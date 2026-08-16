@@ -102,6 +102,7 @@ class ReturnedProductItem {
   final String? colorName;
   final String? sizeName;
   final int quantity;
+  final String measurementType;
   final int refundCents;
   final String? reason;
 
@@ -112,6 +113,7 @@ class ReturnedProductItem {
     this.colorName,
     this.sizeName,
     required this.quantity,
+    this.measurementType = 'piece',
     required this.refundCents,
     this.reason,
   });
@@ -184,8 +186,8 @@ class CustomerSalesReturnsBloc
   ReturnsSortType _sort = ReturnsSortType.totalDesc;
 
   CustomerSalesReturnsBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -210,35 +212,35 @@ class CustomerSalesReturnsBloc
         )
         .watch()
         .asyncMap((_) async {
-      final summaries = await _loadCustomerSummaries();
-      final details = await _loadReturnDetails();
-      final reasons = await _loadReasonBreakdown();
-      final products = await _loadReturnedProducts();
+          final summaries = await _loadCustomerSummaries();
+          final details = await _loadReturnDetails();
+          final reasons = await _loadReasonBreakdown();
+          final products = await _loadReturnedProducts();
 
-      int totalCents = 0;
-      int totalCount = 0;
-      int totalItems = 0;
-      for (final s in summaries) {
-        totalCents += s.totalReturnedCents;
-        totalCount += s.returnCount;
-        totalItems += s.totalItemsReturned;
-      }
+          int totalCents = 0;
+          int totalCount = 0;
+          int totalItems = 0;
+          for (final s in summaries) {
+            totalCents += s.totalReturnedCents;
+            totalCount += s.returnCount;
+            totalItems += s.totalItemsReturned;
+          }
 
-      final sorted = _applySortToSummaries(summaries, _sort);
+          final sorted = _applySortToSummaries(summaries, _sort);
 
-      return CustomerSalesReturnsData(
-        customerSummaries: sorted,
-        returnDetails: details,
-        reasonBreakdown: reasons,
-        returnedProducts: products,
-        totalReturnsCents: totalCents,
-        totalReturnCount: totalCount,
-        totalItemsReturned: totalItems,
-        customersWithReturns: summaries.length,
-        dateRange: _dateRange,
-        sort: _sort,
-      );
-    });
+          return CustomerSalesReturnsData(
+            customerSummaries: sorted,
+            returnDetails: details,
+            reasonBreakdown: reasons,
+            returnedProducts: products,
+            totalReturnsCents: totalCents,
+            totalReturnCount: totalCount,
+            totalItemsReturned: totalItems,
+            customersWithReturns: summaries.length,
+            dateRange: _dateRange,
+            sort: _sort,
+          );
+        });
   }
 
   Future<void> _onDateRangeChanged(
@@ -256,13 +258,15 @@ class CustomerSalesReturnsBloc
     _sort = event.sort;
     final current = currentData;
     if (current != null) {
-      final sorted = _applySortToSummaries(current.customerSummaries, event.sort);
-      emit(RealtimeSuccess<CustomerSalesReturnsData>(
-        data: current.copyWith(
-          customerSummaries: sorted,
-          sort: event.sort,
+      final sorted = _applySortToSummaries(
+        current.customerSummaries,
+        event.sort,
+      );
+      emit(
+        RealtimeSuccess<CustomerSalesReturnsData>(
+          data: current.copyWith(customerSummaries: sorted, sort: event.sort),
         ),
-      ));
+      );
     }
   }
 
@@ -277,9 +281,13 @@ class CustomerSalesReturnsBloc
       case ReturnsSortType.customerDesc:
         list.sort((a, b) => b.customerName.compareTo(a.customerName));
       case ReturnsSortType.totalDesc:
-        list.sort((a, b) => b.totalReturnedCents.compareTo(a.totalReturnedCents));
+        list.sort(
+          (a, b) => b.totalReturnedCents.compareTo(a.totalReturnedCents),
+        );
       case ReturnsSortType.totalAsc:
-        list.sort((a, b) => a.totalReturnedCents.compareTo(b.totalReturnedCents));
+        list.sort(
+          (a, b) => a.totalReturnedCents.compareTo(b.totalReturnedCents),
+        );
       case ReturnsSortType.countDesc:
         list.sort((a, b) => b.returnCount.compareTo(a.returnCount));
       case ReturnsSortType.countAsc:
@@ -296,8 +304,9 @@ class CustomerSalesReturnsBloc
     // Only returns attributed to a real customer are grouped here (walk-in
     // adjustment returns with a NULL customer are excluded, matching the
     // existing by-customer convention used elsewhere in reports).
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         c.id AS customer_id,
         c.name AS customer_name,
@@ -328,21 +337,22 @@ class CustomerSalesReturnsBloc
       GROUP BY c.id
       ORDER BY total_returned_cents DESC
       ''',
-      variables: [
-        Variable<String>(startIso),
-        Variable<String>(endIso),
-        Variable<String>(startIso),
-        Variable<String>(endIso),
-      ],
-      readsFrom: {
-        _db.saleReturns,
-        _db.saleReturnItems,
-        _db.saleReturnAdjustments,
-        _db.saleReturnAdjustmentItems,
-        _db.sales,
-        _db.customers,
-      },
-    ).get();
+          variables: [
+            Variable<String>(startIso),
+            Variable<String>(endIso),
+            Variable<String>(startIso),
+            Variable<String>(endIso),
+          ],
+          readsFrom: {
+            _db.saleReturns,
+            _db.saleReturnItems,
+            _db.saleReturnAdjustments,
+            _db.saleReturnAdjustmentItems,
+            _db.sales,
+            _db.customers,
+          },
+        )
+        .get();
 
     return rows.map((row) {
       final lastDateStr = row.readNullable<String>('last_return_date');
@@ -353,8 +363,9 @@ class CustomerSalesReturnsBloc
         returnCount: row.read<int>('return_count'),
         totalReturnedCents: row.read<int>('total_returned_cents'),
         totalItemsReturned: row.read<int>('total_items_returned'),
-        lastReturnDate:
-            lastDateStr != null ? DateTime.tryParse(lastDateStr) : null,
+        lastReturnDate: lastDateStr != null
+            ? DateTime.tryParse(lastDateStr)
+            : null,
       );
     }).toList();
   }
@@ -366,8 +377,9 @@ class CustomerSalesReturnsBloc
     // Linked returns carry a real disposition + original invoice number.
     // Adjustment (unlinked) returns are marked with disposition 'adjustment'
     // and have no originating invoice; item_count comes from their own items.
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT return_id, return_number, return_date, status, disposition_type,
              refund_method, reason, total_cents, item_count, original_invoice_number
       FROM (
@@ -406,20 +418,21 @@ class CustomerSalesReturnsBloc
       )
       ORDER BY return_date DESC
       ''',
-      variables: [
-        Variable<String>(startIso),
-        Variable<String>(endIso),
-        Variable<String>(startIso),
-        Variable<String>(endIso),
-      ],
-      readsFrom: {
-        _db.saleReturns,
-        _db.saleReturnItems,
-        _db.saleReturnAdjustments,
-        _db.saleReturnAdjustmentItems,
-        _db.sales,
-      },
-    ).get();
+          variables: [
+            Variable<String>(startIso),
+            Variable<String>(endIso),
+            Variable<String>(startIso),
+            Variable<String>(endIso),
+          ],
+          readsFrom: {
+            _db.saleReturns,
+            _db.saleReturnItems,
+            _db.saleReturnAdjustments,
+            _db.saleReturnAdjustmentItems,
+            _db.sales,
+          },
+        )
+        .get();
 
     return rows.map((row) {
       return ReturnDetailItem(
@@ -432,8 +445,9 @@ class CustomerSalesReturnsBloc
         reason: row.readNullable<String>('reason'),
         totalCents: row.read<int>('total_cents'),
         itemCount: row.read<int>('item_count'),
-        originalInvoiceNumber:
-            row.readNullable<String>('original_invoice_number'),
+        originalInvoiceNumber: row.readNullable<String>(
+          'original_invoice_number',
+        ),
       );
     }).toList();
   }
@@ -442,8 +456,9 @@ class CustomerSalesReturnsBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT reason, COUNT(*) AS count, COALESCE(SUM(amount_cents), 0) AS total_cents
       FROM (
         SELECT COALESCE(sri.reason, 'other') AS reason, sri.refund_cents AS amount_cents
@@ -461,19 +476,20 @@ class CustomerSalesReturnsBloc
       GROUP BY reason
       ORDER BY total_cents DESC
       ''',
-      variables: [
-        Variable<String>(startIso),
-        Variable<String>(endIso),
-        Variable<String>(startIso),
-        Variable<String>(endIso),
-      ],
-      readsFrom: {
-        _db.saleReturnItems,
-        _db.saleReturns,
-        _db.saleReturnAdjustmentItems,
-        _db.saleReturnAdjustments,
-      },
-    ).get();
+          variables: [
+            Variable<String>(startIso),
+            Variable<String>(endIso),
+            Variable<String>(startIso),
+            Variable<String>(endIso),
+          ],
+          readsFrom: {
+            _db.saleReturnItems,
+            _db.saleReturns,
+            _db.saleReturnAdjustmentItems,
+            _db.saleReturnAdjustments,
+          },
+        )
+        .get();
 
     return rows.map((row) {
       return ReturnReasonBreakdown(
@@ -488,10 +504,11 @@ class CustomerSalesReturnsBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT return_id, product_name, sku, color_name, size_name,
-             quantity, refund_cents, reason, return_date
+             quantity, measurement_type, refund_cents, reason, return_date
       FROM (
         SELECT 
           sri.return_id AS return_id,
@@ -500,6 +517,7 @@ class CustomerSalesReturnsBloc
           pc.name AS color_name,
           sz.name AS size_name,
           sri.quantity AS quantity,
+          sri.measurement_type AS measurement_type,
           sri.refund_cents AS refund_cents,
           sri.reason AS reason,
           sr.return_date AS return_date,
@@ -521,6 +539,7 @@ class CustomerSalesReturnsBloc
           pc.name AS color_name,
           sz.name AS size_name,
           srai.quantity AS quantity,
+          srai.measurement_type AS measurement_type,
           srai.total_cents AS refund_cents,
           srai.reason AS reason,
           sra.return_date AS return_date,
@@ -536,24 +555,25 @@ class CustomerSalesReturnsBloc
       )
       ORDER BY return_date DESC, order_key ASC
       ''',
-      variables: [
-        Variable<String>(startIso),
-        Variable<String>(endIso),
-        Variable<String>(startIso),
-        Variable<String>(endIso),
-      ],
-      readsFrom: {
-        _db.saleReturnItems,
-        _db.saleReturns,
-        _db.saleReturnAdjustmentItems,
-        _db.saleReturnAdjustments,
-        _db.saleItems,
-        _db.products,
-        _db.productVariants,
-        _db.productColors,
-        _db.sizes,
-      },
-    ).get();
+          variables: [
+            Variable<String>(startIso),
+            Variable<String>(endIso),
+            Variable<String>(startIso),
+            Variable<String>(endIso),
+          ],
+          readsFrom: {
+            _db.saleReturnItems,
+            _db.saleReturns,
+            _db.saleReturnAdjustmentItems,
+            _db.saleReturnAdjustments,
+            _db.saleItems,
+            _db.products,
+            _db.productVariants,
+            _db.productColors,
+            _db.sizes,
+          },
+        )
+        .get();
 
     return rows.map((row) {
       return ReturnedProductItem(
@@ -563,6 +583,7 @@ class CustomerSalesReturnsBloc
         colorName: row.readNullable<String>('color_name'),
         sizeName: row.readNullable<String>('size_name'),
         quantity: row.read<int>('quantity'),
+        measurementType: row.read<String>('measurement_type'),
         refundCents: row.read<int>('refund_cents'),
         reason: row.readNullable<String>('reason'),
       );

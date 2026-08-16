@@ -5,6 +5,7 @@ import 'package:easy_localization/easy_localization.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../domain/entities/product_variant_entity.dart';
 import '../../domain/entities/product_color_entity.dart';
 import '../../domain/entities/size_entity.dart';
@@ -16,10 +17,12 @@ import 'variant_edit_dialog.dart';
 
 class VariantManagementWidget extends StatelessWidget {
   final int productId;
+  final String measurementType;
 
   const VariantManagementWidget({
     super.key,
     required this.productId,
+    this.measurementType = 'piece',
   });
 
   Color? _tryParseHexColor(String? hex) {
@@ -104,8 +107,8 @@ class VariantManagementWidget extends StatelessWidget {
         final colors = colorsState is RealtimeSuccess<List<ProductColor>>
             ? colorsState.data
             : colorsState is RealtimeLoading<List<ProductColor>>
-                ? colorsState.previousData ?? const <ProductColor>[]
-                : const <ProductColor>[];
+            ? colorsState.previousData ?? const <ProductColor>[]
+            : const <ProductColor>[];
         final colorById = {for (final c in colors) c.id: c};
 
         return BlocBuilder<SizesBloc, RealtimeState<List<Size>>>(
@@ -113,11 +116,14 @@ class VariantManagementWidget extends StatelessWidget {
             final sizes = sizesState is RealtimeSuccess<List<Size>>
                 ? sizesState.data
                 : sizesState is RealtimeLoading<List<Size>>
-                    ? sizesState.previousData ?? const <Size>[]
-                    : const <Size>[];
+                ? sizesState.previousData ?? const <Size>[]
+                : const <Size>[];
             final sizeNameById = {for (final s in sizes) s.id: s.name};
 
-            return BlocBuilder<ProductVariantsBloc, RealtimeState<List<ProductVariant>>>(
+            return BlocBuilder<
+              ProductVariantsBloc,
+              RealtimeState<List<ProductVariant>>
+            >(
               builder: (context, state) {
                 List<ProductVariant>? variants;
                 if (state is RealtimeSuccess<List<ProductVariant>>) {
@@ -130,7 +136,8 @@ class VariantManagementWidget extends StatelessWidget {
                   variants = state.optimisticData;
                 }
 
-                if (state is RealtimeLoading<List<ProductVariant>> && variants == null) {
+                if (state is RealtimeLoading<List<ProductVariant>> &&
+                    variants == null) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
@@ -143,7 +150,11 @@ class VariantManagementWidget extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(vertical: 32),
                         child: Column(
                           children: [
-                            const Icon(LucideIcons.layers, size: 48, color: Colors.grey),
+                            const Icon(
+                              LucideIcons.layers,
+                              size: 48,
+                              color: Colors.grey,
+                            ),
                             const SizedBox(height: 8),
                             Text('product_form.noVariants'.tr()),
                             const SizedBox(height: 16),
@@ -157,11 +168,17 @@ class VariantManagementWidget extends StatelessWidget {
                         itemCount: displayVariants.length,
                         itemBuilder: (context, index) {
                           final variant = displayVariants[index];
-                          final sizeName = variant.sizeId == null ? null : sizeNameById[variant.sizeId!];
-                          final colorHex = variant.colorId == null ? null : colorById[variant.colorId!]?.hexCode;
+                          final sizeName = variant.sizeId == null
+                              ? null
+                              : sizeNameById[variant.sizeId!];
+                          final colorHex = variant.colorId == null
+                              ? null
+                              : colorById[variant.colorId!]?.hexCode;
                           final skuText = variant.sku?.isNotEmpty == true
                               ? variant.sku!
-                              : 'product_form.variant_item_title'.tr(args: ['${variant.id}']);
+                              : 'product_form.variant_item_title'.tr(
+                                  args: ['${variant.id}'],
+                                );
 
                           return Card(
                             margin: const EdgeInsets.only(bottom: 8),
@@ -177,11 +194,20 @@ class VariantManagementWidget extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'product_form.variant_item_stock'.tr(args: ['${variant.stockQuantity}']),
+                                    'product_form.variant_item_stock'.tr(
+                                      args: [
+                                        localizedQuantity(
+                                          variant.stockQuantity,
+                                          measurementType,
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                   if (variant.barcode?.isNotEmpty == true)
                                     Text(
-                                      'product_form.variant_item_barcode'.tr(args: [variant.barcode!]),
+                                      'product_form.variant_item_barcode'.tr(
+                                        args: [variant.barcode!],
+                                      ),
                                     ),
                                 ],
                               ),
@@ -190,11 +216,15 @@ class VariantManagementWidget extends StatelessWidget {
                                 children: [
                                   IconButton(
                                     icon: const Icon(LucideIcons.edit),
-                                    onPressed: () => _showVariantDialog(context, variant: variant),
+                                    onPressed: () => _showVariantDialog(
+                                      context,
+                                      variant: variant,
+                                    ),
                                   ),
                                   IconButton(
                                     icon: const Icon(LucideIcons.trash2),
-                                    onPressed: () => _confirmDelete(context, variant),
+                                    onPressed: () =>
+                                        _confirmDelete(context, variant),
                                   ),
                                 ],
                               ),
@@ -228,7 +258,10 @@ class VariantManagementWidget extends StatelessWidget {
   ///   stock>0             → write-off + delete: post a Shrinkage entry
   ///                         (Dr 5800 / Cr 1200) for the on-hand value,
   ///                         then hard-delete or deactivate based on refs.
-  Future<void> _confirmDelete(BuildContext context, ProductVariant variant) async {
+  Future<void> _confirmDelete(
+    BuildContext context,
+    ProductVariant variant,
+  ) async {
     final variantsBloc = context.read<ProductVariantsBloc>();
     final repo = sl<ProductVariantRepository>();
     final colorScheme = Theme.of(context).colorScheme;
@@ -244,6 +277,7 @@ class VariantManagementWidget extends StatelessWidget {
     if (!context.mounted) return;
 
     final stock = variant.stockQuantity;
+    final displayedStock = localizedQuantity(stock, measurementType);
     final hasStock = stock > 0;
     final willDeactivate = refCount != 0; // 0 = safe; >0 or -1 (unknown) = soft
 
@@ -251,12 +285,15 @@ class VariantManagementWidget extends StatelessWidget {
     if (hasStock) {
       final body = willDeactivate
           ? (refCount > 0
-              ? 'product_form.variant_writeoff_deactivate_body'
-                  .tr(args: [stock.toString(), refCount.toString()])
-              : 'product_form.variant_writeoff_deactivate_body_unknown'
-                  .tr(args: [stock.toString()]))
-          : 'product_form.variant_writeoff_delete_body'
-              .tr(args: [stock.toString()]);
+                ? 'product_form.variant_writeoff_deactivate_body'.tr(
+                    args: [displayedStock, refCount.toString()],
+                  )
+                : 'product_form.variant_writeoff_deactivate_body_unknown'.tr(
+                    args: [displayedStock],
+                  ))
+          : 'product_form.variant_writeoff_delete_body'.tr(
+              args: [displayedStock],
+            );
       final actionLabel = 'product_form.variant_writeoff_action'.tr();
 
       final ok = await showDialog<bool>(
@@ -271,9 +308,7 @@ class VariantManagementWidget extends StatelessWidget {
               child: Text('common.cancel'.tr()),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: colorScheme.error,
-              ),
+              style: FilledButton.styleFrom(backgroundColor: colorScheme.error),
               onPressed: () => Navigator.of(ctx).pop(true),
               child: Text(actionLabel),
             ),
@@ -281,10 +316,12 @@ class VariantManagementWidget extends StatelessWidget {
         ),
       );
       if (ok != true || !context.mounted) return;
-      variantsBloc.add(VariantWriteOffAndDeleteRequested(
-        variantId: variant.id,
-        reason: 'product_form.variant_writeoff_reason'.tr(),
-      ));
+      variantsBloc.add(
+        VariantWriteOffAndDeleteRequested(
+          variantId: variant.id,
+          reason: 'product_form.variant_writeoff_reason'.tr(),
+        ),
+      );
       return;
     }
 
@@ -294,8 +331,10 @@ class VariantManagementWidget extends StatelessWidget {
         : 'product_form.variant_delete_title'.tr();
     final body = willDeactivate
         ? (refCount > 0
-            ? 'product_form.variant_deactivate_body'.tr(args: [refCount.toString()])
-            : 'product_form.variant_deactivate_body_unknown'.tr())
+              ? 'product_form.variant_deactivate_body'.tr(
+                  args: [refCount.toString()],
+                )
+              : 'product_form.variant_deactivate_body_unknown'.tr())
         : 'product_form.variant_delete_body'.tr();
     final actionLabel = willDeactivate
         ? 'product_form.variant_deactivate_action'.tr()
@@ -317,8 +356,9 @@ class VariantManagementWidget extends StatelessWidget {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor:
-                  willDeactivate ? colorScheme.tertiary : colorScheme.error,
+              backgroundColor: willDeactivate
+                  ? colorScheme.tertiary
+                  : colorScheme.error,
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: Text(actionLabel),
@@ -336,6 +376,7 @@ class VariantManagementWidget extends StatelessWidget {
       context,
       productId: productId,
       variant: variant,
+      measurementType: measurementType,
     );
   }
 }

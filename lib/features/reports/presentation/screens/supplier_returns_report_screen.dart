@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../services/supplier_returns_pdf_service.dart';
@@ -36,14 +37,15 @@ class _SupplierReturnsReportView extends StatelessWidget {
       appBar: AppBar(
         title: Text('reports.supplier_returns_report'.tr()),
         actions: [
-          BlocBuilder<SupplierReturnsReportBloc,
-              RealtimeState<SupplierReturnsData>>(
+          BlocBuilder<
+            SupplierReturnsReportBloc,
+            RealtimeState<SupplierReturnsData>
+          >(
             builder: (context, state) {
               if (state is! RealtimeSuccess<SupplierReturnsData>) {
                 return const SizedBox.shrink();
               }
-              if (state.data.supplierId == null ||
-                  state.data.returns.isEmpty) {
+              if (state.data.supplierId == null || state.data.returns.isEmpty) {
                 return const SizedBox.shrink();
               }
               return Row(
@@ -65,74 +67,84 @@ class _SupplierReturnsReportView extends StatelessWidget {
           ),
         ],
       ),
-      body: BlocBuilder<SupplierReturnsReportBloc,
-          RealtimeState<SupplierReturnsData>>(
-        builder: (context, state) {
-          if (state is RealtimeLoading<SupplierReturnsData>) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body:
+          BlocBuilder<
+            SupplierReturnsReportBloc,
+            RealtimeState<SupplierReturnsData>
+          >(
+            builder: (context, state) {
+              if (state is RealtimeLoading<SupplierReturnsData>) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (state is RealtimeError<SupplierReturnsData>) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline,
-                      size: 48, color: colorScheme.error),
-                  const SizedBox(height: 16),
-                  Text(state.error.toString(),
-                      style: theme.textTheme.bodyLarge),
-                ],
-              ),
-            );
-          }
-
-          if (state is RealtimeSuccess<SupplierReturnsData>) {
-            final data = state.data;
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: SearchablePartySelector(
-                    labelText: 'reports.select_supplier'.tr(),
-                    prefixIcon: LucideIcons.truck,
-                    selectedId: data.supplierId,
-                    onChanged: (id) => context
-                        .read<SupplierReturnsReportBloc>()
-                        .add(SupplierReturnsSupplierChanged(id)),
-                    options: data.suppliers
-                        .map((s) => SearchablePartyOption(
-                              id: s.id,
-                              name: s.name,
-                              phone: s.phone,
-                              balanceCents: s.balanceCents,
-                            ))
-                        .toList(),
+              if (state is RealtimeError<SupplierReturnsData>) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        state.error.toString(),
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: DateRangeSelector(
-                    dateRange: data.dateRange,
-                    onChanged: (range) => context
-                        .read<SupplierReturnsReportBloc>()
-                        .add(SupplierReturnsDateRangeChanged(range)),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: data.supplierId == null
-                      ? _buildPrompt(context)
-                      : _Content(data: data),
-                ),
-              ],
-            );
-          }
+                );
+              }
 
-          return const SizedBox.shrink();
-        },
-      ),
+              if (state is RealtimeSuccess<SupplierReturnsData>) {
+                final data = state.data;
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: SearchablePartySelector(
+                        labelText: 'reports.select_supplier'.tr(),
+                        prefixIcon: LucideIcons.truck,
+                        selectedId: data.supplierId,
+                        onChanged: (id) => context
+                            .read<SupplierReturnsReportBloc>()
+                            .add(SupplierReturnsSupplierChanged(id)),
+                        options: data.suppliers
+                            .map(
+                              (s) => SearchablePartyOption(
+                                id: s.id,
+                                name: s.name,
+                                phone: s.phone,
+                                balanceCents: s.balanceCents,
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: DateRangeSelector(
+                        dateRange: data.dateRange,
+                        onChanged: (range) => context
+                            .read<SupplierReturnsReportBloc>()
+                            .add(SupplierReturnsDateRangeChanged(range)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: data.supplierId == null
+                          ? _buildPrompt(context)
+                          : _Content(data: data),
+                    ),
+                  ],
+                );
+              }
+
+              return const SizedBox.shrink();
+            },
+          ),
     );
   }
 
@@ -144,20 +156,26 @@ class _SupplierReturnsReportView extends StatelessWidget {
         children: [
           Icon(LucideIcons.search, size: 48, color: theme.colorScheme.primary),
           const SizedBox(height: 16),
-          Text('reports.select_supplier_prompt'.tr(),
-              style: theme.textTheme.bodyLarge),
+          Text(
+            'reports.select_supplier_prompt'.tr(),
+            style: theme.textTheme.bodyLarge,
+          ),
           const SizedBox(height: 8),
-          Text('reports.supplier_returns_prompt_desc'.tr(),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              )),
+          Text(
+            'reports.supplier_returns_prompt_desc'.tr(),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );
   }
 
   Future<void> _printReport(
-      BuildContext context, SupplierReturnsData data) async {
+    BuildContext context,
+    SupplierReturnsData data,
+  ) async {
     await SupplierReturnsPdfService.printReport(context: context, data: data);
     sl<AuditLogService>().log(
       entityType: 'report',
@@ -167,7 +185,9 @@ class _SupplierReturnsReportView extends StatelessWidget {
   }
 
   Future<void> _shareReport(
-      BuildContext context, SupplierReturnsData data) async {
+    BuildContext context,
+    SupplierReturnsData data,
+  ) async {
     await SupplierReturnsPdfService.shareReport(context: context, data: data);
     sl<AuditLogService>().log(
       entityType: 'report',
@@ -195,11 +215,12 @@ class _Content extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.undo2,
-                size: 48, color: theme.colorScheme.primary),
+            Icon(LucideIcons.undo2, size: 48, color: theme.colorScheme.primary),
             const SizedBox(height: 16),
-            Text('reports.no_returns_in_period'.tr(),
-                style: theme.textTheme.bodyLarge),
+            Text(
+              'reports.no_returns_in_period'.tr(),
+              style: theme.textTheme.bodyLarge,
+            ),
           ],
         ),
       );
@@ -217,7 +238,13 @@ class _Content extends StatelessWidget {
         const SizedBox(height: 12),
         InvoiceSummaryCardsRow(
           invoiceCount: data.returnCount,
-          totalQuantity: data.totalQuantity,
+          totalQuantityText: localizedQuantityTotals(
+            aggregateQuantityTotals(
+              data.returns.expand((invoice) => invoice.items),
+              quantityOf: (item) => item.quantity,
+              measurementTypeOf: (item) => item.measurementType,
+            ),
+          ),
           totalAmountCents: data.totalAmountCents,
           totalDiscountCents: data.totalDiscountCents,
           totalPaidCents: data.totalAmountCents,
@@ -229,19 +256,21 @@ class _Content extends StatelessWidget {
           adjustmentCount: data.adjustmentCount,
         ),
         const SizedBox(height: 16),
-        ...data.returns.map((r) => InvoiceCard(
-              invoiceNumber: r.returnNumber,
-              referenceLabel: _referenceLabel(r),
-              date: r.date,
-              items: r.items,
-              subtotalCents: r.subtotalCents,
-              discountCents: r.discountCents,
-              taxCents: r.taxCents,
-              totalCents: r.totalCents,
-              paidAmountCents: r.totalCents,
-              paymentMethod: r.refundMethod,
-              cs: cs,
-            )),
+        ...data.returns.map(
+          (r) => InvoiceCard(
+            invoiceNumber: r.returnNumber,
+            referenceLabel: _referenceLabel(r),
+            date: r.date,
+            items: r.items,
+            subtotalCents: r.subtotalCents,
+            discountCents: r.discountCents,
+            taxCents: r.taxCents,
+            totalCents: r.totalCents,
+            paidAmountCents: r.totalCents,
+            paymentMethod: r.refundMethod,
+            cs: cs,
+          ),
+        ),
       ],
     );
   }

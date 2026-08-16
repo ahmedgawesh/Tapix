@@ -27,19 +27,22 @@ class SalesSettingsSection extends StatelessWidget {
                 'card': 'app_settings.sales.payment_card'.tr(),
                 'bank_transfer': 'app_settings.sales.payment_bank'.tr(),
               },
-              onChanged: (v) => _patch(context, (c) => c.copyWith(defaultPaymentMethod: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(defaultPaymentMethod: v)),
             ),
             SwitchListTile(
               title: Text('app_settings.sales.partial_payments'.tr()),
               subtitle: Text('app_settings.sales.partial_payments_desc'.tr()),
               value: s.allowPartialPayments,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(allowPartialPayments: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(allowPartialPayments: v)),
             ),
             SwitchListTile(
               title: Text('app_settings.sales.allow_discounts'.tr()),
               subtitle: Text('app_settings.sales.allow_discounts_desc'.tr()),
               value: s.allowDiscounts,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(allowDiscounts: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(allowDiscounts: v)),
             ),
             if (s.allowDiscounts)
               SettingsSliderTile(
@@ -49,19 +52,24 @@ class SalesSettingsSection extends StatelessWidget {
                 max: 100,
                 divisions: 99,
                 labelSuffix: '%',
-                onChanged: (v) => _patch(context, (c) => c.copyWith(maxDiscountPercent: v)),
+                onChanged: (v) =>
+                    _patch(context, (c) => c.copyWith(maxDiscountPercent: v)),
               ),
             SwitchListTile(
               title: Text('app_settings.sales.require_customer'.tr()),
               subtitle: Text('app_settings.sales.require_customer_desc'.tr()),
               value: s.requireCustomerForSales,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(requireCustomerForSales: v)),
+              onChanged: (v) => _patch(
+                context,
+                (c) => c.copyWith(requireCustomerForSales: v),
+              ),
             ),
             SwitchListTile(
               title: Text('app_settings.sales.loyalty_points'.tr()),
               subtitle: Text('app_settings.sales.loyalty_points_desc'.tr()),
               value: s.enableLoyaltyPoints,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(enableLoyaltyPoints: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(enableLoyaltyPoints: v)),
             ),
             if (s.enableLoyaltyPoints)
               SettingsSliderTile(
@@ -70,7 +78,10 @@ class SalesSettingsSection extends StatelessWidget {
                 min: 1,
                 max: 10,
                 divisions: 9,
-                onChanged: (v) => _patch(context, (c) => c.copyWith(pointsPerCurrencyUnit: v.round())),
+                onChanged: (v) => _patch(
+                  context,
+                  (c) => c.copyWith(pointsPerCurrencyUnit: v.round()),
+                ),
               ),
           ],
         );

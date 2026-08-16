@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../app_database.dart';
+import '../../measurement/measurement.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // BATCH AUDIT DAO  (Phase H1 — read-only audit/transparency layer)
@@ -47,6 +48,8 @@ class BatchSummary {
   final int receivedQuantity;
   final int remainingQuantity;
   final int unitCostCents;
+  final int quantityScale;
+  final String measurementType;
   final bool isActive;
 
   const BatchSummary({
@@ -66,11 +69,17 @@ class BatchSummary {
     required this.receivedQuantity,
     required this.remainingQuantity,
     required this.unitCostCents,
+    this.quantityScale = 1,
+    this.measurementType = 'piece',
     required this.isActive,
   });
 
   int get consumedQuantity => receivedQuantity - remainingQuantity;
-  int get totalRemainingValueCents => remainingQuantity * unitCostCents;
+  int get totalRemainingValueCents => MeasuredAmount.cents(
+    unitCents: unitCostCents,
+    quantity: remainingQuantity,
+    quantityScale: quantityScale,
+  );
   bool get isDepleted => remainingQuantity <= 0;
 }
 
@@ -109,6 +118,8 @@ class BatchConsumptionRecord {
 
   final int quantity;
   final int unitCostCents;
+  final int quantityScale;
+  final String measurementType;
   final DateTime createdAt;
   final String? notes;
 
@@ -133,6 +144,8 @@ class BatchConsumptionRecord {
     required this.direction,
     required this.quantity,
     required this.unitCostCents,
+    this.quantityScale = 1,
+    this.measurementType = 'piece',
     required this.createdAt,
     required this.notes,
     required this.refKind,
@@ -141,7 +154,11 @@ class BatchConsumptionRecord {
     required this.saleItemId,
   });
 
-  int get totalValueCents => quantity * unitCostCents;
+  int get totalValueCents => MeasuredAmount.cents(
+    unitCents: unitCostCents,
+    quantity: quantity,
+    quantityScale: quantityScale,
+  );
 }
 
 /// One slice of the FEFO consumption that fed a single sale line: which batch
@@ -151,6 +168,8 @@ class BatchSaleConsumed {
   final String batchNumber;
   final int quantity;
   final int unitCostCents;
+  final int quantityScale;
+  final String measurementType;
   final DateTime? expiryDate;
 
   const BatchSaleConsumed({
@@ -158,10 +177,16 @@ class BatchSaleConsumed {
     required this.batchNumber,
     required this.quantity,
     required this.unitCostCents,
+    this.quantityScale = 1,
+    this.measurementType = 'piece',
     required this.expiryDate,
   });
 
-  int get totalCostCents => quantity * unitCostCents;
+  int get totalCostCents => MeasuredAmount.cents(
+    unitCents: unitCostCents,
+    quantity: quantity,
+    quantityScale: quantityScale,
+  );
 }
 
 /// Per-line reconstruction of "where did this sale's COGS come from?". Keeps
@@ -174,6 +199,8 @@ class SaleLineBatchFlow {
   final String productName;
   final String? variantLabel;
   final int totalQuantity;
+  final int quantityScale;
+  final String measurementType;
   final int? snapshotCostCents;
   final List<BatchSaleConsumed> batches;
 
@@ -184,6 +211,8 @@ class SaleLineBatchFlow {
     required this.productName,
     required this.variantLabel,
     required this.totalQuantity,
+    this.quantityScale = 1,
+    this.measurementType = 'piece',
     required this.snapshotCostCents,
     required this.batches,
   });
@@ -266,16 +295,18 @@ class BatchAuditDao {
       whereParts.add('pb.remaining_quantity > 0');
     }
 
-    final sql = '''
+    final sql =
+        '''
       SELECT
         pb.id, pb.batch_number, pb.product_id, pb.variant_id, pb.source,
         pb.supplier_id, pb.purchase_item_id, pb.received_date, pb.expiry_date,
         pb.received_quantity, pb.remaining_quantity, pb.unit_cost_cents,
-        pb.is_active,
+        pb.is_active, p.measurement_type,
         sup.name      AS supplier_name,
         pc.name       AS color_name,
         sz.name       AS size_name
       FROM product_batches pb
+      INNER JOIN products          p   ON p.id  = pb.product_id
       LEFT JOIN suppliers        sup ON sup.id = pb.supplier_id
       LEFT JOIN product_variants pv  ON pv.id  = pb.variant_id
       LEFT JOIN product_colors   pc  ON pc.id  = pv.color_id
@@ -294,6 +325,7 @@ class BatchAuditDao {
           readsFrom: {
             _db.productBatches,
             _db.batchConsumptions,
+            _db.products,
             _db.suppliers,
             _db.productVariants,
             _db.productColors,
@@ -398,41 +430,53 @@ class BatchAuditDao {
           whereParts.add('pb.expiry_date <= ?');
           vars
             ..add(Variable.withString(startOfToday.toIso8601String()))
-            ..add(Variable.withString(
-              startOfToday.add(const Duration(days: 30)).toIso8601String(),
-            ));
+            ..add(
+              Variable.withString(
+                startOfToday.add(const Duration(days: 30)).toIso8601String(),
+              ),
+            );
         case BatchExpiryFilter.in60Days:
           whereParts.add('pb.expiry_date > ?');
           whereParts.add('pb.expiry_date <= ?');
           vars
-            ..add(Variable.withString(
-              startOfToday.add(const Duration(days: 30)).toIso8601String(),
-            ))
-            ..add(Variable.withString(
-              startOfToday.add(const Duration(days: 60)).toIso8601String(),
-            ));
+            ..add(
+              Variable.withString(
+                startOfToday.add(const Duration(days: 30)).toIso8601String(),
+              ),
+            )
+            ..add(
+              Variable.withString(
+                startOfToday.add(const Duration(days: 60)).toIso8601String(),
+              ),
+            );
         case BatchExpiryFilter.in90Days:
           whereParts.add('pb.expiry_date > ?');
           whereParts.add('pb.expiry_date <= ?');
           vars
-            ..add(Variable.withString(
-              startOfToday.add(const Duration(days: 60)).toIso8601String(),
-            ))
-            ..add(Variable.withString(
-              startOfToday.add(const Duration(days: 90)).toIso8601String(),
-            ));
+            ..add(
+              Variable.withString(
+                startOfToday.add(const Duration(days: 60)).toIso8601String(),
+              ),
+            )
+            ..add(
+              Variable.withString(
+                startOfToday.add(const Duration(days: 90)).toIso8601String(),
+              ),
+            );
       }
     }
 
-    final whereClause =
-        whereParts.isEmpty ? '' : 'WHERE ${whereParts.join(' AND ')}';
+    final whereClause = whereParts.isEmpty
+        ? ''
+        : 'WHERE ${whereParts.join(' AND ')}';
 
-    final sql = '''
+    final sql =
+        '''
       SELECT
         pb.id, pb.batch_number, pb.product_id, pb.variant_id, pb.source,
         pb.supplier_id, pb.purchase_item_id, pb.received_date, pb.expiry_date,
         pb.received_quantity, pb.remaining_quantity, pb.unit_cost_cents,
-        pb.is_active,
+        pb.is_active, p.measurement_type,
         p.name                       AS product_name,
         COALESCE(pv.sku, p.sku)      AS product_sku,
         sup.name                     AS supplier_name,
@@ -488,8 +532,9 @@ class BatchAuditDao {
   Future<List<BatchConsumptionRecord>> getConsumptionsForBatch(
     int batchId,
   ) async {
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
         SELECT
           bc.id, bc.batch_id, bc.consumption_type, bc.direction, bc.quantity,
           bc.unit_cost_cents, bc.created_at, bc.notes,
@@ -497,37 +542,41 @@ class BatchAuditDao {
           bc.inventory_adjustment_id,
           bc.purchase_return_adjustment_item_id,
           bc.sale_return_adjustment_item_id,
+          p0.measurement_type AS measurement_type,
           $_kRefSelect
         FROM batch_consumptions bc
+        INNER JOIN product_batches pb0 ON pb0.id = bc.batch_id
+        INNER JOIN products p0 ON p0.id = pb0.product_id
         $_kRefJoins
         WHERE bc.batch_id = ?
         ORDER BY bc.created_at ASC, bc.id ASC
       ''',
-      variables: [Variable.withInt(batchId)],
-      readsFrom: {
-        _db.batchConsumptions,
-        _db.saleItems,
-        _db.sales,
-        _db.saleReturnItems,
-        _db.saleReturns,
-        _db.purchaseReturnItems,
-        _db.purchaseReturns,
-        _db.inventoryAdjustments,
-        _db.purchaseReturnAdjustmentItems,
-        _db.purchaseReturnAdjustments,
-        _db.saleReturnAdjustmentItems,
-        _db.saleReturnAdjustments,
-      },
-    ).get();
+          variables: [Variable.withInt(batchId)],
+          readsFrom: {
+            _db.batchConsumptions,
+            _db.productBatches,
+            _db.products,
+            _db.saleItems,
+            _db.sales,
+            _db.saleReturnItems,
+            _db.saleReturns,
+            _db.purchaseReturnItems,
+            _db.purchaseReturns,
+            _db.inventoryAdjustments,
+            _db.purchaseReturnAdjustmentItems,
+            _db.purchaseReturnAdjustments,
+            _db.saleReturnAdjustmentItems,
+            _db.saleReturnAdjustments,
+          },
+        )
+        .get();
 
     return rows.map(_mapConsumption).toList(growable: false);
   }
 
   /// Reactive variant for screens that watch a batch's history while the user
   /// is staring at it (e.g. when a parallel sale completes).
-  Stream<List<BatchConsumptionRecord>> watchConsumptionsForBatch(
-    int batchId,
-  ) {
+  Stream<List<BatchConsumptionRecord>> watchConsumptionsForBatch(int batchId) {
     return _db
         .customSelect(
           '''
@@ -538,8 +587,11 @@ class BatchAuditDao {
               bc.inventory_adjustment_id,
               bc.purchase_return_adjustment_item_id,
               bc.sale_return_adjustment_item_id,
+              p0.measurement_type AS measurement_type,
               $_kRefSelect
             FROM batch_consumptions bc
+            INNER JOIN product_batches pb0 ON pb0.id = bc.batch_id
+            INNER JOIN products p0 ON p0.id = pb0.product_id
             $_kRefJoins
             WHERE bc.batch_id = ?
             ORDER BY bc.created_at ASC, bc.id ASC
@@ -547,6 +599,8 @@ class BatchAuditDao {
           variables: [Variable.withInt(batchId)],
           readsFrom: {
             _db.batchConsumptions,
+            _db.productBatches,
+            _db.products,
             _db.saleItems,
             _db.sales,
             _db.saleReturnItems,
@@ -580,13 +634,16 @@ class BatchAuditDao {
   /// sale, not the gross.
   Future<List<SaleLineBatchFlow>> getBatchFlowForSale(int saleId) async {
     // 1. Sale lines (drives the result regardless of batch tracking).
-    final lineRows = await _db.customSelect(
-      '''
+    final lineRows = await _db
+        .customSelect(
+          '''
         SELECT
           si.id           AS sale_item_id,
           si.product_id   AS product_id,
           si.variant_id   AS variant_id,
           si.quantity     AS quantity,
+          si.quantity_scale AS quantity_scale,
+          si.measurement_type AS measurement_type,
           si.cost_cents   AS cost_cents,
           p.name          AS product_name,
           pc.name         AS color_name,
@@ -599,24 +656,27 @@ class BatchAuditDao {
         WHERE si.sale_id = ?
         ORDER BY si.id ASC
       ''',
-      variables: [Variable.withInt(saleId)],
-      readsFrom: {
-        _db.saleItems,
-        _db.products,
-        _db.productVariants,
-        _db.productColors,
-        _db.sizes,
-      },
-    ).get();
+          variables: [Variable.withInt(saleId)],
+          readsFrom: {
+            _db.saleItems,
+            _db.products,
+            _db.productVariants,
+            _db.productColors,
+            _db.sizes,
+          },
+        )
+        .get();
 
     if (lineRows.isEmpty) return const [];
 
     // 2. Batch consumptions for ALL sale items in one round-trip.
-    final saleItemIds =
-        lineRows.map((r) => r.read<int>('sale_item_id')).toList();
+    final saleItemIds = lineRows
+        .map((r) => r.read<int>('sale_item_id'))
+        .toList();
     final placeholders = List.filled(saleItemIds.length, '?').join(',');
-    final consumptionRows = await _db.customSelect(
-      '''
+    final consumptionRows = await _db
+        .customSelect(
+          '''
         SELECT
           bc.sale_item_id      AS sale_item_id,
           bc.batch_id          AS batch_id,
@@ -630,9 +690,10 @@ class BatchAuditDao {
         WHERE bc.sale_item_id IN ($placeholders)
         ORDER BY bc.id ASC
       ''',
-      variables: saleItemIds.map((id) => Variable.withInt(id)).toList(),
-      readsFrom: {_db.batchConsumptions, _db.productBatches},
-    ).get();
+          variables: saleItemIds.map((id) => Variable.withInt(id)).toList(),
+          readsFrom: {_db.batchConsumptions, _db.productBatches},
+        )
+        .get();
 
     // 3. Net (out − in) per (saleItemId, batchId) preserving first-seen order.
     final perLine = <int, _LineAcc>{};
@@ -658,36 +719,42 @@ class BatchAuditDao {
     }
 
     // 4. Stitch the two streams.
-    return lineRows.map((row) {
-      final saleItemId = row.read<int>('sale_item_id');
-      final acc = perLine[saleItemId];
-      final batches = (acc?.batches.values ?? const <_BatchAcc>[])
-          .where((b) => b.netQty > 0)
-          .map(
-            (b) => BatchSaleConsumed(
-              batchId: b.batchId,
-              batchNumber: b.batchNumber,
-              quantity: b.netQty,
-              unitCostCents: b.unitCostCents,
-              expiryDate: b.expiryDate,
-            ),
-          )
-          .toList(growable: false);
+    return lineRows
+        .map((row) {
+          final saleItemId = row.read<int>('sale_item_id');
+          final acc = perLine[saleItemId];
+          final batches = (acc?.batches.values ?? const <_BatchAcc>[])
+              .where((b) => b.netQty > 0)
+              .map(
+                (b) => BatchSaleConsumed(
+                  batchId: b.batchId,
+                  batchNumber: b.batchNumber,
+                  quantity: b.netQty,
+                  unitCostCents: b.unitCostCents,
+                  quantityScale: row.read<int>('quantity_scale'),
+                  measurementType: row.read<String>('measurement_type'),
+                  expiryDate: b.expiryDate,
+                ),
+              )
+              .toList(growable: false);
 
-      return SaleLineBatchFlow(
-        saleItemId: saleItemId,
-        productId: row.read<int>('product_id'),
-        variantId: row.readNullable<int>('variant_id'),
-        productName: row.read<String>('product_name'),
-        variantLabel: _composeVariantLabel(
-          row.readNullable<String>('color_name'),
-          row.readNullable<String>('size_name'),
-        ),
-        totalQuantity: row.read<int>('quantity'),
-        snapshotCostCents: row.readNullable<int>('cost_cents'),
-        batches: batches,
-      );
-    }).toList(growable: false);
+          return SaleLineBatchFlow(
+            saleItemId: saleItemId,
+            productId: row.read<int>('product_id'),
+            variantId: row.readNullable<int>('variant_id'),
+            productName: row.read<String>('product_name'),
+            variantLabel: _composeVariantLabel(
+              row.readNullable<String>('color_name'),
+              row.readNullable<String>('size_name'),
+            ),
+            totalQuantity: row.read<int>('quantity'),
+            quantityScale: row.read<int>('quantity_scale'),
+            measurementType: row.read<String>('measurement_type'),
+            snapshotCostCents: row.readNullable<int>('cost_cents'),
+            batches: batches,
+          );
+        })
+        .toList(growable: false);
   }
 
   /// Direct debug helper — every batch_consumptions row attached to a single
@@ -696,8 +763,9 @@ class BatchAuditDao {
   Future<List<BatchConsumptionRecord>> getConsumptionsForSaleItem(
     int saleItemId,
   ) async {
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
         SELECT
           bc.id, bc.batch_id, bc.consumption_type, bc.direction, bc.quantity,
           bc.unit_cost_cents, bc.created_at, bc.notes,
@@ -705,28 +773,34 @@ class BatchAuditDao {
           bc.inventory_adjustment_id,
           bc.purchase_return_adjustment_item_id,
           bc.sale_return_adjustment_item_id,
+          p0.measurement_type AS measurement_type,
           $_kRefSelect
         FROM batch_consumptions bc
+        INNER JOIN product_batches pb0 ON pb0.id = bc.batch_id
+        INNER JOIN products p0 ON p0.id = pb0.product_id
         $_kRefJoins
         WHERE bc.sale_item_id = ?
         ORDER BY bc.id ASC
       ''',
-      variables: [Variable.withInt(saleItemId)],
-      readsFrom: {
-        _db.batchConsumptions,
-        _db.saleItems,
-        _db.sales,
-        _db.saleReturnItems,
-        _db.saleReturns,
-        _db.purchaseReturnItems,
-        _db.purchaseReturns,
-        _db.inventoryAdjustments,
-        _db.purchaseReturnAdjustmentItems,
-        _db.purchaseReturnAdjustments,
-        _db.saleReturnAdjustmentItems,
-        _db.saleReturnAdjustments,
-      },
-    ).get();
+          variables: [Variable.withInt(saleItemId)],
+          readsFrom: {
+            _db.batchConsumptions,
+            _db.productBatches,
+            _db.products,
+            _db.saleItems,
+            _db.sales,
+            _db.saleReturnItems,
+            _db.saleReturns,
+            _db.purchaseReturnItems,
+            _db.purchaseReturns,
+            _db.inventoryAdjustments,
+            _db.purchaseReturnAdjustmentItems,
+            _db.purchaseReturnAdjustments,
+            _db.saleReturnAdjustmentItems,
+            _db.saleReturnAdjustments,
+          },
+        )
+        .get();
 
     return rows.map(_mapConsumption).toList(growable: false);
   }
@@ -742,10 +816,14 @@ class BatchAuditDao {
     String? productSku;
     try {
       productName = r.readNullable<String>('product_name');
-    } catch (_) {/* column not selected */}
+    } catch (_) {
+      /* column not selected */
+    }
     try {
       productSku = r.readNullable<String>('product_sku');
-    } catch (_) {/* column not selected */}
+    } catch (_) {
+      /* column not selected */
+    }
 
     return BatchSummary(
       batchId: r.read<int>('id'),
@@ -767,6 +845,10 @@ class BatchAuditDao {
       receivedQuantity: r.read<int>('received_quantity'),
       remainingQuantity: r.read<int>('remaining_quantity'),
       unitCostCents: r.read<int>('unit_cost_cents'),
+      quantityScale: MeasurementType.fromDb(
+        r.read<String>('measurement_type'),
+      ).quantityScale,
+      measurementType: r.read<String>('measurement_type'),
       isActive: r.read<int>('is_active') == 1,
     );
   }
@@ -775,11 +857,13 @@ class BatchAuditDao {
     final saleItemId = r.readNullable<int>('sale_item_id');
     final saleReturnItemId = r.readNullable<int>('sale_return_item_id');
     final purchaseReturnItemId = r.readNullable<int>('purchase_return_item_id');
-    final inventoryAdjustmentId = r.readNullable<int>('inventory_adjustment_id');
-    final purchaseAdjItemId =
-        r.readNullable<int>('purchase_return_adjustment_item_id');
-    final saleAdjItemId =
-        r.readNullable<int>('sale_return_adjustment_item_id');
+    final inventoryAdjustmentId = r.readNullable<int>(
+      'inventory_adjustment_id',
+    );
+    final purchaseAdjItemId = r.readNullable<int>(
+      'purchase_return_adjustment_item_id',
+    );
+    final saleAdjItemId = r.readNullable<int>('sale_return_adjustment_item_id');
 
     String refKind = 'unknown';
     int? refHeaderId;
@@ -818,6 +902,10 @@ class BatchAuditDao {
       direction: r.read<String>('direction'),
       quantity: r.read<int>('quantity'),
       unitCostCents: r.read<int>('unit_cost_cents'),
+      quantityScale: MeasurementType.fromDb(
+        r.read<String>('measurement_type'),
+      ).quantityScale,
+      measurementType: r.read<String>('measurement_type'),
       createdAt: r.read<DateTime>('created_at'),
       notes: r.readNullable<String>('notes'),
       refKind: refKind,

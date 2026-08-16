@@ -5,13 +5,11 @@ class VariantPreview {
   final String? sizeName;
   final String? colorHex;
 
-  const VariantPreview({
-    required this.sizeName,
-    required this.colorHex,
-  });
+  const VariantPreview({required this.sizeName, required this.colorHex});
 }
 
-class VariantPreviewsBloc extends RealtimeBloc<Map<int, VariantPreview>, RealtimeEvent> {
+class VariantPreviewsBloc
+    extends RealtimeBloc<Map<int, VariantPreview>, RealtimeEvent> {
   final ProductVariantRepository _repository;
 
   VariantPreviewsBloc(this._repository) : super(const RealtimeLoading());

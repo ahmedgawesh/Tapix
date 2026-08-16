@@ -7,6 +7,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/loyalty/loyalty_point_value.dart';
 import '../../../../core/services/parties/party_balance_classifier.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
@@ -98,7 +99,10 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
     );
   }
 
-  Widget _buildErrorState(BuildContext context, RealtimeError<CustomersData> state) {
+  Widget _buildErrorState(
+    BuildContext context,
+    RealtimeError<CustomersData> state,
+  ) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -149,7 +153,8 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
       'premium': 0,
     };
     for (final customer in data.customers) {
-      segmentCounts[customer.segment] = (segmentCounts[customer.segment] ?? 0) + 1;
+      segmentCounts[customer.segment] =
+          (segmentCounts[customer.segment] ?? 0) + 1;
     }
 
     return RefreshIndicator(
@@ -178,9 +183,15 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
 
                       final activeCard = _StatCard(
                         icon: Icons.people_outline,
-                        iconColor: isDark ? const Color(0xFF90CAF9) : colorScheme.primary,
-                        backgroundColor: isDark ? const Color(0xFF0B0F14) : colorScheme.primaryContainer,
-                        borderColor: isDark ? const Color(0xFF1E3A5F) : colorScheme.primary.withValues(alpha: 0.2),
+                        iconColor: isDark
+                            ? const Color(0xFF90CAF9)
+                            : colorScheme.primary,
+                        backgroundColor: isDark
+                            ? const Color(0xFF0B0F14)
+                            : colorScheme.primaryContainer,
+                        borderColor: isDark
+                            ? const Color(0xFF1E3A5F)
+                            : colorScheme.primary.withValues(alpha: 0.2),
                         label: 'customers.active_customers'.tr(),
                         value: activeCount.toString(),
                       );
@@ -188,8 +199,12 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
                       final customerOwesCard = _StatCard(
                         icon: LucideIcons.arrowDownLeft,
                         iconColor: Colors.green,
-                        backgroundColor: isDark ? const Color(0xFF0B0F14) : Colors.green.withValues(alpha: 0.08),
-                        borderColor: isDark ? const Color(0xFF1A3330) : Colors.green.withValues(alpha: 0.2),
+                        backgroundColor: isDark
+                            ? const Color(0xFF0B0F14)
+                            : Colors.green.withValues(alpha: 0.08),
+                        borderColor: isDark
+                            ? const Color(0xFF1A3330)
+                            : Colors.green.withValues(alpha: 0.2),
                         label: 'customers.total_customer_owes'.tr(),
                         value: currencyService.format(customerOwesCents),
                       );
@@ -197,17 +212,27 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
                       final weOweCustomerCard = _StatCard(
                         icon: LucideIcons.arrowUpRight,
                         iconColor: Colors.red,
-                        backgroundColor: isDark ? const Color(0xFF0B0F14) : Colors.red.withValues(alpha: 0.08),
-                        borderColor: isDark ? const Color(0xFF3D2E10) : Colors.red.withValues(alpha: 0.2),
+                        backgroundColor: isDark
+                            ? const Color(0xFF0B0F14)
+                            : Colors.red.withValues(alpha: 0.08),
+                        borderColor: isDark
+                            ? const Color(0xFF3D2E10)
+                            : Colors.red.withValues(alpha: 0.2),
                         label: 'customers.total_we_owe_customer'.tr(),
                         value: currencyService.format(weOweCustomerCents),
                       );
 
                       final creditCard = _StatCard(
                         icon: Icons.credit_card_outlined,
-                        iconColor: isDark ? const Color(0xFF80CBC4) : colorScheme.tertiary,
-                        backgroundColor: isDark ? const Color(0xFF0B0F14) : colorScheme.tertiaryContainer,
-                        borderColor: isDark ? const Color(0xFF1A3330) : colorScheme.tertiary.withValues(alpha: 0.2),
+                        iconColor: isDark
+                            ? const Color(0xFF80CBC4)
+                            : colorScheme.tertiary,
+                        backgroundColor: isDark
+                            ? const Color(0xFF0B0F14)
+                            : colorScheme.tertiaryContainer,
+                        borderColor: isDark
+                            ? const Color(0xFF1A3330)
+                            : colorScheme.tertiary.withValues(alpha: 0.2),
                         label: 'customers.with_credit'.tr(),
                         value: withCreditCount.toString(),
                       );
@@ -274,27 +299,45 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
                           icon: Icons.person_outline,
                           label: 'customers.segment_retail'.tr(),
                           count: segmentCounts['retail'] ?? 0,
-                          color: isDark ? const Color(0xFF90CAF9) : colorScheme.primary,
-                          backgroundColor: isDark ? const Color(0xFF0B0F14) : colorScheme.primaryContainer,
-                          borderColor: isDark ? const Color(0xFF1E3A5F) : colorScheme.primary.withValues(alpha: 0.2),
+                          color: isDark
+                              ? const Color(0xFF90CAF9)
+                              : colorScheme.primary,
+                          backgroundColor: isDark
+                              ? const Color(0xFF0B0F14)
+                              : colorScheme.primaryContainer,
+                          borderColor: isDark
+                              ? const Color(0xFF1E3A5F)
+                              : colorScheme.primary.withValues(alpha: 0.2),
                         ),
                         const SizedBox(width: 8),
                         _SegmentChip(
                           icon: Icons.business_outlined,
                           label: 'customers.segment_wholesale'.tr(),
                           count: segmentCounts['wholesale'] ?? 0,
-                          color: isDark ? const Color(0xFFFFB74D) : colorScheme.secondary,
-                          backgroundColor: isDark ? const Color(0xFF0B0F14) : colorScheme.secondaryContainer,
-                          borderColor: isDark ? const Color(0xFF3D2E10) : colorScheme.secondary.withValues(alpha: 0.2),
+                          color: isDark
+                              ? const Color(0xFFFFB74D)
+                              : colorScheme.secondary,
+                          backgroundColor: isDark
+                              ? const Color(0xFF0B0F14)
+                              : colorScheme.secondaryContainer,
+                          borderColor: isDark
+                              ? const Color(0xFF3D2E10)
+                              : colorScheme.secondary.withValues(alpha: 0.2),
                         ),
                         const SizedBox(width: 8),
                         _SegmentChip(
                           icon: Icons.star_outline,
                           label: 'customers.segment_premium'.tr(),
                           count: segmentCounts['premium'] ?? 0,
-                          color: isDark ? const Color(0xFFCE93D8) : colorScheme.tertiary,
-                          backgroundColor: isDark ? const Color(0xFF0B0F14) : colorScheme.tertiaryContainer,
-                          borderColor: isDark ? const Color(0xFF3A2440) : colorScheme.tertiary.withValues(alpha: 0.2),
+                          color: isDark
+                              ? const Color(0xFFCE93D8)
+                              : colorScheme.tertiary,
+                          backgroundColor: isDark
+                              ? const Color(0xFF0B0F14)
+                              : colorScheme.tertiaryContainer,
+                          borderColor: isDark
+                              ? const Color(0xFF3A2440)
+                              : colorScheme.tertiary.withValues(alpha: 0.2),
                         ),
                       ],
                     ),
@@ -312,7 +355,10 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
                 controller: _searchController,
                 decoration: InputDecoration(
                   hintText: 'customers.search_hint'.tr(),
-                  prefixIcon: Icon(Icons.search, color: isDark ? const Color(0xFF8A97A6) : null),
+                  prefixIcon: Icon(
+                    Icons.search,
+                    color: isDark ? const Color(0xFF8A97A6) : null,
+                  ),
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
                           icon: const Icon(Icons.clear),
@@ -353,11 +399,17 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: isDark ? const Color(0xFF90CAF9) : null,
                       side: BorderSide(
-                        color: (isDark ? const Color(0xFF1E3A5F) : colorScheme.outlineVariant)
-                            .withValues(alpha: isDark ? 0.9 : 0.8),
+                        color:
+                            (isDark
+                                    ? const Color(0xFF1E3A5F)
+                                    : colorScheme.outlineVariant)
+                                .withValues(alpha: isDark ? 0.9 : 0.8),
                       ),
                       backgroundColor: isDark ? const Color(0xFF0B0F14) : null,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                     ),
                   ),
                   OutlinedButton.icon(
@@ -367,11 +419,17 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: isDark ? const Color(0xFFFFB74D) : null,
                       side: BorderSide(
-                        color: (isDark ? const Color(0xFF3D2E10) : colorScheme.outlineVariant)
-                            .withValues(alpha: isDark ? 0.9 : 0.8),
+                        color:
+                            (isDark
+                                    ? const Color(0xFF3D2E10)
+                                    : colorScheme.outlineVariant)
+                                .withValues(alpha: isDark ? 0.9 : 0.8),
                       ),
                       backgroundColor: isDark ? const Color(0xFF0B0F14) : null,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                     ),
                   ),
                   OutlinedButton.icon(
@@ -381,11 +439,17 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: isDark ? const Color(0xFFB0BEC5) : null,
                       side: BorderSide(
-                        color: (isDark ? const Color(0xFF253242) : colorScheme.outlineVariant)
-                            .withValues(alpha: isDark ? 0.9 : 0.8),
+                        color:
+                            (isDark
+                                    ? const Color(0xFF253242)
+                                    : colorScheme.outlineVariant)
+                                .withValues(alpha: isDark ? 0.9 : 0.8),
                       ),
                       backgroundColor: isDark ? const Color(0xFF0B0F14) : null,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                     ),
                   ),
                 ],
@@ -408,27 +472,20 @@ class _CustomerHubContentState extends State<_CustomerHubContent> {
 
           // Customer List
           if (data.customers.isEmpty)
-            SliverFillRemaining(
-              child: _buildEmptyState(context),
-            )
+            SliverFillRemaining(child: _buildEmptyState(context))
           else
             SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final customer = data.customers[index];
-                  return _CustomerListTile(
-                    customer: customer,
-                    onTap: () => context.push('/customers/${customer.id}'),
-                  );
-                },
-                childCount: data.customers.length,
-              ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final customer = data.customers[index];
+                return _CustomerListTile(
+                  customer: customer,
+                  onTap: () => context.push('/customers/${customer.id}'),
+                );
+              }, childCount: data.customers.length),
             ),
-          
+
           // Bottom padding for FAB
-          const SliverToBoxAdapter(
-            child: SizedBox(height: 80),
-          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 80)),
         ],
       ),
     );
@@ -497,13 +554,15 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(16),
-        border: borderColor != null ? Border.all(color: borderColor!, width: 1) : null,
+        border: borderColor != null
+            ? Border.all(color: borderColor!, width: 1)
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -551,13 +610,15 @@ class _SegmentChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(16),
-        border: borderColor != null ? Border.all(color: borderColor!, width: 1) : null,
+        border: borderColor != null
+            ? Border.all(color: borderColor!, width: 1)
+            : null,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -604,10 +665,7 @@ class _CustomerListTile extends StatelessWidget {
   final Customer customer;
   final VoidCallback onTap;
 
-  const _CustomerListTile({
-    required this.customer,
-    required this.onTap,
-  });
+  const _CustomerListTile({required this.customer, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -636,7 +694,9 @@ class _CustomerListTile extends StatelessWidget {
                 radius: 24,
                 backgroundColor: theme.colorScheme.primaryContainer,
                 child: Text(
-                  customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?',
+                  customer.name.isNotEmpty
+                      ? customer.name[0].toUpperCase()
+                      : '?',
                   style: TextStyle(
                     color: theme.colorScheme.onPrimaryContainer,
                     fontWeight: FontWeight.bold,
@@ -681,7 +741,11 @@ class _CustomerListTile extends StatelessWidget {
               Text(
                 currencyService.format(balanceCents),
                 style: theme.textTheme.titleMedium?.copyWith(
-                  color: balanceCents > 0 ? Colors.green : balanceCents < 0 ? Colors.red : Colors.blue,
+                  color: balanceCents > 0
+                      ? Colors.green
+                      : balanceCents < 0
+                      ? Colors.red
+                      : Colors.blue,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -794,11 +858,15 @@ class _LoyaltySettingsDialogState extends State<_LoyaltySettingsDialog> {
           _currentSettings = settings;
           _isEnabled = settings!.isEnabled;
           _allowRedemption = settings.allowPointsRedemption;
-          _pointValueCtrl.text = settings.pointValueCents.toString();
+          _pointValueCtrl.text = LoyaltyPointValue.toInputText(
+            settings.pointValueCents,
+          );
           _minRedemptionCtrl.text = settings.minRedemptionPoints.toString();
-          _maxPercentCtrl.text = (settings.maxRedemptionPercentBps / 100).toStringAsFixed(0);
+          _maxPercentCtrl.text = (settings.maxRedemptionPercentBps / 100)
+              .toStringAsFixed(0);
           _pointsPerUnitCtrl.text = settings.pointsPerCurrencyUnit.toString();
-          _minSpendCtrl.text = (settings.minSpendForPoints / 100).toStringAsFixed(2);
+          _minSpendCtrl.text = (settings.minSpendForPoints / 100)
+              .toStringAsFixed(2);
           _isLoading = false;
         });
       } else {
@@ -815,7 +883,9 @@ class _LoyaltySettingsDialogState extends State<_LoyaltySettingsDialog> {
 
     try {
       final repo = sl<LoyaltyRepository>();
-      final pointValueCents = int.tryParse(_pointValueCtrl.text) ?? 1;
+      final pointValueCents = LoyaltyPointValue.fromInputText(
+        _pointValueCtrl.text,
+      );
       final minRedemptionPoints = int.tryParse(_minRedemptionCtrl.text) ?? 100;
       final maxPercent = int.tryParse(_maxPercentCtrl.text) ?? 50;
       final pointsPerUnit = int.tryParse(_pointsPerUnitCtrl.text) ?? 1;
@@ -831,7 +901,7 @@ class _LoyaltySettingsDialogState extends State<_LoyaltySettingsDialog> {
         signupBonusPoints: _currentSettings!.signupBonusPoints,
         reviewBonusPoints: _currentSettings!.reviewBonusPoints,
         isEnabled: _isEnabled,
-        pointValueCents: pointValueCents.clamp(1, 10000),
+        pointValueCents: pointValueCents,
         minRedemptionPoints: minRedemptionPoints.clamp(0, 100000),
         maxRedemptionPercentBps: (maxPercent * 100).clamp(0, 10000),
         allowPointsRedemption: _allowRedemption,
@@ -848,9 +918,9 @@ class _LoyaltySettingsDialogState extends State<_LoyaltySettingsDialog> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -874,124 +944,163 @@ class _LoyaltySettingsDialogState extends State<_LoyaltySettingsDialog> {
     final currencyService = sl<CurrencyService>();
 
     return AlertDialog(
-      title: Row(children: [
-        const Icon(LucideIcons.award, color: Colors.deepPurple),
-        const SizedBox(width: 8),
-        Text('customers.loyalty_settings'.tr()),
-      ]),
+      title: Row(
+        children: [
+          const Icon(LucideIcons.award, color: Colors.deepPurple),
+          const SizedBox(width: 8),
+          Text('customers.loyalty_settings'.tr()),
+        ],
+      ),
       content: _isLoading
-          ? const SizedBox(height: 100, child: Center(child: CircularProgressIndicator()))
+          ? const SizedBox(
+              height: 100,
+              child: Center(child: CircularProgressIndicator()),
+            )
           : _currentSettings == null
-              ? Text('customers.loyalty_no_settings'.tr())
-              : SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Master toggle
-                      SwitchListTile(
-                        value: _isEnabled,
-                        onChanged: (v) => setState(() => _isEnabled = v),
-                        title: Text('customers.loyalty_enabled'.tr()),
-                        secondary: Icon(
-                          _isEnabled ? LucideIcons.toggleRight : LucideIcons.toggleLeft,
-                          color: _isEnabled ? Colors.deepPurple : cs.outline,
-                        ),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                      const Divider(),
+          ? Text('customers.loyalty_no_settings'.tr())
+          : SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Master toggle
+                  SwitchListTile(
+                    value: _isEnabled,
+                    onChanged: (v) => setState(() => _isEnabled = v),
+                    title: Text('customers.loyalty_enabled'.tr()),
+                    secondary: Icon(
+                      _isEnabled
+                          ? LucideIcons.toggleRight
+                          : LucideIcons.toggleLeft,
+                      color: _isEnabled ? Colors.deepPurple : cs.outline,
+                    ),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  const Divider(),
 
-                      // Earning section
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8, bottom: 12),
-                        child: Text('customers.loyalty_earning_settings'.tr(),
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600, color: Colors.deepPurple)),
+                  // Earning section
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, bottom: 12),
+                    child: Text(
+                      'customers.loyalty_earning_settings'.tr(),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.deepPurple,
                       ),
-                      TextField(
-                        controller: _pointsPerUnitCtrl,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        onTap: () => selectAllText(_pointsPerUnitCtrl),
-                        decoration: InputDecoration(
-                          labelText: 'customers.loyalty_points_per_unit'.tr(),
-                          helperText: 'customers.loyalty_points_per_unit_hint'.tr(),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          isDense: true,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _minSpendCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        onTap: () => selectAllText(_minSpendCtrl),
-                        decoration: InputDecoration(
-                          labelText: 'customers.loyalty_min_spend'.tr(),
-                          helperText: 'customers.loyalty_min_spend_hint'.tr(),
-                          suffixText: currencyService.currencySymbol,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          isDense: true,
-                        ),
-                      ),
-                      const Divider(height: 24),
-
-                      // Redemption section
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Text('customers.loyalty_redemption_settings'.tr(),
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600, color: Colors.deepPurple)),
-                      ),
-                      SwitchListTile(
-                        value: _allowRedemption,
-                        onChanged: (v) => setState(() => _allowRedemption = v),
-                        title: Text('customers.loyalty_allow_redemption'.tr()),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _pointValueCtrl,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        onTap: () => selectAllText(_pointValueCtrl),
-                        decoration: InputDecoration(
-                          labelText: 'customers.loyalty_point_value'.tr(),
-                          helperText: 'customers.loyalty_point_value_hint'.tr(),
-                          suffixText: 'customers.loyalty_cents'.tr(),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          isDense: true,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _minRedemptionCtrl,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        onTap: () => selectAllText(_minRedemptionCtrl),
-                        decoration: InputDecoration(
-                          labelText: 'customers.loyalty_min_redemption'.tr(),
-                          helperText: 'customers.loyalty_min_redemption_hint'.tr(),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          isDense: true,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _maxPercentCtrl,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        onTap: () => selectAllText(_maxPercentCtrl),
-                        decoration: InputDecoration(
-                          labelText: 'customers.loyalty_max_percent'.tr(),
-                          helperText: 'customers.loyalty_max_percent_hint'.tr(),
-                          suffixText: '%',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                          isDense: true,
-                        ),
+                    ),
+                  ),
+                  TextField(
+                    controller: _pointsPerUnitCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                        RegExp(r'^\d*[\.,]?\d{0,2}'),
                       ),
                     ],
+                    onTap: () => selectAllText(_pointsPerUnitCtrl),
+                    decoration: InputDecoration(
+                      labelText: 'customers.loyalty_points_per_unit'.tr(),
+                      helperText: 'customers.loyalty_points_per_unit_hint'.tr(),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      isDense: true,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _minSpendCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    onTap: () => selectAllText(_minSpendCtrl),
+                    decoration: InputDecoration(
+                      labelText: 'customers.loyalty_min_spend'.tr(),
+                      helperText: 'customers.loyalty_min_spend_hint'.tr(),
+                      suffixText: currencyService.currencySymbol,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      isDense: true,
+                    ),
+                  ),
+                  const Divider(height: 24),
+
+                  // Redemption section
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      'customers.loyalty_redemption_settings'.tr(),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.deepPurple,
+                      ),
+                    ),
+                  ),
+                  SwitchListTile(
+                    value: _allowRedemption,
+                    onChanged: (v) => setState(() => _allowRedemption = v),
+                    title: Text('customers.loyalty_allow_redemption'.tr()),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _pointValueCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                        RegExp(r'^\d*[\.,]?\d{0,2}'),
+                      ),
+                    ],
+                    onTap: () => selectAllText(_pointValueCtrl),
+                    decoration: InputDecoration(
+                      labelText: 'customers.loyalty_point_value'.tr(),
+                      helperText: 'customers.loyalty_point_value_hint'.tr(),
+                      suffixText: currencyService.currencySymbol,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _minRedemptionCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    onTap: () => selectAllText(_minRedemptionCtrl),
+                    decoration: InputDecoration(
+                      labelText: 'customers.loyalty_min_redemption'.tr(),
+                      helperText: 'customers.loyalty_min_redemption_hint'.tr(),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _maxPercentCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    onTap: () => selectAllText(_maxPercentCtrl),
+                    decoration: InputDecoration(
+                      labelText: 'customers.loyalty_max_percent'.tr(),
+                      helperText: 'customers.loyalty_max_percent_hint'.tr(),
+                      suffixText: '%',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      isDense: true,
+                    ),
+                  ),
+                ],
+              ),
+            ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
@@ -1000,7 +1109,11 @@ class _LoyaltySettingsDialogState extends State<_LoyaltySettingsDialog> {
         FilledButton(
           onPressed: _isSaving ? null : _save,
           child: _isSaving
-              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
               : Text('common.save'.tr()),
         ),
       ],

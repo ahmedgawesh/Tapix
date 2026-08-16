@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../../core/di/injection_container.dart';
+import '../../../core/measurement/measurement_localization.dart';
 import '../../../core/services/currency_service.dart';
 import '../../settings/data/services/company_profile_service.dart';
 import '../../settings/domain/entities/company_profile.dart';
@@ -31,7 +32,8 @@ class ProductVariantMovementPdfService {
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'VariantMovement_${data.selectedProductName ?? ""}_${DateFormat('yyyyMMdd').format(DateTime.now())}',
+      name:
+          'VariantMovement_${data.selectedProductName ?? ""}_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
   }
 
@@ -55,7 +57,8 @@ class ProductVariantMovementPdfService {
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'VariantMovement_${data.selectedProductName ?? ""}_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      filename:
+          'VariantMovement_${data.selectedProductName ?? ""}_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
   }
 
@@ -88,11 +91,19 @@ class ProductVariantMovementPdfService {
             if (data.selectedProductCategory != null)
               pw.Text(
                 '${_t('category', lang)}: ${data.selectedProductCategory}',
-                style: pw.TextStyle(font: fonts.regular, fontSize: 10, color: PdfColors.grey600),
+                style: pw.TextStyle(
+                  font: fonts.regular,
+                  fontSize: 10,
+                  color: PdfColors.grey600,
+                ),
               ),
             pw.Text(
               '${_t('type', lang)}: ${data.selectedProductHasVariants ? _t('with_variants', lang) : _t('without_variants', lang)}',
-              style: pw.TextStyle(font: fonts.regular, fontSize: 10, color: PdfColors.grey600),
+              style: pw.TextStyle(
+                font: fonts.regular,
+                fontSize: 10,
+                color: PdfColors.grey600,
+              ),
             ),
             pw.SizedBox(height: 4),
             pw.Text(
@@ -106,7 +117,8 @@ class ProductVariantMovementPdfService {
             pw.SizedBox(height: 16),
 
             // Variant breakdown (if has variants)
-            if (data.selectedProductHasVariants && data.variantSummaries.isNotEmpty) ...[
+            if (data.selectedProductHasVariants &&
+                data.variantSummaries.isNotEmpty) ...[
               pw.Text(
                 _t('variant_breakdown', lang),
                 style: pw.TextStyle(font: fonts.bold, fontSize: 11),
@@ -115,7 +127,9 @@ class ProductVariantMovementPdfService {
               pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 8),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.purple50),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.purple50,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.centerLeft,
                   1: pw.Alignment.centerRight,
@@ -132,14 +146,33 @@ class ProductVariantMovementPdfService {
                   _t('purchase_returns', lang),
                   _t('net', lang),
                 ],
-                data: data.variantSummaries.map((s) => [
-                  s.label,
-                  '+${s.purchasedQty}',
-                  '-${s.soldQty}',
-                  '+${s.saleReturnedQty}',
-                  '-${s.purchaseReturnedQty}',
-                  s.netQty >= 0 ? '+${s.netQty}' : '${s.netQty}',
-                ]).toList(),
+                data: data.variantSummaries
+                    .map(
+                      (s) => [
+                        s.label,
+                        localizedSignedQuantity(
+                          s.purchasedQty,
+                          s.measurementType,
+                          showPositiveSign: true,
+                        ),
+                        localizedSignedQuantity(-s.soldQty, s.measurementType),
+                        localizedSignedQuantity(
+                          s.saleReturnedQty,
+                          s.measurementType,
+                          showPositiveSign: true,
+                        ),
+                        localizedSignedQuantity(
+                          -s.purchaseReturnedQty,
+                          s.measurementType,
+                        ),
+                        localizedSignedQuantity(
+                          s.netQty,
+                          s.measurementType,
+                          showPositiveSign: true,
+                        ),
+                      ],
+                    )
+                    .toList(),
               ),
               pw.SizedBox(height: 16),
             ],
@@ -154,7 +187,9 @@ class ProductVariantMovementPdfService {
               pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 7),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 7),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.grey200,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.centerLeft,
                   1: pw.Alignment.centerLeft,
@@ -181,7 +216,7 @@ class ProductVariantMovementPdfService {
                     m.reference,
                     m.counterpartyName ?? '-',
                     m.variantLabel.isNotEmpty ? m.variantLabel : '-',
-                    '$sign${m.quantity}',
+                    '$sign${localizedQuantity(m.quantity, m.measurementType)}',
                     cs.formatCents(m.totalCents),
                   ];
                 }).toList(),
@@ -192,7 +227,11 @@ class ProductVariantMovementPdfService {
             pw.Divider(),
             pw.Text(
               '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
-              style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+              style: pw.TextStyle(
+                font: fonts.regular,
+                fontSize: 8,
+                color: PdfColors.grey600,
+              ),
             ),
           ];
         },
@@ -217,26 +256,56 @@ class ProductVariantMovementPdfService {
         1: pw.Alignment.centerRight,
         2: pw.Alignment.centerRight,
       },
-      headers: [
-        _t('movement_type', lang),
-        _t('qty', lang),
-        _t('amount', lang),
-      ],
+      headers: [_t('movement_type', lang), _t('qty', lang), _t('amount', lang)],
       data: [
-        [_t('purchases', lang), '+${totals.totalPurchased}', cs.formatCents(totals.totalPurchaseCents)],
-        [_t('sales', lang), '-${totals.totalSold}', cs.formatCents(totals.totalSalesCents)],
-        [_t('sale_returns', lang), '+${totals.totalSaleReturned}', cs.formatCents(totals.totalSaleReturnCents)],
-        [_t('purchase_returns', lang), '-${totals.totalPurchaseReturned}', cs.formatCents(totals.totalPurchaseReturnCents)],
+        [
+          _t('purchases', lang),
+          localizedSignedQuantity(
+            totals.totalPurchased,
+            totals.measurementType,
+            showPositiveSign: true,
+          ),
+          cs.formatCents(totals.totalPurchaseCents),
+        ],
+        [
+          _t('sales', lang),
+          localizedSignedQuantity(-totals.totalSold, totals.measurementType),
+          cs.formatCents(totals.totalSalesCents),
+        ],
+        [
+          _t('sale_returns', lang),
+          localizedSignedQuantity(
+            totals.totalSaleReturned,
+            totals.measurementType,
+            showPositiveSign: true,
+          ),
+          cs.formatCents(totals.totalSaleReturnCents),
+        ],
+        [
+          _t('purchase_returns', lang),
+          localizedSignedQuantity(
+            -totals.totalPurchaseReturned,
+            totals.measurementType,
+          ),
+          cs.formatCents(totals.totalPurchaseReturnCents),
+        ],
         [
           _t('net', lang),
-          totals.netQuantity >= 0 ? '+${totals.netQuantity}' : '${totals.netQuantity}',
+          localizedSignedQuantity(
+            totals.netQuantity,
+            totals.measurementType,
+            showPositiveSign: true,
+          ),
           '',
         ],
       ],
     );
   }
 
-  static (String, String) _movementTypeInfo(VariantMovementType type, String lang) {
+  static (String, String) _movementTypeInfo(
+    VariantMovementType type,
+    String lang,
+  ) {
     switch (type) {
       case VariantMovementType.purchase:
         return (_t('purchases', lang), '+');
@@ -254,20 +323,48 @@ class ProductVariantMovementPdfService {
   // ═══════════════════════════════════════════════════════
 
   static const _translations = {
-    'title': {'en': 'Product Variant Movement Report', 'ar': 'تقرير حركة متغيرات المنتج', 'fr': 'Rapport Mouvement Variantes Produit'},
+    'title': {
+      'en': 'Product Variant Movement Report',
+      'ar': 'تقرير حركة متغيرات المنتج',
+      'fr': 'Rapport Mouvement Variantes Produit',
+    },
     'product': {'en': 'Product', 'ar': 'المنتج', 'fr': 'Produit'},
     'category': {'en': 'Category', 'ar': 'التصنيف', 'fr': 'Catégorie'},
     'type': {'en': 'Type', 'ar': 'النوع', 'fr': 'Type'},
-    'with_variants': {'en': 'With Variants', 'ar': 'مع متغيرات', 'fr': 'Avec Variantes'},
-    'without_variants': {'en': 'Without Variants', 'ar': 'بدون متغيرات', 'fr': 'Sans Variantes'},
+    'with_variants': {
+      'en': 'With Variants',
+      'ar': 'مع متغيرات',
+      'fr': 'Avec Variantes',
+    },
+    'without_variants': {
+      'en': 'Without Variants',
+      'ar': 'بدون متغيرات',
+      'fr': 'Sans Variantes',
+    },
     'period': {'en': 'Period', 'ar': 'الفترة', 'fr': 'Période'},
-    'variant_breakdown': {'en': 'Variant Breakdown', 'ar': 'تفصيل المتغيرات', 'fr': 'Détail des Variantes'},
-    'movement_details': {'en': 'Movement Details', 'ar': 'تفاصيل الحركة', 'fr': 'Détails des Mouvements'},
-    'movement_type': {'en': 'Movement Type', 'ar': 'نوع الحركة', 'fr': 'Type de Mouvement'},
+    'variant_breakdown': {
+      'en': 'Variant Breakdown',
+      'ar': 'تفصيل المتغيرات',
+      'fr': 'Détail des Variantes',
+    },
+    'movement_details': {
+      'en': 'Movement Details',
+      'ar': 'تفاصيل الحركة',
+      'fr': 'Détails des Mouvements',
+    },
+    'movement_type': {
+      'en': 'Movement Type',
+      'ar': 'نوع الحركة',
+      'fr': 'Type de Mouvement',
+    },
     'date': {'en': 'Date', 'ar': 'التاريخ', 'fr': 'Date'},
     'type_col': {'en': 'Type', 'ar': 'النوع', 'fr': 'Type'},
     'reference': {'en': 'Reference', 'ar': 'المرجع', 'fr': 'Référence'},
-    'counterparty': {'en': 'Supplier / Customer', 'ar': 'المورد / العميل', 'fr': 'Fournisseur / Client'},
+    'counterparty': {
+      'en': 'Supplier / Customer',
+      'ar': 'المورد / العميل',
+      'fr': 'Fournisseur / Client',
+    },
     'variant': {'en': 'Variant', 'ar': 'المتغير', 'fr': 'Variante'},
     'qty': {'en': 'Qty', 'ar': 'الكمية', 'fr': 'Qté'},
     'amount': {'en': 'Amount', 'ar': 'المبلغ', 'fr': 'Montant'},
@@ -275,8 +372,16 @@ class ProductVariantMovementPdfService {
     'sold': {'en': 'Sold', 'ar': 'مبيعات', 'fr': 'Ventes'},
     'purchases': {'en': 'Purchases', 'ar': 'مشتريات', 'fr': 'Achats'},
     'sales': {'en': 'Sales', 'ar': 'مبيعات', 'fr': 'Ventes'},
-    'sale_returns': {'en': 'Sale Returns', 'ar': 'مرتجعات مبيعات', 'fr': 'Retours Ventes'},
-    'purchase_returns': {'en': 'Purchase Returns', 'ar': 'مرتجعات مشتريات', 'fr': 'Retours Achats'},
+    'sale_returns': {
+      'en': 'Sale Returns',
+      'ar': 'مرتجعات مبيعات',
+      'fr': 'Retours Ventes',
+    },
+    'purchase_returns': {
+      'en': 'Purchase Returns',
+      'ar': 'مرتجعات مشتريات',
+      'fr': 'Retours Achats',
+    },
     'net': {'en': 'Net Movement', 'ar': 'صافي الحركة', 'fr': 'Mouvement Net'},
     'printed_on': {'en': 'Printed on', 'ar': 'طُبع في', 'fr': 'Imprimé le'},
   };
@@ -305,7 +410,11 @@ class ProductVariantMovementPdfService {
         if (company.address != null && company.address!.isNotEmpty)
           pw.Text(
             company.address!,
-            style: pw.TextStyle(font: fonts.regular, fontSize: 9, color: PdfColors.grey600),
+            style: pw.TextStyle(
+              font: fonts.regular,
+              fontSize: 9,
+              color: PdfColors.grey600,
+            ),
           ),
         pw.SizedBox(height: 8),
         pw.Divider(),
@@ -322,8 +431,12 @@ class ProductVariantMovementPdfService {
 
   static Future<_PdfFonts> _loadFonts() async {
     try {
-      final regularData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-      final boldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+      final regularData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+      );
+      final boldData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+      );
       return _PdfFonts(
         regular: pw.Font.ttf(regularData),
         bold: pw.Font.ttf(boldData),

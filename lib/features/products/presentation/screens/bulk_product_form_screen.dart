@@ -22,7 +22,8 @@ class BulkProductFormScreen extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider(
-          create: (context) => sl<BulkProductBloc>()..add(const BulkProductRowAdded()),
+          create: (context) =>
+              sl<BulkProductBloc>()..add(const BulkProductRowAdded()),
         ),
         BlocProvider(
           create: (context) => sl<ColorsBloc>()..add(const LoadColors()),
@@ -31,7 +32,8 @@ class BulkProductFormScreen extends StatelessWidget {
           create: (context) => sl<SizesBloc>()..add(const LoadSizes()),
         ),
         BlocProvider(
-          create: (context) => sl<CategoriesBloc>()..add(const LoadCategories()),
+          create: (context) =>
+              sl<CategoriesBloc>()..add(const LoadCategories()),
         ),
       ],
       child: const _BulkProductFormView(),
@@ -66,7 +68,9 @@ class _BulkProductFormView extends StatelessWidget {
               if (state is BulkProductEditing) {
                 return TextButton.icon(
                   onPressed: () {
-                    context.read<BulkProductBloc>().add(const BulkProductReset());
+                    context.read<BulkProductBloc>().add(
+                      const BulkProductReset(),
+                    );
                   },
                   icon: const Icon(Icons.refresh),
                   label: Text('bulk_product.reset'.tr()),
@@ -83,10 +87,12 @@ class _BulkProductFormView extends StatelessWidget {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  'bulk_product.success_message'.tr(args: [
-                    state.successCount.toString(),
-                    state.totalCount.toString(),
-                  ]),
+                  'bulk_product.success_message'.tr(
+                    args: [
+                      state.successCount.toString(),
+                      state.totalCount.toString(),
+                    ],
+                  ),
                 ),
                 backgroundColor: colorScheme.primary,
               ),
@@ -96,10 +102,12 @@ class _BulkProductFormView extends StatelessWidget {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  'bulk_product.error_message'.tr(args: [
-                    state.successCount.toString(),
-                    state.totalCount.toString(),
-                  ]),
+                  'bulk_product.error_message'.tr(
+                    args: [
+                      state.successCount.toString(),
+                      state.totalCount.toString(),
+                    ],
+                  ),
                 ),
                 backgroundColor: colorScheme.error,
               ),
@@ -117,9 +125,7 @@ class _BulkProductFormView extends StatelessWidget {
 
           if (state is BulkProductInitial) {
             return Center(
-              child: CircularProgressIndicator(
-                color: colorScheme.primary,
-              ),
+              child: CircularProgressIndicator(color: colorScheme.primary),
             );
           }
 
@@ -135,7 +141,9 @@ class _BulkProductFormView extends StatelessWidget {
                 FloatingActionButton.small(
                   heroTag: 'add_row',
                   onPressed: () {
-                    context.read<BulkProductBloc>().add(const BulkProductRowAdded());
+                    context.read<BulkProductBloc>().add(
+                      const BulkProductRowAdded(),
+                    );
                   },
                   tooltip: 'bulk_product.add_row'.tr(),
                   child: const Icon(Icons.add),
@@ -147,8 +155,8 @@ class _BulkProductFormView extends StatelessWidget {
                       ? null
                       : () {
                           context.read<BulkProductBloc>().add(
-                                const BulkProductSubmitRequested(),
-                              );
+                            const BulkProductSubmitRequested(),
+                          );
                         },
                   icon: const Icon(Icons.save),
                   label: Text('bulk_product.submit'.tr()),
@@ -162,7 +170,10 @@ class _BulkProductFormView extends StatelessWidget {
     );
   }
 
-  Widget _buildSubmittingView(BuildContext context, BulkProductSubmitting state) {
+  Widget _buildSubmittingView(
+    BuildContext context,
+    BulkProductSubmitting state,
+  ) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Center(
@@ -177,10 +188,12 @@ class _BulkProductFormView extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              'bulk_product.submitting'.tr(args: [
-                (state.currentIndex + 1).toString(),
-                state.totalCount.toString(),
-              ]),
+              'bulk_product.submitting'.tr(
+                args: [
+                  (state.currentIndex + 1).toString(),
+                  state.totalCount.toString(),
+                ],
+              ),
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
@@ -193,9 +206,9 @@ class _BulkProductFormView extends StatelessWidget {
             Text(
               '${(state.progress * 100).toStringAsFixed(0)}%',
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
+                color: colorScheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ],
         ),
@@ -207,7 +220,8 @@ class _BulkProductFormView extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isDesktop = constraints.maxWidth >= 1024;
-        final isTablet = constraints.maxWidth >= 768 && constraints.maxWidth < 1024;
+        final isTablet =
+            constraints.maxWidth >= 768 && constraints.maxWidth < 1024;
 
         return Column(
           children: [
@@ -221,16 +235,18 @@ class _BulkProductFormView extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context, BulkProductEditing state, bool isDesktop) {
+  Widget _buildHeader(
+    BuildContext context,
+    BulkProductEditing state,
+    bool isDesktop,
+  ) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerLow,
-        border: Border(
-          bottom: BorderSide(color: colorScheme.outlineVariant),
-        ),
+        border: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
       ),
       child: Row(
         children: [
@@ -241,19 +257,21 @@ class _BulkProductFormView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'bulk_product.products_count'.tr(args: [state.rows.length.toString()]),
+                  'bulk_product.products_count'.tr(
+                    args: [state.rows.length.toString()],
+                  ),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 if (state.hasValidationErrors)
                   Text(
                     'bulk_product.validation_errors'.tr(
                       args: [state.validationErrors.length.toString()],
                     ),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: colorScheme.error,
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: colorScheme.error),
                   ),
               ],
             ),
@@ -261,7 +279,9 @@ class _BulkProductFormView extends StatelessWidget {
           if (isDesktop)
             FilledButton.icon(
               onPressed: () {
-                context.read<BulkProductBloc>().add(const BulkProductRowAdded());
+                context.read<BulkProductBloc>().add(
+                  const BulkProductRowAdded(),
+                );
               },
               icon: const Icon(Icons.add),
               label: Text('bulk_product.add_row'.tr()),
@@ -299,27 +319,28 @@ class _BulkProductFormView extends StatelessWidget {
             canRemove: state.rows.length > 1,
             onUpdate: (updates) {
               context.read<BulkProductBloc>().add(
-                    BulkProductRowUpdated(
-                      rowIndex: index,
-                      name: updates['name'] as String?,
-                      nameAr: updates['nameAr'] as String?,
-                      nameFr: updates['nameFr'] as String?,
-                      sku: updates['sku'] as String?,
-                      barcode: updates['barcode'] as String?,
-                      costCents: updates['costCents'] as Decimal?,
-                      priceCents: updates['priceCents'] as Decimal?,
-                      wholesalePriceCents: updates['wholesalePriceCents'] as Decimal?,
-                      stockQuantity: updates['stockQuantity'] as int?,
-                      minQuantity: updates['minQuantity'] as int?,
-                      categoryId: updates['categoryId'] as int?,
-                      colorId: updates['colorId'] as int?,
-                      sizeId: updates['sizeId'] as int?,
-                      hasVariants: updates['hasVariants'] as bool?,
-                      isTaxable: updates['isTaxable'] as bool?,
-                      purchaseTaxRateBps: updates['purchaseTaxRateBps'] as int?,
-                      salesTaxRateBps: updates['salesTaxRateBps'] as int?,
-                    ),
-                  );
+                BulkProductRowUpdated(
+                  rowIndex: index,
+                  name: updates['name'] as String?,
+                  nameAr: updates['nameAr'] as String?,
+                  nameFr: updates['nameFr'] as String?,
+                  sku: updates['sku'] as String?,
+                  barcode: updates['barcode'] as String?,
+                  costCents: updates['costCents'] as Decimal?,
+                  priceCents: updates['priceCents'] as Decimal?,
+                  wholesalePriceCents:
+                      updates['wholesalePriceCents'] as Decimal?,
+                  stockQuantity: updates['stockQuantity'] as int?,
+                  minQuantity: updates['minQuantity'] as int?,
+                  categoryId: updates['categoryId'] as int?,
+                  colorId: updates['colorId'] as int?,
+                  sizeId: updates['sizeId'] as int?,
+                  hasVariants: updates['hasVariants'] as bool?,
+                  isTaxable: updates['isTaxable'] as bool?,
+                  purchaseTaxRateBps: updates['purchaseTaxRateBps'] as int?,
+                  salesTaxRateBps: updates['salesTaxRateBps'] as int?,
+                ),
+              );
             },
             onRemove: () {
               context.read<BulkProductBloc>().add(BulkProductRowRemoved(index));

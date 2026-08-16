@@ -48,8 +48,11 @@ void main() {
     required bool hasVariants,
     required int costCents,
     required int stockQty,
+    String measurementType = 'piece',
   }) {
-    return db.into(db.products).insert(
+    return db
+        .into(db.products)
+        .insert(
           ProductsCompanion.insert(
             name: name,
             costCents: Decimal.fromInt(costCents),
@@ -58,6 +61,7 @@ void main() {
             inventoryTrackingType: Value(inventoryTrackingType),
             hasVariants: Value(hasVariants),
             stockQuantity: Value(stockQty),
+            measurementType: Value(measurementType),
           ),
         );
   }
@@ -70,7 +74,9 @@ void main() {
     int? colorId,
     int? sizeId,
   }) {
-    return db.into(db.productVariants).insert(
+    return db
+        .into(db.productVariants)
+        .insert(
           ProductVariantsCompanion.insert(
             productId: productId,
             sku: Value(sku),
@@ -84,9 +90,9 @@ void main() {
   }
 
   Future<int> insertColor(String name) {
-    return db.into(db.productColors).insert(
-          ProductColorsCompanion.insert(name: name),
-        );
+    return db
+        .into(db.productColors)
+        .insert(ProductColorsCompanion.insert(name: name));
   }
 
   Future<void> insertBatch({
@@ -97,7 +103,9 @@ void main() {
     required int unitCostCents,
     bool active = true,
   }) async {
-    await db.into(db.productBatches).insert(
+    await db
+        .into(db.productBatches)
+        .insert(
           ProductBatchesCompanion.insert(
             productId: productId,
             variantId: Value(variantId),
@@ -113,10 +121,8 @@ void main() {
 
   // ── 1. FIFO regression — multi-batch with different unit costs ───────
 
-  test(
-      'FIFO product with two batches at different unit costs returns batch '
-      'ledger total (NOT variant.cost × stock)',
-      () async {
+  test('FIFO product with two batches at different unit costs returns batch '
+      'ledger total (NOT variant.cost × stock)', () async {
     // Mirror the field-reported case exactly:
     //   batch1: 10 × 9900 = 99,000
     //   batch2:  3 × 9801 = 29,403
@@ -154,45 +160,51 @@ void main() {
     );
 
     final value = await ds.getTotalInventoryValueCents();
-    expect(value, 128403,
-        reason:
-            'must use Σ(batch.remaining_qty × batch.unit_cost_cents), not '
-            'Σ(variant.stock × variant.cost_cents). The 990¢ "drift" '
-            'reported by the pre-Phase-15 formula was a measurement bug.');
+    expect(
+      value,
+      128403,
+      reason:
+          'must use Σ(batch.remaining_qty × batch.unit_cost_cents), not '
+          'Σ(variant.stock × variant.cost_cents). The 990¢ "drift" '
+          'reported by the pre-Phase-15 formula was a measurement bug.',
+    );
   });
 
   // ── 2. WAC happy-path — non-batched product keeps the variant fallback
 
   test(
-      'WAC product without batches falls back to variant.stock × variant.cost',
-      () async {
-    final productId = await insertProduct(
-      name: 'wac-no-batch',
-      costingMethod: 'wac',
-      inventoryTrackingType: 'standard',
-      hasVariants: true,
-      costCents: 100,
-      stockQty: 5,
-    );
-    await insertVariant(
-      productId: productId,
-      sku: 'wac-v1',
-      costCents: 200,
-      stockQty: 5,
-    );
+    'WAC product without batches falls back to variant.stock × variant.cost',
+    () async {
+      final productId = await insertProduct(
+        name: 'wac-no-batch',
+        costingMethod: 'wac',
+        inventoryTrackingType: 'standard',
+        hasVariants: true,
+        costCents: 100,
+        stockQty: 5,
+      );
+      await insertVariant(
+        productId: productId,
+        sku: 'wac-v1',
+        costCents: 200,
+        stockQty: 5,
+      );
 
-    final value = await ds.getTotalInventoryValueCents();
-    expect(value, 1000,
-        reason: '5 × 200 = 1000 — variant fallback kicks in when no '
-            'active batch row exists for the variant.');
-  });
+      final value = await ds.getTotalInventoryValueCents();
+      expect(
+        value,
+        1000,
+        reason:
+            '5 × 200 = 1000 — variant fallback kicks in when no '
+            'active batch row exists for the variant.',
+      );
+    },
+  );
 
   // ── 3. Product without variants — third branch of the COALESCE ───────
 
-  test(
-      'Product without variants and without batches uses '
-      'product.stock × product.cost',
-      () async {
+  test('Product without variants and without batches uses '
+      'product.stock × product.cost', () async {
     await insertProduct(
       name: 'simple',
       costingMethod: 'wac',
@@ -232,10 +244,14 @@ void main() {
     );
 
     final value = await ds.getTotalInventoryValueCents();
-    expect(value, 900,
-        reason: 'only the active batch (3 × 300) is summed; the inactive '
-            'batch is filtered out and the product fallback is suppressed '
-            'because an active batch exists for that product.');
+    expect(
+      value,
+      900,
+      reason:
+          'only the active batch (3 × 300) is summed; the inactive '
+          'batch is filtered out and the product fallback is suppressed '
+          'because an active batch exists for that product.',
+    );
   });
 
   // ── 5. Mixed bag — FIFO + WAC + simple product together ──────────────
@@ -274,12 +290,7 @@ void main() {
       costCents: 50,
       stockQty: 10,
     );
-    await insertVariant(
-      productId: pB,
-      sku: 'b-v',
-      costCents: 50,
-      stockQty: 10,
-    );
+    await insertVariant(productId: pB, sku: 'b-v', costCents: 50, stockQty: 10);
     // Σ = 10 × 50 = 500
 
     // Branch C — simple product, no variants, no batches.
@@ -294,8 +305,13 @@ void main() {
     // Σ = 4 × 25 = 100
 
     final value = await ds.getTotalInventoryValueCents();
-    expect(value, 7600, reason: '7000 (FIFO batches) + 500 (WAC variant) '
-        '+ 100 (simple product) = 7600');
+    expect(
+      value,
+      7600,
+      reason:
+          '7000 (FIFO batches) + 500 (WAC variant) '
+          '+ 100 (simple product) = 7600',
+    );
   });
 
   // ── 6. Phase 15.2 regression — WAC variant with stale batch ──────────
@@ -317,64 +333,74 @@ void main() {
   // The fix gates the batch branch on `_isFifoProduct` so the WAC
   // variant.stock × variant.cost truth wins.
   test(
-      'WAC variant with stale batch row uses variant SoT, NOT batch SoT',
-      () async {
-    final productId = await insertProduct(
-      name: 'wac with stale batch',
-      costingMethod: 'wac',
-      inventoryTrackingType: 'standard',
-      hasVariants: true,
-      costCents: 9900,
-      stockQty: 9,
-    );
-    final variantId = await insertVariant(
-      productId: productId,
-      sku: 'wac-stale',
-      costCents: 9900,
-      stockQty: 9, // already decremented by the WAC return path
-    );
-    await insertBatch(
-      productId: productId,
-      variantId: variantId,
-      receivedQty: 10,
-      remainingQty: 10, // STALE: WAC return path never decrements this
-      unitCostCents: 9900,
-    );
+    'WAC variant with stale batch row uses variant SoT, NOT batch SoT',
+    () async {
+      final productId = await insertProduct(
+        name: 'wac with stale batch',
+        costingMethod: 'wac',
+        inventoryTrackingType: 'standard',
+        hasVariants: true,
+        costCents: 9900,
+        stockQty: 9,
+      );
+      final variantId = await insertVariant(
+        productId: productId,
+        sku: 'wac-stale',
+        costCents: 9900,
+        stockQty: 9, // already decremented by the WAC return path
+      );
+      await insertBatch(
+        productId: productId,
+        variantId: variantId,
+        receivedQty: 10,
+        remainingQty: 10, // STALE: WAC return path never decrements this
+        unitCostCents: 9900,
+      );
 
-    final value = await ds.getTotalInventoryValueCents();
-    expect(value, 89100,
-        reason: 'WAC SoT = variant.stock × variant.cost = 9 × 9 900. '
+      final value = await ds.getTotalInventoryValueCents();
+      expect(
+        value,
+        89100,
+        reason:
+            'WAC SoT = variant.stock × variant.cost = 9 × 9 900. '
             'The stale batch ledger row (10 × 9 900 = 99 000) MUST be '
             'ignored — WAC return paths never touch it, so reading it '
-            'as authoritative re-creates the Phase 15.2 phantom drift.');
-  });
+            'as authoritative re-creates the Phase 15.2 phantom drift.',
+      );
+    },
+  );
 
   // ── 7. Phase 15.2 regression — WAC product without variants + stale batch
   test(
-      'WAC product without variants with stale batch uses product SoT',
-      () async {
-    final productId = await insertProduct(
-      name: 'wac no-variant with stale batch',
-      costingMethod: 'wac',
-      inventoryTrackingType: 'standard',
-      hasVariants: false,
-      costCents: 5000,
-      stockQty: 4, // already decremented by the WAC return path
-    );
-    await insertBatch(
-      productId: productId,
-      variantId: null,
-      receivedQty: 5,
-      remainingQty: 5, // STALE
-      unitCostCents: 5000,
-    );
+    'WAC product without variants with stale batch uses product SoT',
+    () async {
+      final productId = await insertProduct(
+        name: 'wac no-variant with stale batch',
+        costingMethod: 'wac',
+        inventoryTrackingType: 'standard',
+        hasVariants: false,
+        costCents: 5000,
+        stockQty: 4, // already decremented by the WAC return path
+      );
+      await insertBatch(
+        productId: productId,
+        variantId: null,
+        receivedQty: 5,
+        remainingQty: 5, // STALE
+        unitCostCents: 5000,
+      );
 
-    final value = await ds.getTotalInventoryValueCents();
-    expect(value, 20000,
-        reason: 'WAC product SoT = product.stock × product.cost = 4 × 5 000. '
+      final value = await ds.getTotalInventoryValueCents();
+      expect(
+        value,
+        20000,
+        reason:
+            'WAC product SoT = product.stock × product.cost = 4 × 5 000. '
             'The stale batch row (5 × 5 000 = 25 000) MUST be ignored — '
-            'same reason as test #6 but on the no-variant fallback branch.');
-  });
+            'same reason as test #6 but on the no-variant fallback branch.',
+      );
+    },
+  );
 
   // ── 8. Phase 15.2 regression — full field-report parity ──────────────
   //
@@ -388,10 +414,8 @@ void main() {
   // Expected total = 89 100 + 89 100 + (9 × 9 900) = 267 300, which is
   // the exact GL(1200) balance after the 1-unit linked purchase return.
   // Pre-15.2 picked the stale 10 from B5 → 277 200, drift 9 900.
-  test(
-      'Field-report reproduction (FIFO + WAC mix after linked return) '
-      'matches GL exactly with no phantom drift',
-      () async {
+  test('Field-report reproduction (FIFO + WAC mix after linked return) '
+      'matches GL exactly with no phantom drift', () async {
     final p1 = await insertProduct(
       name: 'p1 with v',
       costingMethod: 'fifo',
@@ -403,20 +427,32 @@ void main() {
     final c1 = await insertColor('red');
     final c2 = await insertColor('blue');
     final v1 = await insertVariant(
-      productId: p1, sku: 'tt55-1', costCents: 9900, stockQty: 9,
+      productId: p1,
+      sku: 'tt55-1',
+      costCents: 9900,
+      stockQty: 9,
       colorId: c1,
     );
     final v2 = await insertVariant(
-      productId: p1, sku: 'tt55-2', costCents: 9900, stockQty: 9,
+      productId: p1,
+      sku: 'tt55-2',
+      costCents: 9900,
+      stockQty: 9,
       colorId: c2,
     );
     await insertBatch(
-      productId: p1, variantId: v1,
-      receivedQty: 10, remainingQty: 9, unitCostCents: 9900,
+      productId: p1,
+      variantId: v1,
+      receivedQty: 10,
+      remainingQty: 9,
+      unitCostCents: 9900,
     );
     await insertBatch(
-      productId: p1, variantId: v2,
-      receivedQty: 10, remainingQty: 9, unitCostCents: 9900,
+      productId: p1,
+      variantId: v2,
+      receivedQty: 10,
+      remainingQty: 9,
+      unitCostCents: 9900,
     );
 
     final p2 = await insertProduct(
@@ -428,28 +464,34 @@ void main() {
       stockQty: 9,
     );
     final v3 = await insertVariant(
-      productId: p2, sku: 'tt66', costCents: 9900, stockQty: 9,
+      productId: p2,
+      sku: 'tt66',
+      costCents: 9900,
+      stockQty: 9,
     );
     await insertBatch(
-      productId: p2, variantId: v3,
+      productId: p2,
+      variantId: v3,
       receivedQty: 10,
       remainingQty: 10, // STALE — WAC return path didn't decrement
       unitCostCents: 9900,
     );
 
     final value = await ds.getTotalInventoryValueCents();
-    expect(value, 267300,
-        reason: 'p1 FIFO via batches: 89 100 + 89 100 = 178 200. '
-            'p2 WAC via variant: 9 × 9 900 = 89 100. '
-            'Total = 267 300 — matches GL(1200) exactly. '
-            'The stale WAC batch (B5 remaining=10) is correctly ignored.');
+    expect(
+      value,
+      267300,
+      reason:
+          'p1 FIFO via batches: 89 100 + 89 100 = 178 200. '
+          'p2 WAC via variant: 9 × 9 900 = 89 100. '
+          'Total = 267 300 — matches GL(1200) exactly. '
+          'The stale WAC batch (B5 remaining=10) is correctly ignored.',
+    );
   });
 
   // ── 9. Defense-in-depth — predicate gates by costing_method too ──────
-  test(
-      'Product with costing_method=fifo but inventory_tracking_type=standard '
-      'is still treated as FIFO (mirrors `_isFifoProduct`)',
-      () async {
+  test('Product with costing_method=fifo but inventory_tracking_type=standard '
+      'is still treated as FIFO (mirrors `_isFifoProduct`)', () async {
     final productId = await insertProduct(
       name: 'fifo + standard tracking',
       costingMethod: 'fifo',
@@ -466,12 +508,97 @@ void main() {
     );
 
     final value = await ds.getTotalInventoryValueCents();
-    expect(value, 4000,
-        reason: '`_isFifoProduct` returns true on either signal '
-            '(inventory_tracking_type ∈ batch/batch_expiry OR '
-            'costing_method == fifo). The read formula must mirror that '
-            'or FIFO/standard products would silently regress to the '
-            'display cost (5 × 1 000 = 5 000) instead of the batch SoT '
-            '(5 × 800 = 4 000).');
+    expect(
+      value,
+      4000,
+      reason:
+          '`_isFifoProduct` returns true on either signal '
+          '(inventory_tracking_type ∈ batch/batch_expiry OR '
+          'costing_method == fifo). The read formula must mirror that '
+          'or FIFO/standard products would silently regress to the '
+          'display cost (5 × 1 000 = 5 000) instead of the batch SoT '
+          '(5 × 800 = 4 000).',
+    );
   });
+
+  test(
+    'measured WAC/FIFO valuation divides stored sub-units by 1000 '
+    'for length, weight and volume without affecting piece products',
+    () async {
+      // Length + variants (the exact shape that exposed the phone bug).
+      // 496.500 m × 990¢/m = 491,535¢
+      // 495.400 m × 1,188¢/m = 588,535¢
+      final lengthProduct = await insertProduct(
+        name: 'variant fabric',
+        costingMethod: 'wac',
+        inventoryTrackingType: 'standard',
+        hasVariants: true,
+        costCents: 1089,
+        stockQty: 991900,
+        measurementType: 'length',
+      );
+      await insertVariant(
+        productId: lengthProduct,
+        sku: 'FABRIC-A',
+        costCents: 990,
+        stockQty: 496500,
+        colorId: await insertColor('measured red'),
+      );
+      await insertVariant(
+        productId: lengthProduct,
+        sku: 'FABRIC-B',
+        costCents: 1188,
+        stockQty: 495400,
+        colorId: await insertColor('measured blue'),
+      );
+
+      // Volume + no variants: 750 ml × 2,000¢/l = 1,500¢.
+      await insertProduct(
+        name: 'liquid',
+        costingMethod: 'wac',
+        inventoryTrackingType: 'standard',
+        hasVariants: false,
+        costCents: 2000,
+        stockQty: 750,
+        measurementType: 'volume',
+      );
+
+      // Weight + FIFO: 250 g × 10,000¢/kg = 2,500¢.
+      final weightProduct = await insertProduct(
+        name: 'fifo fruit',
+        costingMethod: 'fifo',
+        inventoryTrackingType: 'batch',
+        hasVariants: false,
+        costCents: 10000,
+        stockQty: 250,
+        measurementType: 'weight',
+      );
+      await insertBatch(
+        productId: weightProduct,
+        receivedQty: 250,
+        remainingQty: 250,
+        unitCostCents: 10000,
+      );
+
+      // Piece remains unscaled: 3 × 500¢ = 1,500¢.
+      await insertProduct(
+        name: 'piece product',
+        costingMethod: 'wac',
+        inventoryTrackingType: 'standard',
+        hasVariants: false,
+        costCents: 500,
+        stockQty: 3,
+      );
+
+      final value = await ds.getTotalInventoryValueCents();
+      expect(
+        value,
+        1085570,
+        reason:
+            '1,080,070 length + 1,500 volume + 2,500 weight FIFO + '
+            '1,500 pieces = 1,085,570 cents. Stored measured quantities '
+            'must never be valued as whole major units.',
+      );
+    },
+  );
 }

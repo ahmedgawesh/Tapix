@@ -4,9 +4,27 @@ import '../tables/products.dart';
 
 part 'product_variant_dao.g.dart';
 
+/// Raised when a caller attempts to hide or delete stock-bearing variants.
+/// Stock must first be reduced through InventoryAdjustmentService so the
+/// physical quantity and account 1200 remain reconciled.
+class VariantStockNotZeroException implements Exception {
+  final int variantCount;
+
+  const VariantStockNotZeroException(this.variantCount);
+
+  @override
+  String toString() =>
+      'VariantStockNotZeroException(variantCount: $variantCount)';
+}
+
 @DriftAccessor(tables: [ProductVariants, ProductColors, Sizes])
-class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVariantDaoMixin {
+class ProductVariantDao extends DatabaseAccessor<AppDatabase>
+    with _$ProductVariantDaoMixin {
   ProductVariantDao(super.db);
+
+  Future<T> runInTransaction<T>(Future<T> Function() action) {
+    return transaction(action);
+  }
 
   Stream<List<ProductVariant>> watchAllVariants() {
     return select(productVariants).watch();
@@ -24,11 +42,15 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
   }
 
   Future<List<ProductVariant>> getVariantsByProduct(int productId) {
-    return (select(productVariants)..where((v) => v.productId.equals(productId))).get();
+    return (select(
+      productVariants,
+    )..where((v) => v.productId.equals(productId))).get();
   }
 
   Future<ProductVariant?> getVariantById(int id) {
-    return (select(productVariants)..where((v) => v.id.equals(id))).getSingleOrNull();
+    return (select(
+      productVariants,
+    )..where((v) => v.id.equals(id))).getSingleOrNull();
   }
 
   /// Returns a map of productId -> (variantCount, totalStock) for all products with variants
@@ -51,7 +73,8 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
 
   /// Returns a map of productId -> (sizeName, colorHex) for the first active variant per product.
   /// Used for compact product-card display (SKU (Size ●)).
-  Stream<Map<int, ({String? sizeName, String? colorHex})>> watchVariantPreviews() {
+  Stream<Map<int, ({String? sizeName, String? colorHex})>>
+  watchVariantPreviews() {
     return customSelect(
       'SELECT v.product_id, s.name AS size_name, c.hex_code AS color_hex '
       'FROM product_variants v '
@@ -72,7 +95,9 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
     });
   }
 
-  Future<Map<int, String>> getVariantInfoByProductIds(List<int> productIds) async {
+  Future<Map<int, String>> getVariantInfoByProductIds(
+    List<int> productIds,
+  ) async {
     final result = <int, String>{};
     for (final productId in productIds) {
       final v = await getDefaultVariantByProduct(productId);
@@ -80,22 +105,24 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
 
       String? colorName;
       if (v.colorId != null) {
-        final color = await (select(productColors)..where((c) => c.id.equals(v.colorId!)))
-            .getSingleOrNull();
+        final color = await (select(
+          productColors,
+        )..where((c) => c.id.equals(v.colorId!))).getSingleOrNull();
         colorName = color?.name;
       }
 
       String? sizeName;
       if (v.sizeId != null) {
-        final size = await (select(sizes)..where((s) => s.id.equals(v.sizeId!)))
-            .getSingleOrNull();
+        final size = await (select(
+          sizes,
+        )..where((s) => s.id.equals(v.sizeId!))).getSingleOrNull();
         sizeName = size?.name;
       }
 
-      final info = [sizeName, colorName]
-          .whereType<String>()
-          .where((x) => x.trim().isNotEmpty)
-          .join(' / ');
+      final info = [
+        sizeName,
+        colorName,
+      ].whereType<String>().where((x) => x.trim().isNotEmpty).join(' / ');
       if (info.isNotEmpty) {
         result[productId] = info;
       }
@@ -103,7 +130,9 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
     return result;
   }
 
-  Future<Map<int, String>> getVariantInfoByVariantIds(List<int> variantIds) async {
+  Future<Map<int, String>> getVariantInfoByVariantIds(
+    List<int> variantIds,
+  ) async {
     final result = <int, String>{};
     for (final variantId in variantIds) {
       final v = await getVariantById(variantId);
@@ -111,22 +140,24 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
 
       String? colorName;
       if (v.colorId != null) {
-        final color = await (select(productColors)..where((c) => c.id.equals(v.colorId!)))
-            .getSingleOrNull();
+        final color = await (select(
+          productColors,
+        )..where((c) => c.id.equals(v.colorId!))).getSingleOrNull();
         colorName = color?.name;
       }
 
       String? sizeName;
       if (v.sizeId != null) {
-        final size = await (select(sizes)..where((s) => s.id.equals(v.sizeId!)))
-            .getSingleOrNull();
+        final size = await (select(
+          sizes,
+        )..where((s) => s.id.equals(v.sizeId!))).getSingleOrNull();
         sizeName = size?.name;
       }
 
-      final info = [sizeName, colorName]
-          .whereType<String>()
-          .where((x) => x.trim().isNotEmpty)
-          .join(' / ');
+      final info = [
+        sizeName,
+        colorName,
+      ].whereType<String>().where((x) => x.trim().isNotEmpty).join(' / ');
       if (info.isNotEmpty) {
         result[variantId] = info;
       }
@@ -135,7 +166,9 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
   }
 
   /// Returns variant summary for a single product
-  Future<({int count, int totalStock})?> getVariantSummaryByProduct(int productId) async {
+  Future<({int count, int totalStock})?> getVariantSummaryByProduct(
+    int productId,
+  ) async {
     final row = await customSelect(
       'SELECT COUNT(*) as cnt, SUM(stock_quantity) as total_stock '
       'FROM product_variants WHERE product_id = ? AND is_active = 1',
@@ -164,21 +197,70 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
 
   Future<ProductVariant?> getDefaultVariantByProduct(int productId) {
     return transaction(() async {
-      final strictDefaults = await (select(productVariants)
-            ..where((v) => v.productId.equals(productId))
-            ..where((v) => v.colorId.isNull())
-            ..where((v) => v.sizeId.isNull())
-            ..limit(1))
-          .get();
+      final strictDefaults =
+          await (select(productVariants)
+                ..where((v) => v.productId.equals(productId))
+                ..where((v) => v.colorId.isNull())
+                ..where((v) => v.sizeId.isNull())
+                ..where((v) => v.isActive.equals(true))
+                ..limit(1))
+              .get();
       if (strictDefaults.isNotEmpty) return strictDefaults.first;
 
-      final anyVariants = await (select(productVariants)
-            ..where((v) => v.productId.equals(productId))
-            ..orderBy([(v) => OrderingTerm(expression: v.id)])
-            ..limit(1))
-          .get();
+      final anyVariants =
+          await (select(productVariants)
+                ..where((v) => v.productId.equals(productId))
+                ..where((v) => v.isActive.equals(true))
+                ..orderBy([(v) => OrderingTerm(expression: v.id)])
+                ..limit(1))
+              .get();
       if (anyVariants.isNotEmpty) return anyVariants.first;
       return null;
+    });
+  }
+
+  /// Returns only the anonymous default row. Unlike
+  /// [getDefaultVariantByProduct], this never falls back to a dimensional
+  /// variant, so callers creating a single-variant product cannot
+  /// accidentally treat the first colour/size as its default row.
+  Future<ProductVariant?> getAnonymousDefaultVariantByProduct(
+    int productId, {
+    bool activeOnly = true,
+  }) {
+    final query = select(productVariants)
+      ..where((v) => v.productId.equals(productId))
+      ..where((v) => v.colorId.isNull())
+      ..where((v) => v.sizeId.isNull())
+      ..orderBy([(v) => OrderingTerm(expression: v.id)])
+      ..limit(1);
+    if (activeOnly) {
+      query.where((v) => v.isActive.equals(true));
+    }
+    return query.getSingleOrNull();
+  }
+
+  Future<void> reactivateVariant(int variantId) {
+    return transaction(() async {
+      final variant = await (select(
+        productVariants,
+      )..where((v) => v.id.equals(variantId))).getSingleOrNull();
+      if (variant == null) return;
+      await (update(
+        productVariants,
+      )..where((v) => v.id.equals(variantId))).write(
+        ProductVariantsCompanion(
+          isActive: const Value(true),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      await customUpdate(
+        'UPDATE products SET is_active = 1, updated_at = ? WHERE id = ?',
+        variables: [
+          Variable.withDateTime(DateTime.now()),
+          Variable.withInt(variant.productId),
+        ],
+        updates: {products},
+      );
     });
   }
 
@@ -189,17 +271,23 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
 
       final hasDimensions =
           variant.colorId.present && variant.colorId.value != null ||
-              variant.sizeId.present && variant.sizeId.value != null;
+          variant.sizeId.present && variant.sizeId.value != null;
       if (hasDimensions) {
         await customUpdate(
           'UPDATE products SET has_variants = 1, updated_at = ? WHERE id = ?',
-          variables: [Variable.withDateTime(DateTime.now()), Variable.withInt(productId)],
+          variables: [
+            Variable.withDateTime(DateTime.now()),
+            Variable.withInt(productId),
+          ],
           updates: {products},
         );
       } else {
         await customUpdate(
           'UPDATE products SET updated_at = ? WHERE id = ?',
-          variables: [Variable.withDateTime(DateTime.now()), Variable.withInt(productId)],
+          variables: [
+            Variable.withDateTime(DateTime.now()),
+            Variable.withInt(productId),
+          ],
           updates: {products},
         );
       }
@@ -207,8 +295,13 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
     });
   }
 
-  Future<void> updateVariantBarcode({required int variantId, required String barcode}) {
-    return (update(productVariants)..where((v) => v.id.equals(variantId))).write(
+  Future<void> updateVariantBarcode({
+    required int variantId,
+    required String barcode,
+  }) {
+    return (update(
+      productVariants,
+    )..where((v) => v.id.equals(variantId))).write(
       ProductVariantsCompanion(
         barcode: Value(barcode),
         updatedAt: Value(DateTime.now()),
@@ -218,6 +311,16 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
 
   Future<bool> updateVariant(ProductVariant variant) {
     return transaction(() async {
+      final persisted = await (select(
+        productVariants,
+      )..where((v) => v.id.equals(variant.id))).getSingleOrNull();
+      if (persisted != null &&
+          persisted.isActive &&
+          !variant.isActive &&
+          persisted.stockQuantity != 0) {
+        throw const VariantStockNotZeroException(1);
+      }
+
       final ok = await update(productVariants).replace(variant);
 
       final row = await customSelect(
@@ -255,49 +358,65 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
     return row.read<int>('cnt');
   }
 
+  Future<int> countActiveDimensionalVariantsWithStock(int productId) async {
+    final row = await customSelect(
+      'SELECT COUNT(*) AS cnt FROM product_variants '
+      'WHERE product_id = ? AND is_active = 1 '
+      'AND (color_id IS NOT NULL OR size_id IS NOT NULL) '
+      'AND stock_quantity != 0',
+      variables: [Variable.withInt(productId)],
+    ).getSingle();
+    return row.read<int>('cnt');
+  }
+
   /// Deactivate every variant of [productId] that has a color or size
   /// dimension (keeping the anonymous default variant intact so non-variant
   /// sales can continue). Called when "Has Variants" is toggled from
   /// true -> false. We never hard-delete — those variants may appear on
   /// historical invoices/returns and must stay for audit + COGS integrity.
   Future<int> deactivateDimensionalVariants(int productId) async {
-    return customUpdate(
-      'UPDATE product_variants SET is_active = 0, updated_at = ? '
-      'WHERE product_id = ? AND (color_id IS NOT NULL OR size_id IS NOT NULL)',
-      variables: [
-        Variable.withDateTime(DateTime.now()),
-        Variable.withInt(productId),
-      ],
-      updates: {productVariants},
-    );
+    return transaction(() async {
+      final stockBearingCount = await countActiveDimensionalVariantsWithStock(
+        productId,
+      );
+      if (stockBearingCount > 0) {
+        throw VariantStockNotZeroException(stockBearingCount);
+      }
+      return customUpdate(
+        'UPDATE product_variants SET is_active = 0, updated_at = ? '
+        'WHERE product_id = ? AND is_active = 1 '
+        'AND (color_id IS NOT NULL OR size_id IS NOT NULL)',
+        variables: [
+          Variable.withDateTime(DateTime.now()),
+          Variable.withInt(productId),
+        ],
+        updates: {productVariants},
+      );
+    });
   }
 
   Future<int> deleteVariant(int id) {
     return transaction(() async {
-      final variant = await (select(productVariants)..where((v) => v.id.equals(id)))
-          .getSingleOrNull();
-      final affected = await (delete(productVariants)..where((v) => v.id.equals(id))).go();
+      final variant = await (select(
+        productVariants,
+      )..where((v) => v.id.equals(id))).getSingleOrNull();
+      if (variant != null && variant.stockQuantity != 0) {
+        throw const VariantStockNotZeroException(1);
+      }
+      final affected = await (delete(
+        productVariants,
+      )..where((v) => v.id.equals(id))).go();
 
       final productId = variant?.productId;
       if (productId != null) {
-        final row = await customSelect(
-          'SELECT COUNT(*) as cnt FROM product_variants WHERE product_id = ? AND is_active = 1',
-          variables: [Variable.withInt(productId)],
-        ).getSingle();
-        final remaining = row.read<int>('cnt');
-        if (remaining == 0) {
-          await customUpdate(
-            'UPDATE products SET has_variants = 0, updated_at = ? WHERE id = ?',
-            variables: [Variable.withDateTime(DateTime.now()), Variable.withInt(productId)],
-            updates: {products},
-          );
-        } else {
-          await customUpdate(
-            'UPDATE products SET updated_at = ? WHERE id = ?',
-            variables: [Variable.withDateTime(DateTime.now()), Variable.withInt(productId)],
-            updates: {products},
-          );
-        }
+        await customUpdate(
+          'UPDATE products SET updated_at = ? WHERE id = ?',
+          variables: [
+            Variable.withDateTime(DateTime.now()),
+            Variable.withInt(productId),
+          ],
+          updates: {products},
+        );
       }
 
       return affected;
@@ -338,12 +457,19 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
   /// Returns `(wasDeleted, referenceCount)`.
   ///   - `wasDeleted = true`  -> row removed from product_variants
   ///   - `wasDeleted = false` -> row deactivated (had `referenceCount` refs)
-  Future<({bool wasDeleted, int referenceCount})> smartDeleteVariant(int variantId) {
+  Future<({bool wasDeleted, int referenceCount})> smartDeleteVariant(
+    int variantId,
+  ) {
     return transaction(() async {
-      final variant = await (select(productVariants)..where((v) => v.id.equals(variantId)))
-          .getSingleOrNull();
+      final variant = await (select(
+        productVariants,
+      )..where((v) => v.id.equals(variantId))).getSingleOrNull();
       if (variant == null) {
         return (wasDeleted: false, referenceCount: 0);
+      }
+
+      if (variant.stockQuantity != 0) {
+        throw const VariantStockNotZeroException(1);
       }
 
       final refCount = await countVariantReferences(variantId);
@@ -354,39 +480,32 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase> with _$ProductVari
         // so reports / cost-of-goods stay reproducible. The user can still
         // run an inventory write-off through the adjustment service if they
         // want to zero on-hand value (this routes through the GL properly).
-        await (update(productVariants)..where((v) => v.id.equals(variantId))).write(
+        await (update(
+          productVariants,
+        )..where((v) => v.id.equals(variantId))).write(
           ProductVariantsCompanion(
             isActive: const Value(false),
             updatedAt: Value(DateTime.now()),
           ),
         );
       } else {
-        await (delete(productVariants)..where((v) => v.id.equals(variantId))).go();
+        await (delete(
+          productVariants,
+        )..where((v) => v.id.equals(variantId))).go();
       }
 
-      // Keep products.has_variants in sync with the count of remaining
-      // active dimensional variants (color or size != null), matching the
-      // semantics used in `deactivateDimensionalVariants`.
-      final row = await customSelect(
-        'SELECT COUNT(*) as cnt FROM product_variants '
-        'WHERE product_id = ? AND is_active = 1 '
-        'AND (color_id IS NOT NULL OR size_id IS NOT NULL)',
-        variables: [Variable.withInt(productId)],
-      ).getSingle();
-      final remainingDimensional = row.read<int>('cnt');
-      if (remainingDimensional == 0) {
-        await customUpdate(
-          'UPDATE products SET has_variants = 0, updated_at = ? WHERE id = ?',
-          variables: [Variable.withDateTime(DateTime.now()), Variable.withInt(productId)],
-          updates: {products},
-        );
-      } else {
-        await customUpdate(
-          'UPDATE products SET updated_at = ? WHERE id = ?',
-          variables: [Variable.withDateTime(DateTime.now()), Variable.withInt(productId)],
-          updates: {products},
-        );
-      }
+      // Deleting the last dimensional variant must not silently convert the
+      // product into a simple product with no anonymous default. Keep the
+      // explicit has_variants setting unchanged; the product form owns that
+      // transition and atomically creates/reactivates a default row.
+      await customUpdate(
+        'UPDATE products SET updated_at = ? WHERE id = ?',
+        variables: [
+          Variable.withDateTime(DateTime.now()),
+          Variable.withInt(productId),
+        ],
+        updates: {products},
+      );
 
       return (wasDeleted: refCount == 0, referenceCount: refCount);
     });

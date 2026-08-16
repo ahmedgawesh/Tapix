@@ -22,14 +22,18 @@ class SizeSelectorWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<SizesBloc, RealtimeState<List<Size>>>(
       builder: (context, state) {
-        final sizes = state is RealtimeSuccess<List<Size>> ? state.data : <Size>[];
+        final sizes = state is RealtimeSuccess<List<Size>>
+            ? state.data
+            : <Size>[];
 
         final byId = <int, Size>{};
         for (final s in sizes) {
           byId.putIfAbsent(s.id, () => s);
         }
         final uniqueSizes = byId.values.toList();
-        uniqueSizes.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        uniqueSizes.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
 
         final effectiveSelected = selectedSizeId == null
             ? null

@@ -25,11 +25,7 @@
 /// enum, so the analytics never drift between the two surfaces.
 library;
 
-enum ExpiryStatus {
-  healthy,
-  nearExpiry,
-  expired,
-}
+enum ExpiryStatus { healthy, nearExpiry, expired }
 
 /// Default near-expiry window in days. Mirrors the convention used by Odoo
 /// (30 / 60 / 90), QuickBooks Enterprise (30 default) and most pharmacy POS

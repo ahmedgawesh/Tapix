@@ -6,6 +6,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../../core/database/daos/batch_audit_dao.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
 import '../widgets/batch_consumption_list.dart';
 
@@ -70,9 +71,7 @@ class _BatchManagementScreenState extends State<BatchManagementScreen> {
     final dao = sl<BatchAuditDao>();
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('batch_management.title'.tr()),
-      ),
+      appBar: AppBar(title: Text('batch_management.title'.tr())),
       body: Column(
         children: [
           // Search
@@ -93,14 +92,15 @@ class _BatchManagementScreenState extends State<BatchManagementScreen> {
                       )
                     : null,
                 isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
                 filled: true,
-                fillColor:
-                    cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.3),
               ),
               onChanged: (q) {
                 setState(() {}); // refresh clear-button visibility
@@ -196,12 +196,32 @@ class _SourceFilterRow extends StatelessWidget {
   const _SourceFilterRow({required this.value, required this.onChanged});
 
   static const List<({String? value, String labelKey, IconData icon})>
-      _options = [
-    (value: null, labelKey: 'batch_management.source_all', icon: LucideIcons.layers),
-    (value: 'purchase', labelKey: 'product_form.batches_source_purchase', icon: LucideIcons.truck),
-    (value: 'opening', labelKey: 'product_form.batches_source_opening', icon: LucideIcons.flag),
-    (value: 'found', labelKey: 'product_form.batches_source_found', icon: LucideIcons.sliders),
-    (value: 'sale_return', labelKey: 'product_form.batches_source_sale_return', icon: LucideIcons.undo2),
+  _options = [
+    (
+      value: null,
+      labelKey: 'batch_management.source_all',
+      icon: LucideIcons.layers,
+    ),
+    (
+      value: 'purchase',
+      labelKey: 'product_form.batches_source_purchase',
+      icon: LucideIcons.truck,
+    ),
+    (
+      value: 'opening',
+      labelKey: 'product_form.batches_source_opening',
+      icon: LucideIcons.flag,
+    ),
+    (
+      value: 'found',
+      labelKey: 'product_form.batches_source_found',
+      icon: LucideIcons.sliders,
+    ),
+    (
+      value: 'sale_return',
+      labelKey: 'product_form.batches_source_sale_return',
+      icon: LucideIcons.undo2,
+    ),
   ];
 
   @override
@@ -314,10 +334,18 @@ class _CountedList extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final totalRemaining =
-        rows.fold<int>(0, (s, b) => s + b.remainingQuantity);
-    final totalValueCents =
-        rows.fold<int>(0, (s, b) => s + b.totalRemainingValueCents);
+    final remainingByType = <String, int>{};
+    for (final batch in rows) {
+      remainingByType.update(
+        batch.measurementType,
+        (value) => value + batch.remainingQuantity,
+        ifAbsent: () => batch.remainingQuantity,
+      );
+    }
+    final totalValueCents = rows.fold<int>(
+      0,
+      (s, b) => s + b.totalRemainingValueCents,
+    );
 
     return Column(
       children: [
@@ -327,10 +355,12 @@ class _CountedList extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'batch_management.count_summary'.tr(args: [
-                    '${rows.length}',
-                    '$totalRemaining',
-                  ]),
+                  'batch_management.count_summary'.tr(
+                    args: [
+                      '${rows.length}',
+                      localizedQuantityTotals(remainingByType),
+                    ],
+                  ),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: cs.onSurfaceVariant,
                   ),
@@ -416,10 +446,18 @@ class _BatchTile extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'product_form.batches_remaining'.tr(args: [
-                      '${batch.remainingQuantity}',
-                      '${batch.receivedQuantity}',
-                    ]),
+                    'product_form.batches_remaining'.tr(
+                      args: [
+                        localizedQuantity(
+                          batch.remainingQuantity,
+                          batch.measurementType,
+                        ),
+                        localizedQuantity(
+                          batch.receivedQuantity,
+                          batch.measurementType,
+                        ),
+                      ],
+                    ),
                     style: theme.textTheme.bodySmall?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
@@ -445,16 +483,17 @@ class _BatchTile extends StatelessWidget {
                       color: cs.primary,
                     ),
                   _Chip(
-                    label: 'product_form.batches_unit_cost'
-                        .tr(args: [currency.format(batch.unitCostCents)]),
+                    label: 'product_form.batches_unit_cost'.tr(
+                      args: [currency.format(batch.unitCostCents)],
+                    ),
                     icon: LucideIcons.dollarSign,
                     color: cs.tertiary,
                   ),
                   if (batch.expiryDate != null)
                     _Chip(
-                      label: 'product_form.batches_expiry_on'.tr(args: [
-                        DateFormat.yMMMd().format(batch.expiryDate!),
-                      ]),
+                      label: 'product_form.batches_expiry_on'.tr(
+                        args: [DateFormat.yMMMd().format(batch.expiryDate!)],
+                      ),
                       icon: LucideIcons.calendarClock,
                       color: expiryStatus.color ?? cs.onSurfaceVariant,
                     ),
@@ -561,28 +600,37 @@ class _BatchDrillDownSheet extends StatelessWidget {
                 children: [
                   _FactPill(
                     icon: LucideIcons.boxes,
-                    label: 'product_form.batches_remaining'.tr(args: [
-                      '${batch.remainingQuantity}',
-                      '${batch.receivedQuantity}',
-                    ]),
+                    label: 'product_form.batches_remaining'.tr(
+                      args: [
+                        localizedQuantity(
+                          batch.remainingQuantity,
+                          batch.measurementType,
+                        ),
+                        localizedQuantity(
+                          batch.receivedQuantity,
+                          batch.measurementType,
+                        ),
+                      ],
+                    ),
                   ),
                   _FactPill(
                     icon: LucideIcons.dollarSign,
-                    label: 'product_form.batches_unit_cost'
-                        .tr(args: [currency.format(batch.unitCostCents)]),
+                    label: 'product_form.batches_unit_cost'.tr(
+                      args: [currency.format(batch.unitCostCents)],
+                    ),
                   ),
                   if (batch.expiryDate != null)
                     _FactPill(
                       icon: LucideIcons.calendarClock,
-                      label: 'product_form.batches_expiry_on'.tr(args: [
-                        DateFormat.yMMMd().format(batch.expiryDate!),
-                      ]),
+                      label: 'product_form.batches_expiry_on'.tr(
+                        args: [DateFormat.yMMMd().format(batch.expiryDate!)],
+                      ),
                     ),
                   _FactPill(
                     icon: LucideIcons.truck,
-                    label: 'product_form.batches_received_on'.tr(args: [
-                      DateFormat.yMMMd().format(batch.receivedDate),
-                    ]),
+                    label: 'product_form.batches_received_on'.tr(
+                      args: [DateFormat.yMMMd().format(batch.receivedDate)],
+                    ),
                   ),
                 ],
               ),

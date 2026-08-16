@@ -18,8 +18,8 @@ class FinancialManagementHubScreen extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider(
-          create: (_) => sl<ReportsBloc>()
-            ..add(const ReportsReconciliationRequested()),
+          create: (_) =>
+              sl<ReportsBloc>()..add(const ReportsReconciliationRequested()),
         ),
         BlocProvider(create: (_) => sl<AccountsBloc>()),
       ],
@@ -70,7 +70,8 @@ class _HubView extends StatelessWidget {
             title: 'financial_management.chart_of_accounts'.tr(),
             subtitle: 'financial_management.chart_of_accounts_desc'.tr(),
             color: colorScheme.primary,
-            onTap: () => context.push('/financial-management/chart-of-accounts'),
+            onTap: () =>
+                context.push('/financial-management/chart-of-accounts'),
           ),
           _NavTile(
             icon: LucideIcons.fileEdit,
@@ -85,6 +86,28 @@ class _HubView extends StatelessWidget {
             subtitle: 'financial_management.accounting_periods_desc'.tr(),
             color: colorScheme.tertiary,
             onTap: () => context.push('/financial-management/periods'),
+          ),
+          const SizedBox(height: 20),
+
+          // ═══ OWNER EQUITY & LONG-TERM ASSETS ═══
+          _SectionHeader(
+            icon: LucideIcons.coins,
+            title: 'financial_management.owner_assets_section'.tr(),
+          ),
+          const SizedBox(height: 8),
+          _NavTile(
+            icon: LucideIcons.banknote,
+            title: 'financial_management.owner_finance'.tr(),
+            subtitle: 'financial_management.owner_finance_desc'.tr(),
+            color: Colors.amber.shade800,
+            onTap: () => context.push('/financial-management/owner-finance'),
+          ),
+          _NavTile(
+            icon: LucideIcons.building2,
+            title: 'financial_management.fixed_assets'.tr(),
+            subtitle: 'financial_management.fixed_assets_desc'.tr(),
+            color: Colors.blueGrey,
+            onTap: () => context.push('/financial-management/fixed-assets'),
           ),
           const SizedBox(height: 20),
 
@@ -169,7 +192,8 @@ class _FinancialHealthBanner extends StatelessWidget {
               child: Row(
                 children: [
                   const SizedBox(
-                    width: 20, height: 20,
+                    width: 20,
+                    height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                   const SizedBox(width: 12),
@@ -182,14 +206,15 @@ class _FinancialHealthBanner extends StatelessWidget {
 
         if (state is RealtimeSuccess<ReportsData>) {
           final data = state.data;
-          final tb = data.trialBalance;
+          final cumulativeTb = data.trialBalance;
+          final periodTb = data.periodTrialBalance;
           final healthy = data.isHealthy;
 
-          // Phase 7 — natural-balance signing via TrialBalance SoT.
-          final totalAssets = tb.totalForType('asset');
-          final totalLiabilities = tb.totalForType('liability');
-          final totalRevenue = tb.totalForType('revenue');
-          final totalExpenses = tb.totalForType('expense');
+          // Balance-sheet KPIs are cumulative; performance KPIs are period-only.
+          final totalAssets = cumulativeTb.totalForType('asset');
+          final totalLiabilities = cumulativeTb.totalForType('liability');
+          final totalRevenue = periodTb.totalForType('revenue');
+          final totalExpenses = periodTb.totalForType('expense');
           final netIncome = totalRevenue - totalExpenses;
 
           return Card(
@@ -204,7 +229,9 @@ class _FinancialHealthBanner extends StatelessWidget {
                   Row(
                     children: [
                       Icon(
-                        healthy ? LucideIcons.shieldCheck : LucideIcons.shieldAlert,
+                        healthy
+                            ? LucideIcons.shieldCheck
+                            : LucideIcons.shieldAlert,
                         color: healthy ? Colors.green : colorScheme.error,
                         size: 20,
                       ),
@@ -217,7 +244,10 @@ class _FinancialHealthBanner extends StatelessWidget {
                       ),
                       const Spacer(),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: healthy
                               ? Colors.green.withValues(alpha: 0.15)
@@ -279,7 +309,9 @@ class _FinancialHealthBanner extends StatelessWidget {
                           icon: netIncome >= 0
                               ? LucideIcons.arrowUpRight
                               : LucideIcons.arrowDownRight,
-                          color: netIncome >= 0 ? Colors.green : colorScheme.error,
+                          color: netIncome >= 0
+                              ? Colors.green
+                              : colorScheme.error,
                         ),
                       ),
                     ],
@@ -319,7 +351,9 @@ class _KpiCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -407,7 +441,12 @@ class _NavTile extends StatelessWidget {
           ),
           child: Icon(icon, color: color, size: 22),
         ),
-        title: Text(title, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+        title: Text(
+          title,
+          style: theme.textTheme.bodyLarge?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         subtitle: Text(subtitle, style: theme.textTheme.bodySmall),
         trailing: const Icon(Icons.chevron_right),
         onTap: onTap,

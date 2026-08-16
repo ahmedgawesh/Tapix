@@ -9,11 +9,12 @@ abstract class ProductRepository {
   Future<Product?> findBySku(String sku);
   Future<Product?> findByBarcode(String barcode);
   Future<Product?> findByName(String name);
+
   /// One-shot fetch of a product by primary key. Used by guards that need a
   /// synchronous server-authoritative snapshot (e.g. preserving ledger-
   /// controlled fields like `stockQuantity` and `costCents` across edits).
   Future<Product?> getProductById(int id);
-  
+
   Future<List<Product>> filterProducts({
     int? categoryId,
     String? stockStatus,
@@ -66,6 +67,7 @@ abstract class ProductRepository {
     int salesTaxRateBps = 0,
     bool isActive = true,
     bool trackInventory = true,
+    String measurementType = 'piece',
     String costingMethod = 'wac',
     // Layer 2 of the two-layer inventory architecture. Must be one of
     // 'standard' | 'batch' | 'batch_expiry'. Threaded through create so the
@@ -78,7 +80,8 @@ abstract class ProductRepository {
 
   Future<bool> updateProduct(Product product);
 
-  /// Returns a non-null reason ('has_stock' or 'has_consumptions') when the
+  /// Returns a non-null reason ('has_stock', 'has_consumptions', or
+  /// 'has_transactions') when the
   /// product's costing method is locked, or `null` when it is editable.
   /// See `ProductDao.getCostingMethodLockReason` for full semantics.
   Future<String?> getCostingMethodLockReason(int productId);
@@ -104,6 +107,16 @@ abstract class ProductRepository {
   Future<String?> setInventoryTrackingType({
     required int productId,
     required String trackingType,
+  });
+
+  /// Lock-checked changes for fields that alter stock semantics.
+  Future<String?> setMeasurementType({
+    required int productId,
+    required String measurementType,
+  });
+  Future<String?> setTrackInventory({
+    required int productId,
+    required bool trackInventory,
   });
   Future<int> deleteProduct(int id);
   Future<int> bulkDeleteProducts(List<int> ids);
@@ -171,7 +184,7 @@ abstract class ProductRepository {
   /// Drives the product list near-expiry / expired badges (Phase C) and
   /// will be re-used by the Phase E expiry alert dashboard.
   Stream<Map<int, ({int expiredQty, DateTime? nextExpiry})>>
-      watchExpirySummaries();
+  watchExpirySummaries();
 }
 
 /// Result of a smart-delete attempt: either the product was hard-deleted

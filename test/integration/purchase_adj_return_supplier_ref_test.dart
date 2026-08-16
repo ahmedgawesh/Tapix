@@ -61,9 +61,9 @@ void main() {
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
   Future<int> getCurrencyId() async {
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     return usd.id;
   }
 
@@ -74,33 +74,39 @@ void main() {
     int? lastPurchasePriceCents,
   }) async {
     final currencyId = await getCurrencyId();
-    return db.into(db.products).insert(
-      ProductsCompanion.insert(
-        name: name,
-        priceCents: Decimal.fromInt(priceCents),
-        costCents: Decimal.fromInt(costCents),
-        currencyId: Value(currencyId),
-        stockQuantity: const Value(10),
-        lastPurchasePriceCents: lastPurchasePriceCents == null
-            ? const Value.absent()
-            : Value(Decimal.fromInt(lastPurchasePriceCents)),
-      ),
-    );
+    return db
+        .into(db.products)
+        .insert(
+          ProductsCompanion.insert(
+            name: name,
+            priceCents: Decimal.fromInt(priceCents),
+            costCents: Decimal.fromInt(costCents),
+            currencyId: Value(currencyId),
+            stockQuantity: const Value(10),
+            lastPurchasePriceCents: lastPurchasePriceCents == null
+                ? const Value.absent()
+                : Value(Decimal.fromInt(lastPurchasePriceCents)),
+          ),
+        );
   }
 
   Future<int> createVariantProduct({
     required String name,
+    String? barcode,
   }) async {
     final currencyId = await getCurrencyId();
-    return db.into(db.products).insert(
-      ProductsCompanion.insert(
-        name: name,
-        priceCents: Decimal.fromInt(0),
-        costCents: Decimal.fromInt(0),
-        currencyId: Value(currencyId),
-        hasVariants: const Value(true),
-      ),
-    );
+    return db
+        .into(db.products)
+        .insert(
+          ProductsCompanion.insert(
+            name: name,
+            priceCents: Decimal.fromInt(0),
+            costCents: Decimal.fromInt(0),
+            currencyId: Value(currencyId),
+            hasVariants: const Value(true),
+            barcode: Value(barcode),
+          ),
+        );
   }
 
   Future<int> createVariant(
@@ -108,18 +114,26 @@ void main() {
     required int priceCents,
     required int costCents,
     int? lastPurchasePriceCents,
+    String? barcode,
+    bool isActive = true,
+    int? sizeId,
   }) async {
-    return db.into(db.productVariants).insert(
-      ProductVariantsCompanion.insert(
-        productId: productId,
-        priceCents: Decimal.fromInt(priceCents),
-        costCents: Decimal.fromInt(costCents),
-        stockQuantity: const Value(5),
-        lastPurchasePriceCents: lastPurchasePriceCents == null
-            ? const Value.absent()
-            : Value(Decimal.fromInt(lastPurchasePriceCents)),
-      ),
-    );
+    return db
+        .into(db.productVariants)
+        .insert(
+          ProductVariantsCompanion.insert(
+            productId: productId,
+            priceCents: Decimal.fromInt(priceCents),
+            costCents: Decimal.fromInt(costCents),
+            stockQuantity: const Value(5),
+            barcode: Value(barcode),
+            isActive: Value(isActive),
+            sizeId: Value(sizeId),
+            lastPurchasePriceCents: lastPurchasePriceCents == null
+                ? const Value.absent()
+                : Value(Decimal.fromInt(lastPurchasePriceCents)),
+          ),
+        );
   }
 
   // ─── Tests ───────────────────────────────────────────────────────────────
@@ -143,126 +157,197 @@ void main() {
       expect(results.single.lastPriceCents, 10000);
     });
 
-    test('no-variant: falls back to costCents when lastPurchasePriceCents is NULL', () async {
-      await createNoVariantProduct(
-        name: 'legacy product',
-        priceCents: 19900,
-        costCents: 9900,
-        lastPurchasePriceCents: null, // pre-migration-10055 row
-      );
+    test(
+      'no-variant: falls back to costCents when lastPurchasePriceCents is NULL',
+      () async {
+        await createNoVariantProduct(
+          name: 'legacy product',
+          priceCents: 19900,
+          costCents: 9900,
+          lastPurchasePriceCents: null, // pre-migration-10055 row
+        );
 
-      final results = await service.searchProducts(
-        'legacy',
-        side: ReturnSide.purchase,
-      );
+        final results = await service.searchProducts(
+          'legacy',
+          side: ReturnSide.purchase,
+        );
 
-      expect(results, hasLength(1));
-      expect(results.single.lastPriceCents, 9900);
-    });
+        expect(results, hasLength(1));
+        expect(results.single.lastPriceCents, 9900);
+      },
+    );
 
-    test('variant: lastPurchasePriceCents wins over variant costCents', () async {
-      final productId = await createVariantProduct(name: 'p1 with v');
-      await createVariant(
-        productId,
-        priceCents: 15000, // variant SELL price — must NOT leak through
-        costCents: 9900,
-        lastPurchasePriceCents: 10000,
-      );
+    test(
+      'variant: lastPurchasePriceCents wins over variant costCents',
+      () async {
+        final productId = await createVariantProduct(name: 'p1 with v');
+        await createVariant(
+          productId,
+          priceCents: 15000, // variant SELL price — must NOT leak through
+          costCents: 9900,
+          lastPurchasePriceCents: 10000,
+        );
 
-      final results = await service.searchProducts(
-        'p1',
-        side: ReturnSide.purchase,
-      );
+        final results = await service.searchProducts(
+          'p1',
+          side: ReturnSide.purchase,
+        );
 
-      expect(results, hasLength(1));
-      expect(results.single.lastPriceCents, 10000);
-    });
+        expect(results, hasLength(1));
+        expect(results.single.lastPriceCents, 10000);
+      },
+    );
 
-    test('variant: falls back to costCents when lastPurchasePriceCents is NULL', () async {
-      final productId = await createVariantProduct(name: 'p1 with v legacy');
-      await createVariant(
-        productId,
-        priceCents: 15000,
-        costCents: 9900,
-        lastPurchasePriceCents: null,
-      );
+    test(
+      'variant: falls back to costCents when lastPurchasePriceCents is NULL',
+      () async {
+        final productId = await createVariantProduct(name: 'p1 with v legacy');
+        await createVariant(
+          productId,
+          priceCents: 15000,
+          costCents: 9900,
+          lastPurchasePriceCents: null,
+        );
 
-      final results = await service.searchProducts(
-        'p1',
-        side: ReturnSide.purchase,
-      );
+        final results = await service.searchProducts(
+          'p1',
+          side: ReturnSide.purchase,
+        );
 
-      expect(results, hasLength(1));
-      expect(results.single.lastPriceCents, 9900);
-    });
+        expect(results, hasLength(1));
+        expect(results.single.lastPriceCents, 9900);
+      },
+    );
 
-    test('variant + no-variant yield IDENTICAL supplier reference for same GROSS', () async {
-      // This is the symmetry the field report demanded: when both products
-      // are sourced from the supplier at the same GROSS unit cost, the
-      // adjustment-return picker must NOT surface $150 for one and $99 for
-      // the other.
-      await createNoVariantProduct(
-        name: 'p2 without v',
-        priceCents: 19900,
-        costCents: 9800,
-        lastPurchasePriceCents: 9900,
-      );
-      final pid = await createVariantProduct(name: 'p1 with v');
-      await createVariant(
-        pid,
-        priceCents: 15000,
-        costCents: 9800,
-        lastPurchasePriceCents: 9900,
-      );
+    test(
+      'variant + no-variant yield IDENTICAL supplier reference for same GROSS',
+      () async {
+        // This is the symmetry the field report demanded: when both products
+        // are sourced from the supplier at the same GROSS unit cost, the
+        // adjustment-return picker must NOT surface $150 for one and $99 for
+        // the other.
+        await createNoVariantProduct(
+          name: 'p2 without v',
+          priceCents: 19900,
+          costCents: 9800,
+          lastPurchasePriceCents: 9900,
+        );
+        final pid = await createVariantProduct(name: 'p1 with v');
+        await createVariant(
+          pid,
+          priceCents: 15000,
+          costCents: 9800,
+          lastPurchasePriceCents: 9900,
+        );
 
-      final results = await service.searchProducts(
-        '',
-        side: ReturnSide.purchase,
-      );
+        final results = await service.searchProducts(
+          '',
+          side: ReturnSide.purchase,
+        );
 
-      final byName = {for (final r in results) r.productName: r};
-      expect(byName['p2 without v']?.lastPriceCents, 9900);
-      expect(byName['p1 with v']?.lastPriceCents, 9900);
-      expect(byName['p2 without v']?.lastPriceCents,
-          equals(byName['p1 with v']?.lastPriceCents));
-    });
+        final byName = {for (final r in results) r.productName: r};
+        expect(byName['p2 without v']?.lastPriceCents, 9900);
+        expect(byName['p1 with v']?.lastPriceCents, 9900);
+        expect(
+          byName['p2 without v']?.lastPriceCents,
+          equals(byName['p1 with v']?.lastPriceCents),
+        );
+      },
+    );
   });
 
   group('searchProducts — sale side keeps customer sell price', () {
-    test('no-variant: returns price_cents (NOT cost or last_purchase_price)', () async {
-      await createNoVariantProduct(
-        name: 'p2 without v',
-        priceCents: 19900,
-        costCents: 9900,
-        lastPurchasePriceCents: 10000,
+    test(
+      'no-variant: returns price_cents (NOT cost or last_purchase_price)',
+      () async {
+        await createNoVariantProduct(
+          name: 'p2 without v',
+          priceCents: 19900,
+          costCents: 9900,
+          lastPurchasePriceCents: 10000,
+        );
+
+        final results = await service.searchProducts(
+          'p2',
+          side: ReturnSide.sale,
+        );
+
+        expect(results, hasLength(1));
+        // Sale-side semantics untouched by Phase 15.2.
+        expect(results.single.lastPriceCents, 19900);
+      },
+    );
+
+    test(
+      'variant: returns variant price_cents (NOT cost or last_purchase_price)',
+      () async {
+        final pid = await createVariantProduct(name: 'p1 with v');
+        await createVariant(
+          pid,
+          priceCents: 15000,
+          costCents: 9900,
+          lastPurchasePriceCents: 10000,
+        );
+
+        final results = await service.searchProducts(
+          'p1',
+          side: ReturnSide.sale,
+        );
+
+        expect(results, hasLength(1));
+        expect(results.single.lastPriceCents, 15000);
+      },
+    );
+  });
+
+  group('searchProducts — variant parent barcode', () {
+    test('returns every active child for explicit return selection', () async {
+      final productId = await createVariantProduct(
+        name: 'parent barcode product',
+        barcode: 'PARENT-900',
       );
-
-      final results = await service.searchProducts(
-        'p2',
-        side: ReturnSide.sale,
+      final firstSizeId = await db
+          .into(db.sizes)
+          .insert(SizesCompanion.insert(name: 'First'));
+      final secondSizeId = await db
+          .into(db.sizes)
+          .insert(SizesCompanion.insert(name: 'Second'));
+      final inactiveSizeId = await db
+          .into(db.sizes)
+          .insert(SizesCompanion.insert(name: 'Inactive'));
+      final firstId = await createVariant(
+        productId,
+        priceCents: 1000,
+        costCents: 600,
+        barcode: 'CHILD-901',
+        sizeId: firstSizeId,
       );
-
-      expect(results, hasLength(1));
-      // Sale-side semantics untouched by Phase 15.2.
-      expect(results.single.lastPriceCents, 19900);
-    });
-
-    test('variant: returns variant price_cents (NOT cost or last_purchase_price)', () async {
-      final pid = await createVariantProduct(name: 'p1 with v');
+      final secondId = await createVariant(
+        productId,
+        priceCents: 1200,
+        costCents: 700,
+        barcode: 'CHILD-902',
+        sizeId: secondSizeId,
+      );
       await createVariant(
-        pid,
-        priceCents: 15000,
-        costCents: 9900,
-        lastPurchasePriceCents: 10000,
+        productId,
+        priceCents: 1400,
+        costCents: 800,
+        barcode: 'CHILD-903',
+        isActive: false,
+        sizeId: inactiveSizeId,
       );
 
       final results = await service.searchProducts(
-        'p1',
+        'PARENT-900',
         side: ReturnSide.sale,
       );
 
-      expect(results, hasLength(1));
-      expect(results.single.lastPriceCents, 15000);
+      expect(
+        results.map((r) => r.variantId),
+        unorderedEquals([firstId, secondId]),
+      );
+      expect(results.every((r) => r.variantId != null), isTrue);
     });
   });
 }

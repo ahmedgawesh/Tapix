@@ -21,10 +21,10 @@ class ColorPickerWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<ColorsBloc, RealtimeState<List<ProductColor>>>(
       builder: (context, state) {
-        final colors = state is RealtimeSuccess<List<ProductColor>> 
-            ? state.data 
+        final colors = state is RealtimeSuccess<List<ProductColor>>
+            ? state.data
             : <ProductColor>[];
-            
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -42,10 +42,12 @@ class ColorPickerWidget extends StatelessWidget {
                   child: Text('common.none'.tr()),
                 ),
                 ...colors.map((color) {
-                  final colorValue = color.hexCode != null 
-                      ? Color(int.parse(color.hexCode!.replaceFirst('#', '0xFF'))) 
+                  final colorValue = color.hexCode != null
+                      ? Color(
+                          int.parse(color.hexCode!.replaceFirst('#', '0xFF')),
+                        )
                       : Colors.grey;
-                      
+
                   return DropdownMenuItem<int>(
                     value: color.id,
                     child: Row(
@@ -60,9 +62,7 @@ class ColorPickerWidget extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(color.name),
-                        ),
+                        Expanded(child: Text(color.name)),
                       ],
                     ),
                   );
@@ -100,7 +100,7 @@ class _ManageColorsDialog extends StatefulWidget {
 class _ManageColorsDialogState extends State<_ManageColorsDialog> {
   // TODO: Implement color management dialog logic (add/edit/delete colors)
   // For now, just a placeholder to satisfy the requirement
-  
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(

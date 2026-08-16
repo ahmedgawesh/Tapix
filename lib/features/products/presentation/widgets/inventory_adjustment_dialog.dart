@@ -1,11 +1,15 @@
 import 'package:decimal/decimal.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/inventory/inventory_adjustment_service.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
+import '../../domain/repositories/product_repository.dart';
 
 /// Accounting-safe manual inventory adjustment dialog.
 ///
@@ -28,6 +32,7 @@ class InventoryAdjustmentDialog extends StatefulWidget {
   final int productId;
   final int? variantId;
   final int currentStock;
+  final String measurementType;
 
   /// Current unit cost in MINOR units (cents) — used to seed the revaluation
   /// new-cost field and to compute the book-value preview.
@@ -42,6 +47,7 @@ class InventoryAdjustmentDialog extends StatefulWidget {
     required this.productId,
     this.variantId,
     required this.currentStock,
+    this.measurementType = 'piece',
     required this.currentUnitCostCents,
     this.subjectLabel,
   });
@@ -55,7 +61,9 @@ class InventoryAdjustmentDialog extends StatefulWidget {
     required int currentStock,
     required int currentUnitCostCents,
     String? subjectLabel,
-  }) {
+  }) async {
+    final product = await sl<ProductRepository>().getProductById(productId);
+    if (!context.mounted) return null;
     return showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -63,6 +71,7 @@ class InventoryAdjustmentDialog extends StatefulWidget {
         productId: productId,
         variantId: variantId,
         currentStock: currentStock,
+        measurementType: product?.measurementType ?? 'piece',
         currentUnitCostCents: currentUnitCostCents,
         subjectLabel: subjectLabel,
       ),
@@ -82,12 +91,14 @@ class _InventoryAdjustmentDialogState extends State<InventoryAdjustmentDialog> {
   final _notesCtrl = TextEditingController();
 
   InventoryAdjustmentType _type = InventoryAdjustmentType.shrinkage;
+  late MeasurementUnit _quantityUnit;
   bool _submitting = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    _quantityUnit = MeasurementType.fromDb(widget.measurementType).majorUnit;
     _qtyCtrl.text = '1';
     _costCtrl.text = _fmtCents(widget.currentUnitCostCents);
   }
@@ -102,9 +113,9 @@ class _InventoryAdjustmentDialogState extends State<InventoryAdjustmentDialog> {
   }
 
   static String _fmtCents(int cents) {
-    final d = (Decimal.fromInt(cents) /
-            Decimal.fromInt(100))
-        .toDecimal(scaleOnInfinitePrecision: 2);
+    final d = (Decimal.fromInt(cents) / Decimal.fromInt(100)).toDecimal(
+      scaleOnInfinitePrecision: 2,
+    );
     return d.toString();
   }
 
@@ -117,15 +128,22 @@ class _InventoryAdjustmentDialogState extends State<InventoryAdjustmentDialog> {
   }
 
   // ── Preview helpers ────────────────────────────────────────
-  int _qty() => int.tryParse(_qtyCtrl.text.trim()) ?? 0;
+  int _qty() {
+    try {
+      return MeasuredQuantity.parseToStored(_qtyCtrl.text, _quantityUnit);
+    } on FormatException {
+      return 0;
+    }
+  }
+
   int? _newCostCents() => _parseToCents(_costCtrl.text);
 
   int _signedDelta() => switch (_type) {
-        InventoryAdjustmentType.shrinkage => -_qty().abs(),
-        InventoryAdjustmentType.gain => _qty().abs(),
-        InventoryAdjustmentType.revaluation => 0,
-        InventoryAdjustmentType.openingBalance => 0,
-      };
+    InventoryAdjustmentType.shrinkage => -_qty().abs(),
+    InventoryAdjustmentType.gain => _qty().abs(),
+    InventoryAdjustmentType.revaluation => 0,
+    InventoryAdjustmentType.openingBalance => 0,
+  };
 
   int _newStockPreview() => widget.currentStock + _signedDelta();
 
@@ -133,11 +151,23 @@ class _InventoryAdjustmentDialogState extends State<InventoryAdjustmentDialog> {
     switch (_type) {
       case InventoryAdjustmentType.shrinkage:
       case InventoryAdjustmentType.gain:
-        return _qty().abs() * widget.currentUnitCostCents;
+        return MeasuredAmount.cents(
+          unitCents: widget.currentUnitCostCents,
+          quantity: _qty().abs(),
+          quantityScale: MeasurementType.fromDb(
+            widget.measurementType,
+          ).quantityScale,
+        );
       case InventoryAdjustmentType.revaluation:
         final nc = _newCostCents();
         if (nc == null) return null;
-        return (nc - widget.currentUnitCostCents) * widget.currentStock;
+        return MeasuredAmount.cents(
+          unitCents: nc - widget.currentUnitCostCents,
+          quantity: widget.currentStock,
+          quantityScale: MeasurementType.fromDb(
+            widget.measurementType,
+          ).quantityScale,
+        );
       case InventoryAdjustmentType.openingBalance:
         return null;
     }
@@ -186,9 +216,7 @@ class _InventoryAdjustmentDialogState extends State<InventoryAdjustmentDialog> {
         children: [
           Icon(LucideIcons.boxes, color: cs.primary),
           const SizedBox(width: 8),
-          Expanded(
-            child: Text('inventory_adjustment.title'.tr()),
-          ),
+          Expanded(child: Text('inventory_adjustment.title'.tr())),
         ],
       ),
       content: ConstrainedBox(
@@ -232,7 +260,9 @@ class _InventoryAdjustmentDialogState extends State<InventoryAdjustmentDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: _submitting ? null : () => Navigator.of(context).pop(false),
+          onPressed: _submitting
+              ? null
+              : () => Navigator.of(context).pop(false),
           child: Text('common.cancel'.tr()),
         ),
         FilledButton.icon(
@@ -241,7 +271,8 @@ class _InventoryAdjustmentDialogState extends State<InventoryAdjustmentDialog> {
               ? const SizedBox(
                   width: 14,
                   height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2))
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
               : const Icon(LucideIcons.check, size: 16),
           label: Text('inventory_adjustment.post'.tr()),
         ),
@@ -261,7 +292,7 @@ class _InventoryAdjustmentDialogState extends State<InventoryAdjustmentDialog> {
           _summaryChip(
             cs,
             'inventory_adjustment.current_stock'.tr(),
-            widget.currentStock.toString(),
+            localizedQuantity(widget.currentStock, widget.measurementType),
           ),
           const SizedBox(width: 12),
           _summaryChip(
@@ -279,12 +310,15 @@ class _InventoryAdjustmentDialogState extends State<InventoryAdjustmentDialog> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+          ),
           const SizedBox(height: 2),
-          Text(value,
-              style: const TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.w600)),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
         ],
       ),
     );
@@ -294,8 +328,10 @@ class _InventoryAdjustmentDialogState extends State<InventoryAdjustmentDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('inventory_adjustment.type'.tr(),
-            style: Theme.of(context).textTheme.labelLarge),
+        Text(
+          'inventory_adjustment.type'.tr(),
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
         const SizedBox(height: 8),
         SegmentedButton<InventoryAdjustmentType>(
           segments: [
@@ -345,7 +381,8 @@ class _InventoryAdjustmentDialogState extends State<InventoryAdjustmentDialog> {
   Widget _buildQuantityField(ColorScheme cs) {
     return TextFormField(
       controller: _qtyCtrl,
-      keyboardType: TextInputType.number,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.,]'))],
       onTap: () => selectAllText(_qtyCtrl),
       enabled: !_submitting,
       decoration: InputDecoration(
@@ -358,11 +395,40 @@ class _InventoryAdjustmentDialogState extends State<InventoryAdjustmentDialog> {
               : LucideIcons.plus,
           size: 18,
         ),
+        suffixIcon:
+            MeasurementType.fromDb(widget.measurementType).minorUnit == null
+            ? null
+            : DropdownButtonHideUnderline(
+                child: DropdownButton<MeasurementUnit>(
+                  value: _quantityUnit,
+                  isDense: true,
+                  items: MeasurementType.fromDb(widget.measurementType)
+                      .inputUnits
+                      .map(
+                        (unit) => DropdownMenuItem(
+                          value: unit,
+                          child: Text('measurement.units.${unit.dbValue}'.tr()),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (unit) {
+                    if (unit == null) return;
+                    final stored = _qty();
+                    setState(() {
+                      _quantityUnit = unit;
+                      _qtyCtrl.text = MeasuredQuantity.editableValue(
+                        stored,
+                        unit,
+                      );
+                    });
+                  },
+                ),
+              ),
       ),
       onChanged: (_) => setState(() {}),
       validator: (v) {
-        final n = int.tryParse((v ?? '').trim());
-        if (n == null || n <= 0) {
+        final n = _qty();
+        if (n <= 0) {
           return 'inventory_adjustment.quantity_invalid'.tr();
         }
         if (_type == InventoryAdjustmentType.shrinkage &&
@@ -452,18 +518,21 @@ class _InventoryAdjustmentDialogState extends State<InventoryAdjustmentDialog> {
             children: [
               Icon(LucideIcons.eye, size: 14, color: cs.primary),
               const SizedBox(width: 6),
-              Text('inventory_adjustment.preview'.tr(),
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: cs.primary)),
+              Text(
+                'inventory_adjustment.preview'.tr(),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: cs.primary,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
           if (_type != InventoryAdjustmentType.revaluation)
             _previewLine(
               'inventory_adjustment.new_stock'.tr(),
-              '${widget.currentStock}  →  $newStock',
+              '${localizedQuantity(widget.currentStock, widget.measurementType)}  →  ${localizedQuantity(newStock, widget.measurementType)}',
               newStock < 0 ? cs.error : null,
             ),
           if (_type == InventoryAdjustmentType.revaluation)
@@ -482,9 +551,10 @@ class _InventoryAdjustmentDialogState extends State<InventoryAdjustmentDialog> {
           Text(
             _journalPreview(),
             style: TextStyle(
-                fontSize: 11,
-                color: cs.onSurfaceVariant,
-                fontFamily: 'monospace'),
+              fontSize: 11,
+              color: cs.onSurfaceVariant,
+              fontFamily: 'monospace',
+            ),
           ),
         ],
       ),
@@ -496,14 +566,14 @@ class _InventoryAdjustmentDialogState extends State<InventoryAdjustmentDialog> {
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
-          Expanded(
-              child: Text(label, style: const TextStyle(fontSize: 12))),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 12))),
           Text(
             value,
             style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: valueColor),
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: valueColor,
+            ),
           ),
         ],
       ),

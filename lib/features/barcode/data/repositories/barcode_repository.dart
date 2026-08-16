@@ -32,9 +32,9 @@ class BarcodeRepositoryImpl implements BarcodeRepository {
   @override
   Future<InvoicePrintData> getPurchasePrintData(int purchaseId) async {
     // Get purchase header information
-    final purchase = await (_database.select(_database.purchases)
-          ..where((p) => p.id.equals(purchaseId)))
-        .getSingleOrNull();
+    final purchase = await (_database.select(
+      _database.purchases,
+    )..where((p) => p.id.equals(purchaseId))).getSingleOrNull();
 
     if (purchase == null) {
       throw InvoiceNotFoundException(purchaseId, 'purchase');
@@ -46,16 +46,16 @@ class BarcodeRepositoryImpl implements BarcodeRepository {
     }
 
     // Get purchase line items with variant information
-    final purchaseItems = await (_database.select(_database.purchaseItems)
-          ..where((pi) => pi.purchaseId.equals(purchaseId)))
-        .get();
+    final purchaseItems = await (_database.select(
+      _database.purchaseItems,
+    )..where((pi) => pi.purchaseId.equals(purchaseId))).get();
 
     final lines = <InvoiceLinePrintData>[];
 
     for (final item in purchaseItems) {
       // Skip if no variant
       if (item.variantId == null) continue;
-      
+
       // Get variant information
       final variant = await getVariantById(item.variantId!);
       if (variant == null || !variant.isActive) {
@@ -82,17 +82,21 @@ class BarcodeRepositoryImpl implements BarcodeRepository {
         sizeName = size?.name;
       }
 
-      lines.add(InvoiceLinePrintData(
-        variantId: variant.id,
-        quantity: item.quantity,
-        productName: product.name,
-        colorName: colorName,
-        sizeName: sizeName,
-        barcode: variant.barcode ?? '',
-        sku: variant.sku ?? '',
-        unitPriceCents: item.unitCostCents.toBigInt().toInt(),
-        isActive: variant.isActive,
-      ));
+      lines.add(
+        InvoiceLinePrintData(
+          variantId: variant.id,
+          quantity: item.quantity,
+          productName: product.name,
+          colorName: colorName,
+          sizeName: sizeName,
+          barcode: variant.barcode ?? '',
+          sku: variant.sku ?? '',
+          unitPriceCents: variant.priceCents.toBigInt().toInt(),
+          sellingPriceCents: variant.priceCents.toBigInt().toInt(),
+          wholesalePriceCents: variant.wholesalePriceCents?.toBigInt().toInt(),
+          isActive: variant.isActive,
+        ),
+      );
     }
 
     return InvoicePrintData(
@@ -107,9 +111,9 @@ class BarcodeRepositoryImpl implements BarcodeRepository {
   @override
   Future<InvoicePrintData> getSalePrintData(int saleId) async {
     // Get sale header information
-    final sale = await (_database.select(_database.sales)
-          ..where((s) => s.id.equals(saleId)))
-        .getSingleOrNull();
+    final sale = await (_database.select(
+      _database.sales,
+    )..where((s) => s.id.equals(saleId))).getSingleOrNull();
 
     if (sale == null) {
       throw InvoiceNotFoundException(saleId, 'sale');
@@ -121,16 +125,16 @@ class BarcodeRepositoryImpl implements BarcodeRepository {
     }
 
     // Get sale line items with variant information
-    final saleItems = await (_database.select(_database.saleItems)
-          ..where((si) => si.saleId.equals(saleId)))
-        .get();
+    final saleItems = await (_database.select(
+      _database.saleItems,
+    )..where((si) => si.saleId.equals(saleId))).get();
 
     final lines = <InvoiceLinePrintData>[];
 
     for (final item in saleItems) {
       // Skip if no variant
       if (item.variantId == null) continue;
-      
+
       // Get variant information
       final variant = await getVariantById(item.variantId!);
       if (variant == null || !variant.isActive) {
@@ -157,17 +161,21 @@ class BarcodeRepositoryImpl implements BarcodeRepository {
         sizeName = size?.name;
       }
 
-      lines.add(InvoiceLinePrintData(
-        variantId: variant.id,
-        quantity: item.quantity,
-        productName: product.name,
-        colorName: colorName,
-        sizeName: sizeName,
-        barcode: variant.barcode ?? '',
-        sku: variant.sku ?? '',
-        unitPriceCents: item.unitPriceCents.toBigInt().toInt(),
-        isActive: variant.isActive,
-      ));
+      lines.add(
+        InvoiceLinePrintData(
+          variantId: variant.id,
+          quantity: item.quantity,
+          productName: product.name,
+          colorName: colorName,
+          sizeName: sizeName,
+          barcode: variant.barcode ?? '',
+          sku: variant.sku ?? '',
+          unitPriceCents: item.unitPriceCents.toBigInt().toInt(),
+          sellingPriceCents: variant.priceCents.toBigInt().toInt(),
+          wholesalePriceCents: variant.wholesalePriceCents?.toBigInt().toInt(),
+          isActive: variant.isActive,
+        ),
+      );
     }
 
     return InvoicePrintData(
@@ -181,29 +189,29 @@ class BarcodeRepositoryImpl implements BarcodeRepository {
 
   @override
   Future<ProductVariant?> getVariantById(int variantId) async {
-    return await (_database.select(_database.productVariants)
-          ..where((v) => v.id.equals(variantId)))
-        .getSingleOrNull();
+    return await (_database.select(
+      _database.productVariants,
+    )..where((v) => v.id.equals(variantId))).getSingleOrNull();
   }
 
   @override
   Future<Product?> getProductById(int productId) async {
-    return await (_database.select(_database.products)
-          ..where((p) => p.id.equals(productId)))
-        .getSingleOrNull();
+    return await (_database.select(
+      _database.products,
+    )..where((p) => p.id.equals(productId))).getSingleOrNull();
   }
 
   @override
   Future<ProductColor?> getColorById(int colorId) async {
-    return await (_database.select(_database.productColors)
-          ..where((c) => c.id.equals(colorId)))
-        .getSingleOrNull();
+    return await (_database.select(
+      _database.productColors,
+    )..where((c) => c.id.equals(colorId))).getSingleOrNull();
   }
 
   @override
   Future<Size?> getSizeById(int sizeId) async {
-    return await (_database.select(_database.sizes)
-          ..where((s) => s.id.equals(sizeId)))
-        .getSingleOrNull();
+    return await (_database.select(
+      _database.sizes,
+    )..where((s) => s.id.equals(sizeId))).getSingleOrNull();
   }
 }

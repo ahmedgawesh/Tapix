@@ -5,6 +5,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../inventory/domain/entities/expiry_alert_item.dart';
 import '../../../inventory/presentation/bloc/expiry_alerts_bloc.dart';
@@ -52,9 +53,7 @@ class _ExpiryReportViewState extends State<_ExpiryReportView> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('reports.expiry_report_title'.tr()),
-      ),
+      appBar: AppBar(title: Text('reports.expiry_report_title'.tr())),
       body: BlocBuilder<ExpiryAlertsBloc, RealtimeState<ExpiryAlertSnapshot>>(
         builder: (context, state) {
           if (state is RealtimeLoading<ExpiryAlertSnapshot>) {
@@ -145,10 +144,13 @@ class _Header extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'reports.expiry_alerts_potential_writeoff'.tr(args: [
-                        sl<CurrencyService>()
-                            .format(snapshot.summary.expiredCostCents),
-                      ]),
+                      'reports.expiry_alerts_potential_writeoff'.tr(
+                        args: [
+                          sl<CurrencyService>().format(
+                            snapshot.summary.expiredCostCents,
+                          ),
+                        ],
+                      ),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.w600,
                         color: colorScheme.onErrorContainer,
@@ -329,7 +331,7 @@ class _AlertTile extends StatelessWidget {
           ),
           Text(
             '${'reports.expiry_report_col_expiry'.tr()}: ${dateFormat.format(item.expiryDate)}  •  '
-            '${'reports.expiry_report_col_qty'.tr()}: ${item.remainingQuantity}',
+            '${'reports.expiry_report_col_qty'.tr()}: ${localizedQuantity(item.remainingQuantity, item.measurementType)}',
             style: theme.textTheme.bodySmall?.copyWith(color: color),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

@@ -4,6 +4,7 @@ import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 
 import '../database/app_database.dart';
+import '../measurement/measurement.dart';
 import '../../features/accounting/data/repositories/accounting_repository.dart';
 import '../../features/accounting/domain/models/journal_entry_data.dart';
 import 'journal_entry_service.dart';
@@ -28,9 +29,9 @@ class LedgerRebuildService {
     required AppDatabase db,
     required AccountingRepository accountingRepo,
     required JournalEntryService journalService,
-  })  : _db = db,
-        _accountingRepo = accountingRepo,
-        _journalService = journalService;
+  }) : _db = db,
+       _accountingRepo = accountingRepo,
+       _journalService = journalService;
 
   /// Rebuild the entire ledger from historical transactions.
   /// Returns a report of what was done.
@@ -38,9 +39,7 @@ class LedgerRebuildService {
   /// [confirmationToken] must be set to `true` to proceed.
   /// This prevents accidental invocation — the caller (UI) must
   /// explicitly confirm the destructive operation.
-  Future<LedgerRebuildReport> rebuild({
-    bool confirmationToken = false,
-  }) async {
+  Future<LedgerRebuildReport> rebuild({bool confirmationToken = false}) async {
     if (!confirmationToken) {
       throw StateError(
         'LedgerRebuildService.rebuild() requires confirmationToken=true. '
@@ -125,12 +124,14 @@ class LedgerRebuildService {
       if (balanceCents == 0) continue;
 
       // Check if an opening_balance journal entry already exists
-      final existing = await (_db.select(_db.journalEntries)
-            ..where((j) =>
-                j.sourceTable.equals('customers') &
-                j.sourceId.equals(customer.id) &
-                j.entryType.equals('opening_balance')))
-          .getSingleOrNull();
+      final existing =
+          await (_db.select(_db.journalEntries)..where(
+                (j) =>
+                    j.sourceTable.equals('customers') &
+                    j.sourceId.equals(customer.id) &
+                    j.entryType.equals('opening_balance'),
+              ))
+              .getSingleOrNull();
       if (existing != null) {
         report.customersSkipped++;
         continue;
@@ -149,7 +150,10 @@ class LedgerRebuildService {
         );
       } catch (e) {
         report.errors.add('Customer #${customer.id}: $e');
-        developer.log('Error repairing customer #${customer.id}: $e', name: 'OpeningBalanceRepair');
+        developer.log(
+          'Error repairing customer #${customer.id}: $e',
+          name: 'OpeningBalanceRepair',
+        );
       }
     }
 
@@ -159,12 +163,14 @@ class LedgerRebuildService {
       final balanceCents = supplier.balanceCents.toBigInt().toInt();
       if (balanceCents == 0) continue;
 
-      final existing = await (_db.select(_db.journalEntries)
-            ..where((j) =>
-                j.sourceTable.equals('suppliers') &
-                j.sourceId.equals(supplier.id) &
-                j.entryType.equals('opening_balance')))
-          .getSingleOrNull();
+      final existing =
+          await (_db.select(_db.journalEntries)..where(
+                (j) =>
+                    j.sourceTable.equals('suppliers') &
+                    j.sourceId.equals(supplier.id) &
+                    j.entryType.equals('opening_balance'),
+              ))
+              .getSingleOrNull();
       if (existing != null) {
         report.suppliersSkipped++;
         continue;
@@ -183,7 +189,10 @@ class LedgerRebuildService {
         );
       } catch (e) {
         report.errors.add('Supplier #${supplier.id}: $e');
-        developer.log('Error repairing supplier #${supplier.id}: $e', name: 'OpeningBalanceRepair');
+        developer.log(
+          'Error repairing supplier #${supplier.id}: $e',
+          name: 'OpeningBalanceRepair',
+        );
       }
     }
 
@@ -201,17 +210,15 @@ class LedgerRebuildService {
   /// create journal entries for dates that fall within those periods.
   /// Returns the list of period IDs that were reopened.
   Future<List<int>> _reopenAllClosedPeriods(LedgerRebuildReport report) async {
-    final closedPeriods = await (_db.select(_db.accountingPeriods)
-          ..where((p) => p.isClosed.equals(true)))
-        .get();
+    final closedPeriods = await (_db.select(
+      _db.accountingPeriods,
+    )..where((p) => p.isClosed.equals(true))).get();
 
     final ids = <int>[];
     for (final period in closedPeriods) {
       await (_db.update(_db.accountingPeriods)
             ..where((p) => p.id.equals(period.id)))
-          .write(const AccountingPeriodsCompanion(
-            isClosed: Value(false),
-          ));
+          .write(const AccountingPeriodsCompanion(isClosed: Value(false)));
       ids.add(period.id);
     }
 
@@ -231,12 +238,14 @@ class LedgerRebuildService {
     LedgerRebuildReport report,
   ) async {
     for (final id in periodIds) {
-      await (_db.update(_db.accountingPeriods)
-            ..where((p) => p.id.equals(id)))
-          .write(AccountingPeriodsCompanion(
-            isClosed: const Value(true),
-            updatedAt: Value(DateTime.now()),
-          ));
+      await (_db.update(
+        _db.accountingPeriods,
+      )..where((p) => p.id.equals(id))).write(
+        AccountingPeriodsCompanion(
+          isClosed: const Value(true),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
     }
 
     if (periodIds.isNotEmpty) {
@@ -249,20 +258,26 @@ class LedgerRebuildService {
 
   /// Phase 1: Reset all account balances to zero
   Future<void> _resetAccountBalances(LedgerRebuildReport report) async {
-    final accounts = await (_db.select(_db.accounts)
-          ..where((a) => a.isActive.equals(true)))
-        .get();
+    final accounts = await (_db.select(
+      _db.accounts,
+    )..where((a) => a.isActive.equals(true))).get();
 
     for (final account in accounts) {
-      await (_db.update(_db.accounts)..where((a) => a.id.equals(account.id)))
-          .write(AccountsCompanion(
-            balanceCents: Value(Decimal.zero),
-            updatedAt: Value(DateTime.now()),
-          ));
+      await (_db.update(
+        _db.accounts,
+      )..where((a) => a.id.equals(account.id))).write(
+        AccountsCompanion(
+          balanceCents: Value(Decimal.zero),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
     }
 
     report.accountsReset = accounts.length;
-    developer.log('Reset ${accounts.length} account balances to zero', name: 'LedgerRebuild');
+    developer.log(
+      'Reset ${accounts.length} account balances to zero',
+      name: 'LedgerRebuild',
+    );
   }
 
   /// Phase 2: Delete all existing journal entries and lines
@@ -287,38 +302,51 @@ class LedgerRebuildService {
       'adjustment',
       'opening',
       'opening_balance',
+      // Inventory adjustments are not reconstructed from invoices/returns.
+      // They must survive a ledger rebuild or 1200 loses opening stock and
+      // physical-count adjustments while the quantities remain unchanged.
+      'inventory_opening_balance',
+      'inventory_shrinkage',
+      'inventory_gain',
+      'inventory_revaluation',
     };
 
-    final entries = await (_db.select(_db.journalEntries)
-          ..where((e) => e.status.equals('posted'))
-          ..where((e) => e.entryType.isIn(preservedTypes.toList())))
-        .get();
+    final entries =
+        await (_db.select(_db.journalEntries)
+              ..where((e) => e.status.equals('posted'))
+              ..where((e) => e.entryType.isIn(preservedTypes.toList())))
+            .get();
 
     final preserved = <_PreservedJournalEntry>[];
     for (final entry in entries) {
-      final lines = await (_db.select(_db.journalEntryLines)
-            ..where((l) => l.journalEntryId.equals(entry.id))
-            ..orderBy([(l) => OrderingTerm(expression: l.lineNumber)]))
-          .get();
+      final lines =
+          await (_db.select(_db.journalEntryLines)
+                ..where((l) => l.journalEntryId.equals(entry.id))
+                ..orderBy([(l) => OrderingTerm(expression: l.lineNumber)]))
+              .get();
 
-      preserved.add(_PreservedJournalEntry(
-        description: entry.description,
-        entryDate: entry.entryDate,
-        entryType: entry.entryType,
-        accountingPeriodId: entry.accountingPeriodId,
-        sourceTable: entry.sourceTable,
-        sourceId: entry.sourceId,
-        createdBy: entry.createdBy,
-        lines: lines
-            .map((line) => JournalEntryLineData(
+      preserved.add(
+        _PreservedJournalEntry(
+          description: entry.description,
+          entryDate: entry.entryDate,
+          entryType: entry.entryType,
+          accountingPeriodId: entry.accountingPeriodId,
+          sourceTable: entry.sourceTable,
+          sourceId: entry.sourceId,
+          createdBy: entry.createdBy,
+          lines: lines
+              .map(
+                (line) => JournalEntryLineData(
                   accountId: line.accountId,
                   debitCents: line.debitCents.toBigInt().toInt(),
                   creditCents: line.creditCents.toBigInt().toInt(),
                   currencyId: line.currencyId,
                   description: line.description,
-                ))
-            .toList(),
-      ));
+                ),
+              )
+              .toList(),
+        ),
+      );
     }
 
     report.manualEntriesPreserved = preserved.length;
@@ -333,9 +361,9 @@ class LedgerRebuildService {
 
   /// Phase 3a: Replay all completed (non-voided) sales
   Future<void> _replaySales(LedgerRebuildReport report) async {
-    final sales = await (_db.select(_db.sales)
-          ..where((s) => s.status.equals('completed')))
-        .get();
+    final sales = await (_db.select(
+      _db.sales,
+    )..where((s) => s.status.equals('completed'))).get();
 
     for (final sale in sales) {
       try {
@@ -349,27 +377,49 @@ class LedgerRebuildService {
           currencyId: sale.currencyId,
           taxCents: sale.taxCents.toBigInt().toInt(),
         );
+
+        // Rebuild the perpetual-inventory leg as well. The old rebuild only
+        // recreated revenue / cash / receivable and silently dropped every
+        // sale COGS entry after deleting the ledger. SaleDao is the shared
+        // source of truth: exact batch-consumption totals for FIFO, frozen
+        // sale-item cost for WAC.
+        final costCents = await _db.saleDao.computeSaleCostCents(sale.id);
+        if (costCents > 0) {
+          await _journalService.recordSaleCOGSJournalEntry(
+            saleId: sale.id,
+            costCents: costCents,
+            currencyId: sale.currencyId,
+          );
+        }
         report.salesReplayed++;
       } catch (e) {
         report.errors.add('Sale #${sale.id}: $e');
-        developer.log('Error replaying sale #${sale.id}: $e', name: 'LedgerRebuild');
+        developer.log(
+          'Error replaying sale #${sale.id}: $e',
+          name: 'LedgerRebuild',
+        );
       }
     }
 
-    developer.log('Replayed ${report.salesReplayed} sales', name: 'LedgerRebuild');
+    developer.log(
+      'Replayed ${report.salesReplayed} sales',
+      name: 'LedgerRebuild',
+    );
   }
 
   /// Phase 3b: Replay all posted (non-voided) purchases
   Future<void> _replayPurchases(LedgerRebuildReport report) async {
-    final purchases = await (_db.select(_db.purchases)
-          ..where((p) => p.status.equals('posted')))
-        .get();
+    final purchases = await (_db.select(
+      _db.purchases,
+    )..where((p) => p.status.equals('posted'))).get();
 
     for (final purchase in purchases) {
       try {
         final totalCents = purchase.totalCents.toBigInt().toInt();
         final paidCents = purchase.paidAmountCents.toBigInt().toInt();
         final taxCents = purchase.taxCents.toBigInt().toInt();
+        final inventoryNetCents = await _db.purchaseDao
+            .computePurchaseInventoryNetCents(purchase.id);
 
         await _journalService.recordPurchaseJournalEntry(
           purchaseId: purchase.id,
@@ -377,16 +427,35 @@ class LedgerRebuildService {
           paidAmountCents: paidCents,
           currencyId: purchase.currencyId,
           taxCents: taxCents,
+          inventoryNetCents: inventoryNetCents,
           paymentMethod: purchase.paymentMethod,
         );
+        final actualInventoryValue = await _db.purchaseDao
+            .computePurchaseInventoryValueAtPostCents(purchase.id);
+        final roundingDelta = actualInventoryValue - inventoryNetCents;
+        if (roundingDelta != 0) {
+          await _journalService.recordInventoryRoundingJournalEntry(
+            sourceTable: 'purchases',
+            sourceId: purchase.id,
+            deltaValueCents: roundingDelta,
+            currencyId: purchase.currencyId,
+            reason: 'Purchase ${purchase.purchaseNumber} rebuild',
+          );
+        }
         report.purchasesReplayed++;
       } catch (e) {
         report.errors.add('Purchase #${purchase.id}: $e');
-        developer.log('Error replaying purchase #${purchase.id}: $e', name: 'LedgerRebuild');
+        developer.log(
+          'Error replaying purchase #${purchase.id}: $e',
+          name: 'LedgerRebuild',
+        );
       }
     }
 
-    developer.log('Replayed ${report.purchasesReplayed} purchases', name: 'LedgerRebuild');
+    developer.log(
+      'Replayed ${report.purchasesReplayed} purchases',
+      name: 'LedgerRebuild',
+    );
   }
 
   /// Phase 3c: Replay all expenses
@@ -405,18 +474,24 @@ class LedgerRebuildService {
         report.expensesReplayed++;
       } catch (e) {
         report.errors.add('Expense #${expense.id}: $e');
-        developer.log('Error replaying expense #${expense.id}: $e', name: 'LedgerRebuild');
+        developer.log(
+          'Error replaying expense #${expense.id}: $e',
+          name: 'LedgerRebuild',
+        );
       }
     }
 
-    developer.log('Replayed ${report.expensesReplayed} expenses', name: 'LedgerRebuild');
+    developer.log(
+      'Replayed ${report.expensesReplayed} expenses',
+      name: 'LedgerRebuild',
+    );
   }
 
   /// Phase 3d: Replay all posted sale returns
   Future<void> _replaySaleReturns(LedgerRebuildReport report) async {
-    final returns = await (_db.select(_db.saleReturns)
-          ..where((r) => r.status.equals('posted')))
-        .get();
+    final returns = await (_db.select(
+      _db.saleReturns,
+    )..where((r) => r.status.equals('posted'))).get();
 
     for (final ret in returns) {
       try {
@@ -425,9 +500,9 @@ class LedgerRebuildService {
 
         // Resolve partyId (customer_id) from the parent sale so the policy
         // can satisfy the credit-refund defense-in-depth check.
-        final saleRow = await (_db.select(_db.sales)
-              ..where((s) => s.id.equals(ret.saleId)))
-            .getSingleOrNull();
+        final saleRow = await (_db.select(
+          _db.sales,
+        )..where((s) => s.id.equals(ret.saleId))).getSingleOrNull();
         final partyId = saleRow?.customerId;
 
         await _journalService.recordSaleReturnJournalEntry(
@@ -440,25 +515,14 @@ class LedgerRebuildService {
         );
 
         // ── COGS reversal leg (Dr 1200 Inventory, Cr 5300 COGS) ──
-        // Pre-existing gap in rebuild: the inventory side of linked sale
-        // returns used to be omitted, leaving a net positive impact on
-        // COGS after a rebuild. We restore it here using the frozen cost
-        // snapshot on `sale_return_items.unit_cost_cents` (falls back to
-        // the parent sale item's unit_cost_cents when NULL).
-        final costRow = await _db.customSelect(
-          '''
-          SELECT COALESCE(SUM(
-                   COALESCE(sri.unit_cost_cents, si.unit_cost_cents, 0)
-                   * sri.quantity
-                 ), 0) AS cost_cents
-          FROM sale_return_items sri
-          INNER JOIN sale_items si ON si.id = sri.sale_item_id
-          WHERE sri.sale_return_id = ?
-          ''',
-          variables: [Variable.withInt(ret.id)],
-          readsFrom: {_db.saleReturnItems, _db.saleItems},
-        ).getSingleOrNull();
-        final returnCostCents = costRow?.read<int>('cost_cents') ?? 0;
+        // Use the same source as live posting. For FIFO this is the exact
+        // value of the batch layers restored by this return; for WAC it is
+        // the frozen return / original-sale cost. Besides preventing blended
+        // unit-cost rounding drift, this removes the stale SQL reference to
+        // the non-existent legacy `sale_return_items.unit_cost_cents` column.
+        final returnCostCents = await _db.saleDao.computeSaleReturnCostCents(
+          ret.id,
+        );
         if (returnCostCents > 0) {
           await _journalService.recordSaleReturnCOGSReversalJournalEntry(
             returnId: ret.id,
@@ -470,18 +534,24 @@ class LedgerRebuildService {
         report.saleReturnsReplayed++;
       } catch (e) {
         report.errors.add('Sale Return #${ret.id}: $e');
-        developer.log('Error replaying sale return #${ret.id}: $e', name: 'LedgerRebuild');
+        developer.log(
+          'Error replaying sale return #${ret.id}: $e',
+          name: 'LedgerRebuild',
+        );
       }
     }
 
-    developer.log('Replayed ${report.saleReturnsReplayed} sale returns', name: 'LedgerRebuild');
+    developer.log(
+      'Replayed ${report.saleReturnsReplayed} sale returns',
+      name: 'LedgerRebuild',
+    );
   }
 
   /// Phase 3e: Replay all posted purchase returns
   Future<void> _replayPurchaseReturns(LedgerRebuildReport report) async {
-    final returns = await (_db.select(_db.purchaseReturns)
-          ..where((r) => r.status.equals('posted')))
-        .get();
+    final returns = await (_db.select(
+      _db.purchaseReturns,
+    )..where((r) => r.status.equals('posted'))).get();
 
     for (final ret in returns) {
       try {
@@ -507,26 +577,35 @@ class LedgerRebuildService {
         report.purchaseReturnsReplayed++;
       } catch (e) {
         report.errors.add('Purchase Return #${ret.id}: $e');
-        developer.log('Error replaying purchase return #${ret.id}: $e', name: 'LedgerRebuild');
+        developer.log(
+          'Error replaying purchase return #${ret.id}: $e',
+          name: 'LedgerRebuild',
+        );
       }
     }
 
-    developer.log('Replayed ${report.purchaseReturnsReplayed} purchase returns', name: 'LedgerRebuild');
+    developer.log(
+      'Replayed ${report.purchaseReturnsReplayed} purchase returns',
+      name: 'LedgerRebuild',
+    );
   }
 
   /// Per-product costing info needed to value a replayed return line the same
   /// way the post path does. Mirrors `PurchaseDao._isFifoProduct` and the
   /// `track_inventory` gate.
   Future<({bool tracks, bool fifo})> _costingInfo(int productId) async {
-    final row = await _db.customSelect(
-      'SELECT track_inventory, inventory_tracking_type, costing_method '
-      'FROM products WHERE id = ?',
-      variables: [Variable.withInt(productId)],
-    ).getSingleOrNull();
+    final row = await _db
+        .customSelect(
+          'SELECT track_inventory, inventory_tracking_type, costing_method '
+          'FROM products WHERE id = ?',
+          variables: [Variable.withInt(productId)],
+        )
+        .getSingleOrNull();
     if (row == null) return (tracks: true, fifo: false);
     final tracks = (row.read<int?>('track_inventory') ?? 1) == 1;
     final tracking = row.read<String?>('inventory_tracking_type');
-    final fifo = tracking == 'batch' ||
+    final fifo =
+        tracking == 'batch' ||
         tracking == 'batch_expiry' ||
         (row.read<String?>('costing_method') ?? 'wac') == 'fifo';
     return (tracks: tracks, fifo: fifo);
@@ -545,16 +624,17 @@ class LedgerRebuildService {
   ///     rebuild, so those rows still exist).
   ///   • WAC  → frozen unit_cost_cents × qty.
   Future<void> _replayPurchaseAdjustmentReturns(
-      LedgerRebuildReport report) async {
-    final returns = await (_db.select(_db.purchaseReturnAdjustments)
-          ..where((r) => r.status.equals('posted')))
-        .get();
+    LedgerRebuildReport report,
+  ) async {
+    final returns = await (_db.select(
+      _db.purchaseReturnAdjustments,
+    )..where((r) => r.status.equals('posted'))).get();
 
     for (final ret in returns) {
       try {
-        final items = await (_db.select(_db.purchaseReturnAdjustmentItems)
-              ..where((i) => i.returnId.equals(ret.id)))
-            .get();
+        final items = await (_db.select(
+          _db.purchaseReturnAdjustmentItems,
+        )..where((i) => i.returnId.equals(ret.id))).get();
 
         int totalTax = 0;
         int totalInvCost = 0;
@@ -568,30 +648,43 @@ class LedgerRebuildService {
           int lineInv;
           if (!info.tracks) {
             lineInv = 0;
+          } else if (item.inventoryValueAtPostCents != null) {
+            lineInv = item.inventoryValueAtPostCents!.toBigInt().toInt();
           } else if (info.fifo) {
-            final r = await _db.customSelect(
-              'SELECT COALESCE(SUM(quantity * unit_cost_cents), 0) AS c '
-              'FROM batch_consumptions '
-              'WHERE purchase_return_adjustment_item_id = ? '
-              "AND direction = 'out'",
-              variables: [Variable.withInt(item.id)],
-            ).getSingle();
+            final r = await _db
+                .customSelect(
+                  'SELECT CAST((COALESCE(SUM(quantity * unit_cost_cents), 0) + ?) / ? AS INTEGER) AS c '
+                  'FROM batch_consumptions '
+                  'WHERE purchase_return_adjustment_item_id = ? '
+                  "AND direction = 'out'",
+                  variables: [
+                    Variable.withInt(item.quantityScale ~/ 2),
+                    Variable.withInt(item.quantityScale),
+                    Variable.withInt(item.id),
+                  ],
+                )
+                .getSingle();
             lineInv = r.read<int>('c');
           } else {
-            lineInv = item.unitCostCents.toBigInt().toInt() * qty;
+            lineInv = MeasuredAmount.cents(
+              unitCents: item.unitCostCents.toBigInt().toInt(),
+              quantity: qty,
+              quantityScale: item.quantityScale,
+            );
           }
           totalInvCost += lineInv;
 
-          explicitLines.add(PostedReturnLine(
-            totalCents: item.totalCents.toBigInt().toInt(),
-            taxCents: tax,
-            inventoryCostCents: lineInv,
-            disposition:
-                ReturnDispositionX.fromWire(item.dispositionType),
-            productId: item.productId,
-            variantId: item.variantId,
-            qty: qty,
-          ));
+          explicitLines.add(
+            PostedReturnLine(
+              totalCents: item.totalCents.toBigInt().toInt(),
+              taxCents: tax,
+              inventoryCostCents: lineInv,
+              disposition: ReturnDispositionX.fromWire(item.dispositionType),
+              productId: item.productId,
+              variantId: item.variantId,
+              qty: qty,
+            ),
+          );
         }
 
         await _journalService.recordPurchaseAdjustmentReturnJournalEntry(
@@ -610,13 +703,17 @@ class LedgerRebuildService {
         report.purchaseReturnsReplayed++;
       } catch (e) {
         report.errors.add('Purchase Adj Return #${ret.id}: $e');
-        developer.log('Error replaying purchase adj return #${ret.id}: $e',
-            name: 'LedgerRebuild');
+        developer.log(
+          'Error replaying purchase adj return #${ret.id}: $e',
+          name: 'LedgerRebuild',
+        );
       }
     }
 
-    developer.log('Replayed posted purchase adjustment returns',
-        name: 'LedgerRebuild');
+    developer.log(
+      'Replayed posted purchase adjustment returns',
+      name: 'LedgerRebuild',
+    );
   }
 
   /// Phase 3d2: Replay posted SALE ADJUSTMENT (unlinked) returns.
@@ -629,15 +726,15 @@ class LedgerRebuildService {
   /// `ReturnPostingService.post` is idempotent on (source_table, source_id),
   /// so a rebuild never double-issues.
   Future<void> _replaySaleAdjustmentReturns(LedgerRebuildReport report) async {
-    final returns = await (_db.select(_db.saleReturnAdjustments)
-          ..where((r) => r.status.equals('posted')))
-        .get();
+    final returns = await (_db.select(
+      _db.saleReturnAdjustments,
+    )..where((r) => r.status.equals('posted'))).get();
 
     for (final ret in returns) {
       try {
-        final items = await (_db.select(_db.saleReturnAdjustmentItems)
-              ..where((i) => i.returnId.equals(ret.id)))
-            .get();
+        final items = await (_db.select(
+          _db.saleReturnAdjustmentItems,
+        )..where((i) => i.returnId.equals(ret.id))).get();
 
         int totalTax = 0;
         int totalInvCost = 0;
@@ -648,20 +745,28 @@ class LedgerRebuildService {
           totalTax += tax;
 
           final info = await _costingInfo(item.productId);
-          final lineInv =
-              info.tracks ? item.unitCostCents.toBigInt().toInt() * qty : 0;
+          final lineInv = !info.tracks
+              ? 0
+              : item.inventoryValueAtPostCents != null
+              ? item.inventoryValueAtPostCents!.toBigInt().toInt()
+              : MeasuredAmount.cents(
+                  unitCents: item.unitCostCents.toBigInt().toInt(),
+                  quantity: qty,
+                  quantityScale: item.quantityScale,
+                );
           totalInvCost += lineInv;
 
-          explicitLines.add(PostedReturnLine(
-            totalCents: item.totalCents.toBigInt().toInt(),
-            taxCents: tax,
-            inventoryCostCents: lineInv,
-            disposition:
-                ReturnDispositionX.fromWire(item.dispositionType),
-            productId: item.productId,
-            variantId: item.variantId,
-            qty: qty,
-          ));
+          explicitLines.add(
+            PostedReturnLine(
+              totalCents: item.totalCents.toBigInt().toInt(),
+              taxCents: tax,
+              inventoryCostCents: lineInv,
+              disposition: ReturnDispositionX.fromWire(item.dispositionType),
+              productId: item.productId,
+              variantId: item.variantId,
+              qty: qty,
+            ),
+          );
         }
 
         await _journalService.recordSaleAdjustmentReturnJournalEntry(
@@ -680,13 +785,17 @@ class LedgerRebuildService {
         report.saleReturnsReplayed++;
       } catch (e) {
         report.errors.add('Sale Adj Return #${ret.id}: $e');
-        developer.log('Error replaying sale adj return #${ret.id}: $e',
-            name: 'LedgerRebuild');
+        developer.log(
+          'Error replaying sale adj return #${ret.id}: $e',
+          name: 'LedgerRebuild',
+        );
       }
     }
 
-    developer.log('Replayed posted sale adjustment returns',
-        name: 'LedgerRebuild');
+    developer.log(
+      'Replayed posted sale adjustment returns',
+      name: 'LedgerRebuild',
+    );
   }
 
   /// Phase 3f: Replay all customer (sale) payments
@@ -707,11 +816,17 @@ class LedgerRebuildService {
         report.salePaymentsReplayed++;
       } catch (e) {
         report.errors.add('Sale Payment #${payment.id}: $e');
-        developer.log('Error replaying sale payment #${payment.id}: $e', name: 'LedgerRebuild');
+        developer.log(
+          'Error replaying sale payment #${payment.id}: $e',
+          name: 'LedgerRebuild',
+        );
       }
     }
 
-    developer.log('Replayed ${report.salePaymentsReplayed} sale payments', name: 'LedgerRebuild');
+    developer.log(
+      'Replayed ${report.salePaymentsReplayed} sale payments',
+      name: 'LedgerRebuild',
+    );
   }
 
   /// Phase 3g: Replay all supplier (purchase) payments
@@ -732,18 +847,26 @@ class LedgerRebuildService {
         report.purchasePaymentsReplayed++;
       } catch (e) {
         report.errors.add('Purchase Payment #${payment.id}: $e');
-        developer.log('Error replaying purchase payment #${payment.id}: $e', name: 'LedgerRebuild');
+        developer.log(
+          'Error replaying purchase payment #${payment.id}: $e',
+          name: 'LedgerRebuild',
+        );
       }
     }
 
-    developer.log('Replayed ${report.purchasePaymentsReplayed} purchase payments', name: 'LedgerRebuild');
+    developer.log(
+      'Replayed ${report.purchasePaymentsReplayed} purchase payments',
+      name: 'LedgerRebuild',
+    );
   }
 
   /// Phase 3h: Replay direct customer transactions (payments & discounts from profile)
-  Future<void> _replayDirectCustomerTransactions(LedgerRebuildReport report) async {
-    final transactions = await (_db.select(_db.customerTransactions)
-          ..where((t) => t.transactionType.isIn(['payment', 'discount'])))
-        .get();
+  Future<void> _replayDirectCustomerTransactions(
+    LedgerRebuildReport report,
+  ) async {
+    final transactions = await (_db.select(
+      _db.customerTransactions,
+    )..where((t) => t.transactionType.isIn(['payment', 'discount']))).get();
 
     for (final tx in transactions) {
       try {
@@ -766,18 +889,26 @@ class LedgerRebuildService {
         report.directCustomerTransactionsReplayed++;
       } catch (e) {
         report.errors.add('Customer Transaction #${tx.id}: $e');
-        developer.log('Error replaying customer transaction #${tx.id}: $e', name: 'LedgerRebuild');
+        developer.log(
+          'Error replaying customer transaction #${tx.id}: $e',
+          name: 'LedgerRebuild',
+        );
       }
     }
 
-    developer.log('Replayed ${report.directCustomerTransactionsReplayed} direct customer transactions', name: 'LedgerRebuild');
+    developer.log(
+      'Replayed ${report.directCustomerTransactionsReplayed} direct customer transactions',
+      name: 'LedgerRebuild',
+    );
   }
 
   /// Phase 3i: Replay direct supplier transactions (payments & discounts from profile)
-  Future<void> _replayDirectSupplierTransactions(LedgerRebuildReport report) async {
-    final transactions = await (_db.select(_db.supplierTransactions)
-          ..where((t) => t.transactionType.isIn(['payment', 'discount'])))
-        .get();
+  Future<void> _replayDirectSupplierTransactions(
+    LedgerRebuildReport report,
+  ) async {
+    final transactions = await (_db.select(
+      _db.supplierTransactions,
+    )..where((t) => t.transactionType.isIn(['payment', 'discount']))).get();
 
     for (final tx in transactions) {
       try {
@@ -800,17 +931,25 @@ class LedgerRebuildService {
         report.directSupplierTransactionsReplayed++;
       } catch (e) {
         report.errors.add('Supplier Transaction #${tx.id}: $e');
-        developer.log('Error replaying supplier transaction #${tx.id}: $e', name: 'LedgerRebuild');
+        developer.log(
+          'Error replaying supplier transaction #${tx.id}: $e',
+          name: 'LedgerRebuild',
+        );
       }
     }
 
-    developer.log('Replayed ${report.directSupplierTransactionsReplayed} direct supplier transactions', name: 'LedgerRebuild');
+    developer.log(
+      'Replayed ${report.directSupplierTransactionsReplayed} direct supplier transactions',
+      name: 'LedgerRebuild',
+    );
   }
 
   /// Phase 3j: Replay opening balances for customers that have a non-zero
   /// balance_cents but whose opening_balance journal entry was NOT preserved
   /// (i.e. it never existed in the first place).
-  Future<void> _replayCustomerOpeningBalances(LedgerRebuildReport report) async {
+  Future<void> _replayCustomerOpeningBalances(
+    LedgerRebuildReport report,
+  ) async {
     final customers = await _db.select(_db.customers).get();
 
     for (final customer in customers) {
@@ -820,12 +959,14 @@ class LedgerRebuildService {
 
         // Check if an opening_balance journal entry already exists for this customer
         // (it would have been replayed via _replayPreservedEntries)
-        final existing = await (_db.select(_db.journalEntries)
-              ..where((j) =>
-                  j.sourceTable.equals('customers') &
-                  j.sourceId.equals(customer.id) &
-                  j.entryType.equals('opening_balance')))
-            .getSingleOrNull();
+        final existing =
+            await (_db.select(_db.journalEntries)..where(
+                  (j) =>
+                      j.sourceTable.equals('customers') &
+                      j.sourceId.equals(customer.id) &
+                      j.entryType.equals('opening_balance'),
+                ))
+                .getSingleOrNull();
         if (existing != null) continue;
 
         await _journalService.recordCustomerOpeningBalanceJournalEntry(
@@ -836,16 +977,24 @@ class LedgerRebuildService {
         report.customerOpeningBalancesReplayed++;
       } catch (e) {
         report.errors.add('Customer Opening Balance #${customer.id}: $e');
-        developer.log('Error replaying customer opening balance #${customer.id}: $e', name: 'LedgerRebuild');
+        developer.log(
+          'Error replaying customer opening balance #${customer.id}: $e',
+          name: 'LedgerRebuild',
+        );
       }
     }
 
-    developer.log('Replayed ${report.customerOpeningBalancesReplayed} customer opening balances', name: 'LedgerRebuild');
+    developer.log(
+      'Replayed ${report.customerOpeningBalancesReplayed} customer opening balances',
+      name: 'LedgerRebuild',
+    );
   }
 
   /// Phase 3k: Replay opening balances for suppliers that have a non-zero
   /// balance_cents but whose opening_balance journal entry was NOT preserved.
-  Future<void> _replaySupplierOpeningBalances(LedgerRebuildReport report) async {
+  Future<void> _replaySupplierOpeningBalances(
+    LedgerRebuildReport report,
+  ) async {
     final suppliers = await _db.select(_db.suppliers).get();
 
     for (final supplier in suppliers) {
@@ -854,12 +1003,14 @@ class LedgerRebuildService {
         if (balanceCents == 0) continue;
 
         // Check if an opening_balance journal entry already exists for this supplier
-        final existing = await (_db.select(_db.journalEntries)
-              ..where((j) =>
-                  j.sourceTable.equals('suppliers') &
-                  j.sourceId.equals(supplier.id) &
-                  j.entryType.equals('opening_balance')))
-            .getSingleOrNull();
+        final existing =
+            await (_db.select(_db.journalEntries)..where(
+                  (j) =>
+                      j.sourceTable.equals('suppliers') &
+                      j.sourceId.equals(supplier.id) &
+                      j.entryType.equals('opening_balance'),
+                ))
+                .getSingleOrNull();
         if (existing != null) continue;
 
         await _journalService.recordSupplierOpeningBalanceJournalEntry(
@@ -870,19 +1021,25 @@ class LedgerRebuildService {
         report.supplierOpeningBalancesReplayed++;
       } catch (e) {
         report.errors.add('Supplier Opening Balance #${supplier.id}: $e');
-        developer.log('Error replaying supplier opening balance #${supplier.id}: $e', name: 'LedgerRebuild');
+        developer.log(
+          'Error replaying supplier opening balance #${supplier.id}: $e',
+          name: 'LedgerRebuild',
+        );
       }
     }
 
-    developer.log('Replayed ${report.supplierOpeningBalancesReplayed} supplier opening balances', name: 'LedgerRebuild');
+    developer.log(
+      'Replayed ${report.supplierOpeningBalancesReplayed} supplier opening balances',
+      name: 'LedgerRebuild',
+    );
   }
 
   /// Phase 3l: Replay all PAID payrolls as direct expense.
   /// No accrual. No Salaries Payable. Direct: Dr Salaries Expense, Cr Cash/Bank.
   Future<void> _replayPayrolls(LedgerRebuildReport report) async {
-    final paidPayrolls = await (_db.select(_db.payrolls)
-          ..where((p) => p.status.equals('paid')))
-        .get();
+    final paidPayrolls = await (_db.select(
+      _db.payrolls,
+    )..where((p) => p.status.equals('paid'))).get();
 
     for (final payroll in paidPayrolls) {
       try {
@@ -898,26 +1055,34 @@ class LedgerRebuildService {
         report.payrollsReplayed++;
       } catch (e) {
         report.errors.add('Payroll #${payroll.id}: $e');
-        developer.log('Error replaying payroll #${payroll.id}: $e', name: 'LedgerRebuild');
+        developer.log(
+          'Error replaying payroll #${payroll.id}: $e',
+          name: 'LedgerRebuild',
+        );
       }
     }
 
-    developer.log('Replayed ${report.payrollsReplayed} payrolls', name: 'LedgerRebuild');
+    developer.log(
+      'Replayed ${report.payrollsReplayed} payrolls',
+      name: 'LedgerRebuild',
+    );
   }
 
   /// Phase 3k: Replay all loyalty point earns.
   /// When points are earned: Dr Discounts Given (5500), Cr Loyalty Points Liability (2300)
   Future<void> _replayLoyaltyEarns(LedgerRebuildReport report) async {
-    final earns = await (_db.select(_db.loyaltyPointTransactions)
-          ..where((t) => t.transactionType.equals('earn')))
-        .get();
+    final earns = await (_db.select(
+      _db.loyaltyPointTransactions,
+    )..where((t) => t.transactionType.equals('earn'))).get();
 
     for (final earn in earns) {
       try {
         if (earn.points <= 0) continue;
 
         // Look up loyalty settings to get point value in cents
-        final settings = await (_db.select(_db.loyaltySettingsTable)).getSingleOrNull();
+        final settings = await (_db.select(
+          _db.loyaltySettingsTable,
+        )).getSingleOrNull();
         final pointValueCents = settings?.pointValueCents ?? 1;
         final valueCents = earn.points * pointValueCents;
         if (valueCents <= 0) continue;
@@ -937,11 +1102,17 @@ class LedgerRebuildService {
         report.loyaltyEarnsReplayed++;
       } catch (e) {
         report.errors.add('Loyalty Earn #${earn.id}: $e');
-        developer.log('Error replaying loyalty earn #${earn.id}: $e', name: 'LedgerRebuild');
+        developer.log(
+          'Error replaying loyalty earn #${earn.id}: $e',
+          name: 'LedgerRebuild',
+        );
       }
     }
 
-    developer.log('Replayed ${report.loyaltyEarnsReplayed} loyalty earns', name: 'LedgerRebuild');
+    developer.log(
+      'Replayed ${report.loyaltyEarnsReplayed} loyalty earns',
+      name: 'LedgerRebuild',
+    );
   }
 
   /// Phase 3l: Replay all loyalty reward redemptions
@@ -951,13 +1122,19 @@ class LedgerRebuildService {
     for (final redemption in redemptions) {
       try {
         // Look up the reward to get its monetary value
-        final reward = await (_db.select(_db.loyaltyRewards)
-              ..where((r) => r.id.equals(redemption.rewardId)))
-            .getSingleOrNull();
-        if (reward == null || reward.valueCents == null || reward.valueCents! <= 0) continue;
+        final reward = await (_db.select(
+          _db.loyaltyRewards,
+        )..where((r) => r.id.equals(redemption.rewardId))).getSingleOrNull();
+        if (reward == null ||
+            reward.valueCents == null ||
+            reward.valueCents! <= 0) {
+          continue;
+        }
 
         // Get customer currency
-        final customer = await _db.customerDao.getCustomer(redemption.customerId);
+        final customer = await _db.customerDao.getCustomer(
+          redemption.customerId,
+        );
         final currencyId = customer?.currencyId ?? 1;
 
         await _journalService.recordLoyaltyRedemptionJournalEntry(
@@ -968,11 +1145,17 @@ class LedgerRebuildService {
         report.loyaltyRedemptionsReplayed++;
       } catch (e) {
         report.errors.add('Loyalty Redemption #${redemption.id}: $e');
-        developer.log('Error replaying loyalty redemption #${redemption.id}: $e', name: 'LedgerRebuild');
+        developer.log(
+          'Error replaying loyalty redemption #${redemption.id}: $e',
+          name: 'LedgerRebuild',
+        );
       }
     }
 
-    developer.log('Replayed ${report.loyaltyRedemptionsReplayed} loyalty redemptions', name: 'LedgerRebuild');
+    developer.log(
+      'Replayed ${report.loyaltyRedemptionsReplayed} loyalty redemptions',
+      name: 'LedgerRebuild',
+    );
   }
 
   Future<void> _replayPreservedEntries(
@@ -997,7 +1180,10 @@ class LedgerRebuildService {
         report.manualEntriesReplayed++;
       } catch (e) {
         report.errors.add('Manual Entry "${entry.description}": $e');
-        developer.log('Error replaying manual entry: $e', name: 'LedgerRebuild');
+        developer.log(
+          'Error replaying manual entry: $e',
+          name: 'LedgerRebuild',
+        );
       }
     }
 
@@ -1061,7 +1247,8 @@ class LedgerRebuildReport {
 
   bool get isSuccess => trialBalanceBalanced && errors.isEmpty;
 
-  String get summary => '''
+  String get summary =>
+      '''
 LEDGER REBUILD REPORT
 =====================
 Duration: ${durationMs}ms
@@ -1132,7 +1319,8 @@ class OpeningBalanceRepairReport {
   bool get isSuccess => errors.isEmpty;
   int get totalRepaired => customersRepaired + suppliersRepaired;
 
-  String get summary => '''
+  String get summary =>
+      '''
 OPENING BALANCE REPAIR REPORT
 ==============================
 Customers repaired: $customersRepaired

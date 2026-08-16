@@ -81,9 +81,11 @@ class _SaleReturnsViewState extends State<_SaleReturnsView> {
         },
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: Icon(LucideIcons.calendarRange,
-              size: 20,
-              color: hasFilter ? cs.onPrimaryContainer : cs.onSurfaceVariant),
+          child: Icon(
+            LucideIcons.calendarRange,
+            size: 20,
+            color: hasFilter ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+          ),
         ),
       ),
     );
@@ -110,10 +112,8 @@ class _SaleReturnsViewState extends State<_SaleReturnsView> {
         title: Text('sales.returns'.tr()),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => showUnifiedReturnSearchSheet(
-          context,
-          side: ReturnSide.sale,
-        ),
+        onPressed: () =>
+            showUnifiedReturnSearchSheet(context, side: ReturnSide.sale),
         icon: const Icon(LucideIcons.plus),
         label: Text('returns.create_sale_return'.tr()),
       ),
@@ -137,7 +137,8 @@ class _SaleReturnsViewState extends State<_SaleReturnsView> {
                                   _searchController.clear();
                                   setState(() {});
                                   context.read<SaleReturnsBloc>().add(
-                                      const SaleReturnsSearchRequested(''));
+                                    const SaleReturnsSearchRequested(''),
+                                  );
                                 },
                               )
                             : null,
@@ -146,14 +147,15 @@ class _SaleReturnsViewState extends State<_SaleReturnsView> {
                         ),
                         filled: true,
                         isDense: true,
-                        contentPadding:
-                            const EdgeInsets.symmetric(vertical: 12),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                        ),
                       ),
                       onChanged: (value) {
                         setState(() {});
-                        context
-                            .read<SaleReturnsBloc>()
-                            .add(SaleReturnsSearchRequested(value));
+                        context.read<SaleReturnsBloc>().add(
+                          SaleReturnsSearchRequested(value),
+                        );
                       },
                     ),
                   ),
@@ -168,13 +170,17 @@ class _SaleReturnsViewState extends State<_SaleReturnsView> {
                 child: Align(
                   alignment: AlignmentDirectional.centerStart,
                   child: Chip(
-                    avatar: Icon(LucideIcons.calendar,
-                        size: 14, color: colorScheme.primary),
+                    avatar: Icon(
+                      LucideIcons.calendar,
+                      size: 14,
+                      color: colorScheme.primary,
+                    ),
                     label: Text(
                       _datePresetLabel ??
                           '${DateFormat.MMMd().format(_dateRange!.start)} – ${DateFormat.MMMd().format(_dateRange!.end)}',
-                      style: theme.textTheme.labelSmall
-                          ?.copyWith(fontWeight: FontWeight.w600),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     deleteIcon: const Icon(LucideIcons.x, size: 14),
                     onDeleted: () => setState(() {
@@ -183,15 +189,16 @@ class _SaleReturnsViewState extends State<_SaleReturnsView> {
                     }),
                     visualDensity: VisualDensity.compact,
                     side: BorderSide(
-                        color: colorScheme.primary.withValues(alpha: 0.3)),
-                    backgroundColor:
-                        colorScheme.primaryContainer.withValues(alpha: 0.3),
+                      color: colorScheme.primary.withValues(alpha: 0.3),
+                    ),
+                    backgroundColor: colorScheme.primaryContainer.withValues(
+                      alpha: 0.3,
+                    ),
                   ),
                 ),
               ),
             Expanded(
-              child: BlocBuilder<SaleReturnsBloc,
-                  RealtimeState<List<SaleReturnEntity>>>(
+              child: BlocBuilder<SaleReturnsBloc, RealtimeState<List<SaleReturnEntity>>>(
                 builder: (context, state) {
                   if (state is RealtimeLoading<List<SaleReturnEntity>> &&
                       state.previousData == null) {
@@ -204,11 +211,16 @@ class _SaleReturnsViewState extends State<_SaleReturnsView> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(LucideIcons.alertCircle,
-                              size: 64, color: colorScheme.error),
+                          Icon(
+                            LucideIcons.alertCircle,
+                            size: 64,
+                            color: colorScheme.error,
+                          ),
                           const SizedBox(height: 16),
-                          Text('common.error'.tr(),
-                              style: theme.textTheme.titleLarge),
+                          Text(
+                            'common.error'.tr(),
+                            style: theme.textTheme.titleLarge,
+                          ),
                           const SizedBox(height: 8),
                           TextButton.icon(
                             onPressed: () =>
@@ -224,11 +236,9 @@ class _SaleReturnsViewState extends State<_SaleReturnsView> {
                   List<SaleReturnEntity>? returns;
                   if (state is RealtimeSuccess<List<SaleReturnEntity>>) {
                     returns = state.data;
-                  } else if (state
-                      is RealtimeLoading<List<SaleReturnEntity>>) {
+                  } else if (state is RealtimeLoading<List<SaleReturnEntity>>) {
                     returns = state.previousData;
-                  } else if (state
-                      is RealtimeError<List<SaleReturnEntity>>) {
+                  } else if (state is RealtimeError<List<SaleReturnEntity>>) {
                     returns = state.previousData;
                   }
 
@@ -239,12 +249,16 @@ class _SaleReturnsViewState extends State<_SaleReturnsView> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(LucideIcons.undo2,
-                              size: 56,
-                              color: colorScheme.primary.withValues(alpha: 0.3)),
+                          Icon(
+                            LucideIcons.undo2,
+                            size: 56,
+                            color: colorScheme.primary.withValues(alpha: 0.3),
+                          ),
                           const SizedBox(height: 16),
-                          Text('sales.no_returns'.tr(),
-                              style: theme.textTheme.titleMedium),
+                          Text(
+                            'sales.no_returns'.tr(),
+                            style: theme.textTheme.titleMedium,
+                          ),
                         ],
                       ),
                     );
@@ -261,8 +275,8 @@ class _SaleReturnsViewState extends State<_SaleReturnsView> {
                         final accentColor = ret.isVoided
                             ? colorScheme.outlineVariant
                             : ret.isAdjustment
-                                ? colorScheme.tertiary
-                                : colorScheme.error;
+                            ? colorScheme.tertiary
+                            : colorScheme.error;
                         final cleanReason = _stripReasonTag(ret.reason);
                         return Padding(
                           key: ValueKey(ret.unifiedId),
@@ -275,8 +289,7 @@ class _SaleReturnsViewState extends State<_SaleReturnsView> {
                               borderRadius: BorderRadius.circular(14),
                               onTap: () {
                                 if (ret.isAdjustment) {
-                                  context.push(
-                                      '/sales/returns/adj/${ret.id}');
+                                  context.push('/sales/returns/adj/${ret.id}');
                                 } else {
                                   context.push('/sales/returns/${ret.id}');
                                 }
@@ -285,8 +298,9 @@ class _SaleReturnsViewState extends State<_SaleReturnsView> {
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(14),
                                   border: Border.all(
-                                      color: colorScheme.outlineVariant
-                                          .withValues(alpha: 0.4)),
+                                    color: colorScheme.outlineVariant
+                                        .withValues(alpha: 0.4),
+                                  ),
                                 ),
                                 child: IntrinsicHeight(
                                   child: Row(
@@ -297,80 +311,88 @@ class _SaleReturnsViewState extends State<_SaleReturnsView> {
                                         decoration: BoxDecoration(
                                           color: accentColor,
                                           borderRadius:
-                                              const BorderRadiusDirectional
-                                                  .only(
-                                            topStart: Radius.circular(14),
-                                            bottomStart: Radius.circular(14),
-                                          ),
+                                              const BorderRadiusDirectional.only(
+                                                topStart: Radius.circular(14),
+                                                bottomStart: Radius.circular(
+                                                  14,
+                                                ),
+                                              ),
                                         ),
                                       ),
                                       Expanded(
                                         child: ListTile(
                                           contentPadding:
                                               const EdgeInsets.symmetric(
-                                                  horizontal: 12,
-                                                  vertical: 4),
+                                                horizontal: 12,
+                                                vertical: 4,
+                                              ),
                                           leading: Container(
                                             width: 38,
                                             height: 38,
                                             decoration: BoxDecoration(
                                               color: ret.isAdjustment
                                                   ? colorScheme
-                                                      .tertiaryContainer
-                                                  : colorScheme
-                                                      .errorContainer,
+                                                        .tertiaryContainer
+                                                  : colorScheme.errorContainer,
                                               borderRadius:
                                                   BorderRadius.circular(10),
                                             ),
                                             child: Icon(
-                                                ret.isAdjustment
-                                                    ? LucideIcons.rotateCcw
-                                                    : LucideIcons.undo2,
-                                                color: ret.isAdjustment
-                                                    ? colorScheme
+                                              ret.isAdjustment
+                                                  ? LucideIcons.rotateCcw
+                                                  : LucideIcons.undo2,
+                                              color: ret.isAdjustment
+                                                  ? colorScheme
                                                         .onTertiaryContainer
-                                                    : colorScheme
+                                                  : colorScheme
                                                         .onErrorContainer,
-                                                size: 18),
+                                              size: 18,
+                                            ),
                                           ),
                                           title: Row(
                                             children: [
                                               Flexible(
-                                                child: Text(ret.returnNumber,
-                                                    style: theme
-                                                        .textTheme.titleSmall
-                                                        ?.copyWith(
-                                                            fontWeight:
-                                                                FontWeight
-                                                                    .w600),
-                                                    overflow: TextOverflow
-                                                        .ellipsis),
+                                                child: Text(
+                                                  ret.returnNumber,
+                                                  style: theme
+                                                      .textTheme
+                                                      .titleSmall
+                                                      ?.copyWith(
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                      ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
                                               ),
                                               if (ret.isAdjustment) ...[
                                                 const SizedBox(width: 6),
                                                 Container(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal: 6,
-                                                      vertical: 1),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 1,
+                                                      ),
                                                   decoration: BoxDecoration(
                                                     color: colorScheme
                                                         .tertiaryContainer,
                                                     borderRadius:
                                                         BorderRadius.circular(
-                                                            6),
+                                                          6,
+                                                        ),
                                                   ),
                                                   child: Text(
                                                     'returns.adjustment'.tr(),
                                                     style: theme
-                                                        .textTheme.labelSmall
+                                                        .textTheme
+                                                        .labelSmall
                                                         ?.copyWith(
-                                                      color: colorScheme
-                                                          .onTertiaryContainer,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      fontSize: 9,
-                                                    ),
+                                                          color: colorScheme
+                                                              .onTertiaryContainer,
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                          fontSize: 9,
+                                                        ),
                                                   ),
                                                 ),
                                               ],
@@ -381,22 +403,25 @@ class _SaleReturnsViewState extends State<_SaleReturnsView> {
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                DateFormat.yMMMd()
-                                                    .format(ret.returnDate),
-                                                style: theme
-                                                    .textTheme.bodySmall
+                                                DateFormat.yMMMd().format(
+                                                  ret.returnDate,
+                                                ),
+                                                style: theme.textTheme.bodySmall
                                                     ?.copyWith(
-                                                        color: colorScheme
-                                                            .onSurfaceVariant),
+                                                      color: colorScheme
+                                                          .onSurfaceVariant,
+                                                    ),
                                               ),
                                               if (cleanReason.isNotEmpty)
                                                 Text(
                                                   cleanReason,
                                                   style: theme
-                                                      .textTheme.bodySmall
+                                                      .textTheme
+                                                      .bodySmall
                                                       ?.copyWith(
-                                                          color: colorScheme
-                                                              .onSurfaceVariant),
+                                                        color: colorScheme
+                                                            .onSurfaceVariant,
+                                                      ),
                                                   maxLines: 1,
                                                   overflow:
                                                       TextOverflow.ellipsis,
@@ -410,41 +435,47 @@ class _SaleReturnsViewState extends State<_SaleReturnsView> {
                                                 CrossAxisAlignment.end,
                                             children: [
                                               Text(
-                                                cs.format(ret.totalCents
-                                                    .toBigInt()
-                                                    .toInt()),
-                                                style: theme
-                                                    .textTheme.titleSmall
-                                                    ?.copyWith(
-                                                  color: colorScheme.error,
-                                                  fontWeight:
-                                                      FontWeight.bold,
+                                                cs.format(
+                                                  ret.totalCents
+                                                      .toBigInt()
+                                                      .toInt(),
                                                 ),
+                                                style: theme
+                                                    .textTheme
+                                                    .titleSmall
+                                                    ?.copyWith(
+                                                      color: colorScheme.error,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
                                               ),
                                               if (ret.isVoided) ...[
                                                 const SizedBox(height: 4),
                                                 Container(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal: 6,
-                                                      vertical: 1),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 1,
+                                                      ),
                                                   decoration: BoxDecoration(
                                                     color: colorScheme
                                                         .surfaceContainerHighest,
                                                     borderRadius:
                                                         BorderRadius.circular(
-                                                            6),
+                                                          6,
+                                                        ),
                                                   ),
                                                   child: Text(
                                                     'purchases.status_voided'
                                                         .tr(),
                                                     style: theme
-                                                        .textTheme.labelSmall
+                                                        .textTheme
+                                                        .labelSmall
                                                         ?.copyWith(
-                                                      color: colorScheme
-                                                          .onSurfaceVariant,
-                                                      fontSize: 9,
-                                                    ),
+                                                          color: colorScheme
+                                                              .onSurfaceVariant,
+                                                          fontSize: 9,
+                                                        ),
                                                   ),
                                                 ),
                                               ],

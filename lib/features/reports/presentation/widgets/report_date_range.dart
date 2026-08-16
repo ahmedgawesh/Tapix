@@ -10,12 +10,19 @@ class ReportDateRange {
     this.preset = ReportPeriodPreset.custom,
   });
 
+  /// Last representable instant of [date]'s local calendar day.
+  static DateTime endOfDay(DateTime date) => DateTime(
+    date.year,
+    date.month,
+    date.day,
+  ).add(const Duration(days: 1)).subtract(const Duration(microseconds: 1));
+
   /// Today only
   factory ReportDateRange.today() {
     final now = DateTime.now();
     return ReportDateRange(
       startDate: DateTime(now.year, now.month, now.day),
-      endDate: DateTime(now.year, now.month, now.day, 23, 59, 59),
+      endDate: endOfDay(now),
       preset: ReportPeriodPreset.today,
     );
   }
@@ -26,7 +33,7 @@ class ReportDateRange {
     final monday = now.subtract(Duration(days: now.weekday - 1));
     return ReportDateRange(
       startDate: DateTime(monday.year, monday.month, monday.day),
-      endDate: DateTime(now.year, now.month, now.day, 23, 59, 59),
+      endDate: endOfDay(now),
       preset: ReportPeriodPreset.thisWeek,
     );
   }
@@ -36,7 +43,7 @@ class ReportDateRange {
     final now = DateTime.now();
     return ReportDateRange(
       startDate: DateTime(now.year, now.month, 1),
-      endDate: DateTime(now.year, now.month, now.day, 23, 59, 59),
+      endDate: endOfDay(now),
       preset: ReportPeriodPreset.thisMonth,
     );
   }
@@ -48,7 +55,7 @@ class ReportDateRange {
     final lastDay = DateTime(now.year, now.month, 0);
     return ReportDateRange(
       startDate: lastMonth,
-      endDate: DateTime(lastDay.year, lastDay.month, lastDay.day, 23, 59, 59),
+      endDate: endOfDay(lastDay),
       preset: ReportPeriodPreset.lastMonth,
     );
   }
@@ -59,7 +66,7 @@ class ReportDateRange {
     final quarterStart = DateTime(now.year, ((now.month - 1) ~/ 3) * 3 + 1, 1);
     return ReportDateRange(
       startDate: quarterStart,
-      endDate: DateTime(now.year, now.month, now.day, 23, 59, 59),
+      endDate: endOfDay(now),
       preset: ReportPeriodPreset.thisQuarter,
     );
   }
@@ -69,7 +76,7 @@ class ReportDateRange {
     final now = DateTime.now();
     return ReportDateRange(
       startDate: DateTime(now.year, 1, 1),
-      endDate: DateTime(now.year, now.month, now.day, 23, 59, 59),
+      endDate: endOfDay(now),
       preset: ReportPeriodPreset.thisYear,
     );
   }
@@ -79,7 +86,7 @@ class ReportDateRange {
     final now = DateTime.now();
     return ReportDateRange(
       startDate: DateTime(now.year - 1, 1, 1),
-      endDate: DateTime(now.year - 1, 12, 31, 23, 59, 59),
+      endDate: endOfDay(DateTime(now.year - 1, 12, 31)),
       preset: ReportPeriodPreset.lastYear,
     );
   }
@@ -89,7 +96,7 @@ class ReportDateRange {
     final now = DateTime.now();
     return ReportDateRange(
       startDate: DateTime(2000, 1, 1),
-      endDate: DateTime(now.year, now.month, now.day, 23, 59, 59),
+      endDate: endOfDay(now),
       preset: ReportPeriodPreset.allTime,
     );
   }

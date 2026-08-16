@@ -1,5 +1,6 @@
 import 'package:decimal/decimal.dart';
 import 'package:equatable/equatable.dart';
+import '../../../../core/measurement/measurement.dart';
 
 class Product extends Equatable {
   final int id;
@@ -34,6 +35,8 @@ class Product extends Equatable {
   final int salesTaxRateBps;
   final bool isActive;
   final bool trackInventory;
+  final String measurementType;
+
   /// Inventory costing method used for COGS computation.
   /// One of `'wac'` (Weighted Average — default) or `'fifo'` (First-In, First-Out).
   /// Locked once any stock movement or batch consumption exists for this product.
@@ -83,6 +86,7 @@ class Product extends Equatable {
     required this.salesTaxRateBps,
     required this.isActive,
     required this.trackInventory,
+    this.measurementType = 'piece',
     this.costingMethod = 'wac',
     this.inventoryTrackingType = 'standard',
   });
@@ -114,6 +118,7 @@ class Product extends Equatable {
     int? salesTaxRateBps,
     bool? isActive,
     bool? trackInventory,
+    String? measurementType,
     String? costingMethod,
     String? inventoryTrackingType,
   }) {
@@ -130,8 +135,10 @@ class Product extends Equatable {
       wholesalePriceCents: wholesalePriceCents ?? this.wholesalePriceCents,
       previousCostCents: previousCostCents ?? this.previousCostCents,
       previousPriceCents: previousPriceCents ?? this.previousPriceCents,
-      previousWholesalePriceCents: previousWholesalePriceCents ?? this.previousWholesalePriceCents,
-      lastPurchasePriceCents: lastPurchasePriceCents ?? this.lastPurchasePriceCents,
+      previousWholesalePriceCents:
+          previousWholesalePriceCents ?? this.previousWholesalePriceCents,
+      lastPurchasePriceCents:
+          lastPurchasePriceCents ?? this.lastPurchasePriceCents,
       stockQuantity: stockQuantity ?? this.stockQuantity,
       minQuantity: minQuantity ?? this.minQuantity,
       categoryId: categoryId ?? this.categoryId,
@@ -144,6 +151,7 @@ class Product extends Equatable {
       salesTaxRateBps: salesTaxRateBps ?? this.salesTaxRateBps,
       isActive: isActive ?? this.isActive,
       trackInventory: trackInventory ?? this.trackInventory,
+      measurementType: measurementType ?? this.measurementType,
       costingMethod: costingMethod ?? this.costingMethod,
       inventoryTrackingType:
           inventoryTrackingType ?? this.inventoryTrackingType,
@@ -152,33 +160,38 @@ class Product extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        name,
-        nameAr,
-        nameFr,
-        description,
-        sku,
-        barcode,
-        costCents,
-        priceCents,
-        wholesalePriceCents,
-        previousCostCents,
-        previousPriceCents,
-        previousWholesalePriceCents,
-        lastPurchasePriceCents,
-        stockQuantity,
-        minQuantity,
-        categoryId,
-        supplierId,
-        currencyId,
-        imagePath,
-        hasVariants,
-        isTaxable,
-        purchaseTaxRateBps,
-        salesTaxRateBps,
-        isActive,
-        trackInventory,
-        costingMethod,
-        inventoryTrackingType,
-      ];
+    id,
+    name,
+    nameAr,
+    nameFr,
+    description,
+    sku,
+    barcode,
+    costCents,
+    priceCents,
+    wholesalePriceCents,
+    previousCostCents,
+    previousPriceCents,
+    previousWholesalePriceCents,
+    lastPurchasePriceCents,
+    stockQuantity,
+    minQuantity,
+    categoryId,
+    supplierId,
+    currencyId,
+    imagePath,
+    hasVariants,
+    isTaxable,
+    purchaseTaxRateBps,
+    salesTaxRateBps,
+    isActive,
+    trackInventory,
+    measurementType,
+    costingMethod,
+    inventoryTrackingType,
+  ];
+
+  MeasurementType get measurement => MeasurementType.fromDb(measurementType);
+
+  int get quantityScale => measurement.quantityScale;
 }

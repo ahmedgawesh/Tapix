@@ -61,7 +61,8 @@ class EditPricesSaveChanges extends EditPricesEvent {
 
 // Bulk adjustment events
 class EditPricesBulkAdjustRequested extends EditPricesEvent {
-  final String adjustmentType; // 'percentage_increase', 'percentage_decrease', 'fixed_increase', 'fixed_decrease'
+  final String
+  adjustmentType; // 'percentage_increase', 'percentage_decrease', 'fixed_increase', 'fixed_decrease'
   final Decimal value;
   final String priceType; // 'cost', 'selling', 'wholesale'
   final bool applyToAll; // true = all products, false = selected only
@@ -78,7 +79,14 @@ class EditPricesBulkAdjustRequested extends EditPricesEvent {
   });
 
   @override
-  List<Object?> get props => [adjustmentType, value, priceType, applyToAll, selectedProductIds, selectedVariantIds];
+  List<Object?> get props => [
+    adjustmentType,
+    value,
+    priceType,
+    applyToAll,
+    selectedProductIds,
+    selectedVariantIds,
+  ];
 }
 
 class EditPricesUndoRequested extends EditPricesEvent {

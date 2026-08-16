@@ -22,6 +22,7 @@ class PurchaseModel extends PurchaseEntity {
     super.notes,
     required super.purchaseDate,
     super.dueDate,
+    super.taxInclusiveAtPost,
     required super.createdAt,
     required super.updatedAt,
   });
@@ -43,6 +44,7 @@ class PurchaseModel extends PurchaseEntity {
       notes: purchase.notes,
       purchaseDate: purchase.purchaseDate,
       dueDate: purchase.dueDate,
+      taxInclusiveAtPost: purchase.taxInclusiveAtPost ?? false,
       createdAt: purchase.createdAt,
       updatedAt: purchase.updatedAt,
     );
@@ -67,6 +69,7 @@ class PurchaseModel extends PurchaseEntity {
       notes: pws.purchase.notes,
       purchaseDate: pws.purchase.purchaseDate,
       dueDate: pws.purchase.dueDate,
+      taxInclusiveAtPost: pws.purchase.taxInclusiveAtPost ?? false,
       createdAt: pws.purchase.createdAt,
       updatedAt: pws.purchase.updatedAt,
     );
@@ -84,7 +87,11 @@ class PurchaseItemModel extends PurchaseItemEntity {
     super.colorName,
     super.colorHex,
     super.sizeName,
+    super.currentStockQuantity,
+    super.tracksInventory,
     required super.quantity,
+    super.quantityScale,
+    super.measurementType,
     required super.unitCostCents,
     super.discountCents,
     required super.subtotalCents,
@@ -106,6 +113,8 @@ class PurchaseItemModel extends PurchaseItemEntity {
       productId: item.productId,
       variantId: item.variantId,
       quantity: item.quantity,
+      quantityScale: item.quantityScale,
+      measurementType: item.measurementType,
       unitCostCents: item.unitCostCents,
       discountCents: item.discountCents,
       subtotalCents: item.subtotalCents,
@@ -132,7 +141,11 @@ class PurchaseItemModel extends PurchaseItemEntity {
       colorName: d.colorName,
       colorHex: d.colorHex,
       sizeName: d.sizeName,
+      currentStockQuantity: d.variant?.stockQuantity ?? d.product.stockQuantity,
+      tracksInventory: d.product.trackInventory,
       quantity: d.item.quantity,
+      quantityScale: d.item.quantityScale,
+      measurementType: d.item.measurementType,
       unitCostCents: d.item.unitCostCents,
       discountCents: d.item.discountCents,
       subtotalCents: d.item.subtotalCents,
@@ -231,7 +244,9 @@ class PurchaseReturnModel extends PurchaseReturnEntity {
     );
   }
 
-  factory PurchaseReturnModel.fromAdjustmentWithParty(PurchaseAdjReturnWithParty data) {
+  factory PurchaseReturnModel.fromAdjustmentWithParty(
+    PurchaseAdjReturnWithParty data,
+  ) {
     return PurchaseReturnModel(
       id: data.adjustment.id,
       purchaseId: 0, // No linked purchase
@@ -257,6 +272,8 @@ class PurchaseReturnItemModel extends PurchaseReturnItemEntity {
     required super.returnId,
     required super.purchaseItemId,
     required super.quantity,
+    super.quantityScale,
+    super.measurementType,
     super.subtotalCents,
     super.discountCents,
     super.taxCents,
@@ -277,6 +294,8 @@ class PurchaseReturnItemModel extends PurchaseReturnItemEntity {
       returnId: item.returnId,
       purchaseItemId: item.purchaseItemId,
       quantity: item.quantity,
+      quantityScale: item.quantityScale,
+      measurementType: item.measurementType,
       subtotalCents: item.subtotalCents,
       discountCents: item.discountCents,
       taxCents: item.taxCents,
@@ -287,12 +306,15 @@ class PurchaseReturnItemModel extends PurchaseReturnItemEntity {
   }
 
   factory PurchaseReturnItemModel.fromDriftWithDetails(
-      PurchaseReturnItemWithDetails d) {
+    PurchaseReturnItemWithDetails d,
+  ) {
     return PurchaseReturnItemModel(
       id: d.returnItem.id,
       returnId: d.returnItem.returnId,
       purchaseItemId: d.returnItem.purchaseItemId,
       quantity: d.returnItem.quantity,
+      quantityScale: d.returnItem.quantityScale,
+      measurementType: d.returnItem.measurementType,
       subtotalCents: d.returnItem.subtotalCents,
       discountCents: d.returnItem.discountCents,
       taxCents: d.returnItem.taxCents,

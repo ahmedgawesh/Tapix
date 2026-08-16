@@ -6,7 +6,8 @@ part of 'sale_form_screen.dart';
 Widget _handle(ColorScheme cs) => Center(
   child: Container(
     margin: const EdgeInsets.symmetric(vertical: 8),
-    width: 40, height: 4,
+    width: 40,
+    height: 4,
     decoration: BoxDecoration(
       color: cs.onSurfaceVariant.withValues(alpha: 0.4),
       borderRadius: BorderRadius.circular(2),
@@ -43,7 +44,10 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
   final _searchCtrl = TextEditingController();
 
   @override
-  void dispose() { _searchCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,71 +58,107 @@ class _CustomerPickerSheetState extends State<_CustomerPickerSheet> {
     return BlocProvider(
       create: (_) => CustomersBloc(sl<CustomerRepository>()),
       child: DraggableScrollableSheet(
-        initialChildSize: 0.7, minChildSize: 0.5, maxChildSize: 0.95, expand: false,
-        builder: (context, scrollCtrl) => Column(children: [
-          _handle(cs),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(children: [
-              Icon(LucideIcons.users, size: 20, color: cs.primary),
-              const SizedBox(width: 8),
-              Text('sales.select_customer'.tr(),
-                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-              const Spacer(),
-              TextButton(onPressed: () => Navigator.pop(context), child: Text('common.cancel'.tr())),
-            ]),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: TextField(
-              controller: _searchCtrl,
-              decoration: InputDecoration(
-                hintText: 'customers.search_hint'.tr(),
-                prefixIcon: const Icon(LucideIcons.search, size: 18),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                filled: true, isDense: true),
-              onChanged: (v) => context.read<CustomersBloc>().add(CustomersSearchRequested(v)),
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollCtrl) => Column(
+          children: [
+            _handle(cs),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.users, size: 20, color: cs.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'sales.select_customer'.tr(),
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text('common.cancel'.tr()),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: BlocBuilder<CustomersBloc, RealtimeState<CustomersData>>(
-              builder: (context, state) {
-                if (state is RealtimeLoading<CustomersData>) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (state is RealtimeSuccess<CustomersData>) {
-                  final customers = state.data.customers;
-                  if (customers.isEmpty) return Center(child: Text('customers.no_results'.tr()));
-                  return ListView.builder(
-                    controller: scrollCtrl, itemCount: customers.length,
-                    itemBuilder: (context, i) {
-                      final c = customers[i];
-                      final bal = c.balanceCents.toBigInt().toInt();
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: cs.primaryContainer,
-                          child: Text(
-                            c.name.isNotEmpty ? c.name[0].toUpperCase() : '?',
-                            style: TextStyle(color: cs.onPrimaryContainer, fontWeight: FontWeight.bold),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _searchCtrl,
+                decoration: InputDecoration(
+                  hintText: 'customers.search_hint'.tr(),
+                  prefixIcon: const Icon(LucideIcons.search, size: 18),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  isDense: true,
+                ),
+                onChanged: (v) => context.read<CustomersBloc>().add(
+                  CustomersSearchRequested(v),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: BlocBuilder<CustomersBloc, RealtimeState<CustomersData>>(
+                builder: (context, state) {
+                  if (state is RealtimeLoading<CustomersData>) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (state is RealtimeSuccess<CustomersData>) {
+                    final customers = state.data.customers;
+                    if (customers.isEmpty) {
+                      return Center(child: Text('customers.no_results'.tr()));
+                    }
+                    return ListView.builder(
+                      controller: scrollCtrl,
+                      itemCount: customers.length,
+                      itemBuilder: (context, i) {
+                        final c = customers[i];
+                        final bal = c.balanceCents.toBigInt().toInt();
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: cs.primaryContainer,
+                            child: Text(
+                              c.name.isNotEmpty ? c.name[0].toUpperCase() : '?',
+                              style: TextStyle(
+                                color: cs.onPrimaryContainer,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
-                        ),
-                        title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.w500)),
-                        subtitle: Text(
-                          curr.format(bal),
-                          style: TextStyle(color: bal > 0 ? Colors.red : Colors.green, fontSize: 12),
-                        ),
-                        trailing: Icon(LucideIcons.chevronRight, size: 16, color: cs.onSurfaceVariant),
-                        onTap: () => widget.onSelected(c),
-                      );
-                    },
-                  );
-                }
-                return const SizedBox.shrink();
-              },
+                          title: Text(
+                            c.name,
+                            style: const TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                          subtitle: Text(
+                            curr.format(bal),
+                            style: TextStyle(
+                              color: bal > 0 ? Colors.red : Colors.green,
+                              fontSize: 12,
+                            ),
+                          ),
+                          trailing: Icon(
+                            LucideIcons.chevronRight,
+                            size: 16,
+                            color: cs.onSurfaceVariant,
+                          ),
+                          onTap: () => widget.onSelected(c),
+                        );
+                      },
+                    );
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
             ),
-          ),
-        ]),
+          ],
+        ),
       ),
     );
   }
@@ -149,25 +189,45 @@ class _EmployeePickerSheetState extends State<_EmployeePickerSheet> {
 
   Future<void> _load() async {
     try {
-      final employees = await sl<EmployeeRepository>().searchEmployees('', isActive: true);
-      if (mounted) setState(() { _all = employees; _filtered = employees; _loading = false; });
+      final employees = await sl<EmployeeRepository>().searchEmployees(
+        '',
+        isActive: true,
+      );
+      if (mounted) {
+        setState(() {
+          _all = employees;
+          _filtered = employees;
+          _loading = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
   }
 
   void _search(String q) {
-    if (q.isEmpty) { setState(() => _filtered = _all); return; }
+    if (q.isEmpty) {
+      setState(() => _filtered = _all);
+      return;
+    }
     final lower = q.toLowerCase();
-    setState(() => _filtered = _all.where((e) =>
-      e.name.toLowerCase().contains(lower) ||
-      (e.phone?.toLowerCase().contains(lower) ?? false) ||
-      (e.employeeCode?.toLowerCase().contains(lower) ?? false)
-    ).toList());
+    setState(
+      () => _filtered = _all
+          .where(
+            (e) =>
+                e.name.toLowerCase().contains(lower) ||
+                (e.phone?.toLowerCase().contains(lower) ?? false) ||
+                (e.employeeCode?.toLowerCase().contains(lower) ?? false),
+          )
+          .toList(),
+    );
   }
 
   @override
-  void dispose() { _searchCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -175,62 +235,94 @@ class _EmployeePickerSheetState extends State<_EmployeePickerSheet> {
     final cs = theme.colorScheme;
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.7, minChildSize: 0.5, maxChildSize: 0.95, expand: false,
-      builder: (context, scrollCtrl) => Column(children: [
-        _handle(cs),
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(children: [
-            Icon(LucideIcons.userCheck, size: 20, color: cs.tertiary),
-            const SizedBox(width: 8),
-            Text('sales.select_salesperson'.tr(),
-              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-            const Spacer(),
-            TextButton(onPressed: () => Navigator.pop(context), child: Text('common.cancel'.tr())),
-          ]),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: TextField(
-            controller: _searchCtrl,
-            decoration: InputDecoration(
-              hintText: 'employees.search_hint'.tr(),
-              prefixIcon: const Icon(LucideIcons.search, size: 18),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              filled: true, isDense: true),
-            onChanged: _search,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Expanded(
-          child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : _filtered.isEmpty
-              ? Center(child: Text('common.no_results'.tr()))
-              : ListView.builder(
-                  controller: scrollCtrl, itemCount: _filtered.length,
-                  itemBuilder: (context, i) {
-                    final e = _filtered[i];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: cs.tertiaryContainer,
-                        child: Text(
-                          e.name.isNotEmpty ? e.name[0].toUpperCase() : '?',
-                          style: TextStyle(color: cs.onTertiaryContainer, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      title: Text(e.name, style: const TextStyle(fontWeight: FontWeight.w500)),
-                      subtitle: Text(
-                        e.position ?? e.department ?? '',
-                        style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
-                      ),
-                      trailing: Icon(LucideIcons.chevronRight, size: 16, color: cs.onSurfaceVariant),
-                      onTap: () => widget.onSelected(e),
-                    );
-                  },
+      initialChildSize: 0.7,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (context, scrollCtrl) => Column(
+        children: [
+          _handle(cs),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Icon(LucideIcons.userCheck, size: 20, color: cs.tertiary),
+                const SizedBox(width: 8),
+                Text(
+                  'sales.select_salesperson'.tr(),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-        ),
-      ]),
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('common.cancel'.tr()),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TextField(
+              controller: _searchCtrl,
+              decoration: InputDecoration(
+                hintText: 'employees.search_hint'.tr(),
+                prefixIcon: const Icon(LucideIcons.search, size: 18),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                isDense: true,
+              ),
+              onChanged: _search,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _filtered.isEmpty
+                ? Center(child: Text('common.no_results'.tr()))
+                : ListView.builder(
+                    controller: scrollCtrl,
+                    itemCount: _filtered.length,
+                    itemBuilder: (context, i) {
+                      final e = _filtered[i];
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: cs.tertiaryContainer,
+                          child: Text(
+                            e.name.isNotEmpty ? e.name[0].toUpperCase() : '?',
+                            style: TextStyle(
+                              color: cs.onTertiaryContainer,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        title: Text(
+                          e.name,
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        subtitle: Text(
+                          e.position ?? e.department ?? '',
+                          style: TextStyle(
+                            color: cs.onSurfaceVariant,
+                            fontSize: 12,
+                          ),
+                        ),
+                        trailing: Icon(
+                          LucideIcons.chevronRight,
+                          size: 16,
+                          color: cs.onSurfaceVariant,
+                        ),
+                        onTap: () => widget.onSelected(e),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -240,8 +332,15 @@ class _EmployeePickerSheetState extends State<_EmployeePickerSheet> {
 // Follows purchase_form_screen.dart _AddItemSheet pattern
 // ═══════════════════════════════════════════════════════
 class _AddItemSheet extends StatefulWidget {
-  final void Function(Product product, ProductVariant? variant, int quantity, Decimal unitPrice) onItemAdded;
-  const _AddItemSheet({required this.onItemAdded});
+  final Product? initialProduct;
+  final void Function(
+    Product product,
+    ProductVariant? variant,
+    int quantity,
+    Decimal unitPrice,
+  )
+  onItemAdded;
+  const _AddItemSheet({this.initialProduct, required this.onItemAdded});
 
   @override
   State<_AddItemSheet> createState() => _AddItemSheetState();
@@ -253,7 +352,16 @@ class _AddItemSheetState extends State<_AddItemSheet> {
   int? _selectedCategoryId;
 
   @override
-  void dispose() { _searchController.dispose(); super.dispose(); }
+  void initState() {
+    super.initState();
+    _selectedProduct = widget.initialProduct;
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -261,102 +369,130 @@ class _AddItemSheetState extends State<_AddItemSheet> {
     final cs = theme.colorScheme;
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.75, minChildSize: 0.5, maxChildSize: 0.95, expand: false,
+      initialChildSize: 0.75,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
       builder: (context, scrollController) {
-        return Column(children: [
-          _handle(cs),
-          // Title row
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(children: [
-              if (_selectedProduct != null)
-                IconButton(
-                  icon: const Icon(LucideIcons.arrowLeft),
-                  onPressed: () => setState(() => _selectedProduct = null),
-                ),
-              Expanded(
-                child: Text(
-                  _selectedProduct != null ? _selectedProduct!.name : 'sales.add_item'.tr(),
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ]),
-          ),
-          // Search + Category Filter (only when selecting product)
-          if (_selectedProduct == null) ...[
+        return Column(
+          children: [
+            _handle(cs),
+            // Title row
             Padding(
-              padding: const EdgeInsets.all(16),
-              child: TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'sales.search_products'.tr(),
-                  prefixIcon: const Icon(LucideIcons.search),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  filled: true,
-                ),
-                onChanged: (v) => context.read<ProductsBloc>().add(ProductSearchRequested(v)),
-              ),
-            ),
-            // Category filter chips
-            BlocBuilder<CategoriesBloc, RealtimeState<List<Category>>>(
-              builder: (context, catState) {
-                List<Category> categories = const [];
-                if (catState is RealtimeSuccess<List<Category>>) {
-                  categories = catState.data;
-                } else if (catState is RealtimeLoading<List<Category>>) {
-                  categories = catState.previousData ?? const [];
-                }
-                if (categories.isEmpty) return const SizedBox.shrink();
-
-                return SizedBox(
-                  height: 40,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsetsDirectional.only(end: 6),
-                        child: ChoiceChip(
-                          label: Text('sales.all_categories'.tr()),
-                          selected: _selectedCategoryId == null,
-                          onSelected: (_) => setState(() => _selectedCategoryId = null),
-                          showCheckmark: false,
-                          selectedColor: cs.primaryContainer,
-                          visualDensity: VisualDensity.compact,
-                        ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  if (_selectedProduct != null)
+                    IconButton(
+                      icon: const Icon(LucideIcons.arrowLeft),
+                      onPressed: () => setState(() => _selectedProduct = null),
+                    ),
+                  Expanded(
+                    child: Text(
+                      _selectedProduct != null
+                          ? _selectedProduct!.name
+                          : 'sales.add_item'.tr(),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
                       ),
-                      ...categories.map((cat) => Padding(
-                        padding: const EdgeInsetsDirectional.only(end: 6),
-                        child: ChoiceChip(
-                          label: Text(cat.name),
-                          selected: _selectedCategoryId == cat.id,
-                          onSelected: (_) => setState(() {
-                            _selectedCategoryId = _selectedCategoryId == cat.id ? null : cat.id;
-                          }),
-                          showCheckmark: false,
-                          selectedColor: cs.primaryContainer,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                      )),
-                    ],
+                    ),
                   ),
-                );
-              },
+                ],
+              ),
             ),
-            const SizedBox(height: 8),
-          ] else
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text('sales.select_variant'.tr(),
-                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+            // Search + Category Filter (only when selecting product)
+            if (_selectedProduct == null) ...[
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'sales.search_products'.tr(),
+                    prefixIcon: const Icon(LucideIcons.search),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                  ),
+                  onChanged: (v) => context.read<ProductsBloc>().add(
+                    ProductSearchRequested(v),
+                  ),
+                ),
+              ),
+              // Category filter chips
+              BlocBuilder<CategoriesBloc, RealtimeState<List<Category>>>(
+                builder: (context, catState) {
+                  List<Category> categories = const [];
+                  if (catState is RealtimeSuccess<List<Category>>) {
+                    categories = catState.data;
+                  } else if (catState is RealtimeLoading<List<Category>>) {
+                    categories = catState.previousData ?? const [];
+                  }
+                  if (categories.isEmpty) return const SizedBox.shrink();
+
+                  return SizedBox(
+                    height: 40,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsetsDirectional.only(end: 6),
+                          child: ChoiceChip(
+                            label: Text('sales.all_categories'.tr()),
+                            selected: _selectedCategoryId == null,
+                            onSelected: (_) =>
+                                setState(() => _selectedCategoryId = null),
+                            showCheckmark: false,
+                            selectedColor: cs.primaryContainer,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                        ...categories.map(
+                          (cat) => Padding(
+                            padding: const EdgeInsetsDirectional.only(end: 6),
+                            child: ChoiceChip(
+                              label: Text(cat.name),
+                              selected: _selectedCategoryId == cat.id,
+                              onSelected: (_) => setState(() {
+                                _selectedCategoryId =
+                                    _selectedCategoryId == cat.id
+                                    ? null
+                                    : cat.id;
+                              }),
+                              showCheckmark: false,
+                              selectedColor: cs.primaryContainer,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 8),
+            ] else
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: Text(
+                  'sales.select_variant'.tr(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            const Divider(height: 1),
+            Expanded(
+              child: _selectedProduct == null
+                  ? _buildProductList(scrollController)
+                  : _buildVariantSelection(),
             ),
-          const Divider(height: 1),
-          Expanded(
-            child: _selectedProduct == null
-              ? _buildProductList(scrollController)
-              : _buildVariantSelection(),
-          ),
-        ]);
+          ],
+        );
       },
     );
   }
@@ -365,7 +501,10 @@ class _AddItemSheetState extends State<_AddItemSheet> {
     final cs = Theme.of(context).colorScheme;
     final currencyService = sl<CurrencyService>();
 
-    return BlocBuilder<VariantPreviewsBloc, RealtimeState<Map<int, VariantPreview>>>(
+    return BlocBuilder<
+      VariantPreviewsBloc,
+      RealtimeState<Map<int, VariantPreview>>
+    >(
       builder: (context, previewState) {
         Map<int, VariantPreview> previews = const {};
         if (previewState is RealtimeSuccess<Map<int, VariantPreview>>) {
@@ -383,12 +522,17 @@ class _AddItemSheetState extends State<_AddItemSheet> {
               products = state.previousData;
             }
 
-            if (products == null) return const Center(child: CircularProgressIndicator());
+            if (products == null) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
             // Apply category filter
             final query = _searchController.text.toLowerCase();
             final filtered = products.where((p) {
-              if (_selectedCategoryId != null && p.categoryId != _selectedCategoryId) return false;
+              if (_selectedCategoryId != null &&
+                  p.categoryId != _selectedCategoryId) {
+                return false;
+              }
               if (query.isEmpty) return true;
               return p.name.toLowerCase().contains(query) ||
                   (p.sku?.toLowerCase().contains(query) ?? false) ||
@@ -397,81 +541,160 @@ class _AddItemSheetState extends State<_AddItemSheet> {
 
             if (filtered.isEmpty) {
               return Center(
-                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Icon(LucideIcons.searchX, size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.3)),
-                  const SizedBox(height: 12),
-                  Text('sales.no_products'.tr(),
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
-                ]),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      LucideIcons.searchX,
+                      size: 48,
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.3),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'sales.no_products'.tr(),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
               );
             }
 
             return ListView.separated(
               controller: scrollController,
               itemCount: filtered.length,
-              separatorBuilder: (context, i) => Divider(height: 1, indent: 56, color: cs.outlineVariant.withValues(alpha: 0.5)),
+              separatorBuilder: (context, i) => Divider(
+                height: 1,
+                indent: 56,
+                color: cs.outlineVariant.withValues(alpha: 0.5),
+              ),
               itemBuilder: (context, index) {
                 final product = filtered[index];
                 final preview = previews[product.id];
-                final sizeName = (!product.hasVariants ? preview?.sizeName?.trim() : null);
-                final colorHex = (!product.hasVariants ? preview?.colorHex?.trim() : null);
+                final sizeName = (!product.hasVariants
+                    ? preview?.sizeName?.trim()
+                    : null);
+                final colorHex = (!product.hasVariants
+                    ? preview?.colorHex?.trim()
+                    : null);
                 final shade = _tryParseHexColor(colorHex);
 
                 return ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
                   leading: Container(
-                    width: 40, height: 40,
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
                       color: cs.primaryContainer.withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
-                      product.hasVariants ? LucideIcons.layers : LucideIcons.package,
-                      size: 20, color: cs.primary,
+                      product.hasVariants
+                          ? LucideIcons.layers
+                          : LucideIcons.package,
+                      size: 20,
+                      color: cs.primary,
                     ),
                   ),
-                  title: Text(product.name, style: const TextStyle(fontWeight: FontWeight.w500)),
-                  subtitle: Row(children: [
-                    // Identifier group takes the available space so the SKU is
-                    // never truncated just to make room for a color dot.
-                    Expanded(
-                      child: Row(children: [
-                        if (product.sku != null) ...[
-                          Flexible(
-                            child: Text('SKU: ${product.sku}',
-                              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                  title: Text(
+                    product.name,
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  subtitle: Row(
+                    children: [
+                      // Identifier group takes the available space so the SKU is
+                      // never truncated just to make room for a color dot.
+                      Expanded(
+                        child: Row(
+                          children: [
+                            if (product.sku != null) ...[
+                              Flexible(
+                                child: Text(
+                                  'SKU: ${product.sku}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            if (sizeName != null && sizeName.isNotEmpty) ...[
+                              Flexible(
+                                child: Text(
+                                  sizeName,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (shade != null) const SizedBox(width: 6),
+                            ],
+                            if (shade != null)
+                              Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: shade,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: cs.outline),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      if (!product.hasVariants) ...[
+                        const SizedBox(width: 8),
+                        Icon(
+                          LucideIcons.warehouse,
+                          size: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          localizedQuantity(
+                            product.stockQuantity,
+                            product.measurementType,
                           ),
-                          const SizedBox(width: 8),
-                        ],
-                        if (sizeName != null && sizeName.isNotEmpty) ...[
-                          Flexible(
-                            child: Text(sizeName,
-                              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
                           ),
-                          if (shade != null) const SizedBox(width: 6),
-                        ],
-                        if (shade != null)
-                          Container(width: 10, height: 10,
-                            decoration: BoxDecoration(color: shade, shape: BoxShape.circle,
-                              border: Border.all(color: cs.outline))),
-                      ]),
-                    ),
-                    if (!product.hasVariants) ...[
-                      const SizedBox(width: 8),
-                      Icon(LucideIcons.warehouse, size: 12, color: cs.onSurfaceVariant),
-                      const SizedBox(width: 4),
-                      Text('${product.stockQuantity}',
-                        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-                      const SizedBox(width: 12),
-                      Text(currencyService.format(product.priceCents.toBigInt().toInt()),
-                        style: TextStyle(fontSize: 12, color: cs.primary, fontWeight: FontWeight.w500)),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          currencyService.format(
+                            product.priceCents.toBigInt().toInt(),
+                          ),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.primary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ],
-                  ]),
+                  ),
                   trailing: product.hasVariants
-                    ? Icon(LucideIcons.chevronRight, size: 20, color: cs.primary)
-                    : Icon(LucideIcons.plusCircle, size: 20, color: cs.primary),
+                      ? Icon(
+                          LucideIcons.chevronRight,
+                          size: 20,
+                          color: cs.primary,
+                        )
+                      : Icon(
+                          LucideIcons.plusCircle,
+                          size: 20,
+                          color: cs.primary,
+                        ),
                   onTap: () async {
                     if (product.hasVariants) {
                       setState(() => _selectedProduct = product);
@@ -479,12 +702,19 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                       // Check stock via default variant
                       try {
                         final variantRepo = sl<ProductVariantRepository>();
-                        final defaultVariant = await variantRepo.getDefaultVariantByProduct(product.id);
-                        if (defaultVariant != null && defaultVariant.stockQuantity <= 0 && context.mounted) {
+                        final defaultVariant = await variantRepo
+                            .getDefaultVariantByProduct(product.id);
+                        if (defaultVariant != null &&
+                            defaultVariant.stockQuantity <= 0 &&
+                            context.mounted) {
                           await showDialog<void>(
                             context: context,
                             builder: (ctx) => AlertDialog(
-                              icon: Icon(LucideIcons.alertTriangle, color: Theme.of(ctx).colorScheme.error, size: 32),
+                              icon: Icon(
+                                LucideIcons.alertTriangle,
+                                color: Theme.of(ctx).colorScheme.error,
+                                size: 32,
+                              ),
                               title: Text('sales.out_of_stock_warning'.tr()),
                               actions: [
                                 TextButton(
@@ -500,7 +730,12 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                         // If we can't check stock, allow the sale
                       }
                       if (context.mounted) {
-                        widget.onItemAdded(product, null, 1, product.priceCents);
+                        widget.onItemAdded(
+                          product,
+                          null,
+                          product.quantityScale,
+                          product.priceCents,
+                        );
                       }
                     }
                   },
@@ -519,120 +754,222 @@ class _AddItemSheetState extends State<_AddItemSheet> {
     final currencyService = sl<CurrencyService>();
 
     return BlocProvider(
-      create: (context) => sl<ProductVariantsBloc>()
-        ..add(ProductVariantsInitialized(_selectedProduct!.id)),
-      child: BlocBuilder<ProductVariantsBloc, RealtimeState<List<ProductVariant>>>(
-        builder: (context, state) {
-          List<ProductVariant>? variants;
-          if (state is RealtimeSuccess<List<ProductVariant>>) {
-            variants = state.data;
-          } else if (state is RealtimeLoading<List<ProductVariant>>) {
-            variants = state.previousData;
-          }
+      create: (context) =>
+          sl<ProductVariantsBloc>()
+            ..add(ProductVariantsInitialized(_selectedProduct!.id)),
+      child:
+          BlocBuilder<ProductVariantsBloc, RealtimeState<List<ProductVariant>>>(
+            builder: (context, state) {
+              List<ProductVariant>? variants;
+              if (state is RealtimeSuccess<List<ProductVariant>>) {
+                variants = state.data;
+              } else if (state is RealtimeLoading<List<ProductVariant>>) {
+                variants = state.previousData;
+              }
 
-          if (variants == null) return const Center(child: CircularProgressIndicator());
+              if (variants == null) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          return FutureBuilder<({Map<int, String> sizeNameById, Map<int, String?> colorHexById})>(
-            future: () async {
-              final colorRepo = sl<ProductColorRepository>();
-              final sizeRepo = sl<SizeRepository>();
-              final results = await Future.wait([colorRepo.getAllColors(), sizeRepo.getAllSizes()]);
-              final colors = results[0] as List<dynamic>;
-              final sizes = results[1] as List<dynamic>;
+              return FutureBuilder<
+                ({
+                  Map<int, String> sizeNameById,
+                  Map<int, String?> colorHexById,
+                })
+              >(
+                future: () async {
+                  final colorRepo = sl<ProductColorRepository>();
+                  final sizeRepo = sl<SizeRepository>();
+                  final results = await Future.wait([
+                    colorRepo.getAllColors(),
+                    sizeRepo.getAllSizes(),
+                  ]);
+                  final colors = results[0] as List<dynamic>;
+                  final sizes = results[1] as List<dynamic>;
 
-              final sizeNameById = <int, String>{};
-              for (final s in sizes) { sizeNameById[(s as dynamic).id as int] = (s as dynamic).name as String; }
-              final colorHexById = <int, String?>{};
-              for (final c in colors) { colorHexById[(c as dynamic).id as int] = (c as dynamic).hexCode as String?; }
+                  final sizeNameById = <int, String>{};
+                  for (final s in sizes) {
+                    sizeNameById[(s as dynamic).id as int] =
+                        (s as dynamic).name as String;
+                  }
+                  final colorHexById = <int, String?>{};
+                  for (final c in colors) {
+                    colorHexById[(c as dynamic).id as int] =
+                        (c as dynamic).hexCode as String?;
+                  }
 
-              return (sizeNameById: sizeNameById, colorHexById: colorHexById);
-            }(),
-            builder: (context, snapshot) {
-              final sizeNameById = snapshot.data?.sizeNameById ?? const <int, String>{};
-              final colorHexById = snapshot.data?.colorHexById ?? const <int, String?>{};
+                  return (
+                    sizeNameById: sizeNameById,
+                    colorHexById: colorHexById,
+                  );
+                }(),
+                builder: (context, snapshot) {
+                  final sizeNameById =
+                      snapshot.data?.sizeNameById ?? const <int, String>{};
+                  final colorHexById =
+                      snapshot.data?.colorHexById ?? const <int, String?>{};
 
-              return ListView.separated(
-                itemCount: variants!.length,
-                separatorBuilder: (context, i) => Divider(height: 1, indent: 56, color: cs.outlineVariant.withValues(alpha: 0.5)),
-                itemBuilder: (context, index) {
-                  final variant = variants![index];
-                  final sizeName = variant.sizeId == null ? null : sizeNameById[variant.sizeId!];
-                  final colorHex = variant.colorId == null ? null : colorHexById[variant.colorId!];
-                  final shade = _tryParseHexColor(colorHex);
-
-                  return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    leading: Container(
-                      width: 40, height: 40,
-                      decoration: BoxDecoration(
-                        color: shade != null ? shade.withValues(alpha: 0.2) : cs.tertiaryContainer.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(8),
-                        border: shade != null ? Border.all(color: shade) : null,
-                      ),
-                      child: shade != null
-                        ? Center(child: Container(width: 20, height: 20,
-                            decoration: BoxDecoration(color: shade, shape: BoxShape.circle)))
-                        : Icon(LucideIcons.tag, size: 18, color: cs.tertiary),
+                  return ListView.separated(
+                    itemCount: variants!.length,
+                    separatorBuilder: (context, i) => Divider(
+                      height: 1,
+                      indent: 56,
+                      color: cs.outlineVariant.withValues(alpha: 0.5),
                     ),
-                    title: Text(
-                      variant.sku ?? 'Variant ${variant.id}',
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                    subtitle: Row(children: [
-                      if (sizeName != null && sizeName.trim().isNotEmpty) ...[
-                        Flexible(
-                          child: Text(sizeName,
-                            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                    itemBuilder: (context, index) {
+                      final variant = variants![index];
+                      final sizeName = variant.sizeId == null
+                          ? null
+                          : sizeNameById[variant.sizeId!];
+                      final colorHex = variant.colorId == null
+                          ? null
+                          : colorHexById[variant.colorId!];
+                      final shade = _tryParseHexColor(colorHex);
+
+                      return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 4,
                         ),
-                        if (shade != null) const SizedBox(width: 6),
-                      ],
-                      if (shade != null) ...[
-                        Container(width: 10, height: 10,
-                          decoration: BoxDecoration(color: shade, shape: BoxShape.circle,
-                            border: Border.all(color: cs.outline))),
-                        const SizedBox(width: 12),
-                      ],
-                      Icon(LucideIcons.warehouse, size: 12, color: cs.onSurfaceVariant),
-                      const SizedBox(width: 4),
-                      Text('${variant.stockQuantity}',
-                        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-                      const SizedBox(width: 12),
-                      Icon(LucideIcons.coins, size: 12, color: cs.primary),
-                      const SizedBox(width: 4),
-                      Text(currencyService.format(variant.priceCents.toBigInt().toInt()),
-                        style: TextStyle(fontSize: 12, color: cs.primary, fontWeight: FontWeight.w500)),
-                    ]),
-                    trailing: Icon(LucideIcons.plusCircle, size: 20,
-                      color: variant.stockQuantity > 0 ? cs.primary : cs.onSurfaceVariant.withValues(alpha: 0.3)),
-                    onTap: () async {
-                      if (variant.stockQuantity <= 0) {
-                        await showDialog<void>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            icon: Icon(LucideIcons.alertTriangle, color: Theme.of(ctx).colorScheme.error, size: 32),
-                            title: Text('sales.out_of_stock_warning'.tr()),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.of(ctx).pop(),
-                                child: Text('common.ok'.tr()),
-                              ),
-                            ],
+                        leading: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: shade != null
+                                ? shade.withValues(alpha: 0.2)
+                                : cs.tertiaryContainer.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(8),
+                            border: shade != null
+                                ? Border.all(color: shade)
+                                : null,
                           ),
-                        );
-                        return;
-                      }
-                      widget.onItemAdded(
-                        _selectedProduct!, variant, 1, variant.priceCents,
+                          child: shade != null
+                              ? Center(
+                                  child: Container(
+                                    width: 20,
+                                    height: 20,
+                                    decoration: BoxDecoration(
+                                      color: shade,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                )
+                              : Icon(
+                                  LucideIcons.tag,
+                                  size: 18,
+                                  color: cs.tertiary,
+                                ),
+                        ),
+                        title: Text(
+                          variant.sku ?? 'Variant ${variant.id}',
+                          style: const TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        subtitle: Row(
+                          children: [
+                            if (sizeName != null &&
+                                sizeName.trim().isNotEmpty) ...[
+                              Flexible(
+                                child: Text(
+                                  sizeName,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (shade != null) const SizedBox(width: 6),
+                            ],
+                            if (shade != null) ...[
+                              Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: shade,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: cs.outline),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                            ],
+                            Icon(
+                              LucideIcons.warehouse,
+                              size: 12,
+                              color: cs.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              localizedQuantity(
+                                variant.stockQuantity,
+                                _selectedProduct!.measurementType,
+                              ),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Icon(
+                              LucideIcons.coins,
+                              size: 12,
+                              color: cs.primary,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              currencyService.format(
+                                variant.priceCents.toBigInt().toInt(),
+                              ),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: cs.primary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                        trailing: Icon(
+                          LucideIcons.plusCircle,
+                          size: 20,
+                          color: variant.stockQuantity > 0
+                              ? cs.primary
+                              : cs.onSurfaceVariant.withValues(alpha: 0.3),
+                        ),
+                        onTap: () async {
+                          if (variant.stockQuantity <= 0) {
+                            await showDialog<void>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                icon: Icon(
+                                  LucideIcons.alertTriangle,
+                                  color: Theme.of(ctx).colorScheme.error,
+                                  size: 32,
+                                ),
+                                title: Text('sales.out_of_stock_warning'.tr()),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.of(ctx).pop(),
+                                    child: Text('common.ok'.tr()),
+                                  ),
+                                ],
+                              ),
+                            );
+                            return;
+                          }
+                          widget.onItemAdded(
+                            _selectedProduct!,
+                            variant,
+                            _selectedProduct!.quantityScale,
+                            variant.priceCents,
+                          );
+                        },
                       );
                     },
                   );
                 },
               );
             },
-          );
-        },
-      ),
+          ),
     );
   }
 }
@@ -644,11 +981,26 @@ class _EditItemSheet extends StatefulWidget {
   final SaleLineItem item;
   final bool showSalesperson;
   final bool allowDiscounts;
-  final void Function(int quantity, Decimal unitPrice, Decimal discount, {
-    int? employeeId, String? employeeName, String? itemNote, bool clearEmployee,
-  }) onUpdated;
+  final void Function(
+    int quantity,
+    Decimal unitPrice,
+    Decimal discount, {
+    int? employeeId,
+    String? employeeName,
+    String? itemNote,
+    bool clearEmployee,
+  })
+  onUpdated;
   final VoidCallback onRemoved;
-  const _EditItemSheet({required this.item, required this.onUpdated, required this.onRemoved, this.showSalesperson = false, this.allowDiscounts = true});
+  final bool canViewProductCost;
+  const _EditItemSheet({
+    required this.item,
+    required this.onUpdated,
+    required this.onRemoved,
+    required this.canViewProductCost,
+    this.showSalesperson = false,
+    this.allowDiscounts = true,
+  });
 
   @override
   State<_EditItemSheet> createState() => _EditItemSheetState();
@@ -660,6 +1012,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
   late TextEditingController _discountCtrl;
   late TextEditingController _noteCtrl;
   late TextEditingController _quantityCtrl;
+  late MeasurementUnit _quantityUnit;
   bool _discountIsPercent = false;
   int? _employeeId;
   String? _employeeName;
@@ -668,20 +1021,33 @@ class _EditItemSheetState extends State<_EditItemSheet> {
   void initState() {
     super.initState();
     _quantity = widget.item.quantity;
+    _quantityUnit = widget.item.product.measurement.majorUnit;
     _priceCtrl = TextEditingController(
-      text: (widget.item.unitPriceCents.toBigInt().toInt() / 100).toStringAsFixed(2));
+      text: (widget.item.unitPriceCents.toBigInt().toInt() / 100)
+          .toStringAsFixed(2),
+    );
     _discountCtrl = TextEditingController(
       text: widget.item.discountCents > Decimal.zero
-        ? (widget.item.discountCents.toBigInt().toInt() / 100).toStringAsFixed(2)
-        : '');
+          ? (widget.item.discountCents.toBigInt().toInt() / 100)
+                .toStringAsFixed(2)
+          : '',
+    );
     _noteCtrl = TextEditingController(text: widget.item.itemNote ?? '');
-    _quantityCtrl = TextEditingController(text: '$_quantity');
+    _quantityCtrl = TextEditingController(
+      text: MeasuredQuantity.editableValue(_quantity, _quantityUnit),
+    );
     _employeeId = widget.item.employeeId;
     _employeeName = widget.item.employeeName;
   }
 
   @override
-  void dispose() { _priceCtrl.dispose(); _discountCtrl.dispose(); _noteCtrl.dispose(); _quantityCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _priceCtrl.dispose();
+    _discountCtrl.dispose();
+    _noteCtrl.dispose();
+    _quantityCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -689,324 +1055,608 @@ class _EditItemSheetState extends State<_EditItemSheet> {
     final cs = theme.colorScheme;
     final curr = sl<CurrencyService>();
     final variant = widget.item.variant;
-    final stockQty = variant?.stockQuantity ?? 0;
+    final stockQty =
+        variant?.stockQuantity ?? widget.item.product.stockQuantity;
     final costCents = variant?.costCents ?? widget.item.product.costCents;
-    final wholesalePrice = variant?.wholesalePriceCents ?? widget.item.product.wholesalePriceCents;
+    final wholesalePrice =
+        variant?.wholesalePriceCents ?? widget.item.product.wholesalePriceCents;
     final retailPrice = variant?.priceCents ?? widget.item.product.priceCents;
 
     return Padding(
-      padding: EdgeInsets.only(left: 16, right: 16, top: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 16),
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
       child: SingleChildScrollView(
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Header with barcode icon
-          Row(children: [
-            Container(width: 44, height: 44,
-              decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(10)),
-              child: Icon(LucideIcons.package, size: 20, color: cs.onSurfaceVariant)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(widget.item.displayName,
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
-                // Product/variant identifier (SKU) — shown under the name like
-                // every other model. Color/size are already surfaced in
-                // `displayName` (e.g. "فستان مطرز (Pink)"), so we must never
-                // print the raw color hex (e.g. "#FFC0CB") here.
-                Builder(builder: (context) {
-                  final variantSku = widget.item.variant?.sku?.trim();
-                  final productSku = widget.item.product.sku?.trim();
-                  final sku = (variantSku != null && variantSku.isNotEmpty)
-                      ? variantSku
-                      : (productSku ?? '');
-                  if (sku.isEmpty) return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text('SKU: $sku',
-                      style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  );
-                }),
-                if (variant?.barcode != null && variant!.barcode!.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(LucideIcons.scanLine, size: 12, color: cs.onSurfaceVariant),
-                      const SizedBox(width: 4),
-                      Text(variant.barcode!,
-                        style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
-                    ]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with barcode icon
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(10),
                   ),
-              ]),
+                  child: Icon(
+                    LucideIcons.package,
+                    size: 20,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.item.displayName,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      // Product/variant identifier (SKU) — shown under the name like
+                      // every other model. Color/size are already surfaced in
+                      // `displayName` (e.g. "فستان مطرز (Pink)"), so we must never
+                      // print the raw color hex (e.g. "#FFC0CB") here.
+                      Builder(
+                        builder: (context) {
+                          final variantSku = widget.item.variant?.sku?.trim();
+                          final productSku = widget.item.product.sku?.trim();
+                          final sku =
+                              (variantSku != null && variantSku.isNotEmpty)
+                              ? variantSku
+                              : (productSku ?? '');
+                          if (sku.isEmpty) return const SizedBox.shrink();
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              'SKU: $sku',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        },
+                      ),
+                      if (variant?.barcode != null &&
+                          variant!.barcode!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                LucideIcons.scanLine,
+                                size: 12,
+                                color: cs.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                variant.barcode!,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(LucideIcons.trash2, color: cs.error),
+                  onPressed: widget.onRemoved,
+                ),
+              ],
             ),
-            IconButton(
-              icon: Icon(LucideIcons.trash2, color: cs.error),
-              onPressed: widget.onRemoved,
-            ),
-          ]),
-          const SizedBox(height: 12),
-
-          // Stock & Cost info row
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
-              borderRadius: BorderRadius.circular(10)),
-            child: Row(children: [
-              Icon(LucideIcons.warehouse, size: 14, color: cs.onSurfaceVariant),
-              const SizedBox(width: 4),
-              Text('${'sales.available_stock'.tr()}: ', style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-              Text('$stockQty', style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.bold, color: stockQty > 0 ? cs.primary : cs.error)),
-              const Spacer(),
-              Icon(LucideIcons.coins, size: 14, color: cs.onSurfaceVariant),
-              const SizedBox(width: 4),
-              Text('${'sales.cost_price'.tr()}: ', style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-              Text(curr.format(costCents.toBigInt().toInt()), style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.bold, color: cs.onSurfaceVariant)),
-            ]),
-          ),
-          // ── Sales Tax Rate (read-only info) ──
-          if (widget.item.product.isTaxable && widget.item.product.salesTaxRateBps > 0) ...[
             const SizedBox(height: 12),
+
+            // Stock & Cost info row
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: cs.tertiaryContainer.withValues(alpha: 0.3),
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: cs.tertiary.withValues(alpha: 0.3)),
               ),
-              child: Row(children: [
-                Icon(LucideIcons.percent, size: 16, color: cs.tertiary),
-                const SizedBox(width: 8),
-                Text('sales.product_tax_rate'.tr(),
-                  style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                const Spacer(),
-                Text('${(widget.item.product.salesTaxRateBps / 100).toStringAsFixed(2)}%',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.bold, color: cs.tertiary)),
-              ]),
-            ),
-          ],
-          const SizedBox(height: 16),
-
-          // Price with tier buttons
-          Text('sales.unit_price'.tr(),
-            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          Row(children: [
-            _priceTierBtn(cs, theme, 'sales.retail_price'.tr(), retailPrice, curr),
-            if (wholesalePrice != null) ...[const SizedBox(width: 6),
-              _priceTierBtn(cs, theme, 'sales.wholesale_price'.tr(), wholesalePrice, curr)],
-          ]),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _priceCtrl,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-            onTap: () => selectAllText(_priceCtrl),
-            decoration: InputDecoration(
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              filled: true, isDense: true,
-              prefixIcon: const Icon(LucideIcons.dollarSign, size: 18)),
-          ),
-          const SizedBox(height: 16),
-
-          // Quantity (editable text input with +/- buttons)
-          Text('sales.quantity'.tr(),
-            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(14)),
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              IconButton.filledTonal(
-                onPressed: _quantity > 1 ? () => setState(() {
-                  _quantity--;
-                  _quantityCtrl.text = '$_quantity';
-                }) : null,
-                icon: const Icon(LucideIcons.minus, size: 18)),
-              SizedBox(
-                width: 80,
-                child: TextField(
-                  controller: _quantityCtrl,
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.center,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
-                  onTap: () => selectAllText(_quantityCtrl),
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.zero,
-                    isDense: true,
+              child: Row(
+                children: [
+                  Icon(
+                    LucideIcons.warehouse,
+                    size: 14,
+                    color: cs.onSurfaceVariant,
                   ),
-                  onChanged: (v) {
-                    final parsed = int.tryParse(v);
-                    if (parsed != null && parsed > 0) {
-                      setState(() => _quantity = parsed);
-                    }
-                  },
+                  const SizedBox(width: 4),
+                  Text(
+                    '${'sales.available_stock'.tr()}: ',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                  Text(
+                    localizedQuantity(
+                      stockQty,
+                      widget.item.product.measurementType,
+                    ),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: stockQty > 0 ? cs.primary : cs.error,
+                    ),
+                  ),
+                  if (widget.canViewProductCost) ...[
+                    const Spacer(),
+                    Icon(
+                      LucideIcons.coins,
+                      size: 14,
+                      color: cs.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${'sales.cost_price'.tr()}: ',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                    Text(
+                      curr.format(costCents.toBigInt().toInt()),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            // ── Sales Tax Rate (read-only info) ──
+            if (widget.item.product.isTaxable &&
+                widget.item.product.salesTaxRateBps > 0) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: cs.tertiaryContainer.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: cs.tertiary.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.percent, size: 16, color: cs.tertiary),
+                    const SizedBox(width: 8),
+                    Text(
+                      'sales.product_tax_rate'.tr(),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${(widget.item.product.salesTaxRateBps / 100).toStringAsFixed(2)}%',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: cs.tertiary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              IconButton.filledTonal(
-                onPressed: () => setState(() {
-                  _quantity++;
-                  _quantityCtrl.text = '$_quantity';
-                }),
-                icon: const Icon(LucideIcons.plus, size: 18)),
-            ]),
-          ),
-          const SizedBox(height: 16),
+            ],
+            const SizedBox(height: 16),
 
-          // Discount with % / $ toggle
-          if (widget.allowDiscounts) ...[
-            Row(children: [
-              Text('sales.item_discount'.tr(),
-                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-              const Spacer(),
-              SegmentedButton<bool>(
-                segments: [
-                  ButtonSegment(value: false, label: Text(curr.currencySymbol, style: const TextStyle(fontSize: 12))),
-                  const ButtonSegment(value: true, label: Text('%', style: TextStyle(fontSize: 12))),
-                ],
-                selected: {_discountIsPercent},
-                onSelectionChanged: (v) => setState(() {
-                  _discountIsPercent = v.first;
-                  _discountCtrl.clear();
-                }),
-                style: const ButtonStyle(visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+            // Price with tier buttons
+            Text(
+              'sales.unit_price'.tr(),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
               ),
-            ]),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _priceTierBtn(
+                  cs,
+                  theme,
+                  'sales.retail_price'.tr(),
+                  retailPrice,
+                  curr,
+                ),
+                if (wholesalePrice != null) ...[
+                  const SizedBox(width: 6),
+                  _priceTierBtn(
+                    cs,
+                    theme,
+                    'sales.wholesale_price'.tr(),
+                    wholesalePrice,
+                    curr,
+                  ),
+                ],
+              ],
+            ),
             const SizedBox(height: 8),
             TextField(
-              controller: _discountCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-              onTap: () => selectAllText(_discountCtrl),
+              controller: _priceCtrl,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+              ],
+              onTap: () => selectAllText(_priceCtrl),
               decoration: InputDecoration(
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                filled: true, isDense: true,
-                hintText: _discountIsPercent ? '0 %' : '0.00',
-                prefixIcon: Icon(_discountIsPercent ? LucideIcons.percent : LucideIcons.tag, size: 18)),
-              onChanged: (_) => setState(() {}),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                isDense: true,
+                prefixIcon: const Icon(LucideIcons.dollarSign, size: 18),
+              ),
             ),
             const SizedBox(height: 16),
-          ],
 
-          // Item note
-          Text('sales.item_note'.tr(),
-            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _noteCtrl,
-            maxLines: 2,
-            decoration: InputDecoration(
-              hintText: 'sales.item_note_hint'.tr(),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              filled: true, isDense: true,
-              prefixIcon: const Icon(LucideIcons.stickyNote, size: 18)),
-          ),
-          const SizedBox(height: 16),
-
-          // Per-item salesperson
-          if (widget.showSalesperson) ...[_buildItemSalesperson(theme, cs), const SizedBox(height: 16)],
-
-          // Preview totals (before & after tax)
-          //
-          // Phase 3.5.4 — the preview now goes through the same
-          // [LineItemPricingEngine] that the bloc uses on submit, so a
-          // tax-inclusive setting / global default rate / rounding-mode
-          // change is reflected here without divergence (the historical
-          // "preview shows X, posted invoice shows Y" bug class).
-          Builder(builder: (context) {
-            // Parse price using Decimal end-to-end (no `double` in money
-            // arithmetic — IEEE-754 traps like 99999.99 * 100 are the
-            // class of bug Phase 3.5 closes).
-            final priceDec = Decimal.tryParse(_priceCtrl.text.trim()) ?? Decimal.zero;
-            final priceCents = (priceDec * Decimal.fromInt(100))
-                .round()
-                .toBigInt()
-                .toInt();
-            final subtotalCents = priceCents * _quantity;
-            final discountCents = _computeDiscountCents();
-            final product = widget.item.product;
-            // Source the global tax flags from the SaleFormBloc so the
-            // preview honours `taxInclusivePricing` and the default rate
-            // exactly like the bloc's [InvoicePricingEngine.compute] call.
-            final saleState = context.read<SaleFormBloc>().state;
-            final pricing = LineItemPricingEngine.compute(
-              input: LineItemPricingInput(
-                unitPrice: Money.fromCents(priceCents),
-                quantity: _quantity,
-                discount: discountCents > 0
-                    ? Discount.fixed(Money.fromCents(discountCents))
-                    : Discount.none,
-                isTaxable: product.isTaxable,
-                productTaxRateBps: product.salesTaxRateBps,
+            // Quantity (editable text input with +/- buttons)
+            Text(
+              'sales.quantity'.tr(),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
               ),
-              enableTaxCalculations: saleState.enableTaxCalculations,
-              defaultTaxRateBps: saleState.defaultSalesTaxRateBps,
-              taxInclusivePricing: saleState.taxInclusivePricing,
-            );
-            final taxCents = pricing.tax.cents;
-            final totalAfterTax = pricing.total.cents;
-            return Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: cs.primaryContainer.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(12)),
-              child: Column(children: [
-                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  Text('sales.subtotal'.tr(), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
-                  Text(curr.format(subtotalCents > 0 ? subtotalCents : 0),
-                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500)),
-                ]),
-                if (discountCents > 0) ...[
-                  const SizedBox(height: 4),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Text('sales.discount'.tr(), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                    Text('- ${curr.format(discountCents)}',
-                      style: theme.textTheme.bodySmall?.copyWith(color: cs.tertiary)),
-                  ]),
-                ],
-                if (taxCents > 0) ...[
-                  const SizedBox(height: 4),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    Text('sales.tax'.tr(), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                    Text('+${curr.format(taxCents)}',
-                      style: theme.textTheme.bodySmall?.copyWith(color: cs.tertiary)),
-                  ]),
-                ],
-                const Divider(height: 12),
-                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  Text('sales.total'.tr(), style: theme.textTheme.titleSmall),
-                  Text(curr.format(totalAfterTax > 0 ? totalAfterTax : 0),
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: cs.primary)),
-                ]),
-              ]),
-            );
-          }),
-          const SizedBox(height: 20),
-
-          // Save button
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _onSave,
-              icon: const Icon(LucideIcons.check, size: 18),
-              label: Text('common.save'.tr()),
-              style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
             ),
-          ),
-        ]),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton.filledTonal(
+                    onPressed: _quantity > _quantityUnit.internalFactor
+                        ? () => setState(() {
+                            _quantity -= _quantityUnit.internalFactor;
+                            _quantityCtrl.text = MeasuredQuantity.editableValue(
+                              _quantity,
+                              _quantityUnit,
+                            );
+                          })
+                        : null,
+                    icon: const Icon(LucideIcons.minus, size: 18),
+                  ),
+                  SizedBox(
+                    width: 80,
+                    child: TextField(
+                      controller: _quantityCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      textAlign: TextAlign.center,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
+                      ],
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                      onTap: () => selectAllText(_quantityCtrl),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                        isDense: true,
+                      ),
+                      onChanged: (v) {
+                        try {
+                          final parsed = MeasuredQuantity.parseToStored(
+                            v,
+                            _quantityUnit,
+                          );
+                          if (parsed > 0) setState(() => _quantity = parsed);
+                        } on FormatException {
+                          // Keep the previous valid value while typing.
+                        }
+                      },
+                    ),
+                  ),
+                  IconButton.filledTonal(
+                    onPressed: () => setState(() {
+                      _quantity += _quantityUnit.internalFactor;
+                      _quantityCtrl.text = MeasuredQuantity.editableValue(
+                        _quantity,
+                        _quantityUnit,
+                      );
+                    }),
+                    icon: const Icon(LucideIcons.plus, size: 18),
+                  ),
+                  if (widget.item.product.measurement.minorUnit != null) ...[
+                    const SizedBox(width: 8),
+                    DropdownButton<MeasurementUnit>(
+                      value: _quantityUnit,
+                      items: widget.item.product.measurement.inputUnits
+                          .map(
+                            (unit) => DropdownMenuItem(
+                              value: unit,
+                              child: Text(
+                                'measurement.units.${unit.dbValue}'.tr(),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (unit) {
+                        if (unit == null) return;
+                        setState(() {
+                          _quantityUnit = unit;
+                          _quantityCtrl.text = MeasuredQuantity.editableValue(
+                            _quantity,
+                            unit,
+                          );
+                        });
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Discount with % / $ toggle
+            if (widget.allowDiscounts) ...[
+              Row(
+                children: [
+                  Text(
+                    'sales.item_discount'.tr(),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  SegmentedButton<bool>(
+                    segments: [
+                      ButtonSegment(
+                        value: false,
+                        label: Text(
+                          curr.currencySymbol,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                      const ButtonSegment(
+                        value: true,
+                        label: Text('%', style: TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                    selected: {_discountIsPercent},
+                    onSelectionChanged: (v) => setState(() {
+                      _discountIsPercent = v.first;
+                      _discountCtrl.clear();
+                    }),
+                    style: const ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _discountCtrl,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+                ],
+                onTap: () => selectAllText(_discountCtrl),
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  isDense: true,
+                  hintText: _discountIsPercent ? '0 %' : '0.00',
+                  prefixIcon: Icon(
+                    _discountIsPercent ? LucideIcons.percent : LucideIcons.tag,
+                    size: 18,
+                  ),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // Item note
+            Text(
+              'sales.item_note'.tr(),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _noteCtrl,
+              maxLines: 2,
+              decoration: InputDecoration(
+                hintText: 'sales.item_note_hint'.tr(),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                isDense: true,
+                prefixIcon: const Icon(LucideIcons.stickyNote, size: 18),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Per-item salesperson
+            if (widget.showSalesperson) ...[
+              _buildItemSalesperson(theme, cs),
+              const SizedBox(height: 16),
+            ],
+
+            // Preview totals (before & after tax)
+            //
+            // Phase 3.5.4 — the preview now goes through the same
+            // [LineItemPricingEngine] that the bloc uses on submit, so a
+            // tax-inclusive setting / global default rate / rounding-mode
+            // change is reflected here without divergence (the historical
+            // "preview shows X, posted invoice shows Y" bug class).
+            Builder(
+              builder: (context) {
+                // Parse price using Decimal end-to-end (no `double` in money
+                // arithmetic — IEEE-754 traps like 99999.99 * 100 are the
+                // class of bug Phase 3.5 closes).
+                final priceDec =
+                    Decimal.tryParse(_priceCtrl.text.trim()) ?? Decimal.zero;
+                final priceCents = (priceDec * Decimal.fromInt(100))
+                    .round()
+                    .toBigInt()
+                    .toInt();
+                final discountCents = _computeDiscountCents();
+                final product = widget.item.product;
+                // Source the global tax flags from the SaleFormBloc so the
+                // preview honours `taxInclusivePricing` and the default rate
+                // exactly like the bloc's [InvoicePricingEngine.compute] call.
+                final saleState = context.read<SaleFormBloc>().state;
+                final pricing = LineItemPricingEngine.compute(
+                  input: LineItemPricingInput(
+                    unitPrice: Money.fromCents(priceCents),
+                    quantity: _quantity,
+                    quantityScale: product.quantityScale,
+                    discount: discountCents > 0
+                        ? Discount.fixed(Money.fromCents(discountCents))
+                        : Discount.none,
+                    isTaxable: product.isTaxable,
+                    productTaxRateBps: product.salesTaxRateBps,
+                  ),
+                  enableTaxCalculations: saleState.enableTaxCalculations,
+                  defaultTaxRateBps: saleState.defaultSalesTaxRateBps,
+                  taxInclusivePricing: saleState.taxInclusivePricing,
+                );
+                final taxCents = pricing.tax.cents;
+                final totalAfterTax = pricing.total.cents;
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'sales.subtotal'.tr(),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                          Text(
+                            curr.format(pricing.subtotal.cents),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (discountCents > 0) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'sales.discount'.tr(),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                            Text(
+                              '- ${curr.format(discountCents)}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: cs.tertiary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (taxCents > 0) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'sales.tax'.tr(),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                            Text(
+                              '+${curr.format(taxCents)}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: cs.tertiary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const Divider(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'sales.total'.tr(),
+                            style: theme.textTheme.titleSmall,
+                          ),
+                          Text(
+                            curr.format(totalAfterTax > 0 ? totalAfterTax : 0),
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: cs.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 20),
+
+            // Save button
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _onSave,
+                icon: const Icon(LucideIcons.check, size: 18),
+                label: Text('common.save'.tr()),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _priceTierBtn(ColorScheme cs, ThemeData theme, String tier, Decimal priceCents, CurrencyService curr) {
+  Widget _priceTierBtn(
+    ColorScheme cs,
+    ThemeData theme,
+    String tier,
+    Decimal priceCents,
+    CurrencyService curr,
+  ) {
     final priceStr = (priceCents.toBigInt().toInt() / 100).toStringAsFixed(2);
     final isActive = _priceCtrl.text == priceStr;
     return InkWell(
@@ -1017,66 +1667,114 @@ class _EditItemSheetState extends State<_EditItemSheet> {
         decoration: BoxDecoration(
           color: isActive ? cs.primary : cs.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: isActive ? cs.primary : cs.outlineVariant)),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Text(tier, style: theme.textTheme.labelSmall?.copyWith(
-            color: isActive ? cs.onPrimary : cs.onSurfaceVariant, fontWeight: FontWeight.bold)),
-          const SizedBox(width: 4),
-          Text(curr.format(priceCents.toBigInt().toInt()), style: theme.textTheme.labelSmall?.copyWith(
-            color: isActive ? cs.onPrimary : cs.onSurface, fontWeight: FontWeight.w500)),
-        ]),
+          border: Border.all(color: isActive ? cs.primary : cs.outlineVariant),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              tier,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: isActive ? cs.onPrimary : cs.onSurfaceVariant,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              curr.format(priceCents.toBigInt().toInt()),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: isActive ? cs.onPrimary : cs.onSurface,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildItemSalesperson(ThemeData theme, ColorScheme cs) {
     final hasEmp = _employeeId != null;
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('sales.item_salesperson'.tr(),
-        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-      const SizedBox(height: 8),
-      InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () async {
-          final result = await showModalBottomSheet<Employee>(
-            context: context, isScrollControlled: true,
-            shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-            builder: (sc) => _EmployeePickerSheet(onSelected: (e) => Navigator.pop(sc, e)),
-          );
-          if (result != null) {
-            setState(() { _employeeId = result.id; _employeeName = result.name; });
-          }
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            border: Border.all(color: cs.outlineVariant),
-            borderRadius: BorderRadius.circular(12)),
-          child: Row(children: [
-            Icon(LucideIcons.userCheck, size: 16, color: hasEmp ? cs.tertiary : cs.onSurfaceVariant),
-            const SizedBox(width: 8),
-            Expanded(child: Text(
-              hasEmp ? _employeeName! : 'sales.select_salesperson'.tr(),
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: hasEmp ? null : cs.onSurfaceVariant),
-            )),
-            if (hasEmp)
-              GestureDetector(
-                onTap: () => setState(() { _employeeId = null; _employeeName = null; }),
-                child: Icon(LucideIcons.x, size: 14, color: cs.onSurfaceVariant)),
-          ]),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'sales.item_salesperson'.tr(),
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
         ),
-      ),
-    ]);
+        const SizedBox(height: 8),
+        InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () async {
+            final result = await showModalBottomSheet<Employee>(
+              context: context,
+              isScrollControlled: true,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              builder: (sc) =>
+                  _EmployeePickerSheet(onSelected: (e) => Navigator.pop(sc, e)),
+            );
+            if (result != null) {
+              setState(() {
+                _employeeId = result.id;
+                _employeeName = result.name;
+              });
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              border: Border.all(color: cs.outlineVariant),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  LucideIcons.userCheck,
+                  size: 16,
+                  color: hasEmp ? cs.tertiary : cs.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    hasEmp ? _employeeName! : 'sales.select_salesperson'.tr(),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: hasEmp ? null : cs.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                if (hasEmp)
+                  GestureDetector(
+                    onTap: () => setState(() {
+                      _employeeId = null;
+                      _employeeName = null;
+                    }),
+                    child: Icon(
+                      LucideIcons.x,
+                      size: 14,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   int _computeDiscountCents() {
     final val = Decimal.tryParse(_discountCtrl.text.trim()) ?? Decimal.zero;
     if (_discountIsPercent) {
       final price = Decimal.tryParse(_priceCtrl.text.trim()) ?? Decimal.zero;
-      final subtotalCents =
-          (price * Decimal.fromInt(100)).round().toBigInt().toInt() *
-              _quantity;
+      final subtotalCents = MeasuredAmount.cents(
+        unitCents: (price * Decimal.fromInt(100)).round().toBigInt().toInt(),
+        quantity: _quantity,
+        quantityScale: widget.item.product.quantityScale,
+      );
       // Phase 3.5.5 — centralised percent → cents conversion.
       return sl<DiscountConverter>().fixedFromPercent(
         subtotalCents: subtotalCents,
@@ -1085,7 +1783,6 @@ class _EditItemSheetState extends State<_EditItemSheet> {
     }
     return (val * Decimal.fromInt(100)).round().toBigInt().toInt();
   }
-
 
   void _onSave() {
     // Phase 3.5.4 — parse the price via Decimal so the saved value is
@@ -1121,7 +1818,8 @@ class _CheckoutSheet extends StatefulWidget {
   final VoidCallback onConfirm;
 
   const _CheckoutSheet({
-    required this.currencyService, required this.notesCtrl,
+    required this.currencyService,
+    required this.notesCtrl,
     required this.onConfirm,
   });
 
@@ -1142,18 +1840,21 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     super.initState();
     final state = context.read<SaleFormBloc>().state;
     _paidCtrl = TextEditingController(
-        text: state.paidAmountCents > Decimal.zero
-            ? (state.paidAmountCents.toBigInt().toInt() / 100).toStringAsFixed(2)
-            : '');
+      text: state.paidAmountCents > Decimal.zero
+          ? (state.paidAmountCents.toBigInt().toInt() / 100).toStringAsFixed(2)
+          : '',
+    );
 
     final discCents = state.invoiceDiscountCents.toBigInt().toInt();
     final subtotalCents = state.subtotalCents.toBigInt().toInt();
     _discountFixedCtrl = TextEditingController(
-        text: discCents > 0 ? (discCents / 100).toStringAsFixed(2) : '');
+      text: discCents > 0 ? (discCents / 100).toStringAsFixed(2) : '',
+    );
     _discountPercentCtrl = TextEditingController(
-        text: discCents > 0 && subtotalCents > 0
-            ? ((discCents / subtotalCents) * 100).toStringAsFixed(2)
-            : '');
+      text: discCents > 0 && subtotalCents > 0
+          ? ((discCents / subtotalCents) * 100).toStringAsFixed(2)
+          : '',
+    );
 
     _discountPercentCtrl.addListener(_syncDiscountFromPercent);
     _discountFixedCtrl.addListener(_syncDiscountFromFixed);
@@ -1172,13 +1873,19 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
 
       final discCents = state.invoiceDiscountCents.toBigInt().toInt();
       final subtotalCents = state.subtotalCents.toBigInt().toInt();
-      final fixedText = discCents > 0 ? (discCents / 100).toStringAsFixed(2) : '';
+      final fixedText = discCents > 0
+          ? (discCents / 100).toStringAsFixed(2)
+          : '';
       final pctText = discCents > 0 && subtotalCents > 0
           ? ((discCents / subtotalCents) * 100).toStringAsFixed(2)
           : '';
 
-      if (_discountFixedCtrl.text != fixedText) _discountFixedCtrl.text = fixedText;
-      if (_discountPercentCtrl.text != pctText) _discountPercentCtrl.text = pctText;
+      if (_discountFixedCtrl.text != fixedText) {
+        _discountFixedCtrl.text = fixedText;
+      }
+      if (_discountPercentCtrl.text != pctText) {
+        _discountPercentCtrl.text = pctText;
+      }
 
       _hasHydratedFromBloc = true;
     }
@@ -1189,8 +1896,14 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     _updatingDiscount = true;
     // Phase 3.5.5 — percent → fixed handled by the central converter so
     // this screen can never drift from the line-edit discount helper.
-    final pct = Decimal.tryParse(_discountPercentCtrl.text.trim()) ?? Decimal.zero;
-    final sub = context.read<SaleFormBloc>().state.subtotalCents.toBigInt().toInt();
+    final pct =
+        Decimal.tryParse(_discountPercentCtrl.text.trim()) ?? Decimal.zero;
+    final sub = context
+        .read<SaleFormBloc>()
+        .state
+        .subtotalCents
+        .toBigInt()
+        .toInt();
     final cents = sl<DiscountConverter>().fixedFromPercent(
       subtotalCents: sub,
       percent: pct,
@@ -1203,16 +1916,23 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   void _syncDiscountFromFixed() {
     if (_updatingDiscount) return;
     _updatingDiscount = true;
-    final fixedVal = Decimal.tryParse(_discountFixedCtrl.text.trim()) ?? Decimal.zero;
-    final fixedCents =
-        (fixedVal * Decimal.fromInt(100)).round().toBigInt().toInt();
-    final sub = context.read<SaleFormBloc>().state.subtotalCents.toBigInt().toInt();
+    final fixedVal =
+        Decimal.tryParse(_discountFixedCtrl.text.trim()) ?? Decimal.zero;
+    final fixedCents = (fixedVal * Decimal.fromInt(100))
+        .round()
+        .toBigInt()
+        .toInt();
+    final sub = context
+        .read<SaleFormBloc>()
+        .state
+        .subtotalCents
+        .toBigInt()
+        .toInt();
     final pct = sl<DiscountConverter>().percentFromFixed(
       subtotalCents: sub,
       fixedCents: fixedCents,
     );
-    _discountPercentCtrl.text =
-        pct == Decimal.zero ? '' : pct.toString();
+    _discountPercentCtrl.text = pct == Decimal.zero ? '' : pct.toString();
     _applyInvoiceDiscount();
     _updatingDiscount = false;
   }
@@ -1221,23 +1941,25 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     final fixedVal = double.tryParse(_discountFixedCtrl.text) ?? 0;
     final cents = (fixedVal * 100).round();
     context.read<SaleFormBloc>().add(
-          SaleInvoiceDiscountChanged(Decimal.fromInt(cents)),
-        );
+      SaleInvoiceDiscountChanged(Decimal.fromInt(cents)),
+    );
   }
 
   @override
-  void dispose() { 
-    _paidCtrl.dispose(); 
+  void dispose() {
+    _paidCtrl.dispose();
     _discountPercentCtrl.dispose();
     _discountFixedCtrl.dispose();
-    super.dispose(); 
+    super.dispose();
   }
 
   void _ensureLoyaltyDataLoaded(BuildContext context, SaleFormState state) {
     if (_loyaltyLoadTriggered) return;
     if (state.customerId != null && state.loyaltySettings == null) {
       _loyaltyLoadTriggered = true;
-      context.read<SaleFormBloc>().add(SaleLoyaltyDataRequested(state.customerId!));
+      context.read<SaleFormBloc>().add(
+        SaleLoyaltyDataRequested(state.customerId!),
+      );
     }
   }
 
@@ -1251,521 +1973,890 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
         _hydrateControllersIfNeeded(state);
         _ensureLoyaltyDataLoaded(context, state);
         return DraggableScrollableSheet(
-          initialChildSize: 0.85, maxChildSize: 0.95, minChildSize: 0.5, expand: false,
-          builder: (context, scrollCtrl) => Column(children: [
-            _handle(cs),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(children: [
-                Icon(LucideIcons.shoppingBag, size: 20, color: cs.primary),
-                const SizedBox(width: 8),
-                Text('sales.checkout'.tr(),
-                  style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                const Spacer(),
-                TextButton(onPressed: () => Navigator.pop(context), child: Text('common.cancel'.tr())),
-              ]),
-            ),
-            Expanded(
-              child: ListView(
-                controller: scrollCtrl,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: [
-                  // Customer Selection
-                  _section(theme, cs, LucideIcons.users, 'sales.customer'.tr(),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(10),
-                      onTap: () => _showCustomerPickerInCheckout(context),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: cs.outlineVariant),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(children: [
-                          if (state.customerName != null) ...[
-                            CircleAvatar(
-                              radius: 16,
-                              backgroundColor: cs.primaryContainer,
-                              child: Text(
-                                state.customerName![0].toUpperCase(),
-                                style: TextStyle(
-                                  color: cs.onPrimaryContainer,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                          ],
-                          Expanded(
-                            child: Text(
-                              state.customerName ?? 'sales.select_customer'.tr(),
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                fontWeight: state.customerName != null ? FontWeight.w500 : FontWeight.normal,
-                                color: state.customerName != null ? null : cs.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                          if (state.customerId != null)
-                            GestureDetector(
-                              onTap: () => context.read<SaleFormBloc>().add(
-                                const SaleCustomerChanged()),
-                              child: Padding(
-                                padding: const EdgeInsetsDirectional.only(end: 4),
-                                child: Icon(LucideIcons.x, size: 16, color: cs.onSurfaceVariant),
-                              ),
-                            ),
-                          Icon(LucideIcons.chevronDown, size: 18, color: cs.onSurfaceVariant),
-                        ]),
+          initialChildSize: 0.85,
+          maxChildSize: 0.95,
+          minChildSize: 0.5,
+          expand: false,
+          builder: (context, scrollCtrl) => Column(
+            children: [
+              _handle(cs),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.shoppingBag, size: 20, color: cs.primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      'sales.checkout'.tr(),
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ),
-                  // Customer Balance Info
-                  if (state.customerId != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8, bottom: 8),
-                      child: _CustomerBalanceInfo(
-                        customerId: state.customerId!,
-                        invoiceTotalCents: state.totalCents.toBigInt().toInt(),
-                        paidAmountCents: state.paidAmountCents.toBigInt().toInt(),
-                        currencyService: widget.currencyService,
-                      ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text('common.cancel'.tr()),
                     ),
-                  // Loyalty Points Redemption
-                  if (state.enableLoyaltyPoints &&
-                      state.customerId != null &&
-                      state.loyaltySettings != null &&
-                      state.loyaltyPointsBalance > 0 &&
-                      state.loyaltySettings!.allowPointsRedemption &&
-                      state.loyaltyPointsBalance >= state.loyaltySettings!.minRedemptionPoints) ...[
-                    _LoyaltyRedemptionSection(
-                      state: state,
-                      currencyService: widget.currencyService,
-                    ),
-                    const SizedBox(height: 16),
                   ],
-
-                  // Payment Method
-                  _section(theme, cs, LucideIcons.wallet, 'sales.payment_method'.tr(),
-                    child: Wrap(spacing: 8, runSpacing: 8,
-                      children: SalePaymentMethod.values.map((m) {
-                        final sel = state.paymentMethod == m;
-                        return ChoiceChip(
-                          label: Text(_pmLabel(m)), selected: sel,
-                          onSelected: (_) => context.read<SaleFormBloc>().add(SalePaymentMethodChanged(m)),
-                          avatar: Icon(_pmIcon(m), size: 16),
-                          selectedColor: cs.primaryContainer, showCheckmark: false,
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Cheque due date (only for cheque)
-                  if (state.paymentMethod == SalePaymentMethod.cheque) ...[
-                    _section(theme, cs, LucideIcons.calendar, 'sales.cheque_due_date'.tr(),
+                ),
+              ),
+              Expanded(
+                child: ListView(
+                  controller: scrollCtrl,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    // Customer Selection
+                    _section(
+                      theme,
+                      cs,
+                      LucideIcons.users,
+                      'sales.customer'.tr(),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(10),
-                        onTap: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: state.dueDate ?? DateTime.now().add(const Duration(days: 30)),
-                            firstDate: DateTime.now(),
-                            lastDate: DateTime.now().add(const Duration(days: 365)),
-                          );
-                          if (picked != null && context.mounted) {
-                            context.read<SaleFormBloc>().add(SaleDueDateChanged(picked));
-                          }
-                        },
+                        onTap: () => _showCustomerPickerInCheckout(context),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
                           decoration: BoxDecoration(
                             border: Border.all(color: cs.outlineVariant),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: Row(children: [
-                            Icon(LucideIcons.calendar, size: 18, color: cs.primary),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                state.dueDate != null
-                                  ? '${state.dueDate!.year}-${state.dueDate!.month.toString().padLeft(2, '0')}-${state.dueDate!.day.toString().padLeft(2, '0')}'
-                                  : 'sales.select_due_date'.tr(),
-                                style: theme.textTheme.bodyLarge?.copyWith(
-                                  color: state.dueDate != null ? null : cs.onSurfaceVariant,
+                          child: Row(
+                            children: [
+                              if (state.customerName != null) ...[
+                                CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: cs.primaryContainer,
+                                  child: Text(
+                                    state.customerName![0].toUpperCase(),
+                                    style: TextStyle(
+                                      color: cs.onPrimaryContainer,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                              ],
+                              Expanded(
+                                child: Text(
+                                  state.customerName ??
+                                      'sales.select_customer'.tr(),
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    fontWeight: state.customerName != null
+                                        ? FontWeight.w500
+                                        : FontWeight.normal,
+                                    color: state.customerName != null
+                                        ? null
+                                        : cs.onSurfaceVariant,
+                                  ),
                                 ),
                               ),
-                            ),
-                            Icon(LucideIcons.chevronDown, size: 18, color: cs.onSurfaceVariant),
-                          ]),
+                              if (state.customerId != null)
+                                GestureDetector(
+                                  onTap: () => context.read<SaleFormBloc>().add(
+                                    const SaleCustomerChanged(),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsetsDirectional.only(
+                                      end: 4,
+                                    ),
+                                    child: Icon(
+                                      LucideIcons.x,
+                                      size: 16,
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                              Icon(
+                                LucideIcons.chevronDown,
+                                size: 18,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                  ],
+                    // Customer Balance Info
+                    if (state.customerId != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 8),
+                        child: _CustomerBalanceInfo(
+                          customerId: state.customerId!,
+                          invoiceTotalCents: state.totalCents
+                              .toBigInt()
+                              .toInt(),
+                          paidAmountCents: state.paidAmountCents
+                              .toBigInt()
+                              .toInt(),
+                          currencyService: widget.currencyService,
+                        ),
+                      ),
+                    // Loyalty Points Redemption
+                    if (state.canOfferLoyaltyRedemption) ...[
+                      _LoyaltyRedemptionSection(
+                        state: state,
+                        currencyService: widget.currencyService,
+                      ),
+                      const SizedBox(height: 16),
+                    ],
 
-                  // Credit/Cheque info message
-                  if (state.paymentMethod == SalePaymentMethod.credit ||
-                      state.paymentMethod == SalePaymentMethod.cheque) ...[
-                    if (state.customerId == null)
+                    // Payment Method
+                    _section(
+                      theme,
+                      cs,
+                      LucideIcons.wallet,
+                      'sales.payment_method'.tr(),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: SalePaymentMethod.values.map((m) {
+                          final sel = state.paymentMethod == m;
+                          return ChoiceChip(
+                            label: Text(_pmLabel(m)),
+                            selected: sel,
+                            onSelected: (_) => context.read<SaleFormBloc>().add(
+                              SalePaymentMethodChanged(m),
+                            ),
+                            avatar: Icon(_pmIcon(m), size: 16),
+                            selectedColor: cs.primaryContainer,
+                            showCheckmark: false,
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Cheque due date (only for cheque)
+                    if (state.paymentMethod == SalePaymentMethod.cheque) ...[
+                      _section(
+                        theme,
+                        cs,
+                        LucideIcons.calendar,
+                        'sales.cheque_due_date'.tr(),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate:
+                                  state.dueDate ??
+                                  DateTime.now().add(const Duration(days: 30)),
+                              firstDate: DateTime.now(),
+                              lastDate: DateTime.now().add(
+                                const Duration(days: 365),
+                              ),
+                            );
+                            if (picked != null && context.mounted) {
+                              context.read<SaleFormBloc>().add(
+                                SaleDueDateChanged(picked),
+                              );
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: cs.outlineVariant),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  LucideIcons.calendar,
+                                  size: 18,
+                                  color: cs.primary,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    state.dueDate != null
+                                        ? '${state.dueDate!.year}-${state.dueDate!.month.toString().padLeft(2, '0')}-${state.dueDate!.day.toString().padLeft(2, '0')}'
+                                        : 'sales.select_due_date'.tr(),
+                                    style: theme.textTheme.bodyLarge?.copyWith(
+                                      color: state.dueDate != null
+                                          ? null
+                                          : cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                                Icon(
+                                  LucideIcons.chevronDown,
+                                  size: 18,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // Credit/Cheque info message
+                    if (state.paymentMethod == SalePaymentMethod.credit ||
+                        state.paymentMethod == SalePaymentMethod.cheque) ...[
+                      if (state.customerId == null)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: cs.errorContainer.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: cs.error.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                LucideIcons.alertTriangle,
+                                size: 16,
+                                color: cs.error,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'sales.customer_required_for_credit'.tr(),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: cs.error,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        Column(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: cs.tertiaryContainer.withValues(
+                                  alpha: 0.3,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: cs.tertiary.withValues(alpha: 0.3),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    LucideIcons.info,
+                                    size: 16,
+                                    color: cs.tertiary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'sales.credit_balance_info'.tr(),
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: cs.onSurfaceVariant,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            // Add Payment button for credit sales
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  // Navigate to receive payment screen with customer pre-selected
+                                  context.push(
+                                    '/customers/receive-payment',
+                                    extra: {'customerId': state.customerId},
+                                  );
+                                },
+                                icon: const Icon(
+                                  LucideIcons.banknote,
+                                  size: 18,
+                                ),
+                                label: Text('sales.add_payment'.tr()),
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                  side: BorderSide(color: cs.primary),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // Tax (read-only, sum of line item taxes)
+                    if (state.taxCents > Decimal.zero) ...[
+                      _section(
+                        theme,
+                        cs,
+                        LucideIcons.percent,
+                        'sales.tax'.tr(),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: cs.surfaceContainerHighest.withValues(
+                              alpha: 0.3,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: cs.outlineVariant),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                LucideIcons.receipt,
+                                size: 16,
+                                color: cs.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                widget.currencyService.format(
+                                  state.taxCents.toBigInt().toInt(),
+                                ),
+                                style: theme.textTheme.bodyLarge?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                'sales.tax_from_products'.tr(),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // Invoice Discount (if invoice mode and allowed)
+                    if (state.allowDiscounts &&
+                        state.discountMode == SaleDiscountMode.invoice) ...[
+                      _section(
+                        theme,
+                        cs,
+                        LucideIcons.tag,
+                        'sales.invoice_discount'.tr(),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _discountFixedCtrl,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'[\d.]'),
+                                  ),
+                                ],
+                                onTap: () => selectAllText(_discountFixedCtrl),
+                                decoration: InputDecoration(
+                                  labelText: 'purchases.discount_fixed'.tr(),
+                                  border: const OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextField(
+                                controller: _discountPercentCtrl,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'[\d.]'),
+                                  ),
+                                ],
+                                onTap: () =>
+                                    selectAllText(_discountPercentCtrl),
+                                decoration: InputDecoration(
+                                  labelText: 'purchases.discount_percent'.tr(),
+                                  border: const OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // Paid Amount (only for cash)
+                    if (state.paymentMethod == SalePaymentMethod.cash) ...[
+                      _section(
+                        theme,
+                        cs,
+                        LucideIcons.banknote,
+                        'sales.paid_amount'.tr(),
+                        child: TextField(
+                          controller: _paidCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+                          ],
+                          onTap: () => selectAllText(_paidCtrl),
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            isDense: true,
+                            hintText:
+                                (state.totalCents.toBigInt().toInt() / 100)
+                                    .toStringAsFixed(2),
+                            prefixIcon: const Icon(
+                              LucideIcons.dollarSign,
+                              size: 18,
+                            ),
+                          ),
+                          onChanged: (v) {
+                            final val = double.tryParse(v) ?? 0;
+                            context.read<SaleFormBloc>().add(
+                              SalePaidAmountChanged(
+                                Decimal.fromInt((val * 100).round()),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Remaining / Change display
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: cs.errorContainer.withValues(alpha: 0.3),
+                          color: state.changeCents > Decimal.zero
+                              ? Colors.green.withValues(alpha: 0.08)
+                              : state.remainingCents > Decimal.zero
+                              ? cs.errorContainer.withValues(alpha: 0.3)
+                              : cs.primaryContainer.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: cs.error.withValues(alpha: 0.3)),
-                        ),
-                        child: Row(children: [
-                          Icon(LucideIcons.alertTriangle, size: 16, color: cs.error),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'sales.customer_required_for_credit'.tr(),
-                              style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
-                            ),
+                          border: Border.all(
+                            color: state.changeCents > Decimal.zero
+                                ? Colors.green.withValues(alpha: 0.3)
+                                : state.remainingCents > Decimal.zero
+                                ? cs.error.withValues(alpha: 0.2)
+                                : cs.primary.withValues(alpha: 0.2),
                           ),
-                        ]),
-                      )
-                    else
-                      Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: cs.tertiaryContainer.withValues(alpha: 0.3),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: cs.tertiary.withValues(alpha: 0.3)),
-                            ),
-                            child: Row(children: [
-                              Icon(LucideIcons.info, size: 16, color: cs.tertiary),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'sales.credit_balance_info'.tr(),
-                                  style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                        ),
+                        child: Column(
+                          children: [
+                            // Underpayment warning (cash with customer selected)
+                            if (state.remainingCents > Decimal.zero &&
+                                state.customerId != null)
+                              Column(
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        LucideIcons.alertTriangle,
+                                        size: 16,
+                                        color: cs.error,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'sales.underpayment_warning'.tr(),
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(color: cs.error),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _cRow(
+                                    theme,
+                                    'sales.remaining'.tr(),
+                                    widget.currencyService.format(
+                                      state.remainingCents.toBigInt().toInt(),
+                                    ),
+                                    isBold: true,
+                                    valueColor: cs.error,
+                                  ),
+                                ],
+                              )
+                            // Underpayment without customer (walk-in)
+                            else if (state.remainingCents > Decimal.zero)
+                              _cRow(
+                                theme,
+                                'sales.remaining'.tr(),
+                                widget.currencyService.format(
+                                  state.remainingCents.toBigInt().toInt(),
+                                ),
+                                isBold: true,
+                                valueColor: cs.error,
+                              ),
+                            // Overpayment with customer - show options
+                            if (state.changeCents > Decimal.zero &&
+                                state.customerId != null) ...[
+                              _cRow(
+                                theme,
+                                'sales.overpayment_amount'.tr(),
+                                widget.currencyService.format(
+                                  state.changeCents.toBigInt().toInt(),
+                                ),
+                                isBold: true,
+                                valueColor: Colors.green,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'sales.overpayment_handling'.tr(),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
                                 ),
                               ),
-                            ]),
-                          ),
-                          const SizedBox(height: 12),
-                          // Add Payment button for credit sales
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                Navigator.pop(context);
-                                // Navigate to receive payment screen with customer pre-selected
-                                context.push('/customers/receive-payment', extra: {'customerId': state.customerId});
-                              },
-                              icon: const Icon(LucideIcons.banknote, size: 18),
-                              label: Text('sales.add_payment'.tr()),
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                side: BorderSide(color: cs.primary),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: ChoiceChip(
+                                      label: Text('sales.return_change'.tr()),
+                                      selected:
+                                          state.overpaymentHandling ==
+                                          SaleOverpaymentHandling.returnChange,
+                                      onSelected: (_) =>
+                                          context.read<SaleFormBloc>().add(
+                                            const SaleOverpaymentHandlingChanged(
+                                              SaleOverpaymentHandling
+                                                  .returnChange,
+                                            ),
+                                          ),
+                                      avatar: const Icon(
+                                        LucideIcons.banknote,
+                                        size: 16,
+                                      ),
+                                      selectedColor: cs.primaryContainer,
+                                      showCheckmark: false,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: ChoiceChip(
+                                      label: Text('sales.add_to_balance'.tr()),
+                                      selected:
+                                          state.overpaymentHandling ==
+                                          SaleOverpaymentHandling.addToBalance,
+                                      onSelected: (_) =>
+                                          context.read<SaleFormBloc>().add(
+                                            const SaleOverpaymentHandlingChanged(
+                                              SaleOverpaymentHandling
+                                                  .addToBalance,
+                                            ),
+                                          ),
+                                      avatar: const Icon(
+                                        LucideIcons.wallet,
+                                        size: 16,
+                                      ),
+                                      selectedColor: cs.primaryContainer,
+                                      showCheckmark: false,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    const SizedBox(height: 16),
-                  ],
-
-                  // Tax (read-only, sum of line item taxes)
-                  if (state.taxCents > Decimal.zero) ...[
-                    _section(theme, cs, LucideIcons.percent, 'sales.tax'.tr(),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: cs.outlineVariant),
+                            ]
+                            // Overpayment without customer (walk-in) - just show change
+                            else if (state.changeCents > Decimal.zero)
+                              _cRow(
+                                theme,
+                                'sales.change'.tr(),
+                                widget.currencyService.format(
+                                  state.changeCents.toBigInt().toInt(),
+                                ),
+                                isBold: true,
+                                valueColor: Colors.green,
+                              ),
+                            if (state.remainingCents == Decimal.zero &&
+                                state.changeCents == Decimal.zero)
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    LucideIcons.checkCircle,
+                                    size: 16,
+                                    color: cs.primary,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'sales.fully_paid'.tr(),
+                                    style: theme.textTheme.titleSmall?.copyWith(
+                                      color: cs.primary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                          ],
                         ),
-                        child: Row(children: [
-                          Icon(LucideIcons.receipt, size: 16, color: cs.onSurfaceVariant),
-                          const SizedBox(width: 8),
-                          Text(
-                            widget.currencyService.format(state.taxCents.toBigInt().toInt()),
-                            style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                          const Spacer(),
-                          Text(
-                            'sales.tax_from_products'.tr(),
-                            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                          ),
-                        ]),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
+                      const SizedBox(height: 16),
+                    ],
 
-                  // Invoice Discount (if invoice mode and allowed)
-                  if (state.allowDiscounts && state.discountMode == SaleDiscountMode.invoice) ...[
-                    _section(theme, cs, LucideIcons.tag, 'sales.invoice_discount'.tr(),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _discountFixedCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-                              onTap: () => selectAllText(_discountFixedCtrl),
-                              decoration: InputDecoration(
-                                labelText: 'purchases.discount_fixed'.tr(),
-                                border: const OutlineInputBorder(),
-                                isDense: true,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: TextField(
-                              controller: _discountPercentCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-                              onTap: () => selectAllText(_discountPercentCtrl),
-                              decoration: InputDecoration(
-                                labelText: 'purchases.discount_percent'.tr(),
-                                border: const OutlineInputBorder(),
-                                isDense: true,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-
-                  // Paid Amount (only for cash)
-                  if (state.paymentMethod == SalePaymentMethod.cash) ...[
-                    _section(theme, cs, LucideIcons.banknote, 'sales.paid_amount'.tr(),
-                      child: TextField(
-                        controller: _paidCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-                        onTap: () => selectAllText(_paidCtrl),
-                        decoration: InputDecoration(
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          filled: true, isDense: true,
-                          hintText: (state.totalCents.toBigInt().toInt() / 100).toStringAsFixed(2),
-                          prefixIcon: const Icon(LucideIcons.dollarSign, size: 18)),
-                        onChanged: (v) {
-                          final val = double.tryParse(v) ?? 0;
-                          context.read<SaleFormBloc>().add(
-                            SalePaidAmountChanged(Decimal.fromInt((val * 100).round())));
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Remaining / Change display
+                    // Financial Summary
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: state.changeCents > Decimal.zero
-                          ? Colors.green.withValues(alpha: 0.08)
-                          : state.remainingCents > Decimal.zero
-                            ? cs.errorContainer.withValues(alpha: 0.3)
-                            : cs.primaryContainer.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: state.changeCents > Decimal.zero
-                          ? Colors.green.withValues(alpha: 0.3)
-                          : state.remainingCents > Decimal.zero
-                            ? cs.error.withValues(alpha: 0.2)
-                            : cs.primary.withValues(alpha: 0.2))),
-                      child: Column(children: [
-                        // Underpayment warning (cash with customer selected)
-                        if (state.remainingCents > Decimal.zero && state.customerId != null)
-                          Column(children: [
-                            Row(children: [
-                              Icon(LucideIcons.alertTriangle, size: 16, color: cs.error),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'sales.underpayment_warning'.tr(),
-                                  style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
-                                ),
-                              ),
-                            ]),
+                        color: cs.surfaceContainerHighest.withValues(
+                          alpha: 0.5,
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: cs.outlineVariant.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          _cRow(
+                            theme,
+                            'sales.subtotal'.tr(),
+                            widget.currencyService.format(
+                              state.subtotalCents.toBigInt().toInt(),
+                            ),
+                          ),
+                          if (state.totalDiscountCents > Decimal.zero) ...[
                             const SizedBox(height: 8),
-                            _cRow(theme, 'sales.remaining'.tr(),
-                              widget.currencyService.format(state.remainingCents.toBigInt().toInt()),
-                              isBold: true, valueColor: cs.error),
-                          ])
-                        // Underpayment without customer (walk-in)
-                        else if (state.remainingCents > Decimal.zero)
-                          _cRow(theme, 'sales.remaining'.tr(),
-                            widget.currencyService.format(state.remainingCents.toBigInt().toInt()),
-                            isBold: true, valueColor: cs.error),
-                        // Overpayment with customer - show options
-                        if (state.changeCents > Decimal.zero && state.customerId != null) ...[
-                          _cRow(theme, 'sales.overpayment_amount'.tr(),
-                            widget.currencyService.format(state.changeCents.toBigInt().toInt()),
-                            isBold: true, valueColor: Colors.green),
-                          const SizedBox(height: 12),
-                          Text('sales.overpayment_handling'.tr(),
-                            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                          const SizedBox(height: 8),
-                          Row(children: [
-                            Expanded(
-                              child: ChoiceChip(
-                                label: Text('sales.return_change'.tr()),
-                                selected: state.overpaymentHandling == SaleOverpaymentHandling.returnChange,
-                                onSelected: (_) => context.read<SaleFormBloc>().add(
-                                  const SaleOverpaymentHandlingChanged(SaleOverpaymentHandling.returnChange)),
-                                avatar: const Icon(LucideIcons.banknote, size: 16),
-                                selectedColor: cs.primaryContainer,
-                                showCheckmark: false,
+                            _cRow(
+                              theme,
+                              'sales.discount'.tr(),
+                              '- ${widget.currencyService.format(state.totalDiscountCents.toBigInt().toInt())}',
+                              valueColor: cs.tertiary,
+                            ),
+                          ],
+                          if (state.taxCents > Decimal.zero) ...[
+                            const SizedBox(height: 8),
+                            _cRow(
+                              theme,
+                              'sales.tax'.tr(),
+                              widget.currencyService.format(
+                                state.taxCents.toBigInt().toInt(),
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: ChoiceChip(
-                                label: Text('sales.add_to_balance'.tr()),
-                                selected: state.overpaymentHandling == SaleOverpaymentHandling.addToBalance,
-                                onSelected: (_) => context.read<SaleFormBloc>().add(
-                                  const SaleOverpaymentHandlingChanged(SaleOverpaymentHandling.addToBalance)),
-                                avatar: const Icon(LucideIcons.wallet, size: 16),
-                                selectedColor: cs.primaryContainer,
-                                showCheckmark: false,
-                              ),
+                          ],
+                          if (state.loyaltyDiscountCents > 0) ...[
+                            const SizedBox(height: 8),
+                            _cRow(
+                              theme,
+                              'sales.loyalty_discount'.tr(),
+                              '- ${widget.currencyService.format(state.loyaltyDiscountCents)}',
+                              valueColor: Colors.deepPurple,
                             ),
-                          ]),
-                        ]
-                        // Overpayment without customer (walk-in) - just show change
-                        else if (state.changeCents > Decimal.zero)
-                          _cRow(theme, 'sales.change'.tr(),
-                            widget.currencyService.format(state.changeCents.toBigInt().toInt()),
-                            isBold: true, valueColor: Colors.green),
-                        if (state.remainingCents == Decimal.zero && state.changeCents == Decimal.zero)
-                          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            Icon(LucideIcons.checkCircle, size: 16, color: cs.primary),
-                            const SizedBox(width: 6),
-                            Text('sales.fully_paid'.tr(), style: theme.textTheme.titleSmall?.copyWith(
-                              color: cs.primary, fontWeight: FontWeight.w600)),
-                          ]),
-                      ]),
+                          ],
+                          Divider(
+                            height: 20,
+                            color: cs.outlineVariant.withValues(alpha: 0.5),
+                          ),
+                          _cRow(
+                            theme,
+                            'sales.total'.tr(),
+                            widget.currencyService.format(
+                              state.totalCents.toBigInt().toInt(),
+                            ),
+                            isBold: true,
+                            valueColor: cs.primary,
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 16),
+
+                    // Notes
+                    _section(
+                      theme,
+                      cs,
+                      LucideIcons.stickyNote,
+                      'sales.notes'.tr(),
+                      child: TextField(
+                        controller: widget.notesCtrl,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          hintText: 'sales.notes_hint'.tr(),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          isDense: true,
+                        ),
+                        onChanged: (v) => context.read<SaleFormBloc>().add(
+                          SaleNotesChanged(v),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 80),
                   ],
+                ),
+              ),
 
-                  // Financial Summary
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3))),
-                    child: Column(children: [
-                      _cRow(theme, 'sales.subtotal'.tr(),
-                        widget.currencyService.format(state.subtotalCents.toBigInt().toInt())),
-                      if (state.totalDiscountCents > Decimal.zero) ...[
-                        const SizedBox(height: 8),
-                        _cRow(theme, 'sales.discount'.tr(),
-                          '- ${widget.currencyService.format(state.totalDiscountCents.toBigInt().toInt())}',
-                          valueColor: cs.tertiary),
-                      ],
-                      if (state.taxCents > Decimal.zero) ...[
-                        const SizedBox(height: 8),
-                        _cRow(theme, 'sales.tax'.tr(),
-                          widget.currencyService.format(state.taxCents.toBigInt().toInt())),
-                      ],
-                      if (state.loyaltyDiscountCents > 0) ...[
-                        const SizedBox(height: 8),
-                        _cRow(theme, 'sales.loyalty_discount'.tr(),
-                          '- ${widget.currencyService.format(state.loyaltyDiscountCents)}',
-                          valueColor: Colors.deepPurple),
-                      ],
-                      Divider(height: 20, color: cs.outlineVariant.withValues(alpha: 0.5)),
-                      _cRow(theme, 'sales.total'.tr(),
-                        widget.currencyService.format(state.totalCents.toBigInt().toInt()),
-                        isBold: true, valueColor: cs.primary),
-                    ]),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Notes
-                  _section(theme, cs, LucideIcons.stickyNote, 'sales.notes'.tr(),
-                    child: TextField(
-                      controller: widget.notesCtrl, maxLines: 2,
-                      decoration: InputDecoration(
-                        hintText: 'sales.notes_hint'.tr(),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        isDense: true),
-                      onChanged: (v) => context.read<SaleFormBloc>().add(SaleNotesChanged(v)),
+              // Bottom actions
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: cs.surface,
+                  border: Border(
+                    top: BorderSide(
+                      color: cs.outlineVariant.withValues(alpha: 0.3),
                     ),
                   ),
-                  const SizedBox(height: 80),
-                ],
-              ),
-            ),
-
-            // Bottom actions
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: cs.surface,
-                border: Border(top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.3))),
-                boxShadow: [BoxShadow(color: cs.shadow.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, -2))],
-              ),
-              child: SafeArea(
-                child: Row(children: [
-                  Expanded(
-                    child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('sales.total'.tr(), style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
-                      Text(widget.currencyService.format(state.totalCents.toBigInt().toInt()),
-                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: cs.primary)),
-                    ]),
+                  boxShadow: [
+                    BoxShadow(
+                      color: cs.shadow.withValues(alpha: 0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
+                ),
+                child: SafeArea(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'sales.total'.tr(),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                            Text(
+                              widget.currencyService.format(
+                                state.totalCents.toBigInt().toInt(),
+                              ),
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: cs.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: Builder(
+                          builder: (ctx) {
+                            final cashInsufficient =
+                                state.paymentMethod == SalePaymentMethod.cash &&
+                                state.paidAmountCents < state.totalCents;
+                            final chequeNoDueDate =
+                                state.paymentMethod ==
+                                    SalePaymentMethod.cheque &&
+                                state.dueDate == null;
+                            final customerRequiredButMissing =
+                                (state.paymentMethod ==
+                                        SalePaymentMethod.credit ||
+                                    state.paymentMethod ==
+                                        SalePaymentMethod.cheque) &&
+                                state.customerId == null;
+                            final canConfirm =
+                                !state.isSubmitting &&
+                                !cashInsufficient &&
+                                !chequeNoDueDate &&
+                                !customerRequiredButMissing;
+                            return FilledButton.icon(
+                              onPressed: canConfirm ? widget.onConfirm : null,
+                              icon: state.isSubmitting
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(LucideIcons.check, size: 18),
+                              label: Text('sales.confirm_save'.tr()),
+                              style: FilledButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: Builder(builder: (ctx) {
-                      final cashInsufficient = state.paymentMethod == SalePaymentMethod.cash &&
-                          state.paidAmountCents < state.totalCents;
-                      final chequeNoDueDate = state.paymentMethod == SalePaymentMethod.cheque &&
-                          state.dueDate == null;
-                      final customerRequiredButMissing =
-                          (state.paymentMethod == SalePaymentMethod.credit ||
-                           state.paymentMethod == SalePaymentMethod.cheque) &&
-                          state.customerId == null;
-                      final canConfirm = !state.isSubmitting && !cashInsufficient && !chequeNoDueDate && !customerRequiredButMissing;
-                      return FilledButton.icon(
-                        onPressed: canConfirm ? widget.onConfirm : null,
-                        icon: state.isSubmitting
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(LucideIcons.check, size: 18),
-                        label: Text('sales.confirm_save'.tr()),
-                        style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-                      );
-                    }),
-                  ),
-                ]),
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
         );
       },
     );
   }
 
-  Widget _section(ThemeData theme, ColorScheme cs, IconData icon, String title, {required Widget child}) =>
-    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        Icon(icon, size: 16, color: cs.primary),
-        const SizedBox(width: 8),
-        Text(title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-      ]),
+  Widget _section(
+    ThemeData theme,
+    ColorScheme cs,
+    IconData icon,
+    String title, {
+    required Widget child,
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Icon(icon, size: 16, color: cs.primary),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
       const SizedBox(height: 8),
       child,
-    ]);
+    ],
+  );
 
-  Widget _cRow(ThemeData t, String l, String v, {bool isBold = false, Color? valueColor}) => Row(
+  Widget _cRow(
+    ThemeData t,
+    String l,
+    String v, {
+    bool isBold = false,
+    Color? valueColor,
+  }) => Row(
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [
-      Text(l, style: (isBold ? t.textTheme.titleSmall : t.textTheme.bodyMedium)?.copyWith(
-        color: isBold ? null : t.colorScheme.onSurfaceVariant)),
-      Text(v, style: (isBold ? t.textTheme.titleMedium : t.textTheme.bodyMedium)?.copyWith(
-        color: valueColor, fontWeight: isBold ? FontWeight.bold : FontWeight.w500)),
+      Text(
+        l,
+        style: (isBold ? t.textTheme.titleSmall : t.textTheme.bodyMedium)
+            ?.copyWith(color: isBold ? null : t.colorScheme.onSurfaceVariant),
+      ),
+      Text(
+        v,
+        style: (isBold ? t.textTheme.titleMedium : t.textTheme.bodyMedium)
+            ?.copyWith(
+              color: valueColor,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+            ),
+      ),
     ],
   );
 
@@ -1793,7 +2884,10 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
       builder: (sheetCtx) => _CustomerPickerSheet(
         onSelected: (customer) {
           context.read<SaleFormBloc>().add(
-            SaleCustomerChanged(customerId: customer.id, customerName: customer.name),
+            SaleCustomerChanged(
+              customerId: customer.id,
+              customerName: customer.name,
+            ),
           );
           Navigator.pop(sheetCtx);
         },
@@ -1859,43 +2953,55 @@ class _CustomerBalanceInfo extends StatelessWidget {
             decoration: BoxDecoration(
               color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.3),
+              ),
             ),
-            child: Row(children: [
-              Icon(LucideIcons.info, size: 16, color: cs.primary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'sales.customer_balance'.tr(),
-                  style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                ),
-              ),
-              Directionality(
-                textDirection: ui.TextDirection.ltr,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      currencyService.format(currentBalanceCents),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: isCurrentReceivable ? cs.error : Colors.green,
-                      ),
+            child: Row(
+              children: [
+                Icon(LucideIcons.info, size: 16, color: cs.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'sales.customer_balance'.tr(),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
                     ),
-                    const SizedBox(width: 4),
-                    Icon(LucideIcons.arrowRight, size: 14, color: cs.onSurfaceVariant),
-                    const SizedBox(width: 4),
-                    Text(
-                      currencyService.format(projectedBalanceCents),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: isProjectedReceivable ? cs.error : Colors.green,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ]),
+                Directionality(
+                  textDirection: ui.TextDirection.ltr,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        currencyService.format(currentBalanceCents),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: isCurrentReceivable ? cs.error : Colors.green,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        LucideIcons.arrowRight,
+                        size: 14,
+                        color: cs.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        currencyService.format(projectedBalanceCents),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: isProjectedReceivable
+                              ? cs.error
+                              : Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -1916,14 +3022,20 @@ class _CustomerBalanceInfo extends StatelessWidget {
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Row(children: [
-          Icon(LucideIcons.wallet, size: 20, color: cs.primary),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text('sales.customer_account'.tr(),
-              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-          ),
-        ]),
+        title: Row(
+          children: [
+            Icon(LucideIcons.wallet, size: 20, color: cs.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'sales.customer_account'.tr(),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1935,26 +3047,38 @@ class _CustomerBalanceInfo extends StatelessWidget {
                 color: cs.primaryContainer.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Row(children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundColor: cs.primaryContainer,
-                  child: Text(
-                    customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?',
-                    style: TextStyle(color: cs.onPrimaryContainer, fontWeight: FontWeight.bold),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: cs.primaryContainer,
+                    child: Text(
+                      customer.name.isNotEmpty
+                          ? customer.name[0].toUpperCase()
+                          : '?',
+                      style: TextStyle(
+                        color: cs.onPrimaryContainer,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(customer.name,
-                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-                ),
-              ]),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      customer.name,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             // Current balance
             _balanceRow(
-              theme: theme, cs: cs,
+              theme: theme,
+              cs: cs,
               icon: LucideIcons.wallet,
               label: 'sales.current_balance'.tr(),
               amount: currencyService.format(currentBalanceCents),
@@ -1966,7 +3090,8 @@ class _CustomerBalanceInfo extends StatelessWidget {
             const SizedBox(height: 12),
             // Invoice amount
             _balanceRow(
-              theme: theme, cs: cs,
+              theme: theme,
+              cs: cs,
               icon: LucideIcons.fileText,
               label: 'sales.this_invoice'.tr(),
               amount: '+ ${currencyService.format(invoiceTotalCents)}',
@@ -1975,10 +3100,14 @@ class _CustomerBalanceInfo extends StatelessWidget {
                   ? '${'sales.paid_now'.tr()}: - ${currencyService.format(paidAmountCents)}'
                   : null,
             ),
-            Divider(height: 24, color: cs.outlineVariant.withValues(alpha: 0.5)),
+            Divider(
+              height: 24,
+              color: cs.outlineVariant.withValues(alpha: 0.5),
+            ),
             // Projected balance
             _balanceRow(
-              theme: theme, cs: cs,
+              theme: theme,
+              cs: cs,
               icon: LucideIcons.trendingUp,
               label: 'sales.projected_balance'.tr(),
               amount: currencyService.format(projectedBalanceCents),
@@ -2010,35 +3139,51 @@ class _CustomerBalanceInfo extends StatelessWidget {
     String? subtitle,
     bool isBold = false,
   }) {
-    return Row(children: [
-      Container(
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(8),
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 16, color: cs.primary),
         ),
-        child: Icon(icon, size: 16, color: cs.primary),
-      ),
-      const SizedBox(width: 10),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-            if (subtitle != null)
-              Text(subtitle, style: theme.textTheme.labelSmall?.copyWith(
-                color: cs.onSurfaceVariant.withValues(alpha: 0.7), fontSize: 10)),
-          ],
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              if (subtitle != null)
+                Text(
+                  subtitle,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                    fontSize: 10,
+                  ),
+                ),
+            ],
+          ),
         ),
-      ),
-      Text(
-        amount,
-        style: (isBold ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium)?.copyWith(
-          fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-          color: amountColor,
+        Text(
+          amount,
+          style:
+              (isBold
+                      ? theme.textTheme.titleMedium
+                      : theme.textTheme.bodyMedium)
+                  ?.copyWith(
+                    fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+                    color: amountColor,
+                  ),
         ),
-      ),
-    ]);
+      ],
+    );
   }
 }
 
@@ -2055,7 +3200,8 @@ class _LoyaltyRedemptionSection extends StatefulWidget {
   });
 
   @override
-  State<_LoyaltyRedemptionSection> createState() => _LoyaltyRedemptionSectionState();
+  State<_LoyaltyRedemptionSection> createState() =>
+      _LoyaltyRedemptionSectionState();
 }
 
 class _LoyaltyRedemptionSectionState extends State<_LoyaltyRedemptionSection> {
@@ -2074,7 +3220,8 @@ class _LoyaltyRedemptionSectionState extends State<_LoyaltyRedemptionSection> {
   @override
   void didUpdateWidget(covariant _LoyaltyRedemptionSection oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.state.loyaltyPointsToRedeem != widget.state.loyaltyPointsToRedeem) {
+    if (oldWidget.state.loyaltyPointsToRedeem !=
+        widget.state.loyaltyPointsToRedeem) {
       final newText = widget.state.loyaltyPointsToRedeem > 0
           ? widget.state.loyaltyPointsToRedeem.toString()
           : '';
@@ -2096,12 +3243,18 @@ class _LoyaltyRedemptionSectionState extends State<_LoyaltyRedemptionSection> {
 
     final pointValueCents = settings.pointValueCents;
     final maxPercentBps = settings.maxRedemptionPercentBps;
-    final invoiceTotal = widget.state.totalBeforeLoyaltyCents.toBigInt().toInt();
+    final invoiceTotal = widget.state.totalBeforeLoyaltyCents
+        .toBigInt()
+        .toInt();
 
     final maxDiscountFromPercent = (invoiceTotal * maxPercentBps) ~/ 10000;
-    final maxDiscountFromPoints = widget.state.loyaltyPointsBalance * pointValueCents;
-    final maxDiscount = [maxDiscountFromPercent, maxDiscountFromPoints, invoiceTotal]
-        .reduce((a, b) => a < b ? a : b);
+    final maxDiscountFromPoints =
+        widget.state.loyaltyPointsBalance * pointValueCents;
+    final maxDiscount = [
+      maxDiscountFromPercent,
+      maxDiscountFromPoints,
+      invoiceTotal,
+    ].reduce((a, b) => a < b ? a : b);
 
     return pointValueCents > 0 ? maxDiscount ~/ pointValueCents : 0;
   }
@@ -2115,7 +3268,9 @@ class _LoyaltyRedemptionSectionState extends State<_LoyaltyRedemptionSection> {
     final balance = widget.state.loyaltyPointsBalance;
     final balanceValueCents = balance * pointValueCents;
     final maxPoints = _maxRedeemablePoints();
-    final maxPercent = (settings.maxRedemptionPercentBps / 100).toStringAsFixed(0);
+    final maxPercent = (settings.maxRedemptionPercentBps / 100).toStringAsFixed(
+      0,
+    );
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -2128,72 +3283,101 @@ class _LoyaltyRedemptionSectionState extends State<_LoyaltyRedemptionSection> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header
-          Row(children: [
-            const Icon(LucideIcons.award, size: 18, color: Colors.deepPurple),
-            const SizedBox(width: 8),
-            Text('sales.loyalty_points'.tr(),
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600, color: Colors.deepPurple)),
-            const Spacer(),
-            // Points balance badge
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.deepPurple.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(20),
+          Row(
+            children: [
+              const Icon(LucideIcons.award, size: 18, color: Colors.deepPurple),
+              const SizedBox(width: 8),
+              Text(
+                'sales.loyalty_points'.tr(),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: Colors.deepPurple,
+                ),
               ),
-              child: Text(
-                '$balance ${'sales.points'.tr()}',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.bold, color: Colors.deepPurple),
+              const Spacer(),
+              // Points balance badge
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurple.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '$balance ${'sales.points'.tr()}',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.deepPurple,
+                  ),
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
           const SizedBox(height: 8),
 
           // Points value info
-          Row(children: [
-            Icon(LucideIcons.coins, size: 14, color: cs.onSurfaceVariant),
-            const SizedBox(width: 6),
-            Text(
-              '${'sales.points_value'.tr()}: ${widget.currencyService.format(balanceValueCents)}',
-              style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-            ),
-            const Spacer(),
-            Text(
-              '${'sales.max_discount'.tr()}: $maxPercent%',
-              style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-            ),
-          ]),
+          Row(
+            children: [
+              Icon(LucideIcons.coins, size: 14, color: cs.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Text(
+                '${'sales.points_value'.tr()}: ${widget.currencyService.format(balanceValueCents)}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${'sales.max_discount'.tr()}: $maxPercent%',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
 
           // Toggle + redeem controls
-          Row(children: [
-            Switch.adaptive(
-              value: widget.state.loyaltyRedemptionEnabled,
-              activeTrackColor: Colors.deepPurple,
-              onChanged: (enabled) {
-                if (enabled) {
-                  // Auto-set to max redeemable points
-                  context.read<SaleFormBloc>().add(
-                    SaleLoyaltyRedemptionChanged(enabled: true, pointsToRedeem: maxPoints));
-                } else {
-                  context.read<SaleFormBloc>().add(
-                    const SaleLoyaltyRedemptionChanged(enabled: false, pointsToRedeem: 0));
-                }
-              },
-            ),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Text(
-                'sales.use_loyalty_points'.tr(),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                  color: widget.state.loyaltyRedemptionEnabled ? Colors.deepPurple : cs.onSurfaceVariant,
+          Row(
+            children: [
+              Switch.adaptive(
+                value: widget.state.loyaltyRedemptionEnabled,
+                activeTrackColor: Colors.deepPurple,
+                onChanged: (enabled) {
+                  if (enabled) {
+                    // Auto-set to max redeemable points
+                    context.read<SaleFormBloc>().add(
+                      SaleLoyaltyRedemptionChanged(
+                        enabled: true,
+                        pointsToRedeem: maxPoints,
+                      ),
+                    );
+                  } else {
+                    context.read<SaleFormBloc>().add(
+                      const SaleLoyaltyRedemptionChanged(
+                        enabled: false,
+                        pointsToRedeem: 0,
+                      ),
+                    );
+                  }
+                },
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  'sales.use_loyalty_points'.tr(),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: widget.state.loyaltyRedemptionEnabled
+                        ? Colors.deepPurple
+                        : cs.onSurfaceVariant,
+                  ),
                 ),
               ),
-            ),
-          ]),
+            ],
+          ),
 
           // Points input + slider (only when enabled)
           if (widget.state.loyaltyRedemptionEnabled && maxPoints > 0) ...[
@@ -2214,66 +3398,97 @@ class _LoyaltyRedemptionSectionState extends State<_LoyaltyRedemptionSection> {
                 label: '${widget.state.loyaltyPointsToRedeem}',
                 onChanged: (val) {
                   context.read<SaleFormBloc>().add(
-                    SaleLoyaltyRedemptionChanged(enabled: true, pointsToRedeem: val.round()));
+                    SaleLoyaltyRedemptionChanged(
+                      enabled: true,
+                      pointsToRedeem: val.round(),
+                    ),
+                  );
                 },
               ),
             ),
             // Points input field
-            Row(children: [
-              Expanded(
-                child: TextField(
-                  controller: _pointsCtrl,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  onTap: () => selectAllText(_pointsCtrl),
-                  decoration: InputDecoration(
-                    labelText: 'sales.points_to_redeem'.tr(),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    isDense: true,
-                    suffixText: '/ $maxPoints',
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _pointsCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    onTap: () => selectAllText(_pointsCtrl),
+                    decoration: InputDecoration(
+                      labelText: 'sales.points_to_redeem'.tr(),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      isDense: true,
+                      suffixText: '/ $maxPoints',
+                    ),
+                    onChanged: (v) {
+                      final pts = int.tryParse(v) ?? 0;
+                      context.read<SaleFormBloc>().add(
+                        SaleLoyaltyRedemptionChanged(
+                          enabled: true,
+                          pointsToRedeem: pts,
+                        ),
+                      );
+                    },
                   ),
-                  onChanged: (v) {
-                    final pts = int.tryParse(v) ?? 0;
+                ),
+                const SizedBox(width: 12),
+                // Quick max button
+                FilledButton.tonal(
+                  onPressed: () {
                     context.read<SaleFormBloc>().add(
-                      SaleLoyaltyRedemptionChanged(enabled: true, pointsToRedeem: pts));
+                      SaleLoyaltyRedemptionChanged(
+                        enabled: true,
+                        pointsToRedeem: maxPoints,
+                      ),
+                    );
                   },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.deepPurple.withValues(alpha: 0.12),
+                    foregroundColor: Colors.deepPurple,
+                  ),
+                  child: Text('sales.max'.tr()),
                 ),
-              ),
-              const SizedBox(width: 12),
-              // Quick max button
-              FilledButton.tonal(
-                onPressed: () {
-                  context.read<SaleFormBloc>().add(
-                    SaleLoyaltyRedemptionChanged(enabled: true, pointsToRedeem: maxPoints));
-                },
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.deepPurple.withValues(alpha: 0.12),
-                  foregroundColor: Colors.deepPurple,
-                ),
-                child: Text('sales.max'.tr()),
-              ),
-            ]),
+              ],
+            ),
             const SizedBox(height: 10),
             // Discount preview
             if (widget.state.loyaltyDiscountCents > 0)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.deepPurple.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Row(children: [
-                  const Icon(LucideIcons.tag, size: 14, color: Colors.deepPurple),
-                  const SizedBox(width: 6),
-                  Text('sales.loyalty_discount'.tr(),
-                    style: theme.textTheme.bodySmall?.copyWith(color: Colors.deepPurple)),
-                  const Spacer(),
-                  Text(
-                    '- ${widget.currencyService.format(widget.state.loyaltyDiscountCents)}',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold, color: Colors.deepPurple),
-                  ),
-                ]),
+                child: Row(
+                  children: [
+                    const Icon(
+                      LucideIcons.tag,
+                      size: 14,
+                      color: Colors.deepPurple,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'sales.loyalty_discount'.tr(),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.deepPurple,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '- ${widget.currencyService.format(widget.state.loyaltyDiscountCents)}',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.deepPurple,
+                      ),
+                    ),
+                  ],
+                ),
               ),
           ],
         ],

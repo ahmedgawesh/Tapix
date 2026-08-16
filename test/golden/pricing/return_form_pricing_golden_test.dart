@@ -14,10 +14,9 @@
 // over ReturnCalculationService. These tests must stay green through that
 // refactor.
 //
-// Rounding note: ReturnCalculationService uses TRUNCATING integer division
-// (~/), so 1-cent reconstruction errors are expected on non-even splits.
-// That's the existing ERP contract — migration must preserve it unless
-// explicitly called out in an ADR.
+// Rounding note: the first partial allocation uses integer division. Later
+// linked returns pass their financial history, so the final return receives
+// every residual cent and the cumulative total reconstructs the invoice.
 //
 // Coverage:
 //   R1  full return of single-line invoice
@@ -197,8 +196,9 @@ void main() {
       // discount = (10*1)  ~/ 3 =  3
       // tax      = (5*1)   ~/ 3 =  1
       // refund   = 33 - 3 + 1   = 31
-      // Truncation is intentional (matches legacy ERP behavior). 3 × this
-      // row = 99/9/3 instead of 100/10/5 → 1-cent loss by design.
+      // This isolated first allocation truncates. Sequential linked returns
+      // pass previousLinkedHistory, allowing the later rows to recover the
+      // residual cents.
       final r = ReturnCalculationService.computeProportionalReturn(
         originalQuantity: 3,
         returnQuantity: 1,
@@ -266,48 +266,52 @@ void main() {
 
       // Invariant: every line's refund == subtotal - discount + tax.
       for (final l in state.returnItems) {
-        final reconstructed =
-            l.subtotalCents - l.discountCents + l.taxCents;
-        expect(l.refundCents, reconstructed,
-            reason: 'refund invariant for line ${l.originalItem.id}');
+        final reconstructed = l.subtotalCents - l.discountCents + l.taxCents;
+        expect(
+          l.refundCents,
+          reconstructed,
+          reason: 'refund invariant for line ${l.originalItem.id}',
+        );
       }
     });
   });
 
   group('PurchaseReturnFormState — Phase 0 rollup aggregation', () {
-    test('R7 multi-line rollup (purchase side): Σ per-line == state totals',
-        () {
-      final line1 = _purchaseReturnLine(
-        purchaseItemId: 201,
-        productId: 10,
-        origQty: 4,
-        returnQty: 1,
-        origSubtotalCents: 8000,
-        origDiscountCents: 1000,
-        origTaxCents: 700,
-      );
-      final line2 = _purchaseReturnLine(
-        purchaseItemId: 202,
-        productId: 11,
-        origQty: 2,
-        returnQty: 2,
-        origSubtotalCents: 4000,
-        origDiscountCents: 0,
-        origTaxCents: 400,
-      );
-      // line1: subtotal=2000, discount=250, tax=175, refund=1925
-      // line2: subtotal=4000, discount=0,   tax=400, refund=4400
-      // Σ:     subtotal=6000, discount=250, tax=575, refund=6325
-      final state = PurchaseReturnFormState(
-        purchaseId: 1,
-        currencyId: 1,
-        returnItems: [line1, line2],
-      );
-      expect(state.totalSubtotalCents, Decimal.fromInt(6000));
-      expect(state.totalDiscountCents, Decimal.fromInt(250));
-      expect(state.totalTaxCents, Decimal.fromInt(575));
-      expect(state.totalRefundCents, Decimal.fromInt(6325));
-      expect(state.totalReturnQuantity, 3);
-    });
+    test(
+      'R7 multi-line rollup (purchase side): Σ per-line == state totals',
+      () {
+        final line1 = _purchaseReturnLine(
+          purchaseItemId: 201,
+          productId: 10,
+          origQty: 4,
+          returnQty: 1,
+          origSubtotalCents: 8000,
+          origDiscountCents: 1000,
+          origTaxCents: 700,
+        );
+        final line2 = _purchaseReturnLine(
+          purchaseItemId: 202,
+          productId: 11,
+          origQty: 2,
+          returnQty: 2,
+          origSubtotalCents: 4000,
+          origDiscountCents: 0,
+          origTaxCents: 400,
+        );
+        // line1: subtotal=2000, discount=250, tax=175, refund=1925
+        // line2: subtotal=4000, discount=0,   tax=400, refund=4400
+        // Σ:     subtotal=6000, discount=250, tax=575, refund=6325
+        final state = PurchaseReturnFormState(
+          purchaseId: 1,
+          currencyId: 1,
+          returnItems: [line1, line2],
+        );
+        expect(state.totalSubtotalCents, Decimal.fromInt(6000));
+        expect(state.totalDiscountCents, Decimal.fromInt(250));
+        expect(state.totalTaxCents, Decimal.fromInt(575));
+        expect(state.totalRefundCents, Decimal.fromInt(6325));
+        expect(state.totalReturnQuantity, 3);
+      },
+    );
   });
 }

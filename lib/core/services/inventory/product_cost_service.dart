@@ -186,6 +186,47 @@ class ProductCostService {
     return resolvedCost;
   }
 
+  /// Remove a quantity that entered WAC at a known frozen unit cost.
+  ///
+  /// Used when voiding a sale return (or another inbound return movement).
+  /// A plain stock decrease leaves WAC unchanged, which is correct for a
+  /// normal sale but wrong when reversing a specific earlier inbound value.
+  /// This inverse weighted-average calculation removes that frozen value from
+  /// the current pool so the remaining stock keeps the correct cost basis.
+  static Future<int> applyRemovalCostToVariant(
+    DatabaseAccessor<AppDatabase> dao, {
+    required int variantId,
+    required int beforeQty,
+    required int beforeCostCents,
+    required int removedQty,
+    required int removedUnitCostCents,
+    required String costingMethod,
+  }) async {
+    assert(variantId > 0, 'variantId must be positive');
+    assert(removedQty > 0, 'removedQty must be positive');
+    assert(beforeQty >= removedQty, 'removedQty cannot exceed beforeQty');
+    assert(removedUnitCostCents >= 0);
+
+    final resolvedCost = _resolveRemovalCost(
+      beforeQty: beforeQty,
+      beforeCostCents: beforeCostCents,
+      removedQty: removedQty,
+      removedUnitCostCents: removedUnitCostCents,
+      costingMethod: costingMethod,
+    );
+
+    LoggingService.debug(
+      'applyRemovalCostToVariant: variant=$variantId '
+      'method=$costingMethod beforeQty=$beforeQty '
+      'beforeCost=$beforeCostCents removedQty=$removedQty '
+      'removedCost=$removedUnitCostCents → resolved=$resolvedCost',
+      tag: _tag,
+    );
+
+    await setVariantCost(dao, variantId: variantId, newCostCents: resolvedCost);
+    return resolvedCost;
+  }
+
   // ────────────────────────────────────────────────────────────────────────
   // DIRECT OVERWRITE WRITERS (revaluation, opening balance, etc.)
   // ────────────────────────────────────────────────────────────────────────
@@ -259,7 +300,10 @@ class ProductCostService {
       await dao.customUpdate(
         'UPDATE product_variants SET previous_cost_cents = cost_cents, '
         'cost_cents = ?, updated_at = ? '
-        'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
+        'WHERE id = (SELECT v.id FROM product_variants v '
+        'JOIN products p ON p.id = v.product_id '
+        'WHERE v.product_id = ? AND v.is_active = 1 '
+        'AND p.has_variants = 0 ORDER BY v.id LIMIT 1)',
         variables: [
           Variable.withInt(newCostCents),
           Variable.withString(now),
@@ -310,8 +354,9 @@ class ProductCostService {
     // pulling every variant into Dart memory. `NULLIF` guards against the
     // zero-denominator case — we fall back to the simple average further
     // down when weighted_cost is NULL.
-    final row = await dao.customSelect(
-      '''
+    final row = await dao
+        .customSelect(
+          '''
       SELECT
         COALESCE(SUM(stock_quantity), 0) AS total_stock,
         CAST(ROUND(
@@ -326,8 +371,9 @@ class ProductCostService {
       FROM product_variants
       WHERE product_id = ? AND is_active = 1
       ''',
-      variables: [Variable.withInt(productId)],
-    ).getSingleOrNull();
+          variables: [Variable.withInt(productId)],
+        )
+        .getSingleOrNull();
 
     if (row == null) return;
 
@@ -427,6 +473,23 @@ class ProductCostService {
     );
   }
 
+  /// Visible for regression tests of return-void WAC math.
+  static int resolveRemovalCostForTest({
+    required int beforeQty,
+    required int beforeCostCents,
+    required int removedQty,
+    required int removedUnitCostCents,
+    String costingMethod = methodWac,
+  }) {
+    return _resolveRemovalCost(
+      beforeQty: beforeQty,
+      beforeCostCents: beforeCostCents,
+      removedQty: removedQty,
+      removedUnitCostCents: removedUnitCostCents,
+      costingMethod: costingMethod,
+    );
+  }
+
   static int _resolvePurchaseCost({
     required int beforeQty,
     required int beforeCostCents,
@@ -457,5 +520,27 @@ class ProductCostService {
         // the journal entries use the invoice total, not the derived cost.
         return (weightedSum / totalQty).round();
     }
+  }
+
+  static int _resolveRemovalCost({
+    required int beforeQty,
+    required int beforeCostCents,
+    required int removedQty,
+    required int removedUnitCostCents,
+    required String costingMethod,
+  }) {
+    if (costingMethod == methodFifo || costingMethod == methodLast) {
+      return beforeCostCents;
+    }
+
+    final afterQty = beforeQty - removedQty;
+    // With no remaining stock, keep the last visible cost. The next inbound
+    // movement ignores it because beforeQty will be zero.
+    if (afterQty <= 0) return beforeCostCents;
+
+    final remainingValue =
+        (beforeCostCents * beforeQty) - (removedUnitCostCents * removedQty);
+    if (remainingValue <= 0) return 0;
+    return (remainingValue / afterQty).round();
   }
 }

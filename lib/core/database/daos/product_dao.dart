@@ -5,18 +5,20 @@ import '../tables/transactions.dart';
 
 part 'product_dao.g.dart';
 
-@DriftAccessor(tables: [
-  Products,
-  ProductVariants,
-  ProductCategories,
-  ProductColors,
-  Sizes,
-  ProductBatches,
-  BatchConsumptions,
-  ProductPriceHistories,
-  Purchases,
-  PurchaseItems,
-])
+@DriftAccessor(
+  tables: [
+    Products,
+    ProductVariants,
+    ProductCategories,
+    ProductColors,
+    Sizes,
+    ProductBatches,
+    BatchConsumptions,
+    ProductPriceHistories,
+    Purchases,
+    PurchaseItems,
+  ],
+)
 class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
   ProductDao(super.db);
 
@@ -30,7 +32,9 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
   }
 
   Stream<Product?> watchProduct(int id) {
-    return (select(products)..where((p) => p.id.equals(id))).watchSingleOrNull();
+    return (select(
+      products,
+    )..where((p) => p.id.equals(id))).watchSingleOrNull();
   }
 
   /// Synchronous single-row fetch by primary key. Used by guards that need
@@ -42,7 +46,12 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
 
   Future<List<Product>> searchProducts(String query, {bool? isActive = true}) {
     final q = select(products)
-      ..where((p) => p.name.like('%$query%') | p.sku.like('%$query%') | p.sku.equals(query));
+      ..where(
+        (p) =>
+            p.name.like('%$query%') |
+            p.sku.like('%$query%') |
+            p.sku.equals(query),
+      );
     if (isActive != null) {
       q.where((p) => p.isActive.equals(isActive));
     }
@@ -220,11 +229,15 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
   }
 
   Future<Product?> findBySku(String sku) {
-    return (select(products)..where((p) => p.sku.equals(sku))).getSingleOrNull();
+    return (select(
+      products,
+    )..where((p) => p.sku.equals(sku))).getSingleOrNull();
   }
 
   Future<Product?> findByBarcode(String barcode) {
-    return (select(products)..where((p) => p.barcode.equals(barcode))).getSingleOrNull();
+    return (select(
+      products,
+    )..where((p) => p.barcode.equals(barcode))).getSingleOrNull();
   }
 
   /// Case-insensitive name lookup. Treating "iPhone" and "iphone" as the
@@ -233,9 +246,9 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
   /// `LOWER(name) = LOWER(?)` pattern in QuickBooks/Xero/Odoo.
   Future<Product?> findByName(String name) {
     final lowered = name.toLowerCase();
-    return (select(products)
-          ..where((p) => p.name.lower().equals(lowered)))
-        .getSingleOrNull();
+    return (select(
+      products,
+    )..where((p) => p.name.lower().equals(lowered))).getSingleOrNull();
   }
 
   Future<int> createProduct(ProductsCompanion product) {
@@ -286,6 +299,8 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
         + (SELECT COUNT(*) FROM purchase_items WHERE product_id = ?1)
         + (SELECT COUNT(*) FROM purchase_return_adjustment_items WHERE product_id = ?1)
         + (SELECT COUNT(*) FROM sale_return_adjustment_items WHERE product_id = ?1)
+        + (SELECT COUNT(*) FROM inventory_adjustments WHERE product_id = ?1)
+        + (SELECT COUNT(*) FROM product_batches WHERE product_id = ?1)
         AS ref_count
       ''',
       variables: [Variable.withInt(productId)],
@@ -301,7 +316,9 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
   /// Returns `(wasDeleted, referenceCount)`.
   ///   - `wasDeleted = true`  -> row removed from products
   ///   - `wasDeleted = false` -> row deactivated (had `referenceCount` refs)
-  Future<({bool wasDeleted, int referenceCount})> smartDeleteProduct(int productId) {
+  Future<({bool wasDeleted, int referenceCount})> smartDeleteProduct(
+    int productId,
+  ) {
     return transaction(() async {
       final refCount = await countProductReferences(productId);
       if (refCount > 0) {
@@ -341,21 +358,22 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
   /// COGS in the same period, breaking IAS 8 consistency.
   ///
   ///   - `null`              → unlocked, may be edited freely.
-  ///   - `'has_stock'`       → on-hand stock > 0 on the product or any variant.
+  ///   - `'has_stock'`       → non-zero on-hand stock on the product or any variant.
   ///   - `'has_consumptions'`→ at least one batch_consumptions row exists.
+  ///   - `'has_transactions'`→ an inventory document already references the product.
   Future<String?> getCostingMethodLockReason(int productId) async {
     final stockRow = await customSelect(
       '''
       SELECT
         (SELECT COALESCE(stock_quantity, 0) FROM products WHERE id = ?1) AS p_stock,
-        (SELECT COALESCE(SUM(stock_quantity), 0) FROM product_variants
-          WHERE product_id = ?1 AND is_active = 1) AS v_stock
+        EXISTS(SELECT 1 FROM product_variants
+          WHERE product_id = ?1 AND stock_quantity != 0) AS has_v_stock
       ''',
       variables: [Variable.withInt(productId)],
     ).getSingle();
     final pStock = stockRow.read<int>('p_stock');
-    final vStock = stockRow.read<int>('v_stock');
-    if (pStock > 0 || vStock > 0) return 'has_stock';
+    final hasVariantStock = stockRow.read<int>('has_v_stock') == 1;
+    if (pStock != 0 || hasVariantStock) return 'has_stock';
 
     final consumptionRow = await customSelect(
       '''
@@ -371,7 +389,55 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     if (consumptionRow.read<int>('has_any') == 1) {
       return 'has_consumptions';
     }
+    if (await countProductReferences(productId) > 0) {
+      return 'has_transactions';
+    }
     return null;
+  }
+
+  /// Changes the stock dimension only while the product is pristine. A
+  /// measured quantity is stored at scale 1000, so changing this field after
+  /// activity would reinterpret every historical quantity and valuation.
+  Future<String?> setMeasurementType({
+    required int productId,
+    required String measurementType,
+  }) {
+    assert(
+      measurementType == 'piece' ||
+          measurementType == 'length' ||
+          measurementType == 'weight' ||
+          measurementType == 'volume',
+      'measurement type must be piece | length | weight | volume',
+    );
+    return transaction(() async {
+      final reason = await getCostingMethodLockReason(productId);
+      if (reason != null) return reason;
+      await (update(products)..where((p) => p.id.equals(productId))).write(
+        ProductsCompanion(
+          measurementType: Value(measurementType),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      return null;
+    });
+  }
+
+  /// Enables/disables stock tracking only before stock activity exists.
+  Future<String?> setTrackInventory({
+    required int productId,
+    required bool trackInventory,
+  }) {
+    return transaction(() async {
+      final reason = await getCostingMethodLockReason(productId);
+      if (reason != null) return reason;
+      await (update(products)..where((p) => p.id.equals(productId))).write(
+        ProductsCompanion(
+          trackInventory: Value(trackInventory),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      return null;
+    });
   }
 
   /// Update [Products.costingMethod]. Refuses the change when the product is
@@ -383,8 +449,10 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     required int productId,
     required String method,
   }) async {
-    assert(method == 'wac' || method == 'fifo',
-        'costing method must be wac or fifo');
+    assert(
+      method == 'wac' || method == 'fifo',
+      'costing method must be wac or fifo',
+    );
     return transaction(() async {
       final reason = await getCostingMethodLockReason(productId);
       if (reason != null) return reason;
@@ -445,9 +513,7 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
           // window so older code paths that still read `costing_method` see a
           // consistent view. `'batch'` and `'batch_expiry'` both imply FIFO
           // costing semantics; `'standard'` implies WAC.
-          costingMethod: Value(
-            trackingType == 'standard' ? 'wac' : 'fifo',
-          ),
+          costingMethod: Value(trackingType == 'standard' ? 'wac' : 'fifo'),
           updatedAt: Value(DateTime.now()),
         ),
       );
@@ -468,13 +534,15 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
   /// no expiry date (non-perishable). Sorted earliest-expiry first so the
   /// UI surfaces the most urgent rows at the top.
   Future<List<({int quantity, DateTime expiryDate})>>
-      getProductRemainingExpiryInfo(int productId) async {
+  getProductRemainingExpiryInfo(int productId) async {
     final query = select(productBatches)
-      ..where((b) =>
-          b.productId.equals(productId) &
-          b.expiryDate.isNotNull() &
-          b.remainingQuantity.isBiggerThanValue(0) &
-          b.isActive.equals(true))
+      ..where(
+        (b) =>
+            b.productId.equals(productId) &
+            b.expiryDate.isNotNull() &
+            b.remainingQuantity.isBiggerThanValue(0) &
+            b.isActive.equals(true),
+      )
       ..orderBy([(b) => OrderingTerm.asc(b.expiryDate)]);
 
     final rows = await query.get();
@@ -505,7 +573,7 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
   /// comparison matches chronological ordering. We pass `today` as an ISO
   /// 8601 string for the same reason.
   Stream<Map<int, ({int expiredQty, DateTime? nextExpiry})>>
-      watchExpirySummaries() {
+  watchExpirySummaries() {
     return _expirySummariesQuery().watch().map((rows) {
       final out = <int, ({int expiredQty, DateTime? nextExpiry})>{};
       for (final row in rows) {
@@ -559,24 +627,25 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
 
   Future<int> deactivateProduct(int id) {
     return (update(products)..where((p) => p.id.equals(id))).write(
-      const ProductsCompanion(
-        isActive: Value(false),
-      ),
+      const ProductsCompanion(isActive: Value(false)),
     );
   }
 
   Future<int> bulkDeactivateProducts(List<int> ids) {
     if (ids.isEmpty) return Future.value(0);
     return (update(products)..where((p) => p.id.isIn(ids))).write(
-      const ProductsCompanion(
-        isActive: Value(false),
-      ),
+      const ProductsCompanion(isActive: Value(false)),
     );
   }
 
   Future<List<int>> findProductIdsReferencedByOpenPurchases(
     List<int> productIds, {
-    Set<String> closedPurchaseStatuses = const {'closed', 'paid', 'completed', 'posted'},
+    Set<String> closedPurchaseStatuses = const {
+      'closed',
+      'paid',
+      'completed',
+      'posted',
+    },
   }) async {
     if (productIds.isEmpty) return const [];
 
@@ -586,10 +655,7 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     final query = selectOnly(purchaseItems, distinct: true)
       ..addColumns([purchaseItems.productId])
       ..join([
-        innerJoin(
-          purchases,
-          purchases.id.equalsExp(purchaseItems.purchaseId),
-        ),
+        innerJoin(purchases, purchases.id.equalsExp(purchaseItems.purchaseId)),
       ])
       ..where(purchaseItems.productId.isIn(productIds));
     query.where(purchases.status.isNotIn(closedPurchaseStatuses.toList()));
@@ -621,16 +687,18 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
 
   /// Bulk create products in a single transaction for performance
   /// Returns a map of index to product ID
-  Future<Map<int, int>> bulkCreateProducts(List<ProductsCompanion> productList) async {
+  Future<Map<int, int>> bulkCreateProducts(
+    List<ProductsCompanion> productList,
+  ) async {
     final results = <int, int>{};
-    
+
     await db.transaction(() async {
       for (int i = 0; i < productList.length; i++) {
         final id = await into(products).insert(productList[i]);
         results[i] = id;
       }
     });
-    
+
     return results;
   }
 

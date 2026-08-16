@@ -3,11 +3,13 @@ import 'package:decimal/decimal.dart';
 import '../app_database.dart';
 import '../tables/parties.dart';
 import '../../services/balance_service.dart';
+import '../../services/document_number_service.dart';
 
 part 'supplier_dao.g.dart';
 
 @DriftAccessor(tables: [Suppliers, SupplierTransactions])
-class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin {
+class SupplierDao extends DatabaseAccessor<AppDatabase>
+    with _$SupplierDaoMixin {
   SupplierDao(super.db);
 
   Stream<List<Supplier>> watchAllSuppliers({bool? isActive}) {
@@ -20,7 +22,9 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
   }
 
   Stream<Supplier?> watchSupplier(int id) {
-    return (select(suppliers)..where((s) => s.id.equals(id))).watchSingleOrNull();
+    return (select(
+      suppliers,
+    )..where((s) => s.id.equals(id))).watchSingleOrNull();
   }
 
   Future<Supplier?> getSupplier(int id) {
@@ -29,7 +33,12 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
 
   Future<List<Supplier>> searchSuppliers(String query, {bool? isActive}) {
     final q = select(suppliers)
-      ..where((s) => s.name.like('%$query%') | s.phone.like('%$query%') | s.email.like('%$query%'));
+      ..where(
+        (s) =>
+            s.name.like('%$query%') |
+            s.phone.like('%$query%') |
+            s.email.like('%$query%'),
+      );
     if (isActive != null) {
       q.where((s) => s.isActive.equals(isActive));
     }
@@ -48,16 +57,8 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
     return (delete(suppliers)..where((s) => s.id.equals(id))).go();
   }
 
-  /// Generate the next sequential transaction number for a given prefix.
-  /// e.g. PAY-0001, DSC-0001, PUR-0001, RET-0001
-  Future<String> _nextTransactionNumber(String prefix) async {
-    final result = await customSelect(
-'SELECT COUNT(*) AS cnt FROM supplier_transactions WHERE transaction_number LIKE ?',
-      variables: [Variable<String>('$prefix-%')],
-    ).getSingle();
-    final count = result.read<int>('cnt');
-    return '$prefix-${(count + 1).toString().padLeft(4, '0')}';
-  }
+  Future<String> _nextTransactionNumber(String prefix) =>
+      DocumentNumberService(attachedDatabase).nextSupplierTransaction(prefix);
 
   /// Transaction types that are managed by PurchaseDao and must NOT be routed
   /// through this method. PurchaseDao updates supplier balance directly, so
@@ -87,10 +88,10 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
         String prefix;
         switch (type) {
           case 'payment':
-            prefix = 'SPAY';
+            prefix = 'CPS';
             break;
           case 'discount':
-            prefix = 'SDSC';
+            prefix = 'DS';
             break;
           case 'purchase':
             prefix = 'PUR';
@@ -119,7 +120,8 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
       final supplierId = tx.supplierId.value;
       final deltaCents = tx.amountCents.value.toBigInt().toInt();
 
-      final affectsBalance = type == 'purchase' ||
+      final affectsBalance =
+          type == 'purchase' ||
           type == 'payment' ||
           type == 'payment_reversal' ||
           type == 'discount' ||
@@ -131,7 +133,8 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
         return txId;
       }
 
-      await BalanceService.adjustSupplierBalance(this,
+      await BalanceService.adjustSupplierBalance(
+        this,
         supplierId: supplierId,
         deltaCents: deltaCents,
       );
@@ -152,9 +155,9 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
     String? newDescription,
   }) {
     return transaction(() async {
-      final existing = await (select(supplierTransactions)
-            ..where((t) => t.id.equals(transactionId)))
-          .getSingleOrNull();
+      final existing = await (select(
+        supplierTransactions,
+      )..where((t) => t.id.equals(transactionId))).getSingleOrNull();
       if (existing == null) {
         throw StateError('Transaction #$transactionId not found');
       }
@@ -168,20 +171,27 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
       final oldCents = existing.amountCents.toBigInt().toInt();
       // For payments/discounts the stored amount is negative (reduces balance).
       // The caller passes the absolute new amount; we preserve the sign.
-      final signedNewAmount = oldCents < 0 ? -newAmountCents.abs() : newAmountCents.abs();
+      final signedNewAmount = oldCents < 0
+          ? -newAmountCents.abs()
+          : newAmountCents.abs();
       final deltaCents = signedNewAmount - oldCents;
 
       // Update the transaction row
-      await (update(supplierTransactions)
-            ..where((t) => t.id.equals(transactionId)))
-          .write(SupplierTransactionsCompanion(
-        amountCents: Value(Decimal.fromInt(signedNewAmount)),
-        description: newDescription != null ? Value(newDescription) : const Value.absent(),
-      ));
+      await (update(
+        supplierTransactions,
+      )..where((t) => t.id.equals(transactionId))).write(
+        SupplierTransactionsCompanion(
+          amountCents: Value(Decimal.fromInt(signedNewAmount)),
+          description: newDescription != null
+              ? Value(newDescription)
+              : const Value.absent(),
+        ),
+      );
 
       // Adjust supplier balance by the delta
       if (deltaCents != 0) {
-        await BalanceService.adjustSupplierBalance(this,
+        await BalanceService.adjustSupplierBalance(
+          this,
           supplierId: existing.supplierId,
           deltaCents: deltaCents,
         );
@@ -192,14 +202,20 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
   }
 
   Future<SupplierTransaction?> getTransaction(int transactionId) {
-    return (select(supplierTransactions)..where((t) => t.id.equals(transactionId)))
-        .getSingleOrNull();
+    return (select(
+      supplierTransactions,
+    )..where((t) => t.id.equals(transactionId))).getSingleOrNull();
   }
 
   Stream<List<SupplierTransaction>> watchSupplierTransactions(int supplierId) {
     return (select(supplierTransactions)
           ..where((t) => t.supplierId.equals(supplierId))
-          ..orderBy([(t) => OrderingTerm(expression: t.transactionDate, mode: OrderingMode.desc)]))
+          ..orderBy([
+            (t) => OrderingTerm(
+              expression: t.transactionDate,
+              mode: OrderingMode.desc,
+            ),
+          ]))
         .watch();
   }
 
@@ -208,14 +224,18 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
     DateTime? startDate,
     DateTime? endDate,
   }) {
-    final query = select(supplierTransactions)..where((t) => t.supplierId.equals(supplierId));
+    final query = select(supplierTransactions)
+      ..where((t) => t.supplierId.equals(supplierId));
     if (startDate != null) {
       query.where((t) => t.transactionDate.isBiggerOrEqualValue(startDate));
     }
     if (endDate != null) {
       query.where((t) => t.transactionDate.isSmallerOrEqualValue(endDate));
     }
-    query.orderBy([(t) => OrderingTerm(expression: t.transactionDate, mode: OrderingMode.desc)]);
+    query.orderBy([
+      (t) =>
+          OrderingTerm(expression: t.transactionDate, mode: OrderingMode.desc),
+    ]);
     return query.get();
   }
 
@@ -224,27 +244,44 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
     if (isActive != null) {
       query.where(suppliers.isActive.equals(isActive));
     }
-    return query.map((row) => row.read(suppliers.id.count()) ?? 0).watchSingle();
+    return query
+        .map((row) => row.read(suppliers.id.count()) ?? 0)
+        .watchSingle();
   }
 
   Stream<int> watchTotalBalanceCents() {
     final query = selectOnly(suppliers)
       ..addColumns([suppliers.balanceCents.sum()])
       ..where(suppliers.isActive.equals(true));
-    return query.map((row) => row.read(suppliers.balanceCents.sum()) ?? 0).watchSingle();
+    return query
+        .map((row) => row.read(suppliers.balanceCents.sum()) ?? 0)
+        .watchSingle();
   }
 
   Stream<List<Supplier>> watchSuppliersWithPositiveBalance() {
     return (select(suppliers)
-          ..where((s) => s.balanceCents.isBiggerThanValue(0) & s.isActive.equals(true))
-          ..orderBy([(s) => OrderingTerm(expression: s.balanceCents, mode: OrderingMode.desc)]))
+          ..where(
+            (s) =>
+                s.balanceCents.isBiggerThanValue(0) & s.isActive.equals(true),
+          )
+          ..orderBy([
+            (s) => OrderingTerm(
+              expression: s.balanceCents,
+              mode: OrderingMode.desc,
+            ),
+          ]))
         .watch();
   }
 
   Stream<List<Supplier>> watchTopSuppliersByBalance({int limit = 5}) {
     return (select(suppliers)
           ..where((s) => s.isActive.equals(true))
-          ..orderBy([(s) => OrderingTerm(expression: s.balanceCents, mode: OrderingMode.desc)])
+          ..orderBy([
+            (s) => OrderingTerm(
+              expression: s.balanceCents,
+              mode: OrderingMode.desc,
+            ),
+          ])
           ..limit(limit))
         .watch();
   }
@@ -265,7 +302,10 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
   /// Retained only for legacy migration / repair scripts that seed a
   /// balance before any transactions exist.
   @Deprecated('Use BalanceService.adjustSupplierBalance or recalculateBalance')
-  Future<void> updateSupplierBalance(int supplierId, int newBalanceCents) async {
+  Future<void> updateSupplierBalance(
+    int supplierId,
+    int newBalanceCents,
+  ) async {
     await (update(suppliers)..where((s) => s.id.equals(supplierId))).write(
       SuppliersCompanion(
         balanceCents: Value(Decimal.fromInt(newBalanceCents)),
@@ -274,16 +314,20 @@ class SupplierDao extends DatabaseAccessor<AppDatabase> with _$SupplierDaoMixin 
     );
   }
 
-  /// Recalculate supplier balance from the transaction ledger (single source of truth).
-  /// This derives the balance from SUM(supplier_transactions.amount_cents) and
-  /// overwrites the cached suppliers.balance_cents field.
+  /// Recalculate supplier balance from opening balance plus the transaction ledger.
+  /// The opening balance is stored on the supplier and is not duplicated as a
+  /// supplier transaction, so omitting it would erase it during reconciliation.
   /// Use this for reconciliation or to fix any balance drift.
   Future<int> recalculateBalance(int supplierId) async {
     return transaction(() async {
       final result = await customSelect(
-        'SELECT COALESCE(SUM(amount_cents), 0) AS derived_balance '
-        'FROM supplier_transactions WHERE supplier_id = ?',
-        variables: [Variable.withInt(supplierId)],
+        'SELECT '
+        'COALESCE((SELECT opening_balance_cents FROM suppliers WHERE id = ?), 0) + '
+        'COALESCE((SELECT SUM(amount_cents) FROM supplier_transactions '
+        "WHERE supplier_id = ? AND transaction_type NOT IN ('refund', 'refund_reversal')), 0) "
+        'AS derived_balance',
+        variables: [Variable.withInt(supplierId), Variable.withInt(supplierId)],
+        readsFrom: {suppliers, supplierTransactions},
       ).getSingle();
 
       final derivedBalance = result.read<int>('derived_balance');

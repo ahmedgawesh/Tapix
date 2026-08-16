@@ -51,7 +51,8 @@ class JournalRepositoryImpl implements JournalRepository {
   Future<Account?> getAccount(int id) => _datasource.getAccount(id);
 
   @override
-  Future<Account?> findAccountByCode(String code) => _datasource.findByCode(code);
+  Future<Account?> findAccountByCode(String code) =>
+      _datasource.findByCode(code);
 
   @override
   Future<List<Account>> getChildAccounts(int parentId) =>
@@ -88,7 +89,8 @@ class JournalRepositoryImpl implements JournalRepository {
   }
 
   @override
-  Future<bool> updateAccount(Account account) => _datasource.updateAccount(account);
+  Future<bool> updateAccount(Account account) =>
+      _datasource.updateAccount(account);
 
   @override
   Future<int> deleteAccount(int id) => _datasource.deleteAccount(id);
@@ -104,8 +106,10 @@ class JournalRepositoryImpl implements JournalRepository {
       _datasource.watchJournalEntries();
 
   @override
-  Stream<List<JournalEntry>> watchJournalEntriesByDateRange(DateTime start, DateTime end) =>
-      _datasource.watchJournalEntriesByDateRange(start, end);
+  Stream<List<JournalEntry>> watchJournalEntriesByDateRange(
+    DateTime start,
+    DateTime end,
+  ) => _datasource.watchJournalEntriesByDateRange(start, end);
 
   @override
   Stream<List<JournalEntry>> watchJournalEntriesByType(String entryType) =>
@@ -116,15 +120,18 @@ class JournalRepositoryImpl implements JournalRepository {
       _datasource.watchJournalEntriesByStatus(status);
 
   @override
-  Future<JournalEntry?> getJournalEntry(int id) => _datasource.getJournalEntry(id);
+  Future<JournalEntry?> getJournalEntry(int id) =>
+      _datasource.getJournalEntry(id);
 
   @override
   Future<JournalEntry?> findJournalEntryByNumber(String entryNumber) =>
       _datasource.findJournalEntryByNumber(entryNumber);
 
   @override
-  Future<JournalEntry?> findJournalEntryBySource(String sourceTable, int sourceId) =>
-      _datasource.findJournalEntryBySource(sourceTable, sourceId);
+  Future<JournalEntry?> findJournalEntryBySource(
+    String sourceTable,
+    int sourceId,
+  ) => _datasource.findJournalEntryBySource(sourceTable, sourceId);
 
   @override
   Future<List<JournalEntry>> searchJournalEntries(String query) =>
@@ -212,10 +219,7 @@ class JournalRepositoryImpl implements JournalRepository {
       );
     }
 
-    await _accountingRepo.postJournalEntry(
-      entryId: entryId,
-      userId: postedBy,
-    );
+    await _accountingRepo.postJournalEntry(entryId: entryId, userId: postedBy);
   }
 
   @override
@@ -287,84 +291,18 @@ class JournalRepositoryImpl implements JournalRepository {
 
   @override
   Future<ReconciliationResult> reconcileBalances() async {
-    final issues = <String>[];
-
-    // Check 1: Trial balance
+    // AccountingRepository owns the shared GL, entry, account-type and AR/AP
+    // checks. This adapter only appends the physical inventory valuation check.
+    final base = await _accountingRepo.reconcileBalances();
+    final issues = List<String>.from(base.issues);
     final trialBalance = await getTrialBalance();
-    if (!trialBalance.isBalanced) {
-      issues.add(
-        'Trial balance mismatch: Debits=${trialBalance.totalDebitCents}, '
-        'Credits=${trialBalance.totalCreditCents}',
-      );
-    }
 
-    // Check 2: All posted entries are balanced
-    final entries = await _datasource.getPostedJournalEntries();
-    for (final entry in entries) {
-      if (entry.totalDebitCents != entry.totalCreditCents) {
-        issues.add('Unbalanced posted entry: ${entry.entryNumber}');
-      }
-    }
-
-    final accounts = await _datasource.getAllActiveAccounts();
-    for (final account in accounts) {
-      final normalizedType = account.accountType.trim().toLowerCase();
-      if (!_validAccountTypes.contains(normalizedType)) {
-        issues.add(
-          'Invalid account type for ${account.accountCode} (${account.accountName}): '
-          '${account.accountType}',
-        );
-        continue;
-      }
-
-      final expectedType = _expectedTypeForCode(account.accountCode);
-      if (expectedType != null && expectedType != normalizedType) {
-        issues.add(
-          'Account type mismatch for ${account.accountCode} (${account.accountName}): '
-          'expected $expectedType, found ${account.accountType}',
-        );
-      }
-    }
-
-    // AR/AP checks: derive GL balance from journal_lines, not cached balanceCents
-    final arAccount = await _datasource.findByCode('1100');
-    if (arAccount != null) {
-      final arItem = trialBalance.items.where((i) => i.accountId == arAccount.id).firstOrNull;
-      final arBalance = arItem != null ? (arItem.debitCents - arItem.creditCents) : 0;
-      final customerTotal = await _datasource.getCustomerBalanceTotal();
-      if (arBalance != customerTotal) {
-        issues.add(
-          'Accounts receivable mismatch: GL(journal_lines)=$arBalance, Customers=$customerTotal',
-        );
-      }
-    }
-
-    final apAccount = await _datasource.findByCode('2000');
-    if (apAccount != null) {
-      final apItem = trialBalance.items.where((i) => i.accountId == apAccount.id).firstOrNull;
-      // AP is liability — credit balance is positive, so net = credit - debit
-      final apBalance = apItem != null ? (apItem.creditCents - apItem.debitCents) : 0;
-      final supplierTotal = await _datasource.getSupplierBalanceTotal();
-      if (apBalance != supplierTotal) {
-        issues.add(
-          'Accounts payable mismatch: GL(journal_lines)=$apBalance, Suppliers=$supplierTotal',
-        );
-      }
-    }
-
-    // Inventory consistency: GL balance of 1200 Inventory MUST equal
-    // Σ(stock_quantity × cost_cents) across the whole stock ledger
-    // (active + inactive variants + variant-less products). A mismatch
-    // means either a stock mutation bypassed the InventoryAdjustmentService
-    // (P0 accounting bug) or an old product was hard-deleted while it still
-    // held stock (no longer possible after the smart-delete write-off flow,
-    // but legacy DBs may surface it once and never again).
     final invAccount = await _datasource.findByCode('1200');
     if (invAccount != null) {
-      final invItem =
-          trialBalance.items.where((i) => i.accountId == invAccount.id).firstOrNull;
-      final glBalance =
-          invItem != null ? (invItem.debitCents - invItem.creditCents) : 0;
+      final invItem = trialBalance.items
+          .where((i) => i.accountId == invAccount.id)
+          .firstOrNull;
+      final glBalance = invItem?.naturalBalanceCents ?? 0;
       final stockValue = await _datasource.getTotalInventoryValueCents();
       if (glBalance != stockValue) {
         issues.add(
@@ -390,36 +328,6 @@ class JournalRepositoryImpl implements JournalRepository {
     }
   }
 
-  String? _expectedTypeForCode(String accountCode) {
-    final trimmed = accountCode.trim();
-    if (trimmed.isEmpty) return null;
-    // Contra accounts: classified opposite to their numeric prefix so they
-    // automatically net out on the P&L without special-casing the report.
-    //   4100 Purchase Return Adjustment  → contra-expense (deducts from COGS)
-    //   5700 Sales Return Adjustment     → contra-revenue (deducts from Sales)
-    // See `seedDefaultAccounts` for the full rationale.
-    switch (trimmed) {
-      case '4100':
-        return 'expense';
-      case '5700':
-        return 'revenue';
-    }
-    switch (trimmed[0]) {
-      case '1':
-        return 'asset';
-      case '2':
-        return 'liability';
-      case '3':
-        return 'equity';
-      case '4':
-        return 'revenue';
-      case '5':
-        return 'expense';
-      default:
-        return null;
-    }
-  }
-
   // ── Seeding ───────────────────────────────────────────────
 
   @override
@@ -433,10 +341,34 @@ class JournalRepositoryImpl implements JournalRepository {
     // DO NOT add temporary, clearing, suspense, or smart accounts.
     final defaultAccounts = <Map<String, dynamic>>[
       // ── Assets (1xxx) ──
-      {'code': '1000', 'name': 'Cash', 'type': 'asset', 'system': true, 'order': 1},              // الصندوق
-      {'code': '1010', 'name': 'Bank', 'type': 'asset', 'system': true, 'order': 2},
-      {'code': '1100', 'name': 'Accounts Receivable', 'type': 'asset', 'system': true, 'order': 3}, // Customers
-      {'code': '1200', 'name': 'Inventory', 'type': 'asset', 'system': true, 'order': 4},
+      {
+        'code': '1000',
+        'name': 'Cash',
+        'type': 'asset',
+        'system': true,
+        'order': 1,
+      }, // الصندوق
+      {
+        'code': '1010',
+        'name': 'Bank',
+        'type': 'asset',
+        'system': true,
+        'order': 2,
+      },
+      {
+        'code': '1100',
+        'name': 'Accounts Receivable',
+        'type': 'asset',
+        'system': true,
+        'order': 3,
+      }, // Customers
+      {
+        'code': '1200',
+        'name': 'Inventory',
+        'type': 'asset',
+        'system': true,
+        'order': 4,
+      },
       // 1290 (Returns in Transit) is an INVENTORY-class clearing account
       // used for the `send_back` disposition on purchase returns: when the
       // supplier physically leaves the premises with defective goods but
@@ -444,12 +376,77 @@ class JournalRepositoryImpl implements JournalRepository {
       // instead of Inventory (1200) or Shrinkage (5800). Clears to AP /
       // Cash / 4100 when the supplier finally settles. This keeps 1200
       // reconciliable to on-hand stock count even mid-return.
-      {'code': '1290', 'name': 'Returns in Transit', 'type': 'asset', 'system': true, 'order': 6},
-      {'code': '1300', 'name': 'VAT Receivable', 'type': 'asset', 'system': true, 'order': 7},      // Purchase Tax
+      {
+        'code': '1290',
+        'name': 'Returns in Transit',
+        'type': 'asset',
+        'system': true,
+        'order': 6,
+      },
+      {
+        'code': '1300',
+        'name': 'VAT Receivable',
+        'type': 'asset',
+        'system': true,
+        'order': 7,
+      }, // Purchase Tax
+      {
+        'code': '1500',
+        'name': 'Fixed Assets',
+        'type': 'asset',
+        'system': true,
+        'order': 8,
+      },
+      {
+        'code': '1510',
+        'name': 'Furniture and Fixtures',
+        'type': 'asset',
+        'system': true,
+        'order': 9,
+      },
+      {
+        'code': '1520',
+        'name': 'Equipment and Air Conditioners',
+        'type': 'asset',
+        'system': true,
+        'order': 10,
+      },
+      {
+        'code': '1590',
+        'name': 'Accumulated Depreciation',
+        'type': 'asset',
+        'system': true,
+        'order': 11,
+      },
       // ── Liabilities (2xxx) ──
-      {'code': '2000', 'name': 'Accounts Payable', 'type': 'liability', 'system': true, 'order': 10}, // Suppliers
-      {'code': '2100', 'name': 'VAT Payable', 'type': 'liability', 'system': true, 'order': 11},      // Sales Tax
-      {'code': '2300', 'name': 'Loyalty Points Liability', 'type': 'liability', 'system': true, 'order': 12},
+      {
+        'code': '2000',
+        'name': 'Accounts Payable',
+        'type': 'liability',
+        'system': true,
+        'order': 10,
+      }, // Suppliers
+      {
+        'code': '2100',
+        'name': 'VAT Payable',
+        'type': 'liability',
+        'system': true,
+        'order': 11,
+      }, // Sales Tax
+      {
+        'code': '2200',
+        'name': 'Owner Loan Payable',
+        'type': 'liability',
+        'system': true,
+        'order': 12,
+      },
+      {
+        'code': '2300',
+        'name': 'Loyalty Points Liability',
+        'type': 'liability',
+        'system': true,
+        'order': 12,
+      },
       // 2400 (Customer Credit Liability) holds refunds we owe customers but
       // have not yet settled in cash, when the return is **unlinked** to any
       // sale invoice. Routing on-account refunds here (instead of into 1100
@@ -458,19 +455,62 @@ class JournalRepositoryImpl implements JournalRepository {
       // credit to a future sale, that sale's JE clears 2400. This is the
       // IFRS/ZATCA Phase-2-friendly treatment of "credit notes without
       // original invoice".
-      {'code': '2400', 'name': 'Customer Credit Liability', 'type': 'liability', 'system': true, 'order': 13},
+      {
+        'code': '2400',
+        'name': 'Customer Credit Liability',
+        'type': 'liability',
+        'system': true,
+        'order': 13,
+      },
       // ── Equity (3xxx) ──
-      {'code': '3000', 'name': 'Owner Capital', 'type': 'equity', 'system': true, 'order': 20},
-      {'code': '3100', 'name': 'Opening Balance Equity', 'type': 'equity', 'system': true, 'order': 21},
+      {
+        'code': '3000',
+        'name': 'Owner Capital',
+        'type': 'equity',
+        'system': true,
+        'order': 20,
+      },
+      {
+        'code': '3100',
+        'name': 'Opening Balance Equity',
+        'type': 'equity',
+        'system': true,
+        'order': 21,
+      },
+      {
+        'code': '3200',
+        'name': 'Owner Drawings',
+        'type': 'equity',
+        'system': true,
+        'order': 22,
+      },
       // ── Income (4xxx) ──
-      {'code': '4000', 'name': 'Sales Revenue', 'type': 'revenue', 'system': true, 'order': 30},
+      {
+        'code': '4000',
+        'name': 'Sales Revenue',
+        'type': 'revenue',
+        'system': true,
+        'order': 30,
+      },
       // 5700 (Sales Return Adjustment) is a CONTRA-REVENUE account: it carries
       // a debit balance and is presented as a deduction from gross revenue on
       // the income statement to yield Net Sales (IFRS/GAAP). Classifying it
       // as `revenue` makes the P&L revenue total = Σ(Cr − Dr) automatically
       // subtract sale-return debit balances — no special-case logic needed.
-      {'code': '5700', 'name': 'Sales Return Adjustment', 'type': 'revenue', 'system': true, 'order': 33},
-      {'code': '4200', 'name': 'Inventory Gain', 'type': 'revenue', 'system': true, 'order': 32},
+      {
+        'code': '5700',
+        'name': 'Sales Return Adjustment',
+        'type': 'revenue',
+        'system': true,
+        'order': 33,
+      },
+      {
+        'code': '4200',
+        'name': 'Inventory Gain',
+        'type': 'revenue',
+        'system': true,
+        'order': 32,
+      },
       // 4900 (Purchase Discounts Earned) is an "other income" account that
       // captures after-the-fact, unallocated supplier discounts recorded
       // directly from the supplier profile screen (supplier_transactions
@@ -479,21 +519,82 @@ class JournalRepositoryImpl implements JournalRepository {
       // keeps the GL Inventory balance equal to the on-hand carrying value
       // Σ(stock × cost), eliminating a class of permanent reconciliation
       // drift. See `JournalEntryService.recordDirectSupplierDiscount…`.
-      {'code': '4900', 'name': 'Purchase Discounts Earned', 'type': 'revenue', 'system': true, 'order': 34},
+      {
+        'code': '4900',
+        'name': 'Purchase Discounts Earned',
+        'type': 'revenue',
+        'system': true,
+        'order': 34,
+      },
       // ── Expenses (5xxx) ──
       // 4100 (Purchase Return Adjustment) is a CONTRA-EXPENSE account: it
       // carries a credit balance and is presented as a deduction from COGS
       // on the income statement to yield Net Cost of Sales. Classifying it
       // as `expense` makes Σ(Dr − Cr) automatically deduct purchase-return
       // credit balances from gross COGS — IFRS/GAAP presentation.
-      {'code': '4100', 'name': 'Purchase Return Adjustment', 'type': 'expense', 'system': true, 'order': 40},
-      {'code': '5100', 'name': 'Expenses', 'type': 'expense', 'system': true, 'order': 41},
-      {'code': '5200', 'name': 'Salaries Expense', 'type': 'expense', 'system': true, 'order': 42},
-      {'code': '5300', 'name': 'Cost of Goods Sold', 'type': 'expense', 'system': true, 'order': 43},
-      {'code': '5500', 'name': 'Discounts Given', 'type': 'expense', 'system': true, 'order': 44},
-      {'code': '5600', 'name': 'Commissions Expense', 'type': 'expense', 'system': true, 'order': 45},
-      {'code': '5800', 'name': 'Inventory Shrinkage', 'type': 'expense', 'system': true, 'order': 47},
-      {'code': '5900', 'name': 'Inventory Revaluation', 'type': 'expense', 'system': true, 'order': 48},
+      {
+        'code': '4100',
+        'name': 'Purchase Return Adjustment',
+        'type': 'expense',
+        'system': true,
+        'order': 40,
+      },
+      {
+        'code': '5100',
+        'name': 'Expenses',
+        'type': 'expense',
+        'system': true,
+        'order': 41,
+      },
+      {
+        'code': '5200',
+        'name': 'Salaries Expense',
+        'type': 'expense',
+        'system': true,
+        'order': 42,
+      },
+      {
+        'code': '5300',
+        'name': 'Cost of Goods Sold',
+        'type': 'expense',
+        'system': true,
+        'order': 43,
+      },
+      {
+        'code': '5500',
+        'name': 'Discounts Given',
+        'type': 'expense',
+        'system': true,
+        'order': 44,
+      },
+      {
+        'code': '5600',
+        'name': 'Commissions Expense',
+        'type': 'expense',
+        'system': true,
+        'order': 45,
+      },
+      {
+        'code': '5800',
+        'name': 'Inventory Shrinkage',
+        'type': 'expense',
+        'system': true,
+        'order': 47,
+      },
+      {
+        'code': '5900',
+        'name': 'Inventory Revaluation',
+        'type': 'expense',
+        'system': true,
+        'order': 48,
+      },
+      {
+        'code': '6100',
+        'name': 'Depreciation Expense',
+        'type': 'expense',
+        'system': true,
+        'order': 49,
+      },
     ];
 
     // Idempotent: skip accounts that already exist, create only missing ones
@@ -523,11 +624,18 @@ class JournalRepositoryImpl implements JournalRepository {
 
   @override
   Stream<List<JournalEntryLine>> watchPostedLinesByDateRange(
-    DateTime startDate, DateTime endDate) =>
-      _datasource.watchPostedLinesByDateRange(startDate, endDate);
+    DateTime startDate,
+    DateTime endDate,
+  ) => _datasource.watchPostedLinesByDateRange(startDate, endDate);
 
   @override
   Stream<List<JournalEntryLine>> watchPostedLinesByAccountAndDateRange(
-    int accountId, DateTime startDate, DateTime endDate) =>
-      _datasource.watchPostedLinesByAccountAndDateRange(accountId, startDate, endDate);
+    int accountId,
+    DateTime startDate,
+    DateTime endDate,
+  ) => _datasource.watchPostedLinesByAccountAndDateRange(
+    accountId,
+    startDate,
+    endDate,
+  );
 }

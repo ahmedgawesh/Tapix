@@ -8,7 +8,8 @@ import '../../domain/usecases/validate_import_data.dart';
 import 'import_products_event.dart';
 import 'import_products_state.dart';
 
-class ImportProductsBloc extends Bloc<ImportProductsEvent, ImportProductsState> {
+class ImportProductsBloc
+    extends Bloc<ImportProductsEvent, ImportProductsState> {
   final ParseImportFile _parseImportFile;
   final ValidateImportData _validateImportData;
   final ImportProducts _importProducts;
@@ -19,11 +20,11 @@ class ImportProductsBloc extends Bloc<ImportProductsEvent, ImportProductsState> 
     required ValidateImportData validateImportData,
     required ImportProducts importProducts,
     required CurrencyService currencyService,
-  })  : _parseImportFile = parseImportFile,
-        _validateImportData = validateImportData,
-        _importProducts = importProducts,
-        _currencyService = currencyService,
-        super(const ImportProductsInitial()) {
+  }) : _parseImportFile = parseImportFile,
+       _validateImportData = validateImportData,
+       _importProducts = importProducts,
+       _currencyService = currencyService,
+       super(const ImportProductsInitial()) {
     on<ImportFileSelected>(_onFileSelected);
     on<ImportColumnMapped>(_onColumnMapped);
     on<ImportValidationRequested>(_onValidationRequested);
@@ -46,14 +47,17 @@ class ImportProductsBloc extends Bloc<ImportProductsEvent, ImportProductsState> 
 
       final availableFields = _getAvailableFields();
 
-      emit(ImportFileParsed(
-        fileData: fileData,
-        availableFields: availableFields,
-      ));
+      emit(
+        ImportFileParsed(fileData: fileData, availableFields: availableFields),
+      );
     } catch (e) {
-      emit(ImportFailed(
-        errorMessage: 'import_products.error_parse_file'.tr(args: [e.toString()]),
-      ));
+      emit(
+        ImportFailed(
+          errorMessage: 'import_products.error_parse_file'.tr(
+            args: [e.toString()],
+          ),
+        ),
+      );
     }
   }
 
@@ -63,11 +67,13 @@ class ImportProductsBloc extends Bloc<ImportProductsEvent, ImportProductsState> 
   ) async {
     if (state is ImportFileParsed) {
       final currentState = state as ImportFileParsed;
-      emit(ImportColumnMappingReady(
-        fileData: currentState.fileData,
-        columnMapping: event.columnMapping,
-        availableFields: currentState.availableFields,
-      ));
+      emit(
+        ImportColumnMappingReady(
+          fileData: currentState.fileData,
+          columnMapping: event.columnMapping,
+          availableFields: currentState.availableFields,
+        ),
+      );
     }
   }
 
@@ -78,10 +84,12 @@ class ImportProductsBloc extends Bloc<ImportProductsEvent, ImportProductsState> 
     if (state is ImportColumnMappingReady) {
       final currentState = state as ImportColumnMappingReady;
 
-      emit(ImportValidating(
-        fileData: currentState.fileData,
-        columnMapping: currentState.columnMapping,
-      ));
+      emit(
+        ImportValidating(
+          fileData: currentState.fileData,
+          columnMapping: currentState.columnMapping,
+        ),
+      );
 
       try {
         final errors = await _validateImportData(
@@ -89,16 +97,22 @@ class ImportProductsBloc extends Bloc<ImportProductsEvent, ImportProductsState> 
           columnMapping: currentState.columnMapping,
         );
 
-        emit(ImportValidated(
-          fileData: currentState.fileData,
-          columnMapping: currentState.columnMapping,
-          validationErrors: errors,
-        ));
+        emit(
+          ImportValidated(
+            fileData: currentState.fileData,
+            columnMapping: currentState.columnMapping,
+            validationErrors: errors,
+          ),
+        );
       } catch (e) {
-        emit(ImportFailed(
-          errorMessage: 'import_products.error_validation'.tr(args: [e.toString()]),
-          fileData: currentState.fileData,
-        ));
+        emit(
+          ImportFailed(
+            errorMessage: 'import_products.error_validation'.tr(
+              args: [e.toString()],
+            ),
+            fileData: currentState.fileData,
+          ),
+        );
       }
     }
   }
@@ -111,19 +125,23 @@ class ImportProductsBloc extends Bloc<ImportProductsEvent, ImportProductsState> 
       final currentState = state as ImportValidated;
 
       if (currentState.hasErrors) {
-        emit(ImportFailed(
-          errorMessage: 'import_products.error_validation_errors'.tr(),
-          fileData: currentState.fileData,
-        ));
+        emit(
+          ImportFailed(
+            errorMessage: 'import_products.error_validation_errors'.tr(),
+            fileData: currentState.fileData,
+          ),
+        );
         return;
       }
 
-      emit(ImportInProgress(
-        fileData: currentState.fileData,
-        columnMapping: currentState.columnMapping,
-        processedRows: 0,
-        totalRows: currentState.fileData.totalRows,
-      ));
+      emit(
+        ImportInProgress(
+          fileData: currentState.fileData,
+          columnMapping: currentState.columnMapping,
+          processedRows: 0,
+          totalRows: currentState.fileData.totalRows,
+        ),
+      );
 
       try {
         final result = await _importProducts(
@@ -133,25 +151,23 @@ class ImportProductsBloc extends Bloc<ImportProductsEvent, ImportProductsState> 
 
         emit(ImportCompleted(result));
       } catch (e) {
-        emit(ImportFailed(
-          errorMessage: 'import_products.error_import'.tr(args: [e.toString()]),
-          fileData: currentState.fileData,
-        ));
+        emit(
+          ImportFailed(
+            errorMessage: 'import_products.error_import'.tr(
+              args: [e.toString()],
+            ),
+            fileData: currentState.fileData,
+          ),
+        );
       }
     }
   }
 
-  void _onCancelled(
-    ImportCancelled event,
-    Emitter<ImportProductsState> emit,
-  ) {
+  void _onCancelled(ImportCancelled event, Emitter<ImportProductsState> emit) {
     emit(const ImportProductsInitial());
   }
 
-  void _onReset(
-    ImportReset event,
-    Emitter<ImportProductsState> emit,
-  ) {
+  void _onReset(ImportReset event, Emitter<ImportProductsState> emit) {
     emit(const ImportProductsInitial());
   }
 

@@ -92,12 +92,13 @@ class _ColumnMappingWidgetState extends State<ColumnMappingWidget> {
                         children: [
                           Text(
                             fileData.fileName,
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
                           ),
                           Text(
-                            'import_products.rows_found'.tr(args: [fileData.totalRows.toString()]),
+                            'import_products.rows_found'.tr(
+                              args: [fileData.totalRows.toString()],
+                            ),
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],
@@ -120,12 +121,10 @@ class _ColumnMappingWidgetState extends State<ColumnMappingWidget> {
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 16),
-        ...availableFields.map((field) => _buildFieldMapping(
-              context,
-              field,
-              fileData.headers,
-              colorScheme,
-            )),
+        ...availableFields.map(
+          (field) =>
+              _buildFieldMapping(context, field, fileData.headers, colorScheme),
+        ),
         const SizedBox(height: 32),
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
@@ -172,10 +171,7 @@ class _ColumnMappingWidgetState extends State<ColumnMappingWidget> {
             ),
             if (field.isRequired) ...[
               const SizedBox(width: 4),
-              Text(
-                '*',
-                style: TextStyle(color: colorScheme.error),
-              ),
+              Text('*', style: TextStyle(color: colorScheme.error)),
             ],
           ],
         ),
@@ -190,47 +186,44 @@ class _ColumnMappingWidgetState extends State<ColumnMappingWidget> {
     );
 
     final dropdownWidget = DropdownButtonFormField<int?>(
-        initialValue: selectedIndex,
-        isExpanded: true,
-        decoration: InputDecoration(
-          border: const OutlineInputBorder(),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 8,
+      initialValue: selectedIndex,
+      isExpanded: true,
+      decoration: InputDecoration(
+        border: const OutlineInputBorder(),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        errorText: field.isRequired && selectedIndex == null
+            ? 'import_products.required_field'.tr()
+            : null,
+      ),
+      hint: Text(
+        'import_products.select_column'.tr(),
+        overflow: TextOverflow.ellipsis,
+      ),
+      items: [
+        DropdownMenuItem<int?>(
+          value: null,
+          child: Text(
+            'import_products.skip_field'.tr(),
+            overflow: TextOverflow.ellipsis,
           ),
-          errorText: field.isRequired && selectedIndex == null
-              ? 'import_products.required_field'.tr()
-              : null,
         ),
-        hint: Text(
-          'import_products.select_column'.tr(),
-          overflow: TextOverflow.ellipsis,
-        ),
-        items: [
-          DropdownMenuItem<int?>(
-            value: null,
+        ...headers.asMap().entries.map((entry) {
+          return DropdownMenuItem<int?>(
+            value: entry.key,
             child: Text(
-              'import_products.skip_field'.tr(),
+              '${entry.value} ${'import_products.column_reference'.tr()} ${entry.key + 1})',
               overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
-          ),
-          ...headers.asMap().entries.map((entry) {
-            return DropdownMenuItem<int?>(
-              value: entry.key,
-              child: Text(
-                '${entry.value} ${'import_products.column_reference'.tr()} ${entry.key + 1})',
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            );
-          }),
-        ],
-        onChanged: (value) {
-          setState(() {
-            _fieldToColumnIndex[field.fieldName] = value;
-          });
-        },
-      );
+          );
+        }),
+      ],
+      onChanged: (value) {
+        setState(() {
+          _fieldToColumnIndex[field.fieldName] = value;
+        });
+      },
+    );
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),

@@ -43,7 +43,9 @@ void main() {
     String costingMethod = 'fifo',
     bool hasVariants = false,
   }) async {
-    final pid = await db.into(db.products).insert(
+    final pid = await db
+        .into(db.products)
+        .insert(
           ProductsCompanion.insert(
             sku: Value(sku),
             name: name,
@@ -65,7 +67,9 @@ void main() {
     int costCents = 1000,
     int priceCents = 2000,
   }) async {
-    return db.into(db.productVariants).insert(
+    return db
+        .into(db.productVariants)
+        .insert(
           ProductVariantsCompanion.insert(
             productId: productId,
             costCents: Decimal.fromInt(costCents),
@@ -82,7 +86,9 @@ void main() {
     DateTime? expiryDate,
     String poNumber = 'PO-X',
   }) async {
-    final purchaseId = await db.into(db.purchases).insert(
+    final purchaseId = await db
+        .into(db.purchases)
+        .insert(
           PurchasesCompanion.insert(
             purchaseNumber: poNumber,
             supplierId: supplierId,
@@ -95,7 +101,9 @@ void main() {
             paymentMethod: const Value('credit'),
           ),
         );
-    await db.into(db.purchaseItems).insert(
+    await db
+        .into(db.purchaseItems)
+        .insert(
           PurchaseItemsCompanion.insert(
             purchaseId: purchaseId,
             productId: productId,
@@ -134,7 +142,9 @@ void main() {
     int unitPriceCents = 200,
     String invoiceNumber = 'INV-X',
   }) async {
-    final saleId = await db.into(db.sales).insert(
+    final saleId = await db
+        .into(db.sales)
+        .insert(
           SalesCompanion.insert(
             invoiceNumber: invoiceNumber,
             customerId: Value(customerId),
@@ -147,7 +157,9 @@ void main() {
             status: const Value('draft'),
           ),
         );
-    await db.into(db.saleItems).insert(
+    await db
+        .into(db.saleItems)
+        .insert(
           SaleItemsCompanion.insert(
             saleId: saleId,
             productId: productId,
@@ -183,19 +195,23 @@ void main() {
       "VALUES (0, 'system', 'no-pin', 'owner', 1, $now, $now)",
     );
 
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     currencyId = usd.id;
 
-    customerId = await db.into(db.customers).insert(
+    customerId = await db
+        .into(db.customers)
+        .insert(
           CustomersCompanion.insert(
             name: 'Phase 6.4 Customer',
             currencyId: currencyId,
             balanceCents: Value(Decimal.zero),
           ),
         );
-    supplierId = await db.into(db.suppliers).insert(
+    supplierId = await db
+        .into(db.suppliers)
+        .insert(
           SuppliersCompanion.insert(
             name: 'Phase 6.4 Supplier',
             currencyId: currencyId,
@@ -225,13 +241,15 @@ void main() {
       );
       await insertVariant(productId: pid);
 
-      final result = await db.productDao
-          .setCostingMethod(productId: pid, method: 'fifo');
+      final result = await db.productDao.setCostingMethod(
+        productId: pid,
+        method: 'fifo',
+      );
       expect(result, isNull, reason: 'no lock reason returned on success');
 
-      final row = await (db.select(db.products)
-            ..where((p) => p.id.equals(pid)))
-          .getSingle();
+      final row = await (db.select(
+        db.products,
+      )..where((p) => p.id.equals(pid))).getSingle();
       expect(row.costingMethod, equals('fifo'));
     });
 
@@ -250,15 +268,20 @@ void main() {
       final reason = await db.productDao.getCostingMethodLockReason(pid);
       expect(reason, equals('has_stock'));
 
-      final refusal = await db.productDao
-          .setCostingMethod(productId: pid, method: 'wac');
-      expect(refusal, equals('has_stock'),
-          reason: 'setter must refuse with the same reason');
+      final refusal = await db.productDao.setCostingMethod(
+        productId: pid,
+        method: 'wac',
+      );
+      expect(
+        refusal,
+        equals('has_stock'),
+        reason: 'setter must refuse with the same reason',
+      );
 
       // Persisted method must NOT have flipped despite the refused call.
-      final row = await (db.select(db.products)
-            ..where((p) => p.id.equals(pid)))
-          .getSingle();
+      final row = await (db.select(
+        db.products,
+      )..where((p) => p.id.equals(pid))).getSingle();
       expect(row.costingMethod, equals('fifo'));
     });
 
@@ -285,11 +308,16 @@ void main() {
         );
 
         final reason = await db.productDao.getCostingMethodLockReason(pid);
-        expect(reason, equals('has_consumptions'),
-            reason: 'historical COGS must keep the method frozen');
+        expect(
+          reason,
+          equals('has_consumptions'),
+          reason: 'historical COGS must keep the method frozen',
+        );
 
-        final refusal = await db.productDao
-            .setCostingMethod(productId: pid, method: 'wac');
+        final refusal = await db.productDao.setCostingMethod(
+          productId: pid,
+          method: 'wac',
+        );
         expect(refusal, equals('has_consumptions'));
       },
     );
@@ -326,41 +354,47 @@ void main() {
   // 5-6. FIFO-AWARE EXPIRY (the Phase 6.4 expiry-info bug fix)
   // ──────────────────────────────────────────────────────────────────────────
   group('FIFO-aware expiry info', () {
-    test('reports remaining qty after a partial sale (not original qty)',
-        () async {
-      final pid = await insertProduct(sku: 'E-001', name: 'E1');
-      final vid = await insertVariant(productId: pid);
-      final exp = DateTime.now().add(const Duration(days: 60));
+    test(
+      'reports remaining qty after a partial sale (not original qty)',
+      () async {
+        final pid = await insertProduct(sku: 'E-001', name: 'E1');
+        final vid = await insertVariant(productId: pid);
+        final exp = DateTime.now().add(const Duration(days: 60));
 
-      await postPurchase(
-        productId: pid,
-        variantId: vid,
-        quantity: 100,
-        unitCostCents: 100,
-        expiryDate: exp,
-        poNumber: 'PO-E1',
-      );
+        await postPurchase(
+          productId: pid,
+          variantId: vid,
+          quantity: 100,
+          unitCostCents: 100,
+          expiryDate: exp,
+          poNumber: 'PO-E1',
+        );
 
-      // Sell 88 → batch should have 12 remaining.
-      await postSale(
-        productId: pid,
-        variantId: vid,
-        quantity: 88,
-        invoiceNumber: 'INV-E1',
-      );
+        // Sell 88 → batch should have 12 remaining.
+        await postSale(
+          productId: pid,
+          variantId: vid,
+          quantity: 88,
+          invoiceNumber: 'INV-E1',
+        );
 
-      final rows = await db.productDao.getProductRemainingExpiryInfo(pid);
-      expect(rows.length, equals(1));
-      expect(rows.first.quantity, equals(12),
+        final rows = await db.productDao.getProductRemainingExpiryInfo(pid);
+        expect(rows.length, equals(1));
+        expect(
+          rows.first.quantity,
+          equals(12),
           reason:
-              'expiry info must reflect remaining_quantity, not the original 100');
-      // Compare on the day to avoid sub-second drift.
-      expect(rows.first.expiryDate.toIso8601String().substring(0, 10),
-          equals(exp.toIso8601String().substring(0, 10)));
-    });
+              'expiry info must reflect remaining_quantity, not the original 100',
+        );
+        // Compare on the day to avoid sub-second drift.
+        expect(
+          rows.first.expiryDate.toIso8601String().substring(0, 10),
+          equals(exp.toIso8601String().substring(0, 10)),
+        );
+      },
+    );
 
-    test('fully-consumed batches are excluded; partial ones survive',
-        () async {
+    test('fully-consumed batches are excluded; partial ones survive', () async {
       final pid = await insertProduct(sku: 'E-002', name: 'E2');
       final vid = await insertVariant(productId: pid);
       final near = DateTime.now().add(const Duration(days: 15));
@@ -392,12 +426,20 @@ void main() {
       );
 
       final rows = await db.productDao.getProductRemainingExpiryInfo(pid);
-      expect(rows.length, equals(1),
-          reason: 'depleted near-expiry batch must drop out of the report');
-      expect(rows.first.quantity, equals(8),
-          reason: '10 received - 2 consumed = 8 remaining');
-      expect(rows.first.expiryDate.toIso8601String().substring(0, 10),
-          equals(far.toIso8601String().substring(0, 10)));
+      expect(
+        rows.length,
+        equals(1),
+        reason: 'depleted near-expiry batch must drop out of the report',
+      );
+      expect(
+        rows.first.quantity,
+        equals(8),
+        reason: '10 received - 2 consumed = 8 remaining',
+      );
+      expect(
+        rows.first.expiryDate.toIso8601String().substring(0, 10),
+        equals(far.toIso8601String().substring(0, 10)),
+      );
     });
 
     test('non-perishable batches (no expiry_date) are excluded', () async {
@@ -414,8 +456,11 @@ void main() {
       );
 
       final rows = await db.productDao.getProductRemainingExpiryInfo(pid);
-      expect(rows, isEmpty,
-          reason: 'batches with no expiry must not appear in the expiry list');
+      expect(
+        rows,
+        isEmpty,
+        reason: 'batches with no expiry must not appear in the expiry list',
+      );
     });
   });
 
@@ -424,21 +469,23 @@ void main() {
   // ──────────────────────────────────────────────────────────────────────────
   group('FIFO activation migration (10044 → 10045+)', () {
     test(
-      'a fresh DB has no orphaned opening batches and the schema is at 10059',
+      'a fresh DB has no orphaned opening batches and the schema is at 10068',
       () async {
         // The migration is exercised on every fresh in-memory DB. We assert:
-        //   - schema is at the expected version (v10059 — Phase 16 commission
-        //     reversal for adjustment (unlinked) sale returns: adds
-        //     `sale_return_adjustment_id` on `commissions`; v10058 added
-        //     `effective_date` on `commissions`)
+        //   - schema is at the expected version (v10060 — re-prefixes legacy
+        //     unlinked-sale-return batches from SR- to SAR-; v10059 added
+        //     adjustment-return commission reversal)
         //   - no batch rows exist for an empty seed (sanity)
-        expect(db.schemaVersion, equals(10059));
+        expect(db.schemaVersion, equals(10068));
 
-        final any = await db.customSelect(
-          'SELECT COUNT(*) AS c FROM product_batches',
-        ).getSingle();
-        expect(any.read<int>('c'), equals(0),
-            reason: 'no products seeded yet → no batches');
+        final any = await db
+            .customSelect('SELECT COUNT(*) AS c FROM product_batches')
+            .getSingle();
+        expect(
+          any.read<int>('c'),
+          equals(0),
+          reason: 'no products seeded yet → no batches',
+        );
       },
     );
   });

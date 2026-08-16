@@ -72,7 +72,8 @@ class VariantWriteOffAndDeleteRequested extends ProductVariantsEvent {
 }
 
 // Bloc
-class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVariantsEvent> {
+class ProductVariantsBloc
+    extends RealtimeBloc<List<ProductVariant>, ProductVariantsEvent> {
   final ProductVariantRepository _repository;
   int? _productId;
   bool _initialized = false;
@@ -141,10 +142,12 @@ class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVari
       if (msg.contains('no column named price_adjustment_cents') ||
           msg.contains('no column named cost_cents') ||
           msg.contains('no column named price_cents')) {
-        add(RealtimeErrorOccurred(
-          'Database schema is out of date (missing product_variants pricing columns). Please restart the app completely to apply the schema fix.',
-          st,
-        ));
+        add(
+          RealtimeErrorOccurred(
+            'Database schema is out of date (missing product_variants pricing columns). Please restart the app completely to apply the schema fix.',
+            st,
+          ),
+        );
         return;
       }
       add(RealtimeErrorOccurred(e, st));
@@ -201,7 +204,9 @@ class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVari
     // Optimistic UX: removing the row from the visible list works for both
     // hard delete and soft delete, because soft-deleted variants drop out of
     // `watchVariantsByProduct` (filtered by is_active).
-    final optimisticData = currentData.where((v) => v.id != event.variantId).toList();
+    final optimisticData = currentData
+        .where((v) => v.id != event.variantId)
+        .toList();
 
     try {
       await performOptimisticUpdate(
@@ -231,8 +236,9 @@ class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVari
       return;
     }
 
-    final optimisticData =
-        currentData.where((v) => v.id != event.variantId).toList();
+    final optimisticData = currentData
+        .where((v) => v.id != event.variantId)
+        .toList();
 
     try {
       await performOptimisticUpdate(
@@ -247,5 +253,4 @@ class ProductVariantsBloc extends RealtimeBloc<List<ProductVariant>, ProductVari
       add(RealtimeErrorOccurred(e, st));
     }
   }
-
 }

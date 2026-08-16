@@ -1,11 +1,14 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
@@ -22,8 +25,9 @@ class PurchaseReturnFormScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => sl<PurchaseReturnFormBloc>()
-        ..add(PurchaseReturnFormInitialized(purchaseId)),
+      create: (_) =>
+          sl<PurchaseReturnFormBloc>()
+            ..add(PurchaseReturnFormInitialized(purchaseId)),
       child: const _ReturnFormView(),
     );
   }
@@ -159,9 +163,12 @@ class _ReturnFormView extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text('purchases.menu'.tr(),
-                  style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold)),
+              child: Text(
+                'purchases.menu'.tr(),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
             const Divider(),
             ListTile(
@@ -202,8 +209,10 @@ class _ReturnFormView extends StatelessWidget {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('purchases.enter_invoice_number'.tr(),
-                  style: theme.textTheme.bodyMedium),
+              Text(
+                'purchases.enter_invoice_number'.tr(),
+                style: theme.textTheme.bodyMedium,
+              ),
               const SizedBox(height: 12),
               TextField(
                 controller: controller,
@@ -244,7 +253,10 @@ class _ReturnFormView extends StatelessWidget {
   // RETURN SAVED OVERLAY (Print / Share / Finish)
   // Shown AFTER navigating back to the purchases list.
   // ═══════════════════════════════════════════════════════
-  void _showReturnSavedOverlay(BuildContext context, PurchaseReturnFormState returnState) {
+  void _showReturnSavedOverlay(
+    BuildContext context,
+    PurchaseReturnFormState returnState,
+  ) {
     final theme = Theme.of(context);
 
     showDialog<void>(
@@ -261,13 +273,18 @@ class _ReturnFormView extends StatelessWidget {
                   color: Colors.green.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(LucideIcons.checkCircle2, size: 48, color: Colors.green),
+                child: const Icon(
+                  LucideIcons.checkCircle2,
+                  size: 48,
+                  color: Colors.green,
+                ),
               ),
               const SizedBox(height: 16),
               Text(
                 'purchases.return_saved'.tr(),
                 style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold),
+                  fontWeight: FontWeight.bold,
+                ),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -279,7 +296,11 @@ class _ReturnFormView extends StatelessWidget {
               label: Text('purchases.print_invoice'.tr()),
               onPressed: () async {
                 Navigator.pop(ctx);
-                await _printOrShareReturnFromState(context, returnState, share: false);
+                await _printOrShareReturnFromState(
+                  context,
+                  returnState,
+                  share: false,
+                );
               },
             ),
             TextButton.icon(
@@ -287,7 +308,11 @@ class _ReturnFormView extends StatelessWidget {
               label: Text('purchases.share_pdf'.tr()),
               onPressed: () async {
                 Navigator.pop(ctx);
-                await _printOrShareReturnFromState(context, returnState, share: true);
+                await _printOrShareReturnFromState(
+                  context,
+                  returnState,
+                  share: true,
+                );
               },
             ),
             FilledButton.icon(
@@ -303,14 +328,22 @@ class _ReturnFormView extends StatelessWidget {
     );
   }
 
-  Future<void> _printOrShareReturnFromState(BuildContext context, PurchaseReturnFormState state, {required bool share}) async {
+  Future<void> _printOrShareReturnFromState(
+    BuildContext context,
+    PurchaseReturnFormState state, {
+    required bool share,
+  }) async {
     try {
       if (state.purchaseId != null && state.purchase != null) {
         final repo = sl<PurchaseRepository>();
-        final returns = await repo.watchPurchaseReturnsByPurchase(state.purchaseId!).first;
+        final returns = await repo
+            .watchPurchaseReturnsByPurchase(state.purchaseId!)
+            .first;
         if (returns.isNotEmpty && context.mounted) {
           final latestReturn = returns.first;
-          final returnItems = await repo.watchPurchaseReturnItemsWithDetails(latestReturn.id).first;
+          final returnItems = await repo
+              .watchPurchaseReturnItemsWithDetails(latestReturn.id)
+              .first;
           if (context.mounted) {
             if (share) {
               await PurchasePdfService.sharePurchaseReturn(
@@ -343,7 +376,10 @@ class _ReturnFormView extends StatelessWidget {
   }
 
   Widget _buildWideLayout(
-      BuildContext context, PurchaseReturnFormState state, CurrencyService cs) {
+    BuildContext context,
+    PurchaseReturnFormState state,
+    CurrencyService cs,
+  ) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -369,9 +405,7 @@ class _ReturnFormView extends StatelessWidget {
               Expanded(
                 child: ListView(
                   padding: const EdgeInsets.all(16),
-                  children: [
-                    _buildItemsSelectionCard(context, state, cs),
-                  ],
+                  children: [_buildItemsSelectionCard(context, state, cs)],
                 ),
               ),
               _buildBottomBar(context, state, cs),
@@ -383,7 +417,10 @@ class _ReturnFormView extends StatelessWidget {
   }
 
   Widget _buildNarrowLayout(
-      BuildContext context, PurchaseReturnFormState state, CurrencyService cs) {
+    BuildContext context,
+    PurchaseReturnFormState state,
+    CurrencyService cs,
+  ) {
     return Column(
       children: [
         Expanded(
@@ -412,12 +449,15 @@ class _ReturnFormView extends StatelessWidget {
   // PURCHASE INFO CARD (Premium)
   // ═══════════════════════════════════════════════════════
   Widget _buildPurchaseInfoCard(
-      BuildContext context, PurchaseReturnFormState state, CurrencyService cs) {
+    BuildContext context,
+    PurchaseReturnFormState state,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final purchase = state.purchase;
-    final supplierInitial = purchase?.supplierName != null &&
-            purchase!.supplierName!.isNotEmpty
+    final supplierInitial =
+        purchase?.supplierName != null && purchase!.supplierName!.isNotEmpty
         ? purchase.supplierName![0].toUpperCase()
         : '?';
 
@@ -432,18 +472,25 @@ class _ReturnFormView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (purchase?.paymentMethod == 'cheque' && purchase?.dueDate != null) ...[
+            if (purchase?.paymentMethod == 'cheque' &&
+                purchase?.dueDate != null) ...[
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: colorScheme.error.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: colorScheme.error.withValues(alpha: 0.25)),
+                  border: Border.all(
+                    color: colorScheme.error.withValues(alpha: 0.25),
+                  ),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(LucideIcons.alertTriangle, size: 18, color: colorScheme.error),
+                    Icon(
+                      LucideIcons.alertTriangle,
+                      size: 18,
+                      color: colorScheme.error,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
@@ -458,8 +505,11 @@ class _ReturnFormView extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'purchases.cheque_warning_message'
-                                .tr(args: [DateFormat.yMMMd().format(purchase!.dueDate!)]),
+                            'purchases.cheque_warning_message'.tr(
+                              args: [
+                                DateFormat.yMMMd().format(purchase!.dueDate!),
+                              ],
+                            ),
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: colorScheme.onSurfaceVariant,
                             ),
@@ -478,59 +528,88 @@ class _ReturnFormView extends StatelessWidget {
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [colorScheme.primary, colorScheme.primary.withValues(alpha: 0.7)],
+                      colors: [
+                        colorScheme.primary,
+                        colorScheme.primary.withValues(alpha: 0.7),
+                      ],
                     ),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(LucideIcons.fileText, size: 18, color: Colors.white),
+                  child: const Icon(
+                    LucideIcons.fileText,
+                    size: 18,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('purchases.return_from_purchase'.tr(),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                              letterSpacing: 0.5)),
-                      Text(purchase?.purchaseNumber ?? '—',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600)),
+                      Text(
+                        'purchases.return_from_purchase'.tr(),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      Text(
+                        purchase?.purchaseNumber ?? '—',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ],
             ),
             if (purchase != null) ...[
-              Divider(height: 24, color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+              Divider(
+                height: 24,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+              ),
               if (purchase.supplierName != null) ...[
                 Row(
                   children: [
                     Container(
-                      width: 36, height: 36,
+                      width: 36,
+                      height: 36,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [colorScheme.primaryContainer, colorScheme.primaryContainer.withValues(alpha: 0.6)],
+                          colors: [
+                            colorScheme.primaryContainer,
+                            colorScheme.primaryContainer.withValues(alpha: 0.6),
+                          ],
                         ),
                         borderRadius: BorderRadius.circular(9),
                       ),
                       alignment: Alignment.center,
-                      child: Text(supplierInitial,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                              color: colorScheme.onPrimaryContainer,
-                              fontWeight: FontWeight.bold)),
+                      child: Text(
+                        supplierInitial,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: colorScheme.onPrimaryContainer,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('purchases.supplier'.tr(),
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                  color: colorScheme.onSurfaceVariant)),
-                          Text(purchase.supplierName!,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w500)),
+                          Text(
+                            'purchases.supplier'.tr(),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          Text(
+                            purchase.supplierName!,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -538,11 +617,17 @@ class _ReturnFormView extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
               ],
-              _infoRow(theme, 'purchases.date'.tr(),
-                  DateFormat.yMMMd().format(purchase.purchaseDate)),
+              _infoRow(
+                theme,
+                'purchases.date'.tr(),
+                DateFormat.yMMMd().format(purchase.purchaseDate),
+              ),
               const SizedBox(height: 8),
-              _infoRow(theme, 'purchases.total'.tr(),
-                  cs.format(purchase.totalCents.toBigInt().toInt())),
+              _infoRow(
+                theme,
+                'purchases.total'.tr(),
+                cs.format(purchase.totalCents.toBigInt().toInt()),
+              ),
             ],
           ],
         ),
@@ -564,17 +649,29 @@ class _ReturnFormView extends StatelessWidget {
                 color: cs.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(5),
               ),
-              child: Icon(label.contains('Date') || label.contains('تاريخ')
-                  ? LucideIcons.calendar : LucideIcons.coins,
-                  size: 12, color: cs.onSurfaceVariant),
+              child: Icon(
+                label.contains('Date') || label.contains('تاريخ')
+                    ? LucideIcons.calendar
+                    : LucideIcons.coins,
+                size: 12,
+                color: cs.onSurfaceVariant,
+              ),
             ),
             const SizedBox(width: 8),
-            Text(label, style: theme.textTheme.bodySmall?.copyWith(
-                color: cs.onSurfaceVariant)),
+            Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: cs.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
-        Text(value, style: theme.textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w500)),
+        Text(
+          value,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w500,
+          ),
+        ),
       ],
     );
   }
@@ -583,7 +680,10 @@ class _ReturnFormView extends StatelessWidget {
   // ITEMS SELECTION CARD (Premium)
   // ═══════════════════════════════════════════════════════
   Widget _buildItemsSelectionCard(
-      BuildContext context, PurchaseReturnFormState state, CurrencyService cs) {
+    BuildContext context,
+    PurchaseReturnFormState state,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -591,7 +691,9 @@ class _ReturnFormView extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -604,28 +706,44 @@ class _ReturnFormView extends StatelessWidget {
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [colorScheme.error, colorScheme.error.withValues(alpha: 0.7)],
+                      colors: [
+                        colorScheme.error,
+                        colorScheme.error.withValues(alpha: 0.7),
+                      ],
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(LucideIcons.undo2, size: 16, color: Colors.white),
+                  child: const Icon(
+                    LucideIcons.undo2,
+                    size: 16,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('purchases.select_items_to_return'.tr(),
-                    style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600)),
+                Text(
+                  'purchases.select_items_to_return'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 if (state.returnItems.isNotEmpty) ...[
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: colorScheme.errorContainer,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Text('${state.returnItems.length}',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                            color: colorScheme.onErrorContainer,
-                            fontWeight: FontWeight.bold)),
+                    child: Text(
+                      '${state.returnItems.length}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onErrorContainer,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
               ],
@@ -640,16 +758,24 @@ class _ReturnFormView extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: colorScheme.errorContainer.withValues(alpha: 0.15),
+                        color: colorScheme.errorContainer.withValues(
+                          alpha: 0.15,
+                        ),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(LucideIcons.packageX, size: 36,
-                          color: colorScheme.error.withValues(alpha: 0.3)),
+                      child: Icon(
+                        LucideIcons.packageX,
+                        size: 36,
+                        color: colorScheme.error.withValues(alpha: 0.3),
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    Text('purchases.no_items_to_return'.tr(),
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant)),
+                    Text(
+                      'purchases.no_items_to_return'.tr(),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                 ),
               )
@@ -659,8 +785,9 @@ class _ReturnFormView extends StatelessWidget {
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: state.availableItems.length,
                 separatorBuilder: (_, idx) => Divider(
-                    height: 1,
-                    color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  height: 1,
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                ),
                 itemBuilder: (context, index) {
                   final item = state.availableItems[index];
                   final returnItem = state.returnItems
@@ -668,8 +795,9 @@ class _ReturnFormView extends StatelessWidget {
                       .toList();
                   final isSelected = returnItem.isNotEmpty;
 
-                  final alreadyReturned = state.alreadyReturnedQty[item.id] ?? 0;
-                  final maxReturnable = state.maxReturnableQty(item.id, item.quantity);
+                  final alreadyReturned =
+                      state.alreadyReturnedQty[item.id] ?? 0;
+                  final maxReturnable = state.maxReturnableQty(item);
 
                   return _ReturnItemTile(
                     item: item,
@@ -678,9 +806,9 @@ class _ReturnFormView extends StatelessWidget {
                     currencyService: cs,
                     maxReturnableQty: maxReturnable,
                     alreadyReturnedQty: alreadyReturned,
-                    onToggle: () => context
-                        .read<PurchaseReturnFormBloc>()
-                        .add(ReturnItemToggled(item)),
+                    onToggle: () => context.read<PurchaseReturnFormBloc>().add(
+                      ReturnItemToggled(item),
+                    ),
                     onQuantityChanged: (qty) => context
                         .read<PurchaseReturnFormBloc>()
                         .add(ReturnItemQuantityChanged(item.id, qty)),
@@ -696,7 +824,10 @@ class _ReturnFormView extends StatelessWidget {
   // ═══════════════════════════════════════════════════════
   // REFUND METHOD CARD (Primary – how money comes back)
   // ═══════════════════════════════════════════════════════
-  Widget _buildDispositionCard(BuildContext context, PurchaseReturnFormState state) {
+  Widget _buildDispositionCard(
+    BuildContext context,
+    PurchaseReturnFormState state,
+  ) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
@@ -732,12 +863,19 @@ class _ReturnFormView extends StatelessWidget {
                     color: cs.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(LucideIcons.creditCard, size: 16, color: cs.primary),
+                  child: Icon(
+                    LucideIcons.creditCard,
+                    size: 16,
+                    color: cs.primary,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('purchases.refund_method'.tr(),
-                    style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600)),
+                Text(
+                  'purchases.refund_method'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -752,31 +890,52 @@ class _ReturnFormView extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(10),
-                    onTap: () => context
-                        .read<PurchaseReturnFormBloc>()
-                        .add(ReturnRefundMethodChanged(m.$1)),
+                    onTap: () => context.read<PurchaseReturnFormBloc>().add(
+                      ReturnRefundMethodChanged(m.$1),
+                    ),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                       child: Row(
                         children: [
-                          Icon(m.$2, size: 18,
-                              color: isSelected ? cs.primary : cs.onSurfaceVariant),
+                          Icon(
+                            m.$2,
+                            size: 18,
+                            color: isSelected
+                                ? cs.primary
+                                : cs.onSurfaceVariant,
+                          ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('purchases.refund_method_${m.$1}'.tr(),
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal)),
-                                Text('purchases.refund_method_${m.$1}_desc'.tr(),
-                                    style: theme.textTheme.labelSmall?.copyWith(
-                                        color: cs.onSurfaceVariant, fontSize: 10)),
+                                Text(
+                                  'purchases.refund_method_${m.$1}'.tr(),
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    fontWeight: isSelected
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                                Text(
+                                  'purchases.refund_method_${m.$1}_desc'.tr(),
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                    fontSize: 10,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
                           if (isSelected)
-                            Icon(LucideIcons.checkCircle2, size: 18, color: cs.primary),
+                            Icon(
+                              LucideIcons.checkCircle2,
+                              size: 18,
+                              color: cs.primary,
+                            ),
                         ],
                       ),
                     ),
@@ -789,7 +948,10 @@ class _ReturnFormView extends StatelessWidget {
               const SizedBox(height: 6),
               _buildChequeDueDatePicker(context, state, theme, cs),
             ],
-            Divider(height: 20, color: cs.outlineVariant.withValues(alpha: 0.4)),
+            Divider(
+              height: 20,
+              color: cs.outlineVariant.withValues(alpha: 0.4),
+            ),
             // ── Disposition (what happens to the goods) ──
             Row(
               children: [
@@ -799,13 +961,20 @@ class _ReturnFormView extends StatelessWidget {
                     color: Colors.amber.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(LucideIcons.package, size: 16, color: Colors.amber.shade700),
+                  child: Icon(
+                    LucideIcons.package,
+                    size: 16,
+                    color: Colors.amber.shade700,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text('purchases.disposition_type'.tr(),
-                      style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600)),
+                  child: Text(
+                    'purchases.disposition_type'.tr(),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
                 InkWell(
                   borderRadius: BorderRadius.circular(12),
@@ -816,7 +985,11 @@ class _ReturnFormView extends StatelessWidget {
                       color: cs.surfaceContainerHighest,
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(LucideIcons.info, size: 14, color: cs.onSurfaceVariant),
+                    child: Icon(
+                      LucideIcons.info,
+                      size: 14,
+                      color: cs.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ],
@@ -828,25 +1001,34 @@ class _ReturnFormView extends StatelessWidget {
               children: dispositions.map((d) {
                 final isSelected = state.dispositionType == d.$1;
                 return ChoiceChip(
-                  avatar: Icon(d.$2, size: 16,
-                      color: isSelected ? cs.onPrimary : cs.onSurfaceVariant),
+                  avatar: Icon(
+                    d.$2,
+                    size: 16,
+                    color: isSelected ? cs.onPrimary : cs.onSurfaceVariant,
+                  ),
                   label: Text('purchases.disposition_${d.$1}'.tr()),
                   selected: isSelected,
                   selectedColor: cs.primary,
                   labelStyle: TextStyle(
                     color: isSelected ? cs.onPrimary : cs.onSurface,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: isSelected
+                        ? FontWeight.w600
+                        : FontWeight.normal,
                   ),
-                  onSelected: (_) => context
-                      .read<PurchaseReturnFormBloc>()
-                      .add(ReturnDispositionChanged(d.$1)),
+                  onSelected: (_) => context.read<PurchaseReturnFormBloc>().add(
+                    ReturnDispositionChanged(d.$1),
+                  ),
                 );
               }).toList(),
             ),
             const SizedBox(height: 4),
-            Text('purchases.disposition_hint'.tr(),
-                style: theme.textTheme.labelSmall?.copyWith(
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.6), fontSize: 10)),
+            Text(
+              'purchases.disposition_hint'.tr(),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                fontSize: 10,
+              ),
+            ),
           ],
         ),
       ),
@@ -866,15 +1048,15 @@ class _ReturnFormView extends StatelessWidget {
       onTap: () async {
         final picked = await showDatePicker(
           context: context,
-          initialDate: state.dueDate ??
-              DateTime.now().add(const Duration(days: 30)),
+          initialDate:
+              state.dueDate ?? DateTime.now().add(const Duration(days: 30)),
           firstDate: DateTime.now(),
           lastDate: DateTime.now().add(const Duration(days: 365)),
         );
         if (picked != null && context.mounted) {
-          context
-              .read<PurchaseReturnFormBloc>()
-              .add(PurchaseReturnDueDateChanged(picked));
+          context.read<PurchaseReturnFormBloc>().add(
+            PurchaseReturnDueDateChanged(picked),
+          );
         }
       },
       child: Container(
@@ -892,8 +1074,11 @@ class _ReturnFormView extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(LucideIcons.calendar,
-                size: 18, color: missing ? cs.error : cs.primary),
+            Icon(
+              LucideIcons.calendar,
+              size: 18,
+              color: missing ? cs.error : cs.primary,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -910,8 +1095,8 @@ class _ReturnFormView extends StatelessWidget {
                   Text(
                     state.dueDate != null
                         ? '${state.dueDate!.year}-'
-                            '${state.dueDate!.month.toString().padLeft(2, '0')}-'
-                            '${state.dueDate!.day.toString().padLeft(2, '0')}'
+                              '${state.dueDate!.month.toString().padLeft(2, '0')}-'
+                              '${state.dueDate!.day.toString().padLeft(2, '0')}'
                         : 'purchases.select_due_date'.tr(),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w600,
@@ -939,8 +1124,12 @@ class _ReturnFormView extends StatelessWidget {
           children: [
             Icon(LucideIcons.info, size: 20, color: cs.primary),
             const SizedBox(width: 10),
-            Text('purchases.disposition_type'.tr(),
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+            Text(
+              'purchases.disposition_type'.tr(),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
         content: Column(
@@ -973,7 +1162,8 @@ class _ReturnFormView extends StatelessWidget {
     );
   }
 
-  Widget _dispositionInfoTile(BuildContext context, {
+  Widget _dispositionInfoTile(
+    BuildContext context, {
     required IconData icon,
     required String title,
     required String description,
@@ -1004,11 +1194,20 @@ class _ReturnFormView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600)),
+                Text(
+                  title,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text(description, style: theme.textTheme.bodySmall?.copyWith(
-                    color: cs.onSurfaceVariant, height: 1.4)),
+                Text(
+                  description,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    height: 1.4,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1043,12 +1242,19 @@ class _ReturnFormView extends StatelessWidget {
                     color: Colors.amber.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(LucideIcons.messageSquare, size: 16, color: Colors.amber.shade700),
+                  child: Icon(
+                    LucideIcons.messageSquare,
+                    size: 16,
+                    color: Colors.amber.shade700,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('purchases.return_reason'.tr(),
-                    style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600)),
+                Text(
+                  'purchases.return_reason'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -1057,14 +1263,16 @@ class _ReturnFormView extends StatelessWidget {
                 hintText: 'purchases.return_reason_hint'.tr(),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                  borderSide: BorderSide(
+                    color: cs.outlineVariant.withValues(alpha: 0.5),
+                  ),
                 ),
                 isDense: true,
               ),
               maxLines: 3,
-              onChanged: (v) => context
-                  .read<PurchaseReturnFormBloc>()
-                  .add(ReturnReasonChanged(v)),
+              onChanged: (v) => context.read<PurchaseReturnFormBloc>().add(
+                ReturnReasonChanged(v),
+              ),
             ),
           ],
         ),
@@ -1076,9 +1284,19 @@ class _ReturnFormView extends StatelessWidget {
   // FINANCIAL IMPACT CARD (Premium)
   // ═══════════════════════════════════════════════════════
   Widget _buildFinancialImpactCard(
-      BuildContext context, PurchaseReturnFormState state, CurrencyService cs) {
+    BuildContext context,
+    PurchaseReturnFormState state,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final returnedQuantity = localizedQuantityTotals(
+      aggregateQuantityTotals(
+        state.returnItems,
+        quantityOf: (item) => item.returnQuantity,
+        measurementTypeOf: (item) => item.originalItem.measurementType,
+      ),
+    );
 
     return Card(
       elevation: 0,
@@ -1101,43 +1319,65 @@ class _ReturnFormView extends StatelessWidget {
                         color: colorScheme.error.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(LucideIcons.alertCircle, size: 16, color: colorScheme.error),
+                      child: Icon(
+                        LucideIcons.alertCircle,
+                        size: 16,
+                        color: colorScheme.error,
+                      ),
                     ),
                     const SizedBox(width: 10),
-                    Text('purchases.financial_impact'.tr(),
-                        style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600)),
+                    Text(
+                      'purchases.financial_impact'.tr(),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 14),
-                _impactRow(theme, LucideIcons.package,
-                    'purchases.inventory_restored'.tr(),
-                    '+${state.totalReturnQuantity} ${'purchases.items_count'.tr()}',
-                    Colors.green),
+                _impactRow(
+                  theme,
+                  LucideIcons.package,
+                  'purchases.inventory_restored'.tr(),
+                  '+$returnedQuantity',
+                  Colors.green,
+                ),
                 const SizedBox(height: 10),
-                _impactRow(theme, LucideIcons.receipt,
-                    'purchases.subtotal'.tr(),
-                    cs.format(state.totalSubtotalCents.toBigInt().toInt()),
-                    colorScheme.onSurfaceVariant),
+                _impactRow(
+                  theme,
+                  LucideIcons.receipt,
+                  'purchases.subtotal'.tr(),
+                  cs.format(state.totalSubtotalCents.toBigInt().toInt()),
+                  colorScheme.onSurfaceVariant,
+                ),
                 if (state.totalDiscountCents > Decimal.zero) ...[
                   const SizedBox(height: 10),
-                  _impactRow(theme, LucideIcons.tag,
-                      'purchases.discount'.tr(),
-                      '- ${cs.format(state.totalDiscountCents.toBigInt().toInt())}',
-                      Colors.orange),
+                  _impactRow(
+                    theme,
+                    LucideIcons.tag,
+                    'purchases.discount'.tr(),
+                    '- ${cs.format(state.totalDiscountCents.toBigInt().toInt())}',
+                    Colors.orange,
+                  ),
                 ],
                 if (state.totalTaxCents > Decimal.zero) ...[
                   const SizedBox(height: 10),
-                  _impactRow(theme, LucideIcons.percent,
-                      'purchases.tax'.tr(),
-                      '+ ${cs.format(state.totalTaxCents.toBigInt().toInt())}',
-                      colorScheme.tertiary),
+                  _impactRow(
+                    theme,
+                    LucideIcons.percent,
+                    'purchases.tax'.tr(),
+                    '+ ${cs.format(state.totalTaxCents.toBigInt().toInt())}',
+                    colorScheme.tertiary,
+                  ),
                 ],
                 const SizedBox(height: 10),
-                _impactRow(theme, LucideIcons.coins,
-                    'purchases.supplier_credit'.tr(),
-                    cs.format(state.totalRefundCents.toBigInt().toInt()),
-                    colorScheme.error),
+                _impactRow(
+                  theme,
+                  LucideIcons.coins,
+                  'purchases.supplier_credit'.tr(),
+                  cs.format(state.totalRefundCents.toBigInt().toInt()),
+                  colorScheme.error,
+                ),
               ],
             ),
           ),
@@ -1151,19 +1391,27 @@ class _ReturnFormView extends StatelessWidget {
                 bottomRight: Radius.circular(14),
               ),
               border: Border(
-                top: BorderSide(color: colorScheme.error.withValues(alpha: 0.15)),
+                top: BorderSide(
+                  color: colorScheme.error.withValues(alpha: 0.15),
+                ),
               ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('purchases.return_total'.tr(),
-                    style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold)),
-                Text(cs.format(state.totalRefundCents.toBigInt().toInt()),
-                    style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.error)),
+                Text(
+                  'purchases.return_total'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  cs.format(state.totalRefundCents.toBigInt().toInt()),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.error,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1172,8 +1420,13 @@ class _ReturnFormView extends StatelessWidget {
     );
   }
 
-  Widget _impactRow(ThemeData theme, IconData icon, String label, String value,
-      Color valueColor) {
+  Widget _impactRow(
+    ThemeData theme,
+    IconData icon,
+    String label,
+    String value,
+    Color valueColor,
+  ) {
     final cs = theme.colorScheme;
     return Row(
       children: [
@@ -1187,11 +1440,20 @@ class _ReturnFormView extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: Text(label, style: theme.textTheme.bodySmall?.copyWith(
-              color: cs.onSurfaceVariant)),
+          child: Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: cs.onSurfaceVariant,
+            ),
+          ),
         ),
-        Text(value, style: theme.textTheme.bodyMedium?.copyWith(
-            color: valueColor, fontWeight: FontWeight.w600)),
+        Text(
+          value,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: valueColor,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ],
     );
   }
@@ -1200,16 +1462,29 @@ class _ReturnFormView extends StatelessWidget {
   // BOTTOM BAR (Premium)
   // ═══════════════════════════════════════════════════════
   Widget _buildBottomBar(
-      BuildContext context, PurchaseReturnFormState state, CurrencyService cs) {
+    BuildContext context,
+    PurchaseReturnFormState state,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final returnedQuantity = localizedQuantityTotals(
+      aggregateQuantityTotals(
+        state.returnItems,
+        quantityOf: (item) => item.returnQuantity,
+        measurementTypeOf: (item) => item.originalItem.measurementType,
+      ),
+    );
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        border: Border(top: BorderSide(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.3))),
+        border: Border(
+          top: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+          ),
+        ),
         boxShadow: [
           BoxShadow(
             color: colorScheme.shadow.withValues(alpha: 0.05),
@@ -1228,12 +1503,17 @@ class _ReturnFormView extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(LucideIcons.undo2, size: 12, color: colorScheme.onSurfaceVariant),
+                    Icon(
+                      LucideIcons.undo2,
+                      size: 12,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                     const SizedBox(width: 4),
                     Text(
-                      '${state.totalReturnQuantity} ${'purchases.items_count'.tr()}',
+                      returnedQuantity,
                       style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant),
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
@@ -1241,20 +1521,25 @@ class _ReturnFormView extends StatelessWidget {
                 Text(
                   cs.format(state.totalRefundCents.toBigInt().toInt()),
                   style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold, color: colorScheme.error),
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.error,
+                  ),
                 ),
               ],
             ),
             const Spacer(),
             OutlinedButton(
-              onPressed: state.isSubmitting ? null : () {
-                if (context.canPop()) context.pop();
-              },
+              onPressed: state.isSubmitting
+                  ? null
+                  : () {
+                      if (context.canPop()) context.pop();
+                    },
               child: Text('common.cancel'.tr()),
             ),
             const SizedBox(width: 8),
             FilledButton.icon(
-              onPressed: state.isSubmitting ||
+              onPressed:
+                  state.isSubmitting ||
                       state.isSuccess ||
                       state.returnItems.isEmpty ||
                       state.isChequeMissingDueDate
@@ -1266,18 +1551,18 @@ class _ReturnFormView extends StatelessWidget {
                           .settings
                           .allowNegativeStock;
                       context.read<PurchaseReturnFormBloc>().add(
-                            PurchaseReturnFormSubmitted(
-                              allowNegativeStock: allowNegativeStock,
-                            ),
-                          );
+                        PurchaseReturnFormSubmitted(
+                          allowNegativeStock: allowNegativeStock,
+                        ),
+                      );
                     },
-              style: FilledButton.styleFrom(
-                backgroundColor: colorScheme.error,
-              ),
+              style: FilledButton.styleFrom(backgroundColor: colorScheme.error),
               icon: state.isSubmitting
                   ? const SizedBox(
-                      width: 16, height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : const Icon(LucideIcons.undo2, size: 18),
               label: Text('purchases.process_return'.tr()),
             ),
@@ -1318,19 +1603,29 @@ class _ReturnItemTile extends StatefulWidget {
 
 class _ReturnItemTileState extends State<_ReturnItemTile> {
   late TextEditingController _qtyCtrl;
+  late MeasurementUnit _quantityUnit;
   bool _isEditing = false;
   final FocusNode _qtyFocus = FocusNode();
 
   @override
   void initState() {
     super.initState();
+    _quantityUnit = MeasurementType.fromDb(
+      widget.item.measurementType,
+    ).majorUnit;
     _qtyCtrl = TextEditingController(
-        text: '${widget.returnItem?.returnQuantity ?? 1}');
+      text: MeasuredQuantity.editableValue(
+        widget.returnItem?.returnQuantity ?? widget.item.quantityScale,
+        _quantityUnit,
+      ),
+    );
     _qtyFocus.addListener(() {
       if (_qtyFocus.hasFocus) {
         _isEditing = true;
         _qtyCtrl.selection = TextSelection(
-            baseOffset: 0, extentOffset: _qtyCtrl.text.length);
+          baseOffset: 0,
+          extentOffset: _qtyCtrl.text.length,
+        );
       } else {
         _isEditing = false;
         _applyQty(_qtyCtrl.text);
@@ -1342,9 +1637,11 @@ class _ReturnItemTileState extends State<_ReturnItemTile> {
   void didUpdateWidget(covariant _ReturnItemTile oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!_isEditing) {
-      final newQty = widget.returnItem?.returnQuantity ?? 1;
-      if (_qtyCtrl.text != '$newQty') {
-        _qtyCtrl.text = '$newQty';
+      final newQty =
+          widget.returnItem?.returnQuantity ?? widget.item.quantityScale;
+      final newText = MeasuredQuantity.editableValue(newQty, _quantityUnit);
+      if (_qtyCtrl.text != newText) {
+        _qtyCtrl.text = newText;
       }
     }
   }
@@ -1357,31 +1654,47 @@ class _ReturnItemTileState extends State<_ReturnItemTile> {
   }
 
   void _applyQty(String value) {
-    final parsed = int.tryParse(value);
-    if (parsed == null || parsed < 1) {
+    int parsed;
+    try {
+      parsed = MeasuredQuantity.parseToStored(value, _quantityUnit);
+    } on FormatException {
       // Don't update if empty or invalid - wait for valid input
       if (value.isEmpty) return;
-      widget.onQuantityChanged(1);
-    } else if (parsed > widget.maxReturnableQty) {
+      return;
+    }
+    if (parsed < 1) return;
+    if (parsed > widget.maxReturnableQty) {
       // Show error immediately when quantity exceeds max
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('purchases.max_return_qty_exceeded'.tr(
-              args: ['${widget.maxReturnableQty}'])),
+          content: Text(
+            'purchases.max_return_qty_exceeded'.tr(
+              args: [
+                localizedQuantity(
+                  widget.maxReturnableQty,
+                  widget.item.measurementType,
+                ),
+              ],
+            ),
+          ),
           behavior: SnackBarBehavior.floating,
           backgroundColor: Theme.of(context).colorScheme.error,
           duration: const Duration(seconds: 2),
         ),
       );
       // Reset the text field to max allowed and update state
-      _qtyCtrl.text = '${widget.maxReturnableQty}';
+      _qtyCtrl.text = MeasuredQuantity.editableValue(
+        widget.maxReturnableQty,
+        _quantityUnit,
+      );
       _qtyCtrl.selection = TextSelection.fromPosition(
-          TextPosition(offset: _qtyCtrl.text.length));
+        TextPosition(offset: _qtyCtrl.text.length),
+      );
       widget.onQuantityChanged(widget.maxReturnableQty);
-    } else {
-      widget.onQuantityChanged(parsed);
+      return;
     }
+    widget.onQuantityChanged(parsed);
   }
 
   @override
@@ -1407,22 +1720,28 @@ class _ReturnItemTileState extends State<_ReturnItemTile> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(displayName,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600)),
+                    Text(
+                      displayName,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(height: 2),
                     Text(
-                      '${widget.currencyService.format(widget.item.unitCostCents.toBigInt().toInt())} × ${widget.item.quantity}  •  ${widget.currencyService.format(widget.item.totalCents.toBigInt().toInt())}',
+                      '${widget.currencyService.format(widget.item.unitCostCents.toBigInt().toInt())} × ${localizedQuantity(widget.item.quantity, widget.item.measurementType)}  •  ${widget.currencyService.format(widget.item.totalCents.toBigInt().toInt())}',
                       style: theme.textTheme.bodySmall?.copyWith(
-                          color: cs.onSurfaceVariant),
+                        color: cs.onSurfaceVariant,
+                      ),
                     ),
                     if (widget.alreadyReturnedQty > 0)
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
-                          '${'purchases.already_returned'.tr()}: ${widget.alreadyReturnedQty} / ${widget.item.quantity}',
+                          '${'purchases.already_returned'.tr()}: ${localizedQuantity(widget.alreadyReturnedQty, widget.item.measurementType)} / ${localizedQuantity(widget.item.quantity, widget.item.measurementType)}',
                           style: theme.textTheme.bodySmall?.copyWith(
-                              color: Colors.orange, fontSize: 11),
+                            color: Colors.orange,
+                            fontSize: 11,
+                          ),
                         ),
                       ),
                   ],
@@ -1432,94 +1751,197 @@ class _ReturnItemTileState extends State<_ReturnItemTile> {
           ),
           if (widget.isSelected && widget.returnItem != null) ...[
             const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.only(left: 48),
-              child: Row(
-                children: [
-                  Text('purchases.return_quantity'.tr(),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                          color: cs.onSurfaceVariant)),
-                  const SizedBox(width: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: cs.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        InkWell(
-                          borderRadius: BorderRadius.circular(8),
-                          onTap: widget.returnItem!.returnQuantity > 1
-                              ? () => widget.onQuantityChanged(
-                                  widget.returnItem!.returnQuantity - 1)
-                              : null,
-                          child: Padding(
-                            padding: const EdgeInsets.all(6),
-                            child: Icon(LucideIcons.minus, size: 14,
-                                color: widget.returnItem!.returnQuantity > 1
-                                    ? cs.onSurface
-                                    : cs.onSurface.withValues(alpha: 0.3)),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = constraints.maxWidth < 520;
+
+                Widget quantityEditor() => Container(
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap:
+                            widget.returnItem!.returnQuantity >
+                                _quantityUnit.internalFactor
+                            ? () => widget.onQuantityChanged(
+                                widget.returnItem!.returnQuantity -
+                                    _quantityUnit.internalFactor,
+                              )
+                            : null,
+                        child: Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: Icon(
+                            LucideIcons.minus,
+                            size: 14,
+                            color:
+                                widget.returnItem!.returnQuantity >
+                                    _quantityUnit.internalFactor
+                                ? cs.onSurface
+                                : cs.onSurface.withValues(alpha: 0.3),
                           ),
                         ),
-                        SizedBox(
-                          width: 48,
-                          child: TextField(
-                            controller: _qtyCtrl,
-                            focusNode: _qtyFocus,
-                            keyboardType: TextInputType.number,
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.labelLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: cs.error),
-                            onTap: () => selectAllText(_qtyCtrl),
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(vertical: 4),
+                      ),
+                      SizedBox(
+                        width: 64,
+                        child: TextField(
+                          controller: _qtyCtrl,
+                          focusNode: _qtyFocus,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'[\d.,]'),
                             ),
-                            onChanged: (v) {
-                              // Update totals immediately as user types
-                              _applyQty(v);
-                            },
-                            onSubmitted: (v) {
-                              _applyQty(v);
-                              _qtyFocus.unfocus();
-                            },
+                          ],
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: cs.error,
+                          ),
+                          onTap: () => selectAllText(_qtyCtrl),
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(vertical: 4),
+                          ),
+                          onChanged: _applyQty,
+                          onSubmitted: (value) {
+                            _applyQty(value);
+                            _qtyFocus.unfocus();
+                          },
+                        ),
+                      ),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap:
+                            widget.returnItem!.returnQuantity +
+                                    _quantityUnit.internalFactor <=
+                                widget.maxReturnableQty
+                            ? () => widget.onQuantityChanged(
+                                widget.returnItem!.returnQuantity +
+                                    _quantityUnit.internalFactor,
+                              )
+                            : null,
+                        child: Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: Icon(
+                            LucideIcons.plus,
+                            size: 14,
+                            color:
+                                widget.returnItem!.returnQuantity +
+                                        _quantityUnit.internalFactor <=
+                                    widget.maxReturnableQty
+                                ? cs.onSurface
+                                : cs.onSurface.withValues(alpha: 0.3),
                           ),
                         ),
-                        InkWell(
-                          borderRadius: BorderRadius.circular(8),
-                          onTap: widget.returnItem!.returnQuantity < widget.maxReturnableQty
-                              ? () => widget.onQuantityChanged(
-                                  widget.returnItem!.returnQuantity + 1)
-                              : null,
-                          child: Padding(
-                            padding: const EdgeInsets.all(6),
-                            child: Icon(LucideIcons.plus, size: 14,
-                                color: widget.returnItem!.returnQuantity < widget.maxReturnableQty
-                                    ? cs.onSurface
-                                    : cs.onSurface.withValues(alpha: 0.3)),
-                          ),
-                        ),
-                      ],
+                      ),
+                    ],
+                  ),
+                );
+
+                Widget quantityInputs() => Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    quantityEditor(),
+                    const SizedBox(width: 8),
+                    if (MeasurementType.fromDb(
+                          widget.item.measurementType,
+                        ).minorUnit !=
+                        null) ...[
+                      DropdownButton<MeasurementUnit>(
+                        value: _quantityUnit,
+                        isDense: true,
+                        items:
+                            MeasurementType.fromDb(
+                              widget.item.measurementType,
+                            ).inputUnits.map((unit) {
+                              return DropdownMenuItem(
+                                value: unit,
+                                child: Text(
+                                  'measurement.units.${unit.dbValue}'.tr(),
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              );
+                            }).toList(),
+                        onChanged: (unit) {
+                          if (unit == null) return;
+                          final stored = widget.returnItem!.returnQuantity;
+                          setState(() {
+                            _quantityUnit = unit;
+                            _qtyCtrl.text = MeasuredQuantity.editableValue(
+                              stored,
+                              unit,
+                            );
+                          });
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Text(
+                      '/ ${localizedQuantity(widget.maxReturnableQty, widget.item.measurementType)}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
                     ),
+                  ],
+                );
+
+                final quantityLabel = Text(
+                  'purchases.return_quantity'.tr(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '/ ${widget.maxReturnableQty}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                        color: cs.onSurfaceVariant),
+                );
+                final refundLabel = Text(
+                  widget.currencyService.format(
+                    widget.returnItem!.refundCents.toBigInt().toInt(),
                   ),
-                  const Spacer(),
-                  Text(
-                    widget.currencyService.format(
-                        widget.returnItem!.refundCents.toBigInt().toInt()),
-                    style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold, color: cs.error),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: cs.error,
                   ),
-                ],
-              ),
+                );
+
+                return Padding(
+                  padding: EdgeInsetsDirectional.only(start: compact ? 0 : 48),
+                  child: compact
+                      ? Column(
+                          children: [
+                            Row(
+                              children: [
+                                quantityLabel,
+                                const Spacer(),
+                                refundLabel,
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: AlignmentDirectional.centerStart,
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: quantityInputs(),
+                              ),
+                            ),
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            quantityLabel,
+                            const SizedBox(width: 8),
+                            quantityInputs(),
+                            const Spacer(),
+                            refundLabel,
+                          ],
+                        ),
+                );
+              },
             ),
           ],
         ],

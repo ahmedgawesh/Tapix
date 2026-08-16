@@ -24,9 +24,9 @@ import '../database/app_database.dart';
 ///
 /// Storage convention (matches the rest of the app):
 ///   - All `*Cents` parameters are integer cents (e.g. 12345 = $123.45).
-///   - The DB columns use `MoneyConverter`, which round-trips integer cents
-///     unchanged. Writing via raw SQL with `Variable.withInt(cents)` is
-///     equivalent to using the typed Drift companion.
+///   - The DB columns store those integer cents directly. Do not divide by
+///     100 here: `MoneyConverter` is an integer-preserving converter, not a
+///     major-unit converter.
 class PriceHistoryService {
   PriceHistoryService._();
 
@@ -52,44 +52,37 @@ class PriceHistoryService {
   }) async {
     final costChanged = oldCostCents != newCostCents;
     final priceChanged = oldPriceCents != newPriceCents;
-    final wholesaleChanged =
-        oldWholesalePriceCents != newWholesalePriceCents;
+    final wholesaleChanged = oldWholesalePriceCents != newWholesalePriceCents;
     if (!costChanged && !priceChanged && !wholesaleChanged) return;
 
-    // The `product_price_histories.*_cents` columns use `MoneyConverter`,
-    // which round-trips Decimal ↔ integer storage. The existing
-    // `ProductLocalDatasource.createPriceHistory` writes Decimal values
-    // scaled by 1/100 (cents → dollars) and reads back via `shift(2)`.
-    // This service intentionally mirrors that contract so that writes from
-    // any sanctioned call site (purchase posting, inventory revaluation,
-    // product form, returns) end up in the same shape that the price-history
-    // surface in the product edit page already understands.
+    // `MoneyConverter` round-trips Decimal.toBigInt() ↔ SQL INTEGER, so the
+    // Decimal supplied here must itself contain integer cents. Legacy rows
+    // that used a major-unit-like convention are normalized once by schema
+    // migration 10067.
     final db = dao.attachedDatabase;
-    await db.into(db.productPriceHistories).insert(
+    await db
+        .into(db.productPriceHistories)
+        .insert(
           ProductPriceHistoriesCompanion.insert(
             productId: productId,
             variantId: Value(variantId),
-            oldCostCents: _centsToDecimal(oldCostCents),
-            newCostCents: _centsToDecimal(newCostCents),
-            oldPriceCents: _centsToDecimal(oldPriceCents),
-            newPriceCents: _centsToDecimal(newPriceCents),
+            oldCostCents: Decimal.fromInt(oldCostCents),
+            newCostCents: Decimal.fromInt(newCostCents),
+            oldPriceCents: Decimal.fromInt(oldPriceCents),
+            newPriceCents: Decimal.fromInt(newPriceCents),
             oldWholesalePriceCents: Value(
               oldWholesalePriceCents == null
                   ? null
-                  : _centsToDecimal(oldWholesalePriceCents),
+                  : Decimal.fromInt(oldWholesalePriceCents),
             ),
             newWholesalePriceCents: Value(
               newWholesalePriceCents == null
                   ? null
-                  : _centsToDecimal(newWholesalePriceCents),
+                  : Decimal.fromInt(newWholesalePriceCents),
             ),
             userId: Value(userId == 0 ? null : userId),
             changeReason: Value(changeReason),
           ),
         );
-  }
-
-  static Decimal _centsToDecimal(int cents) {
-    return (Decimal.fromInt(cents) / Decimal.fromInt(100)).toDecimal();
   }
 }

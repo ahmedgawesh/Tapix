@@ -35,21 +35,25 @@ class ImportValidationService implements ValidateImportData {
 
     final nameIndex = columnMapping.getColumnIndex('name');
     if (nameIndex == null) {
-      errors.add(ImportError(
-        rowIndex: rowIndex,
-        field: 'name',
-        message: 'import_products.validation_column_not_mapped'.tr(),
-        severity: ImportErrorSeverity.error,
-      ));
+      errors.add(
+        ImportError(
+          rowIndex: rowIndex,
+          field: 'name',
+          message: 'import_products.validation_column_not_mapped'.tr(),
+          severity: ImportErrorSeverity.error,
+        ),
+      );
     } else {
       final name = _getCellValue(row, nameIndex);
       if (name.isEmpty) {
-        errors.add(ImportError(
-          rowIndex: rowIndex,
-          field: 'name',
-          message: 'import_products.validation_name_required'.tr(),
-          severity: ImportErrorSeverity.error,
-        ));
+        errors.add(
+          ImportError(
+            rowIndex: rowIndex,
+            field: 'name',
+            message: 'import_products.validation_name_required'.tr(),
+            severity: ImportErrorSeverity.error,
+          ),
+        );
       }
     }
 
@@ -57,15 +61,21 @@ class ImportValidationService implements ValidateImportData {
     if (priceIndex != null) {
       final priceStr = _getCellValue(row, priceIndex);
       if (priceStr.isNotEmpty) {
-        final priceValidation = _validateMoneyField(priceStr, 'price', rowIndex);
+        final priceValidation = _validateMoneyField(
+          priceStr,
+          'price',
+          rowIndex,
+        );
         if (priceValidation != null) errors.add(priceValidation);
       } else {
-        errors.add(ImportError(
-          rowIndex: rowIndex,
-          field: 'price',
-          message: 'import_products.validation_price_required'.tr(),
-          severity: ImportErrorSeverity.error,
-        ));
+        errors.add(
+          ImportError(
+            rowIndex: rowIndex,
+            field: 'price',
+            message: 'import_products.validation_price_required'.tr(),
+            severity: ImportErrorSeverity.error,
+          ),
+        );
       }
     }
 
@@ -84,12 +94,14 @@ class ImportValidationService implements ValidateImportData {
       if (sku.isNotEmpty) {
         final existingProduct = await _productRepository.findBySku(sku);
         if (existingProduct != null) {
-          errors.add(ImportError(
-            rowIndex: rowIndex,
-            field: 'sku',
-            message: 'import_products.validation_sku_exists'.tr(args: [sku]),
-            severity: ImportErrorSeverity.error,
-          ));
+          errors.add(
+            ImportError(
+              rowIndex: rowIndex,
+              field: 'sku',
+              message: 'import_products.validation_sku_exists'.tr(args: [sku]),
+              severity: ImportErrorSeverity.error,
+            ),
+          );
         }
       }
     }
@@ -100,12 +112,16 @@ class ImportValidationService implements ValidateImportData {
       if (barcode.isNotEmpty) {
         final existingProduct = await _productRepository.findByBarcode(barcode);
         if (existingProduct != null) {
-          errors.add(ImportError(
-            rowIndex: rowIndex,
-            field: 'barcode',
-            message: 'import_products.validation_barcode_exists'.tr(args: [barcode]),
-            severity: ImportErrorSeverity.error,
-          ));
+          errors.add(
+            ImportError(
+              rowIndex: rowIndex,
+              field: 'barcode',
+              message: 'import_products.validation_barcode_exists'.tr(
+                args: [barcode],
+              ),
+              severity: ImportErrorSeverity.error,
+            ),
+          );
         }
       }
     }
@@ -114,7 +130,11 @@ class ImportValidationService implements ValidateImportData {
     if (stockIndex != null) {
       final stockStr = _getCellValue(row, stockIndex);
       if (stockStr.isNotEmpty) {
-        final stockValidation = _validateIntegerField(stockStr, 'stock_quantity', rowIndex);
+        final stockValidation = _validateIntegerField(
+          stockStr,
+          'stock_quantity',
+          rowIndex,
+        );
         if (stockValidation != null) errors.add(stockValidation);
       }
     }
@@ -123,7 +143,11 @@ class ImportValidationService implements ValidateImportData {
     if (minStockIndex != null) {
       final minStockStr = _getCellValue(row, minStockIndex);
       if (minStockStr.isNotEmpty) {
-        final minStockValidation = _validateIntegerField(minStockStr, 'min_quantity', rowIndex);
+        final minStockValidation = _validateIntegerField(
+          minStockStr,
+          'min_quantity',
+          rowIndex,
+        );
         if (minStockValidation != null) errors.add(minStockValidation);
       }
     }
@@ -136,7 +160,11 @@ class ImportValidationService implements ValidateImportData {
     return row[index].trim();
   }
 
-  ImportError? _validateMoneyField(String value, String fieldName, int rowIndex) {
+  ImportError? _validateMoneyField(
+    String value,
+    String fieldName,
+    int rowIndex,
+  ) {
     try {
       final parsed = Decimal.parse(value.replaceAll(',', ''));
       if (parsed < Decimal.zero) {
@@ -172,7 +200,11 @@ class ImportValidationService implements ValidateImportData {
     }
   }
 
-  ImportError? _validateIntegerField(String value, String fieldName, int rowIndex) {
+  ImportError? _validateIntegerField(
+    String value,
+    String fieldName,
+    int rowIndex,
+  ) {
     try {
       final parsed = int.parse(value);
       if (parsed < 0) {

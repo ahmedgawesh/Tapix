@@ -23,14 +23,16 @@ class PrinterSettingsSection extends StatelessWidget {
               label: 'app_settings.printer.receipt_printer'.tr(),
               value: s.receiptPrinterName,
               hint: 'app_settings.printer.receipt_printer_hint'.tr(),
-              onChanged: (v) => _patch(context, (c) => c.copyWith(receiptPrinterName: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(receiptPrinterName: v)),
             ),
             const SizedBox(height: 8),
             SettingsTextField(
               label: 'app_settings.printer.label_printer'.tr(),
               value: s.labelPrinterName,
               hint: 'app_settings.printer.label_printer_hint'.tr(),
-              onChanged: (v) => _patch(context, (c) => c.copyWith(labelPrinterName: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(labelPrinterName: v)),
             ),
             const SizedBox(height: 8),
             Padding(
@@ -38,7 +40,9 @@ class PrinterSettingsSection extends StatelessWidget {
               child: OutlinedButton.icon(
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('app_settings.printer.test_sent'.tr())),
+                    SnackBar(
+                      content: Text('app_settings.printer.test_sent'.tr()),
+                    ),
                   );
                 },
                 icon: const Icon(LucideIcons.printer),

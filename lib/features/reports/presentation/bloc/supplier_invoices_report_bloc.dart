@@ -116,8 +116,8 @@ class SupplierInvoicesReportBloc
   int? _supplierId;
 
   SupplierInvoicesReportBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
   int? get supplierId => _supplierId;
@@ -153,22 +153,26 @@ class SupplierInvoicesReportBloc
 
   Future<SupplierInvoicesData> _loadData() async {
     // ── Supplier list for the selector ──
-    final supplierRows = await _db.customSelect(
-      '''
+    final supplierRows = await _db
+        .customSelect(
+          '''
       SELECT s.id, s.name, s.phone, s.balance_cents
       FROM suppliers s WHERE s.is_active = 1
       ORDER BY s.name ASC
       ''',
-      readsFrom: {_db.suppliers},
-    ).get();
+          readsFrom: {_db.suppliers},
+        )
+        .get();
 
     final suppliers = supplierRows
-        .map((r) => SupplierInvoiceOption(
-              id: r.read<int>('id'),
-              name: r.read<String>('name'),
-              phone: r.readNullable<String>('phone'),
-              balanceCents: r.read<int>('balance_cents'),
-            ))
+        .map(
+          (r) => SupplierInvoiceOption(
+            id: r.read<int>('id'),
+            name: r.read<String>('name'),
+            phone: r.readNullable<String>('phone'),
+            balanceCents: r.read<int>('balance_cents'),
+          ),
+        )
         .toList();
 
     if (_supplierId == null) {
@@ -176,11 +180,13 @@ class SupplierInvoicesReportBloc
     }
 
     // ── Supplier info ──
-    final sRows = await _db.customSelect(
-      'SELECT name, phone, address FROM suppliers WHERE id = ?',
-      variables: [Variable.withInt(_supplierId!)],
-      readsFrom: {_db.suppliers},
-    ).get();
+    final sRows = await _db
+        .customSelect(
+          'SELECT name, phone, address FROM suppliers WHERE id = ?',
+          variables: [Variable.withInt(_supplierId!)],
+          readsFrom: {_db.suppliers},
+        )
+        .get();
     if (sRows.isEmpty) {
       return SupplierInvoicesData(dateRange: _dateRange, suppliers: suppliers);
     }
@@ -191,12 +197,15 @@ class SupplierInvoicesReportBloc
       _dateRange.endDate.year,
       _dateRange.endDate.month,
       _dateRange.endDate.day,
-      23, 59, 59,
+      23,
+      59,
+      59,
     ).toIso8601String();
 
     // ── Invoices (purchases) in range ──
-    final purchaseRows = await _db.customSelect(
-      '''
+    final purchaseRows = await _db
+        .customSelect(
+          '''
       SELECT p.id, p.purchase_number, p.supplier_invoice_ref, p.subtotal_cents,
              p.discount_cents, p.tax_cents, p.total_cents, p.paid_amount_cents,
              p.payment_method, p.status, p.purchase_date
@@ -207,13 +216,14 @@ class SupplierInvoicesReportBloc
         AND p.purchase_date <= ?
       ORDER BY p.purchase_date ASC, p.id ASC
       ''',
-      variables: [
-        Variable.withInt(_supplierId!),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.purchases},
-    ).get();
+          variables: [
+            Variable.withInt(_supplierId!),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {_db.purchases},
+        )
+        .get();
 
     int totalAmount = 0;
     int totalDiscount = 0;
@@ -265,12 +275,15 @@ class SupplierInvoicesReportBloc
   }
 
   Future<List<InvoiceLineItem>> _loadInvoiceItems(int purchaseId) async {
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT p.name AS product_name,
+             COALESCE(pv.sku, p.sku) AS sku,
              pc.name AS color_name,
              sz.name AS size_name,
              pi.quantity AS quantity,
+             pi.measurement_type AS measurement_type,
              pi.unit_cost_cents AS unit_cost_cents,
              pi.total_cents AS total_cents
       FROM purchase_items pi
@@ -281,15 +294,16 @@ class SupplierInvoicesReportBloc
       WHERE pi.purchase_id = ?
       ORDER BY pi.id ASC
       ''',
-      variables: [Variable.withInt(purchaseId)],
-      readsFrom: {
-        _db.purchaseItems,
-        _db.products,
-        _db.productVariants,
-        _db.productColors,
-        _db.sizes,
-      },
-    ).get();
+          variables: [Variable.withInt(purchaseId)],
+          readsFrom: {
+            _db.purchaseItems,
+            _db.products,
+            _db.productVariants,
+            _db.productColors,
+            _db.sizes,
+          },
+        )
+        .get();
 
     return rows.map((r) {
       final parts = <String>[];
@@ -299,8 +313,10 @@ class SupplierInvoicesReportBloc
       if (size != null && size.isNotEmpty) parts.add(size);
       return InvoiceLineItem(
         productName: r.read<String>('product_name'),
+        sku: r.readNullable<String>('sku'),
         variantLabel: parts.isEmpty ? null : parts.join(' · '),
         quantity: r.read<int>('quantity'),
+        measurementType: r.read<String>('measurement_type'),
         unitPriceCents: r.read<int>('unit_cost_cents'),
         totalCents: r.read<int>('total_cents'),
       );

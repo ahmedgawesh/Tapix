@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:drift/drift.dart' hide Column;
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -12,6 +11,7 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../services/daily_sales_pdf_service.dart';
+import '../services/daily_sales_reporting_service.dart';
 
 /// Key used to store dismissed daily summary date in SharedPreferences.
 const _kDismissedDailySummaryKey = 'dismissed_daily_summary_date';
@@ -21,7 +21,8 @@ class DailySalesSummarySection extends StatefulWidget {
   const DailySalesSummarySection({super.key});
 
   @override
-  State<DailySalesSummarySection> createState() => _DailySalesSummarySectionState();
+  State<DailySalesSummarySection> createState() =>
+      _DailySalesSummarySectionState();
 }
 
 class _DailySalesSummarySectionState extends State<DailySalesSummarySection> {
@@ -51,7 +52,7 @@ class _DailySalesSummarySectionState extends State<DailySalesSummarySection> {
     final prefs = sl<SharedPreferences>();
     final dismissedDate = prefs.getString(_kDismissedDailySummaryKey);
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    
+
     if (dismissedDate == today) {
       if (mounted) setState(() => _isDismissed = true);
     }
@@ -59,55 +60,28 @@ class _DailySalesSummarySectionState extends State<DailySalesSummarySection> {
 
   void _subscribeSummary() {
     final today = DateTime.now();
-    final startOfDay = DateTime(today.year, today.month, today.day);
-    final endOfDay = startOfDay.add(const Duration(days: 1));
+    _summarySub = DailySalesReportingService(_db)
+        .watchDay(today)
+        .map((rows) {
+          if (rows.isEmpty) {
+            return null;
+          }
 
-    _summarySub = _db.customSelect(
-      '''
-      SELECT 
-        COUNT(DISTINCT s.id) AS sale_count,
-        COALESCE(SUM(s.total_cents), 0) AS total_sales_cents,
-        COALESCE(SUM(s.subtotal_cents - s.discount_cents), 0) AS revenue_cents,
-        COALESCE(SUM(
-          (SELECT SUM(si.quantity * COALESCE(v.cost_cents, p.cost_cents))
-           FROM sale_items si
-           LEFT JOIN product_variants v ON v.id = si.variant_id
-           LEFT JOIN products p ON p.id = si.product_id
-           WHERE si.sale_id = s.id)
-        ), 0) AS cost_cents
-      FROM sales s
-      WHERE s.sale_date >= ? AND s.sale_date < ?
-        AND s.status != 'draft'
-      ''',
-      variables: [
-        Variable.withDateTime(startOfDay),
-        Variable.withDateTime(endOfDay),
-      ],
-      readsFrom: {_db.sales, _db.saleItems, _db.products, _db.productVariants},
-    ).watch().map((rows) {
-      if (rows.isEmpty) {
-        return null;
-      }
-      final row = rows.first;
-      final saleCount = row.read<int>('sale_count');
-      if (saleCount == 0) {
-        return null;
-      }
-      
-      return DailySalesSummary(
-        saleCount: saleCount,
-        totalSalesCents: row.read<int>('total_sales_cents'),
-        revenueCents: row.read<int>('revenue_cents'),
-        costCents: row.read<int>('cost_cents'),
-      );
-    }).listen((summary) {
-      if (mounted) {
-        setState(() {
-          _summary = summary;
-          _loaded = true;
+          return DailySalesSummary(
+            saleCount: rows.where((r) => r.documentType == 'sale').length,
+            totalSalesCents: rows.fold(0, (sum, r) => sum + r.grossCents),
+            revenueCents: rows.fold(0, (sum, r) => sum + r.revenueCents),
+            costCents: rows.fold(0, (sum, r) => sum + r.costCents),
+          );
+        })
+        .listen((summary) {
+          if (mounted) {
+            setState(() {
+              _summary = summary;
+              _loaded = true;
+            });
+          }
         });
-      }
-    });
   }
 
   Future<void> _dismiss() async {
@@ -143,7 +117,7 @@ class _DailySalesSummarySectionState extends State<DailySalesSummarySection> {
     return BlocBuilder<AppSettingsBloc, AppSettingsState>(
       builder: (context, settingsState) {
         final settings = settingsState.settings;
-        
+
         // Check if daily sales summary is enabled
         if (!settings.dailySalesSummary) {
           return const SizedBox.shrink();
@@ -164,8 +138,14 @@ class _DailySalesSummarySectionState extends State<DailySalesSummarySection> {
               key: const Key('daily_sales_summary'),
               direction: DismissDirection.horizontal,
               onDismissed: (_) => _dismiss(),
-              background: _buildDismissBackground(context, Alignment.centerLeft),
-              secondaryBackground: _buildDismissBackground(context, Alignment.centerRight),
+              background: _buildDismissBackground(
+                context,
+                Alignment.centerLeft,
+              ),
+              secondaryBackground: _buildDismissBackground(
+                context,
+                Alignment.centerRight,
+              ),
               child: Card(
                 elevation: 0,
                 color: isDark
@@ -183,7 +163,11 @@ class _DailySalesSummarySectionState extends State<DailySalesSummarySection> {
                       // Header
                       Row(
                         children: [
-                          const Icon(LucideIcons.trendingUp, size: 20, color: Colors.green),
+                          const Icon(
+                            LucideIcons.trendingUp,
+                            size: 20,
+                            color: Colors.green,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -200,7 +184,9 @@ class _DailySalesSummarySectionState extends State<DailySalesSummarySection> {
                             label: Text('dashboard.report'.tr()),
                             style: FilledButton.styleFrom(
                               visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -241,7 +227,9 @@ class _DailySalesSummarySectionState extends State<DailySalesSummarySection> {
                               icon: LucideIcons.trendingUp,
                               label: 'dashboard.profit'.tr(),
                               value: _cs.format(profitCents),
-                              color: profitCents >= 0 ? Colors.green : Colors.red,
+                              color: profitCents >= 0
+                                  ? Colors.green
+                                  : Colors.red,
                             ),
                           ),
                         ],
@@ -263,10 +251,7 @@ class _DailySalesSummarySectionState extends State<DailySalesSummarySection> {
     final isLeft = alignment == Alignment.centerLeft;
     return Container(
       alignment: alignment,
-      padding: EdgeInsets.only(
-        left: isLeft ? 20 : 0,
-        right: isLeft ? 0 : 20,
-      ),
+      padding: EdgeInsets.only(left: isLeft ? 20 : 0, right: isLeft ? 0 : 20),
       decoration: BoxDecoration(
         color: theme.colorScheme.errorContainer,
         borderRadius: BorderRadius.circular(14),

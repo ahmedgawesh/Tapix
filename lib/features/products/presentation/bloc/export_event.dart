@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 
 enum ExportFormat { csv, excel }
+
 enum ExportAction { save, share }
 
 abstract class ExportEvent extends RealtimeEvent with Equatable {
@@ -16,11 +17,7 @@ class LoadExportPreview extends ExportEvent {
   final int? supplierId;
   final bool? activeOnly;
 
-  const LoadExportPreview({
-    this.categoryId,
-    this.supplierId,
-    this.activeOnly,
-  });
+  const LoadExportPreview({this.categoryId, this.supplierId, this.activeOnly});
 
   @override
   List<Object?> get props => [categoryId, supplierId, activeOnly];
@@ -42,7 +39,13 @@ class ExportToCSV extends ExportEvent {
   });
 
   @override
-  List<Object?> get props => [categoryId, supplierId, activeOnly, action, selectedProductIds];
+  List<Object?> get props => [
+    categoryId,
+    supplierId,
+    activeOnly,
+    action,
+    selectedProductIds,
+  ];
 }
 
 class ExportToExcel extends ExportEvent {
@@ -61,7 +64,13 @@ class ExportToExcel extends ExportEvent {
   });
 
   @override
-  List<Object?> get props => [categoryId, supplierId, activeOnly, action, selectedProductIds];
+  List<Object?> get props => [
+    categoryId,
+    supplierId,
+    activeOnly,
+    action,
+    selectedProductIds,
+  ];
 }
 
 class UpdateExportFormat extends ExportEvent {

@@ -8,6 +8,8 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../domain/entities/product_color_entity.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/entities/product_variant_entity.dart';
@@ -28,6 +30,7 @@ class VariantEditDialog extends StatefulWidget {
   final String? productName;
   final ProductVariant? variant;
   final ProductVariantsBloc? variantsBloc;
+  final String measurementType;
 
   const VariantEditDialog({
     super.key,
@@ -35,6 +38,7 @@ class VariantEditDialog extends StatefulWidget {
     this.productName,
     this.variant,
     this.variantsBloc,
+    this.measurementType = 'piece',
   });
 
   @override
@@ -47,6 +51,7 @@ class VariantEditDialog extends StatefulWidget {
     String? productName,
     ProductVariant? variant,
     ProductVariantsBloc? existingVariantsBloc,
+    String measurementType = 'piece',
   }) {
     // Try to get blocs from context first, fallback to GetIt
     ColorsBloc? colorsBloc;
@@ -92,6 +97,7 @@ class VariantEditDialog extends StatefulWidget {
             productName: productName,
             variant: variant,
             variantsBloc: variantsBloc,
+            measurementType: measurementType,
           ),
         ),
       );
@@ -112,6 +118,7 @@ class VariantEditDialog extends StatefulWidget {
                 productName: productName,
                 variant: variant,
                 variantsBloc: variantsBloc,
+                measurementType: measurementType,
               ),
             ),
           ),
@@ -127,7 +134,6 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
   final _barcodeController = TextEditingController();
   final _stockController = TextEditingController();
 
-  
   int? _colorId;
   int? _sizeId;
   Decimal _costCents = Decimal.zero;
@@ -151,7 +157,10 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
       final v = widget.variant!;
       _skuController.text = v.sku ?? '';
       _barcodeController.text = v.barcode ?? '';
-      _stockController.text = v.stockQuantity.toString();
+      _stockController.text = MeasuredQuantity.majorValue(
+        v.stockQuantity,
+        MeasurementType.fromDb(widget.measurementType),
+      );
       _colorId = v.colorId;
       _sizeId = v.sizeId;
       // Display the GROSS supplier reference price rather than the IAS-2
@@ -179,7 +188,9 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
         _wholesalePriceCents = product.wholesalePriceCents;
         _baseSku = (product.sku ?? '').trim();
 
-        if (_skuController.text.trim().isEmpty && _baseSku != null && _baseSku!.isNotEmpty) {
+        if (_skuController.text.trim().isEmpty &&
+            _baseSku != null &&
+            _baseSku!.isNotEmpty) {
           // Pre-fill with base SKU (user must add a suffix).
           _skuController.text = '${_baseSku!}-';
         }
@@ -206,9 +217,11 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
       backgroundColor: isMobile ? null : Colors.transparent,
       appBar: isMobile
           ? AppBar(
-              title: Text(_isEditing
-                  ? 'variant_dialog.edit_title'.tr()
-                  : 'variant_dialog.add_title'.tr()),
+              title: Text(
+                _isEditing
+                    ? 'variant_dialog.edit_title'.tr()
+                    : 'variant_dialog.add_title'.tr(),
+              ),
               leading: IconButton(
                 icon: const Icon(Icons.close),
                 onPressed: () => Navigator.pop(context),
@@ -227,8 +240,7 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (_errorMessage != null)
-                      _buildErrorBanner(colorScheme),
+                    if (_errorMessage != null) _buildErrorBanner(colorScheme),
                     if (_duplicateError != null)
                       _buildDuplicateWarning(colorScheme),
                     _buildAttributesSection(colorScheme),
@@ -240,11 +252,10 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
                     _buildInventorySection(colorScheme),
                     const SizedBox(height: 24),
                     _buildStatusSection(colorScheme),
-                    if (_isEditing) ...
-                      [
-                        const SizedBox(height: 24),
-                        _buildDangerZone(colorScheme),
-                      ],
+                    if (_isEditing) ...[
+                      const SizedBox(height: 24),
+                      _buildDangerZone(colorScheme),
+                    ],
                   ],
                 ),
               ),
@@ -287,53 +298,53 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
-              if (_isEditing) ...
-                [
-                  Chip(
-                    label: Text('#${widget.variant!.id}'),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  const SizedBox(width: 8),
-                  Chip(
-                    label: Text(_isActive
+              if (_isEditing) ...[
+                Chip(
+                  label: Text('#${widget.variant!.id}'),
+                  visualDensity: VisualDensity.compact,
+                ),
+                const SizedBox(width: 8),
+                Chip(
+                  label: Text(
+                    _isActive
                         ? 'variant_dialog.active'.tr()
-                        : 'variant_dialog.inactive'.tr()),
-                    backgroundColor: _isActive
-                        ? colorScheme.primaryContainer
-                        : colorScheme.errorContainer,
-                    visualDensity: VisualDensity.compact,
+                        : 'variant_dialog.inactive'.tr(),
                   ),
-                ],
+                  backgroundColor: _isActive
+                      ? colorScheme.primaryContainer
+                      : colorScheme.errorContainer,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
               IconButton(
                 icon: const Icon(Icons.close),
                 onPressed: () => Navigator.pop(context),
               ),
             ],
           ),
-          if (widget.productName != null) ...
-            [
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(LucideIcons.package, size: 16, color: colorScheme.outline),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      widget.productName!,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.outline,
-                          ),
+          if (widget.productName != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(LucideIcons.package, size: 16, color: colorScheme.outline),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.productName!,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.outline,
                     ),
                   ),
-                  if (_isEditing)
-                    TextButton.icon(
-                      onPressed: _printLabel,
-                      icon: const Icon(LucideIcons.printer, size: 16),
-                      label: Text('variant_dialog.print_label'.tr()),
-                    ),
-                ],
-              ),
-            ],
+                ),
+                if (_isEditing)
+                  TextButton.icon(
+                    onPressed: _printLabel,
+                    icon: const Icon(LucideIcons.printer, size: 16),
+                    label: Text('variant_dialog.print_label'.tr()),
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -390,7 +401,11 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
     );
   }
 
-  Widget _buildSectionTitle(String title, IconData icon, ColorScheme colorScheme) {
+  Widget _buildSectionTitle(
+    String title,
+    IconData icon,
+    ColorScheme colorScheme,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -400,9 +415,9 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
           Text(
             title,
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: colorScheme.primary,
-                  fontWeight: FontWeight.bold,
-                ),
+              color: colorScheme.primary,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
@@ -576,24 +591,26 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
                             Navigator.pop(ctx);
                           },
                         ),
-                        ...filtered.map((color) => ListTile(
-                              leading: Container(
-                                width: 32,
-                                height: 32,
-                                decoration: BoxDecoration(
-                                  color: _parseColor(color.hexCode),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.grey.shade300),
-                                ),
+                        ...filtered.map(
+                          (color) => ListTile(
+                            leading: Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: _parseColor(color.hexCode),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.grey.shade300),
                               ),
-                              title: Text(color.name),
-                              selected: _colorId == color.id,
-                              onTap: () {
-                                setState(() => _colorId = color.id);
-                                _checkDuplicateCombination();
-                                Navigator.pop(ctx);
-                              },
-                            )),
+                            ),
+                            title: Text(color.name),
+                            selected: _colorId == color.id,
+                            onTap: () {
+                              setState(() => _colorId = color.id);
+                              _checkDuplicateCombination();
+                              Navigator.pop(ctx);
+                            },
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -672,16 +689,18 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
                             Navigator.pop(ctx);
                           },
                         ),
-                        ...filtered.map((size) => ListTile(
-                              leading: const Icon(LucideIcons.ruler),
-                              title: Text(size.name),
-                              selected: _sizeId == size.id,
-                              onTap: () {
-                                setState(() => _sizeId = size.id);
-                                _checkDuplicateCombination();
-                                Navigator.pop(ctx);
-                              },
-                            )),
+                        ...filtered.map(
+                          (size) => ListTile(
+                            leading: const Icon(LucideIcons.ruler),
+                            title: Text(size.name),
+                            selected: _sizeId == size.id,
+                            onTap: () {
+                              setState(() => _sizeId = size.id);
+                              _checkDuplicateCombination();
+                              Navigator.pop(ctx);
+                            },
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -751,9 +770,9 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
             padding: const EdgeInsets.only(top: 8),
             child: Text(
               'variant_dialog.barcode_auto_hint'.tr(),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colorScheme.outline,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: colorScheme.outline),
             ),
           ),
       ],
@@ -806,8 +825,11 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
             padding: const EdgeInsets.only(top: 8),
             child: Row(
               children: [
-                Icon(LucideIcons.alertTriangle,
-                    size: 16, color: colorScheme.tertiary),
+                Icon(
+                  LucideIcons.alertTriangle,
+                  size: 16,
+                  color: colorScheme.tertiary,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'variant_dialog.price_below_cost'.tr(),
@@ -829,75 +851,79 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
           LucideIcons.package,
           colorScheme,
         ),
-        if (_isEditing) ...
-          [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(LucideIcons.boxes, color: colorScheme.primary),
-                  const SizedBox(width: 12),
-                  Text(
-                    'variant_dialog.current_stock'.tr(),
-                    style: Theme.of(context).textTheme.bodyMedium,
+        if (_isEditing) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Icon(LucideIcons.boxes, color: colorScheme.primary),
+                const SizedBox(width: 12),
+                Text(
+                  'variant_dialog.current_stock'.tr(),
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const Spacer(),
+                Text(
+                  localizedQuantity(_currentStock, widget.measurementType),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: _currentStock <= 0
+                        ? colorScheme.error
+                        : colorScheme.primary,
                   ),
-                  const Spacer(),
-                  Text(
-                    _currentStock.toString(),
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: _currentStock <= 0
-                              ? colorScheme.error
-                              : colorScheme.primary,
-                        ),
-                  ),
-                ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              'products.stock_readonly_hint'.tr(),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Text(
-                'products.stock_readonly_hint'.tr(),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-              ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _isLoading ? null : _openInventoryAdjustment,
+            icon: const Icon(LucideIcons.warehouse, size: 16),
+            label: Text('products.adjust_inventory'.tr()),
+          ),
+        ] else ...[
+          TextFormField(
+            controller: _stockController,
+            decoration: InputDecoration(
+              labelText: 'variant_dialog.initial_stock'.tr(),
+              border: const OutlineInputBorder(),
+              prefixIcon: const Icon(LucideIcons.package),
             ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: _isLoading ? null : _openInventoryAdjustment,
-              icon: const Icon(LucideIcons.warehouse, size: 16),
-              label: Text('products.adjust_inventory'.tr()),
-            ),
-          ]
-        else ...
-          [
-            TextFormField(
-              controller: _stockController,
-              decoration: InputDecoration(
-                labelText: 'variant_dialog.initial_stock'.tr(),
-                border: const OutlineInputBorder(),
-                prefixIcon: const Icon(LucideIcons.package),
-              ),
-              keyboardType: TextInputType.number,
-              onTap: () => selectAllText(_stockController),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'common.required'.tr();
-                }
-                final n = int.tryParse(value);
-                if (n == null || n < 0) {
-                  return 'variant_dialog.invalid_stock'.tr();
-                }
-                return null;
-              },
-            ),
-          ],
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+            ],
+            onTap: () => selectAllText(_stockController),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'common.required'.tr();
+              }
+              try {
+                MeasuredQuantity.parseToStored(
+                  value,
+                  MeasurementType.fromDb(widget.measurementType).majorUnit,
+                );
+              } on FormatException {
+                return 'variant_dialog.invalid_stock'.tr();
+              }
+              return null;
+            },
+          ),
+        ],
       ],
     );
   }
@@ -938,9 +964,19 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
         ),
         SwitchListTile(
           title: Text('variant_dialog.active'.tr()),
-          subtitle: Text('variant_dialog.active_hint'.tr()),
+          subtitle: Text(
+            (widget.variant?.stockQuantity ?? 0) != 0 && _isActive
+                ? 'variant_dialog.active_stock_hint'.tr()
+                : 'variant_dialog.active_hint'.tr(),
+          ),
           value: _isActive,
-          onChanged: (value) => setState(() => _isActive = value),
+          onChanged: (value) {
+            if (!value && (widget.variant?.stockQuantity ?? 0) != 0) {
+              _showStockBlock();
+              return;
+            }
+            setState(() => _isActive = value);
+          },
           contentPadding: EdgeInsets.zero,
         ),
       ],
@@ -1071,9 +1107,9 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
 
   void _copyToClipboard(String text) {
     Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('variant_dialog.copied'.tr())),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('variant_dialog.copied'.tr())));
   }
 
   Future<void> _validateSku() async {
@@ -1126,7 +1162,9 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
         excludeVariantId: widget.variant?.id,
       );
       setState(() {
-        _duplicateError = exists ? 'variant_dialog.duplicate_combination'.tr() : null;
+        _duplicateError = exists
+            ? 'variant_dialog.duplicate_combination'.tr()
+            : null;
       });
     } catch (_) {
       setState(() => _duplicateError = null);
@@ -1178,6 +1216,10 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
   }
 
   void _confirmDelete() {
+    if ((widget.variant?.stockQuantity ?? 0) != 0) {
+      _showStockBlock();
+      return;
+    }
     showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1200,21 +1242,47 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
     ).then((confirmed) {
       if (!mounted) return;
       if (confirmed == true && widget.variant != null) {
-        context
-            .read<ProductVariantsBloc>()
-            .add(VariantDeleteRequested(widget.variant!.id));
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('variant_dialog.deleted'.tr())),
+        context.read<ProductVariantsBloc>().add(
+          VariantDeleteRequested(widget.variant!.id),
         );
+        Navigator.pop(context);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('variant_dialog.deleted'.tr())));
       }
     });
+  }
+
+  void _showStockBlock() {
+    final cs = Theme.of(context).colorScheme;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(LucideIcons.packageX, color: cs.error),
+        title: Text('variant_dialog.stock_block_title'.tr()),
+        content: Text('variant_dialog.stock_block_body'.tr()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('common.cancel'.tr()),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _openInventoryAdjustment();
+            },
+            icon: const Icon(LucideIcons.warehouse),
+            label: Text('variant_dialog.adjust_stock'.tr()),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _submit() async {
     // Capture bloc reference before any async operations
     final bloc = widget.variantsBloc ?? context.read<ProductVariantsBloc>();
-    
+
     if (!(_formKey.currentState?.validate() ?? false)) return;
     if (_duplicateError != null) {
       setState(() => _errorMessage = _duplicateError);
@@ -1231,14 +1299,13 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
       setState(() => _errorMessage = 'variant_dialog.fix_errors'.tr());
       return;
     }
-    
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-
       if (_isEditing) {
         // NOTE: stockQuantity is NEVER written from this form. The
         // defense-in-depth guard in `VariantLocalDatasource.updateVariant`
@@ -1268,29 +1335,38 @@ class _VariantEditDialogState extends State<VariantEditDialog> {
         );
         bloc.add(VariantUpdateRequested(updatedVariant));
       } else {
-        final stock = int.parse(_stockController.text);
-        bloc.add(VariantCreateRequested(
-          productId: widget.productId,
-          sku: _skuController.text.isEmpty ? null : _skuController.text.trim(),
-          barcode: _barcodeController.text.isEmpty
-              ? null
-              : _barcodeController.text.trim(),
-          colorId: _colorId,
-          sizeId: _sizeId,
-          costCents: _costCents,
-          priceCents: _priceCents,
-          wholesalePriceCents: _wholesalePriceCents,
-          stockQuantity: stock,
-        ));
+        final stock = MeasuredQuantity.parseToStored(
+          _stockController.text,
+          MeasurementType.fromDb(widget.measurementType).majorUnit,
+        );
+        bloc.add(
+          VariantCreateRequested(
+            productId: widget.productId,
+            sku: _skuController.text.isEmpty
+                ? null
+                : _skuController.text.trim(),
+            barcode: _barcodeController.text.isEmpty
+                ? null
+                : _barcodeController.text.trim(),
+            colorId: _colorId,
+            sizeId: _sizeId,
+            costCents: _costCents,
+            priceCents: _priceCents,
+            wholesalePriceCents: _wholesalePriceCents,
+            stockQuantity: stock,
+          ),
+        );
       }
 
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_isEditing
-                ? 'variant_dialog.updated'.tr()
-                : 'variant_dialog.created'.tr()),
+            content: Text(
+              _isEditing
+                  ? 'variant_dialog.updated'.tr()
+                  : 'variant_dialog.created'.tr(),
+            ),
           ),
         );
       }

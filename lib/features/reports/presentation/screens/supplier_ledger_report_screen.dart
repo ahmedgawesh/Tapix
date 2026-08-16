@@ -435,11 +435,11 @@ class _LedgerContent extends StatelessWidget {
               style: cellStyle,
             )),
             DataCell(Text(
-              row.purchaseTotalCents > 0
+              row.purchaseTotalCents != 0
                   ? cs.formatCents(row.purchaseTotalCents)
                   : '-',
               style: cellStyle?.copyWith(
-                color: row.purchaseTotalCents > 0
+                color: row.purchaseTotalCents != 0
                     ? colorScheme.error
                     : null,
               ),
@@ -460,22 +460,22 @@ class _LedgerContent extends StatelessWidget {
               style: cellStyle,
             )),
             DataCell(Text(
-              row.returnTotalCents > 0
+              row.returnTotalCents != 0
                   ? cs.formatCents(row.returnTotalCents)
                   : '-',
               style: cellStyle?.copyWith(
-                color: row.returnTotalCents > 0
+                color: row.returnTotalCents != 0
                     ? Colors.green.shade700
                     : null,
               ),
             )),
             // Payment columns
             DataCell(Text(
-              row.paymentAmountCents > 0
+              row.paymentAmountCents != 0
                   ? cs.formatCents(row.paymentAmountCents)
                   : '-',
               style: cellStyle?.copyWith(
-                color: row.paymentAmountCents > 0
+                color: row.paymentAmountCents != 0
                     ? Colors.blue.shade700
                     : null,
               ),
@@ -490,11 +490,11 @@ class _LedgerContent extends StatelessWidget {
             )),
             // Discount columns
             DataCell(Text(
-              row.discountAmountCents > 0
+              row.discountAmountCents != 0
                   ? cs.formatCents(row.discountAmountCents)
                   : '-',
               style: cellStyle?.copyWith(
-                color: row.discountAmountCents > 0
+                color: row.discountAmountCents != 0
                     ? Colors.purple.shade700
                     : null,
               ),
@@ -529,7 +529,7 @@ class _LedgerContent extends StatelessWidget {
                 style: boldCellStyle)),
             const DataCell(Text('-')),
             DataCell(Text(
-              data.totalPurchaseItems > 0
+              data.totalPurchaseItems != 0
                   ? data.totalPurchaseItems.toString()
                   : '-',
               style: boldCellStyle,
@@ -540,7 +540,7 @@ class _LedgerContent extends StatelessWidget {
             )),
             const DataCell(Text('-')),
             DataCell(Text(
-              data.totalReturnItems > 0
+              data.totalReturnItems != 0
                   ? data.totalReturnItems.toString()
                   : '-',
               style: boldCellStyle,

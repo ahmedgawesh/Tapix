@@ -41,7 +41,11 @@ class SimpleExportScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(LucideIcons.lock, size: 64, color: Theme.of(context).colorScheme.error),
+              Icon(
+                LucideIcons.lock,
+                size: 64,
+                color: Theme.of(context).colorScheme.error,
+              ),
               const SizedBox(height: 16),
               Text(
                 'import_products.permission_denied'.tr(),
@@ -87,7 +91,8 @@ class _SimpleExportScreenContent extends StatelessWidget {
       body: SafeArea(
         child: BlocConsumer<ExportBloc, RealtimeState<ExportUiData>>(
           listener: (context, state) async {
-            if (state is RealtimeSuccess<ExportUiData> && state.data.lastExport != null) {
+            if (state is RealtimeSuccess<ExportUiData> &&
+                state.data.lastExport != null) {
               await _handleExportSuccess(context, state.data.lastExport!);
               if (context.mounted) {
                 context.read<ExportBloc>().add(const ExportAcknowledged());
@@ -112,13 +117,14 @@ class _SimpleExportScreenContent extends StatelessWidget {
                 final data = state is RealtimeSuccess<ExportUiData>
                     ? state.data
                     : state is RealtimeLoading<ExportUiData>
-                        ? state.previousData
-                        : state is RealtimeError<ExportUiData>
-                            ? state.previousData
-                            : null;
+                    ? state.previousData
+                    : state is RealtimeError<ExportUiData>
+                    ? state.previousData
+                    : null;
 
                 final products = data?.products ?? const [];
-                final isExporting = data?.operationStatus == ExportOperationStatus.inProgress;
+                final isExporting =
+                    data?.operationStatus == ExportOperationStatus.inProgress;
                 final selectedIds = data?.selectedProductIds ?? <int>{};
 
                 return SingleChildScrollView(
@@ -210,8 +216,11 @@ class _SimpleExportScreenContent extends StatelessWidget {
             ExportPreviewWidget(
               products: products.cast(),
               selectedProductIds: selectedIds,
-              onToggleSelectAll: () => context.read<ExportBloc>().add(const ToggleSelectAllProducts()),
-              onToggleProduct: (id) => context.read<ExportBloc>().add(ToggleProductSelection(id)),
+              onToggleSelectAll: () => context.read<ExportBloc>().add(
+                const ToggleSelectAllProducts(),
+              ),
+              onToggleProduct: (id) =>
+                  context.read<ExportBloc>().add(ToggleProductSelection(id)),
             ),
           ],
         ),
@@ -230,7 +239,9 @@ class _SimpleExportScreenContent extends StatelessWidget {
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     final saveButton = FilledButton.icon(
-      onPressed: isExporting ? null : () => _handleExport(context, currentFormat, ExportAction.save),
+      onPressed: isExporting
+          ? null
+          : () => _handleExport(context, currentFormat, ExportAction.save),
       icon: isExporting
           ? const SizedBox(
               width: 20,
@@ -245,7 +256,8 @@ class _SimpleExportScreenContent extends StatelessWidget {
       ),
     );
 
-    final shareSupported = kIsWeb || defaultTargetPlatform != TargetPlatform.linux;
+    final shareSupported =
+        kIsWeb || defaultTargetPlatform != TargetPlatform.linux;
     final shareButton = OutlinedButton.icon(
       onPressed: (!shareSupported || isExporting)
           ? null
@@ -257,11 +269,7 @@ class _SimpleExportScreenContent extends StatelessWidget {
     if (isMobile) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          saveButton,
-          const SizedBox(height: 12),
-          shareButton,
-        ],
+        children: [saveButton, const SizedBox(height: 12), shareButton],
       );
     }
 
@@ -274,20 +282,32 @@ class _SimpleExportScreenContent extends StatelessWidget {
     );
   }
 
-  void _handleExport(BuildContext context, ExportFormat format, ExportAction action) {
+  void _handleExport(
+    BuildContext context,
+    ExportFormat format,
+    ExportAction action,
+  ) {
     LoggingService.methodEntry(
       '_handleExport',
       params: {'format': format.toString(), 'action': action.toString()},
       tag: 'SimpleExportScreen',
     );
-    
+
     final bloc = context.read<ExportBloc>();
-    
+
     if (format == ExportFormat.csv) {
-      LoggingService.blocEvent('ExportBloc', 'ExportToCSV', tag: 'SimpleExportScreen');
+      LoggingService.blocEvent(
+        'ExportBloc',
+        'ExportToCSV',
+        tag: 'SimpleExportScreen',
+      );
       bloc.add(ExportToCSV(action: action));
     } else {
-      LoggingService.blocEvent('ExportBloc', 'ExportToExcel', tag: 'SimpleExportScreen');
+      LoggingService.blocEvent(
+        'ExportBloc',
+        'ExportToExcel',
+        tag: 'SimpleExportScreen',
+      );
       bloc.add(ExportToExcel(action: action));
     }
   }
@@ -325,7 +345,8 @@ class _SimpleExportScreenContent extends StatelessWidget {
           throw Exception('Save cancelled');
         }
       } else {
-        final shareSupported = kIsWeb || defaultTargetPlatform != TargetPlatform.linux;
+        final shareSupported =
+            kIsWeb || defaultTargetPlatform != TargetPlatform.linux;
         if (!shareSupported) {
           final saver = createExportFileSaver();
           await saver.saveBytes(
@@ -334,7 +355,11 @@ class _SimpleExportScreenContent extends StatelessWidget {
             mimeType: mimeType,
           );
         } else {
-          LoggingService.serviceOperation('SharePlus', 'share', tag: 'SimpleExportScreen');
+          LoggingService.serviceOperation(
+            'SharePlus',
+            'share',
+            tag: 'SimpleExportScreen',
+          );
 
           final xFile = XFile.fromData(
             payload.bytes,
@@ -350,7 +375,7 @@ class _SimpleExportScreenContent extends StatelessWidget {
           );
         }
       }
-      
+
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -369,7 +394,7 @@ class _SimpleExportScreenContent extends StatelessWidget {
         },
         tag: 'SimpleExportScreen',
       );
-      
+
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -378,7 +403,10 @@ class _SimpleExportScreenContent extends StatelessWidget {
         ),
       );
     } finally {
-      LoggingService.methodExit('_handleExportSuccess', tag: 'SimpleExportScreen');
+      LoggingService.methodExit(
+        '_handleExportSuccess',
+        tag: 'SimpleExportScreen',
+      );
     }
   }
 }

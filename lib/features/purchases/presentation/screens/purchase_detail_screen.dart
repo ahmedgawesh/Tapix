@@ -7,6 +7,7 @@ import 'package:decimal/decimal.dart';
 
 import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/void_impact_analyzer.dart';
 import '../../../../core/widgets/pin_verification_dialog.dart';
@@ -16,6 +17,7 @@ import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../../domain/repositories/purchase_repository.dart';
 import '../../../products/domain/repositories/product_variant_repository.dart';
+import '../../../products/domain/repositories/product_repository.dart';
 import '../services/purchase_pdf_service.dart';
 import '../../../barcode/data/models/invoice_print_data.dart';
 
@@ -46,8 +48,7 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
 
     // Repair legacy supplier accounting for already-posted purchases (idempotent).
     if (purchase != null && purchase.status == 'posted') {
-      await sl<AppDatabase>()
-          .purchaseDao
+      await sl<AppDatabase>().purchaseDao
           .ensureSupplierAccountingForPostedPurchase(widget.purchaseId);
     }
 
@@ -85,7 +86,10 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
             children: [
               Icon(LucideIcons.alertCircle, size: 64, color: colorScheme.error),
               const SizedBox(height: 16),
-              Text('purchases.not_found'.tr(), style: theme.textTheme.titleLarge),
+              Text(
+                'purchases.not_found'.tr(),
+                style: theme.textTheme.titleLarge,
+              ),
             ],
           ),
         ),
@@ -146,16 +150,20 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
               child: ListTile(
                 leading: const Icon(LucideIcons.edit3),
                 title: Text('purchases.edit'.tr()),
-                dense: true, contentPadding: EdgeInsets.zero,
+                dense: true,
+                contentPadding: EdgeInsets.zero,
               ),
             ),
             PopupMenuItem(
               value: 'delete',
               child: ListTile(
                 leading: Icon(LucideIcons.trash2, color: colorScheme.error),
-                title: Text('purchases.delete'.tr(),
-                    style: TextStyle(color: colorScheme.error)),
-                dense: true, contentPadding: EdgeInsets.zero,
+                title: Text(
+                  'purchases.delete'.tr(),
+                  style: TextStyle(color: colorScheme.error),
+                ),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
               ),
             ),
           ],
@@ -166,8 +174,12 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
     if (purchase.isPosted) {
       // Check if user has edit permission
       final authState = context.read<AuthBloc>().state;
-      final canEdit = authState is AuthAuthenticated &&
-          sl<PermissionService>().hasPermission(authState.user, Permissions.editTransactions);
+      final canEdit =
+          authState is AuthAuthenticated &&
+          sl<PermissionService>().hasPermission(
+            authState.user,
+            Permissions.editTransactions,
+          );
 
       actions.add(
         FilledButton.tonalIcon(
@@ -188,7 +200,8 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                 child: ListTile(
                   leading: const Icon(LucideIcons.pencil),
                   title: Text('purchases.edit'.tr()),
-                  dense: true, contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
                 ),
               ),
             PopupMenuItem(
@@ -196,7 +209,8 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
               child: ListTile(
                 leading: const Icon(LucideIcons.printer),
                 title: Text('purchases.print_invoice'.tr()),
-                dense: true, contentPadding: EdgeInsets.zero,
+                dense: true,
+                contentPadding: EdgeInsets.zero,
               ),
             ),
             PopupMenuItem(
@@ -204,7 +218,8 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
               child: ListTile(
                 leading: const Icon(LucideIcons.share2),
                 title: Text('purchases.share_pdf'.tr()),
-                dense: true, contentPadding: EdgeInsets.zero,
+                dense: true,
+                contentPadding: EdgeInsets.zero,
               ),
             ),
             PopupMenuItem(
@@ -212,7 +227,8 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
               child: ListTile(
                 leading: const Icon(LucideIcons.scanLine),
                 title: Text('purchases.print_labels'.tr()),
-                dense: true, contentPadding: EdgeInsets.zero,
+                dense: true,
+                contentPadding: EdgeInsets.zero,
               ),
             ),
             const PopupMenuDivider(),
@@ -220,9 +236,12 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
               value: 'void',
               child: ListTile(
                 leading: Icon(LucideIcons.ban, color: colorScheme.error),
-                title: Text('purchases.void_purchase'.tr(),
-                    style: TextStyle(color: colorScheme.error)),
-                dense: true, contentPadding: EdgeInsets.zero,
+                title: Text(
+                  'purchases.void_purchase'.tr(),
+                  style: TextStyle(color: colorScheme.error),
+                ),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
               ),
             ),
           ],
@@ -236,7 +255,11 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
   // ═══════════════════════════════════════════════════════
   // WIDE LAYOUT
   // ═══════════════════════════════════════════════════════
-  Widget _buildWideLayout(BuildContext context, PurchaseEntity purchase, CurrencyService cs) {
+  Widget _buildWideLayout(
+    BuildContext context,
+    PurchaseEntity purchase,
+    CurrencyService cs,
+  ) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -276,7 +299,11 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
   // ═══════════════════════════════════════════════════════
   // NARROW LAYOUT
   // ═══════════════════════════════════════════════════════
-  Widget _buildNarrowLayout(BuildContext context, PurchaseEntity purchase, CurrencyService cs) {
+  Widget _buildNarrowLayout(
+    BuildContext context,
+    PurchaseEntity purchase,
+    CurrencyService cs,
+  ) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -292,8 +319,7 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
           _buildNotesCard(context, purchase),
           const SizedBox(height: 16),
         ],
-        if (_returns.isNotEmpty)
-          _buildReturnsCard(context, cs),
+        if (_returns.isNotEmpty) _buildReturnsCard(context, cs),
       ],
     );
   }
@@ -321,13 +347,15 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
     ];
 
     if (purchase.isVoided) {
-      steps.add(_TimelineStep(
-        label: 'purchases.status_voided'.tr(),
-        icon: LucideIcons.ban,
-        isActive: true,
-        isCompleted: false,
-        isError: true,
-      ));
+      steps.add(
+        _TimelineStep(
+          label: 'purchases.status_voided'.tr(),
+          icon: LucideIcons.ban,
+          isActive: true,
+          isCompleted: false,
+          isError: true,
+        ),
+      );
     }
 
     return Card(
@@ -349,11 +377,15 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                     margin: const EdgeInsets.only(bottom: 18),
                     decoration: BoxDecoration(
                       gradient: steps[i].isCompleted
-                          ? const LinearGradient(colors: [Colors.green, Colors.green])
-                          : LinearGradient(colors: [
-                              cs.outlineVariant.withValues(alpha: 0.5),
-                              cs.outlineVariant.withValues(alpha: 0.3),
-                            ]),
+                          ? const LinearGradient(
+                              colors: [Colors.green, Colors.green],
+                            )
+                          : LinearGradient(
+                              colors: [
+                                cs.outlineVariant.withValues(alpha: 0.5),
+                                cs.outlineVariant.withValues(alpha: 0.3),
+                              ],
+                            ),
                       borderRadius: BorderRadius.circular(1),
                     ),
                   ),
@@ -382,7 +414,8 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 40, height: 40,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
             gradient: (step.isCompleted || step.isActive)
                 ? LinearGradient(
@@ -391,21 +424,39 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                     end: Alignment.bottomRight,
                   )
                 : null,
-            color: (step.isCompleted || step.isActive) ? null : cs.surfaceContainerHighest,
+            color: (step.isCompleted || step.isActive)
+                ? null
+                : cs.surfaceContainerHighest,
             shape: BoxShape.circle,
             boxShadow: (step.isCompleted || step.isActive)
-                ? [BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 2))]
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
                 : null,
           ),
-          child: Icon(step.icon, size: 18,
-              color: (step.isCompleted || step.isActive) ? Colors.white : cs.onSurfaceVariant),
+          child: Icon(
+            step.icon,
+            size: 18,
+            color: (step.isCompleted || step.isActive)
+                ? Colors.white
+                : cs.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 6),
-        Text(step.label,
-            style: theme.textTheme.labelSmall?.copyWith(
-                color: (step.isCompleted || step.isActive) ? color : cs.onSurfaceVariant,
-                fontWeight: FontWeight.w600),
-            textAlign: TextAlign.center),
+        Text(
+          step.label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: (step.isCompleted || step.isActive)
+                ? color
+                : cs.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+          textAlign: TextAlign.center,
+        ),
       ],
     );
   }
@@ -413,11 +464,15 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
   // ═══════════════════════════════════════════════════════
   // INFO CARD (Invoice-style header)
   // ═══════════════════════════════════════════════════════
-  Widget _buildInfoCard(BuildContext context, PurchaseEntity purchase, CurrencyService cs) {
+  Widget _buildInfoCard(
+    BuildContext context,
+    PurchaseEntity purchase,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final supplierInitial = purchase.supplierName != null &&
-            purchase.supplierName!.isNotEmpty
+    final supplierInitial =
+        purchase.supplierName != null && purchase.supplierName!.isNotEmpty
         ? purchase.supplierName![0].toUpperCase()
         : '?';
 
@@ -425,7 +480,9 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -437,76 +494,136 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
               Row(
                 children: [
                   Container(
-                    width: 44, height: 44,
+                    width: 44,
+                    height: 44,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [colorScheme.primary, colorScheme.primary.withValues(alpha: 0.7)],
+                        colors: [
+                          colorScheme.primary,
+                          colorScheme.primary.withValues(alpha: 0.7),
+                        ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     alignment: Alignment.center,
-                    child: Text(supplierInitial,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                            color: Colors.white, fontWeight: FontWeight.bold)),
+                    child: Text(
+                      supplierInitial,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('purchases.supplier'.tr(),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                                letterSpacing: 0.5)),
-                        Text(purchase.supplierName!,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w600)),
+                        Text(
+                          'purchases.supplier'.tr(),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        Text(
+                          purchase.supplierName!,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 ],
               ),
-              Divider(height: 24, color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+              Divider(
+                height: 24,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+              ),
             ],
             // Details grid
-            _detailRow(theme, LucideIcons.hash, 'purchases.number'.tr(),
-                purchase.purchaseNumber),
+            _detailRow(
+              theme,
+              LucideIcons.hash,
+              'purchases.number'.tr(),
+              purchase.purchaseNumber,
+            ),
             const SizedBox(height: 10),
-            _detailRow(theme, LucideIcons.calendar, 'purchases.date'.tr(),
-                DateFormat.yMMMd().format(purchase.purchaseDate)),
-            if (purchase.dueDate != null) ...[              const SizedBox(height: 10),
-              _detailRow(theme, LucideIcons.calendarClock, 'purchases.due_date'.tr(),
-                  DateFormat.yMMMd().format(purchase.dueDate!),
-                  valueColor: purchase.isOverdue ? colorScheme.error : null),
+            _detailRow(
+              theme,
+              LucideIcons.calendar,
+              'purchases.date'.tr(),
+              DateFormat.yMMMd().format(purchase.purchaseDate),
+            ),
+            if (purchase.dueDate != null) ...[
+              const SizedBox(height: 10),
+              _detailRow(
+                theme,
+                LucideIcons.calendarClock,
+                'purchases.due_date'.tr(),
+                DateFormat.yMMMd().format(purchase.dueDate!),
+                valueColor: purchase.isOverdue ? colorScheme.error : null,
+              ),
             ],
-            if (purchase.paymentMethod != null && purchase.paymentMethod!.isNotEmpty) ...[              const SizedBox(height: 10),
-              _detailRow(theme, LucideIcons.creditCard, 'purchases.payment_method'.tr(),
-                  purchase.paymentMethod!),
+            if (purchase.paymentMethod != null &&
+                purchase.paymentMethod!.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _detailRow(
+                theme,
+                LucideIcons.creditCard,
+                'purchases.payment_method'.tr(),
+                purchase.paymentMethod!,
+              ),
             ],
-            if (purchase.supplierInvoiceRef != null && purchase.supplierInvoiceRef!.isNotEmpty) ...[              const SizedBox(height: 10),
-              _detailRow(theme, LucideIcons.fileText, 'purchases.supplier_ref'.tr(),
-                  purchase.supplierInvoiceRef!),
+            if (purchase.supplierInvoiceRef != null &&
+                purchase.supplierInvoiceRef!.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _detailRow(
+                theme,
+                LucideIcons.fileText,
+                'purchases.supplier_ref'.tr(),
+                purchase.supplierInvoiceRef!,
+              ),
             ],
             const SizedBox(height: 10),
-            _detailRow(theme, LucideIcons.clock, 'purchases.created_at'.tr(),
-                DateFormat.yMMMd().add_jm().format(purchase.createdAt)),
-            if (purchase.isOverdue) ...[              const SizedBox(height: 12),
+            _detailRow(
+              theme,
+              LucideIcons.clock,
+              'purchases.created_at'.tr(),
+              DateFormat.yMMMd().add_jm().format(purchase.createdAt),
+            ),
+            if (purchase.isOverdue) ...[
+              const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: colorScheme.error.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: colorScheme.error.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: colorScheme.error.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    Icon(LucideIcons.alertTriangle, size: 16, color: colorScheme.error),
+                    Icon(
+                      LucideIcons.alertTriangle,
+                      size: 16,
+                      color: colorScheme.error,
+                    ),
                     const SizedBox(width: 8),
-                    Text('purchases.overdue'.tr(),
-                        style: theme.textTheme.labelMedium?.copyWith(
-                            color: colorScheme.error, fontWeight: FontWeight.w600)),
+                    Text(
+                      'purchases.overdue'.tr(),
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: colorScheme.error,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -517,8 +634,13 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
     );
   }
 
-  Widget _detailRow(ThemeData theme, IconData icon, String label, String value,
-      {Color? valueColor}) {
+  Widget _detailRow(
+    ThemeData theme,
+    IconData icon,
+    String label,
+    String value, {
+    Color? valueColor,
+  }) {
     final cs = theme.colorScheme;
     return Row(
       children: [
@@ -531,14 +653,23 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
           child: Icon(icon, size: 14, color: cs.onSurfaceVariant),
         ),
         const SizedBox(width: 10),
-        Text(label, style: theme.textTheme.bodySmall?.copyWith(
-            color: cs.onSurfaceVariant)),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: cs.onSurfaceVariant,
+          ),
+        ),
         const Spacer(),
         Flexible(
-          child: Text(value,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w500, color: valueColor),
-              textAlign: TextAlign.end, overflow: TextOverflow.ellipsis),
+          child: Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+              color: valueColor,
+            ),
+            textAlign: TextAlign.end,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );
@@ -569,7 +700,9 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -583,28 +716,44 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [colorScheme.primary, colorScheme.primary.withValues(alpha: 0.7)],
+                      colors: [
+                        colorScheme.primary,
+                        colorScheme.primary.withValues(alpha: 0.7),
+                      ],
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(LucideIcons.shoppingCart, size: 16, color: Colors.white),
+                  child: const Icon(
+                    LucideIcons.shoppingCart,
+                    size: 16,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('purchases.items'.tr(),
-                    style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600)),
+                Text(
+                  'purchases.items'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 if (_items.isNotEmpty) ...[
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: colorScheme.primaryContainer,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Text('${_items.length}',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                            color: colorScheme.onPrimaryContainer,
-                            fontWeight: FontWeight.bold)),
+                    child: Text(
+                      '${_items.length}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
               ],
@@ -617,12 +766,18 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                 padding: const EdgeInsets.all(32),
                 child: Column(
                   children: [
-                    Icon(LucideIcons.packageOpen, size: 40,
-                        color: colorScheme.onSurface.withValues(alpha: 0.15)),
+                    Icon(
+                      LucideIcons.packageOpen,
+                      size: 40,
+                      color: colorScheme.onSurface.withValues(alpha: 0.15),
+                    ),
                     const SizedBox(height: 8),
-                    Text('purchases.no_items'.tr(),
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant)),
+                    Text(
+                      'purchases.no_items'.tr(),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -632,10 +787,16 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                color: colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.5,
+                ),
                 border: Border(
-                  top: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
-                  bottom: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                  top: BorderSide(
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+                  ),
+                  bottom: BorderSide(
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+                  ),
                 ),
               ),
               child: Row(
@@ -643,29 +804,38 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                   const SizedBox(width: 32),
                   Expanded(
                     flex: 3,
-                    child: Text('purchases.product_col'.tr(),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5)),
+                    child: Text(
+                      'purchases.product_col'.tr(),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
                   ),
                   SizedBox(
                     width: 50,
-                    child: Text('purchases.qty_col'.tr(),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5),
-                        textAlign: TextAlign.center),
+                    child: Text(
+                      'purchases.qty_col'.tr(),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                   Expanded(
                     flex: 2,
-                    child: Text('purchases.total'.tr(),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5),
-                        textAlign: TextAlign.end),
+                    child: Text(
+                      'purchases.total'.tr(),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                      textAlign: TextAlign.end,
+                    ),
                   ),
                 ],
               ),
@@ -687,181 +857,205 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                 final sizeName = item.sizeName?.trim();
                 final shade = tryParseHexColor(item.colorHex);
 
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                      color: isEven
-                          ? Colors.transparent
-                          : colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: 26,
-                            height: 26,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: colorScheme.primaryContainer.withValues(alpha: 0.6),
-                              borderRadius: BorderRadius.circular(7),
-                            ),
-                            child: Text(
-                              '${index + 1}',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: colorScheme.onPrimaryContainer,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 11,
-                              ),
-                            ),
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  color: isEven
+                      ? Colors.transparent
+                      : colorScheme.surfaceContainerHighest.withValues(
+                          alpha: 0.2,
+                        ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 26,
+                        height: 26,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer.withValues(
+                            alpha: 0.6,
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            flex: 3,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  item.productName ?? 'Product #${item.productId}',
-                                  style: theme.textTheme.bodyMedium
-                                      ?.copyWith(fontWeight: FontWeight.w500),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                if ((sizeName != null && sizeName.isNotEmpty) || shade != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 2),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        if (sizeName != null && sizeName.isNotEmpty)
-                                          Flexible(
-                                            child: Text(
-                                              sizeName,
-                                              style: theme.textTheme.bodySmall?.copyWith(
-                                                color: colorScheme.onSurfaceVariant,
+                          borderRadius: BorderRadius.circular(7),
+                        ),
+                        child: Text(
+                          '${index + 1}',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onPrimaryContainer,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 3,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.productName ?? 'Product #${item.productId}',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if ((sizeName != null && sizeName.isNotEmpty) ||
+                                shade != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (sizeName != null && sizeName.isNotEmpty)
+                                      Flexible(
+                                        child: Text(
+                                          sizeName,
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: colorScheme
+                                                    .onSurfaceVariant,
                                                 fontSize: 11,
                                               ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        if (sizeName != null && sizeName.isNotEmpty && shade != null)
-                                          const SizedBox(width: 6),
-                                        if (shade != null)
-                                          Container(
-                                            width: 10,
-                                            height: 10,
-                                            decoration: BoxDecoration(
-                                              color: shade,
-                                              shape: BoxShape.circle,
-                                              border: Border.all(color: colorScheme.outline),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                if (item.variantSku != null)
-                                  Container(
-                                    margin: const EdgeInsets.only(top: 2),
-                                    padding:
-                                        const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                    decoration: BoxDecoration(
-                                      color: colorScheme.tertiaryContainer.withValues(alpha: 0.4),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      item.variantSku!,
-                                      style: theme.textTheme.labelSmall?.copyWith(
-                                        color: colorScheme.onTertiaryContainer,
-                                        fontSize: 10,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                Text(
-                                  cs.format(item.unitCostCents.toBigInt().toInt()),
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                                if (item.discountCents > Decimal.zero)
-                                  Text(
-                                    '-${cs.format(item.discountCents.toBigInt().toInt())}',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.tertiary,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                if (item.taxCents > Decimal.zero)
-                                  Text(
-                                    '+${cs.format(item.taxCents.toBigInt().toInt())}',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.secondary,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                if (item.expiryDate != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 2),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          LucideIcons.calendarClock,
-                                          size: 10,
-                                          color: Colors.orange.shade700,
-                                        ),
-                                        const SizedBox(width: 3),
-                                        Flexible(
-                                          child: Text(
-                                            '${'purchases.expiry_date'.tr()}: ${item.expiryDate!.toLocal().toString().split(' ').first}',
-                                            style: theme.textTheme.bodySmall?.copyWith(
-                                              color: colorScheme.onSurfaceVariant,
-                                              fontSize: 10,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
+                                    if (sizeName != null &&
+                                        sizeName.isNotEmpty &&
+                                        shade != null)
+                                      const SizedBox(width: 6),
+                                    if (shade != null)
+                                      Container(
+                                        width: 10,
+                                        height: 10,
+                                        decoration: BoxDecoration(
+                                          color: shade,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: colorScheme.outline,
                                           ),
                                         ),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          SizedBox(
-                            width: 50,
-                            child: Text(
-                              '${item.quantity}',
-                              style: theme.textTheme.bodyMedium
-                                  ?.copyWith(fontWeight: FontWeight.w600),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                          Expanded(
-                            flex: 2,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  cs.format(item.totalCents.toBigInt().toInt()),
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                    color: colorScheme.primary,
-                                  ),
+                                      ),
+                                  ],
                                 ),
-                                Text(
-                                  cs.format(item.subtotalCents.toBigInt().toInt()),
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
+                              ),
+                            if (item.variantSku != null)
+                              Container(
+                                margin: const EdgeInsets.only(top: 2),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.tertiaryContainer
+                                      .withValues(alpha: 0.4),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  item.variantSku!,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: colorScheme.onTertiaryContainer,
                                     fontSize: 10,
                                   ),
                                 ),
-                              ],
+                              ),
+                            Text(
+                              cs.format(item.unitCostCents.toBigInt().toInt()),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                                fontSize: 11,
+                              ),
                             ),
-                          ),
-                        ],
+                            if (item.discountCents > Decimal.zero)
+                              Text(
+                                '-${cs.format(item.discountCents.toBigInt().toInt())}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.tertiary,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            if (item.taxCents > Decimal.zero)
+                              Text(
+                                '+${cs.format(item.taxCents.toBigInt().toInt())}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.secondary,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            if (item.expiryDate != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      LucideIcons.calendarClock,
+                                      size: 10,
+                                      color: Colors.orange.shade700,
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Flexible(
+                                      child: Text(
+                                        '${'purchases.expiry_date'.tr()}: ${item.expiryDate!.toLocal().toString().split(' ').first}',
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color:
+                                                  colorScheme.onSurfaceVariant,
+                                              fontSize: 10,
+                                            ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
-                    );
-                  },
-                ),
+                      SizedBox(
+                        width: 50,
+                        child: Text(
+                          localizedQuantity(
+                            item.quantity,
+                            item.measurementType,
+                          ),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              cs.format(item.totalCents.toBigInt().toInt()),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: colorScheme.primary,
+                              ),
+                            ),
+                            Text(
+                              cs.format(item.subtotalCents.toBigInt().toInt()),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ],
         ],
       ),
@@ -871,17 +1065,26 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
   // ═══════════════════════════════════════════════════════
   // TOTALS CARD (Invoice footer style)
   // ═══════════════════════════════════════════════════════
-  Widget _buildTotalsCard(BuildContext context, PurchaseEntity purchase, CurrencyService cs) {
+  Widget _buildTotalsCard(
+    BuildContext context,
+    PurchaseEntity purchase,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final totalItems = _items.length;
+    final allPieceItems = _items.every(
+      (item) => item.measurementType == 'piece',
+    );
     final totalPieces = _items.fold<int>(0, (sum, item) => sum + item.quantity);
 
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Column(
         children: [
@@ -890,24 +1093,43 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Column(
               children: [
-                _summaryRow(theme, 'purchases.total_items_count'.tr(),
-                    '$totalItems', icon: LucideIcons.layers),
-                const SizedBox(height: 8),
-                _summaryRow(theme, 'purchases.total_pieces_count'.tr(),
-                    '$totalPieces', icon: LucideIcons.package),
-                const SizedBox(height: 8),
-                _summaryRow(theme, 'purchases.subtotal'.tr(),
-                    cs.format(purchase.subtotalCents.toBigInt().toInt())),
-                if (purchase.discountCents > Decimal.zero) ...[
+                _summaryRow(
+                  theme,
+                  'purchases.total_items_count'.tr(),
+                  '$totalItems',
+                  icon: LucideIcons.layers,
+                ),
+                if (allPieceItems) ...[
                   const SizedBox(height: 8),
-                  _summaryRow(theme, 'purchases.discount'.tr(),
-                      '- ${cs.format(purchase.discountCents.toBigInt().toInt())}',
-                      valueColor: colorScheme.tertiary,
-                      icon: LucideIcons.percent),
+                  _summaryRow(
+                    theme,
+                    'purchases.total_pieces_count'.tr(),
+                    '$totalPieces',
+                    icon: LucideIcons.package,
+                  ),
                 ],
                 const SizedBox(height: 8),
-                _summaryRow(theme, 'purchases.tax'.tr(),
-                    cs.format(purchase.taxCents.toBigInt().toInt())),
+                _summaryRow(
+                  theme,
+                  'purchases.subtotal'.tr(),
+                  cs.format(purchase.subtotalCents.toBigInt().toInt()),
+                ),
+                if (purchase.discountCents > Decimal.zero) ...[
+                  const SizedBox(height: 8),
+                  _summaryRow(
+                    theme,
+                    'purchases.discount'.tr(),
+                    '- ${cs.format(purchase.discountCents.toBigInt().toInt())}',
+                    valueColor: colorScheme.tertiary,
+                    icon: LucideIcons.percent,
+                  ),
+                ],
+                const SizedBox(height: 8),
+                _summaryRow(
+                  theme,
+                  'purchases.tax'.tr(),
+                  cs.format(purchase.taxCents.toBigInt().toInt()),
+                ),
               ],
             ),
           ),
@@ -918,20 +1140,26 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
             decoration: BoxDecoration(
               color: colorScheme.primary.withValues(alpha: 0.06),
               border: Border(
-                top: BorderSide(color: colorScheme.primary.withValues(alpha: 0.2)),
+                top: BorderSide(
+                  color: colorScheme.primary.withValues(alpha: 0.2),
+                ),
               ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('purchases.total'.tr(),
-                    style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold)),
+                Text(
+                  'purchases.total'.tr(),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 Text(
                   cs.format(purchase.totalCents.toBigInt().toInt()),
                   style: theme.textTheme.titleLarge?.copyWith(
-                      color: colorScheme.primary,
-                      fontWeight: FontWeight.bold),
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
@@ -944,8 +1172,10 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                 color: purchase.isFullyPaid
                     ? Colors.green.withValues(alpha: 0.06)
                     : purchase.isOverdue
-                        ? colorScheme.error.withValues(alpha: 0.06)
-                        : colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                    ? colorScheme.error.withValues(alpha: 0.06)
+                    : colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.3,
+                      ),
                 borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(14),
                   bottomRight: Radius.circular(14),
@@ -960,44 +1190,68 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            purchase.isFullyPaid ? LucideIcons.checkCircle : LucideIcons.wallet,
+                            purchase.isFullyPaid
+                                ? LucideIcons.checkCircle
+                                : LucideIcons.wallet,
                             size: 14,
-                            color: purchase.isFullyPaid ? Colors.green : colorScheme.onSurfaceVariant,
+                            color: purchase.isFullyPaid
+                                ? Colors.green
+                                : colorScheme.onSurfaceVariant,
                           ),
                           const SizedBox(width: 6),
-                          Text('purchases.paid'.tr(),
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: purchase.isFullyPaid ? Colors.green : colorScheme.onSurfaceVariant)),
+                          Text(
+                            'purchases.paid'.tr(),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: purchase.isFullyPaid
+                                  ? Colors.green
+                                  : colorScheme.onSurfaceVariant,
+                            ),
+                          ),
                         ],
                       ),
                       Text(
                         cs.format(purchase.paidAmountCents.toBigInt().toInt()),
                         style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: purchase.isFullyPaid ? Colors.green : null),
+                          fontWeight: FontWeight.w600,
+                          color: purchase.isFullyPaid ? Colors.green : null,
+                        ),
                       ),
                     ],
                   ),
-                  if (!purchase.isFullyPaid) ...[                    const SizedBox(height: 6),
+                  if (!purchase.isFullyPaid) ...[
+                    const SizedBox(height: 6),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(LucideIcons.arrowRight, size: 14,
-                                color: purchase.isOverdue ? colorScheme.error : colorScheme.onSurfaceVariant),
+                            Icon(
+                              LucideIcons.arrowRight,
+                              size: 14,
+                              color: purchase.isOverdue
+                                  ? colorScheme.error
+                                  : colorScheme.onSurfaceVariant,
+                            ),
                             const SizedBox(width: 6),
-                            Text('purchases.remaining'.tr(),
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: purchase.isOverdue ? colorScheme.error : colorScheme.onSurfaceVariant)),
+                            Text(
+                              'purchases.remaining'.tr(),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: purchase.isOverdue
+                                    ? colorScheme.error
+                                    : colorScheme.onSurfaceVariant,
+                              ),
+                            ),
                           ],
                         ),
                         Text(
                           cs.format(purchase.remainingCents.toBigInt().toInt()),
                           style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: purchase.isOverdue ? colorScheme.error : null),
+                            fontWeight: FontWeight.w600,
+                            color: purchase.isOverdue
+                                ? colorScheme.error
+                                : null,
+                          ),
                         ),
                       ],
                     ),
@@ -1010,8 +1264,14 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
     );
   }
 
-  Widget _summaryRow(ThemeData theme, String label, String value,
-      {bool isBold = false, Color? valueColor, IconData? icon}) {
+  Widget _summaryRow(
+    ThemeData theme,
+    String label,
+    String value, {
+    bool isBold = false,
+    Color? valueColor,
+    IconData? icon,
+  }) {
     final cs = theme.colorScheme;
     final style = isBold
         ? theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)
@@ -1026,12 +1286,25 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
               Icon(icon, size: 14, color: valueColor ?? cs.onSurfaceVariant),
               const SizedBox(width: 6),
             ],
-            Text(label, style: style?.copyWith(
-                color: isBold ? null : cs.onSurfaceVariant)),
+            Text(
+              label,
+              style: style?.copyWith(
+                color: isBold ? null : cs.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
-        Text(value, style: (isBold ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium)
-            ?.copyWith(color: valueColor, fontWeight: isBold ? FontWeight.bold : FontWeight.w500)),
+        Text(
+          value,
+          style:
+              (isBold
+                      ? theme.textTheme.titleMedium
+                      : theme.textTheme.bodyMedium)
+                  ?.copyWith(
+                    color: valueColor,
+                    fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+                  ),
+        ),
       ],
     );
   }
@@ -1062,12 +1335,19 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                     color: Colors.amber.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(LucideIcons.stickyNote, size: 16, color: Colors.amber.shade700),
+                  child: Icon(
+                    LucideIcons.stickyNote,
+                    size: 16,
+                    color: Colors.amber.shade700,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('purchases.notes'.tr(),
-                    style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600)),
+                Text(
+                  'purchases.notes'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -1078,9 +1358,13 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                 color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(purchase.notes!,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                      color: cs.onSurface, height: 1.4)),
+              child: Text(
+                purchase.notes!,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurface,
+                  height: 1.4,
+                ),
+              ),
             ),
           ],
         ),
@@ -1095,7 +1379,9 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final totalRefund = _returns.fold<int>(
-        0, (sum, r) => sum + r.totalCents.toBigInt().toInt());
+      0,
+      (sum, r) => sum + r.totalCents.toBigInt().toInt(),
+    );
 
     return Card(
       elevation: 0,
@@ -1114,32 +1400,52 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [colorScheme.error, colorScheme.error.withValues(alpha: 0.7)],
+                      colors: [
+                        colorScheme.error,
+                        colorScheme.error.withValues(alpha: 0.7),
+                      ],
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(LucideIcons.undo2, size: 16, color: Colors.white),
+                  child: const Icon(
+                    LucideIcons.undo2,
+                    size: 16,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('purchases.returns'.tr(),
-                    style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600)),
+                Text(
+                  'purchases.returns'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: colorScheme.errorContainer,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text('${_returns.length}',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: colorScheme.onErrorContainer,
-                          fontWeight: FontWeight.bold)),
+                  child: Text(
+                    '${_returns.length}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onErrorContainer,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
                 const Spacer(),
-                Text(cs.format(totalRefund),
-                    style: theme.textTheme.titleSmall?.copyWith(
-                        color: colorScheme.error, fontWeight: FontWeight.bold)),
+                Text(
+                  cs.format(totalRefund),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: colorScheme.error,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1149,51 +1455,79 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
             physics: const NeverScrollableScrollPhysics(),
             itemCount: _returns.length,
             separatorBuilder: (_, idx) => Divider(
-                height: 1, indent: 16, endIndent: 16,
-                color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+              height: 1,
+              indent: 16,
+              endIndent: 16,
+              color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+            ),
             itemBuilder: (context, index) {
               final ret = _returns[index];
               return InkWell(
                 onTap: () => context.push('/purchases/returns/${ret.id}'),
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 10,
+                    horizontal: 16,
+                  ),
                   child: Row(
                     children: [
                       Container(
-                        width: 36, height: 36,
+                        width: 36,
+                        height: 36,
                         decoration: BoxDecoration(
-                          color: colorScheme.errorContainer.withValues(alpha: 0.25),
+                          color: colorScheme.errorContainer.withValues(
+                            alpha: 0.25,
+                          ),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         alignment: Alignment.center,
-                        child: Icon(LucideIcons.undo2, size: 16, color: colorScheme.error),
+                        child: Icon(
+                          LucideIcons.undo2,
+                          size: 16,
+                          color: colorScheme.error,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(ret.returnNumber,
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w600)),
+                            Text(
+                              ret.returnNumber,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                             Row(
                               children: [
-                                Icon(LucideIcons.calendar, size: 11,
-                                    color: colorScheme.onSurfaceVariant),
+                                Icon(
+                                  LucideIcons.calendar,
+                                  size: 11,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
                                 const SizedBox(width: 4),
-                                Text(DateFormat.yMMMd().format(ret.returnDate),
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                        color: colorScheme.onSurfaceVariant, fontSize: 11)),
+                                Text(
+                                  DateFormat.yMMMd().format(ret.returnDate),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                    fontSize: 11,
+                                  ),
+                                ),
                               ],
                             ),
                             if (ret.reason != null && ret.reason!.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(top: 2),
-                                child: Text(ret.reason!,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                        color: colorScheme.onSurfaceVariant, fontStyle: FontStyle.italic),
-                                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                                child: Text(
+                                  ret.reason!,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                           ],
                         ),
@@ -1201,7 +1535,9 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                       Text(
                         cs.format(ret.totalCents.toBigInt().toInt()),
                         style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.bold, color: colorScheme.error),
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.error,
+                        ),
                       ),
                     ],
                   ),
@@ -1230,16 +1566,21 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
           await repo.postPurchase(widget.purchaseId);
           if (!mounted) return;
           messenger.showSnackBar(
-            SnackBar(content: Text('purchases.posted_success'.tr()),
-                behavior: SnackBarBehavior.floating),
+            SnackBar(
+              content: Text('purchases.posted_success'.tr()),
+              behavior: SnackBarBehavior.floating,
+            ),
           );
           _loadPurchase();
         } catch (e) {
           debugPrint('[PurchaseDetailScreen] postPurchase failed: $e');
           if (!mounted) return;
           messenger.showSnackBar(
-            SnackBar(content: Text(e.toString()),
-                backgroundColor: errorColor, behavior: SnackBarBehavior.floating),
+            SnackBar(
+              content: Text(e.toString()),
+              backgroundColor: errorColor,
+              behavior: SnackBarBehavior.floating,
+            ),
           );
         }
         break;
@@ -1261,8 +1602,9 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
         // 2026-05-13 — pre-flight integrity check via VoidImpactAnalyzer.
         // Surfaces entangled adjustment returns, projected negative stock,
         // and estimated GL impact (AP/Inventory) BEFORE the void runs.
-        final report = await VoidImpactAnalyzer(sl<AppDatabase>())
-            .analyzePurchaseVoid(widget.purchaseId);
+        final report = await VoidImpactAnalyzer(
+          sl<AppDatabase>(),
+        ).analyzePurchaseVoid(widget.purchaseId);
         if (!context.mounted) return;
         final confirmed = await VoidImpactDialog.show(context, report);
         if (confirmed) {
@@ -1270,8 +1612,10 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
             await repo.voidPurchase(widget.purchaseId);
             if (!mounted) return;
             messenger.showSnackBar(
-              SnackBar(content: Text('purchases.voided_success'.tr()),
-                  behavior: SnackBarBehavior.floating),
+              SnackBar(
+                content: Text('purchases.voided_success'.tr()),
+                behavior: SnackBarBehavior.floating,
+              ),
             );
             _loadPurchase();
           } on VoidBlockedByImpactException catch (e) {
@@ -1286,7 +1630,11 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
             showDialog<void>(
               context: context,
               builder: (ctx) => AlertDialog(
-                icon: Icon(LucideIcons.alertTriangle, color: errorColor, size: 32),
+                icon: Icon(
+                  LucideIcons.alertTriangle,
+                  color: errorColor,
+                  size: 32,
+                ),
                 title: Text('purchases.void_failed_title'.tr()),
                 content: Text(errorMsg),
                 actions: [
@@ -1324,15 +1672,20 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
             await repo.deletePurchase(widget.purchaseId);
             if (!mounted) return;
             messenger.showSnackBar(
-              SnackBar(content: Text('purchases.deleted_success'.tr()),
-                  behavior: SnackBarBehavior.floating),
+              SnackBar(
+                content: Text('purchases.deleted_success'.tr()),
+                behavior: SnackBarBehavior.floating,
+              ),
             );
             router.pop();
           } catch (e) {
             if (!mounted) return;
             messenger.showSnackBar(
-              SnackBar(content: Text(e.toString()),
-                  backgroundColor: errorColor, behavior: SnackBarBehavior.floating),
+              SnackBar(
+                content: Text(e.toString()),
+                backgroundColor: errorColor,
+                behavior: SnackBarBehavior.floating,
+              ),
             );
           }
         }
@@ -1348,8 +1701,11 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
           } catch (e) {
             if (!mounted) return;
             messenger.showSnackBar(
-              SnackBar(content: Text(e.toString()),
-                  backgroundColor: errorColor, behavior: SnackBarBehavior.floating),
+              SnackBar(
+                content: Text(e.toString()),
+                backgroundColor: errorColor,
+                behavior: SnackBarBehavior.floating,
+              ),
             );
           }
         }
@@ -1365,8 +1721,11 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
           } catch (e) {
             if (!mounted) return;
             messenger.showSnackBar(
-              SnackBar(content: Text(e.toString()),
-                  backgroundColor: errorColor, behavior: SnackBarBehavior.floating),
+              SnackBar(
+                content: Text(e.toString()),
+                backgroundColor: errorColor,
+                behavior: SnackBarBehavior.floating,
+              ),
             );
           }
         }
@@ -1377,26 +1736,54 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
           final lines = <InvoiceLinePrintData>[];
           for (final item in _items) {
             // Use variant barcode or generate a fallback
-            final barcode = item.variantSku ?? '${item.variantId ?? item.productId}';
+            final barcode =
+                item.variantSku ?? '${item.variantId ?? item.productId}';
             // Try to get the actual barcode from the variant
             String? actualBarcode;
             if (item.variantId != null) {
-              final variant = await sl<ProductVariantRepository>().getVariantById(item.variantId!);
+              final variant = await sl<ProductVariantRepository>()
+                  .getVariantById(item.variantId!);
               actualBarcode = variant?.barcode;
             }
             if (actualBarcode == null || actualBarcode.trim().isEmpty) {
               // Skip items without barcodes
               continue;
             }
-            lines.add(InvoiceLinePrintData(
-              variantId: item.variantId ?? item.productId,
-              quantity: item.quantity,
-              productName: item.productName ?? 'Product #${item.productId}',
-              barcode: actualBarcode,
-              sku: item.variantSku ?? barcode,
-              unitPriceCents: item.unitCostCents.toBigInt().toInt(),
-              isActive: true,
-            ));
+            // Use variant selling price (not purchase cost price) for barcode labels
+            int sellingPriceCents;
+            int? wholesalePriceCents;
+            if (item.variantId != null) {
+              final variantForPrice = await sl<ProductVariantRepository>()
+                  .getVariantById(item.variantId!);
+              sellingPriceCents =
+                  variantForPrice?.priceCents.toBigInt().toInt() ?? 0;
+              wholesalePriceCents = variantForPrice?.wholesalePriceCents
+                  ?.toBigInt()
+                  .toInt();
+            } else {
+              final productForPrice = await sl<ProductRepository>()
+                  .getProductById(item.productId);
+              sellingPriceCents =
+                  productForPrice?.priceCents.toBigInt().toInt() ?? 0;
+              wholesalePriceCents = productForPrice?.wholesalePriceCents
+                  ?.toBigInt()
+                  .toInt();
+            }
+            lines.add(
+              InvoiceLinePrintData(
+                variantId: item.variantId ?? item.productId,
+                quantity: item.quantity,
+                productName: item.productName ?? 'Product #${item.productId}',
+                colorName: item.colorName,
+                sizeName: item.sizeName,
+                barcode: actualBarcode,
+                sku: item.variantSku ?? barcode,
+                unitPriceCents: sellingPriceCents,
+                sellingPriceCents: sellingPriceCents,
+                wholesalePriceCents: wholesalePriceCents,
+                isActive: true,
+              ),
+            );
           }
           final invoiceData = InvoicePrintData(
             lines: lines,
@@ -1407,9 +1794,7 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
           );
           router.push(
             '/products/barcode-design',
-            extra: {
-              'invoiceData': invoiceData,
-            },
+            extra: {'invoiceData': invoiceData},
           );
         }
         break;

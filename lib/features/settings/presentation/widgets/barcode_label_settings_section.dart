@@ -27,7 +27,8 @@ class BarcodeLabelSettingsSection extends StatelessWidget {
                 'medium': 'app_settings.barcode.size_medium'.tr(),
                 'large': 'app_settings.barcode.size_large'.tr(),
               },
-              onChanged: (v) => _patch(context, (c) => c.copyWith(defaultLabelSize: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(defaultLabelSize: v)),
             ),
             SettingsOptionTile<String>(
               title: 'app_settings.barcode.template'.tr(),
@@ -37,7 +38,8 @@ class BarcodeLabelSettingsSection extends StatelessWidget {
                 'compact': 'app_settings.barcode.template_compact'.tr(),
                 'detailed': 'app_settings.barcode.template_detailed'.tr(),
               },
-              onChanged: (v) => _patch(context, (c) => c.copyWith(labelTemplate: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(labelTemplate: v)),
             ),
             SettingsOptionTile<String>(
               title: 'app_settings.barcode.printer_connection'.tr(),
@@ -48,19 +50,22 @@ class BarcodeLabelSettingsSection extends StatelessWidget {
                 'usb': 'app_settings.barcode.conn_usb'.tr(),
                 'network': 'app_settings.barcode.conn_network'.tr(),
               },
-              onChanged: (v) => _patch(context, (c) => c.copyWith(printerConnection: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(printerConnection: v)),
             ),
             SwitchListTile(
               title: Text('app_settings.barcode.include_price'.tr()),
               subtitle: Text('app_settings.barcode.include_price_desc'.tr()),
               value: s.includePriceOnLabel,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(includePriceOnLabel: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(includePriceOnLabel: v)),
             ),
             SwitchListTile(
               title: Text('app_settings.barcode.include_text'.tr()),
               subtitle: Text('app_settings.barcode.include_text_desc'.tr()),
               value: s.includeBarcodeText,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(includeBarcodeText: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(includeBarcodeText: v)),
             ),
           ],
         );

@@ -1,7 +1,7 @@
-import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../services/supplier_balance_ledger_service.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -10,8 +10,7 @@ abstract class SupplierBalanceReportEvent extends RealtimeEvent {
   const SupplierBalanceReportEvent();
 }
 
-class SupplierBalanceReportDateRangeChanged
-    extends SupplierBalanceReportEvent {
+class SupplierBalanceReportDateRangeChanged extends SupplierBalanceReportEvent {
   final ReportDateRange dateRange;
   const SupplierBalanceReportDateRangeChanged(this.dateRange);
 }
@@ -45,27 +44,27 @@ class SupplierBalanceItem {
   final String supplierName;
   final String? phone;
   final String? email;
-  
+
   /// Opening balance from suppliers.opening_balance_cents
   /// Positive = we owe them (debit), Negative = they owe us (credit)
   final int openingBalanceCents;
-  
+
   /// Total purchases (increases what we owe)
   final int totalPurchasesCents;
-  
+
   /// Total payments made to supplier (decreases what we owe)
   final int totalPaymentsCents;
-  
+
   /// Total returns/credit notes (decreases what we owe)
   final int totalReturnsCents;
-  
+
   /// Total discounts received (decreases what we owe)
   final int totalDiscountsCents;
-  
+
   /// Net balance = opening + purchases - payments - returns - discounts
   /// Positive = we owe them (payable), Negative = they owe us (receivable)
   final int netBalanceCents;
-  
+
   final int transactionCount;
   final DateTime? lastTransactionAt;
 
@@ -83,22 +82,27 @@ class SupplierBalanceItem {
     required this.transactionCount,
     this.lastTransactionAt,
   });
-  
+
   /// Total debit (what we owe) = opening debit + purchases
   int get totalDebitCents {
     final openingDebit = openingBalanceCents > 0 ? openingBalanceCents : 0;
     return openingDebit + totalPurchasesCents;
   }
-  
+
   /// Total credit (what reduces our debt) = opening credit + payments + returns + discounts
   int get totalCreditCents {
-    final openingCredit = openingBalanceCents < 0 ? openingBalanceCents.abs() : 0;
-    return openingCredit + totalPaymentsCents + totalReturnsCents + totalDiscountsCents;
+    final openingCredit = openingBalanceCents < 0
+        ? openingBalanceCents.abs()
+        : 0;
+    return openingCredit +
+        totalPaymentsCents +
+        totalReturnsCents +
+        totalDiscountsCents;
   }
-  
+
   /// Is this a payable (we owe them)?
   bool get isPayable => netBalanceCents > 0;
-  
+
   /// Is this a receivable (they owe us)?
   bool get isReceivable => netBalanceCents < 0;
 }
@@ -107,34 +111,34 @@ class SupplierBalanceItem {
 class SupplierBalanceSummary {
   /// Total payables (what we owe to all suppliers)
   final int totalPayablesCents;
-  
+
   /// Total receivables (what suppliers owe us - overpayments, credits)
   final int totalReceivablesCents;
-  
+
   /// Opening balance debit (suppliers we owed at start)
   final int openingDebitCents;
-  
+
   /// Opening balance credit (suppliers that owed us at start)
   final int openingCreditCents;
-  
+
   /// Total purchases in period
   final int totalPurchasesCents;
-  
+
   /// Total payments in period
   final int totalPaymentsCents;
-  
+
   /// Total returns in period
   final int totalReturnsCents;
-  
+
   /// Total discounts in period
   final int totalDiscountsCents;
-  
+
   /// Number of suppliers with payable balance
   final int suppliersWithPayable;
-  
+
   /// Number of suppliers with receivable balance
   final int suppliersWithReceivable;
-  
+
   const SupplierBalanceSummary({
     this.totalPayablesCents = 0,
     this.totalReceivablesCents = 0,
@@ -147,7 +151,7 @@ class SupplierBalanceSummary {
     this.suppliersWithPayable = 0,
     this.suppliersWithReceivable = 0,
   });
-  
+
   /// Net balance across all suppliers
   int get netBalanceCents => totalPayablesCents - totalReceivablesCents;
 }
@@ -186,7 +190,7 @@ class SupplierBalanceReportData {
       searchQuery: searchQuery ?? this.searchQuery,
     );
   }
-  
+
   // Legacy getters for backward compatibility
   int get grandTotalDebitCents => summary.totalPayablesCents;
   int get grandTotalCreditCents => summary.totalReceivablesCents;
@@ -198,16 +202,17 @@ class SupplierBalanceReportData {
 
 // ==================== BLOC ====================
 
-class SupplierBalanceReportBloc extends RealtimeBloc<SupplierBalanceReportData,
-    SupplierBalanceReportEvent> {
+class SupplierBalanceReportBloc
+    extends
+        RealtimeBloc<SupplierBalanceReportData, SupplierBalanceReportEvent> {
   final AppDatabase _db;
   ReportDateRange _dateRange;
   SupplierBalanceSortType _sort = SupplierBalanceSortType.balanceDesc;
   String _searchQuery = '';
 
   SupplierBalanceReportBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -224,21 +229,27 @@ class SupplierBalanceReportBloc extends RealtimeBloc<SupplierBalanceReportData,
   }
 
   Stream<SupplierBalanceReportData> _buildCombinedStream() {
-    return _db.select(_db.supplierTransactions).watch().asyncMap((_) async {
-      final items = await _loadSupplierBalances();
-      final summary = _calculateSummary(items);
-      final sorted = _applySortToSuppliers(items, _sort);
-      final filtered = _applySearch(sorted, _searchQuery);
+    return _db
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {_db.suppliers, _db.supplierTransactions},
+        )
+        .watch()
+        .asyncMap((_) async {
+          final items = await _loadSupplierBalances();
+          final summary = _calculateSummary(items);
+          final sorted = _applySortToSuppliers(items, _sort);
+          final filtered = _applySearch(sorted, _searchQuery);
 
-      return SupplierBalanceReportData(
-        suppliers: sorted,
-        filteredSuppliers: filtered,
-        summary: summary,
-        dateRange: _dateRange,
-        sort: _sort,
-        searchQuery: _searchQuery,
-      );
-    });
+          return SupplierBalanceReportData(
+            suppliers: sorted,
+            filteredSuppliers: filtered,
+            summary: summary,
+            dateRange: _dateRange,
+            sort: _sort,
+            searchQuery: _searchQuery,
+          );
+        });
   }
 
   SupplierBalanceSummary _calculateSummary(List<SupplierBalanceItem> items) {
@@ -260,13 +271,13 @@ class SupplierBalanceReportBloc extends RealtimeBloc<SupplierBalanceReportData,
       } else if (item.openingBalanceCents < 0) {
         openingCredit += item.openingBalanceCents.abs();
       }
-      
+
       // Transaction totals
       totalPurchases += item.totalPurchasesCents;
       totalPayments += item.totalPaymentsCents;
       totalReturns += item.totalReturnsCents;
       totalDiscounts += item.totalDiscountsCents;
-      
+
       // Net balance classification
       if (item.netBalanceCents > 0) {
         totalPayables += item.netBalanceCents;
@@ -308,13 +319,15 @@ class SupplierBalanceReportBloc extends RealtimeBloc<SupplierBalanceReportData,
     if (current != null) {
       final sorted = _applySortToSuppliers(current.suppliers, event.sort);
       final filtered = _applySearch(sorted, _searchQuery);
-      emit(RealtimeSuccess<SupplierBalanceReportData>(
-        data: current.copyWith(
-          suppliers: sorted,
-          filteredSuppliers: filtered,
-          sort: event.sort,
+      emit(
+        RealtimeSuccess<SupplierBalanceReportData>(
+          data: current.copyWith(
+            suppliers: sorted,
+            filteredSuppliers: filtered,
+            sort: event.sort,
+          ),
         ),
-      ));
+      );
     }
   }
 
@@ -326,12 +339,14 @@ class SupplierBalanceReportBloc extends RealtimeBloc<SupplierBalanceReportData,
     final current = currentData;
     if (current != null) {
       final filtered = _applySearch(current.suppliers, event.query);
-      emit(RealtimeSuccess<SupplierBalanceReportData>(
-        data: current.copyWith(
-          filteredSuppliers: filtered,
-          searchQuery: event.query,
+      emit(
+        RealtimeSuccess<SupplierBalanceReportData>(
+          data: current.copyWith(
+            filteredSuppliers: filtered,
+            searchQuery: event.query,
+          ),
         ),
-      ));
+      );
     }
   }
 
@@ -356,10 +371,12 @@ class SupplierBalanceReportBloc extends RealtimeBloc<SupplierBalanceReportData,
     switch (sort) {
       case SupplierBalanceSortType.balanceDesc:
         list.sort(
-            (a, b) => b.netBalanceCents.abs().compareTo(a.netBalanceCents.abs()));
+          (a, b) => b.netBalanceCents.abs().compareTo(a.netBalanceCents.abs()),
+        );
       case SupplierBalanceSortType.balanceAsc:
         list.sort(
-            (a, b) => a.netBalanceCents.abs().compareTo(b.netBalanceCents.abs()));
+          (a, b) => a.netBalanceCents.abs().compareTo(b.netBalanceCents.abs()),
+        );
       case SupplierBalanceSortType.nameAsc:
         list.sort((a, b) => a.supplierName.compareTo(b.supplierName));
       case SupplierBalanceSortType.nameDesc:
@@ -372,69 +389,26 @@ class SupplierBalanceReportBloc extends RealtimeBloc<SupplierBalanceReportData,
     return list;
   }
 
-  /// Loads supplier balances with detailed breakdown of all transaction types
+  /// Loads the signed supplier balance as of the report end date while
+  /// keeping the activity columns limited to the selected period.
   Future<List<SupplierBalanceItem>> _loadSupplierBalances() async {
-    final startIso = _dateRange.startDate.toIso8601String();
-    final endIso = _dateRange.endDate.toIso8601String();
-
-    final rows = await _db.customSelect(
-      '''
-      SELECT 
-        s.id AS supplier_id,
-        s.name AS supplier_name,
-        s.phone AS phone,
-        s.email AS email,
-        s.opening_balance_cents AS opening_balance_cents,
-        COALESCE(tx.total_purchases_cents, 0) AS total_purchases_cents,
-        COALESCE(tx.total_payments_cents, 0) AS total_payments_cents,
-        COALESCE(tx.total_returns_cents, 0) AS total_returns_cents,
-        COALESCE(tx.total_discounts_cents, 0) AS total_discounts_cents,
-        s.opening_balance_cents + COALESCE(tx.net_balance_cents, 0) AS net_balance_cents,
-        COALESCE(tx.transaction_count, 0) AS transaction_count,
-        tx.last_transaction_at
-      FROM suppliers s
-      LEFT JOIN (
-        SELECT 
-          st.supplier_id,
-          SUM(CASE WHEN st.transaction_type = 'purchase' THEN st.amount_cents ELSE 0 END) AS total_purchases_cents,
-          SUM(CASE WHEN st.transaction_type = 'payment' THEN ABS(st.amount_cents) ELSE 0 END) AS total_payments_cents,
-          SUM(CASE WHEN st.transaction_type IN ('credit_note', 'refund') THEN ABS(st.amount_cents) ELSE 0 END) AS total_returns_cents,
-          SUM(CASE WHEN st.transaction_type = 'discount' THEN ABS(st.amount_cents) ELSE 0 END) AS total_discounts_cents,
-          SUM(st.amount_cents) AS net_balance_cents,
-          COUNT(st.id) AS transaction_count,
-          MAX(st.transaction_date) AS last_transaction_at
-        FROM supplier_transactions st
-        WHERE st.transaction_date >= ? AND st.transaction_date <= ?
-        GROUP BY st.supplier_id
-      ) tx ON tx.supplier_id = s.id
-      WHERE s.is_active = 1
-        AND (tx.transaction_count > 0 OR s.opening_balance_cents != 0)
-      ORDER BY ABS(s.opening_balance_cents + COALESCE(tx.net_balance_cents, 0)) DESC
-      ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.suppliers, _db.supplierTransactions},
-    ).get();
-
-    return rows.map((row) {
-      final lastTxStr = row.readNullable<String>('last_transaction_at');
-
+    final records = await SupplierBalanceLedgerService(
+      _db,
+    ).load(startDate: _dateRange.startDate, endDate: _dateRange.endDate);
+    return records.map((record) {
       return SupplierBalanceItem(
-        supplierId: row.read<int>('supplier_id'),
-        supplierName: row.read<String>('supplier_name'),
-        phone: row.readNullable<String>('phone'),
-        email: row.readNullable<String>('email'),
-        openingBalanceCents: row.read<int>('opening_balance_cents'),
-        totalPurchasesCents: row.read<int>('total_purchases_cents'),
-        totalPaymentsCents: row.read<int>('total_payments_cents'),
-        totalReturnsCents: row.read<int>('total_returns_cents'),
-        totalDiscountsCents: row.read<int>('total_discounts_cents'),
-        netBalanceCents: row.read<int>('net_balance_cents'),
-        transactionCount: row.read<int>('transaction_count'),
-        lastTransactionAt:
-            lastTxStr != null ? DateTime.tryParse(lastTxStr) : null,
+        supplierId: record.supplierId,
+        supplierName: record.supplierName,
+        phone: record.phone,
+        email: record.email,
+        openingBalanceCents: record.openingBalanceCents,
+        totalPurchasesCents: record.totalPurchasesCents,
+        totalPaymentsCents: record.totalPaymentsCents,
+        totalReturnsCents: record.totalReturnsCents,
+        totalDiscountsCents: record.totalDiscountsCents,
+        netBalanceCents: record.netBalanceCents,
+        transactionCount: record.transactionCount,
+        lastTransactionAt: record.lastTransactionAt,
       );
     }).toList();
   }

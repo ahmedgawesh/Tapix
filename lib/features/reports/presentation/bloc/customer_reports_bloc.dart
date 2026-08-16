@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../services/party_aging_ledger_service.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -142,10 +143,13 @@ class CustomerReportsData {
       customers: customers ?? this.customers,
       agingItems: agingItems ?? this.agingItems,
       analyticsItems: analyticsItems ?? this.analyticsItems,
-      totalReceivablesCents: totalReceivablesCents ?? this.totalReceivablesCents,
+      totalReceivablesCents:
+          totalReceivablesCents ?? this.totalReceivablesCents,
       totalPayablesCents: totalPayablesCents ?? this.totalPayablesCents,
-      totalOpeningDebitCents: totalOpeningDebitCents ?? this.totalOpeningDebitCents,
-      totalOpeningCreditCents: totalOpeningCreditCents ?? this.totalOpeningCreditCents,
+      totalOpeningDebitCents:
+          totalOpeningDebitCents ?? this.totalOpeningDebitCents,
+      totalOpeningCreditCents:
+          totalOpeningCreditCents ?? this.totalOpeningCreditCents,
       totalDiscountsCents: totalDiscountsCents ?? this.totalDiscountsCents,
       totalPaymentsCents: totalPaymentsCents ?? this.totalPaymentsCents,
       activeCustomerCount: activeCustomerCount ?? this.activeCustomerCount,
@@ -158,7 +162,9 @@ class CustomerReportsData {
   List<CustomerBalanceItem> get filteredCustomers {
     if (searchQuery.isEmpty) return customers;
     final q = searchQuery.toLowerCase();
-    return customers.where((c) => c.customerName.toLowerCase().contains(q)).toList();
+    return customers
+        .where((c) => c.customerName.toLowerCase().contains(q))
+        .toList();
   }
 }
 
@@ -171,8 +177,8 @@ class CustomerReportsBloc
   String _searchQuery = '';
 
   CustomerReportsBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -186,8 +192,13 @@ class CustomerReportsBloc
   }
 
   Stream<CustomerReportsData> _buildStream() {
-    // Watch both customers and customer_transactions for real-time changes
-    return _db.select(_db.customerTransactions).watch().asyncMap((_) => _loadAll());
+    return _db
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {_db.customers, _db.customerTransactions},
+        )
+        .watch()
+        .asyncMap((_) => _loadAll());
   }
 
   Future<CustomerReportsData> _loadAll() async {
@@ -249,30 +260,38 @@ class CustomerReportsBloc
     _searchQuery = event.query;
     final current = currentData;
     if (current != null) {
-      emit(RealtimeSuccess<CustomerReportsData>(
-        data: current.copyWith(searchQuery: event.query),
-      ));
+      emit(
+        RealtimeSuccess<CustomerReportsData>(
+          data: current.copyWith(searchQuery: event.query),
+        ),
+      );
     }
   }
 
-  /// Load per-customer balance breakdown using customers table (source of truth)
-  /// plus transaction aggregates for the selected period.
+  /// Load the balance as of the selected end date from opening balance plus
+  /// all signed ledger movements. Activity columns remain period-specific.
   ///
   /// Transaction types in customer_transactions:
   ///   sale (+), payment (-), discount (-), credit_note (-), refund (-),
   ///   adjustment (+/-), opening_balance (+/-)
   Future<List<CustomerBalanceItem>> _loadCustomerBalances() async {
-    final start = _dateRange.startDate.toIso8601String();
-    final end = _dateRange.endDate.toIso8601String();
+    final start = _dateRange.startDate;
+    final end = _dateRange.endDate;
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         c.id,
         c.name,
         c.segment,
         c.opening_balance_cents,
-        c.balance_cents AS current_balance_cents,
+        c.opening_balance_cents + COALESCE((
+          SELECT SUM(balance_tx.amount_cents)
+          FROM customer_transactions balance_tx
+          WHERE balance_tx.customer_id = c.id
+            AND balance_tx.transaction_date <= ?
+        ), 0) AS current_balance_cents,
         COALESCE((
           SELECT SUM(ct.amount_cents)
           FROM customer_transactions ct
@@ -306,21 +325,34 @@ class CustomerReportsBloc
             AND ct.transaction_date <= ?
         ), 0) AS total_returns_cents
       FROM customers c
-      WHERE c.is_active = 1
-      ORDER BY ABS(c.balance_cents) DESC
+      WHERE c.created_at <= ?
+        AND (
+          c.is_active = 1 OR
+          c.opening_balance_cents + COALESCE((
+            SELECT SUM(inactive_tx.amount_cents)
+            FROM customer_transactions inactive_tx
+            WHERE inactive_tx.customer_id = c.id
+              AND inactive_tx.transaction_date <= ?
+          ), 0) != 0
+        )
+      ORDER BY ABS(current_balance_cents) DESC
       ''',
-      variables: [
-        Variable.withString(start),
-        Variable.withString(end),
-        Variable.withString(start),
-        Variable.withString(end),
-        Variable.withString(start),
-        Variable.withString(end),
-        Variable.withString(start),
-        Variable.withString(end),
-      ],
-      readsFrom: {_db.customers, _db.customerTransactions},
-    ).get();
+          variables: [
+            Variable.withDateTime(end),
+            Variable.withDateTime(start),
+            Variable.withDateTime(end),
+            Variable.withDateTime(start),
+            Variable.withDateTime(end),
+            Variable.withDateTime(start),
+            Variable.withDateTime(end),
+            Variable.withDateTime(start),
+            Variable.withDateTime(end),
+            Variable.withDateTime(end),
+            Variable.withDateTime(end),
+          ],
+          readsFrom: {_db.customers, _db.customerTransactions},
+        )
+        .get();
 
     return rows.map((row) {
       return CustomerBalanceItem(
@@ -337,76 +369,30 @@ class CustomerReportsBloc
     }).toList();
   }
 
-  /// Aging analysis: only considers positive-amount (debit) transactions that
-  /// generated receivables. Buckets by transaction age relative to today.
   Future<List<CustomerAgingItem>> _loadAging() async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day, 23, 59, 59);
-    final d30 = today.subtract(const Duration(days: 30));
-    final d60 = today.subtract(const Duration(days: 60));
-    final d90 = today.subtract(const Duration(days: 90));
-    final d120 = today.subtract(const Duration(days: 120));
-
-    final rows = await _db.customSelect(
-      '''
-      SELECT 
-        c.id AS customer_id,
-        c.name AS customer_name,
-        c.segment AS segment,
-        COALESCE(SUM(CASE 
-          WHEN ct.transaction_date >= ? THEN ct.amount_cents ELSE 0 
-        END), 0) AS current_cents,
-        COALESCE(SUM(CASE 
-          WHEN ct.transaction_date >= ? AND ct.transaction_date < ? THEN ct.amount_cents ELSE 0 
-        END), 0) AS days_30_cents,
-        COALESCE(SUM(CASE 
-          WHEN ct.transaction_date >= ? AND ct.transaction_date < ? THEN ct.amount_cents ELSE 0 
-        END), 0) AS days_60_cents,
-        COALESCE(SUM(CASE 
-          WHEN ct.transaction_date >= ? AND ct.transaction_date < ? THEN ct.amount_cents ELSE 0 
-        END), 0) AS days_90_cents,
-        COALESCE(SUM(CASE 
-          WHEN ct.transaction_date < ? THEN ct.amount_cents ELSE 0 
-        END), 0) AS over_90_cents,
-        c.balance_cents AS total_cents
-      FROM customers c
-      LEFT JOIN customer_transactions ct ON ct.customer_id = c.id
-        AND ct.amount_cents > 0
-      WHERE c.is_active = 1 AND c.balance_cents > 0
-      GROUP BY c.id
-      ORDER BY c.balance_cents DESC
-      ''',
-      variables: [
-        Variable.withString(d30.toIso8601String()),   // ?1: current >= today-30
-        Variable.withString(d60.toIso8601String()),   // ?2: 1-30d  >= today-60
-        Variable.withString(d30.toIso8601String()),   // ?3: 1-30d  <  today-30
-        Variable.withString(d90.toIso8601String()),   // ?4: 31-60d >= today-90
-        Variable.withString(d60.toIso8601String()),   // ?5: 31-60d <  today-60
-        Variable.withString(d120.toIso8601String()),  // ?6: 61-90d >= today-120
-        Variable.withString(d90.toIso8601String()),   // ?7: 61-90d <  today-90
-        Variable.withString(d120.toIso8601String()),  // ?8: 90+    <  today-120
-      ],
-      readsFrom: {_db.customers, _db.customerTransactions},
-    ).get();
-
+    final rows = await PartyAgingLedgerService(
+      _db,
+    ).loadCustomers(asOf: _dateRange.endDate);
     return rows.map((row) {
+      final buckets = row.buckets;
       return CustomerAgingItem(
-        customerId: row.read<int>('customer_id'),
-        customerName: row.read<String>('customer_name'),
-        segment: row.read<String>('segment'),
-        currentCents: row.read<int>('current_cents'),
-        days30Cents: row.read<int>('days_30_cents'),
-        days60Cents: row.read<int>('days_60_cents'),
-        days90Cents: row.read<int>('days_90_cents'),
-        over90Cents: row.read<int>('over_90_cents'),
-        totalCents: row.read<int>('total_cents'),
+        customerId: row.partyId,
+        customerName: row.partyName,
+        segment: row.segment ?? 'retail',
+        currentCents: buckets.currentCents,
+        days30Cents: buckets.days30Cents,
+        days60Cents: buckets.days60Cents,
+        days90Cents: buckets.days90Cents,
+        over90Cents: buckets.over90Cents,
+        totalCents: buckets.totalCents,
       );
     }).toList();
   }
 
   Future<List<CustomerAnalyticsItem>> _loadAnalytics() async {
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         c.id AS customer_id,
         c.name AS customer_name,
@@ -419,8 +405,9 @@ class CustomerReportsBloc
       WHERE c.is_active = 1
       ORDER BY c.total_spent_cents DESC
       ''',
-      readsFrom: {_db.customers},
-    ).get();
+          readsFrom: {_db.customers},
+        )
+        .get();
 
     return rows.map((row) {
       final totalSpent = row.read<int>('total_spent_cents');
@@ -436,7 +423,9 @@ class CustomerReportsBloc
         totalTransactions: totalTx,
         averageOrderCents: avgOrder,
         balanceCents: row.read<int>('balance_cents'),
-        lastTransactionAt: lastTxStr != null ? DateTime.tryParse(lastTxStr) : null,
+        lastTransactionAt: lastTxStr != null
+            ? DateTime.tryParse(lastTxStr)
+            : null,
       );
     }).toList();
   }

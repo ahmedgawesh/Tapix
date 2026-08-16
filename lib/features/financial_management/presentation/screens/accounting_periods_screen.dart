@@ -45,7 +45,12 @@ class _PeriodsView extends StatelessWidget {
           if (state is RealtimeError<AccountingPeriodsData>) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(state.error.toString()),
+                content: Text(
+                  state.error
+                      .toString()
+                      .replaceFirst('Bad state: ', '')
+                      .tr(),
+                ),
                 backgroundColor: colorScheme.error,
               ),
             );
@@ -139,7 +144,14 @@ class _PeriodsView extends StatelessWidget {
                           firstDate: DateTime(2020),
                           lastDate: DateTime(2030),
                         );
-                        if (picked != null) setState(() => startDate = picked);
+                        if (picked != null) {
+                          setState(() {
+                            startDate = picked;
+                            if (endDate.isBefore(startDate)) {
+                              endDate = startDate;
+                            }
+                          });
+                        }
                       },
                     ),
                     ListTile(

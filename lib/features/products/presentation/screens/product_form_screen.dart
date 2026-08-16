@@ -14,6 +14,8 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/widgets/theme_toggle_button.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
+import '../../../../core/measurement/measurement.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../subscription/presentation/widgets/upgrade_prompt.dart';
 import '../../domain/entities/price_history_entity.dart';
 import '../../domain/entities/product_entity.dart';
@@ -49,28 +51,31 @@ class ProductFormScreen extends StatelessWidget {
     // Get inventory settings from AppSettingsBloc for new products
     final appSettingsState = context.read<AppSettingsBloc>().state;
     final settings = appSettingsState.settings;
-    
+
     return MultiBlocProvider(
       providers: [
         BlocProvider(
           create: (context) => sl<ProductFormBloc>()
-            ..add(ProductFormInitialized(
-              productId: productId,
-              initialBarcode: initialBarcode,
-              defaultTrackInventory: settings.defaultTrackInventory,
-              // New products inherit the global `lowStockThreshold` from
-              // settings as their initial per-product re-order point. The
-              // user can still override the value per-product in the form
-              // before saving. This restores the pre-Phase-B behaviour that
-              // was inadvertently changed when inventory tracking types
-              // were introduced — the global setting is the single source
-              // of truth for the *default*, while `products.min_quantity`
-              // remains the per-product authoritative value once saved.
-              defaultMinQuantity: settings.lowStockThreshold,
-            )),
+            ..add(
+              ProductFormInitialized(
+                productId: productId,
+                initialBarcode: initialBarcode,
+                defaultTrackInventory: settings.defaultTrackInventory,
+                // New products inherit the global `lowStockThreshold` from
+                // settings as their initial per-product re-order point. The
+                // user can still override the value per-product in the form
+                // before saving. This restores the pre-Phase-B behaviour that
+                // was inadvertently changed when inventory tracking types
+                // were introduced — the global setting is the single source
+                // of truth for the *default*, while `products.min_quantity`
+                // remains the per-product authoritative value once saved.
+                defaultMinQuantity: settings.lowStockThreshold,
+              ),
+            ),
         ),
         BlocProvider(
-          create: (context) => sl<CategoriesBloc>()..add(const LoadCategories()),
+          create: (context) =>
+              sl<CategoriesBloc>()..add(const LoadCategories()),
         ),
         BlocProvider(
           create: (context) => sl<ColorsBloc>()..add(const LoadColors()),
@@ -80,8 +85,9 @@ class ProductFormScreen extends StatelessWidget {
         ),
         if (productId != null) ...[
           BlocProvider(
-            create: (context) => sl<ProductVariantsBloc>()
-              ..add(ProductVariantsInitialized(productId!)),
+            create: (context) =>
+                sl<ProductVariantsBloc>()
+                  ..add(ProductVariantsInitialized(productId!)),
           ),
         ],
       ],
@@ -97,7 +103,8 @@ class _ProductFormView extends StatefulWidget {
   State<_ProductFormView> createState() => _ProductFormViewState();
 }
 
-class _ProductFormViewState extends State<_ProductFormView> {
+class _ProductFormViewState extends State<_ProductFormView>
+    with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -107,18 +114,25 @@ class _ProductFormViewState extends State<_ProductFormView> {
   final _minStockController = TextEditingController();
   final _purchaseTaxRateController = TextEditingController();
   final _salesTaxRateController = TextEditingController();
-  
+
   final _stockFocusNode = FocusNode();
   final _minStockFocusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
-    _stockFocusNode.addListener(() => _selectAllOnFocus(_stockFocusNode, _stockController));
-    _minStockFocusNode.addListener(() => _selectAllOnFocus(_minStockFocusNode, _minStockController));
+    _stockFocusNode.addListener(
+      () => _selectAllOnFocus(_stockFocusNode, _stockController),
+    );
+    _minStockFocusNode.addListener(
+      () => _selectAllOnFocus(_minStockFocusNode, _minStockController),
+    );
   }
-  
-  void _selectAllOnFocus(FocusNode focusNode, TextEditingController controller) {
+
+  void _selectAllOnFocus(
+    FocusNode focusNode,
+    TextEditingController controller,
+  ) {
     if (focusNode.hasFocus) {
       controller.selection = TextSelection(
         baseOffset: 0,
@@ -129,7 +143,8 @@ class _ProductFormViewState extends State<_ProductFormView> {
 
   /// Delegates EAN-13 generation to the shared [BarcodeGenerationService] so
   /// every generation path produces a valid checksum (scanner-compatible).
-  String _generateBarcode() => sl<BarcodeGenerationService>().generateRandomEan13();
+  String _generateBarcode() =>
+      sl<BarcodeGenerationService>().generateRandomEan13();
 
   void _showPrintModeChoice(BuildContext context, Product product) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -179,9 +194,12 @@ class _ProductFormViewState extends State<_ProductFormView> {
                   colorScheme: colorScheme,
                   onTap: () {
                     Navigator.pop(ctx);
-                    context.push('/products/barcode-design', extra: {
-                      'products': [product],
-                    });
+                    context.push(
+                      '/products/barcode-design',
+                      extra: {
+                        'products': [product],
+                      },
+                    );
                   },
                 ),
               ],
@@ -221,13 +239,21 @@ class _ProductFormViewState extends State<_ProductFormView> {
       _barcodeController.text = state.barcode!;
     }
     if (!_stockFocusNode.hasFocus) {
-      _stockController.text = state.stockQuantity.toString();
+      _stockController.text = MeasuredQuantity.majorValue(
+        state.stockQuantity,
+        MeasurementType.fromDb(state.measurementType),
+      );
     }
     if (!_minStockFocusNode.hasFocus) {
-      _minStockController.text = state.minQuantity.toString();
+      _minStockController.text = MeasuredQuantity.majorValue(
+        state.minQuantity,
+        MeasurementType.fromDb(state.measurementType),
+      );
     }
-    if (_purchaseTaxRateController.text.isEmpty && state.purchaseTaxRateBps > 0) {
-      _purchaseTaxRateController.text = (state.purchaseTaxRateBps / 100).toString();
+    if (_purchaseTaxRateController.text.isEmpty &&
+        state.purchaseTaxRateBps > 0) {
+      _purchaseTaxRateController.text = (state.purchaseTaxRateBps / 100)
+          .toString();
     }
     if (_salesTaxRateController.text.isEmpty && state.salesTaxRateBps > 0) {
       _salesTaxRateController.text = (state.salesTaxRateBps / 100).toString();
@@ -251,153 +277,173 @@ class _ProductFormViewState extends State<_ProductFormView> {
       child: Focus(
         autofocus: true,
         child: BlocConsumer<ProductFormBloc, ProductFormState>(
-      listener: (context, state) {
-        if (state.isSuccess) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.isEditing
-                  ? 'product_updated'.tr()
-                  : 'product_created'.tr()),
-              backgroundColor: colorScheme.primary,
-            ),
-          );
-          Navigator.of(context).pop(true);
-        }
-
-        if (state.error != null) {
-          final quota = parseQuotaError(state.error);
-          if (quota != null) {
-            showQuotaExceededDialog(
-              context,
-              isProducts: quota.isProducts,
-              limit: quota.limit,
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('product_form.error_saving'.tr()),
-                backgroundColor: colorScheme.error,
-              ),
-            );
-          }
-        }
-
-        _initControllers(state);
-      },
-      builder: (context, state) {
-        if (state.isLoading) {
-          return Scaffold(
-            appBar: AppBar(
-              leading: IconButton(
-                icon: const Icon(LucideIcons.arrowLeft),
-                onPressed: () => context.pop(),
-                tooltip: 'common.back'.tr(),
-              ),
-              title: Text('product_form.title'.tr()),
-              centerTitle: true,
-            ),
-            body: const Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        return Scaffold(
-          appBar: AppBar(
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () {
-                if (context.canPop()) {
-                  context.pop();
-                } else {
-                  context.go('/products');
-                }
-              },
-              tooltip: 'common.back'.tr(),
-            ),
-            title: Text(state.isEditing
-                ? 'product_form.edit'.tr()
-                : 'product_form.create'.tr()),
-            centerTitle: true,
-            actions: [
-              const ThemeToggleButton(),
-              if (state.isEditing) ...[
-                IconButton(
-                  icon: const Icon(LucideIcons.printer),
-                  onPressed: () {
-                    if (state.productId == null) return;
-                    
-                    final product = Product(
-                      id: state.productId!,
-                      name: state.name,
-                      nameAr: state.nameAr,
-                      nameFr: state.nameFr,
-                      description: state.description,
-                      sku: state.sku,
-                      barcode: state.barcode,
-                      costCents: state.costCents,
-                      priceCents: state.priceCents,
-                      wholesalePriceCents: state.wholesalePriceCents,
-                      stockQuantity: state.stockQuantity,
-                      minQuantity: state.minQuantity,
-                      categoryId: state.categoryId,
-                      supplierId: state.supplierId,
-                      currencyId: state.currencyId ?? 1, // Default if not set
-                      imagePath: state.imagePath,
-                      hasVariants: state.hasVariants,
-                      isTaxable: state.isTaxable,
-                      purchaseTaxRateBps: state.purchaseTaxRateBps,
-                      salesTaxRateBps: state.salesTaxRateBps,
-                      isActive: state.isActive,
-                      trackInventory: state.trackInventory,
-                    );
-                    _showPrintModeChoice(context, product);
-                  },
-                  tooltip: 'edit_prices.print_label'.tr(),
-                ),
-                IconButton(
-                  icon: const Icon(LucideIcons.trash2),
-                  onPressed: state.isSubmitting
-                      ? null
-                      : () => _handleSmartDelete(context, state),
-                  tooltip: 'common.delete'.tr(),
-                ),
-              ],
-              if (state.isSubmitting)
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+          listener: (context, state) {
+            if (state.isSuccess) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    state.isEditing
+                        ? 'product_updated'.tr()
+                        : 'product_created'.tr(),
                   ),
-                )
-              else
-                IconButton(
-                  icon: const Icon(LucideIcons.save),
-                  onPressed: () {
-                    context.read<ProductFormBloc>().add(const ProductFormSubmitted());
-                  },
-                  tooltip: 'common.save'.tr(),
-                ),
-            ],
-          ),
-          body: LayoutBuilder(
-            builder: (context, constraints) {
-              final isWide = constraints.maxWidth > 800;
-
-              return SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Form(
-                  key: _formKey,
-                  child: isWide
-                      ? _buildWideLayout(context, state)
-                      : _buildNarrowLayout(context, state),
+                  backgroundColor: colorScheme.primary,
                 ),
               );
-            },
-          ),
-        );
-      },
-    ),
+              Navigator.of(context).pop(true);
+            }
+
+            if (state.error != null) {
+              final quota = parseQuotaError(state.error);
+              if (quota != null) {
+                showQuotaExceededDialog(
+                  context,
+                  isProducts: quota.isProducts,
+                  limit: quota.limit,
+                );
+              } else if (state.error!.startsWith('variant_stock_conflict:')) {
+                final count = int.tryParse(state.error!.split(':').last) ?? 1;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'product_form.hasVariants_stock_blocked'.tr(
+                        args: [count.toString()],
+                      ),
+                    ),
+                    backgroundColor: colorScheme.error,
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('product_form.error_saving'.tr()),
+                    backgroundColor: colorScheme.error,
+                  ),
+                );
+              }
+            }
+
+            _initControllers(state);
+          },
+          builder: (context, state) {
+            if (state.isLoading) {
+              return Scaffold(
+                appBar: AppBar(
+                  leading: IconButton(
+                    icon: const Icon(LucideIcons.arrowLeft),
+                    onPressed: () => context.pop(),
+                    tooltip: 'common.back'.tr(),
+                  ),
+                  title: Text('product_form.title'.tr()),
+                  centerTitle: true,
+                ),
+                body: const Center(child: CircularProgressIndicator()),
+              );
+            }
+
+            return Scaffold(
+              appBar: AppBar(
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () {
+                    if (context.canPop()) {
+                      context.pop();
+                    } else {
+                      context.go('/products');
+                    }
+                  },
+                  tooltip: 'common.back'.tr(),
+                ),
+                title: Text(
+                  state.isEditing
+                      ? 'product_form.edit'.tr()
+                      : 'product_form.create'.tr(),
+                ),
+                centerTitle: true,
+                actions: [
+                  const ThemeToggleButton(),
+                  if (state.isEditing) ...[
+                    IconButton(
+                      icon: const Icon(LucideIcons.printer),
+                      onPressed: () {
+                        if (state.productId == null) return;
+
+                        final product = Product(
+                          id: state.productId!,
+                          name: state.name,
+                          nameAr: state.nameAr,
+                          nameFr: state.nameFr,
+                          description: state.description,
+                          sku: state.sku,
+                          barcode: state.barcode,
+                          costCents: state.costCents,
+                          priceCents: state.priceCents,
+                          wholesalePriceCents: state.wholesalePriceCents,
+                          stockQuantity: state.stockQuantity,
+                          minQuantity: state.minQuantity,
+                          categoryId: state.categoryId,
+                          supplierId: state.supplierId,
+                          currencyId:
+                              state.currencyId ?? 1, // Default if not set
+                          imagePath: state.imagePath,
+                          hasVariants: state.hasVariants,
+                          isTaxable: state.isTaxable,
+                          purchaseTaxRateBps: state.purchaseTaxRateBps,
+                          salesTaxRateBps: state.salesTaxRateBps,
+                          isActive: state.isActive,
+                          trackInventory: state.trackInventory,
+                          measurementType: state.measurementType,
+                        );
+                        _showPrintModeChoice(context, product);
+                      },
+                      tooltip: 'edit_prices.print_label'.tr(),
+                    ),
+                    IconButton(
+                      icon: const Icon(LucideIcons.trash2),
+                      onPressed: state.isSubmitting
+                          ? null
+                          : () => _handleSmartDelete(context, state),
+                      tooltip: 'common.delete'.tr(),
+                    ),
+                  ],
+                  if (state.isSubmitting)
+                    const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  else
+                    IconButton(
+                      icon: const Icon(LucideIcons.save),
+                      onPressed: () {
+                        context.read<ProductFormBloc>().add(
+                          const ProductFormSubmitted(),
+                        );
+                      },
+                      tooltip: 'common.save'.tr(),
+                    ),
+                ],
+              ),
+              body: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isWide = constraints.maxWidth > 800;
+
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Form(
+                      key: _formKey,
+                      child: isWide
+                          ? _buildWideLayout(context, state)
+                          : _buildNarrowLayout(context, state),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -425,10 +471,17 @@ class _ProductFormViewState extends State<_ProductFormView> {
               _buildTaxSection(context, state),
               const SizedBox(height: 24),
               _buildOptionsSection(context, state),
-              if (state.hasVariants) ...[
-                const SizedBox(height: 24),
-                _buildVariantsSection(context, state),
-              ],
+              AnimatedSize(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                alignment: Alignment.topCenter,
+                child: state.hasVariants
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: 24),
+                        child: _buildVariantsSection(context, state),
+                      )
+                    : const SizedBox.shrink(),
+              ),
             ],
           ),
         ),
@@ -448,10 +501,17 @@ class _ProductFormViewState extends State<_ProductFormView> {
         _buildTaxSection(context, state),
         const SizedBox(height: 24),
         _buildOptionsSection(context, state),
-        if (state.hasVariants) ...[
-          const SizedBox(height: 24),
-          _buildVariantsSection(context, state),
-        ],
+        AnimatedSize(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          alignment: Alignment.topCenter,
+          child: state.hasVariants
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 24),
+                  child: _buildVariantsSection(context, state),
+                )
+              : const SizedBox.shrink(),
+        ),
         const SizedBox(height: 80),
       ],
     );
@@ -464,27 +524,32 @@ class _ProductFormViewState extends State<_ProductFormView> {
   }) {
     final theme = Theme.of(context);
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 20, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      alignment: Alignment.topCenter,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 20, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    title,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            ...children,
-          ],
+                ],
+              ),
+              const SizedBox(height: 16),
+              ...children,
+            ],
+          ),
         ),
       ),
     );
@@ -542,7 +607,9 @@ class _ProductFormViewState extends State<_ProductFormView> {
     // syncProductStockFromVariants rewrites products.stock_quantity back to
     // its pre-adjustment value — producing a posted journal entry with no
     // matching stock movement (accounting ↔ inventory desync).
-    final defaultVariant = await variantRepo.getDefaultVariantByProduct(productId);
+    final defaultVariant = await variantRepo.getDefaultVariantByProduct(
+      productId,
+    );
     if (!context.mounted) return;
 
     final posted = await InventoryAdjustmentDialog.show(
@@ -550,8 +617,8 @@ class _ProductFormViewState extends State<_ProductFormView> {
       productId: productId,
       variantId: defaultVariant?.id,
       currentStock: defaultVariant?.stockQuantity ?? fallbackStock,
-      currentUnitCostCents: defaultVariant?.costCents.toBigInt().toInt() ??
-          fallbackCostCents,
+      currentUnitCostCents:
+          defaultVariant?.costCents.toBigInt().toInt() ?? fallbackCostCents,
     );
     if (posted == true && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -563,9 +630,11 @@ class _ProductFormViewState extends State<_ProductFormView> {
   Future<void> _pickImage(ProductFormBloc bloc) async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-    
+
     if (pickedFile != null) {
-      bloc.add(ProductFormFieldChanged(field: 'imagePath', value: pickedFile.path));
+      bloc.add(
+        ProductFormFieldChanged(field: 'imagePath', value: pickedFile.path),
+      );
     }
   }
 
@@ -605,8 +674,11 @@ class _ProductFormViewState extends State<_ProductFormView> {
                         Text(
                           'product_form_tap_to_add_image'.tr(),
                           textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                               ),
                         ),
                       ],
@@ -632,8 +704,12 @@ class _ProductFormViewState extends State<_ProductFormView> {
           _ColorSizePickerRow(
             selectedColorId: state.selectedColorId,
             selectedSizeId: state.selectedSizeId,
-            onColorSelected: (id) => bloc.add(ProductFormFieldChanged(field: 'selectedColorId', value: id)),
-            onSizeSelected: (id) => bloc.add(ProductFormFieldChanged(field: 'selectedSizeId', value: id)),
+            onColorSelected: (id) => bloc.add(
+              ProductFormFieldChanged(field: 'selectedColorId', value: id),
+            ),
+            onSizeSelected: (id) => bloc.add(
+              ProductFormFieldChanged(field: 'selectedSizeId', value: id),
+            ),
           )
         else
           Container(
@@ -642,7 +718,9 @@ class _ProductFormViewState extends State<_ProductFormView> {
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                color: Theme.of(
+                  context,
+                ).colorScheme.outline.withValues(alpha: 0.2),
               ),
             ),
             child: Row(
@@ -672,7 +750,9 @@ class _ProductFormViewState extends State<_ProductFormView> {
           ),
           maxLines: 3,
           onChanged: (value) {
-            bloc.add(ProductFormFieldChanged(field: 'description', value: value));
+            bloc.add(
+              ProductFormFieldChanged(field: 'description', value: value),
+            );
           },
         ),
         const SizedBox(height: 16),
@@ -683,7 +763,9 @@ class _ProductFormViewState extends State<_ProductFormView> {
                 controller: _skuController,
                 decoration: InputDecoration(
                   labelText: 'product_form_sku'.tr(),
-                  errorText: state.fieldErrors['sku']?.tr(args: [state.sku ?? '']),
+                  errorText: state.fieldErrors['sku']?.tr(
+                    args: [state.sku ?? ''],
+                  ),
                   border: const OutlineInputBorder(),
                 ),
                 onChanged: (value) {
@@ -697,7 +779,9 @@ class _ProductFormViewState extends State<_ProductFormView> {
                 controller: _barcodeController,
                 decoration: InputDecoration(
                   labelText: 'product_form_barcode'.tr(),
-                  errorText: state.fieldErrors['barcode']?.tr(args: [state.barcode ?? '']),
+                  errorText: state.fieldErrors['barcode']?.tr(
+                    args: [state.barcode ?? ''],
+                  ),
                   border: const OutlineInputBorder(),
                   suffixIcon: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -708,17 +792,29 @@ class _ProductFormViewState extends State<_ProductFormView> {
                         onPressed: () {
                           final barcode = _generateBarcode();
                           _barcodeController.text = barcode;
-                          bloc.add(ProductFormFieldChanged(field: 'barcode', value: barcode));
+                          bloc.add(
+                            ProductFormFieldChanged(
+                              field: 'barcode',
+                              value: barcode,
+                            ),
+                          );
                         },
                       ),
                       IconButton(
                         icon: const Icon(LucideIcons.scanLine),
                         tooltip: 'barcode.scan'.tr(),
                         onPressed: () async {
-                          final result = await context.push<String>('/barcode-scanner');
+                          final result = await context.push<String>(
+                            '/barcode-scanner',
+                          );
                           if (result != null && result.isNotEmpty && mounted) {
                             _barcodeController.text = result;
-                            bloc.add(ProductFormFieldChanged(field: 'barcode', value: result));
+                            bloc.add(
+                              ProductFormFieldChanged(
+                                field: 'barcode',
+                                value: result,
+                              ),
+                            );
                           }
                         },
                       ),
@@ -726,7 +822,9 @@ class _ProductFormViewState extends State<_ProductFormView> {
                   ),
                 ),
                 onChanged: (value) {
-                  bloc.add(ProductFormFieldChanged(field: 'barcode', value: value));
+                  bloc.add(
+                    ProductFormFieldChanged(field: 'barcode', value: value),
+                  );
                 },
               ),
             ),
@@ -745,12 +843,13 @@ class _ProductFormViewState extends State<_ProductFormView> {
         final selected = state.categoryId == null
             ? null
             : categories.cast<Category?>().firstWhere(
-                  (c) => c?.id == state.categoryId,
-                  orElse: () => null,
-                );
+                (c) => c?.id == state.categoryId,
+                orElse: () => null,
+              );
 
         return InkWell(
-          onTap: () => _showCategoryPickerBottomSheet(context, state.categoryId),
+          onTap: () =>
+              _showCategoryPickerBottomSheet(context, state.categoryId),
           child: InputDecorator(
             decoration: InputDecoration(
               labelText: 'product_form.category'.tr(),
@@ -764,7 +863,10 @@ class _ProductFormViewState extends State<_ProductFormView> {
     );
   }
 
-  Future<void> _showCategoryPickerBottomSheet(BuildContext context, int? currentId) async {
+  Future<void> _showCategoryPickerBottomSheet(
+    BuildContext context,
+    int? currentId,
+  ) async {
     final categoriesBloc = context.read<CategoriesBloc>();
     final bloc = context.read<ProductFormBloc>();
 
@@ -798,35 +900,45 @@ class _ProductFormViewState extends State<_ProductFormView> {
                   Align(
                     alignment: AlignmentDirectional.centerStart,
                     child: TextButton.icon(
-                      onPressed: () => sheetContext.push('/products/categories'),
+                      onPressed: () =>
+                          sheetContext.push('/products/categories'),
                       icon: const Icon(LucideIcons.settings),
                       label: Text('categories.title'.tr()),
                     ),
                   ),
                   Flexible(
-                    child: BlocBuilder<CategoriesBloc, RealtimeState<List<Category>>>(
-                      bloc: categoriesBloc,
-                      builder: (context, state) {
-                        final categories = state is RealtimeSuccess<List<Category>> ? state.data : <Category>[];
-                        return ListView.builder(
-                          shrinkWrap: true,
-                          itemCount: categories.length + 1,
-                          itemBuilder: (context, index) {
-                            if (index == 0) {
-                              return ListTile(
-                                title: Text('common.none'.tr()),
-                                onTap: () => Navigator.of(context).pop(null),
-                              );
-                            }
-                            final cat = categories[index - 1];
-                            return ListTile(
-                              title: Text(cat.name),
-                              onTap: () => Navigator.of(context).pop(cat.id),
+                    child:
+                        BlocBuilder<
+                          CategoriesBloc,
+                          RealtimeState<List<Category>>
+                        >(
+                          bloc: categoriesBloc,
+                          builder: (context, state) {
+                            final categories =
+                                state is RealtimeSuccess<List<Category>>
+                                ? state.data
+                                : <Category>[];
+                            return ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: categories.length + 1,
+                              itemBuilder: (context, index) {
+                                if (index == 0) {
+                                  return ListTile(
+                                    title: Text('common.none'.tr()),
+                                    onTap: () =>
+                                        Navigator.of(context).pop(null),
+                                  );
+                                }
+                                final cat = categories[index - 1];
+                                return ListTile(
+                                  title: Text(cat.name),
+                                  onTap: () =>
+                                      Navigator.of(context).pop(cat.id),
+                                );
+                              },
                             );
                           },
-                        );
-                      },
-                    ),
+                        ),
                   ),
                 ],
               ),
@@ -871,12 +983,20 @@ class _ProductFormViewState extends State<_ProductFormView> {
                         ? 'products.cost_readonly_hint'.tr()
                         : null,
                     onChanged: (value) {
-                      bloc.add(ProductFormFieldChanged(field: 'costCents', value: value));
+                      bloc.add(
+                        ProductFormFieldChanged(
+                          field: 'costCents',
+                          value: value,
+                        ),
+                      );
                     },
                   ),
                   if (state.fieldErrors['costCents'] == null &&
                       state.fieldWarnings['costCents'] != null)
-                    _buildWarningHint(context, state.fieldWarnings['costCents']!),
+                    _buildWarningHint(
+                      context,
+                      state.fieldWarnings['costCents']!,
+                    ),
                 ],
               ),
             ),
@@ -890,12 +1010,20 @@ class _ProductFormViewState extends State<_ProductFormView> {
                     label: 'product_form_price'.tr(),
                     errorText: state.fieldErrors['priceCents']?.tr(),
                     onChanged: (value) {
-                      bloc.add(ProductFormFieldChanged(field: 'priceCents', value: value));
+                      bloc.add(
+                        ProductFormFieldChanged(
+                          field: 'priceCents',
+                          value: value,
+                        ),
+                      );
                     },
                   ),
                   if (state.fieldErrors['priceCents'] == null &&
                       state.fieldWarnings['priceCents'] != null)
-                    _buildWarningHint(context, state.fieldWarnings['priceCents']!),
+                    _buildWarningHint(
+                      context,
+                      state.fieldWarnings['priceCents']!,
+                    ),
                 ],
               ),
             ),
@@ -909,10 +1037,12 @@ class _ProductFormViewState extends State<_ProductFormView> {
                 value: state.wholesalePriceCents ?? Decimal.zero,
                 label: 'product_form_wholesalePrice'.tr(),
                 onChanged: (value) {
-                  bloc.add(ProductFormFieldChanged(
-                    field: 'wholesalePriceCents',
-                    value: value == Decimal.zero ? null : value,
-                  ));
+                  bloc.add(
+                    ProductFormFieldChanged(
+                      field: 'wholesalePriceCents',
+                      value: value == Decimal.zero ? null : value,
+                    ),
+                  );
                 },
               ),
             ),
@@ -946,7 +1076,9 @@ class _ProductFormViewState extends State<_ProductFormView> {
         // bulk template that the user can push down to every variant, while
         // the actual ground-truth prices are shown as min–max ranges derived
         // from the variants themselves (Shopify / WooCommerce behaviour).
-        if (state.hasVariants && state.isEditing && state.productId != null) ...[
+        if (state.hasVariants &&
+            state.isEditing &&
+            state.productId != null) ...[
           const SizedBox(height: 16),
           _VariantPriceRangeCard(productId: state.productId!),
           const SizedBox(height: 12),
@@ -1010,17 +1142,19 @@ class _ProductFormViewState extends State<_ProductFormView> {
 
     final willDeactivate = refCount != 0;
     final hasStock = stockQty > 0;
+    final displayedStock = localizedQuantity(stockQty, state.measurementType);
 
     // Branch 1: stock>0 → mandatory shrinkage write-off path.
     if (hasStock) {
       final body = willDeactivate
           ? (refCount > 0
-              ? 'product_form.writeoff_deactivate_body'
-                  .tr(args: [stockQty.toString(), refCount.toString()])
-              : 'product_form.writeoff_deactivate_body_unknown'
-                  .tr(args: [stockQty.toString()]))
-          : 'product_form.writeoff_delete_body'
-              .tr(args: [stockQty.toString()]);
+                ? 'product_form.writeoff_deactivate_body'.tr(
+                    args: [displayedStock, refCount.toString()],
+                  )
+                : 'product_form.writeoff_deactivate_body_unknown'.tr(
+                    args: [displayedStock],
+                  ))
+          : 'product_form.writeoff_delete_body'.tr(args: [displayedStock]);
 
       final ok = await showDialog<bool>(
         context: context,
@@ -1034,9 +1168,7 @@ class _ProductFormViewState extends State<_ProductFormView> {
               child: Text('common.cancel'.tr()),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: colorScheme.error,
-              ),
+              style: FilledButton.styleFrom(backgroundColor: colorScheme.error),
               onPressed: () => Navigator.of(ctx).pop(true),
               child: Text('product_form.writeoff_action'.tr()),
             ),
@@ -1056,8 +1188,9 @@ class _ProductFormViewState extends State<_ProductFormView> {
             content: Text(
               result.wasDeleted
                   ? 'product_form.writeoff_deleted_success'.tr()
-                  : 'product_form.writeoff_deactivated_success'
-                      .tr(args: [result.referenceCount.toString()]),
+                  : 'product_form.writeoff_deactivated_success'.tr(
+                      args: [result.referenceCount.toString()],
+                    ),
             ),
             backgroundColor: result.wasDeleted
                 ? colorScheme.primary
@@ -1104,8 +1237,9 @@ class _ProductFormViewState extends State<_ProductFormView> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor:
-                  willDeactivate ? colorScheme.tertiary : colorScheme.error,
+              backgroundColor: willDeactivate
+                  ? colorScheme.tertiary
+                  : colorScheme.error,
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: Text(actionLabel),
@@ -1124,8 +1258,9 @@ class _ProductFormViewState extends State<_ProductFormView> {
           content: Text(
             result.wasDeleted
                 ? 'product_form.deleted_success'.tr()
-                : 'product_form.deactivated_success'
-                    .tr(args: [result.referenceCount.toString()]),
+                : 'product_form.deactivated_success'.tr(
+                    args: [result.referenceCount.toString()],
+                  ),
           ),
           backgroundColor: result.wasDeleted
               ? colorScheme.primary
@@ -1154,7 +1289,9 @@ class _ProductFormViewState extends State<_ProductFormView> {
       builder: (ctx) => AlertDialog(
         icon: Icon(LucideIcons.alertTriangle, color: cs.tertiary),
         title: Text('product_form.hasVariants_disable_title'.tr()),
-        content: Text('product_form.hasVariants_disable_body'.tr(args: [count.toString()])),
+        content: Text(
+          'product_form.hasVariants_disable_body'.tr(args: [count.toString()]),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -1169,6 +1306,26 @@ class _ProductFormViewState extends State<_ProductFormView> {
       ),
     );
     return confirmed ?? false;
+  }
+
+  Future<void> _showVariantStockBlock(BuildContext context, int count) {
+    final cs = Theme.of(context).colorScheme;
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(LucideIcons.packageX, color: cs.error),
+        title: Text('product_form.hasVariants_stock_title'.tr()),
+        content: Text(
+          'product_form.hasVariants_stock_blocked'.tr(args: [count.toString()]),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('common.ok'.tr()),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _applyPriceToAllVariants(
@@ -1208,10 +1365,12 @@ class _ProductFormViewState extends State<_ProductFormView> {
       // adjustment which posts the proper Dr/Cr against 1200 / 5900.
       for (final variant in variants) {
         if (!variant.isActive) continue;
-        await variantRepo.updateVariant(variant.copyWith(
-          priceCents: state.priceCents,
-          wholesalePriceCents: state.wholesalePriceCents,
-        ));
+        await variantRepo.updateVariant(
+          variant.copyWith(
+            priceCents: state.priceCents,
+            wholesalePriceCents: state.wholesalePriceCents,
+          ),
+        );
       }
 
       if (!context.mounted) return;
@@ -1256,6 +1415,8 @@ class _ProductFormViewState extends State<_ProductFormView> {
       title: 'product_form_inventory'.tr(),
       icon: LucideIcons.warehouse,
       children: [
+        _buildMeasurementTypeSelector(context, state),
+        const SizedBox(height: 16),
         if (state.hasVariants)
           Container(
             width: double.infinity,
@@ -1264,7 +1425,9 @@ class _ProductFormViewState extends State<_ProductFormView> {
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                color: Theme.of(
+                  context,
+                ).colorScheme.outline.withValues(alpha: 0.2),
               ),
             ),
             child: Row(
@@ -1288,24 +1451,37 @@ class _ProductFormViewState extends State<_ProductFormView> {
           children: [
             Expanded(
               child: state.hasVariants && productId != null
-                  ? BlocBuilder<ProductVariantsBloc, RealtimeState<List<ProductVariant>>>(
+                  ? BlocBuilder<
+                      ProductVariantsBloc,
+                      RealtimeState<List<ProductVariant>>
+                    >(
                       builder: (context, variantsState) {
                         List<ProductVariant> variants = const [];
-                        if (variantsState is RealtimeSuccess<List<ProductVariant>>) {
+                        if (variantsState
+                            is RealtimeSuccess<List<ProductVariant>>) {
                           variants = variantsState.data;
-                        } else if (variantsState is RealtimeLoading<List<ProductVariant>>) {
+                        } else if (variantsState
+                            is RealtimeLoading<List<ProductVariant>>) {
                           variants = variantsState.previousData ?? const [];
-                        } else if (variantsState is RealtimeError<List<ProductVariant>>) {
+                        } else if (variantsState
+                            is RealtimeError<List<ProductVariant>>) {
                           variants = variantsState.previousData ?? const [];
-                        } else if (variantsState is RealtimeOptimistic<List<ProductVariant>>) {
+                        } else if (variantsState
+                            is RealtimeOptimistic<List<ProductVariant>>) {
                           variants = variantsState.optimisticData;
                         }
 
-                        final totalStock = variants.fold<int>(0, (sum, v) => sum + v.stockQuantity);
+                        final totalStock = variants.fold<int>(
+                          0,
+                          (sum, v) => sum + v.stockQuantity,
+                        );
 
                         return TextFormField(
                           key: ValueKey('total_stock_$totalStock'),
-                          initialValue: totalStock.toString(),
+                          initialValue: localizedQuantity(
+                            totalStock,
+                            state.measurementType,
+                          ),
                           decoration: InputDecoration(
                             labelText: 'product_form.totalStock'.tr(),
                             border: const OutlineInputBorder(),
@@ -1339,14 +1515,23 @@ class _ProductFormViewState extends State<_ProductFormView> {
                       // labor, etc.) carry no inventory ledger so direct
                       // editing is allowed.
                       enabled: !state.isEditing || !state.trackInventory,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                      ],
                       onTap: () => selectAllText(_stockController),
                       onChanged: (value) {
-                        bloc.add(ProductFormFieldChanged(
-                          field: 'stockQuantity',
-                          value: int.tryParse(value) ?? 0,
-                        ));
+                        bloc.add(
+                          ProductFormFieldChanged(
+                            field: 'stockQuantity',
+                            value: _parseMajorQuantity(
+                              value,
+                              MeasurementType.fromDb(state.measurementType),
+                            ),
+                          ),
+                        );
                       },
                     ),
             ),
@@ -1360,14 +1545,23 @@ class _ProductFormViewState extends State<_ProductFormView> {
                   errorText: state.fieldErrors['minQuantity']?.tr(),
                   border: const OutlineInputBorder(),
                 ),
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                ],
                 onTap: () => selectAllText(_minStockController),
                 onChanged: (value) {
-                  bloc.add(ProductFormFieldChanged(
-                    field: 'minQuantity',
-                    value: int.tryParse(value) ?? 0,
-                  ));
+                  bloc.add(
+                    ProductFormFieldChanged(
+                      field: 'minQuantity',
+                      value: _parseMajorQuantity(
+                        value,
+                        MeasurementType.fromDb(state.measurementType),
+                      ),
+                    ),
+                  );
                 },
               ),
             ),
@@ -1396,9 +1590,19 @@ class _ProductFormViewState extends State<_ProductFormView> {
         SwitchListTile(
           title: Text('product_form_trackInventory'.tr()),
           value: state.trackInventory,
-          onChanged: (value) {
-            bloc.add(ProductFormFieldChanged(field: 'trackInventory', value: value));
-          },
+          subtitle: state.isEditing && state.costingMethodLockReason != null
+              ? Text('measurement.locked_after_activity'.tr())
+              : null,
+          onChanged: state.isEditing && state.costingMethodLockReason != null
+              ? null
+              : (value) {
+                  bloc.add(
+                    ProductFormFieldChanged(
+                      field: 'trackInventory',
+                      value: value,
+                    ),
+                  );
+                },
         ),
         const SizedBox(height: 16),
         _buildInventoryTrackingSelector(context, state),
@@ -1409,6 +1613,70 @@ class _ProductFormViewState extends State<_ProductFormView> {
           BatchesSectionWidget(productId: productId),
         ],
       ],
+    );
+  }
+
+  int _parseMajorQuantity(String raw, MeasurementType type) {
+    try {
+      return MeasuredQuantity.parseToStored(raw, type.majorUnit);
+    } on FormatException {
+      return 0;
+    }
+  }
+
+  Widget _buildMeasurementTypeSelector(
+    BuildContext context,
+    ProductFormState state,
+  ) {
+    final settings = context.watch<AppSettingsBloc>().state.settings;
+    final current = MeasurementType.fromDb(state.measurementType);
+    final enabled = <MeasurementType>{MeasurementType.piece};
+    if (settings.enableMeasuredProducts) {
+      if (settings.enableLengthUnits) enabled.add(MeasurementType.length);
+      if (settings.enableWeightUnits) enabled.add(MeasurementType.weight);
+      if (settings.enableVolumeUnits) enabled.add(MeasurementType.volume);
+    }
+    // Existing measured products remain usable even if their settings switch
+    // is later disabled. The switch controls creation choices, not history.
+    enabled.add(current);
+    final locked = state.isEditing && state.costingMethodLockReason != null;
+
+    return DropdownButtonFormField<MeasurementType>(
+      initialValue: current,
+      decoration: InputDecoration(
+        labelText: 'measurement.product_type'.tr(),
+        helperText: locked
+            ? 'measurement.locked_after_activity'.tr()
+            : 'measurement.price_per_major_unit'.tr(
+                namedArgs: {
+                  'unit': 'measurement.units.${current.majorUnit.dbValue}'.tr(),
+                },
+              ),
+        helperMaxLines: 2,
+        border: const OutlineInputBorder(),
+        prefixIcon: const Icon(LucideIcons.ruler),
+      ),
+      items: enabled
+          .map(
+            (type) => DropdownMenuItem(
+              value: type,
+              child: Text('measurement.types.${type.dbValue}'.tr()),
+            ),
+          )
+          .toList(),
+      onChanged: locked
+          ? null
+          : (type) {
+              if (type == null || type == current) return;
+              context.read<ProductFormBloc>().add(
+                ProductFormFieldChanged(
+                  field: 'measurementType',
+                  value: type.dbValue,
+                ),
+              );
+              _stockController.text = '0';
+              _minStockController.text = '0';
+            },
     );
   }
 
@@ -1439,6 +1707,8 @@ class _ProductFormViewState extends State<_ProductFormView> {
           return 'products.tracking_locked_stock'.tr();
         case 'has_consumptions':
           return 'products.tracking_locked_consumptions'.tr();
+        case 'has_transactions':
+          return 'products.tracking_locked_transactions'.tr();
         default:
           return '';
       }
@@ -1456,7 +1726,8 @@ class _ProductFormViewState extends State<_ProductFormView> {
       }
     }
 
-    final fieldError = state.fieldErrors['inventoryTrackingType'] ??
+    final fieldError =
+        state.fieldErrors['inventoryTrackingType'] ??
         state.fieldErrors['costingMethod'];
 
     return Column(
@@ -1499,11 +1770,11 @@ class _ProductFormViewState extends State<_ProductFormView> {
           onSelectionChanged: isLocked
               ? null
               : (set) => bloc.add(
-                    ProductFormFieldChanged(
-                      field: 'inventoryTrackingType',
-                      value: set.first,
-                    ),
+                  ProductFormFieldChanged(
+                    field: 'inventoryTrackingType',
+                    value: set.first,
                   ),
+                ),
           showSelectedIcon: false,
         ),
         const SizedBox(height: 6),
@@ -1580,10 +1851,12 @@ class _ProductFormViewState extends State<_ProductFormView> {
             onTap: () => selectAllText(_purchaseTaxRateController),
             onChanged: (value) {
               final rate = double.tryParse(value) ?? 0;
-              bloc.add(ProductFormFieldChanged(
-                field: 'purchaseTaxRateBps',
-                value: (rate * 100).toInt(),
-              ));
+              bloc.add(
+                ProductFormFieldChanged(
+                  field: 'purchaseTaxRateBps',
+                  value: (rate * 100).toInt(),
+                ),
+              );
             },
           ),
           const SizedBox(height: 16),
@@ -1599,10 +1872,12 @@ class _ProductFormViewState extends State<_ProductFormView> {
             onTap: () => selectAllText(_salesTaxRateController),
             onChanged: (value) {
               final rate = double.tryParse(value) ?? 0;
-              bloc.add(ProductFormFieldChanged(
-                field: 'salesTaxRateBps',
-                value: (rate * 100).toInt(),
-              ));
+              bloc.add(
+                ProductFormFieldChanged(
+                  field: 'salesTaxRateBps',
+                  value: (rate * 100).toInt(),
+                ),
+              );
             },
           ),
         ],
@@ -1625,16 +1900,30 @@ class _ProductFormViewState extends State<_ProductFormView> {
             // Turning variants OFF on an editing product is destructive:
             // dimensional variants will be deactivated. Confirm with the
             // exact count (Shopify / WooCommerce style) before applying.
-            if (!value && state.hasVariants && state.isEditing && state.productId != null) {
-              final count = await sl<ProductVariantRepository>()
-                  .countActiveDimensionalVariants(state.productId!);
+            if (!value &&
+                state.hasVariants &&
+                state.isEditing &&
+                state.productId != null) {
+              final repository = sl<ProductVariantRepository>();
+              final stockBearingCount = await repository
+                  .countActiveDimensionalVariantsWithStock(state.productId!);
+              if (!context.mounted) return;
+              if (stockBearingCount > 0) {
+                await _showVariantStockBlock(context, stockBearingCount);
+                return;
+              }
+              final count = await repository.countActiveDimensionalVariants(
+                state.productId!,
+              );
               if (!context.mounted) return;
               if (count > 0) {
                 final confirmed = await _confirmDisableVariants(context, count);
                 if (!confirmed) return;
               }
             }
-            bloc.add(ProductFormFieldChanged(field: 'hasVariants', value: value));
+            bloc.add(
+              ProductFormFieldChanged(field: 'hasVariants', value: value),
+            );
           },
         ),
         SwitchListTile(
@@ -1650,7 +1939,7 @@ class _ProductFormViewState extends State<_ProductFormView> {
 
   Widget _buildVariantsSection(BuildContext context, ProductFormState state) {
     final productId = state.productId;
-    
+
     // For new products, show a message that variants can be added after saving
     if (productId == null) {
       return _buildSectionCard(
@@ -1687,11 +1976,13 @@ class _ProductFormViewState extends State<_ProductFormView> {
       title: 'product_form.variants'.tr(),
       icon: LucideIcons.layers,
       children: [
-        VariantManagementWidget(productId: productId),
+        VariantManagementWidget(
+          productId: productId,
+          measurementType: state.measurementType,
+        ),
       ],
     );
   }
-
 }
 
 class _ColorSizePickerRow extends StatelessWidget {
@@ -1756,13 +2047,15 @@ class _ColorPickerField extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<ColorsBloc, RealtimeState<List<ProductColor>>>(
       builder: (context, state) {
-        final colors = state is RealtimeSuccess<List<ProductColor>> ? state.data : <ProductColor>[];
+        final colors = state is RealtimeSuccess<List<ProductColor>>
+            ? state.data
+            : <ProductColor>[];
         final selected = selectedColorId == null
             ? null
             : colors.cast<ProductColor?>().firstWhere(
-                  (c) => c?.id == selectedColorId,
-                  orElse: () => null,
-                );
+                (c) => c?.id == selectedColorId,
+                orElse: () => null,
+              );
 
         return InkWell(
           onTap: () => _showColorPickerBottomSheet(context, colors),
@@ -1780,9 +2073,13 @@ class _ColorPickerField extends StatelessWidget {
                         width: 18,
                         height: 18,
                         decoration: BoxDecoration(
-                          color: _tryParseHexColor(selected.hexCode) ?? Colors.grey,
+                          color:
+                              _tryParseHexColor(selected.hexCode) ??
+                              Colors.grey,
                           shape: BoxShape.circle,
-                          border: Border.all(color: Theme.of(context).colorScheme.outline),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -1795,7 +2092,10 @@ class _ColorPickerField extends StatelessWidget {
     );
   }
 
-  Future<void> _showColorPickerBottomSheet(BuildContext context, List<ProductColor> colors) async {
+  Future<void> _showColorPickerBottomSheet(
+    BuildContext context,
+    List<ProductColor> colors,
+  ) async {
     final colorsBloc = context.read<ColorsBloc>();
     final selected = await showModalBottomSheet<int?>(
       context: context,
@@ -1808,10 +2108,18 @@ class _ColorPickerField extends StatelessWidget {
             builder: (context, setState) {
               return BlocBuilder<ColorsBloc, RealtimeState<List<ProductColor>>>(
                 builder: (context, state) {
-                  final allColors = state is RealtimeSuccess<List<ProductColor>> ? state.data : colors;
+                  final allColors = state is RealtimeSuccess<List<ProductColor>>
+                      ? state.data
+                      : colors;
                   final filtered = query.isEmpty
                       ? allColors
-                      : allColors.where((c) => c.name.toLowerCase().contains(query.toLowerCase())).toList();
+                      : allColors
+                            .where(
+                              (c) => c.name.toLowerCase().contains(
+                                query.toLowerCase(),
+                              ),
+                            )
+                            .toList();
 
                   return SafeArea(
                     child: Padding(
@@ -1849,7 +2157,8 @@ class _ColorPickerField extends StatelessWidget {
                                 if (index == 0) {
                                   return ListTile(
                                     title: Text('common.none'.tr()),
-                                    onTap: () => Navigator.of(context).pop(null),
+                                    onTap: () =>
+                                        Navigator.of(context).pop(null),
                                   );
                                 }
                                 final color = filtered[index - 1];
@@ -1858,13 +2167,20 @@ class _ColorPickerField extends StatelessWidget {
                                     width: 18,
                                     height: 18,
                                     decoration: BoxDecoration(
-                                      color: _tryParseHexColor(color.hexCode) ?? Colors.grey,
+                                      color:
+                                          _tryParseHexColor(color.hexCode) ??
+                                          Colors.grey,
                                       shape: BoxShape.circle,
-                                      border: Border.all(color: Theme.of(context).colorScheme.outline),
+                                      border: Border.all(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.outline,
+                                      ),
                                     ),
                                   ),
                                   title: Text(color.name),
-                                  onTap: () => Navigator.of(context).pop(color.id),
+                                  onTap: () =>
+                                      Navigator.of(context).pop(color.id),
                                 );
                               },
                             ),
@@ -1900,13 +2216,15 @@ class _SizePickerField extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<SizesBloc, RealtimeState<List<Size>>>(
       builder: (context, state) {
-        final sizes = state is RealtimeSuccess<List<Size>> ? state.data : <Size>[];
+        final sizes = state is RealtimeSuccess<List<Size>>
+            ? state.data
+            : <Size>[];
         final selected = selectedSizeId == null
             ? null
             : sizes.cast<Size?>().firstWhere(
-                  (s) => s?.id == selectedSizeId,
-                  orElse: () => null,
-                );
+                (s) => s?.id == selectedSizeId,
+                orElse: () => null,
+              );
 
         return InkWell(
           onTap: () => _showSizePickerBottomSheet(context, sizes),
@@ -1923,7 +2241,10 @@ class _SizePickerField extends StatelessWidget {
     );
   }
 
-  Future<void> _showSizePickerBottomSheet(BuildContext context, List<Size> sizes) async {
+  Future<void> _showSizePickerBottomSheet(
+    BuildContext context,
+    List<Size> sizes,
+  ) async {
     final sizesBloc = context.read<SizesBloc>();
     final selected = await showModalBottomSheet<int?>(
       context: context,
@@ -1936,10 +2257,18 @@ class _SizePickerField extends StatelessWidget {
             builder: (context, setState) {
               return BlocBuilder<SizesBloc, RealtimeState<List<Size>>>(
                 builder: (context, state) {
-                  final allSizes = state is RealtimeSuccess<List<Size>> ? state.data : sizes;
+                  final allSizes = state is RealtimeSuccess<List<Size>>
+                      ? state.data
+                      : sizes;
                   final filtered = query.isEmpty
                       ? allSizes
-                      : allSizes.where((s) => s.name.toLowerCase().contains(query.toLowerCase())).toList();
+                      : allSizes
+                            .where(
+                              (s) => s.name.toLowerCase().contains(
+                                query.toLowerCase(),
+                              ),
+                            )
+                            .toList();
 
                   return SafeArea(
                     child: Padding(
@@ -1977,13 +2306,15 @@ class _SizePickerField extends StatelessWidget {
                                 if (index == 0) {
                                   return ListTile(
                                     title: Text('common.none'.tr()),
-                                    onTap: () => Navigator.of(context).pop(null),
+                                    onTap: () =>
+                                        Navigator.of(context).pop(null),
                                   );
                                 }
                                 final size = filtered[index - 1];
                                 return ListTile(
                                   title: Text(size.name),
-                                  onTap: () => Navigator.of(context).pop(size.id),
+                                  onTap: () =>
+                                      Navigator.of(context).pop(size.id),
                                 );
                               },
                             ),
@@ -2037,20 +2368,27 @@ class _ExpiryInfoWidget extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: item.expiryDate.isBefore(now)
                         ? cs.errorContainer.withValues(alpha: 0.3)
-                        : item.expiryDate.isBefore(now.add(const Duration(days: 30)))
-                            ? Colors.orange.withValues(alpha: 0.15)
-                            : cs.surfaceContainerHighest,
+                        : item.expiryDate.isBefore(
+                            now.add(const Duration(days: 30)),
+                          )
+                        ? Colors.orange.withValues(alpha: 0.15)
+                        : cs.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: item.expiryDate.isBefore(now)
                           ? cs.error.withValues(alpha: 0.5)
-                          : item.expiryDate.isBefore(now.add(const Duration(days: 30)))
-                              ? Colors.orange.withValues(alpha: 0.5)
-                              : cs.outline.withValues(alpha: 0.2),
+                          : item.expiryDate.isBefore(
+                              now.add(const Duration(days: 30)),
+                            )
+                          ? Colors.orange.withValues(alpha: 0.5)
+                          : cs.outline.withValues(alpha: 0.2),
                     ),
                   ),
                   child: Row(
@@ -2060,23 +2398,29 @@ class _ExpiryInfoWidget extends StatelessWidget {
                         size: 16,
                         color: item.expiryDate.isBefore(now)
                             ? cs.error
-                            : item.expiryDate.isBefore(now.add(const Duration(days: 30)))
-                                ? Colors.orange
-                                : cs.onSurfaceVariant,
+                            : item.expiryDate.isBefore(
+                                now.add(const Duration(days: 30)),
+                              )
+                            ? Colors.orange
+                            : cs.onSurfaceVariant,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'product_form.expiry_info'.tr(args: [
-                            '${item.quantity}',
-                            DateFormat.yMMMd().format(item.expiryDate),
-                          ]),
+                          'product_form.expiry_info'.tr(
+                            args: [
+                              '${item.quantity}',
+                              DateFormat.yMMMd().format(item.expiryDate),
+                            ],
+                          ),
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: item.expiryDate.isBefore(now)
                                 ? cs.error
-                                : item.expiryDate.isBefore(now.add(const Duration(days: 30)))
-                                    ? Colors.orange.shade800
-                                    : cs.onSurfaceVariant,
+                                : item.expiryDate.isBefore(
+                                    now.add(const Duration(days: 30)),
+                                  )
+                                ? Colors.orange.shade800
+                                : cs.onSurfaceVariant,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -2100,8 +2444,9 @@ class _VariantPriceRangeCard extends StatelessWidget {
   final int productId;
   const _VariantPriceRangeCard({required this.productId});
 
-  String _fmt(Decimal cents) =>
-      (cents / Decimal.fromInt(100)).toDecimal(scaleOnInfinitePrecision: 2).toStringAsFixed(2);
+  String _fmt(Decimal cents) => (cents / Decimal.fromInt(100))
+      .toDecimal(scaleOnInfinitePrecision: 2)
+      .toStringAsFixed(2);
 
   String _range(Decimal min, Decimal max) {
     if (min == max) return _fmt(min);
@@ -2152,7 +2497,9 @@ class _VariantPriceRangeCard extends StatelessWidget {
                   const Spacer(),
                   Text(
                     '${variants.length}',
-                    style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -2183,7 +2530,11 @@ class _VariantPriceRangeCard extends StatelessWidget {
     );
   }
 
-  Widget _rangeCell(ThemeData theme, {required String label, required String value}) {
+  Widget _rangeCell(
+    ThemeData theme, {
+    required String label,
+    required String value,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2196,7 +2547,9 @@ class _VariantPriceRangeCard extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           value,
-          style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ],
     );
@@ -2251,23 +2604,20 @@ class _PrintModeOptionCard extends StatelessWidget {
                     Text(
                       title,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right,
-                color: colorScheme.onSurfaceVariant,
-              ),
+              Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant),
             ],
           ),
         ),
@@ -2362,7 +2712,7 @@ class _PriceHistoryWidget extends StatelessWidget {
                   final variantLabel = h.variantId == null
                       ? null
                       : (vm.variantLabels[h.variantId!] ??
-                          'Variant #${h.variantId}');
+                            'Variant #${h.variantId}');
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Column(
@@ -2380,10 +2730,13 @@ class _PriceHistoryWidget extends StatelessWidget {
                               const SizedBox(width: 6),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: cs.primaryContainer
-                                      .withValues(alpha: 0.6),
+                                  color: cs.primaryContainer.withValues(
+                                    alpha: 0.6,
+                                  ),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
@@ -2416,7 +2769,8 @@ class _PriceHistoryWidget extends StatelessWidget {
                             label: 'product_form_wholesalePrice'.tr(),
                             from: _fmtCents(h.oldWholesalePriceCents ?? 0),
                             to: _fmtCents(h.newWholesalePriceCents ?? 0),
-                            isIncrease: (h.newWholesalePriceCents ?? 0) >
+                            isIncrease:
+                                (h.newWholesalePriceCents ?? 0) >
                                 (h.oldWholesalePriceCents ?? 0),
                           ),
                         const Divider(height: 12),
@@ -2435,18 +2789,16 @@ class _PriceHistoryWidget extends StatelessWidget {
     final entries = await sl<ProductRepository>().getPriceHistory(productId);
     // Resolve variant labels for the chip. Best-effort: SKU first, else
     // "Variant #id". Skipped entirely when no variant-scoped rows exist.
-    final variantIds = entries
-        .map((e) => e.variantId)
-        .whereType<int>()
-        .toSet();
+    final variantIds = entries.map((e) => e.variantId).whereType<int>().toSet();
     final labels = <int, String>{};
     if (variantIds.isNotEmpty) {
-      final variants =
-          await sl<ProductVariantRepository>().getVariantsByProduct(productId);
+      final variants = await sl<ProductVariantRepository>()
+          .getVariantsByProduct(productId);
       for (final v in variants) {
         if (variantIds.contains(v.id)) {
-          labels[v.id] =
-              (v.sku?.trim().isNotEmpty ?? false) ? v.sku!.trim() : 'Variant #${v.id}';
+          labels[v.id] = (v.sku?.trim().isNotEmpty ?? false)
+              ? v.sku!.trim()
+              : 'Variant #${v.id}';
         }
       }
     }
@@ -2462,8 +2814,8 @@ class _PriceHistoryViewModel {
     required this.variantLabels,
   });
   const _PriceHistoryViewModel.empty()
-      : entries = const <PriceHistory>[],
-        variantLabels = const <int, String>{};
+    : entries = const <PriceHistory>[],
+      variantLabels = const <int, String>{};
 }
 
 class _PriceHistoryRow extends StatelessWidget {

@@ -23,9 +23,10 @@ enum DiscountMode { perItem, invoice }
 enum PurchasePaymentMethod { cash, credit, card, cheque, purchaseOrder }
 
 /// How to handle overpayment when paid amount exceeds invoice total
-enum OverpaymentHandling { 
+enum OverpaymentHandling {
   /// Return the excess as change to the party
   returnChange,
+
   /// Add the excess to the party's credit balance
   addToBalance,
 }
@@ -119,18 +120,24 @@ class PurchaseFormState extends Equatable {
     // what the bloc previously persisted.
     final inInvoiceMode = discountMode == DiscountMode.invoice;
     final lineInputs = items
-        .map((i) => i.toPricingInput(
-              overrideDiscount: inInvoiceMode ? Discount.none : null,
-            ))
+        .map(
+          (i) => i.toPricingInput(
+            overrideDiscount: inInvoiceMode ? Discount.none : null,
+          ),
+        )
         .toList(growable: false);
 
-    return InvoicePricingEngine.compute(InvoicePricingInput(
-      lines: lineInputs,
-      overallDiscount: inInvoiceMode ? _buildOverallDiscount() : Discount.none,
-      enableTaxCalculations: enableTaxCalculations,
-      defaultTaxRateBps: defaultPurchaseTaxRateBps,
-      taxInclusivePricing: taxInclusivePricing,
-    ));
+    return InvoicePricingEngine.compute(
+      InvoicePricingInput(
+        lines: lineInputs,
+        overallDiscount: inInvoiceMode
+            ? _buildOverallDiscount()
+            : Discount.none,
+        enableTaxCalculations: enableTaxCalculations,
+        defaultTaxRateBps: defaultPurchaseTaxRateBps,
+        taxInclusivePricing: taxInclusivePricing,
+      ),
+    );
   }
 
   Discount _buildOverallDiscount() {
@@ -154,10 +161,8 @@ class PurchaseFormState extends Equatable {
   /// per-line discount input is gated to `perItem` mode. The engine also
   /// masks per-line discounts at compute time for defence-in-depth (per
   /// Q3 mode-exclusivity) — but state is the single SoT.
-  Decimal get itemDiscountCents => items.fold(
-        Decimal.zero,
-        (sum, item) => sum + item.discountCents,
-      );
+  Decimal get itemDiscountCents =>
+      items.fold(Decimal.zero, (sum, item) => sum + item.discountCents);
 
   /// Invoice-level discount actually applied. The engine clamps both
   /// fixed and percent paths to `[0, subtotal]` so this value can never
@@ -244,8 +249,10 @@ class PurchaseFormState extends Equatable {
       error: error,
       isSuccess: isSuccess ?? this.isSuccess,
       hasUnsavedChanges: hasUnsavedChanges ?? this.hasUnsavedChanges,
-      enableTaxCalculations: enableTaxCalculations ?? this.enableTaxCalculations,
-      defaultPurchaseTaxRateBps: defaultPurchaseTaxRateBps ?? this.defaultPurchaseTaxRateBps,
+      enableTaxCalculations:
+          enableTaxCalculations ?? this.enableTaxCalculations,
+      defaultPurchaseTaxRateBps:
+          defaultPurchaseTaxRateBps ?? this.defaultPurchaseTaxRateBps,
       taxInclusivePricing: taxInclusivePricing ?? this.taxInclusivePricing,
       isEditingPosted: isEditingPosted ?? this.isEditingPosted,
     );
@@ -253,13 +260,31 @@ class PurchaseFormState extends Equatable {
 
   @override
   List<Object?> get props => [
-        purchaseId, purchaseNumber, supplierId, supplierName, currencyId, items,
-        discountMode, invoiceDiscountCents, supplierInvoiceRef,
-        notes, purchaseDate, dueDate,
-        paymentMethod, taxRatePercent, paidAmountCents, overpaymentHandling,
-        isSubmitting, error, isSuccess, hasUnsavedChanges,
-        enableTaxCalculations, defaultPurchaseTaxRateBps, taxInclusivePricing, isEditingPosted,
-      ];
+    purchaseId,
+    purchaseNumber,
+    supplierId,
+    supplierName,
+    currencyId,
+    items,
+    discountMode,
+    invoiceDiscountCents,
+    supplierInvoiceRef,
+    notes,
+    purchaseDate,
+    dueDate,
+    paymentMethod,
+    taxRatePercent,
+    paidAmountCents,
+    overpaymentHandling,
+    isSubmitting,
+    error,
+    isSuccess,
+    hasUnsavedChanges,
+    enableTaxCalculations,
+    defaultPurchaseTaxRateBps,
+    taxInclusivePricing,
+    isEditingPosted,
+  ];
 }
 
 /// A line item in the purchase form
@@ -274,6 +299,7 @@ class PurchaseLineItem extends Equatable {
   final String? colorName;
   final String? colorHex;
   final String? sizeName;
+
   /// Display value for "old cost" in the bottom-sheet. Always populated via
   /// [OriginalPriceResolver]; never null even for brand-new variants.
   final int originalCostCents;
@@ -320,7 +346,7 @@ class PurchaseLineItem extends Equatable {
     this.persistOriginalWholesalePriceCents,
     this.newSellPriceCents,
     this.newWholesalePriceCents,
-  })  : discountCents = discountCents ?? Decimal.zero;
+  }) : discountCents = discountCents ?? Decimal.zero;
 
   // ── Engine-backed line math ────────────────────────────────────────────
   // Per-line totals flow through [LineItemPricingEngine] so there is
@@ -335,7 +361,9 @@ class PurchaseLineItem extends Equatable {
     return LineItemPricingInput(
       unitPrice: Money.fromDecimalCents(unitCostCents),
       quantity: quantity,
-      discount: overrideDiscount ??
+      quantityScale: product.quantityScale,
+      discount:
+          overrideDiscount ??
           (discountCents > Decimal.zero
               ? Discount.fixed(Money.fromDecimalCents(discountCents))
               : Discount.none),
@@ -349,11 +377,11 @@ class PurchaseLineItem extends Equatable {
   /// tax-inclusive pricing. The state-level engine in [PurchaseFormState]
   /// is where global settings are honored.
   LineItemPricingResult _localCompute() => LineItemPricingEngine.compute(
-        input: toPricingInput(),
-        enableTaxCalculations: true,
-        defaultTaxRateBps: 0,
-        taxInclusivePricing: false,
-      );
+    input: toPricingInput(),
+    enableTaxCalculations: true,
+    defaultTaxRateBps: 0,
+    taxInclusivePricing: false,
+  );
 
   Decimal get subtotalCents => _localCompute().subtotal.decimalCents;
 
@@ -432,24 +460,45 @@ class PurchaseLineItem extends Equatable {
       sizeName: sizeName ?? this.sizeName,
       originalCostCents: originalCostCents ?? this.originalCostCents,
       originalPriceCents: originalPriceCents ?? this.originalPriceCents,
-      originalWholesalePriceCents: originalWholesalePriceCents ?? this.originalWholesalePriceCents,
-      persistOriginalCostCents: persistOriginalCostCents ?? this.persistOriginalCostCents,
-      persistOriginalPriceCents: persistOriginalPriceCents ?? this.persistOriginalPriceCents,
-      persistOriginalWholesalePriceCents: persistOriginalWholesalePriceCents ?? this.persistOriginalWholesalePriceCents,
-      newSellPriceCents: clearNewSellPrice ? null : (newSellPriceCents ?? this.newSellPriceCents),
-      newWholesalePriceCents: clearNewWholesalePrice ? null : (newWholesalePriceCents ?? this.newWholesalePriceCents),
+      originalWholesalePriceCents:
+          originalWholesalePriceCents ?? this.originalWholesalePriceCents,
+      persistOriginalCostCents:
+          persistOriginalCostCents ?? this.persistOriginalCostCents,
+      persistOriginalPriceCents:
+          persistOriginalPriceCents ?? this.persistOriginalPriceCents,
+      persistOriginalWholesalePriceCents:
+          persistOriginalWholesalePriceCents ??
+          this.persistOriginalWholesalePriceCents,
+      newSellPriceCents: clearNewSellPrice
+          ? null
+          : (newSellPriceCents ?? this.newSellPriceCents),
+      newWholesalePriceCents: clearNewWholesalePrice
+          ? null
+          : (newWholesalePriceCents ?? this.newWholesalePriceCents),
     );
   }
 
   @override
   List<Object?> get props => [
-        tempId, product, variant, quantity,
-        unitCostCents, discountCents, expiryDate,
-        colorName, colorHex, sizeName,
-        originalCostCents, originalPriceCents, originalWholesalePriceCents,
-        persistOriginalCostCents, persistOriginalPriceCents, persistOriginalWholesalePriceCents,
-        newSellPriceCents, newWholesalePriceCents,
-      ];
+    tempId,
+    product,
+    variant,
+    quantity,
+    unitCostCents,
+    discountCents,
+    expiryDate,
+    colorName,
+    colorHex,
+    sizeName,
+    originalCostCents,
+    originalPriceCents,
+    originalWholesalePriceCents,
+    persistOriginalCostCents,
+    persistOriginalPriceCents,
+    persistOriginalWholesalePriceCents,
+    newSellPriceCents,
+    newWholesalePriceCents,
+  ];
 }
 
 // ==================== EVENTS ====================
@@ -479,7 +528,14 @@ class PurchaseFormInitialized extends PurchaseFormEvent {
   });
 
   @override
-  List<Object?> get props => [purchaseId, currencyId, enableTaxCalculations, defaultPurchaseTaxRateBps, taxInclusivePricing, isEditingPosted];
+  List<Object?> get props => [
+    purchaseId,
+    currencyId,
+    enableTaxCalculations,
+    defaultPurchaseTaxRateBps,
+    taxInclusivePricing,
+    isEditingPosted,
+  ];
 }
 
 class PurchaseTaxSettingsChanged extends PurchaseFormEvent {
@@ -493,7 +549,11 @@ class PurchaseTaxSettingsChanged extends PurchaseFormEvent {
   });
 
   @override
-  List<Object?> get props => [enableTaxCalculations, defaultPurchaseTaxRateBps, taxInclusivePricing];
+  List<Object?> get props => [
+    enableTaxCalculations,
+    defaultPurchaseTaxRateBps,
+    taxInclusivePricing,
+  ];
 }
 
 class PurchaseSupplierChanged extends PurchaseFormEvent {
@@ -571,7 +631,14 @@ class PurchaseLineItemAdded extends PurchaseFormEvent {
   });
 
   @override
-  List<Object?> get props => [product, variant, quantity, unitCostCents, discountCents, expiryDate];
+  List<Object?> get props => [
+    product,
+    variant,
+    quantity,
+    unitCostCents,
+    discountCents,
+    expiryDate,
+  ];
 }
 
 class PurchaseLineItemUpdated extends PurchaseFormEvent {
@@ -596,7 +663,16 @@ class PurchaseLineItemUpdated extends PurchaseFormEvent {
   });
 
   @override
-  List<Object?> get props => [tempId, quantity, unitCostCents, discountCents, expiryDate, clearExpiry, newSellPriceCents, newWholesalePriceCents];
+  List<Object?> get props => [
+    tempId,
+    quantity,
+    unitCostCents,
+    discountCents,
+    expiryDate,
+    clearExpiry,
+    newSellPriceCents,
+    newWholesalePriceCents,
+  ];
 }
 
 class PurchaseLineItemRemoved extends PurchaseFormEvent {
@@ -660,11 +736,11 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
   Map<int, String?> _colorHexes = {};
   Map<int, String> _sizeNames = {};
 
-  PurchaseFormBloc(this._repository, this._variantRepository, this._productRepository)
-      : super(PurchaseFormState(
-          currencyId: 1,
-          purchaseDate: DateTime.now(),
-        )) {
+  PurchaseFormBloc(
+    this._repository,
+    this._variantRepository,
+    this._productRepository,
+  ) : super(PurchaseFormState(currencyId: 1, purchaseDate: DateTime.now())) {
     on<PurchaseFormInitialized>(_onInitialized);
     on<PurchaseSupplierChanged>(_onSupplierChanged);
     on<PurchaseDateChanged>(_onDateChanged);
@@ -696,9 +772,12 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     } catch (_) {}
   }
 
-  String? _resolveColorName(int? colorId) => colorId != null ? _colorNames[colorId] : null;
-  String? _resolveColorHex(int? colorId) => colorId != null ? _colorHexes[colorId] : null;
-  String? _resolveSizeName(int? sizeId) => sizeId != null ? _sizeNames[sizeId] : null;
+  String? _resolveColorName(int? colorId) =>
+      colorId != null ? _colorNames[colorId] : null;
+  String? _resolveColorHex(int? colorId) =>
+      colorId != null ? _colorHexes[colorId] : null;
+  String? _resolveSizeName(int? sizeId) =>
+      sizeId != null ? _sizeNames[sizeId] : null;
 
   String _generateTempId() {
     _lineCounter++;
@@ -732,32 +811,38 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       // New purchase: generate next invoice number
       try {
         final nextNumber = await _repository.generatePurchaseNumber();
-        emit(state.copyWith(
-          currencyId: event.currencyId,
-          purchaseNumber: nextNumber,
-          enableTaxCalculations: event.enableTaxCalculations,
-          defaultPurchaseTaxRateBps: event.defaultPurchaseTaxRateBps,
-          taxInclusivePricing: event.taxInclusivePricing,
-        ));
+        emit(
+          state.copyWith(
+            currencyId: event.currencyId,
+            purchaseNumber: nextNumber,
+            enableTaxCalculations: event.enableTaxCalculations,
+            defaultPurchaseTaxRateBps: event.defaultPurchaseTaxRateBps,
+            taxInclusivePricing: event.taxInclusivePricing,
+          ),
+        );
       } catch (_) {
-        emit(state.copyWith(
-          currencyId: event.currencyId,
-          enableTaxCalculations: event.enableTaxCalculations,
-          defaultPurchaseTaxRateBps: event.defaultPurchaseTaxRateBps,
-          taxInclusivePricing: event.taxInclusivePricing,
-        ));
+        emit(
+          state.copyWith(
+            currencyId: event.currencyId,
+            enableTaxCalculations: event.enableTaxCalculations,
+            defaultPurchaseTaxRateBps: event.defaultPurchaseTaxRateBps,
+            taxInclusivePricing: event.taxInclusivePricing,
+          ),
+        );
       }
       return;
     }
 
-    emit(state.copyWith(
-      purchaseId: event.purchaseId,
-      currencyId: event.currencyId,
-      enableTaxCalculations: event.enableTaxCalculations,
-      defaultPurchaseTaxRateBps: event.defaultPurchaseTaxRateBps,
-      taxInclusivePricing: event.taxInclusivePricing,
-      isEditingPosted: event.isEditingPosted,
-    ));
+    emit(
+      state.copyWith(
+        purchaseId: event.purchaseId,
+        currencyId: event.currencyId,
+        enableTaxCalculations: event.enableTaxCalculations,
+        defaultPurchaseTaxRateBps: event.defaultPurchaseTaxRateBps,
+        taxInclusivePricing: event.taxInclusivePricing,
+        isEditingPosted: event.isEditingPosted,
+      ),
+    );
 
     try {
       final purchase = await _repository.getPurchaseById(event.purchaseId!);
@@ -776,11 +861,14 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       for (final i in items) {
         productIds.add(i.productId);
         if (i.variantId != null && !variantFutures.containsKey(i.variantId)) {
-          variantFutures[i.variantId!] = _variantRepository.getVariantById(i.variantId!);
+          variantFutures[i.variantId!] = _variantRepository.getVariantById(
+            i.variantId!,
+          );
         }
-        if (i.variantId == null && !defaultVariantFutures.containsKey(i.productId)) {
-          defaultVariantFutures[i.productId] =
-              _variantRepository.getDefaultVariantByProduct(i.productId);
+        if (i.variantId == null &&
+            !defaultVariantFutures.containsKey(i.productId)) {
+          defaultVariantFutures[i.productId] = _variantRepository
+              .getDefaultVariantByProduct(i.productId);
         }
       }
       final resolvedVariants = <int, ProductVariant?>{};
@@ -816,26 +904,34 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           salesTaxRateBps: realProduct?.salesTaxRateBps ?? 0,
           isActive: realProduct?.isActive ?? true,
           trackInventory: realProduct?.trackInventory ?? true,
+          measurementType: i.measurementType,
         );
 
-        final realVariant = i.variantId != null ? resolvedVariants[i.variantId!] : null;
-        final defaultVariant = i.variantId == null ? resolvedDefaultVariants[i.productId] : null;
-        final variant = realVariant ?? defaultVariant ?? (i.variantId == null
-            ? null
-            : ProductVariant(
-                id: i.variantId!,
-                productId: i.productId,
-                sku: i.variantSku,
-                barcode: null,
-                colorId: null,
-                sizeId: null,
-                costCents: i.unitCostCents,
-                priceCents: Decimal.zero,
-                wholesalePriceCents: null,
-                priceAdjustmentCents: Decimal.zero,
-                stockQuantity: 0,
-                isActive: true,
-              ));
+        final realVariant = i.variantId != null
+            ? resolvedVariants[i.variantId!]
+            : null;
+        final defaultVariant = i.variantId == null
+            ? resolvedDefaultVariants[i.productId]
+            : null;
+        final variant =
+            realVariant ??
+            defaultVariant ??
+            (i.variantId == null
+                ? null
+                : ProductVariant(
+                    id: i.variantId!,
+                    productId: i.productId,
+                    sku: i.variantSku,
+                    barcode: null,
+                    colorId: null,
+                    sizeId: null,
+                    costCents: i.unitCostCents,
+                    priceCents: Decimal.zero,
+                    wholesalePriceCents: null,
+                    priceAdjustmentCents: Decimal.zero,
+                    stockQuantity: 0,
+                    isActive: true,
+                  ));
 
         // Resolve "original" (pre-purchase) prices through the centralized
         // [OriginalPriceResolver]. This is the SINGLE source of truth for
@@ -847,8 +943,9 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           variant: variant,
           savedCostCents: i.originalCostCents?.toBigInt().toInt(),
           savedPriceCents: i.originalPriceCents?.toBigInt().toInt(),
-          savedWholesalePriceCents:
-              i.originalWholesalePriceCents?.toBigInt().toInt(),
+          savedWholesalePriceCents: i.originalWholesalePriceCents
+              ?.toBigInt()
+              .toInt(),
         );
 
         return PurchaseLineItem(
@@ -867,7 +964,8 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           originalWholesalePriceCents: snapshot.wholesalePriceCents,
           persistOriginalCostCents: snapshot.persistCostCents,
           persistOriginalPriceCents: snapshot.persistPriceCents,
-          persistOriginalWholesalePriceCents: snapshot.persistWholesalePriceCents,
+          persistOriginalWholesalePriceCents:
+              snapshot.persistWholesalePriceCents,
           newSellPriceCents: i.newSellPriceCents,
           newWholesalePriceCents: i.newWholesalePriceCents,
         );
@@ -883,7 +981,9 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           ? DiscountMode.invoice
           : DiscountMode.perItem;
       final resolvedInvoiceDiscountCents =
-          resolvedDiscountMode == DiscountMode.invoice ? purchase.discountCents : Decimal.zero;
+          resolvedDiscountMode == DiscountMode.invoice
+          ? purchase.discountCents
+          : Decimal.zero;
 
       final hasAnyItemTax = mappedItems.any((i) => i.taxCents > Decimal.zero);
       Decimal resolvedTaxRatePercent = Decimal.zero;
@@ -892,27 +992,31 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
         if (taxable > Decimal.zero) {
           final rawPct = (purchase.taxCents * Decimal.fromInt(100)) / taxable;
           final rawPctDouble = double.tryParse(rawPct.toString()) ?? 0;
-          resolvedTaxRatePercent = Decimal.parse(rawPctDouble.toStringAsFixed(2));
+          resolvedTaxRatePercent = Decimal.parse(
+            rawPctDouble.toStringAsFixed(2),
+          );
         }
       }
 
-      emit(state.copyWith(
-        purchaseId: purchase.id,
-        purchaseNumber: purchase.purchaseNumber,
-        supplierId: purchase.supplierId,
-        supplierName: purchase.supplierName,
-        currencyId: purchase.currencyId,
-        purchaseDate: purchase.purchaseDate,
-        dueDate: purchase.dueDate,
-        supplierInvoiceRef: purchase.supplierInvoiceRef,
-        notes: purchase.notes,
-        items: mappedItems,
-        discountMode: resolvedDiscountMode,
-        invoiceDiscountCents: resolvedInvoiceDiscountCents,
-        paymentMethod: _parsePaymentMethod(purchase.paymentMethod),
-        paidAmountCents: purchase.paidAmountCents,
-        taxRatePercent: resolvedTaxRatePercent,
-      ));
+      emit(
+        state.copyWith(
+          purchaseId: purchase.id,
+          purchaseNumber: purchase.purchaseNumber,
+          supplierId: purchase.supplierId,
+          supplierName: purchase.supplierName,
+          currencyId: purchase.currencyId,
+          purchaseDate: purchase.purchaseDate,
+          dueDate: purchase.dueDate,
+          supplierInvoiceRef: purchase.supplierInvoiceRef,
+          notes: purchase.notes,
+          items: mappedItems,
+          discountMode: resolvedDiscountMode,
+          invoiceDiscountCents: resolvedInvoiceDiscountCents,
+          paymentMethod: _parsePaymentMethod(purchase.paymentMethod),
+          paidAmountCents: purchase.paidAmountCents,
+          taxRatePercent: resolvedTaxRatePercent,
+        ),
+      );
     } catch (e) {
       emit(state.copyWith(error: e.toString()));
     }
@@ -922,10 +1026,12 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     PurchaseSupplierChanged event,
     Emitter<PurchaseFormState> emit,
   ) {
-    emit(state.copyWith(
-      supplierId: event.supplierId,
-      supplierName: event.supplierName,
-    ));
+    emit(
+      state.copyWith(
+        supplierId: event.supplierId,
+        supplierName: event.supplierName,
+      ),
+    );
   }
 
   void _onDateChanged(
@@ -979,24 +1085,24 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     final isInvoice = event.mode == DiscountMode.invoice;
     final clearedItems = isInvoice
         ? state.items
-            .map((i) => i.copyWith(discountCents: Decimal.zero))
-            .toList()
+              .map((i) => i.copyWith(discountCents: Decimal.zero))
+              .toList()
         : state.items;
-    emit(state.copyWith(
-      discountMode: event.mode,
-      items: clearedItems,
-      invoiceDiscountCents: Decimal.zero,
-      hasUnsavedChanges: true,
-    ));
+    emit(
+      state.copyWith(
+        discountMode: event.mode,
+        items: clearedItems,
+        invoiceDiscountCents: Decimal.zero,
+        hasUnsavedChanges: true,
+      ),
+    );
   }
 
   void _onInvoiceDiscountChanged(
     PurchaseInvoiceDiscountChanged event,
     Emitter<PurchaseFormState> emit,
   ) {
-    emit(state.copyWith(
-      invoiceDiscountCents: event.discountCents,
-    ));
+    emit(state.copyWith(invoiceDiscountCents: event.discountCents));
   }
 
   Future<void> _onLineItemAdded(
@@ -1008,7 +1114,9 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     ProductVariant? resolvedVariant = event.variant;
     if (resolvedVariant == null) {
       try {
-        resolvedVariant = await _variantRepository.getDefaultVariantByProduct(event.product.id);
+        resolvedVariant = await _variantRepository.getDefaultVariantByProduct(
+          event.product.id,
+        );
       } catch (_) {}
     }
 
@@ -1040,7 +1148,9 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       persistOriginalPriceCents: snapshot.persistPriceCents,
       persistOriginalWholesalePriceCents: snapshot.persistWholesalePriceCents,
     );
-    emit(state.copyWith(items: [...state.items, newItem], hasUnsavedChanges: true));
+    emit(
+      state.copyWith(items: [...state.items, newItem], hasUnsavedChanges: true),
+    );
   }
 
   void _onLineItemUpdated(
@@ -1068,7 +1178,9 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     PurchaseLineItemRemoved event,
     Emitter<PurchaseFormState> emit,
   ) {
-    final updatedItems = state.items.where((item) => item.tempId != event.tempId).toList();
+    final updatedItems = state.items
+        .where((item) => item.tempId != event.tempId)
+        .toList();
     emit(state.copyWith(items: updatedItems, hasUnsavedChanges: true));
   }
 
@@ -1091,9 +1203,11 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     // is the server-authoritative back-stop in case a stale or programmatic
     // payload bypasses the UI guard.
     final missingExpiry = state.items
-        .where((it) =>
-            it.product.inventoryTrackingType == 'batch_expiry' &&
-            it.expiryDate == null)
+        .where(
+          (it) =>
+              it.product.inventoryTrackingType == 'batch_expiry' &&
+              it.expiryDate == null,
+        )
         .toList();
     if (missingExpiry.isNotEmpty) {
       emit(state.copyWith(error: 'purchases.expiry_required_submit_blocked'));
@@ -1121,35 +1235,40 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       for (int idx = 0; idx < lineItems.length; idx++) {
         final item = lineItems[idx];
         final line = pricing.lines[idx];
-        items.add(PurchaseItemInput(
-          productId: item.product.id,
-          variantId: item.variant?.id,
-          quantity: item.quantity,
-          unitCostCents: item.unitCostCents,
-          // Total per-line discount = entered line discount + share of
-          // the invoice-level discount (zero in `perItem` mode).
-          discountCents: Decimal.fromInt(line.totalLineDiscount.cents),
-          subtotalCents: Decimal.fromInt(line.subtotal.cents),
-          taxCents: Decimal.fromInt(line.tax.cents),
-          totalCents: Decimal.fromInt(line.total.cents),
-          expiryDate: item.expiryDate,
-          // Persist the snapshot fields, NOT the display fields. When the
-          // resolver determined there is no real historical value (live cost
-          // is still 0 from default-init), persist `null` rather than `0` —
-          // a future re-load will then fall back through the resolver chain
-          // and render meaningful prices instead of `0.00`.
-          originalCostCents: item.persistOriginalCostCents != null
-              ? Decimal.fromInt(item.persistOriginalCostCents!)
-              : null,
-          originalPriceCents: item.persistOriginalPriceCents != null
-              ? Decimal.fromInt(item.persistOriginalPriceCents!)
-              : null,
-          originalWholesalePriceCents: item.persistOriginalWholesalePriceCents != null
-              ? Decimal.fromInt(item.persistOriginalWholesalePriceCents!)
-              : null,
-          newSellPriceCents: item.newSellPriceCents,
-          newWholesalePriceCents: item.newWholesalePriceCents,
-        ));
+        items.add(
+          PurchaseItemInput(
+            productId: item.product.id,
+            variantId: item.variant?.id,
+            quantity: item.quantity,
+            quantityScale: item.product.quantityScale,
+            measurementType: item.product.measurementType,
+            unitCostCents: item.unitCostCents,
+            // Total per-line discount = entered line discount + share of
+            // the invoice-level discount (zero in `perItem` mode).
+            discountCents: Decimal.fromInt(line.totalLineDiscount.cents),
+            subtotalCents: Decimal.fromInt(line.subtotal.cents),
+            taxCents: Decimal.fromInt(line.tax.cents),
+            totalCents: Decimal.fromInt(line.total.cents),
+            expiryDate: item.expiryDate,
+            // Persist the snapshot fields, NOT the display fields. When the
+            // resolver determined there is no real historical value (live cost
+            // is still 0 from default-init), persist `null` rather than `0` —
+            // a future re-load will then fall back through the resolver chain
+            // and render meaningful prices instead of `0.00`.
+            originalCostCents: item.persistOriginalCostCents != null
+                ? Decimal.fromInt(item.persistOriginalCostCents!)
+                : null,
+            originalPriceCents: item.persistOriginalPriceCents != null
+                ? Decimal.fromInt(item.persistOriginalPriceCents!)
+                : null,
+            originalWholesalePriceCents:
+                item.persistOriginalWholesalePriceCents != null
+                ? Decimal.fromInt(item.persistOriginalWholesalePriceCents!)
+                : null,
+            newSellPriceCents: item.newSellPriceCents,
+            newWholesalePriceCents: item.newWholesalePriceCents,
+          ),
+        );
       }
 
       // Determine effective paid amount:
@@ -1196,12 +1315,14 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           'total_cents': state.totalCents.toString(),
           'items_count': state.items.length.toString(),
         });
-        emit(state.copyWith(
-          purchaseId: purchaseId,
-          isSubmitting: false,
-          isSuccess: true,
-          hasUnsavedChanges: false,
-        ));
+        emit(
+          state.copyWith(
+            purchaseId: purchaseId,
+            isSubmitting: false,
+            isSuccess: true,
+            hasUnsavedChanges: false,
+          ),
+        );
       } else if (state.isEditingPosted) {
         // Editing a posted purchase: void original and create new
         final newPurchaseId = await _repository.editPostedPurchase(
@@ -1226,12 +1347,14 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           'purchase_id': newPurchaseId.toString(),
           'original_purchase_id': state.purchaseId.toString(),
         });
-        emit(state.copyWith(
-          purchaseId: newPurchaseId,
-          isSubmitting: false,
-          isSuccess: true,
-          hasUnsavedChanges: false,
-        ));
+        emit(
+          state.copyWith(
+            purchaseId: newPurchaseId,
+            isSubmitting: false,
+            isSuccess: true,
+            hasUnsavedChanges: false,
+          ),
+        );
       } else {
         final ok = await _repository.updatePurchase(
           purchaseId: state.purchaseId!,
@@ -1258,11 +1381,13 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
         CrashlyticsService.instance.logAction('purchase_updated', {
           'purchase_id': state.purchaseId.toString(),
         });
-        emit(state.copyWith(
-          isSubmitting: false,
-          isSuccess: true,
-          hasUnsavedChanges: false,
-        ));
+        emit(
+          state.copyWith(
+            isSubmitting: false,
+            isSuccess: true,
+            hasUnsavedChanges: false,
+          ),
+        );
       }
     } catch (e, st) {
       CrashlyticsService.instance.recordError(
@@ -1270,10 +1395,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
         stackTrace: st,
         reason: 'PurchaseFormBloc._onSubmitted failed',
       );
-      emit(state.copyWith(
-        isSubmitting: false,
-        error: e.toString(),
-      ));
+      emit(state.copyWith(isSubmitting: false, error: e.toString()));
     }
   }
 
@@ -1282,10 +1404,12 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     Emitter<PurchaseFormState> emit,
   ) {
     // Reset paid amount when switching payment methods
-    emit(state.copyWith(
-      paymentMethod: event.method,
-      paidAmountCents: Decimal.zero,
-    ));
+    emit(
+      state.copyWith(
+        paymentMethod: event.method,
+        paidAmountCents: Decimal.zero,
+      ),
+    );
   }
 
   void _onTaxRateChanged(
@@ -1326,10 +1450,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       await _repository.postPurchase(state.purchaseId!);
       emit(state.copyWith(isSubmitting: false, isSuccess: true));
     } catch (e) {
-      emit(state.copyWith(
-        isSubmitting: false,
-        error: e.toString(),
-      ));
+      emit(state.copyWith(isSubmitting: false, error: e.toString()));
     }
   }
 
@@ -1337,10 +1458,12 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     PurchaseTaxSettingsChanged event,
     Emitter<PurchaseFormState> emit,
   ) {
-    emit(state.copyWith(
-      enableTaxCalculations: event.enableTaxCalculations,
-      defaultPurchaseTaxRateBps: event.defaultPurchaseTaxRateBps,
-      taxInclusivePricing: event.taxInclusivePricing,
-    ));
+    emit(
+      state.copyWith(
+        enableTaxCalculations: event.enableTaxCalculations,
+        defaultPurchaseTaxRateBps: event.defaultPurchaseTaxRateBps,
+        taxInclusivePricing: event.taxInclusivePricing,
+      ),
+    );
   }
 }

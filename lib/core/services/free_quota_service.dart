@@ -46,11 +46,13 @@ class FreeQuotaStatus {
     required this.salesLimit,
   });
 
-  int? get productsRemaining =>
-      productsLimit == null ? null : (productsLimit! - productsCreatedLifetime).clamp(0, productsLimit!);
+  int? get productsRemaining => productsLimit == null
+      ? null
+      : (productsLimit! - productsCreatedLifetime).clamp(0, productsLimit!);
 
-  int? get salesRemaining =>
-      salesLimit == null ? null : (salesLimit! - salesCreatedLifetime).clamp(0, salesLimit!);
+  int? get salesRemaining => salesLimit == null
+      ? null
+      : (salesLimit! - salesCreatedLifetime).clamp(0, salesLimit!);
 
   bool get productsExhausted =>
       productsLimit != null && productsCreatedLifetime >= productsLimit!;
@@ -90,8 +92,8 @@ class FreeQuotaService {
     required FeatureGateService featureGateService,
     this.maxProductsLifetime = defaultMaxProductsLifetime,
     this.maxSalesLifetime = defaultMaxSalesLifetime,
-  })  : _prefs = prefs,
-        _featureGateService = featureGateService;
+  }) : _prefs = prefs,
+       _featureGateService = featureGateService;
 
   // ── Read ──────────────────────────────────────────────────────────────────
 
@@ -131,13 +133,23 @@ class FreeQuotaService {
   /// Throw [FreeQuotaExceededException] if the user cannot create another
   /// product. Pro users bypass.
   void guardProductCreation() {
+    guardProductCreations(1);
+  }
+
+  /// Throw before an atomic batch that would cross the free-tier product cap.
+  /// Checking the complete batch up front avoids committing only its first
+  /// rows and then failing halfway through the file/form.
+  void guardProductCreations(int count) {
+    if (count < 0) {
+      throw ArgumentError.value(count, 'count', 'must not be negative');
+    }
     if (_featureGateService.isPro) return;
-    final count = productsCreatedLifetime;
-    if (count >= maxProductsLifetime) {
+    final current = productsCreatedLifetime;
+    if (current + count > maxProductsLifetime) {
       throw FreeQuotaExceededException(
         kind: FreeQuotaKind.products,
         limit: maxProductsLifetime,
-        currentCount: count,
+        currentCount: current,
       );
     }
   }
@@ -161,11 +173,29 @@ class FreeQuotaService {
   /// Increment the cumulative products counter. Pro users still increment so
   /// that if their subscription lapses, their lifetime usage is accurate.
   Future<void> incrementProductsCreated() async {
-    final next = productsCreatedLifetime + 1;
+    await incrementProductsCreatedBy(1);
+  }
+
+  /// Record a successfully committed atomic product batch.
+  Future<void> incrementProductsCreatedBy(int count) async {
+    if (count < 0) {
+      throw ArgumentError.value(count, 'count', 'must not be negative');
+    }
+    final next = productsCreatedLifetime + count;
     await _prefs.setInt(_kProductsKey, next);
     if (kDebugMode) {
       debugPrint('FreeQuota: products lifetime → $next / $maxProductsLifetime');
     }
+  }
+
+  /// Compensates an external SharedPreferences counter when the surrounding
+  /// database transaction rolls back. This does not decrement real lifetime
+  /// usage: the corresponding product rows never committed.
+  Future<void> restoreProductsCreatedAfterRollback(int snapshot) async {
+    if (snapshot < 0) {
+      throw ArgumentError.value(snapshot, 'snapshot', 'must not be negative');
+    }
+    await _prefs.setInt(_kProductsKey, snapshot);
   }
 
   /// Increment the cumulative sales counter. Pro users still increment.

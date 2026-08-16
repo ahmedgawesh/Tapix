@@ -1,4 +1,5 @@
 import 'package:decimal/decimal.dart';
+import '../../../../core/services/return_calculation_service.dart';
 import '../entities/purchase_entity.dart';
 
 abstract class PurchaseRepository {
@@ -43,6 +44,7 @@ abstract class PurchaseRepository {
     String? notes,
     DateTime? purchaseDate,
     DateTime? dueDate,
+
     /// Phase 11.2 — tax-inclusive flag the engine used to produce the
     /// totals being persisted. Stamped on `purchases.tax_inclusive_at_post`.
     bool taxInclusiveAtPost = false,
@@ -64,6 +66,7 @@ abstract class PurchaseRepository {
     String? notes,
     DateTime? purchaseDate,
     DateTime? dueDate,
+
     /// Phase 11.2 — tax-inclusive flag the engine used to produce the
     /// totals being persisted.
     bool taxInclusiveAtPost = false,
@@ -93,6 +96,7 @@ abstract class PurchaseRepository {
     String? notes,
     DateTime? purchaseDate,
     DateTime? dueDate,
+
     /// Phase 11.2 — tax-inclusive flag the engine used to produce the
     /// totals being persisted.
     bool taxInclusiveAtPost = false,
@@ -113,7 +117,9 @@ abstract class PurchaseRepository {
   Stream<List<PurchaseReturnEntity>> watchAllPurchaseReturns();
 
   /// Watch returns for a specific purchase
-  Stream<List<PurchaseReturnEntity>> watchPurchaseReturnsByPurchase(int purchaseId);
+  Stream<List<PurchaseReturnEntity>> watchPurchaseReturnsByPurchase(
+    int purchaseId,
+  );
 
   /// Get returns for a specific purchase
   Future<List<PurchaseReturnEntity>> getPurchaseReturns(int purchaseId);
@@ -125,7 +131,9 @@ abstract class PurchaseRepository {
   Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItems(int returnId);
 
   /// Watch return items with full product details (name, color, size, SKU)
-  Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItemsWithDetails(int returnId);
+  Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItemsWithDetails(
+    int returnId,
+  );
 
   /// Generate next return number
   Future<String> generateReturnNumber();
@@ -146,16 +154,19 @@ abstract class PurchaseRepository {
     String refundMethod = 'credit',
     String? reason,
     DateTime? returnDate,
+
     /// Phase 14.0 — cheque due date when `refundMethod` is `cheque`.
     /// Required by the form bloc when refund method is cheque; ignored
     /// (stored as NULL) otherwise. Surfaces on the dashboard reminder.
     DateTime? dueDate,
     bool allowNegativeStock = false,
+
     /// Optional client-generated idempotency token. The unique constraint on
     /// `purchase_returns.idempotency_key` rejects duplicate inserts so a
     /// double-tap or retried network call cannot create two returns / GL
     /// entries / stock movements.
     String? idempotencyKey,
+
     /// Phase 11.2 — tax-inclusive flag the engine used to produce the
     /// totals being persisted. Stamped on
     /// `purchase_returns.tax_inclusive_at_post`.
@@ -167,7 +178,10 @@ abstract class PurchaseRepository {
   /// Posting a purchase return DECREASES stock (goods leaving the warehouse
   /// back to the supplier). If [allowNegativeStock] is false and current
   /// stock is insufficient, the operation is rejected.
-  Future<void> postPurchaseReturn(int returnId, {bool allowNegativeStock = false});
+  Future<void> postPurchaseReturn(
+    int returnId, {
+    bool allowNegativeStock = false,
+  });
 
   /// Void purchase return (reverse stock if posted)
   Future<void> voidPurchaseReturn(int returnId);
@@ -197,6 +211,9 @@ abstract class PurchaseRepository {
   /// Get total already returned quantity for a purchase item
   Future<int> getReturnedQuantity(int purchaseItemId);
 
+  /// Get financial amounts from linked returns only (adjustments excluded).
+  Future<LinkedReturnHistory> getLinkedReturnHistory(int purchaseItemId);
+
   /// Watch set of purchase IDs that have at least one non-voided return
   Stream<Set<int>> watchPurchaseIdsWithReturns();
 
@@ -212,6 +229,8 @@ class PurchaseItemInput {
   final int productId;
   final int? variantId;
   final int quantity;
+  final int quantityScale;
+  final String measurementType;
   final Decimal unitCostCents;
   final Decimal discountCents;
   final Decimal subtotalCents;
@@ -228,6 +247,8 @@ class PurchaseItemInput {
     required this.productId,
     this.variantId,
     required this.quantity,
+    this.quantityScale = 1,
+    this.measurementType = 'piece',
     required this.unitCostCents,
     Decimal? discountCents,
     required this.subtotalCents,
@@ -246,6 +267,8 @@ class PurchaseItemInput {
 class PurchaseReturnItemInput {
   final int purchaseItemId;
   final int quantity;
+  final int quantityScale;
+  final String measurementType;
   final Decimal subtotalCents;
   final Decimal discountCents;
   final Decimal taxCents;
@@ -255,12 +278,34 @@ class PurchaseReturnItemInput {
   const PurchaseReturnItemInput({
     required this.purchaseItemId,
     required this.quantity,
+    this.quantityScale = 1,
+    this.measurementType = 'piece',
     required this.subtotalCents,
     required this.discountCents,
     required this.taxCents,
     required this.refundCents,
     this.reason,
   });
+
+  /// Rebuilds the monetary snapshot while requiring the authoritative
+  /// quantity representation from the original invoice line.
+  PurchaseReturnItemInput withCalculatedAmounts(
+    ProportionalReturnResult result, {
+    required int sourceQuantityScale,
+    required String sourceMeasurementType,
+  }) {
+    return PurchaseReturnItemInput(
+      purchaseItemId: purchaseItemId,
+      quantity: quantity,
+      quantityScale: sourceQuantityScale,
+      measurementType: sourceMeasurementType,
+      subtotalCents: Decimal.fromInt(result.subtotalCents),
+      discountCents: Decimal.fromInt(result.discountCents),
+      taxCents: Decimal.fromInt(result.taxCents),
+      refundCents: Decimal.fromInt(result.refundCents),
+      reason: reason,
+    );
+  }
 }
 
 /// Dashboard stats for purchases

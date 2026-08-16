@@ -107,12 +107,23 @@ class Money implements Comparable<Money> {
 
   /// Scalar multiplication by an integer quantity. The most common use is
   /// `unitPrice * quantity`. Money × Money is intentionally not provided.
-  Money operator *(int scalar) =>
-      Money._(_cents * Decimal.fromInt(scalar));
+  Money operator *(int scalar) => Money._(_cents * Decimal.fromInt(scalar));
 
   /// Scalar multiplication by a [Decimal] (e.g. for fractional weights or
   /// rates). The result keeps full precision — call [round] to commit.
   Money multiplyDecimal(Decimal factor) => Money._(_cents * factor);
+
+  /// Multiply by an exact rational quantity. Used by measured stock where
+  /// quantities are stored as grams/ml/milli-metres while monetary unit rates
+  /// are expressed per kg/litre/metre.
+  Money multiplyRatio(int numerator, int denominator) {
+    if (denominator <= 0) {
+      throw ArgumentError.value(denominator, 'denominator');
+    }
+    final result =
+        _cents * Decimal.fromInt(numerator) / Decimal.fromInt(denominator);
+    return Money._(result.toDecimal(scaleOnInfinitePrecision: 12));
+  }
 
   // ── Comparison ──────────────────────────────────────────────────────────
 
@@ -157,7 +168,9 @@ class Money implements Comparable<Money> {
         final fraction = _cents - floored;
         final half = Decimal.parse('0.5');
         if (fraction == half) {
-          final rounded = flooredBig.isEven ? flooredBig : flooredBig + BigInt.one;
+          final rounded = flooredBig.isEven
+              ? flooredBig
+              : flooredBig + BigInt.one;
           return Money._(Decimal.fromBigInt(rounded));
         }
         return Money._(Decimal.fromBigInt(_cents.round().toBigInt()));
@@ -268,8 +281,7 @@ class Money implements Comparable<Money> {
   // ── Equality / hash / debug ─────────────────────────────────────────────
 
   @override
-  bool operator ==(Object other) =>
-      other is Money && other._cents == _cents;
+  bool operator ==(Object other) => other is Money && other._cents == _cents;
 
   @override
   int get hashCode => _cents.hashCode;

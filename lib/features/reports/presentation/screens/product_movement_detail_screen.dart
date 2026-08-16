@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../services/product_movement_pdf_service.dart';
@@ -51,8 +52,10 @@ class _ProductMovementDetailViewState
       appBar: AppBar(
         title: Text('reports.product_movement_detail'.tr()),
         actions: [
-          BlocBuilder<ProductMovementDetailBloc,
-              RealtimeState<ProductMovementDetailData>>(
+          BlocBuilder<
+            ProductMovementDetailBloc,
+            RealtimeState<ProductMovementDetailData>
+          >(
             builder: (context, state) {
               if (state is! RealtimeSuccess<ProductMovementDetailData>) {
                 return const SizedBox.shrink();
@@ -79,72 +82,78 @@ class _ProductMovementDetailViewState
           ),
         ],
       ),
-      body: BlocBuilder<ProductMovementDetailBloc,
-          RealtimeState<ProductMovementDetailData>>(
-        builder: (context, state) {
-          if (state is RealtimeLoading<ProductMovementDetailData>) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body:
+          BlocBuilder<
+            ProductMovementDetailBloc,
+            RealtimeState<ProductMovementDetailData>
+          >(
+            builder: (context, state) {
+              if (state is RealtimeLoading<ProductMovementDetailData>) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (state is RealtimeError<ProductMovementDetailData>) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline,
-                      size: 48, color: colorScheme.error),
-                  const SizedBox(height: 16),
-                  Text(state.error.toString(),
-                      style: theme.textTheme.bodyLarge),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    onPressed: () => context
-                        .read<ProductMovementDetailBloc>()
-                        .refresh(),
-                    icon: const Icon(LucideIcons.refreshCw),
-                    label: Text('reports.retry'.tr()),
+              if (state is RealtimeError<ProductMovementDetailData>) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        state.error.toString(),
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: () =>
+                            context.read<ProductMovementDetailBloc>().refresh(),
+                        icon: const Icon(LucideIcons.refreshCw),
+                        label: Text('reports.retry'.tr()),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            );
-          }
+                );
+              }
 
-          if (state is RealtimeSuccess<ProductMovementDetailData>) {
-            return Column(
-              children: [
-                // Date range selector
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: DateRangeSelector(
-                    dateRange: state.data.dateRange,
-                    onChanged: (range) => context
-                        .read<ProductMovementDetailBloc>()
-                        .add(ProductMovementDetailDateRangeChanged(range)),
-                  ),
-                ),
-                const SizedBox(height: 12),
+              if (state is RealtimeSuccess<ProductMovementDetailData>) {
+                return Column(
+                  children: [
+                    // Date range selector
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: DateRangeSelector(
+                        dateRange: state.data.dateRange,
+                        onChanged: (range) => context
+                            .read<ProductMovementDetailBloc>()
+                            .add(ProductMovementDetailDateRangeChanged(range)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
 
-                // Search bar
-                _buildSearchBar(context, state.data),
+                    // Search bar
+                    _buildSearchBar(context, state.data),
 
-                // Content
-                Expanded(
-                  child: state.data.selectedProductId == null
-                      ? _buildEmptyState(context, state.data)
-                      : _buildMovementContent(context, state.data),
-                ),
-              ],
-            );
-          }
+                    // Content
+                    Expanded(
+                      child: state.data.selectedProductId == null
+                          ? _buildEmptyState(context, state.data)
+                          : _buildMovementContent(context, state.data),
+                    ),
+                  ],
+                );
+              }
 
-          return const SizedBox.shrink();
-        },
-      ),
+              return const SizedBox.shrink();
+            },
+          ),
     );
   }
 
-  Widget _buildSearchBar(
-      BuildContext context, ProductMovementDetailData data) {
+  Widget _buildSearchBar(BuildContext context, ProductMovementDetailData data) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -156,16 +165,18 @@ class _ProductMovementDetailViewState
           // Selected product chip or search field
           if (data.selectedProductId != null)
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: colorScheme.primaryContainer,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 children: [
-                  Icon(LucideIcons.package,
-                      size: 18, color: colorScheme.onPrimaryContainer),
+                  Icon(
+                    LucideIcons.package,
+                    size: 18,
+                    color: colorScheme.onPrimaryContainer,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -177,18 +188,23 @@ class _ProductMovementDetailViewState
                     ),
                   ),
                   IconButton(
-                    icon: Icon(LucideIcons.x,
-                        size: 18, color: colorScheme.onPrimaryContainer),
+                    icon: Icon(
+                      LucideIcons.x,
+                      size: 18,
+                      color: colorScheme.onPrimaryContainer,
+                    ),
                     onPressed: () {
                       _searchController.clear();
-                      context
-                          .read<ProductMovementDetailBloc>()
-                          .add(const ProductMovementDetailProductCleared());
+                      context.read<ProductMovementDetailBloc>().add(
+                        const ProductMovementDetailProductCleared(),
+                      );
                     },
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(
-                        minWidth: 32, minHeight: 32),
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
                   ),
                 ],
               ),
@@ -205,10 +221,9 @@ class _ProductMovementDetailViewState
                         icon: const Icon(LucideIcons.x, size: 18),
                         onPressed: () {
                           _searchController.clear();
-                          context
-                              .read<ProductMovementDetailBloc>()
-                              .add(const ProductMovementDetailSearchChanged(
-                                  ''));
+                          context.read<ProductMovementDetailBloc>().add(
+                            const ProductMovementDetailSearchChanged(''),
+                          );
                         },
                       )
                     : null,
@@ -219,7 +234,9 @@ class _ProductMovementDetailViewState
                   borderSide: BorderSide.none,
                 ),
                 contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 12),
+                  horizontal: 16,
+                  vertical: 12,
+                ),
               ),
               onChanged: (value) => context
                   .read<ProductMovementDetailBloc>()
@@ -227,8 +244,7 @@ class _ProductMovementDetailViewState
             ),
 
           // Search results dropdown
-          if (data.searchResults.isNotEmpty &&
-              data.selectedProductId == null)
+          if (data.searchResults.isNotEmpty && data.selectedProductId == null)
             Container(
               margin: const EdgeInsets.only(top: 4),
               constraints: const BoxConstraints(maxHeight: 200),
@@ -253,21 +269,26 @@ class _ProductMovementDetailViewState
                   final result = data.searchResults[index];
                   return ListTile(
                     dense: true,
-                    leading: Icon(LucideIcons.package,
-                        size: 20, color: colorScheme.primary),
-                    title: Text(result.name,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w500)),
+                    leading: Icon(
+                      LucideIcons.package,
+                      size: 20,
+                      color: colorScheme.primary,
+                    ),
+                    title: Text(
+                      result.name,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                     subtitle: result.sku != null
-                        ? Text(result.sku!,
-                            style: theme.textTheme.bodySmall)
+                        ? Text(result.sku!, style: theme.textTheme.bodySmall)
                         : null,
                     onTap: () {
                       _searchController.clear();
                       _searchFocusNode.unfocus();
                       context.read<ProductMovementDetailBloc>().add(
-                          ProductMovementDetailProductSelected(
-                              result.productId));
+                        ProductMovementDetailProductSelected(result.productId),
+                      );
                     },
                   );
                 },
@@ -279,7 +300,9 @@ class _ProductMovementDetailViewState
   }
 
   Widget _buildEmptyState(
-      BuildContext context, ProductMovementDetailData data) {
+    BuildContext context,
+    ProductMovementDetailData data,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -289,8 +312,11 @@ class _ProductMovementDetailViewState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.search,
-                size: 64, color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4)),
+            Icon(
+              LucideIcons.search,
+              size: 64,
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+            ),
             const SizedBox(height: 16),
             Text(
               'reports.search_product_prompt'.tr(),
@@ -314,7 +340,9 @@ class _ProductMovementDetailViewState
   }
 
   Widget _buildMovementContent(
-      BuildContext context, ProductMovementDetailData data) {
+    BuildContext context,
+    ProductMovementDetailData data,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final cs = sl<CurrencyService>();
@@ -326,9 +354,11 @@ class _ProductMovementDetailViewState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(LucideIcons.packageOpen,
-                  size: 64,
-                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4)),
+              Icon(
+                LucideIcons.packageOpen,
+                size: 64,
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+              ),
               const SizedBox(height: 16),
               Text(
                 'reports.no_movements'.tr(),
@@ -359,14 +389,16 @@ class _ProductMovementDetailViewState
         ),
         const SizedBox(height: 8),
 
-        ...data.movements.map((entry) =>
-            _MovementCard(entry: entry, cs: cs)),
+        ...data.movements.map((entry) => _MovementCard(entry: entry, cs: cs)),
       ],
     );
   }
 
   Widget _buildSummaryCards(
-      BuildContext context, ProductMovementSummary summary, CurrencyService cs) {
+    BuildContext context,
+    ProductMovementSummary summary,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -378,7 +410,10 @@ class _ProductMovementDetailViewState
               child: _SummaryCard(
                 icon: LucideIcons.shoppingCart,
                 label: 'reports.total_purchased'.tr(),
-                value: '${summary.totalPurchased}',
+                value: localizedQuantity(
+                  summary.totalPurchased,
+                  summary.measurementType,
+                ),
                 subValue: cs.formatCents(summary.totalPurchaseCents),
                 color: Colors.blue,
               ),
@@ -388,7 +423,10 @@ class _ProductMovementDetailViewState
               child: _SummaryCard(
                 icon: LucideIcons.receipt,
                 label: 'reports.total_sold'.tr(),
-                value: '${summary.totalSold}',
+                value: localizedQuantity(
+                  summary.totalSold,
+                  summary.measurementType,
+                ),
                 subValue: cs.formatCents(summary.totalSalesCents),
                 color: Colors.green,
               ),
@@ -402,7 +440,10 @@ class _ProductMovementDetailViewState
               child: _SummaryCard(
                 icon: LucideIcons.undo2,
                 label: 'reports.sale_returns_qty'.tr(),
-                value: '${summary.totalSaleReturned}',
+                value: localizedQuantity(
+                  summary.totalSaleReturned,
+                  summary.measurementType,
+                ),
                 subValue: cs.formatCents(summary.totalSaleReturnCents),
                 color: Colors.orange,
               ),
@@ -412,7 +453,10 @@ class _ProductMovementDetailViewState
               child: _SummaryCard(
                 icon: LucideIcons.redo2,
                 label: 'reports.purchase_returns_qty'.tr(),
-                value: '${summary.totalPurchaseReturned}',
+                value: localizedQuantity(
+                  summary.totalPurchaseReturned,
+                  summary.measurementType,
+                ),
                 subValue: cs.formatCents(summary.totalPurchaseReturnCents),
                 color: Colors.red,
               ),
@@ -430,8 +474,11 @@ class _ProductMovementDetailViewState
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(LucideIcons.arrowLeftRight,
-                  size: 18, color: colorScheme.onPrimaryContainer),
+              Icon(
+                LucideIcons.arrowLeftRight,
+                size: 18,
+                color: colorScheme.onPrimaryContainer,
+              ),
               const SizedBox(width: 8),
               Text(
                 '${'reports.net_movement'.tr()}: ',
@@ -440,18 +487,14 @@ class _ProductMovementDetailViewState
                 ),
               ),
               Text(
-                summary.netQuantity >= 0
-                    ? '+${summary.netQuantity}'
-                    : '${summary.netQuantity}',
+                localizedSignedQuantity(
+                  summary.netQuantity,
+                  summary.measurementType,
+                  showPositiveSign: true,
+                ),
                 style: theme.textTheme.titleMedium?.copyWith(
                   color: colorScheme.onPrimaryContainer,
                   fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                ' ${'reports.units'.tr()}',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: colorScheme.onPrimaryContainer,
                 ),
               ),
             ],
@@ -462,11 +505,10 @@ class _ProductMovementDetailViewState
   }
 
   Future<void> _printReport(
-      BuildContext context, ProductMovementDetailData data) async {
-    await ProductMovementPdfService.printReport(
-      context: context,
-      data: data,
-    );
+    BuildContext context,
+    ProductMovementDetailData data,
+  ) async {
+    await ProductMovementPdfService.printReport(context: context, data: data);
     sl<AuditLogService>().log(
       entityType: 'report',
       entityId: 0,
@@ -475,11 +517,10 @@ class _ProductMovementDetailViewState
   }
 
   Future<void> _shareReport(
-      BuildContext context, ProductMovementDetailData data) async {
-    await ProductMovementPdfService.shareReport(
-      context: context,
-      data: data,
-    );
+    BuildContext context,
+    ProductMovementDetailData data,
+  ) async {
+    await ProductMovementPdfService.shareReport(context: context, data: data);
     sl<AuditLogService>().log(
       entityType: 'report',
       entityId: 0,
@@ -608,7 +649,9 @@ class _MovementCard extends StatelessWidget {
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: color.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(6),
@@ -633,8 +676,11 @@ class _MovementCard extends StatelessWidget {
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      Icon(LucideIcons.fileText,
-                          size: 14, color: colorScheme.onSurfaceVariant),
+                      Icon(
+                        LucideIcons.fileText,
+                        size: 14,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
@@ -678,13 +724,15 @@ class _MovementCard extends StatelessWidget {
                       // Quantity badge
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          '$sign${entry.quantity} ${'reports.units'.tr()}',
+                          '$sign${localizedQuantity(entry.quantity, entry.measurementType)}',
                           style: theme.textTheme.labelMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -716,28 +764,28 @@ class _MovementCard extends StatelessWidget {
           LucideIcons.shoppingCart,
           Colors.blue,
           'reports.movement_purchase',
-          '+'
+          '+',
         );
       case MovementType.sale:
         return (
           LucideIcons.receipt,
           Colors.green,
           'reports.movement_sale',
-          '-'
+          '-',
         );
       case MovementType.saleReturn:
         return (
           LucideIcons.undo2,
           Colors.orange,
           'reports.movement_sale_return',
-          '+'
+          '+',
         );
       case MovementType.purchaseReturn:
         return (
           LucideIcons.redo2,
           Colors.red,
           'reports.movement_purchase_return',
-          '-'
+          '-',
         );
     }
   }

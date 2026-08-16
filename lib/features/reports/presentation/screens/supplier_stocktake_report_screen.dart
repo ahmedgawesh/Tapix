@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../services/supplier_stocktake_pdf_service.dart';
@@ -37,8 +38,10 @@ class _SupplierStocktakeReportView extends StatelessWidget {
       appBar: AppBar(
         title: Text('reports.supplier_stocktake'.tr()),
         actions: [
-          BlocBuilder<SupplierStocktakeReportBloc,
-              RealtimeState<SupplierStocktakeReportData>>(
+          BlocBuilder<
+            SupplierStocktakeReportBloc,
+            RealtimeState<SupplierStocktakeReportData>
+          >(
             builder: (context, state) {
               if (state is! RealtimeSuccess<SupplierStocktakeReportData>) {
                 return const SizedBox.shrink();
@@ -65,69 +68,78 @@ class _SupplierStocktakeReportView extends StatelessWidget {
           ),
         ],
       ),
-      body: BlocBuilder<SupplierStocktakeReportBloc,
-          RealtimeState<SupplierStocktakeReportData>>(
-        builder: (context, state) {
-          if (state is RealtimeLoading<SupplierStocktakeReportData>) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body:
+          BlocBuilder<
+            SupplierStocktakeReportBloc,
+            RealtimeState<SupplierStocktakeReportData>
+          >(
+            builder: (context, state) {
+              if (state is RealtimeLoading<SupplierStocktakeReportData>) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (state is RealtimeError<SupplierStocktakeReportData>) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline,
-                      size: 48, color: colorScheme.error),
-                  const SizedBox(height: 16),
-                  Text(state.error.toString(),
-                      style: theme.textTheme.bodyLarge),
-                ],
-              ),
-            );
-          }
-
-          if (state is RealtimeSuccess<SupplierStocktakeReportData>) {
-            return Column(
-              children: [
-                // Supplier selector
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: _SupplierSelector(
-                    suppliers: state.data.suppliers,
-                    selectedId: state.data.supplierId,
-                    onChanged: (id) => context
-                        .read<SupplierStocktakeReportBloc>()
-                        .add(SupplierStocktakeReportSupplierChanged(id)),
+              if (state is RealtimeError<SupplierStocktakeReportData>) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        state.error.toString(),
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
+                );
+              }
 
-                // Date range selector
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: DateRangeSelector(
-                    dateRange: state.data.dateRange,
-                    onChanged: (range) => context
-                        .read<SupplierStocktakeReportBloc>()
-                        .add(SupplierStocktakeReportDateRangeChanged(range)),
-                  ),
-                ),
-                const SizedBox(height: 8),
+              if (state is RealtimeSuccess<SupplierStocktakeReportData>) {
+                return Column(
+                  children: [
+                    // Supplier selector
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: _SupplierSelector(
+                        suppliers: state.data.suppliers,
+                        selectedId: state.data.supplierId,
+                        onChanged: (id) => context
+                            .read<SupplierStocktakeReportBloc>()
+                            .add(SupplierStocktakeReportSupplierChanged(id)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
 
-                // Content
-                Expanded(
-                  child: state.data.supplierId == null
-                      ? _buildSelectSupplierPrompt(context)
-                      : _StocktakeContent(data: state.data),
-                ),
-              ],
-            );
-          }
+                    // Date range selector
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: DateRangeSelector(
+                        dateRange: state.data.dateRange,
+                        onChanged: (range) =>
+                            context.read<SupplierStocktakeReportBloc>().add(
+                              SupplierStocktakeReportDateRangeChanged(range),
+                            ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
 
-          return const SizedBox.shrink();
-        },
-      ),
+                    // Content
+                    Expanded(
+                      child: state.data.supplierId == null
+                          ? _buildSelectSupplierPrompt(context)
+                          : _StocktakeContent(data: state.data),
+                    ),
+                  ],
+                );
+              }
+
+              return const SizedBox.shrink();
+            },
+          ),
     );
   }
 
@@ -137,23 +149,28 @@ class _SupplierStocktakeReportView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(LucideIcons.search,
-              size: 48, color: theme.colorScheme.primary),
+          Icon(LucideIcons.search, size: 48, color: theme.colorScheme.primary),
           const SizedBox(height: 16),
-          Text('reports.select_supplier_prompt'.tr(),
-              style: theme.textTheme.bodyLarge),
+          Text(
+            'reports.select_supplier_prompt'.tr(),
+            style: theme.textTheme.bodyLarge,
+          ),
           const SizedBox(height: 8),
-          Text('reports.select_supplier_stocktake_desc'.tr(),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              )),
+          Text(
+            'reports.select_supplier_stocktake_desc'.tr(),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );
   }
 
   Future<void> _printReport(
-      BuildContext context, SupplierStocktakeReportData data) async {
+    BuildContext context,
+    SupplierStocktakeReportData data,
+  ) async {
     await SupplierStocktakePdfService.printSupplierStocktakeReport(
       context: context,
       data: data,
@@ -166,7 +183,9 @@ class _SupplierStocktakeReportView extends StatelessWidget {
   }
 
   Future<void> _shareReport(
-      BuildContext context, SupplierStocktakeReportData data) async {
+    BuildContext context,
+    SupplierStocktakeReportData data,
+  ) async {
     await SupplierStocktakePdfService.shareSupplierStocktakeReport(
       context: context,
       data: data,
@@ -202,12 +221,14 @@ class _SupplierSelector extends StatelessWidget {
       selectedId: selectedId,
       onChanged: onChanged,
       options: suppliers
-          .map((s) => SearchablePartyOption(
-                id: s.id,
-                name: s.name,
-                phone: s.phone,
-                balanceCents: s.balanceCents,
-              ))
+          .map(
+            (s) => SearchablePartyOption(
+              id: s.id,
+              name: s.name,
+              phone: s.phone,
+              balanceCents: s.balanceCents,
+            ),
+          )
           .toList(),
     );
   }
@@ -380,10 +401,15 @@ class _StocktakeContentState extends State<_StocktakeContent> {
                   )
                 : null,
             isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             filled: true,
-            fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+            fillColor: colorScheme.surfaceContainerHighest.withValues(
+              alpha: 0.3,
+            ),
           ),
           onChanged: (q) {
             setState(() {});
@@ -399,22 +425,25 @@ class _StocktakeContentState extends State<_StocktakeContent> {
             children: [
               // Category filter chip
               _CategoryFilterChip(
-                label: data.filterCategoryName ?? 'reports.filter_category'.tr(),
+                label:
+                    data.filterCategoryName ?? 'reports.filter_category'.tr(),
                 sheetTitle: 'reports.filter_category'.tr(),
                 isActive: data.filterCategoryId != null,
                 options: data.availableCategories,
-                onSelected: (opt) => context.read<SupplierStocktakeReportBloc>().add(
-                  SupplierStocktakeCategoryFilterChanged(
-                    opt?.id,
-                    opt?.name,
-                  ),
-                ),
+                onSelected: (opt) =>
+                    context.read<SupplierStocktakeReportBloc>().add(
+                      SupplierStocktakeCategoryFilterChanged(
+                        opt?.id,
+                        opt?.name,
+                      ),
+                    ),
               ),
               const SizedBox(width: 8),
               // Sort chips
               _SortChip(
                 label: 'reports.sort_value'.tr(),
-                selected: data.sort == SupplierStocktakeSortType.valueDesc ||
+                selected:
+                    data.sort == SupplierStocktakeSortType.valueDesc ||
                     data.sort == SupplierStocktakeSortType.valueAsc,
                 onTap: () {
                   final next = data.sort == SupplierStocktakeSortType.valueDesc
@@ -428,7 +457,8 @@ class _StocktakeContentState extends State<_StocktakeContent> {
               ),
               _SortChip(
                 label: 'reports.sort_name'.tr(),
-                selected: data.sort == SupplierStocktakeSortType.nameAsc ||
+                selected:
+                    data.sort == SupplierStocktakeSortType.nameAsc ||
                     data.sort == SupplierStocktakeSortType.nameDesc,
                 onTap: () {
                   final next = data.sort == SupplierStocktakeSortType.nameAsc
@@ -442,7 +472,8 @@ class _StocktakeContentState extends State<_StocktakeContent> {
               ),
               _SortChip(
                 label: 'reports.sort_remaining'.tr(),
-                selected: data.sort == SupplierStocktakeSortType.stockDesc ||
+                selected:
+                    data.sort == SupplierStocktakeSortType.stockDesc ||
                     data.sort == SupplierStocktakeSortType.stockAsc,
                 onTap: () {
                   final next = data.sort == SupplierStocktakeSortType.stockDesc
@@ -458,21 +489,27 @@ class _StocktakeContentState extends State<_StocktakeContent> {
                 label: 'reports.sort_sold'.tr(),
                 selected: data.sort == SupplierStocktakeSortType.soldDesc,
                 onTap: () => context.read<SupplierStocktakeReportBloc>().add(
-                  const SupplierStocktakeReportSortChanged(SupplierStocktakeSortType.soldDesc),
+                  const SupplierStocktakeReportSortChanged(
+                    SupplierStocktakeSortType.soldDesc,
+                  ),
                 ),
               ),
               _SortChip(
                 label: 'reports.sort_purchased'.tr(),
                 selected: data.sort == SupplierStocktakeSortType.purchasedDesc,
                 onTap: () => context.read<SupplierStocktakeReportBloc>().add(
-                  const SupplierStocktakeReportSortChanged(SupplierStocktakeSortType.purchasedDesc),
+                  const SupplierStocktakeReportSortChanged(
+                    SupplierStocktakeSortType.purchasedDesc,
+                  ),
                 ),
               ),
               _SortChip(
                 label: 'reports.sort_profit'.tr(),
                 selected: data.sort == SupplierStocktakeSortType.profitDesc,
                 onTap: () => context.read<SupplierStocktakeReportBloc>().add(
-                  const SupplierStocktakeReportSortChanged(SupplierStocktakeSortType.profitDesc),
+                  const SupplierStocktakeReportSortChanged(
+                    SupplierStocktakeSortType.profitDesc,
+                  ),
                 ),
               ),
             ],
@@ -488,9 +525,12 @@ class _StocktakeContentState extends State<_StocktakeContent> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('reports.stocktake_items'.tr(),
-                style: theme.textTheme.titleSmall
-                    ?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'reports.stocktake_items'.tr(),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             Text(
               'reports.stocktake_products'.tr(args: ['${data.totalProducts}']),
               style: theme.textTheme.bodySmall?.copyWith(
@@ -510,31 +550,45 @@ class _StocktakeContentState extends State<_StocktakeContent> {
   }
 
   Widget _buildSummaryCards(
-      BuildContext context, SupplierStocktakeReportData data, CurrencyService cs) {
+    BuildContext context,
+    SupplierStocktakeReportData data,
+    CurrencyService cs,
+  ) {
     final colorScheme = Theme.of(context).colorScheme;
+    String totalOf(int Function(SupplierStocktakeProductItem item) selector) {
+      final totals = <String, int>{};
+      for (final item in data.products) {
+        totals.update(
+          item.measurementType,
+          (value) => value + selector(item),
+          ifAbsent: () => selector(item),
+        );
+      }
+      return localizedQuantityTotals(totals);
+    }
 
     final cards = [
       _SummaryCard(
         label: 'reports.total_purchased'.tr(),
-        value: '${data.totalPurchasedQuantity}',
+        value: totalOf((item) => item.purchasedQuantity),
         icon: LucideIcons.shoppingCart,
         color: colorScheme.primary,
       ),
       _SummaryCard(
         label: 'reports.total_sold'.tr(),
-        value: '${data.totalSoldQuantity}',
+        value: totalOf((item) => item.soldQuantity),
         icon: LucideIcons.trendingUp,
         color: colorScheme.error,
       ),
       _SummaryCard(
         label: 'reports.stocktake_sale_returned'.tr(),
-        value: '${data.totalSaleReturnedQuantity}',
+        value: totalOf((item) => item.saleReturnedQuantity),
         icon: LucideIcons.undo2,
         color: Colors.orange,
       ),
       _SummaryCard(
         label: 'reports.stocktake_purchase_returned'.tr(),
-        value: '${data.totalPurchaseReturnedQuantity}',
+        value: totalOf((item) => item.purchaseReturnedQuantity),
         icon: LucideIcons.redo2,
         color: Colors.deepPurple,
       ),
@@ -565,7 +619,14 @@ class _StocktakeContentState extends State<_StocktakeContent> {
           return Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: cards.map((c) => SizedBox(width: (constraints.maxWidth - 24) / 4, child: c)).toList(),
+            children: cards
+                .map(
+                  (c) => SizedBox(
+                    width: (constraints.maxWidth - 24) / 4,
+                    child: c,
+                  ),
+                )
+                .toList(),
           );
         }
 
@@ -573,12 +634,24 @@ class _StocktakeContentState extends State<_StocktakeContent> {
         final rows = <Widget>[];
         for (int i = 0; i < cards.length; i += 2) {
           if (i + 1 < cards.length) {
-            rows.add(Row(
-              children: [
-                Expanded(child: Padding(padding: const EdgeInsets.only(right: 4), child: cards[i])),
-                Expanded(child: Padding(padding: const EdgeInsets.only(left: 4), child: cards[i + 1])),
-              ],
-            ));
+            rows.add(
+              Row(
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: cards[i],
+                    ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: cards[i + 1],
+                    ),
+                  ),
+                ],
+              ),
+            );
           } else {
             rows.add(cards[i]);
           }
@@ -597,16 +670,23 @@ class _StocktakeContentState extends State<_StocktakeContent> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.warehouse,
-                size: 48, color: theme.colorScheme.onSurfaceVariant),
+            Icon(
+              LucideIcons.warehouse,
+              size: 48,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 16),
-            Text('reports.no_supplier_stocktake'.tr(),
-                style: theme.textTheme.bodyLarge),
+            Text(
+              'reports.no_supplier_stocktake'.tr(),
+              style: theme.textTheme.bodyLarge,
+            ),
             const SizedBox(height: 8),
-            Text('reports.no_supplier_stocktake_desc'.tr(),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                )),
+            Text(
+              'reports.no_supplier_stocktake_desc'.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       ),
@@ -629,108 +709,159 @@ class _StocktakeContentState extends State<_StocktakeContent> {
           DataColumn(label: Text('reports.variant'.tr())),
           DataColumn(label: Text('reports.purchased'.tr()), numeric: true),
           DataColumn(label: Text('reports.sold'.tr()), numeric: true),
-          DataColumn(label: Text('reports.stocktake_sale_ret_short'.tr()), numeric: true),
-          DataColumn(label: Text('reports.stocktake_purch_ret_short'.tr()), numeric: true),
+          DataColumn(
+            label: Text('reports.stocktake_sale_ret_short'.tr()),
+            numeric: true,
+          ),
+          DataColumn(
+            label: Text('reports.stocktake_purch_ret_short'.tr()),
+            numeric: true,
+          ),
           DataColumn(label: Text('reports.remaining'.tr()), numeric: true),
           DataColumn(label: Text('reports.unit_cost'.tr()), numeric: true),
-          DataColumn(label: Text('reports.remaining_value'.tr()), numeric: true),
+          DataColumn(
+            label: Text('reports.remaining_value'.tr()),
+            numeric: true,
+          ),
           DataColumn(label: Text('reports.profit'.tr()), numeric: true),
         ],
         rows: data.products.asMap().entries.map((entry) {
           final idx = entry.key + 1;
           final item = entry.value;
-          return DataRow(cells: [
-            DataCell(Text('$idx', style: theme.textTheme.bodySmall)),
-            DataCell(
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 180),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      item.productName,
-                      style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (item.sku != null)
+          return DataRow(
+            cells: [
+              DataCell(Text('$idx', style: theme.textTheme.bodySmall)),
+              DataCell(
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 180),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                       Text(
-                        item.sku!,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                          fontFamily: 'monospace',
+                        item.productName,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w500,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    if (item.categoryName != null)
-                      Text(
-                        item.categoryName!,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: colorScheme.tertiary,
+                      if (item.sku != null)
+                        Text(
+                          item.sku!,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            fontFamily: 'monospace',
+                          ),
                         ),
-                      ),
-                  ],
+                      if (item.categoryName != null)
+                        Text(
+                          item.categoryName!,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.tertiary,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            DataCell(Text(
-              item.variantLabel.isNotEmpty ? item.variantLabel : '-',
-              style: theme.textTheme.bodySmall,
-            )),
-            DataCell(Text(
-              '${item.purchasedQuantity}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.primary,
-                fontWeight: FontWeight.w600,
+              DataCell(
+                Text(
+                  item.variantLabel.isNotEmpty ? item.variantLabel : '-',
+                  style: theme.textTheme.bodySmall,
+                ),
               ),
-            )),
-            DataCell(Text(
-              '${item.soldQuantity}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: item.soldQuantity > 0 ? colorScheme.error : colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
+              DataCell(
+                Text(
+                  localizedQuantity(
+                    item.purchasedQuantity,
+                    item.measurementType,
+                  ),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-            )),
-            DataCell(Text(
-              '${item.saleReturnedQuantity}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: item.saleReturnedQuantity > 0 ? Colors.orange : colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
+              DataCell(
+                Text(
+                  localizedQuantity(item.soldQuantity, item.measurementType),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: item.soldQuantity > 0
+                        ? colorScheme.error
+                        : colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-            )),
-            DataCell(Text(
-              '${item.purchaseReturnedQuantity}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: item.purchaseReturnedQuantity > 0 ? Colors.deepPurple : colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
+              DataCell(
+                Text(
+                  localizedQuantity(
+                    item.saleReturnedQuantity,
+                    item.measurementType,
+                  ),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: item.saleReturnedQuantity > 0
+                        ? Colors.orange
+                        : colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-            )),
-            DataCell(Text(
-              '${item.remainingQuantity}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.tertiary,
-                fontWeight: FontWeight.bold,
+              DataCell(
+                Text(
+                  localizedQuantity(
+                    item.purchaseReturnedQuantity,
+                    item.measurementType,
+                  ),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: item.purchaseReturnedQuantity > 0
+                        ? Colors.deepPurple
+                        : colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-            )),
-            DataCell(Text(
-              cs.formatCents(item.costCents),
-              style: theme.textTheme.bodySmall,
-            )),
-            DataCell(Text(
-              cs.formatCents(item.remainingValueCents),
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: colorScheme.primary,
+              DataCell(
+                Text(
+                  localizedQuantity(
+                    item.remainingQuantity,
+                    item.measurementType,
+                  ),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.tertiary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
-            )),
-            DataCell(Text(
-              cs.formatCents(item.profitCents),
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: item.profitCents >= 0 ? Colors.teal : colorScheme.error,
+              DataCell(
+                Text(
+                  cs.formatCents(item.costCents),
+                  style: theme.textTheme.bodySmall,
+                ),
               ),
-            )),
-          ]);
+              DataCell(
+                Text(
+                  cs.formatCents(item.remainingValueCents),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
+                  ),
+                ),
+              ),
+              DataCell(
+                Text(
+                  cs.formatCents(item.profitCents),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: item.profitCents >= 0
+                        ? Colors.teal
+                        : colorScheme.error,
+                  ),
+                ),
+              ),
+            ],
+          );
         }).toList(),
       ),
     );
@@ -821,7 +952,9 @@ class _CategorySearchSheetState extends State<_CategorySearchSheet> {
   List<SupplierStocktakeCategoryOption> get _filtered {
     if (_query.isEmpty) return widget.options;
     final q = _query.toLowerCase();
-    return widget.options.where((o) => o.name.toLowerCase().contains(q)).toList();
+    return widget.options
+        .where((o) => o.name.toLowerCase().contains(q))
+        .toList();
   }
 
   @override
@@ -851,7 +984,9 @@ class _CategorySearchSheetState extends State<_CategorySearchSheet> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Text(
                 widget.title,
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             Padding(
@@ -862,26 +997,41 @@ class _CategorySearchSheetState extends State<_CategorySearchSheet> {
                   hintText: 'common.search'.tr(),
                   prefixIcon: const Icon(LucideIcons.search, size: 18),
                   isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   filled: true,
-                  fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                  fillColor: colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.3,
+                  ),
                 ),
                 onChanged: (q) => setState(() => _query = q),
               ),
             ),
             const SizedBox(height: 8),
             ListTile(
-              leading: Icon(LucideIcons.layers, color: !widget.isActive ? colorScheme.primary : null),
+              leading: Icon(
+                LucideIcons.layers,
+                color: !widget.isActive ? colorScheme.primary : null,
+              ),
               title: Text(
                 'reports.all'.tr(),
                 style: TextStyle(
-                  fontWeight: !widget.isActive ? FontWeight.bold : FontWeight.normal,
+                  fontWeight: !widget.isActive
+                      ? FontWeight.bold
+                      : FontWeight.normal,
                   color: !widget.isActive ? colorScheme.primary : null,
                 ),
               ),
               dense: true,
-              onTap: () => Navigator.pop(context, const SupplierStocktakeCategoryOption(id: -1, name: '')),
+              onTap: () => Navigator.pop(
+                context,
+                const SupplierStocktakeCategoryOption(id: -1, name: ''),
+              ),
             ),
             const Divider(height: 1),
             Expanded(
@@ -889,7 +1039,9 @@ class _CategorySearchSheetState extends State<_CategorySearchSheet> {
                   ? Center(
                       child: Text(
                         'common.no_results'.tr(),
-                        style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     )
                   : ListView.builder(

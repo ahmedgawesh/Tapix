@@ -57,6 +57,7 @@ class ProRoutePolicy {
     '/reports': AppFeature.reports,
     '/users': AppFeature.multiUser,
     '/employees': AppFeature.employees,
+    '/cashier-shifts': AppFeature.multiUser,
     '/financial-management': AppFeature.accounting,
     '/accounting': AppFeature.accounting,
     '/audit': AppFeature.multiUser,

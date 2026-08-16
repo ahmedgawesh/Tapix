@@ -49,10 +49,7 @@ class ImportValidating extends ImportProductsState {
   final ImportFileData fileData;
   final ColumnMapping columnMapping;
 
-  const ImportValidating({
-    required this.fileData,
-    required this.columnMapping,
-  });
+  const ImportValidating({required this.fileData, required this.columnMapping});
 
   @override
   List<Object?> get props => [fileData, columnMapping];
@@ -91,7 +88,12 @@ class ImportInProgress extends ImportProductsState {
   double get progress => totalRows > 0 ? (processedRows / totalRows) : 0.0;
 
   @override
-  List<Object?> get props => [fileData, columnMapping, processedRows, totalRows];
+  List<Object?> get props => [
+    fileData,
+    columnMapping,
+    processedRows,
+    totalRows,
+  ];
 }
 
 class ImportCompleted extends ImportProductsState {
@@ -107,10 +109,7 @@ class ImportFailed extends ImportProductsState {
   final String errorMessage;
   final ImportFileData? fileData;
 
-  const ImportFailed({
-    required this.errorMessage,
-    this.fileData,
-  });
+  const ImportFailed({required this.errorMessage, this.fileData});
 
   @override
   List<Object?> get props => [errorMessage, fileData];

@@ -40,6 +40,7 @@ class MovementEntry {
   final DateTime date;
   final String reference;
   final int quantity;
+  final String measurementType;
   final int totalCents;
   final String? counterpartyName;
 
@@ -48,6 +49,7 @@ class MovementEntry {
     required this.date,
     required this.reference,
     required this.quantity,
+    this.measurementType = 'piece',
     required this.totalCents,
     this.counterpartyName,
   });
@@ -68,6 +70,7 @@ class ProductSearchResult {
 }
 
 class ProductMovementSummary {
+  final String measurementType;
   final int totalPurchased;
   final int totalSold;
   final int totalSaleReturned;
@@ -78,6 +81,7 @@ class ProductMovementSummary {
   final int totalPurchaseReturnCents;
 
   const ProductMovementSummary({
+    this.measurementType = 'piece',
     this.totalPurchased = 0,
     this.totalSold = 0,
     this.totalSaleReturned = 0,
@@ -88,7 +92,8 @@ class ProductMovementSummary {
     this.totalPurchaseReturnCents = 0,
   });
 
-  int get netQuantity => totalPurchased - totalSold + totalSaleReturned - totalPurchaseReturned;
+  int get netQuantity =>
+      totalPurchased - totalSold + totalSaleReturned - totalPurchaseReturned;
 }
 
 class ProductMovementDetailData {
@@ -123,8 +128,12 @@ class ProductMovementDetailData {
     return ProductMovementDetailData(
       dateRange: dateRange ?? this.dateRange,
       searchQuery: searchQuery ?? this.searchQuery,
-      selectedProductId: clearProduct ? null : (selectedProductId ?? this.selectedProductId),
-      selectedProductName: clearProduct ? null : (selectedProductName ?? this.selectedProductName),
+      selectedProductId: clearProduct
+          ? null
+          : (selectedProductId ?? this.selectedProductId),
+      selectedProductName: clearProduct
+          ? null
+          : (selectedProductName ?? this.selectedProductName),
       searchResults: searchResults ?? this.searchResults,
       movements: movements ?? this.movements,
       summary: summary ?? this.summary,
@@ -135,15 +144,16 @@ class ProductMovementDetailData {
 // ==================== BLOC ====================
 
 class ProductMovementDetailBloc
-    extends RealtimeBloc<ProductMovementDetailData, ProductMovementDetailEvent> {
+    extends
+        RealtimeBloc<ProductMovementDetailData, ProductMovementDetailEvent> {
   final AppDatabase _db;
   ReportDateRange _dateRange;
   String _searchQuery = '';
   int? _selectedProductId;
 
   ProductMovementDetailBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   @override
   Stream<ProductMovementDetailData> get dataStream {
@@ -175,10 +185,11 @@ class ProductMovementDetailBloc
     if (event.query.trim().isEmpty) {
       final current = currentData;
       if (current != null) {
-        emit(RealtimeSuccess(data: current.copyWith(
-          searchQuery: '',
-          searchResults: [],
-        )));
+        emit(
+          RealtimeSuccess(
+            data: current.copyWith(searchQuery: '', searchResults: []),
+          ),
+        );
       }
       return;
     }
@@ -186,10 +197,14 @@ class ProductMovementDetailBloc
     final results = await _searchProducts(event.query.trim());
     final current = currentData;
     if (current != null) {
-      emit(RealtimeSuccess(data: current.copyWith(
-        searchQuery: event.query,
-        searchResults: results,
-      )));
+      emit(
+        RealtimeSuccess(
+          data: current.copyWith(
+            searchQuery: event.query,
+            searchResults: results,
+          ),
+        ),
+      );
     }
   }
 
@@ -224,16 +239,18 @@ class ProductMovementDetailBloc
     final endIso = _dateRange.endDate.toIso8601String();
 
     // Get product name
-    final productRow = await (_db.select(_db.products)
-          ..where((p) => p.id.equals(productId)))
-        .getSingleOrNull();
+    final productRow = await (_db.select(
+      _db.products,
+    )..where((p) => p.id.equals(productId))).getSingleOrNull();
     final productName = productRow?.name ?? '';
+    final measurementType = productRow?.measurementType ?? 'piece';
 
     final movements = <MovementEntry>[];
 
     // ── Purchases ──
-    final purchaseRows = await _db.customSelect(
-      '''
+    final purchaseRows = await _db
+        .customSelect(
+          '''
       SELECT 
         pu.purchase_date AS dt,
         pu.purchase_number AS ref,
@@ -248,28 +265,33 @@ class ProductMovementDetailBloc
         AND pu.purchase_date >= ? AND pu.purchase_date <= ?
       ORDER BY pu.purchase_date DESC
       ''',
-      variables: [
-        Variable.withInt(productId),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.purchaseItems, _db.purchases, _db.suppliers},
-    ).get();
+          variables: [
+            Variable.withInt(productId),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {_db.purchaseItems, _db.purchases, _db.suppliers},
+        )
+        .get();
 
     for (final row in purchaseRows) {
-      movements.add(MovementEntry(
-        type: MovementType.purchase,
-        date: DateTime.parse(row.read<String>('dt')),
-        reference: row.read<String>('ref'),
-        quantity: row.read<int>('qty'),
-        totalCents: row.read<int>('total'),
-        counterpartyName: row.readNullable<String>('counterparty'),
-      ));
+      movements.add(
+        MovementEntry(
+          type: MovementType.purchase,
+          date: DateTime.parse(row.read<String>('dt')),
+          reference: row.read<String>('ref'),
+          quantity: row.read<int>('qty'),
+          measurementType: measurementType,
+          totalCents: row.read<int>('total'),
+          counterpartyName: row.readNullable<String>('counterparty'),
+        ),
+      );
     }
 
     // ── Sales ──
-    final saleRows = await _db.customSelect(
-      '''
+    final saleRows = await _db
+        .customSelect(
+          '''
       SELECT 
         s.sale_date AS dt,
         s.invoice_number AS ref,
@@ -284,28 +306,33 @@ class ProductMovementDetailBloc
         AND s.sale_date >= ? AND s.sale_date <= ?
       ORDER BY s.sale_date DESC
       ''',
-      variables: [
-        Variable.withInt(productId),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.saleItems, _db.sales, _db.customers},
-    ).get();
+          variables: [
+            Variable.withInt(productId),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {_db.saleItems, _db.sales, _db.customers},
+        )
+        .get();
 
     for (final row in saleRows) {
-      movements.add(MovementEntry(
-        type: MovementType.sale,
-        date: DateTime.parse(row.read<String>('dt')),
-        reference: row.read<String>('ref'),
-        quantity: row.read<int>('qty'),
-        totalCents: row.read<int>('total'),
-        counterpartyName: row.readNullable<String>('counterparty'),
-      ));
+      movements.add(
+        MovementEntry(
+          type: MovementType.sale,
+          date: DateTime.parse(row.read<String>('dt')),
+          reference: row.read<String>('ref'),
+          quantity: row.read<int>('qty'),
+          measurementType: measurementType,
+          totalCents: row.read<int>('total'),
+          counterpartyName: row.readNullable<String>('counterparty'),
+        ),
+      );
     }
 
     // ── Sale Returns ──
-    final saleReturnRows = await _db.customSelect(
-      '''
+    final saleReturnRows = await _db
+        .customSelect(
+          '''
       SELECT 
         sr.return_date AS dt,
         sr.return_number AS ref,
@@ -322,28 +349,39 @@ class ProductMovementDetailBloc
         AND sr.return_date >= ? AND sr.return_date <= ?
       ORDER BY sr.return_date DESC
       ''',
-      variables: [
-        Variable.withInt(productId),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.saleReturnItems, _db.saleReturns, _db.saleItems, _db.sales, _db.customers},
-    ).get();
+          variables: [
+            Variable.withInt(productId),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.saleReturnItems,
+            _db.saleReturns,
+            _db.saleItems,
+            _db.sales,
+            _db.customers,
+          },
+        )
+        .get();
 
     for (final row in saleReturnRows) {
-      movements.add(MovementEntry(
-        type: MovementType.saleReturn,
-        date: DateTime.parse(row.read<String>('dt')),
-        reference: row.read<String>('ref'),
-        quantity: row.read<int>('qty'),
-        totalCents: row.read<int>('total'),
-        counterpartyName: row.readNullable<String>('counterparty'),
-      ));
+      movements.add(
+        MovementEntry(
+          type: MovementType.saleReturn,
+          date: DateTime.parse(row.read<String>('dt')),
+          reference: row.read<String>('ref'),
+          quantity: row.read<int>('qty'),
+          measurementType: measurementType,
+          totalCents: row.read<int>('total'),
+          counterpartyName: row.readNullable<String>('counterparty'),
+        ),
+      );
     }
 
     // ── Sale Adjustment Returns (unlinked) ──
-    final saleAdjReturnRows = await _db.customSelect(
-      '''
+    final saleAdjReturnRows = await _db
+        .customSelect(
+          '''
       SELECT 
         sra.return_date AS dt,
         sra.return_number AS ref,
@@ -358,28 +396,37 @@ class ProductMovementDetailBloc
         AND sra.return_date >= ? AND sra.return_date <= ?
       ORDER BY sra.return_date DESC
       ''',
-      variables: [
-        Variable.withInt(productId),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.saleReturnAdjustmentItems, _db.saleReturnAdjustments, _db.customers},
-    ).get();
+          variables: [
+            Variable.withInt(productId),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.saleReturnAdjustmentItems,
+            _db.saleReturnAdjustments,
+            _db.customers,
+          },
+        )
+        .get();
 
     for (final row in saleAdjReturnRows) {
-      movements.add(MovementEntry(
-        type: MovementType.saleReturn,
-        date: DateTime.parse(row.read<String>('dt')),
-        reference: row.read<String>('ref'),
-        quantity: row.read<int>('qty'),
-        totalCents: row.read<int>('total'),
-        counterpartyName: row.readNullable<String>('counterparty'),
-      ));
+      movements.add(
+        MovementEntry(
+          type: MovementType.saleReturn,
+          date: DateTime.parse(row.read<String>('dt')),
+          reference: row.read<String>('ref'),
+          quantity: row.read<int>('qty'),
+          measurementType: measurementType,
+          totalCents: row.read<int>('total'),
+          counterpartyName: row.readNullable<String>('counterparty'),
+        ),
+      );
     }
 
     // ── Purchase Returns ──
-    final purchaseReturnRows = await _db.customSelect(
-      '''
+    final purchaseReturnRows = await _db
+        .customSelect(
+          '''
       SELECT 
         pr.return_date AS dt,
         pr.return_number AS ref,
@@ -396,28 +443,39 @@ class ProductMovementDetailBloc
         AND pr.return_date >= ? AND pr.return_date <= ?
       ORDER BY pr.return_date DESC
       ''',
-      variables: [
-        Variable.withInt(productId),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.purchaseReturnItems, _db.purchaseReturns, _db.purchaseItems, _db.purchases, _db.suppliers},
-    ).get();
+          variables: [
+            Variable.withInt(productId),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.purchaseReturnItems,
+            _db.purchaseReturns,
+            _db.purchaseItems,
+            _db.purchases,
+            _db.suppliers,
+          },
+        )
+        .get();
 
     for (final row in purchaseReturnRows) {
-      movements.add(MovementEntry(
-        type: MovementType.purchaseReturn,
-        date: DateTime.parse(row.read<String>('dt')),
-        reference: row.read<String>('ref'),
-        quantity: row.read<int>('qty'),
-        totalCents: row.read<int>('total'),
-        counterpartyName: row.readNullable<String>('counterparty'),
-      ));
+      movements.add(
+        MovementEntry(
+          type: MovementType.purchaseReturn,
+          date: DateTime.parse(row.read<String>('dt')),
+          reference: row.read<String>('ref'),
+          quantity: row.read<int>('qty'),
+          measurementType: measurementType,
+          totalCents: row.read<int>('total'),
+          counterpartyName: row.readNullable<String>('counterparty'),
+        ),
+      );
     }
 
     // ── Purchase Adjustment Returns (unlinked) ──
-    final purchaseAdjReturnRows = await _db.customSelect(
-      '''
+    final purchaseAdjReturnRows = await _db
+        .customSelect(
+          '''
       SELECT 
         pra.return_date AS dt,
         pra.return_number AS ref,
@@ -432,31 +490,45 @@ class ProductMovementDetailBloc
         AND pra.return_date >= ? AND pra.return_date <= ?
       ORDER BY pra.return_date DESC
       ''',
-      variables: [
-        Variable.withInt(productId),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.purchaseReturnAdjustmentItems, _db.purchaseReturnAdjustments, _db.suppliers},
-    ).get();
+          variables: [
+            Variable.withInt(productId),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.purchaseReturnAdjustmentItems,
+            _db.purchaseReturnAdjustments,
+            _db.suppliers,
+          },
+        )
+        .get();
 
     for (final row in purchaseAdjReturnRows) {
-      movements.add(MovementEntry(
-        type: MovementType.purchaseReturn,
-        date: DateTime.parse(row.read<String>('dt')),
-        reference: row.read<String>('ref'),
-        quantity: row.read<int>('qty'),
-        totalCents: row.read<int>('total'),
-        counterpartyName: row.readNullable<String>('counterparty'),
-      ));
+      movements.add(
+        MovementEntry(
+          type: MovementType.purchaseReturn,
+          date: DateTime.parse(row.read<String>('dt')),
+          reference: row.read<String>('ref'),
+          quantity: row.read<int>('qty'),
+          measurementType: measurementType,
+          totalCents: row.read<int>('total'),
+          counterpartyName: row.readNullable<String>('counterparty'),
+        ),
+      );
     }
 
     // Sort all movements by date descending
     movements.sort((a, b) => b.date.compareTo(a.date));
 
     // Compute summary
-    int totalPurchased = 0, totalSold = 0, totalSaleReturned = 0, totalPurchaseReturned = 0;
-    int totalPurchaseCents = 0, totalSalesCents = 0, totalSaleReturnCents = 0, totalPurchaseReturnCents = 0;
+    int totalPurchased = 0,
+        totalSold = 0,
+        totalSaleReturned = 0,
+        totalPurchaseReturned = 0;
+    int totalPurchaseCents = 0,
+        totalSalesCents = 0,
+        totalSaleReturnCents = 0,
+        totalPurchaseReturnCents = 0;
 
     for (final m in movements) {
       switch (m.type) {
@@ -482,6 +554,9 @@ class ProductMovementDetailBloc
       selectedProductName: productName,
       movements: movements,
       summary: ProductMovementSummary(
+        measurementType: movements.isEmpty
+            ? 'piece'
+            : movements.first.measurementType,
         totalPurchased: totalPurchased,
         totalSold: totalSold,
         totalSaleReturned: totalSaleReturned,
@@ -496,8 +571,9 @@ class ProductMovementDetailBloc
 
   Future<List<ProductSearchResult>> _searchProducts(String query) async {
     final likeQuery = '%$query%';
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT DISTINCT p.id, p.name, p.sku, p.barcode
       FROM products p
       LEFT JOIN product_variants v ON v.product_id = p.id
@@ -512,21 +588,26 @@ class ProductMovementDetailBloc
       ORDER BY p.name
       LIMIT 20
       ''',
-      variables: [
-        Variable.withString(likeQuery),
-        Variable.withString(likeQuery),
-        Variable.withString(likeQuery),
-        Variable.withString(likeQuery),
-        Variable.withString(likeQuery),
-      ],
-      readsFrom: {_db.products, _db.productVariants},
-    ).get();
+          variables: [
+            Variable.withString(likeQuery),
+            Variable.withString(likeQuery),
+            Variable.withString(likeQuery),
+            Variable.withString(likeQuery),
+            Variable.withString(likeQuery),
+          ],
+          readsFrom: {_db.products, _db.productVariants},
+        )
+        .get();
 
-    return rows.map((row) => ProductSearchResult(
-      productId: row.read<int>('id'),
-      name: row.read<String>('name'),
-      sku: row.readNullable<String>('sku'),
-      barcode: row.readNullable<String>('barcode'),
-    )).toList();
+    return rows
+        .map(
+          (row) => ProductSearchResult(
+            productId: row.read<int>('id'),
+            name: row.read<String>('name'),
+            sku: row.readNullable<String>('sku'),
+            barcode: row.readNullable<String>('barcode'),
+          ),
+        )
+        .toList();
   }
 }

@@ -2,7 +2,9 @@ import 'dart:async';
 
 import '../../../../core/database/app_database.dart' as db;
 import '../../../../core/database/daos/sale_dao.dart' hide SaleDashboardStats;
-import '../../../../core/database/daos/sale_dao.dart' as dao show SaleDashboardStats;
+import '../../../../core/database/daos/sale_dao.dart'
+    as dao
+    show SaleDashboardStats;
 import '../../../../core/database/daos/adjustment_return_dao.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../models/sale_model.dart';
@@ -16,7 +18,9 @@ abstract class SaleLocalDatasource {
   Future<List<SaleItemEntity>> getSaleItemsWithDetails(int saleId);
   Stream<List<SaleReturnEntity>> watchAllSaleReturns();
   Future<SaleReturnEntity?> getSaleReturnById(int id);
-  Stream<List<SaleReturnItemEntity>> watchSaleReturnItemsWithDetails(int returnId);
+  Stream<List<SaleReturnItemEntity>> watchSaleReturnItemsWithDetails(
+    int returnId,
+  );
   Stream<List<SaleReturnEntity>> watchSaleReturnsBySale(int saleId);
   Stream<Set<int>> watchSaleIdsWithReturns();
   Future<void> voidSaleReturn(int returnId, {bool allowNegativeStock = false});
@@ -41,15 +45,16 @@ class SaleLocalDatasourceImpl implements SaleLocalDatasource {
   @override
   Stream<List<SaleEntity>> watchAllSales() {
     return _dao.watchAllSalesWithCustomer().map(
-      (list) => list.map((swc) => SaleModel.fromDriftWithCustomer(swc)).toList(),
+      (list) =>
+          list.map((swc) => SaleModel.fromDriftWithCustomer(swc)).toList(),
     );
   }
 
   @override
   Stream<List<SaleEntity>> watchCustomerSales(int customerId) {
-    return _dao.watchCustomerSales(customerId).map(
-      (list) => list.map((s) => SaleModel.fromDrift(s)).toList(),
-    );
+    return _dao
+        .watchCustomerSales(customerId)
+        .map((list) => list.map((s) => SaleModel.fromDrift(s)).toList());
   }
 
   @override
@@ -67,9 +72,9 @@ class SaleLocalDatasourceImpl implements SaleLocalDatasource {
 
   @override
   Stream<List<SaleItemEntity>> watchSaleItems(int saleId) {
-    return _dao.watchSaleItems(saleId).map(
-      (items) => items.map((i) => SaleItemModel.fromDrift(i)).toList(),
-    );
+    return _dao
+        .watchSaleItems(saleId)
+        .map((items) => items.map((i) => SaleItemModel.fromDrift(i)).toList());
   }
 
   @override
@@ -91,11 +96,18 @@ class SaleLocalDatasourceImpl implements SaleLocalDatasource {
 
     final controller = StreamController<List<SaleReturnEntity>>.broadcast();
     final sub1 = _dao.watchAllSaleReturnsWithParty().listen((rows) {
-      lastLinked = rows.map((r) => SaleReturnModel.fromDriftWithParty(r) as SaleReturnEntity).toList();
+      lastLinked = rows
+          .map((r) => SaleReturnModel.fromDriftWithParty(r) as SaleReturnEntity)
+          .toList();
       controller.add(merge());
     });
     final sub2 = _adjDao.watchAllSaleAdjReturnsWithParty().listen((rows) {
-      lastAdj = rows.map((a) => SaleReturnModel.fromAdjustmentWithParty(a) as SaleReturnEntity).toList();
+      lastAdj = rows
+          .map(
+            (a) =>
+                SaleReturnModel.fromAdjustmentWithParty(a) as SaleReturnEntity,
+          )
+          .toList();
       controller.add(merge());
     });
     controller.onCancel = () {
@@ -136,31 +148,39 @@ class SaleLocalDatasourceImpl implements SaleLocalDatasource {
   }
 
   @override
-  Stream<List<SaleReturnItemEntity>> watchSaleReturnItemsWithDetails(int returnId) {
-    return _dao.watchSaleReturnItemsWithDetails(returnId).map(
-      (list) => list.map((d) => SaleReturnItemModel.fromDriftWithDetails(d)).toList(),
-    );
+  Stream<List<SaleReturnItemEntity>> watchSaleReturnItemsWithDetails(
+    int returnId,
+  ) {
+    return _dao
+        .watchSaleReturnItemsWithDetails(returnId)
+        .map(
+          (list) => list
+              .map((d) => SaleReturnItemModel.fromDriftWithDetails(d))
+              .toList(),
+        );
   }
 
   @override
   Stream<List<SaleReturnEntity>> watchSaleReturnsBySale(int saleId) {
-    return _dao.watchSaleReturnsBySale(saleId).map(
-      (list) => list.map((r) => SaleReturnModel.fromDrift(r)).toList(),
-    );
+    return _dao
+        .watchSaleReturnsBySale(saleId)
+        .map((list) => list.map((r) => SaleReturnModel.fromDrift(r)).toList());
   }
 
   @override
   Stream<Set<int>> watchSaleIdsWithReturns() => _dao.watchSaleIdsWithReturns();
 
   @override
-  Future<void> voidSaleReturn(int returnId, {bool allowNegativeStock = false}) =>
-      _dao.voidSaleReturn(returnId, allowNegativeStock: allowNegativeStock);
+  Future<void> voidSaleReturn(
+    int returnId, {
+    bool allowNegativeStock = false,
+  }) => _dao.voidSaleReturn(returnId, allowNegativeStock: allowNegativeStock);
 
   @override
   Stream<List<SalePaymentEntity>> watchSalePayments(int saleId) {
-    return _dao.watchSalePayments(saleId).map(
-      (list) => list.map((p) => SalePaymentModel.fromDrift(p)).toList(),
-    );
+    return _dao
+        .watchSalePayments(saleId)
+        .map((list) => list.map((p) => SalePaymentModel.fromDrift(p)).toList());
   }
 
   @override
@@ -182,16 +202,18 @@ class SaleLocalDatasourceImpl implements SaleLocalDatasource {
 
   @override
   Stream<SaleDashboardStats> watchDashboardStats() {
-    return _dao.watchDashboardStats().map((dao.SaleDashboardStats stats) => SaleDashboardStats(
-          totalCount: stats.totalCount,
-          completedCount: stats.completedCount,
-          voidedCount: stats.voidedCount,
-          totalSalesCents: stats.totalSalesCents,
-          returnsCount: stats.returnsCount,
-          totalReturnsCents: stats.totalReturnsCents,
-          todaySalesCents: stats.todaySalesCents,
-          todayCount: stats.todayCount,
-        ));
+    return _dao.watchDashboardStats().map(
+      (dao.SaleDashboardStats stats) => SaleDashboardStats(
+        totalCount: stats.totalCount,
+        completedCount: stats.completedCount,
+        voidedCount: stats.voidedCount,
+        totalSalesCents: stats.totalSalesCents,
+        returnsCount: stats.returnsCount,
+        totalReturnsCents: stats.totalReturnsCents,
+        todaySalesCents: stats.todaySalesCents,
+        todayCount: stats.todayCount,
+      ),
+    );
   }
 
   @override

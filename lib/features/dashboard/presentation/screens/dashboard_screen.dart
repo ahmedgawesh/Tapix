@@ -29,6 +29,7 @@ class DashboardItemData {
   final String titleKey;
   final Color color;
   final String route;
+
   /// If true, only shown to owner users.
   final bool ownerOnly;
 
@@ -54,6 +55,13 @@ const _kAllDefaultItems = [
     titleKey: 'dashboard.new_sale',
     color: Color(0xFF6750A4), // resolved to colorScheme.primary at runtime
     route: '/sales',
+  ),
+  DashboardItemData(
+    id: 'cashier_shifts',
+    icon: LucideIcons.timer,
+    titleKey: 'dashboard.cashier_shifts',
+    color: Color(0xFF00897B),
+    route: '/cashier-shifts',
   ),
   DashboardItemData(
     id: 'products',
@@ -257,9 +265,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               onPressed: _exitEditMode,
               icon: const Icon(LucideIcons.check, size: 18),
               label: Text('dashboard.done_editing'.tr()),
-              style: TextButton.styleFrom(
-                foregroundColor: colorScheme.primary,
-              ),
+              style: TextButton.styleFrom(foregroundColor: colorScheme.primary),
             ),
           if (!_isEditMode) ...[
             // Company info
@@ -277,12 +283,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                             radius: 16,
                             backgroundColor:
                                 colorScheme.surfaceContainerHighest,
-                            backgroundImage: (profile.logoBase64 != null &&
+                            backgroundImage:
+                                (profile.logoBase64 != null &&
                                     profile.logoBase64!.isNotEmpty)
-                                ? MemoryImage(
-                                    base64Decode(profile.logoBase64!))
+                                ? MemoryImage(base64Decode(profile.logoBase64!))
                                 : null,
-                            child: (profile.logoBase64 == null ||
+                            child:
+                                (profile.logoBase64 == null ||
                                     profile.logoBase64!.isEmpty)
                                 ? Icon(
                                     LucideIcons.building2,
@@ -371,8 +378,8 @@ class _DashboardScreenState extends State<DashboardScreen>
       body: SafeArea(
         child: BlocBuilder<AuthBloc, RealtimeState<UserEntity?>>(
           builder: (context, authState) {
-            final isOwner = authState is AuthAuthenticated &&
-                authState.user.isOwner;
+            final isOwner =
+                authState is AuthAuthenticated && authState.user.isOwner;
             final visibleItems = _visibleItems(isOwner);
 
             return SingleChildScrollView(
@@ -386,10 +393,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                       width: double.infinity,
                       margin: const EdgeInsets.only(bottom: 16),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 12),
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
-                        color:
-                            colorScheme.primaryContainer.withAlpha(180),
+                        color: colorScheme.primaryContainer.withAlpha(180),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: colorScheme.primary.withAlpha(80),
@@ -424,17 +432,17 @@ class _DashboardScreenState extends State<DashboardScreen>
                         children: [
                           Text(
                             'dashboard.welcome'.tr(
-                                args: [authState.user.username]),
-                            style:
-                                theme.textTheme.headlineSmall?.copyWith(
+                              args: [authState.user.username],
+                            ),
+                            style: theme.textTheme.headlineSmall?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'dashboard.role'.tr(args: [
-                              authState.user.role.displayName
-                            ]),
+                            'dashboard.role'.tr(
+                              args: [authState.user.role.displayName],
+                            ),
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: colorScheme.onSurfaceVariant,
                             ),
@@ -478,7 +486,8 @@ class _DashboardScreenState extends State<DashboardScreen>
                           childAspectRatio: isDesktop ? 1.3 : 1.1,
                           children: visibleItems.map((item) {
                             final color = _resolveColor(item, colorScheme);
-                            final locked = !isPro &&
+                            final locked =
+                                !isPro &&
                                 ProRoutePolicy.requiresPro(item.route);
                             return _DashboardCard(
                               icon: item.icon,
@@ -503,20 +512,20 @@ class _DashboardScreenState extends State<DashboardScreen>
                         return AnimatedBuilder(
                           animation: animation,
                           builder: (context, child) {
-                            final scale =
-                                Tween<double>(begin: 1.0, end: 1.05)
-                                    .animate(CurvedAnimation(
-                              parent: animation,
-                              curve: Curves.easeInOut,
-                            ));
+                            final scale = Tween<double>(begin: 1.0, end: 1.05)
+                                .animate(
+                                  CurvedAnimation(
+                                    parent: animation,
+                                    curve: Curves.easeInOut,
+                                  ),
+                                );
                             return Transform.scale(
                               scale: scale.value,
                               child: Material(
                                 color: Colors.transparent,
                                 elevation: 8,
                                 shadowColor: Colors.black26,
-                                borderRadius:
-                                    BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(12),
                                 child: child,
                               ),
                             );
@@ -534,21 +543,17 @@ class _DashboardScreenState extends State<DashboardScreen>
                         if (newIndex > oldIndex) {
                           // Moving down: insert after the item at
                           // newIndex-1 in the visible list.
-                          final visAfter =
-                              visibleItems[newIndex - 1];
-                          realNew =
-                              _items.indexOf(visAfter) + 1;
+                          final visAfter = visibleItems[newIndex - 1];
+                          realNew = _items.indexOf(visAfter) + 1;
                         } else {
                           // Moving up: insert before the item at
                           // newIndex in the visible list.
-                          final visBefore =
-                              visibleItems[newIndex];
+                          final visBefore = visibleItems[newIndex];
                           realNew = _items.indexOf(visBefore);
                         }
 
                         setState(() {
-                          final item =
-                              _items.removeAt(realOld);
+                          final item = _items.removeAt(realOld);
                           if (realNew > realOld) realNew--;
                           _items.insert(realNew, item);
                         });
@@ -557,8 +562,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       itemCount: visibleItems.length,
                       itemBuilder: (context, index) {
                         final item = visibleItems[index];
-                        final color =
-                            _resolveColor(item, colorScheme);
+                        final color = _resolveColor(item, colorScheme);
                         return _EditModeListTile(
                           key: ValueKey(item.id),
                           index: index,
@@ -607,7 +611,7 @@ class _EditModeListTile extends StatelessWidget {
         // Each item gets a unique wobble phase for an organic feel.
         final wobble =
             math.sin(wobbleController.value * math.pi * 2 + index * 0.7) *
-                0.008;
+            0.008;
         return Transform.rotate(angle: wobble, child: child);
       },
       child: Padding(
@@ -621,7 +625,9 @@ class _EditModeListTile extends StatelessWidget {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: Color.alphaBlend(
-                    color.withAlpha(38), Colors.transparent),
+                  color.withAlpha(38),
+                  Colors.transparent,
+                ),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(item.icon, size: 22, color: color),
@@ -695,14 +701,12 @@ class _DashboardCard extends StatelessWidget {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Color.alphaBlend(
-                      color.withAlpha(38), Colors.transparent),
+                    color.withAlpha(38),
+                    Colors.transparent,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  icon,
-                  size: 28,
-                  color: color,
-                ),
+                child: Icon(icon, size: 28, color: color),
               ),
               const SizedBox(height: 12),
               Text(
@@ -734,11 +738,7 @@ class _DashboardCard extends StatelessWidget {
               color: Colors.amber,
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              LucideIcons.lock,
-              size: 13,
-              color: Colors.white,
-            ),
+            child: const Icon(LucideIcons.lock, size: 13, color: Colors.white),
           ),
         ),
       ],

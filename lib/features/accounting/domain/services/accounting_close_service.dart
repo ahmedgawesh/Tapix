@@ -1,7 +1,8 @@
-import 'package:drift/drift.dart' show Variable;
+import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
 import '../../data/repositories/accounting_repository.dart';
+import '../services/trial_balance_calculation_service.dart';
 
 /// Result of pre-close validation
 class PeriodCloseValidation {
@@ -129,16 +130,28 @@ class AccountingCloseService {
       );
     }
 
-    // ── Check 2: Period end date must be in the past ──
-    if (period.endDate.isAfter(DateTime.now())) {
+    final periodStart = DateTime(
+      period.startDate.year,
+      period.startDate.month,
+      period.startDate.day,
+    );
+    final endExclusive = DateTime(
+      period.endDate.year,
+      period.endDate.month,
+      period.endDate.day,
+    ).add(const Duration(days: 1));
+    final endInclusive = endExclusive.subtract(const Duration(microseconds: 1));
+
+    // ── Check 2: The complete final day must have elapsed ──
+    if (DateTime.now().isBefore(endExclusive)) {
       blockers.add(const PeriodCloseBlocker(
         reasonKey: 'reports.close_blocker_future_period',
       ));
     }
 
-    // ── Check 3: Trial balance must be balanced ──
+    // ── Check 3: Cumulative trial balance at period end must balance ──
     final trialBalance = await _accountingRepo.getTrialBalance(
-      asOfDate: period.endDate,
+      asOfDate: endInclusive,
     );
     if (!trialBalance.isBalanced) {
       blockers.add(const PeriodCloseBlocker(
@@ -150,10 +163,10 @@ class AccountingCloseService {
     final draftRows = await _db.customSelect(
       '''SELECT COUNT(*) AS cnt FROM journal_entries
          WHERE status = 'draft'
-           AND entry_date >= ? AND entry_date <= ?''',
+           AND entry_date >= ? AND entry_date < ?''',
       variables: [
-        Variable.withDateTime(period.startDate),
-        Variable.withDateTime(period.endDate),
+        Variable.withDateTime(periodStart),
+        Variable.withDateTime(endExclusive),
       ],
       readsFrom: {_db.journalEntries},
     ).getSingle();
@@ -166,10 +179,78 @@ class AccountingCloseService {
       ));
     }
 
-    // ── Compute net income for the period ──
-    // Phase 7 — natural-balance signing via TrialBalance SoT.
-    final totalRevenue = trialBalance.totalForType('revenue');
-    final totalExpenses = trialBalance.totalForType('expense');
+    // ── Check 5: No unposted operational documents in the period ──
+    final unpostedRow = await _db.customSelect(
+      '''SELECT COALESCE(SUM(cnt), 0) AS cnt FROM (
+           SELECT COUNT(*) AS cnt FROM sales
+             WHERE status IN ('draft', 'pending')
+               AND sale_date >= ? AND sale_date < ?
+           UNION ALL
+           SELECT COUNT(*) AS cnt FROM purchases
+             WHERE status IN ('draft', 'pending')
+               AND purchase_date >= ? AND purchase_date < ?
+           UNION ALL
+           SELECT COUNT(*) AS cnt FROM sale_returns
+             WHERE status = 'draft' AND return_date >= ? AND return_date < ?
+           UNION ALL
+           SELECT COUNT(*) AS cnt FROM purchase_returns
+             WHERE status = 'draft' AND return_date >= ? AND return_date < ?
+           UNION ALL
+           SELECT COUNT(*) AS cnt FROM sale_return_adjustments
+             WHERE status = 'draft' AND return_date >= ? AND return_date < ?
+           UNION ALL
+           SELECT COUNT(*) AS cnt FROM purchase_return_adjustments
+             WHERE status = 'draft' AND return_date >= ? AND return_date < ?
+         )''',
+      variables: List.generate(
+        6,
+        (_) => [
+          Variable.withDateTime(periodStart),
+          Variable.withDateTime(endExclusive),
+        ],
+      ).expand((pair) => pair).toList(),
+      readsFrom: {
+        _db.sales,
+        _db.purchases,
+        _db.saleReturns,
+        _db.purchaseReturns,
+        _db.saleReturnAdjustments,
+        _db.purchaseReturnAdjustments,
+      },
+    ).getSingle();
+    final unpostedCount = unpostedRow.read<int>('cnt');
+    if (unpostedCount > 0) {
+      blockers.add(PeriodCloseBlocker(
+        reasonKey: 'reports.close_blocker_unposted_transactions',
+        args: [unpostedCount.toString()],
+      ));
+    }
+
+    // ── Compute activity only inside this accounting period ──
+    final accounts = await (_db.select(_db.accounts)
+          ..where((account) => account.isActive.equals(true)))
+        .get();
+    final periodQuery = _db.select(_db.journalEntryLines).join([
+      innerJoin(
+        _db.journalEntries,
+        _db.journalEntries.id.equalsExp(_db.journalEntryLines.journalEntryId),
+      ),
+    ]);
+    periodQuery.where(
+      _db.journalEntries.status.equals('posted') &
+          _db.journalEntries.entryDate.isBiggerOrEqualValue(periodStart) &
+          _db.journalEntries.entryDate.isSmallerThanValue(endExclusive),
+    );
+    final periodRows = await periodQuery.get();
+    final periodTrialBalance = TrialBalanceCalculationService.calculate(
+      accounts: accounts,
+      lines: periodRows.map(
+        (row) => row.readTable(_db.journalEntryLines),
+      ),
+      asOfDate: endInclusive,
+    );
+    final totalRevenue = periodTrialBalance.totalForType('revenue');
+    final totalExpenses = periodTrialBalance.totalForType('expense');
     final netIncome = totalRevenue - totalExpenses;
     final ownerCapital = trialBalance.totalForType('equity');
 

@@ -1,6 +1,7 @@
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart' as db;
+import '../../../../core/database/daos/product_variant_dao.dart';
 import '../../../../core/services/inventory/inventory_adjustment_service.dart';
 import '../../../barcode/services/barcode_generation_service.dart';
 import '../../domain/entities/product_variant_entity.dart';
@@ -75,9 +76,36 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
     required Decimal priceCents,
     required int stockQuantity,
   }) async {
-    final existing = await _datasource.getDefaultVariantByProduct(productId);
-    if (existing != null) {
-      return existing.id;
+    // A simple product still has one operational variant row so every stock
+    // movement has a stable variant id. That row is allowed to carry the
+    // product's optional colour/size; those are descriptive attributes, not
+    // evidence that the product has multiple variants. Requiring an
+    // anonymous row here used to split a simple product into two rows: the
+    // original row kept SKU/barcode/attributes while a newly-created row
+    // received stock and invoice references.
+    final active = (await _datasource.getVariantsByProduct(
+      productId,
+    )).where((variant) => variant.isActive).toList();
+    if (active.length == 1) {
+      return active.single.id;
+    }
+    if (active.length > 1) {
+      throw StateError(
+        'Simple product $productId has ${active.length} active variant rows. '
+        'Refusing to create or guess another default variant.',
+      );
+    }
+
+    // Reuse an archived anonymous row instead of colliding with the unique
+    // (product, colour, size) index. Reactivation reveals its preserved
+    // stock; it never creates or removes inventory value.
+    final archived = await _datasource.getAnonymousDefaultVariantByProduct(
+      productId,
+      activeOnly: false,
+    );
+    if (archived != null) {
+      await _datasource.reactivateVariant(archived.id);
+      return archived.id;
     }
 
     final id = await createVariant(
@@ -136,7 +164,10 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
     final shouldAutoGenerate = barcode == null || barcode.trim().isEmpty;
     if (shouldAutoGenerate) {
       final autoBarcode = _buildAutoBarcode(id);
-      await _datasource.updateVariantBarcode(variantId: id, barcode: autoBarcode);
+      await _datasource.updateVariantBarcode(
+        variantId: id,
+        barcode: autoBarcode,
+      );
     }
 
     if (stockQuantity > 0) {
@@ -151,11 +182,12 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
   }
 
   @override
-  Future<bool> updateVariant(ProductVariant variant) {
-    if (variant is ProductVariantModel) {
-      return _datasource.updateVariant(variant);
-    } else {
-      return _datasource.updateVariant(
+  Future<bool> updateVariant(ProductVariant variant) async {
+    try {
+      if (variant is ProductVariantModel) {
+        return await _datasource.updateVariant(variant);
+      }
+      return await _datasource.updateVariant(
         ProductVariantModel(
           id: variant.id,
           productId: variant.productId,
@@ -171,12 +203,18 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
           isActive: variant.isActive,
         ),
       );
+    } on VariantStockNotZeroException catch (e) {
+      throw VariantStockConflictException(e.variantCount);
     }
   }
 
   @override
-  Future<int> deleteVariant(int id) {
-    return _datasource.deleteVariant(id);
+  Future<int> deleteVariant(int id) async {
+    try {
+      return await _datasource.deleteVariant(id);
+    } on VariantStockNotZeroException catch (e) {
+      throw VariantStockConflictException(e.variantCount);
+    }
   }
 
   @override
@@ -186,7 +224,12 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
 
   @override
   Future<VariantDeletionResult> smartDeleteVariant(int variantId) async {
-    final result = await _datasource.smartDeleteVariant(variantId);
+    late final ({bool wasDeleted, int referenceCount}) result;
+    try {
+      result = await _datasource.smartDeleteVariant(variantId);
+    } on VariantStockNotZeroException catch (e) {
+      throw VariantStockConflictException(e.variantCount);
+    }
     return VariantDeletionResult(
       wasDeleted: result.wasDeleted,
       referenceCount: result.referenceCount,
@@ -232,8 +275,17 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
   }
 
   @override
-  Future<int> deactivateDimensionalVariants(int productId) {
-    return _datasource.deactivateDimensionalVariants(productId);
+  Future<int> countActiveDimensionalVariantsWithStock(int productId) {
+    return _datasource.countActiveDimensionalVariantsWithStock(productId);
+  }
+
+  @override
+  Future<int> deactivateDimensionalVariants(int productId) async {
+    try {
+      return await _datasource.deactivateDimensionalVariants(productId);
+    } on VariantStockNotZeroException catch (e) {
+      throw VariantStockConflictException(e.variantCount);
+    }
   }
 
   @override
@@ -273,7 +325,9 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
   Future<bool> isSkuTaken(String sku, {int? excludeVariantId}) async {
     final variant = await _datasource.getVariantBySku(sku);
     if (variant == null) return false;
-    if (excludeVariantId != null && variant.id == excludeVariantId) return false;
+    if (excludeVariantId != null && variant.id == excludeVariantId) {
+      return false;
+    }
     return true;
   }
 
@@ -281,7 +335,9 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
   Future<bool> isBarcodeTaken(String barcode, {int? excludeVariantId}) async {
     final variant = await _datasource.getVariantByBarcode(barcode);
     if (variant == null) return false;
-    if (excludeVariantId != null && variant.id == excludeVariantId) return false;
+    if (excludeVariantId != null && variant.id == excludeVariantId) {
+      return false;
+    }
     return true;
   }
 
@@ -306,12 +362,15 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
   }
 
   @override
-  Stream<Map<int, ({String? sizeName, String? colorHex})>> watchVariantPreviews() {
+  Stream<Map<int, ({String? sizeName, String? colorHex})>>
+  watchVariantPreviews() {
     return _datasource.watchVariantPreviews();
   }
 
   @override
-  Future<({int count, int totalStock})?> getVariantSummaryByProduct(int productId) {
+  Future<({int count, int totalStock})?> getVariantSummaryByProduct(
+    int productId,
+  ) {
     return _datasource.getVariantSummaryByProduct(productId);
   }
 
@@ -329,10 +388,7 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
   @override
   Future<int> createColor(String name, String? hexCode) {
     return _datasource.createColor(
-      db.ProductColorsCompanion(
-        name: Value(name),
-        hexCode: Value(hexCode),
-      ),
+      db.ProductColorsCompanion(name: Value(name), hexCode: Value(hexCode)),
     );
   }
 

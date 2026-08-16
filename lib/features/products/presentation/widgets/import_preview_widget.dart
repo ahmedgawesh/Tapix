@@ -27,13 +27,17 @@ class ImportPreviewWidget extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Card(
-          color: hasErrors ? colorScheme.errorContainer : colorScheme.primaryContainer,
+          color: hasErrors
+              ? colorScheme.errorContainer
+              : colorScheme.primaryContainer,
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
                 Icon(
-                  hasErrors ? LucideIcons.alertTriangle : LucideIcons.checkCircle,
+                  hasErrors
+                      ? LucideIcons.alertTriangle
+                      : LucideIcons.checkCircle,
                   color: hasErrors ? colorScheme.error : colorScheme.primary,
                   size: 32,
                 ),
@@ -47,13 +51,15 @@ class ImportPreviewWidget extends StatelessWidget {
                             ? 'import_products.validation_failed'.tr()
                             : 'import_products.validation_passed'.tr(),
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       Text(
                         hasErrors
                             ? 'import_products.fix_errors_hint'.tr(
-                                args: [state.validationErrors.length.toString()],
+                                args: [
+                                  state.validationErrors.length.toString(),
+                                ],
                               )
                             : 'import_products.ready_to_import'.tr(
                                 args: [state.fileData.totalRows.toString()],
@@ -78,7 +84,9 @@ class ImportPreviewWidget extends StatelessWidget {
             child: ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: state.validationErrors.length > 50 ? 50 : state.validationErrors.length,
+              itemCount: state.validationErrors.length > 50
+                  ? 50
+                  : state.validationErrors.length,
               separatorBuilder: (context, index) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final error = state.validationErrors[index];
@@ -87,7 +95,9 @@ class ImportPreviewWidget extends StatelessWidget {
                     LucideIcons.alertCircle,
                     color: colorScheme.error,
                   ),
-                  title: Text('${'import_products.row'.tr()} ${error.rowIndex + 2}: ${error.field}'),
+                  title: Text(
+                    '${'import_products.row'.tr()} ${error.rowIndex + 2}: ${error.field}',
+                  ),
                   subtitle: Text(error.message),
                 );
               },
@@ -97,7 +107,9 @@ class ImportPreviewWidget extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                'import_products.showing_first_errors'.tr(args: ['50', state.validationErrors.length.toString()]),
+                'import_products.showing_first_errors'.tr(
+                  args: ['50', state.validationErrors.length.toString()],
+                ),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
@@ -117,7 +129,9 @@ class ImportPreviewWidget extends StatelessWidget {
               onPressed: hasErrors
                   ? null
                   : () {
-                      context.read<ImportProductsBloc>().add(const ImportExecutionStarted());
+                      context.read<ImportProductsBloc>().add(
+                        const ImportExecutionStarted(),
+                      );
                     },
               icon: const Icon(LucideIcons.upload),
               label: Text('import_products.start_import'.tr()),

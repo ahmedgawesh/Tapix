@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../accounting/presentation/services/journal_pdf_service.dart';
@@ -53,8 +54,10 @@ class _CustomerSalesReturnsView extends StatelessWidget {
         appBar: AppBar(
           title: Text('reports.customer_returns'.tr()),
           actions: [
-            BlocBuilder<CustomerSalesReturnsBloc,
-                RealtimeState<CustomerSalesReturnsData>>(
+            BlocBuilder<
+              CustomerSalesReturnsBloc,
+              RealtimeState<CustomerSalesReturnsData>
+            >(
               builder: (context, state) {
                 if (state is! RealtimeSuccess<CustomerSalesReturnsData>) {
                   return const SizedBox.shrink();
@@ -85,70 +88,80 @@ class _CustomerSalesReturnsView extends StatelessWidget {
             ],
           ),
         ),
-        body: BlocBuilder<CustomerSalesReturnsBloc,
-            RealtimeState<CustomerSalesReturnsData>>(
-          builder: (context, state) {
-            if (state is RealtimeLoading<CustomerSalesReturnsData>) {
-              return const Center(child: CircularProgressIndicator());
-            }
+        body:
+            BlocBuilder<
+              CustomerSalesReturnsBloc,
+              RealtimeState<CustomerSalesReturnsData>
+            >(
+              builder: (context, state) {
+                if (state is RealtimeLoading<CustomerSalesReturnsData>) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-            if (state is RealtimeError<CustomerSalesReturnsData>) {
-              return Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.error_outline,
-                        size: 48, color: colorScheme.error),
-                    const SizedBox(height: 16),
-                    Text(state.error.toString(),
-                        style: theme.textTheme.bodyLarge),
-                  ],
-                ),
-              );
-            }
-
-            if (state is RealtimeSuccess<CustomerSalesReturnsData>) {
-              return Column(
-                children: [
-                  // Date range selector
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    child: DateRangeSelector(
-                      dateRange: state.data.dateRange,
-                      onChanged: (range) => context
-                          .read<CustomerSalesReturnsBloc>()
-                          .add(CustomerSalesReturnsDateRangeChanged(range)),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Summary cards
-                  _buildSummaryCards(context, state.data),
-                  const SizedBox(height: 8),
-
-                  // Tab views
-                  Expanded(
-                    child: TabBarView(
+                if (state is RealtimeError<CustomerSalesReturnsData>) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        _CustomerSummaryTab(data: state.data),
-                        _ReturnDetailsTab(data: state.data),
-                        _ReturnReasonsTab(data: state.data),
+                        Icon(
+                          Icons.error_outline,
+                          size: 48,
+                          color: colorScheme.error,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          state.error.toString(),
+                          style: theme.textTheme.bodyLarge,
+                        ),
                       ],
                     ),
-                  ),
-                ],
-              );
-            }
+                  );
+                }
 
-            return const SizedBox.shrink();
-          },
-        ),
+                if (state is RealtimeSuccess<CustomerSalesReturnsData>) {
+                  return Column(
+                    children: [
+                      // Date range selector
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                        child: DateRangeSelector(
+                          dateRange: state.data.dateRange,
+                          onChanged: (range) => context
+                              .read<CustomerSalesReturnsBloc>()
+                              .add(CustomerSalesReturnsDateRangeChanged(range)),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Summary cards
+                      _buildSummaryCards(context, state.data),
+                      const SizedBox(height: 8),
+
+                      // Tab views
+                      Expanded(
+                        child: TabBarView(
+                          children: [
+                            _CustomerSummaryTab(data: state.data),
+                            _ReturnDetailsTab(data: state.data),
+                            _ReturnReasonsTab(data: state.data),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
+                return const SizedBox.shrink();
+              },
+            ),
       ),
     );
   }
 
   Widget _buildSummaryCards(
-      BuildContext context, CustomerSalesReturnsData data) {
+    BuildContext context,
+    CustomerSalesReturnsData data,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final cs = sl<CurrencyService>();
@@ -182,11 +195,14 @@ class _CustomerSalesReturnsView extends StatelessWidget {
           if (isWide) {
             return Row(
               children: cards
-                  .map((c) => Expanded(
-                          child: Padding(
+                  .map(
+                    (c) => Expanded(
+                      child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: c,
-                      )))
+                      ),
+                    ),
+                  )
                   .toList(),
             );
           }
@@ -196,15 +212,17 @@ class _CustomerSalesReturnsView extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: cards[0],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: cards[0],
+                    ),
+                  ),
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: cards[1],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: cards[1],
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -217,7 +235,9 @@ class _CustomerSalesReturnsView extends StatelessWidget {
   }
 
   Future<void> _printReport(
-      BuildContext context, CustomerSalesReturnsData data) async {
+    BuildContext context,
+    CustomerSalesReturnsData data,
+  ) async {
     await JournalPdfService.printCustomerReturnsReport(
       context: context,
       customerSummaries: data.customerSummaries,
@@ -236,7 +256,9 @@ class _CustomerSalesReturnsView extends StatelessWidget {
   }
 
   Future<void> _shareReport(
-      BuildContext context, CustomerSalesReturnsData data) async {
+    BuildContext context,
+    CustomerSalesReturnsData data,
+  ) async {
     await JournalPdfService.shareCustomerReturnsReport(
       context: context,
       customerSummaries: data.customerSummaries,
@@ -332,16 +354,23 @@ class _CustomerSummaryTab extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.checkCircle,
-                size: 48, color: theme.colorScheme.primary),
+            Icon(
+              LucideIcons.checkCircle,
+              size: 48,
+              color: theme.colorScheme.primary,
+            ),
             const SizedBox(height: 16),
-            Text('reports.no_customer_returns'.tr(),
-                style: theme.textTheme.bodyLarge),
+            Text(
+              'reports.no_customer_returns'.tr(),
+              style: theme.textTheme.bodyLarge,
+            ),
             const SizedBox(height: 8),
-            Text('reports.no_customer_returns_desc'.tr(),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                )),
+            Text(
+              'reports.no_customer_returns_desc'.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       );
@@ -352,9 +381,12 @@ class _CustomerSummaryTab extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('reports.returns_by_customer_detail'.tr(),
-              style: theme.textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.bold)),
+          Text(
+            'reports.returns_by_customer_detail'.tr(),
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 8),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -364,43 +396,66 @@ class _CustomerSummaryTab extends StatelessWidget {
               columns: [
                 DataColumn(label: Text('reports.customer'.tr())),
                 DataColumn(
-                    label: Text('reports.return_count_short'.tr()),
-                    numeric: true),
+                  label: Text('reports.return_count_short'.tr()),
+                  numeric: true,
+                ),
                 DataColumn(
-                    label: Text('reports.items_returned'.tr()),
-                    numeric: true),
+                  label: Text('reports.items_returned'.tr()),
+                  numeric: true,
+                ),
                 DataColumn(
-                    label: Text('reports.total_returned'.tr()),
-                    numeric: true),
+                  label: Text('reports.total_returned'.tr()),
+                  numeric: true,
+                ),
                 DataColumn(
-                    label: Text('reports.avg_return'.tr()), numeric: true),
-                DataColumn(
-                    label: Text('reports.last_return'.tr())),
+                  label: Text('reports.avg_return'.tr()),
+                  numeric: true,
+                ),
+                DataColumn(label: Text('reports.last_return'.tr())),
               ],
               rows: data.customerSummaries.map((item) {
-                return DataRow(cells: [
-                  DataCell(ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 150),
-                    child: Text(item.customerName,
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                  )),
-                  DataCell(Text(item.returnCount.toString())),
-                  DataCell(Text(item.totalItemsReturned.toString())),
-                  DataCell(Text(
-                    cs.formatCents(item.totalReturnedCents),
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.error,
+                return DataRow(
+                  cells: [
+                    DataCell(
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 150),
+                        child: Text(
+                          item.customerName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ),
-                  )),
-                  DataCell(Text(cs.formatCents(item.averageReturnCents))),
-                  DataCell(Text(
-                    item.lastReturnDate != null
-                        ? DateFormat.yMd().format(item.lastReturnDate!)
-                        : '-',
-                    style: theme.textTheme.bodySmall,
-                  )),
-                ]);
+                    DataCell(Text(item.returnCount.toString())),
+                    DataCell(
+                      Text(
+                        data.returnedProducts.any(
+                              (product) => product.measurementType != 'piece',
+                            )
+                            ? '—'
+                            : item.totalItemsReturned.toString(),
+                      ),
+                    ),
+                    DataCell(
+                      Text(
+                        cs.formatCents(item.totalReturnedCents),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.error,
+                        ),
+                      ),
+                    ),
+                    DataCell(Text(cs.formatCents(item.averageReturnCents))),
+                    DataCell(
+                      Text(
+                        item.lastReturnDate != null
+                            ? DateFormat.yMd().format(item.lastReturnDate!)
+                            : '-',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                );
               }).toList(),
             ),
           ),
@@ -427,7 +482,13 @@ class _CustomerSummaryTab extends StatelessWidget {
                   ),
                   _TotalItem(
                     label: 'reports.total_items_returned'.tr(),
-                    value: data.totalItemsReturned.toString(),
+                    value: localizedQuantityTotals(
+                      aggregateQuantityTotals(
+                        data.returnedProducts,
+                        quantityOf: (item) => item.quantity,
+                        measurementTypeOf: (item) => item.measurementType,
+                      ),
+                    ),
                   ),
                 ];
 
@@ -440,10 +501,12 @@ class _CustomerSummaryTab extends StatelessWidget {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: items
-                      .map((i) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: i,
-                          ))
+                      .map(
+                        (i) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: i,
+                        ),
+                      )
                       .toList(),
                 );
               },
@@ -468,15 +531,19 @@ class _TotalItem extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            )),
-        Text(value,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: color,
-            )),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        Text(
+          value,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
       ],
     );
   }
@@ -500,11 +567,16 @@ class _ReturnDetailsTab extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.fileText,
-                size: 48, color: theme.colorScheme.onSurfaceVariant),
+            Icon(
+              LucideIcons.fileText,
+              size: 48,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 16),
-            Text('reports.no_return_details'.tr(),
-                style: theme.textTheme.bodyLarge),
+            Text(
+              'reports.no_return_details'.tr(),
+              style: theme.textTheme.bodyLarge,
+            ),
           ],
         ),
       );
@@ -527,8 +599,9 @@ class _ReturnDetailsTab extends StatelessWidget {
                     Expanded(
                       child: Text(
                         item.returnNumber,
-                        style: theme.textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.bold),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -570,21 +643,26 @@ class _ReturnDetailsTab extends StatelessWidget {
 
                     if (isWide) {
                       return Row(
-                        children:
-                            metrics.map((m) => Expanded(child: m)).toList(),
+                        children: metrics
+                            .map((m) => Expanded(child: m))
+                            .toList(),
                       );
                     }
                     return Column(
                       children: [
-                        Row(children: [
-                          Expanded(child: metrics[0]),
-                          Expanded(child: metrics[1])
-                        ]),
+                        Row(
+                          children: [
+                            Expanded(child: metrics[0]),
+                            Expanded(child: metrics[1]),
+                          ],
+                        ),
                         const SizedBox(height: 4),
-                        Row(children: [
-                          Expanded(child: metrics[2]),
-                          Expanded(child: metrics[3])
-                        ]),
+                        Row(
+                          children: [
+                            Expanded(child: metrics[2]),
+                            Expanded(child: metrics[3]),
+                          ],
+                        ),
                       ],
                     );
                   },
@@ -646,7 +724,6 @@ class _ReturnDetailsTab extends StatelessWidget {
         return method;
     }
   }
-
 }
 
 class _MetricItem extends StatelessWidget {
@@ -666,15 +743,19 @@ class _MetricItem extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            )),
-        Text(value,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: valueColor,
-            )),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        Text(
+          value,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: valueColor,
+          ),
+        ),
       ],
     );
   }
@@ -698,11 +779,16 @@ class _ReturnReasonsTab extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.pieChart,
-                size: 48, color: theme.colorScheme.onSurfaceVariant),
+            Icon(
+              LucideIcons.pieChart,
+              size: 48,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 16),
-            Text('reports.no_return_reasons'.tr(),
-                style: theme.textTheme.bodyLarge),
+            Text(
+              'reports.no_return_reasons'.tr(),
+              style: theme.textTheme.bodyLarge,
+            ),
           ],
         ),
       );
@@ -728,9 +814,12 @@ class _ReturnReasonsTab extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('reports.return_reason_breakdown'.tr(),
-                      style: theme.textTheme.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.bold)),
+                  Text(
+                    'reports.return_reason_breakdown'.tr(),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   ...data.reasonBreakdown.map((r) {
                     final pct = grandTotalCount > 0
@@ -747,8 +836,9 @@ class _ReturnReasonsTab extends StatelessWidget {
                               Expanded(
                                 child: Text(
                                   _reasonLabel(r.reason),
-                                  style: theme.textTheme.bodyMedium
-                                      ?.copyWith(fontWeight: FontWeight.w500),
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -787,13 +877,17 @@ class _ReturnReasonsTab extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('reports.aging_total'.tr(),
-                          style: theme.textTheme.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.bold)),
+                      Text(
+                        'reports.aging_total'.tr(),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       Text(
                         '$grandTotalCount — ${cs.formatCents(grandTotalCents)}',
-                        style: theme.textTheme.bodyMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ],
                   ),
@@ -804,9 +898,12 @@ class _ReturnReasonsTab extends StatelessWidget {
           const SizedBox(height: 16),
 
           // Detailed table
-          Text('reports.return_reason_detail'.tr(),
-              style: theme.textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.bold)),
+          Text(
+            'reports.return_reason_detail'.tr(),
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 8),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -816,27 +913,35 @@ class _ReturnReasonsTab extends StatelessWidget {
               columns: [
                 DataColumn(label: Text('reports.reason'.tr())),
                 DataColumn(
-                    label: Text('reports.return_count_short'.tr()),
-                    numeric: true),
+                  label: Text('reports.return_count_short'.tr()),
+                  numeric: true,
+                ),
                 DataColumn(
-                    label: Text('reports.percentage'.tr()), numeric: true),
+                  label: Text('reports.percentage'.tr()),
+                  numeric: true,
+                ),
                 DataColumn(
-                    label: Text('reports.total_returned'.tr()),
-                    numeric: true),
+                  label: Text('reports.total_returned'.tr()),
+                  numeric: true,
+                ),
               ],
               rows: data.reasonBreakdown.map((r) {
                 final pct = grandTotalCount > 0
                     ? (r.count / grandTotalCount * 100)
                     : 0.0;
-                return DataRow(cells: [
-                  DataCell(Text(_reasonLabel(r.reason))),
-                  DataCell(Text(r.count.toString())),
-                  DataCell(Text('${pct.toStringAsFixed(1)}%')),
-                  DataCell(Text(
-                    cs.formatCents(r.totalCents),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  )),
-                ]);
+                return DataRow(
+                  cells: [
+                    DataCell(Text(_reasonLabel(r.reason))),
+                    DataCell(Text(r.count.toString())),
+                    DataCell(Text('${pct.toStringAsFixed(1)}%')),
+                    DataCell(
+                      Text(
+                        cs.formatCents(r.totalCents),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                );
               }).toList(),
             ),
           ),

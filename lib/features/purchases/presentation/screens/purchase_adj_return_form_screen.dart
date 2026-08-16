@@ -10,6 +10,8 @@ import 'package:intl/intl.dart' as intl;
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/database/app_database.dart' hide Size;
 import '../../../../core/database/daos/adjustment_return_dao.dart';
+import '../../../../core/measurement/measurement.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
@@ -23,10 +25,12 @@ class PurchaseAdjReturnFormScreen extends StatelessWidget {
   final int? variantId;
   final String? productName;
   final String? productSku;
+
   /// Optional variant label (e.g. "Red / L") rendered as a colored chip
   /// below the product name in the item card.
   final String? variantLabel;
   final int? productPrice;
+  final String measurementType;
   final int? taxRateBps;
 
   const PurchaseAdjReturnFormScreen({
@@ -39,6 +43,7 @@ class PurchaseAdjReturnFormScreen extends StatelessWidget {
     this.productSku,
     this.variantLabel,
     this.productPrice,
+    this.measurementType = 'piece',
     this.taxRateBps,
   });
 
@@ -51,19 +56,27 @@ class PurchaseAdjReturnFormScreen extends StatelessWidget {
           sl<JournalEntryService>(),
         );
         if (supplierId != null && supplierName != null) {
-          bloc.add(PurchaseAdjReturnSupplierSelected(supplierId!, supplierName!));
+          bloc.add(
+            PurchaseAdjReturnSupplierSelected(supplierId!, supplierName!),
+          );
         }
         if (productId != null && productName != null) {
-          bloc.add(PurchaseAdjReturnItemAdded(AdjReturnLineItem(
-            productId: productId!,
-            variantId: variantId,
-            productName: productName!,
-            variantSku: productSku,
-            variantLabel: variantLabel,
-            quantity: 1,
-            unitPriceCents: productPrice ?? 0,
-            taxRateBps: taxRateBps ?? 0,
-          )));
+          bloc.add(
+            PurchaseAdjReturnItemAdded(
+              AdjReturnLineItem(
+                productId: productId!,
+                variantId: variantId,
+                productName: productName!,
+                variantSku: productSku,
+                variantLabel: variantLabel,
+                quantity: measurementType == 'piece' ? 1 : 1000,
+                quantityScale: measurementType == 'piece' ? 1 : 1000,
+                measurementType: measurementType,
+                unitPriceCents: productPrice ?? 0,
+                taxRateBps: taxRateBps ?? 0,
+              ),
+            ),
+          );
         }
         return bloc;
       },
@@ -114,8 +127,7 @@ class _FormView extends StatelessWidget {
     final cs = sl<CurrencyService>();
 
     return BlocConsumer<PurchaseAdjReturnFormBloc, PurchaseAdjReturnFormState>(
-      listenWhen: (prev, curr) =>
-          prev.isSuccess != curr.isSuccess,
+      listenWhen: (prev, curr) => prev.isSuccess != curr.isSuccess,
       listener: (context, state) {
         if (state.isSuccess) {
           // Capture router BEFORE navigation destroys this context.
@@ -128,7 +140,9 @@ class _FormView extends StatelessWidget {
             ),
           );
           // Close any open bottom sheet first.
-          Navigator.of(context).popUntil((route) => !route.isActive || route is! PopupRoute);
+          Navigator.of(
+            context,
+          ).popUntil((route) => !route.isActive || route is! PopupRoute);
           final createdId = state.createdReturnId;
           // Replace form with returns list, then push detail on top
           // so that Back from detail returns to the list.
@@ -209,7 +223,11 @@ class _FormView extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(LucideIcons.alertTriangle, size: 18, color: Colors.amber.shade700),
+          Icon(
+            LucideIcons.alertTriangle,
+            size: 18,
+            color: Colors.amber.shade700,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -241,7 +259,10 @@ class _FormView extends StatelessWidget {
   // ═══════════════════════════════════════════════════════
   // RETURN HEADER CARD (Return # + Date)
   // ═══════════════════════════════════════════════════════
-  Widget _buildReturnHeaderCard(BuildContext context, PurchaseAdjReturnFormState state) {
+  Widget _buildReturnHeaderCard(
+    BuildContext context,
+    PurchaseAdjReturnFormState state,
+  ) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
@@ -259,12 +280,19 @@ class _FormView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('returns.return_number_label'.tr(),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                        color: cs.onSurfaceVariant, letterSpacing: 0.5)),
+                Text(
+                  'returns.return_number_label'.tr(),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    letterSpacing: 0.5,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: cs.surface,
                     borderRadius: BorderRadius.circular(8),
@@ -273,7 +301,9 @@ class _FormView extends StatelessWidget {
                   child: Text(
                     state.returnNumber ?? '—',
                     style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold, color: cs.primary),
+                      fontWeight: FontWeight.bold,
+                      color: cs.primary,
+                    ),
                   ),
                 ),
               ],
@@ -292,18 +322,27 @@ class _FormView extends StatelessWidget {
                   lastDate: DateTime.now().add(const Duration(days: 1)),
                 );
                 if (date != null && context.mounted) {
-                  context.read<PurchaseAdjReturnFormBloc>().add(PurchaseAdjReturnDateChanged(date));
+                  context.read<PurchaseAdjReturnFormBloc>().add(
+                    PurchaseAdjReturnDateChanged(date),
+                  );
                 }
               },
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('returns.return_date'.tr(),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: cs.onSurfaceVariant, letterSpacing: 0.5)),
+                  Text(
+                    'returns.return_date'.tr(),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
                   const SizedBox(height: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: cs.surface,
                       borderRadius: BorderRadius.circular(8),
@@ -317,7 +356,8 @@ class _FormView extends StatelessWidget {
                           child: Text(
                             intl.DateFormat.yMd().format(state.returnDate),
                             style: theme.textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w500),
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ],
@@ -336,7 +376,10 @@ class _FormView extends StatelessWidget {
   // ITEMS CARD
   // ═══════════════════════════════════════════════════════
   Widget _buildItemsCard(
-      BuildContext context, PurchaseAdjReturnFormState state, CurrencyService cs) {
+    BuildContext context,
+    PurchaseAdjReturnFormState state,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -344,7 +387,9 @@ class _FormView extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -359,30 +404,42 @@ class _FormView extends StatelessWidget {
                     gradient: LinearGradient(
                       colors: [
                         colorScheme.error,
-                        colorScheme.error.withValues(alpha: 0.7)
+                        colorScheme.error.withValues(alpha: 0.7),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(LucideIcons.package, size: 16, color: Colors.white),
+                  child: const Icon(
+                    LucideIcons.package,
+                    size: 16,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('returns.return_items'.tr(),
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600)),
+                Text(
+                  'returns.return_items'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 if (state.items.isNotEmpty) ...[
                   const SizedBox(width: 8),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: colorScheme.errorContainer,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Text('${state.items.length}',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                            color: colorScheme.onErrorContainer,
-                            fontWeight: FontWeight.bold)),
+                    child: Text(
+                      '${state.items.length}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onErrorContainer,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
                 const Spacer(),
@@ -407,18 +464,24 @@ class _FormView extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color:
-                              colorScheme.errorContainer.withValues(alpha: 0.15),
+                          color: colorScheme.errorContainer.withValues(
+                            alpha: 0.15,
+                          ),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(LucideIcons.packageX,
-                            size: 36,
-                            color: colorScheme.error.withValues(alpha: 0.3)),
+                        child: Icon(
+                          LucideIcons.packageX,
+                          size: 36,
+                          color: colorScheme.error.withValues(alpha: 0.3),
+                        ),
                       ),
                       const SizedBox(height: 12),
-                      Text('returns.no_items_yet'.tr(),
-                          style: theme.textTheme.bodyMedium
-                              ?.copyWith(color: colorScheme.onSurfaceVariant)),
+                      Text(
+                        'returns.no_items_yet'.tr(),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -429,27 +492,30 @@ class _FormView extends StatelessWidget {
                   padding: EdgeInsets.zero,
                   itemCount: state.items.length,
                   separatorBuilder: (context2, index2) => Divider(
-                      height: 1,
-                      color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                    height: 1,
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                  ),
                   itemBuilder: (context, index) {
                     final item = state.items[index];
                     return _AdjReturnItemTile(
                       item: item,
                       index: index,
                       currencyService: cs,
-                      onQuantityChanged: (qty) => context
-                          .read<PurchaseAdjReturnFormBloc>()
-                          .add(PurchaseAdjReturnItemQuantityChanged(index, qty)),
+                      onQuantityChanged: (qty) =>
+                          context.read<PurchaseAdjReturnFormBloc>().add(
+                            PurchaseAdjReturnItemQuantityChanged(index, qty),
+                          ),
                       onPriceChanged: (price) => context
                           .read<PurchaseAdjReturnFormBloc>()
                           .add(PurchaseAdjReturnItemPriceChanged(index, price)),
-                      onDiscountChanged: (disc, bps) => context
-                          .read<PurchaseAdjReturnFormBloc>()
-                          .add(PurchaseAdjReturnItemDiscountChanged(
-                            index,
-                            disc,
-                            discountPercentBps: bps,
-                          )),
+                      onDiscountChanged: (disc, bps) =>
+                          context.read<PurchaseAdjReturnFormBloc>().add(
+                            PurchaseAdjReturnItemDiscountChanged(
+                              index,
+                              disc,
+                              discountPercentBps: bps,
+                            ),
+                          ),
                       onRemove: () => context
                           .read<PurchaseAdjReturnFormBloc>()
                           .add(PurchaseAdjReturnItemRemoved(index)),
@@ -476,25 +542,34 @@ class _FormView extends StatelessWidget {
     );
 
     if (result != null && context.mounted) {
-      context
-          .read<PurchaseAdjReturnFormBloc>()
-          .add(PurchaseAdjReturnItemAdded(result));
+      context.read<PurchaseAdjReturnFormBloc>().add(
+        PurchaseAdjReturnItemAdded(result),
+      );
     }
   }
 
   // ═══════════════════════════════════════════════════════
   // DISCOUNT MODE TOGGLE
   // ═══════════════════════════════════════════════════════
-  Widget _buildDiscountToggle(BuildContext context, PurchaseAdjReturnFormState state) {
+  Widget _buildDiscountToggle(
+    BuildContext context,
+    PurchaseAdjReturnFormState state,
+  ) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     return Row(
       children: [
-        Icon(LucideIcons.tag, size: 16, color: cs.primary), const SizedBox(width: 8),
+        Icon(LucideIcons.tag, size: 16, color: cs.primary),
+        const SizedBox(width: 8),
         Flexible(
-          child: Text('returns.discount_mode'.tr(),
-              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-              maxLines: 1, overflow: TextOverflow.ellipsis),
+          child: Text(
+            'returns.discount_mode'.tr(),
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         const SizedBox(width: 8),
         Flexible(
@@ -505,15 +580,31 @@ class _FormView extends StatelessWidget {
               alignment: AlignmentDirectional.centerEnd,
               child: SegmentedButton<bool>(
                 segments: [
-                  ButtonSegment(value: true, label: Text('returns.discount_per_item'.tr(), style: const TextStyle(fontSize: 12))),
-                  ButtonSegment(value: false, label: Text('returns.discount_overall'.tr(), style: const TextStyle(fontSize: 12))),
+                  ButtonSegment(
+                    value: true,
+                    label: Text(
+                      'returns.discount_per_item'.tr(),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  ButtonSegment(
+                    value: false,
+                    label: Text(
+                      'returns.discount_overall'.tr(),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
                 ],
                 selected: {state.discountPerItem},
                 onSelectionChanged: (v) {
                   context.read<PurchaseAdjReturnFormBloc>().add(
-                      PurchaseAdjReturnDiscountModeChanged(v.first));
+                    PurchaseAdjReturnDiscountModeChanged(v.first),
+                  );
                 },
-                style: const ButtonStyle(visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
               ),
             ),
           ),
@@ -526,7 +617,10 @@ class _FormView extends StatelessWidget {
   // BOTTOM BAR
   // ═══════════════════════════════════════════════════════
   Widget _buildBottomBar(
-      BuildContext context, PurchaseAdjReturnFormState state, CurrencyService cs) {
+    BuildContext context,
+    PurchaseAdjReturnFormState state,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -534,41 +628,74 @@ class _FormView extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        border: Border(top: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.3))),
-        boxShadow: [BoxShadow(color: colorScheme.shadow.withValues(alpha: 0.05),
-            blurRadius: 8, offset: const Offset(0, -2))],
+        border: Border(
+          top: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
       ),
       child: SafeArea(
-        child: Row(children: [
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('purchases.total'.tr(),
-                  style: theme.textTheme.labelSmall?.copyWith(color: colorScheme.onSurfaceVariant)),
-              Text(cs.format(state.totalCents),
-                  style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold, color: colorScheme.error)),
-              Text('${state.items.length} ${'purchases.items_count'.tr()}  •  ${state.totalQuantity} ${'purchases.pieces_count'.tr().toLowerCase()}',
-                  style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant)),
-            ],
-          )),
-          const SizedBox(width: 12),
-          Expanded(child: FilledButton.icon(
-            onPressed: state.items.isEmpty ? null : () => _showCheckoutSheet(context, state, cs),
-            icon: const Icon(LucideIcons.shoppingBag, size: 18),
-            label: Text('returns.checkout'.tr()),
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              backgroundColor: colorScheme.error),
-          )),
-        ]),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'purchases.total'.tr(),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  Text(
+                    cs.format(state.totalCents),
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.error,
+                    ),
+                  ),
+                  Text(
+                    '${state.items.length} ${'purchases.items_count'.tr()}  •  ${state.totalQuantity} ${'purchases.pieces_count'.tr().toLowerCase()}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: state.items.isEmpty
+                    ? null
+                    : () => _showCheckoutSheet(context, state, cs),
+                icon: const Icon(LucideIcons.shoppingBag, size: 18),
+                label: Text('returns.checkout'.tr()),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  backgroundColor: colorScheme.error,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  void _showCheckoutSheet(BuildContext context,
-      PurchaseAdjReturnFormState state, CurrencyService cs) {
+  void _showCheckoutSheet(
+    BuildContext context,
+    PurchaseAdjReturnFormState state,
+    CurrencyService cs,
+  ) {
     // Capture bloc reference BEFORE showing the sheet to avoid
     // accessing a deactivated widget's ancestor if the parent navigates away.
     final bloc = context.read<PurchaseAdjReturnFormBloc>();
@@ -610,7 +737,8 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     final state = context.read<PurchaseAdjReturnFormBloc>().state;
     _notesCtrl.text = state.notes ?? '';
     if (state.overallDiscountCents > 0) {
-      _discountFixedCtrl.text = (state.overallDiscountCents / 100).toStringAsFixed(2);
+      _discountFixedCtrl.text = (state.overallDiscountCents / 100)
+          .toStringAsFixed(2);
       final base = state.totalNetBeforeOverallDiscountCents;
       if (base > 0) {
         final pct = (state.overallDiscountCents / base) * 100;
@@ -671,13 +799,16 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     final fixedVal = double.tryParse(_discountFixedCtrl.text) ?? 0;
     final cents = (fixedVal * 100).round();
     context.read<PurchaseAdjReturnFormBloc>().add(
-        PurchaseAdjReturnOverallDiscountChanged(cents, false));
+      PurchaseAdjReturnOverallDiscountChanged(cents, false),
+    );
   }
 
   void _showSupplierPicker(BuildContext context) async {
     final db = sl<AppDatabase>();
     final suppliers = await db.select(db.suppliers).get();
-    suppliers.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    suppliers.sort(
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
     if (!context.mounted) return;
 
     final selected = await showModalBottomSheet<Supplier>(
@@ -695,17 +826,21 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     );
 
     if (selected != null && context.mounted) {
-      context.read<PurchaseAdjReturnFormBloc>()
-          .add(PurchaseAdjReturnSupplierSelected(selected.id, selected.name));
+      context.read<PurchaseAdjReturnFormBloc>().add(
+        PurchaseAdjReturnSupplierSelected(selected.id, selected.name),
+      );
     }
   }
 
   void _onConfirm(BuildContext context) {
-    final allowNegativeStock =
-        context.read<AppSettingsBloc>().state.settings.allowNegativeStock;
+    final allowNegativeStock = context
+        .read<AppSettingsBloc>()
+        .state
+        .settings
+        .allowNegativeStock;
     context.read<PurchaseAdjReturnFormBloc>().add(
-          PurchaseAdjReturnSubmitted(allowNegativeStock: allowNegativeStock),
-        );
+      PurchaseAdjReturnSubmitted(allowNegativeStock: allowNegativeStock),
+    );
   }
 
   @override
@@ -715,358 +850,619 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     final curr = widget.currencyService;
 
     return BlocListener<PurchaseAdjReturnFormBloc, PurchaseAdjReturnFormState>(
-      listenWhen: (prev, curr) =>
-          prev.isSuccess != curr.isSuccess,
+      listenWhen: (prev, curr) => prev.isSuccess != curr.isSuccess,
       listener: (context, state) {
         // Success navigation is handled by the main screen's BlocConsumer.
         // Errors are shown inline in the sheet.
       },
       child: BlocBuilder<PurchaseAdjReturnFormBloc, PurchaseAdjReturnFormState>(
-      builder: (context, state) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.85,
-          maxChildSize: 0.95,
-          minChildSize: 0.5,
-          expand: false,
-          builder: (context, scrollCtrl) => Column(children: [
-            const SizedBox(height: 12),
-            Container(width: 40, height: 4,
-                decoration: BoxDecoration(
-                    color: cs.outlineVariant, borderRadius: BorderRadius.circular(2))),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(children: [
-                Icon(LucideIcons.shoppingBag, size: 20, color: cs.error),
-                const SizedBox(width: 8),
-                Text('returns.checkout'.tr(),
-                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                const Spacer(),
-                TextButton(onPressed: () => Navigator.pop(context),
-                    child: Text('common.cancel'.tr())),
-              ]),
-            ),
-            Expanded(child: ListView(
-              controller: scrollCtrl,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+        builder: (context, state) {
+          return DraggableScrollableSheet(
+            initialChildSize: 0.85,
+            maxChildSize: 0.95,
+            minChildSize: 0.5,
+            expand: false,
+            builder: (context, scrollCtrl) => Column(
               children: [
-                // ── Supplier Selection ──
-                _sectionHeader(theme, cs, LucideIcons.building2, 'purchases.supplier'.tr()),
-                const SizedBox(height: 8),
-                InkWell(
-                  borderRadius: BorderRadius.circular(10),
-                  onTap: () => _showSupplierPicker(context),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: state.supplierId == null
-                          ? cs.error.withValues(alpha: 0.5) : cs.outlineVariant),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(children: [
-                      if (state.supplierName != null) ...[
-                        CircleAvatar(radius: 16, backgroundColor: cs.primaryContainer,
-                          child: Text(state.supplierName![0].toUpperCase(),
-                              style: TextStyle(color: cs.onPrimaryContainer,
-                                  fontWeight: FontWeight.bold, fontSize: 14))),
-                        const SizedBox(width: 10),
-                      ],
-                      Expanded(child: Text(
-                        state.supplierName ?? 'returns.select_supplier'.tr(),
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          fontWeight: state.supplierName != null ? FontWeight.w500 : FontWeight.normal,
-                          color: state.supplierName != null ? null : cs.onSurfaceVariant),
-                      )),
-                      Icon(LucideIcons.chevronDown, size: 18, color: cs.onSurfaceVariant),
-                    ]),
-                  ),
-                ),
-                if (state.supplierId == null) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: cs.errorContainer.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: cs.error.withValues(alpha: 0.2)),
-                    ),
-                    child: Row(children: [
-                      Icon(LucideIcons.alertTriangle, size: 14, color: cs.error),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text('returns.select_supplier'.tr(),
-                          style: theme.textTheme.bodySmall?.copyWith(color: cs.error))),
-                    ]),
-                  ),
-                ],
-                const SizedBox(height: 20),
-
-                // ── Payment Method ──
-                _sectionHeader(theme, cs, LucideIcons.wallet, 'purchases.payment_method'.tr()),
-                const SizedBox(height: 8),
-                Wrap(spacing: 8, runSpacing: 8,
-                  children: AdjReturnPaymentMethod.values.map((m) {
-                    final sel = state.paymentMethod == m;
-                    return ChoiceChip(
-                      label: Text(_pmLabel(m)), selected: sel,
-                      onSelected: (_) => context.read<PurchaseAdjReturnFormBloc>()
-                          .add(PurchaseAdjReturnPaymentMethodChanged(m)),
-                      avatar: Icon(_pmIcon(m), size: 16),
-                      selectedColor: cs.primaryContainer, showCheckmark: false,
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 16),
-
-                // ── Cheque due date ──
-                if (state.paymentMethod == AdjReturnPaymentMethod.cheque) ...[
-                  _sectionHeader(theme, cs, LucideIcons.calendar, 'purchases.cheque_due_date'.tr()),
-                  const SizedBox(height: 8),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(10),
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: state.dueDate ?? DateTime.now().add(const Duration(days: 30)),
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime.now().add(const Duration(days: 365)),
-                      );
-                      if (picked != null && context.mounted) {
-                        context.read<PurchaseAdjReturnFormBloc>().add(PurchaseAdjReturnDueDateChanged(picked));
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: state.dueDate == null
-                            ? cs.error.withValues(alpha: 0.5)
-                            : cs.outlineVariant),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(children: [
-                        Icon(LucideIcons.calendar, size: 18, color: cs.primary),
-                        const SizedBox(width: 10),
-                        Expanded(child: Text(
-                          state.dueDate != null
-                              ? '${state.dueDate!.year}-${state.dueDate!.month.toString().padLeft(2, '0')}-${state.dueDate!.day.toString().padLeft(2, '0')}'
-                              : 'purchases.select_due_date'.tr(),
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            color: state.dueDate != null ? null : cs.onSurfaceVariant),
-                        )),
-                        Icon(LucideIcons.chevronDown, size: 18, color: cs.onSurfaceVariant),
-                      ]),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-
-                // ── Reason (required) ──
-                _sectionHeader(theme, cs, LucideIcons.listChecks, 'returns.reason_label'.tr()),
-                const SizedBox(height: 8),
-                _ReasonDropdown(
-                  value: state.reasonCode,
-                  isRequired: state.reasonCode == null,
-                  onChanged: (r) => context
-                      .read<PurchaseAdjReturnFormBloc>()
-                      .add(PurchaseAdjReturnReasonChanged(r)),
-                ),
-                const SizedBox(height: 20),
-
-                // ── Notes ──
-                _sectionHeader(theme, cs, LucideIcons.stickyNote, 'returns.notes'.tr()),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _notesCtrl,
-                  maxLines: 2,
-                  decoration: InputDecoration(
-                    hintText: 'returns.notes_hint'.tr(),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    isDense: true),
-                  onChanged: (v) => context.read<PurchaseAdjReturnFormBloc>()
-                      .add(PurchaseAdjReturnNotesChanged(v)),
-                ),
-                const SizedBox(height: 20),
-
-                // ── Overall Discount (when mode is not per-item) ──
-                if (!state.discountPerItem) ...[
-                  _sectionHeader(theme, cs, LucideIcons.tag, 'returns.overall_discount'.tr()),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _discountFixedCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-                          onTap: () => selectAllText(_discountFixedCtrl),
-                          decoration: InputDecoration(
-                            labelText: 'purchases.discount_fixed'.tr(),
-                            border: const OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: _discountPercentCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-                          onTap: () => selectAllText(_discountPercentCtrl),
-                          decoration: InputDecoration(
-                            labelText: 'purchases.discount_percent'.tr(),
-                            border: const OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                ],
-
-                // ── Financial Summary ──
+                const SizedBox(height: 12),
                 Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: cs.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
-                  ),
-                  child: Column(children: [
-                    _summaryRow(theme, 'purchases.subtotal'.tr(),
-                        curr.format(state.totalSubtotalCents)),
-                    if (state.totalItemDiscountCents > 0) ...[
-                      const SizedBox(height: 8),
-                      _summaryRow(theme, 'returns.item_discounts'.tr(),
-                          '- ${curr.format(state.totalItemDiscountCents)}', valueColor: Colors.orange),
-                    ],
-                    if (state.totalAdjustedTaxCents > 0) ...[
-                      const SizedBox(height: 8),
-                      _summaryRow(theme, 'purchases.tax'.tr(),
-                          '+ ${curr.format(state.totalAdjustedTaxCents)}', valueColor: cs.tertiary),
-                    ],
-                    if (state.effectiveOverallDiscountCents > 0) ...[
-                      const SizedBox(height: 8),
-                      _summaryRow(theme, 'returns.overall_discount'.tr(),
-                          '- ${curr.format(state.effectiveOverallDiscountCents)}',
-                          valueColor: Colors.deepOrange),
-                    ],
-                    Divider(height: 20, color: cs.outlineVariant.withValues(alpha: 0.5)),
-                    _summaryRow(theme, 'returns.supplier_credit_total'.tr(),
-                        curr.format(state.totalCents), isBold: true, valueColor: cs.error),
-                  ]),
-                ),
-                const SizedBox(height: 16),
-
-                // Fraud-prevention warnings (shown inline so the user
-                // sees them right before confirming the return).
-                _PurchaseFraudWarnings(
-                  supplierId: state.supplierId,
-                  items: state.items,
-                ),
-
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
-                  ),
-                  child: Row(children: [
-                    Icon(LucideIcons.alertTriangle, size: 14, color: Colors.amber.shade700),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text('returns.confirm_post_warning'.tr(),
-                        style: theme.textTheme.labelSmall?.copyWith(color: Colors.amber.shade800))),
-                  ]),
-                ),
-                const SizedBox(height: 80),
-              ],
-            )),
-
-            // ── Inline error banner (above bottom bar) ──
-            if (state.error != null)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                color: cs.errorContainer,
-                child: Row(
-                  children: [
-                    Icon(LucideIcons.alertCircle, size: 16, color: cs.error),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        state.error!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: cs.onErrorContainer,
-                          fontWeight: FontWeight.w500,
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.shoppingBag, size: 20, color: cs.error),
+                      const SizedBox(width: 8),
+                      Text(
+                        'returns.checkout'.tr(),
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ),
-                  ],
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text('common.cancel'.tr()),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: cs.surface,
-                border: Border(top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.3))),
-                boxShadow: [BoxShadow(color: cs.shadow.withValues(alpha: 0.05),
-                    blurRadius: 8, offset: const Offset(0, -2))],
-              ),
-              child: SafeArea(child: Row(children: [
-                Expanded(child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                Expanded(
+                  child: ListView(
+                    controller: scrollCtrl,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     children: [
-                      Text('returns.supplier_credit_total'.tr(),
-                          style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
-                      Text(curr.format(state.totalCents),
-                          style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold, color: cs.error)),
-                    ])),
-                const SizedBox(width: 12),
-                Expanded(flex: 2, child: Builder(builder: (ctx) {
-                  final chequeNoDueDate = state.paymentMethod == AdjReturnPaymentMethod.cheque &&
-                      state.dueDate == null;
-                  final canConfirm = state.supplierId != null &&
-                      state.reasonCode != null &&
-                      !state.isSubmitting && !chequeNoDueDate;
-                  return FilledButton.icon(
-                    onPressed: canConfirm ? () => _onConfirm(context) : null,
-                    icon: state.isSubmitting
-                        ? const SizedBox(width: 18, height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(LucideIcons.check, size: 18),
-                    label: Text('returns.confirm_save'.tr()),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      backgroundColor: cs.error),
-                  );
-                })),
-              ])),
+                      // ── Supplier Selection ──
+                      _sectionHeader(
+                        theme,
+                        cs,
+                        LucideIcons.building2,
+                        'purchases.supplier'.tr(),
+                      ),
+                      const SizedBox(height: 8),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: () => _showSupplierPicker(context),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: state.supplierId == null
+                                  ? cs.error.withValues(alpha: 0.5)
+                                  : cs.outlineVariant,
+                            ),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            children: [
+                              if (state.supplierName != null) ...[
+                                CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: cs.primaryContainer,
+                                  child: Text(
+                                    state.supplierName![0].toUpperCase(),
+                                    style: TextStyle(
+                                      color: cs.onPrimaryContainer,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                              ],
+                              Expanded(
+                                child: Text(
+                                  state.supplierName ??
+                                      'returns.select_supplier'.tr(),
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    fontWeight: state.supplierName != null
+                                        ? FontWeight.w500
+                                        : FontWeight.normal,
+                                    color: state.supplierName != null
+                                        ? null
+                                        : cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                              Icon(
+                                LucideIcons.chevronDown,
+                                size: 18,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (state.supplierId == null) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: cs.errorContainer.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: cs.error.withValues(alpha: 0.2),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                LucideIcons.alertTriangle,
+                                size: 14,
+                                color: cs.error,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'returns.select_supplier'.tr(),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: cs.error,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+
+                      // ── Payment Method ──
+                      _sectionHeader(
+                        theme,
+                        cs,
+                        LucideIcons.wallet,
+                        'purchases.payment_method'.tr(),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: AdjReturnPaymentMethod.values.map((m) {
+                          final sel = state.paymentMethod == m;
+                          return ChoiceChip(
+                            label: Text(_pmLabel(m)),
+                            selected: sel,
+                            onSelected: (_) => context
+                                .read<PurchaseAdjReturnFormBloc>()
+                                .add(PurchaseAdjReturnPaymentMethodChanged(m)),
+                            avatar: Icon(_pmIcon(m), size: 16),
+                            selectedColor: cs.primaryContainer,
+                            showCheckmark: false,
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // ── Cheque due date ──
+                      if (state.paymentMethod ==
+                          AdjReturnPaymentMethod.cheque) ...[
+                        _sectionHeader(
+                          theme,
+                          cs,
+                          LucideIcons.calendar,
+                          'purchases.cheque_due_date'.tr(),
+                        ),
+                        const SizedBox(height: 8),
+                        InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate:
+                                  state.dueDate ??
+                                  DateTime.now().add(const Duration(days: 30)),
+                              firstDate: DateTime.now(),
+                              lastDate: DateTime.now().add(
+                                const Duration(days: 365),
+                              ),
+                            );
+                            if (picked != null && context.mounted) {
+                              context.read<PurchaseAdjReturnFormBloc>().add(
+                                PurchaseAdjReturnDueDateChanged(picked),
+                              );
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: state.dueDate == null
+                                    ? cs.error.withValues(alpha: 0.5)
+                                    : cs.outlineVariant,
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  LucideIcons.calendar,
+                                  size: 18,
+                                  color: cs.primary,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    state.dueDate != null
+                                        ? '${state.dueDate!.year}-${state.dueDate!.month.toString().padLeft(2, '0')}-${state.dueDate!.day.toString().padLeft(2, '0')}'
+                                        : 'purchases.select_due_date'.tr(),
+                                    style: theme.textTheme.bodyLarge?.copyWith(
+                                      color: state.dueDate != null
+                                          ? null
+                                          : cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                                Icon(
+                                  LucideIcons.chevronDown,
+                                  size: 18,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
+                      // ── Reason (required) ──
+                      _sectionHeader(
+                        theme,
+                        cs,
+                        LucideIcons.listChecks,
+                        'returns.reason_label'.tr(),
+                      ),
+                      const SizedBox(height: 8),
+                      _ReasonDropdown(
+                        value: state.reasonCode,
+                        isRequired: state.reasonCode == null,
+                        onChanged: (r) => context
+                            .read<PurchaseAdjReturnFormBloc>()
+                            .add(PurchaseAdjReturnReasonChanged(r)),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // ── Notes ──
+                      _sectionHeader(
+                        theme,
+                        cs,
+                        LucideIcons.stickyNote,
+                        'returns.notes'.tr(),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _notesCtrl,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          hintText: 'returns.notes_hint'.tr(),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          isDense: true,
+                        ),
+                        onChanged: (v) => context
+                            .read<PurchaseAdjReturnFormBloc>()
+                            .add(PurchaseAdjReturnNotesChanged(v)),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // ── Overall Discount (when mode is not per-item) ──
+                      if (!state.discountPerItem) ...[
+                        _sectionHeader(
+                          theme,
+                          cs,
+                          LucideIcons.tag,
+                          'returns.overall_discount'.tr(),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _discountFixedCtrl,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'[\d.]'),
+                                  ),
+                                ],
+                                onTap: () => selectAllText(_discountFixedCtrl),
+                                decoration: InputDecoration(
+                                  labelText: 'purchases.discount_fixed'.tr(),
+                                  border: const OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TextField(
+                                controller: _discountPercentCtrl,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'[\d.]'),
+                                  ),
+                                ],
+                                onTap: () =>
+                                    selectAllText(_discountPercentCtrl),
+                                decoration: InputDecoration(
+                                  labelText: 'purchases.discount_percent'.tr(),
+                                  border: const OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+
+                      // ── Financial Summary ──
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: cs.surfaceContainerHighest.withValues(
+                            alpha: 0.5,
+                          ),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: cs.outlineVariant.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            _summaryRow(
+                              theme,
+                              'purchases.subtotal'.tr(),
+                              curr.format(state.totalSubtotalCents),
+                            ),
+                            if (state.totalItemDiscountCents > 0) ...[
+                              const SizedBox(height: 8),
+                              _summaryRow(
+                                theme,
+                                'returns.item_discounts'.tr(),
+                                '- ${curr.format(state.totalItemDiscountCents)}',
+                                valueColor: Colors.orange,
+                              ),
+                            ],
+                            if (state.totalAdjustedTaxCents > 0) ...[
+                              const SizedBox(height: 8),
+                              _summaryRow(
+                                theme,
+                                'purchases.tax'.tr(),
+                                '+ ${curr.format(state.totalAdjustedTaxCents)}',
+                                valueColor: cs.tertiary,
+                              ),
+                            ],
+                            if (state.effectiveOverallDiscountCents > 0) ...[
+                              const SizedBox(height: 8),
+                              _summaryRow(
+                                theme,
+                                'returns.overall_discount'.tr(),
+                                '- ${curr.format(state.effectiveOverallDiscountCents)}',
+                                valueColor: Colors.deepOrange,
+                              ),
+                            ],
+                            Divider(
+                              height: 20,
+                              color: cs.outlineVariant.withValues(alpha: 0.5),
+                            ),
+                            _summaryRow(
+                              theme,
+                              'returns.supplier_credit_total'.tr(),
+                              curr.format(state.totalCents),
+                              isBold: true,
+                              valueColor: cs.error,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Fraud-prevention warnings (shown inline so the user
+                      // sees them right before confirming the return).
+                      _PurchaseFraudWarnings(
+                        supplierId: state.supplierId,
+                        items: state.items,
+                      ),
+
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.amber.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              LucideIcons.alertTriangle,
+                              size: 14,
+                              color: Colors.amber.shade700,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'returns.confirm_post_warning'.tr(),
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: Colors.amber.shade800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 80),
+                    ],
+                  ),
+                ),
+
+                // ── Inline error banner (above bottom bar) ──
+                if (state.error != null)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    color: cs.errorContainer,
+                    child: Row(
+                      children: [
+                        Icon(
+                          LucideIcons.alertCircle,
+                          size: 16,
+                          color: cs.error,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            state.error!,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: cs.onErrorContainer,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: cs.surface,
+                    border: Border(
+                      top: BorderSide(
+                        color: cs.outlineVariant.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: cs.shadow.withValues(alpha: 0.05),
+                        blurRadius: 8,
+                        offset: const Offset(0, -2),
+                      ),
+                    ],
+                  ),
+                  child: SafeArea(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'returns.supplier_credit_total'.tr(),
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                              Text(
+                                curr.format(state.totalCents),
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: cs.error,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: Builder(
+                            builder: (ctx) {
+                              final chequeNoDueDate =
+                                  state.paymentMethod ==
+                                      AdjReturnPaymentMethod.cheque &&
+                                  state.dueDate == null;
+                              final canConfirm =
+                                  state.supplierId != null &&
+                                  state.reasonCode != null &&
+                                  !state.isSubmitting &&
+                                  !chequeNoDueDate;
+                              return FilledButton.icon(
+                                onPressed: canConfirm
+                                    ? () => _onConfirm(context)
+                                    : null,
+                                icon: state.isSubmitting
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(LucideIcons.check, size: 18),
+                                label: Text('returns.confirm_save'.tr()),
+                                style: FilledButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  backgroundColor: cs.error,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ]),
-        );
-      },
+          );
+        },
       ),
     );
   }
 
-  Widget _sectionHeader(ThemeData theme, ColorScheme cs, IconData icon, String title) =>
-      Row(children: [
-        Icon(icon, size: 16, color: cs.primary),
-        const SizedBox(width: 8),
-        Text(title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-      ]);
+  Widget _sectionHeader(
+    ThemeData theme,
+    ColorScheme cs,
+    IconData icon,
+    String title,
+  ) => Row(
+    children: [
+      Icon(icon, size: 16, color: cs.primary),
+      const SizedBox(width: 8),
+      Text(
+        title,
+        style: theme.textTheme.titleSmall?.copyWith(
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ],
+  );
 
-  Widget _summaryRow(ThemeData t, String l, String v,
-      {bool isBold = false, Color? valueColor}) =>
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text(l, style: (isBold ? t.textTheme.titleSmall : t.textTheme.bodyMedium)?.copyWith(
-            color: isBold ? null : t.colorScheme.onSurfaceVariant)),
-        Text(v, style: (isBold ? t.textTheme.titleMedium : t.textTheme.bodyMedium)?.copyWith(
-            color: valueColor, fontWeight: isBold ? FontWeight.bold : FontWeight.w500)),
-      ]);
+  Widget _summaryRow(
+    ThemeData t,
+    String l,
+    String v, {
+    bool isBold = false,
+    Color? valueColor,
+  }) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(
+        l,
+        style: (isBold ? t.textTheme.titleSmall : t.textTheme.bodyMedium)
+            ?.copyWith(color: isBold ? null : t.colorScheme.onSurfaceVariant),
+      ),
+      Text(
+        v,
+        style: (isBold ? t.textTheme.titleMedium : t.textTheme.bodyMedium)
+            ?.copyWith(
+              color: valueColor,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+            ),
+      ),
+    ],
+  );
 
   String _pmLabel(AdjReturnPaymentMethod m) => switch (m) {
     AdjReturnPaymentMethod.cash => 'purchases.payment_cash'.tr(),
@@ -1093,6 +1489,7 @@ class _AdjReturnItemTile extends StatefulWidget {
   final CurrencyService currencyService;
   final ValueChanged<int> onQuantityChanged;
   final ValueChanged<int> onPriceChanged;
+
   /// Receives `(discountCents, discountPercentBps)`. When `discountPercentBps`
   /// is non-zero the discount is treated as a live percent and recomputed
   /// against quantity changes; otherwise it is a fixed-cent discount.
@@ -1115,19 +1512,29 @@ class _AdjReturnItemTile extends StatefulWidget {
 
 class _AdjReturnItemTileState extends State<_AdjReturnItemTile> {
   late TextEditingController _qtyCtrl;
+  late MeasurementUnit _quantityUnit;
 
   @override
   void initState() {
     super.initState();
-    _qtyCtrl = TextEditingController(text: '${widget.item.quantity}');
+    _quantityUnit = MeasurementType.fromDb(
+      widget.item.measurementType,
+    ).majorUnit;
+    _qtyCtrl = TextEditingController(
+      text: MeasuredQuantity.editableValue(widget.item.quantity, _quantityUnit),
+    );
   }
 
   @override
   void didUpdateWidget(covariant _AdjReturnItemTile oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final text = MeasuredQuantity.editableValue(
+      widget.item.quantity,
+      _quantityUnit,
+    );
     if (widget.item.quantity != oldWidget.item.quantity &&
-        _qtyCtrl.text != '${widget.item.quantity}') {
-      _qtyCtrl.text = '${widget.item.quantity}';
+        _qtyCtrl.text != text) {
+      _qtyCtrl.text = text;
     }
   }
 
@@ -1138,15 +1545,22 @@ class _AdjReturnItemTileState extends State<_AdjReturnItemTile> {
   }
 
   void _showEditSheet(BuildContext context) async {
-    final discountPerItem = context.read<PurchaseAdjReturnFormBloc>().state.discountPerItem;
+    final discountPerItem = context
+        .read<PurchaseAdjReturnFormBloc>()
+        .state
+        .discountPerItem;
     final db = sl<AppDatabase>();
     int stockQty = 0;
     try {
       if (widget.item.variantId != null) {
-        final v = await (db.select(db.productVariants)..where((t) => t.id.equals(widget.item.variantId!))).getSingleOrNull();
+        final v = await (db.select(
+          db.productVariants,
+        )..where((t) => t.id.equals(widget.item.variantId!))).getSingleOrNull();
         stockQty = v?.stockQuantity ?? 0;
       } else {
-        final p = await (db.select(db.products)..where((t) => t.id.equals(widget.item.productId))).getSingleOrNull();
+        final p = await (db.select(
+          db.products,
+        )..where((t) => t.id.equals(widget.item.productId))).getSingleOrNull();
         stockQty = p?.stockQuantity ?? 0;
       }
     } catch (_) {}
@@ -1180,88 +1594,197 @@ class _AdjReturnItemTileState extends State<_AdjReturnItemTile> {
       onTap: () => _showEditSheet(context),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-        child: Row(children: [
-          // Qty stepper with editable text field
-          Container(
-            decoration: BoxDecoration(
-                color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(8)),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              InkWell(
+        child: Row(
+          children: [
+            // Qty stepper with editable text field
+            Container(
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(8),
-                onTap: item.quantity > 1 ? () => widget.onQuantityChanged(item.quantity - 1) : null,
-                child: Padding(padding: const EdgeInsets.all(6),
-                  child: Icon(LucideIcons.minus, size: 12,
-                      color: item.quantity > 1 ? cs.onSurface : cs.onSurface.withValues(alpha: 0.3))),
               ),
-              SizedBox(
-                width: 32,
-                child: TextField(
-                  controller: _qtyCtrl,
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.center,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  onTap: () => selectAllText(_qtyCtrl),
-                  style: theme.textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.bold, color: cs.error),
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: item.quantity > _quantityUnit.internalFactor
+                        ? () => widget.onQuantityChanged(
+                            item.quantity - _quantityUnit.internalFactor,
+                          )
+                        : null,
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Icon(
+                        LucideIcons.minus,
+                        size: 12,
+                        color: item.quantity > _quantityUnit.internalFactor
+                            ? cs.onSurface
+                            : cs.onSurface.withValues(alpha: 0.3),
+                      ),
+                    ),
                   ),
-                  onChanged: (v) {
-                    final parsed = int.tryParse(v);
-                    if (parsed != null && parsed > 0) {
-                      widget.onQuantityChanged(parsed);
-                    }
-                  },
-                ),
+                  SizedBox(
+                    width: 52,
+                    child: TextField(
+                      controller: _qtyCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      textAlign: TextAlign.center,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
+                      ],
+                      onTap: () => selectAllText(_qtyCtrl),
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: cs.error,
+                      ),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(vertical: 4),
+                      ),
+                      onChanged: (v) {
+                        try {
+                          final parsed = MeasuredQuantity.parseToStored(
+                            v,
+                            _quantityUnit,
+                          );
+                          if (parsed > 0) widget.onQuantityChanged(parsed);
+                        } on FormatException {
+                          // Keep partial decimal input until it becomes valid.
+                        }
+                      },
+                    ),
+                  ),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => widget.onQuantityChanged(
+                      item.quantity + _quantityUnit.internalFactor,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Icon(
+                        LucideIcons.plus,
+                        size: 12,
+                        color: cs.onSurface,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: () => widget.onQuantityChanged(item.quantity + 1),
-                child: Padding(padding: const EdgeInsets.all(6),
-                  child: Icon(LucideIcons.plus, size: 12, color: cs.onSurface)),
+            ),
+            if (MeasurementType.fromDb(item.measurementType).minorUnit != null)
+              PopupMenuButton<MeasurementUnit>(
+                tooltip: 'measurement.select_unit'.tr(),
+                initialValue: _quantityUnit,
+                icon: const Icon(LucideIcons.ruler, size: 16),
+                itemBuilder: (_) => MeasurementType.fromDb(item.measurementType)
+                    .inputUnits
+                    .map((unit) {
+                      return PopupMenuItem(
+                        value: unit,
+                        child: Text('measurement.units.${unit.dbValue}'.tr()),
+                      );
+                    })
+                    .toList(),
+                onSelected: (unit) {
+                  setState(() {
+                    _quantityUnit = unit;
+                    _qtyCtrl.text = MeasuredQuantity.editableValue(
+                      item.quantity,
+                      unit,
+                    );
+                  });
+                },
               ),
-            ]),
-          ),
-          const SizedBox(width: 10),
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(item.productName,
-                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
-              Wrap(spacing: 6, runSpacing: 2, children: [
-                if (item.variantLabel != null && item.variantLabel!.isNotEmpty)
-                  Text(item.variantLabel!,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: cs.primary, fontWeight: FontWeight.w500)),
-                if (item.variantSku != null && item.variantSku!.isNotEmpty)
-                  Text('#${item.variantSku!}',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: cs.onSurfaceVariant, fontWeight: FontWeight.w500)),
-                Text('${curr.format(item.unitPriceCents)} × ${item.quantity}',
-                    style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
-                if (item.discountCents > 0)
-                  Text('-${curr.format(item.discountCents)}',
-                      style: theme.textTheme.labelSmall?.copyWith(color: Colors.orange)),
-                if (item.taxRateBps > 0)
-                  Text('+${(item.taxRateBps / 100).toStringAsFixed(1)}%',
-                      style: theme.textTheme.labelSmall?.copyWith(color: cs.tertiary)),
-              ]),
-            ],
-          )),
-          const SizedBox(width: 8),
-          Text(curr.format(item.totalCents),
-              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold, color: cs.error)),
-          const SizedBox(width: 4),
-          InkWell(borderRadius: BorderRadius.circular(6), onTap: () => _showEditSheet(context),
-            child: Padding(padding: const EdgeInsets.all(4),
-              child: Icon(LucideIcons.pencil, size: 14, color: cs.primary))),
-          InkWell(borderRadius: BorderRadius.circular(6), onTap: widget.onRemove,
-            child: Padding(padding: const EdgeInsets.all(4),
-              child: Icon(LucideIcons.trash2, size: 14, color: cs.error))),
-        ]),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.productName,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 2,
+                    children: [
+                      if (item.variantLabel != null &&
+                          item.variantLabel!.isNotEmpty)
+                        Text(
+                          item.variantLabel!,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: cs.primary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      if (item.variantSku != null &&
+                          item.variantSku!.isNotEmpty)
+                        Text(
+                          '#${item.variantSku!}',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      Text(
+                        '${curr.format(item.unitPriceCents)} × ${localizedQuantity(item.quantity, item.measurementType)}',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                      if (item.discountCents > 0)
+                        Text(
+                          '-${curr.format(item.discountCents)}',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: Colors.orange,
+                          ),
+                        ),
+                      if (item.taxRateBps > 0)
+                        Text(
+                          '+${(item.taxRateBps / 100).toStringAsFixed(1)}%',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: cs.tertiary,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              curr.format(item.totalCents),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: cs.error,
+              ),
+            ),
+            const SizedBox(width: 4),
+            InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: () => _showEditSheet(context),
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(LucideIcons.pencil, size: 14, color: cs.primary),
+              ),
+            ),
+            InkWell(
+              borderRadius: BorderRadius.circular(6),
+              onTap: widget.onRemove,
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(LucideIcons.trash2, size: 14, color: cs.error),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1275,6 +1798,7 @@ class _ItemEditSheet extends StatefulWidget {
   final AdjReturnLineItem item;
   final CurrencyService currencyService;
   final ValueChanged<int> onPriceChanged;
+
   /// Receives `(discountCents, discountPercentBps)`.
   final void Function(int cents, int percentBps) onDiscountChanged;
   final bool showDiscount;
@@ -1302,20 +1826,23 @@ class _ItemEditSheetState extends State<_ItemEditSheet> {
   void initState() {
     super.initState();
     _priceCtrl = TextEditingController(
-        text: (widget.item.unitPriceCents / 100).toStringAsFixed(2));
+      text: (widget.item.unitPriceCents / 100).toStringAsFixed(2),
+    );
     // Pre-populate the sheet using whichever discount form was previously
     // saved on the line. A percent (basis-points) value takes precedence so
     // the user keeps editing the same semantic value they entered before.
     if (widget.item.discountPercentBps > 0) {
       _discountIsPercent = true;
       _discountCtrl = TextEditingController(
-          text: (widget.item.discountPercentBps / 100).toStringAsFixed(2));
+        text: (widget.item.discountPercentBps / 100).toStringAsFixed(2),
+      );
     } else {
       _discountIsPercent = false;
       _discountCtrl = TextEditingController(
-          text: widget.item.discountCents > 0
-              ? (widget.item.discountCents / 100).toStringAsFixed(2)
-              : '');
+        text: widget.item.discountCents > 0
+            ? (widget.item.discountCents / 100).toStringAsFixed(2)
+            : '',
+      );
     }
   }
 
@@ -1331,7 +1858,11 @@ class _ItemEditSheetState extends State<_ItemEditSheet> {
     final val = double.tryParse(_discountCtrl.text) ?? 0;
     if (_discountIsPercent) {
       final price = double.tryParse(_priceCtrl.text) ?? 0;
-      final subtotal = (price * 100).round() * widget.item.quantity;
+      final subtotal = MeasuredAmount.cents(
+        unitCents: (price * 100).round(),
+        quantity: widget.item.quantity,
+        quantityScale: widget.item.quantityScale,
+      );
       return (subtotal * val / 100).round();
     }
     return (val * 100).round();
@@ -1365,11 +1896,18 @@ class _ItemEditSheetState extends State<_ItemEditSheet> {
   }
 
   // ─── live computed values from controllers ───
-  int get _livePriceCents => ((double.tryParse(_priceCtrl.text) ?? 0) * 100).round();
-  int get _liveSubtotal => _livePriceCents * widget.item.quantity;
+  int get _livePriceCents =>
+      ((double.tryParse(_priceCtrl.text) ?? 0) * 100).round();
+  int get _liveSubtotal => MeasuredAmount.cents(
+    unitCents: _livePriceCents,
+    quantity: widget.item.quantity,
+    quantityScale: widget.item.quantityScale,
+  );
   int get _liveDiscount => _computeDiscountCents();
   int get _liveNet => (_liveSubtotal - _liveDiscount).clamp(0, 999999999);
-  int get _liveTax => widget.item.taxRateBps > 0 ? (_liveNet * widget.item.taxRateBps / 10000).round() : 0;
+  int get _liveTax => widget.item.taxRateBps > 0
+      ? (_liveNet * widget.item.taxRateBps / 10000).round()
+      : 0;
   int get _liveTotal => _liveNet + _liveTax;
 
   @override
@@ -1381,26 +1919,47 @@ class _ItemEditSheetState extends State<_ItemEditSheet> {
 
     return Padding(
       padding: EdgeInsets.only(
-        left: 20, right: 20, top: 16,
+        left: 20,
+        right: 20,
+        top: 16,
         bottom: MediaQuery.of(context).viewInsets.bottom + 20,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(child: Container(width: 40, height: 4,
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
               decoration: BoxDecoration(
-                  color: cs.outlineVariant, borderRadius: BorderRadius.circular(2)))),
+                color: cs.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
           const SizedBox(height: 16),
-          Row(children: [
-            Icon(LucideIcons.pencil, size: 18, color: cs.primary),
-            const SizedBox(width: 8),
-            Expanded(child: Text(item.displayName,
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold))),
-            Text(curr.format(_liveTotal),
+          Row(
+            children: [
+              Icon(LucideIcons.pencil, size: 18, color: cs.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  item.displayName,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Text(
+                curr.format(_liveTotal),
                 style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold, color: cs.error)),
-          ]),
+                  fontWeight: FontWeight.bold,
+                  color: cs.error,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
 
           // Stock quantity info
@@ -1417,71 +1976,120 @@ class _ItemEditSheetState extends State<_ItemEditSheet> {
                     : cs.error.withValues(alpha: 0.3),
               ),
             ),
-            child: Row(children: [
-              Icon(LucideIcons.warehouse, size: 16,
-                  color: widget.stockQuantity > 0 ? cs.primary : cs.error),
-              const SizedBox(width: 8),
-              Text('returns.stock'.tr(),
-                  style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-              const Spacer(),
-              Text('${widget.stockQuantity}',
+            child: Row(
+              children: [
+                Icon(
+                  LucideIcons.warehouse,
+                  size: 16,
+                  color: widget.stockQuantity > 0 ? cs.primary : cs.error,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'returns.stock'.tr(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  localizedQuantity(widget.stockQuantity, item.measurementType),
                   style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: widget.stockQuantity > 0 ? cs.primary : cs.error)),
-            ]),
+                    fontWeight: FontWeight.bold,
+                    color: widget.stockQuantity > 0 ? cs.primary : cs.error,
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 14),
 
-          Text('purchases.unit_cost'.tr(),
-              style: theme.textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
+          Text(
+            'purchases.unit_cost'.tr(),
+            style: theme.textTheme.labelSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurfaceVariant,
+            ),
+          ),
           const SizedBox(height: 6),
           TextField(
             controller: _priceCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+            ],
             onTap: () => selectAllText(_priceCtrl),
             decoration: InputDecoration(
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                filled: true, isDense: true,
-                prefixIcon: const Icon(LucideIcons.dollarSign, size: 18)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              filled: true,
+              isDense: true,
+              prefixIcon: const Icon(LucideIcons.dollarSign, size: 18),
+            ),
             onChanged: (_) => _applyPrice(),
           ),
           const SizedBox(height: 14),
 
           if (widget.showDiscount) ...[
-            Row(children: [
-              Text('purchases.item_discount'.tr(),
+            Row(
+              children: [
+                Text(
+                  'purchases.item_discount'.tr(),
                   style: theme.textTheme.labelSmall?.copyWith(
-                      fontWeight: FontWeight.w600, color: cs.onSurfaceVariant)),
-              const Spacer(),
-              SegmentedButton<bool>(
-                segments: [
-                  ButtonSegment(value: false, label: Text(curr.currencySymbol, style: const TextStyle(fontSize: 11))),
-                  const ButtonSegment(value: true, label: Text('%', style: TextStyle(fontSize: 11))),
-                ],
-                selected: {_discountIsPercent},
-                onSelectionChanged: (v) => setState(() {
-                  _discountIsPercent = v.first;
-                  _discountCtrl.clear();
-                  widget.onDiscountChanged(0, 0);
-                }),
-                style: const ButtonStyle(
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+                const Spacer(),
+                SegmentedButton<bool>(
+                  segments: [
+                    ButtonSegment(
+                      value: false,
+                      label: Text(
+                        curr.currencySymbol,
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    ),
+                    const ButtonSegment(
+                      value: true,
+                      label: Text('%', style: TextStyle(fontSize: 11)),
+                    ),
+                  ],
+                  selected: {_discountIsPercent},
+                  onSelectionChanged: (v) => setState(() {
+                    _discountIsPercent = v.first;
+                    _discountCtrl.clear();
+                    widget.onDiscountChanged(0, 0);
+                  }),
+                  style: const ButtonStyle(
                     visualDensity: VisualDensity.compact,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-              ),
-            ]),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 6),
             TextField(
               controller: _discountCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
+              ],
               onTap: () => selectAllText(_discountCtrl),
               decoration: InputDecoration(
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  filled: true, isDense: true,
-                  hintText: _discountIsPercent ? '0 %' : '0.00',
-                  prefixIcon: Icon(_discountIsPercent ? LucideIcons.percent : LucideIcons.tag, size: 18)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                filled: true,
+                isDense: true,
+                hintText: _discountIsPercent ? '0 %' : '0.00',
+                prefixIcon: Icon(
+                  _discountIsPercent ? LucideIcons.percent : LucideIcons.tag,
+                  size: 18,
+                ),
+              ),
               onChanged: (_) => _applyDiscount(),
             ),
           ],
@@ -1491,19 +2099,30 @@ class _ItemEditSheetState extends State<_ItemEditSheet> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                  color: cs.tertiaryContainer.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: cs.tertiary.withValues(alpha: 0.3))),
-              child: Row(children: [
-                Icon(LucideIcons.percent, size: 16, color: cs.tertiary),
-                const SizedBox(width: 8),
-                Text('purchases.tax'.tr(),
-                    style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                const Spacer(),
-                Text('${(item.taxRateBps / 100).toStringAsFixed(2)}%  =  ${curr.format(_liveTax)}',
+                color: cs.tertiaryContainer.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: cs.tertiary.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.percent, size: 16, color: cs.tertiary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'purchases.tax'.tr(),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${(item.taxRateBps / 100).toStringAsFixed(2)}%  =  ${curr.format(_liveTax)}',
                     style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.bold, color: cs.tertiary)),
-              ]),
+                      fontWeight: FontWeight.bold,
+                      color: cs.tertiary,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
 
@@ -1511,52 +2130,109 @@ class _ItemEditSheetState extends State<_ItemEditSheet> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-                color: cs.primaryContainer.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(10)),
-            child: Column(children: [
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Text('purchases.subtotal'.tr(), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                Text(curr.format(_liveSubtotal), style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500)),
-              ]),
-              if (_liveDiscount > 0) ...[
-                const SizedBox(height: 4),
-                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  Text('purchases.discount'.tr(), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                  Text('-${curr.format(_liveDiscount)}', style: theme.textTheme.bodySmall?.copyWith(color: Colors.orange)),
-                ]),
+              color: cs.primaryContainer.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'purchases.subtotal'.tr(),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                    Text(
+                      curr.format(_liveSubtotal),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                if (_liveDiscount > 0) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'purchases.discount'.tr(),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        '-${curr.format(_liveDiscount)}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.orange,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (_liveTax > 0) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'purchases.tax'.tr(),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        '+${curr.format(_liveTax)}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: cs.tertiary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const Divider(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'purchases.total'.tr(),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      curr.format(_liveTotal),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: cs.error,
+                      ),
+                    ),
+                  ],
+                ),
               ],
-              if (_liveTax > 0) ...[
-                const SizedBox(height: 4),
-                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  Text('purchases.tax'.tr(), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                  Text('+${curr.format(_liveTax)}', style: theme.textTheme.bodySmall?.copyWith(color: cs.tertiary)),
-                ]),
-              ],
-              const Divider(height: 12),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Text('purchases.total'.tr(), style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
-                Text(curr.format(_liveTotal), style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.bold, color: cs.error)),
-              ]),
-            ]),
+            ),
           ),
           const SizedBox(height: 16),
-          Row(children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text('common.cancel'.tr()),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('common.cancel'.tr()),
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton.icon(
-                icon: const Icon(LucideIcons.check, size: 18),
-                label: Text('common.save'.tr()),
-                onPressed: () => Navigator.pop(context),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  icon: const Icon(LucideIcons.check, size: 18),
+                  label: Text('common.save'.tr()),
+                  onPressed: () => Navigator.pop(context),
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
         ],
       ),
     );
@@ -1610,7 +2286,8 @@ class _PartyPickerSheetState<T> extends State<_PartyPickerSheet<T>> {
         children: [
           const SizedBox(height: 12),
           Container(
-            width: 40, height: 4,
+            width: 40,
+            height: 4,
             decoration: BoxDecoration(
               color: cs.outlineVariant,
               borderRadius: BorderRadius.circular(2),
@@ -1618,9 +2295,12 @@ class _PartyPickerSheetState<T> extends State<_PartyPickerSheet<T>> {
           ),
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Text(widget.title,
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.bold)),
+            child: Text(
+              widget.title,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1629,8 +2309,9 @@ class _PartyPickerSheetState<T> extends State<_PartyPickerSheet<T>> {
               decoration: InputDecoration(
                 hintText: 'common.search'.tr(),
                 prefixIcon: const Icon(LucideIcons.search, size: 18),
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 isDense: true,
               ),
               onChanged: (v) => setState(() => _query = v),
@@ -1646,8 +2327,10 @@ class _PartyPickerSheetState<T> extends State<_PartyPickerSheet<T>> {
                 return ListTile(
                   leading: CircleAvatar(
                     backgroundColor: cs.primaryContainer,
-                    child: Text(widget.getInitial(item),
-                        style: TextStyle(color: cs.onPrimaryContainer)),
+                    child: Text(
+                      widget.getInitial(item),
+                      style: TextStyle(color: cs.onPrimaryContainer),
+                    ),
                   ),
                   title: Text(widget.getName(item)),
                   onTap: () => Navigator.pop(context, item),
@@ -1673,6 +2356,7 @@ class _PickerRow {
   final String? sku;
   final int priceCents;
   final int costCents;
+
   /// GROSS supplier reference price (last unit cost the user typed on a
   /// purchase line, before per-line trade discounts). Nullable because rows
   /// created before migration 10055 — or never touched by a purchase post —
@@ -1683,7 +2367,9 @@ class _PickerRow {
   /// return show the cost basis (not the customer sell price).
   final int? lastPurchasePriceCents;
   final int stockQuantity;
+  final String measurementType;
   final int taxRateBps;
+
   /// Whether the underlying product is a variant product (`products.has_variants = 1`).
   /// Used for the picker icon so non-variant products that happen to carry a
   /// default variant id don't get the `layers` icon — matching the rest of the
@@ -1700,6 +2386,7 @@ class _PickerRow {
     required this.costCents,
     this.lastPurchasePriceCents,
     required this.stockQuantity,
+    required this.measurementType,
     required this.taxRateBps,
     required this.hasVariants,
   });
@@ -1748,10 +2435,11 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
 
   Future<void> _loadProducts() async {
     final db = widget.db;
-    final products = await (db.select(db.products)
-          ..where((p) => p.isActive.equals(true))
-          ..orderBy([(p) => drift.OrderingTerm.asc(p.name)]))
-        .get();
+    final products =
+        await (db.select(db.products)
+              ..where((p) => p.isActive.equals(true))
+              ..orderBy([(p) => drift.OrderingTerm.asc(p.name)]))
+            .get();
 
     // Pre-fetch the default variant's color/size for every non-variant
     // product. The default variant exists in `product_variants` even when
@@ -1760,17 +2448,19 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
     // Without this, non-variant products render an empty chip while variant
     // products render "Color / Size" — which is exactly the discrepancy the
     // user sees in the picker and in the item card downstream.
-    final defaultVariantRows = await db.customSelect(
-      'SELECT pv.id AS variant_id, pv.product_id AS product_id, '
-      '  pc.name AS color_name, sz.name AS size_name '
-      'FROM product_variants pv '
-      'JOIN products p ON p.id = pv.product_id '
-      'LEFT JOIN product_colors pc ON pc.id = pv.color_id '
-      'LEFT JOIN sizes sz ON sz.id = pv.size_id '
-      'WHERE p.is_active = 1 AND p.has_variants = 0 AND pv.is_active = 1 '
-      '  AND pv.id = (SELECT MIN(pv2.id) FROM product_variants pv2 '
-      '               WHERE pv2.product_id = pv.product_id AND pv2.is_active = 1)',
-    ).get();
+    final defaultVariantRows = await db
+        .customSelect(
+          'SELECT pv.id AS variant_id, pv.product_id AS product_id, '
+          '  pc.name AS color_name, sz.name AS size_name '
+          'FROM product_variants pv '
+          'JOIN products p ON p.id = pv.product_id '
+          'LEFT JOIN product_colors pc ON pc.id = pv.color_id '
+          'LEFT JOIN sizes sz ON sz.id = pv.size_id '
+          'WHERE p.is_active = 1 AND p.has_variants = 0 AND pv.is_active = 1 '
+          '  AND pv.id = (SELECT MIN(pv2.id) FROM product_variants pv2 '
+          '               WHERE pv2.product_id = pv.product_id AND pv2.is_active = 1)',
+        )
+        .get();
     final defaultVariantLabels = <int, String?>{};
     // Resolve the actual default variant id for each non-variant product so
     // downstream stock adjustments hit the correct (color/size) row instead
@@ -1781,13 +2471,11 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
     for (final r in defaultVariantRows) {
       final colorName = r.readNullable<String>('color_name');
       final sizeName = r.readNullable<String>('size_name');
-      final parts = <String>[
-        ?colorName,
-        ?sizeName,
-      ];
+      final parts = <String>[?colorName, ?sizeName];
       final productId = r.read<int>('product_id');
-      defaultVariantLabels[productId] =
-          parts.isNotEmpty ? parts.join(' / ') : null;
+      defaultVariantLabels[productId] = parts.isNotEmpty
+          ? parts.join(' / ')
+          : null;
       defaultVariantIds[productId] = r.read<int>('variant_id');
     }
 
@@ -1802,65 +2490,81 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
         // column added in migration 10055 — read it explicitly below so the
         // purchase-adjustment-return picker can resolve the GROSS supplier
         // reference (Phase 15.2).
-        final variantRows = await db.customSelect(
-          'SELECT pv.*, pc.name AS color_name, sz.name AS size_name '
-          'FROM product_variants pv '
-          'LEFT JOIN product_colors pc ON pc.id = pv.color_id '
-          'LEFT JOIN sizes sz ON sz.id = pv.size_id '
-          'WHERE pv.product_id = ? AND pv.is_active = 1 '
-          'ORDER BY pc.name ASC, sz.name ASC',
-          variables: [drift.Variable.withInt(product.id)],
-        ).get();
+        final variantRows = await db
+            .customSelect(
+              'SELECT pv.*, pc.name AS color_name, sz.name AS size_name '
+              'FROM product_variants pv '
+              'LEFT JOIN product_colors pc ON pc.id = pv.color_id '
+              'LEFT JOIN sizes sz ON sz.id = pv.size_id '
+              'WHERE pv.product_id = ? AND pv.is_active = 1 '
+              'ORDER BY pc.name ASC, sz.name ASC',
+              variables: [drift.Variable.withInt(product.id)],
+            )
+            .get();
 
         for (final vr in variantRows) {
           final colorName = vr.readNullable<String>('color_name');
           final sizeName = vr.readNullable<String>('size_name');
-          final parts = <String>[
-            ?colorName,
-            ?sizeName,
-          ];
-          rows.add(_PickerRow(
-            productId: product.id,
-            variantId: vr.read<int>('id'),
-            productName: product.name,
-            variantLabel: parts.isNotEmpty ? parts.join(' / ') : null,
-            sku: vr.readNullable<String>('sku'),
-            priceCents: vr.read<int>('price_cents'),
-            costCents: vr.read<int>('cost_cents'),
-            lastPurchasePriceCents:
-                vr.readNullable<int>('last_purchase_price_cents'),
-            stockQuantity: vr.read<int>('stock_quantity'),
-            taxRateBps: taxBps,
-            hasVariants: true,
-          ));
+          final parts = <String>[?colorName, ?sizeName];
+          rows.add(
+            _PickerRow(
+              productId: product.id,
+              variantId: vr.read<int>('id'),
+              productName: product.name,
+              variantLabel: parts.isNotEmpty ? parts.join(' / ') : null,
+              sku: vr.readNullable<String>('sku'),
+              priceCents: vr.read<int>('price_cents'),
+              costCents: vr.read<int>('cost_cents'),
+              lastPurchasePriceCents: vr.readNullable<int>(
+                'last_purchase_price_cents',
+              ),
+              stockQuantity: vr.read<int>('stock_quantity'),
+              measurementType: product.measurementType,
+              taxRateBps: taxBps,
+              hasVariants: true,
+            ),
+          );
         }
       } else {
-        rows.add(_PickerRow(
-          productId: product.id,
-          variantId: defaultVariantIds[product.id],
-          productName: product.name,
-          variantLabel: defaultVariantLabels[product.id],
-          sku: product.sku,
-          priceCents: product.priceCents.toBigInt().toInt(),
-          costCents: product.costCents.toBigInt().toInt(),
-          lastPurchasePriceCents:
-              product.lastPurchasePriceCents?.toBigInt().toInt(),
-          stockQuantity: product.stockQuantity,
-          taxRateBps: taxBps,
-          hasVariants: false,
-        ));
+        rows.add(
+          _PickerRow(
+            productId: product.id,
+            variantId: defaultVariantIds[product.id],
+            productName: product.name,
+            variantLabel: defaultVariantLabels[product.id],
+            sku: product.sku,
+            priceCents: product.priceCents.toBigInt().toInt(),
+            costCents: product.costCents.toBigInt().toInt(),
+            lastPurchasePriceCents: product.lastPurchasePriceCents
+                ?.toBigInt()
+                .toInt(),
+            stockQuantity: product.stockQuantity,
+            measurementType: product.measurementType,
+            taxRateBps: taxBps,
+            hasVariants: false,
+          ),
+        );
       }
     }
 
-    if (mounted) setState(() { _rows = rows; _isLoading = false; });
+    if (mounted) {
+      setState(() {
+        _rows = rows;
+        _isLoading = false;
+      });
+    }
   }
 
   List<_PickerRow> get _filtered {
     if (_query.isEmpty) return _rows;
     final q = _query.toLowerCase();
-    return _rows.where((r) =>
-        r.displayName.toLowerCase().contains(q) ||
-        (r.sku?.toLowerCase().contains(q) ?? false)).toList();
+    return _rows
+        .where(
+          (r) =>
+              r.displayName.toLowerCase().contains(q) ||
+              (r.sku?.toLowerCase().contains(q) ?? false),
+        )
+        .toList();
   }
 
   @override
@@ -1878,14 +2582,21 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
         children: [
           const SizedBox(height: 12),
           Container(
-            width: 40, height: 4,
+            width: 40,
+            height: 4,
             decoration: BoxDecoration(
-              color: cs.outlineVariant, borderRadius: BorderRadius.circular(2)),
+              color: cs.outlineVariant,
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Text('returns.select_product'.tr(),
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            child: Text(
+              'returns.select_product'.tr(),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1894,7 +2605,9 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
               decoration: InputDecoration(
                 hintText: 'products_search_hint'.tr(),
                 prefixIcon: const Icon(LucideIcons.search, size: 18),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 isDense: true,
               ),
               onChanged: (v) => setState(() => _query = v),
@@ -1916,28 +2629,43 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                   final isVariant = row.hasVariants;
                   return ListTile(
                     leading: Container(
-                      width: 40, height: 40,
+                      width: 40,
+                      height: 40,
                       decoration: BoxDecoration(
-                        color: (isVariant ? cs.secondaryContainer : cs.primaryContainer)
-                            .withValues(alpha: 0.5),
+                        color:
+                            (isVariant
+                                    ? cs.secondaryContainer
+                                    : cs.primaryContainer)
+                                .withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
                         isVariant ? LucideIcons.layers : LucideIcons.package,
                         size: 18,
-                        color: isVariant ? cs.onSecondaryContainer : cs.onPrimaryContainer),
+                        color: isVariant
+                            ? cs.onSecondaryContainer
+                            : cs.onPrimaryContainer,
+                      ),
                     ),
                     title: Text(row.productName),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (row.variantLabel != null)
-                          Text(row.variantLabel!,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                  color: cs.primary, fontWeight: FontWeight.w500)),
+                          Text(
+                            row.variantLabel!,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: cs.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         if (row.sku != null)
-                          Text(row.sku!,
-                              style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                          Text(
+                            row.sku!,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
                       ],
                     ),
                     trailing: Column(
@@ -1949,27 +2677,46 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                         // price. Phase 15.2 fix — `unitMoneyCents` collapses
                         // variant + no-variant to the same convention used
                         // by `purchase_form_screen.dart` (Phase 15.1).
-                        Text(curr.format(row.unitMoneyCents(isSale: widget.isSale)),
-                            style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
-                        Text('${'returns.stock'.tr()}: ${row.stockQuantity}',
-                            style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                        Text(
+                          curr.format(
+                            row.unitMoneyCents(isSale: widget.isSale),
+                          ),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          '${'returns.stock'.tr()}: ${localizedQuantity(row.stockQuantity, row.measurementType)}',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
                       ],
                     ),
-                    onTap: () => Navigator.pop(context, AdjReturnLineItem(
-                      productId: row.productId,
-                      variantId: row.variantId,
-                      productName: row.productName,
-                      variantLabel: row.variantLabel,
-                      variantSku: row.sku,
-                      quantity: 1,
-                      // Auto-fill the new line with the side-correct money.
-                      // Variant + no-variant resolve identically (Phase 15.2)
-                      // — both fall through `lastPurchasePriceCents ?? costCents`
-                      // for the purchase form, never the sell price.
-                      unitPriceCents: row.unitMoneyCents(isSale: widget.isSale),
-                      unitCostCents: row.costCents,
-                      taxRateBps: row.taxRateBps,
-                    )),
+                    onTap: () => Navigator.pop(
+                      context,
+                      AdjReturnLineItem(
+                        productId: row.productId,
+                        variantId: row.variantId,
+                        productName: row.productName,
+                        variantLabel: row.variantLabel,
+                        variantSku: row.sku,
+                        quantity: row.measurementType == 'piece' ? 1 : 1000,
+                        quantityScale: row.measurementType == 'piece'
+                            ? 1
+                            : 1000,
+                        measurementType: row.measurementType,
+                        // Auto-fill the new line with the side-correct money.
+                        // Variant + no-variant resolve identically (Phase 15.2)
+                        // — both fall through `lastPurchasePriceCents ?? costCents`
+                        // for the purchase form, never the sell price.
+                        unitPriceCents: row.unitMoneyCents(
+                          isSale: widget.isSale,
+                        ),
+                        unitCostCents: row.costCents,
+                        taxRateBps: row.taxRateBps,
+                      ),
+                    ),
                   );
                 },
               ),
@@ -2016,10 +2763,7 @@ class _ReasonDropdown extends StatelessWidget {
         prefixIcon: const Icon(LucideIcons.listChecks, size: 18),
       ),
       items: AdjReturnReasonCode.values
-          .map((r) => DropdownMenuItem(
-                value: r,
-                child: Text(_label(r)),
-              ))
+          .map((r) => DropdownMenuItem(value: r, child: Text(_label(r))))
           .toList(),
       onChanged: (v) {
         if (v != null) onChanged(v);
@@ -2028,14 +2772,14 @@ class _ReasonDropdown extends StatelessWidget {
   }
 
   static String _label(AdjReturnReasonCode r) => switch (r) {
-        AdjReturnReasonCode.damaged => 'returns.reason_damaged'.tr(),
-        AdjReturnReasonCode.defective => 'returns.reason_defective'.tr(),
-        AdjReturnReasonCode.wrongItem => 'returns.reason_wrong_item'.tr(),
-        AdjReturnReasonCode.gift => 'returns.reason_gift'.tr(),
-        AdjReturnReasonCode.goodwill => 'returns.reason_goodwill'.tr(),
-        AdjReturnReasonCode.noReceipt => 'returns.reason_no_receipt'.tr(),
-        AdjReturnReasonCode.other => 'returns.reason_other'.tr(),
-      };
+    AdjReturnReasonCode.damaged => 'returns.reason_damaged'.tr(),
+    AdjReturnReasonCode.defective => 'returns.reason_defective'.tr(),
+    AdjReturnReasonCode.wrongItem => 'returns.reason_wrong_item'.tr(),
+    AdjReturnReasonCode.gift => 'returns.reason_gift'.tr(),
+    AdjReturnReasonCode.goodwill => 'returns.reason_goodwill'.tr(),
+    AdjReturnReasonCode.noReceipt => 'returns.reason_no_receipt'.tr(),
+    AdjReturnReasonCode.other => 'returns.reason_other'.tr(),
+  };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2048,10 +2792,7 @@ class _PurchaseFraudWarnings extends StatelessWidget {
   final int? supplierId;
   final List<AdjReturnLineItem> items;
 
-  const _PurchaseFraudWarnings({
-    required this.supplierId,
-    required this.items,
-  });
+  const _PurchaseFraudWarnings({required this.supplierId, required this.items});
 
   @override
   Widget build(BuildContext context) {
@@ -2061,19 +2802,20 @@ class _PurchaseFraudWarnings extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: FutureBuilder<List<_PurchaseItemWarning>>(
-        future: Future.wait(items.map((it) async {
-          final qty = await dao.getSupplierProductSuppliedQty(
-            supplierId: supplierId!,
-            productId: it.productId,
-            variantId: it.variantId,
-          );
-          return _PurchaseItemWarning(item: it, historyQty: qty);
-        })),
+        future: Future.wait(
+          items.map((it) async {
+            final qty = await dao.getSupplierProductSuppliedQty(
+              supplierId: supplierId!,
+              productId: it.productId,
+              variantId: it.variantId,
+            );
+            return _PurchaseItemWarning(item: it, historyQty: qty);
+          }),
+        ),
         builder: (context, snap) {
           if (!snap.hasData) return const SizedBox.shrink();
           final warnings = snap.data!
-              .where((w) =>
-                  w.historyQty == 0 || w.item.quantity > w.historyQty)
+              .where((w) => w.historyQty == 0 || w.item.quantity > w.historyQty)
               .toList();
           if (warnings.isEmpty) return const SizedBox.shrink();
           return _buildCard(context, warnings);
@@ -2082,8 +2824,7 @@ class _PurchaseFraudWarnings extends StatelessWidget {
     );
   }
 
-  Widget _buildCard(
-      BuildContext context, List<_PurchaseItemWarning> warnings) {
+  Widget _buildCard(BuildContext context, List<_PurchaseItemWarning> warnings) {
     final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(12),
@@ -2095,35 +2836,43 @@ class _PurchaseFraudWarnings extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Icon(LucideIcons.shieldAlert,
-                size: 16, color: Colors.amber.shade700),
-            const SizedBox(width: 8),
-            Text('returns.fraud_warnings_title'.tr(),
+          Row(
+            children: [
+              Icon(
+                LucideIcons.shieldAlert,
+                size: 16,
+                color: Colors.amber.shade700,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'returns.fraud_warnings_title'.tr(),
                 style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: Colors.amber.shade800)),
-          ]),
+                  fontWeight: FontWeight.w700,
+                  color: Colors.amber.shade800,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
           ...warnings.map((w) {
             final never = w.historyQty == 0;
             final text = never
                 ? '${w.item.displayName} — ${'returns.warning_never_supplied'.tr()}'
-                : '${w.item.displayName} — ${'returns.warning_qty_exceeds_history'.tr(namedArgs: {
-                    'qty': '${w.item.quantity}',
-                    'history': '${w.historyQty}',
-                  })}';
+                : '${w.item.displayName} — ${'returns.warning_qty_exceeds_history'.tr(namedArgs: {'qty': '${w.item.quantity}', 'history': '${w.historyQty}'})}';
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(LucideIcons.dot,
-                      size: 16, color: Colors.amber.shade700),
+                  Icon(LucideIcons.dot, size: 16, color: Colors.amber.shade700),
                   Expanded(
-                    child: Text(text,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.amber.shade900, height: 1.35)),
+                    child: Text(
+                      text,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.amber.shade900,
+                        height: 1.35,
+                      ),
+                    ),
                   ),
                 ],
               ),

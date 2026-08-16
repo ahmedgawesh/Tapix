@@ -1,4 +1,3 @@
-import 'package:decimal/decimal.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -8,8 +7,13 @@ import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../auth/domain/entities/permission_constants.dart';
+import '../../../auth/presentation/widgets/permission_gate.dart';
 import '../../../accounting/domain/repositories/journal_repository.dart';
+import '../../../accounting/presentation/utils/account_display_name.dart';
+import '../../../accounting/presentation/utils/journal_description_localizer.dart';
 import '../../../accounting/presentation/bloc/accounts_bloc.dart';
+import '../../../reports/services/general_ledger_service.dart';
 
 class ChartOfAccountsScreen extends StatelessWidget {
   const ChartOfAccountsScreen({super.key});
@@ -32,7 +36,6 @@ class _ChartView extends StatefulWidget {
 
 class _ChartViewState extends State<_ChartView> {
   String? _selectedType;
-  bool _isUnlocked = false;
 
   static const _accountTypes = [
     null, // All
@@ -51,18 +54,17 @@ class _ChartViewState extends State<_ChartView> {
 
     return Scaffold(
       appBar: AppBar(
-        title: GestureDetector(
-          onLongPress: () => _showDevPasswordDialog(context),
-          child: Text('financial_management.chart_of_accounts'.tr()),
-        ),
+        title: Text('financial_management.chart_of_accounts'.tr()),
         centerTitle: true,
         actions: [
-          if (_isUnlocked)
-            IconButton(
+          PermissionGate(
+            permission: Permissions.manageAccounting,
+            child: IconButton(
               icon: const Icon(LucideIcons.plus),
               tooltip: 'financial_management.add_account'.tr(),
               onPressed: () => _showAccountDialog(context),
             ),
+          ),
         ],
       ),
       body: Column(
@@ -85,8 +87,8 @@ class _ChartViewState extends State<_ChartView> {
                     onSelected: (_) {
                       setState(() => _selectedType = type);
                       context.read<AccountsBloc>().add(
-                            AccountFilterByTypeRequested(type),
-                          );
+                        AccountFilterByTypeRequested(type),
+                      );
                     },
                   ),
                 );
@@ -109,8 +111,13 @@ class _ChartViewState extends State<_ChartView> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(LucideIcons.bookOpen, size: 64,
-                              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4)),
+                          Icon(
+                            LucideIcons.bookOpen,
+                            size: 64,
+                            color: colorScheme.onSurfaceVariant.withValues(
+                              alpha: 0.4,
+                            ),
+                          ),
                           const SizedBox(height: 16),
                           Text(
                             'financial_management.no_accounts'.tr(),
@@ -129,8 +136,16 @@ class _ChartViewState extends State<_ChartView> {
                     grouped.putIfAbsent(acc.accountType, () => []).add(acc);
                   }
 
-                  final sortedTypes = ['asset', 'liability', 'equity', 'revenue', 'expense'];
-                  final orderedKeys = sortedTypes.where((t) => grouped.containsKey(t)).toList();
+                  final sortedTypes = [
+                    'asset',
+                    'liability',
+                    'equity',
+                    'revenue',
+                    'expense',
+                  ];
+                  final orderedKeys = sortedTypes
+                      .where((t) => grouped.containsKey(t))
+                      .toList();
 
                   return ListView.builder(
                     padding: const EdgeInsets.all(16),
@@ -142,8 +157,8 @@ class _ChartViewState extends State<_ChartView> {
                         type: type,
                         accounts: typeAccounts,
                         cs: cs,
-                        isUnlocked: _isUnlocked,
-                        onEdit: (acc) => _showAccountDialog(context, account: acc),
+                        onEdit: (acc) =>
+                            _showAccountDialog(context, account: acc),
                         onDelete: (acc) => _confirmDelete(context, acc),
                         onInfo: (acc) => _showAccountDiagnostic(context, acc),
                       );
@@ -160,97 +175,17 @@ class _ChartViewState extends State<_ChartView> {
     );
   }
 
-  void _showDevPasswordDialog(BuildContext context) {
-    if (_isUnlocked) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('financial_management.already_unlocked'.tr()),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    final passwordController = TextEditingController();
-
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          icon: const Icon(LucideIcons.lock, size: 32),
-          title: Text('financial_management.dev_access'.tr()),
-          content: TextField(
-            controller: passwordController,
-            obscureText: true,
-            autofocus: true,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              labelText: 'financial_management.dev_password'.tr(),
-              border: const OutlineInputBorder(),
-              prefixIcon: const Icon(LucideIcons.keyRound),
-            ),
-            onSubmitted: (_) {
-              if (passwordController.text == '123456789') {
-                Navigator.pop(dialogContext);
-                setState(() => _isUnlocked = true);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('financial_management.dev_unlocked'.tr()),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              } else {
-                Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('financial_management.dev_wrong_password'.tr()),
-                    behavior: SnackBarBehavior.floating,
-                    backgroundColor: Theme.of(context).colorScheme.error,
-                  ),
-                );
-              }
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('common.cancel'.tr()),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (passwordController.text == '123456789') {
-                  Navigator.pop(dialogContext);
-                  setState(() => _isUnlocked = true);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('financial_management.dev_unlocked'.tr()),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                } else {
-                  Navigator.pop(dialogContext);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('financial_management.dev_wrong_password'.tr()),
-                      behavior: SnackBarBehavior.floating,
-                      backgroundColor: Theme.of(context).colorScheme.error,
-                    ),
-                  );
-                }
-              },
-              child: Text('financial_management.dev_unlock'.tr()),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   void _showAccountDialog(BuildContext context, {Account? account}) {
     final isEdit = account != null;
-    final codeController = TextEditingController(text: account?.accountCode ?? '');
-    final nameController = TextEditingController(text: account?.accountName ?? '');
-    final descController = TextEditingController(text: account?.description ?? '');
+    final codeController = TextEditingController(
+      text: account?.accountCode ?? '',
+    );
+    final nameController = TextEditingController(
+      text: account?.accountName ?? '',
+    );
+    final descController = TextEditingController(
+      text: account?.description ?? '',
+    );
     String selectedType = account?.accountType ?? 'asset';
 
     showDialog<void>(
@@ -259,9 +194,11 @@ class _ChartViewState extends State<_ChartView> {
         return StatefulBuilder(
           builder: (ctx, setState) {
             return AlertDialog(
-              title: Text(isEdit
-                  ? 'financial_management.edit_account'.tr()
-                  : 'financial_management.add_account'.tr()),
+              title: Text(
+                isEdit
+                    ? 'financial_management.edit_account'.tr()
+                    : 'financial_management.add_account'.tr(),
+              ),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -290,13 +227,20 @@ class _ChartViewState extends State<_ChartView> {
                         labelText: 'financial_management.account_type'.tr(),
                         border: const OutlineInputBorder(),
                       ),
-                      items: ['asset', 'liability', 'equity', 'revenue', 'expense']
-                          .map((t) => DropdownMenuItem(
-                                value: t,
-                                child: Text('financial_management.type_$t'.tr()),
-                              ))
-                          .toList(),
-                      onChanged: isEdit ? null : (v) => setState(() => selectedType = v!),
+                      items:
+                          ['asset', 'liability', 'equity', 'revenue', 'expense']
+                              .map(
+                                (t) => DropdownMenuItem(
+                                  value: t,
+                                  child: Text(
+                                    'financial_management.type_$t'.tr(),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                      onChanged: isEdit
+                          ? null
+                          : (v) => setState(() => selectedType = v!),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -316,7 +260,7 @@ class _ChartViewState extends State<_ChartView> {
                   child: Text('common.cancel'.tr()),
                 ),
                 FilledButton(
-                  onPressed: () {
+                  onPressed: () async {
                     final code = codeController.text.trim();
                     final name = nameController.text.trim();
                     if (code.isEmpty || name.isEmpty) return;
@@ -339,21 +283,29 @@ class _ChartViewState extends State<_ChartView> {
                         createdAt: account.createdAt,
                         updatedAt: DateTime.now(),
                       );
-                      context.read<AccountsBloc>().add(AccountUpdateRequested(updated));
+                      context.read<AccountsBloc>().add(
+                        AccountUpdateRequested(updated),
+                      );
                     } else {
-                      context.read<AccountsBloc>().add(AccountCreateRequested(
-                            accountCode: code,
-                            accountName: name,
-                            accountType: selectedType,
-                            currencyId: 1,
-                            description: descController.text.trim().isEmpty
-                                ? null
-                                : descController.text.trim(),
-                          ));
+                      final currencyId = await _resolveCurrentCurrencyId();
+                      if (!context.mounted) return;
+                      context.read<AccountsBloc>().add(
+                        AccountCreateRequested(
+                          accountCode: code,
+                          accountName: name,
+                          accountType: selectedType,
+                          currencyId: currencyId,
+                          description: descController.text.trim().isEmpty
+                              ? null
+                              : descController.text.trim(),
+                        ),
+                      );
                     }
                     Navigator.pop(dialogContext);
                   },
-                  child: Text(isEdit ? 'common.save'.tr() : 'common.create'.tr()),
+                  child: Text(
+                    isEdit ? 'common.save'.tr() : 'common.create'.tr(),
+                  ),
                 ),
               ],
             );
@@ -361,6 +313,24 @@ class _ChartViewState extends State<_ChartView> {
         );
       },
     );
+  }
+
+  Future<int> _resolveCurrentCurrencyId() async {
+    final db = sl<AppDatabase>();
+    final currencyCode = sl<CurrencyService>().currencyCode;
+    final selected =
+        await (db.select(db.currencies)
+              ..where((currency) => currency.code.equals(currencyCode)))
+            .getSingleOrNull();
+    if (selected != null) return selected.id;
+
+    final fallback = await (db.select(
+      db.currencies,
+    )..limit(1)).getSingleOrNull();
+    if (fallback == null) {
+      throw StateError('No accounting currency is configured.');
+    }
+    return fallback.id;
   }
 
   void _showAccountDiagnostic(BuildContext context, Account account) {
@@ -376,7 +346,9 @@ class _ChartViewState extends State<_ChartView> {
     if (account.isSystemAccount) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('financial_management.cannot_delete_system_account'.tr()),
+          content: Text(
+            'financial_management.cannot_delete_system_account'.tr(),
+          ),
           backgroundColor: colorScheme.error,
         ),
       );
@@ -402,7 +374,9 @@ class _ChartViewState extends State<_ChartView> {
             FilledButton(
               style: FilledButton.styleFrom(backgroundColor: colorScheme.error),
               onPressed: () {
-                context.read<AccountsBloc>().add(AccountDeleteRequested(account.id));
+                context.read<AccountsBloc>().add(
+                  AccountDeleteRequested(account.id),
+                );
                 Navigator.pop(dialogContext);
               },
               child: Text('common.delete'.tr()),
@@ -418,7 +392,6 @@ class _AccountTypeGroup extends StatelessWidget {
   final String type;
   final List<Account> accounts;
   final CurrencyService cs;
-  final bool isUnlocked;
   final void Function(Account) onEdit;
   final void Function(Account) onDelete;
   final void Function(Account) onInfo;
@@ -427,16 +400,10 @@ class _AccountTypeGroup extends StatelessWidget {
     required this.type,
     required this.accounts,
     required this.cs,
-    required this.isUnlocked,
     required this.onEdit,
     required this.onDelete,
     required this.onInfo,
   });
-
-  String _balanceMeaning(String type, bool isPositive) {
-    final direction = isPositive ? 'positive' : 'negative';
-    return 'financial_management.balance_${direction}_$type'.tr();
-  }
 
   Color _typeColor(String type) {
     switch (type) {
@@ -525,73 +492,64 @@ class _AccountTypeGroup extends StatelessWidget {
         ),
 
         // Account cards
-        ...accounts.map((acc) => Card(
-              margin: const EdgeInsets.only(bottom: 6),
-              elevation: 0,
-              child: ListTile(
-                dense: true,
-                leading: CircleAvatar(
-                  radius: 16,
-                  backgroundColor: color.withValues(alpha: 0.12),
-                  child: Text(
-                    acc.accountCode.length > 2
-                        ? acc.accountCode.substring(0, 2)
-                        : acc.accountCode,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: color,
-                      fontWeight: FontWeight.bold,
-                    ),
+        ...accounts.map(
+          (acc) => Card(
+            margin: const EdgeInsets.only(bottom: 6),
+            elevation: 0,
+            child: ListTile(
+              dense: true,
+              leading: CircleAvatar(
+                radius: 16,
+                backgroundColor: color.withValues(alpha: 0.12),
+                child: Text(
+                  acc.accountCode.length > 2
+                      ? acc.accountCode.substring(0, 2)
+                      : acc.accountCode,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                title: Row(
-                  children: [
-                    Text(
-                      acc.accountCode,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                        fontFamily: 'monospace',
+              ),
+              title: Row(
+                children: [
+                  Text(
+                    acc.accountCode,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      localizedAccountName(acc),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        acc.accountName,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                subtitle: acc.description != null && acc.description!.isNotEmpty
-                    ? Text(acc.description!, style: theme.textTheme.bodySmall)
-                    : null,
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          cs.formatCents(acc.balanceCents.toBigInt().toInt()),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: acc.balanceCents >= Decimal.zero ? color : colorScheme.error,
-                          ),
-                        ),
-                        Text(
-                          _balanceMeaning(acc.accountType, acc.balanceCents >= Decimal.zero),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
-                            fontSize: 10,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (isUnlocked && !acc.isSystemAccount) ...[
-                      const SizedBox(width: 4),
-                      PopupMenuButton<String>(
+                  ),
+                ],
+              ),
+              subtitle: localizedAccountDescription(acc) != null
+                  ? Text(
+                      localizedAccountDescription(acc)!,
+                      style: theme.textTheme.bodySmall,
+                    )
+                  : null,
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _PostedAccountBalance(
+                    account: acc,
+                    currencyService: cs,
+                    positiveColor: color,
+                  ),
+                  if (!acc.isSystemAccount) ...[
+                    const SizedBox(width: 4),
+                    PermissionGate(
+                      permission: Permissions.manageAccounting,
+                      child: PopupMenuButton<String>(
                         itemBuilder: (_) => [
                           PopupMenuItem(
                             value: 'edit',
@@ -607,10 +565,16 @@ class _AccountTypeGroup extends StatelessWidget {
                             value: 'delete',
                             child: Row(
                               children: [
-                                Icon(LucideIcons.trash2, size: 16, color: colorScheme.error),
+                                Icon(
+                                  LucideIcons.trash2,
+                                  size: 16,
+                                  color: colorScheme.error,
+                                ),
                                 const SizedBox(width: 8),
-                                Text('common.delete'.tr(),
-                                    style: TextStyle(color: colorScheme.error)),
+                                Text(
+                                  'common.delete'.tr(),
+                                  style: TextStyle(color: colorScheme.error),
+                                ),
                               ],
                             ),
                           ),
@@ -620,28 +584,106 @@ class _AccountTypeGroup extends StatelessWidget {
                           if (action == 'delete') onDelete(acc);
                         },
                       ),
-                    ],
-                    IconButton(
-                      icon: Icon(LucideIcons.info, size: 16,
-                          color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6)),
-                      tooltip: 'financial_management.account_info_tooltip'.tr(),
-                      onPressed: () => onInfo(acc),
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                     ),
-                    if (acc.isSystemAccount)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4),
-                        child: Icon(LucideIcons.lock, size: 14,
-                            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
-                      ),
                   ],
-                ),
+                  IconButton(
+                    icon: Icon(
+                      LucideIcons.info,
+                      size: 16,
+                      color: colorScheme.onSurfaceVariant.withValues(
+                        alpha: 0.6,
+                      ),
+                    ),
+                    tooltip: 'financial_management.account_info_tooltip'.tr(),
+                    onPressed: () => onInfo(acc),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
+                    ),
+                  ),
+                  if (acc.isSystemAccount)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: Icon(
+                        LucideIcons.lock,
+                        size: 14,
+                        color: colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.5,
+                        ),
+                      ),
+                    ),
+                ],
               ),
-            )),
+            ),
+          ),
+        ),
         const SizedBox(height: 12),
       ],
+    );
+  }
+}
+
+class _PostedAccountBalance extends StatelessWidget {
+  final Account account;
+  final CurrencyService currencyService;
+  final Color positiveColor;
+
+  const _PostedAccountBalance({
+    required this.account,
+    required this.currencyService,
+    required this.positiveColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return StreamBuilder<List<JournalEntryLine>>(
+      stream: sl<JournalRepository>().watchJournalLinesByAccount(account.id),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const SizedBox(
+            width: 22,
+            height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          );
+        }
+
+        var debits = 0;
+        var credits = 0;
+        for (final line in snapshot.data!) {
+          debits += line.debitCents.toBigInt().toInt();
+          credits += line.creditCents.toBigInt().toInt();
+        }
+        final debitNormal =
+            account.accountType == 'asset' || account.accountType == 'expense';
+        final balance = debitNormal ? debits - credits : credits - debits;
+        final direction = balance >= 0 ? 'positive' : 'negative';
+
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              currencyService.formatCents(balance),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: balance >= 0 ? positiveColor : colorScheme.error,
+              ),
+            ),
+            Text(
+              'financial_management.balance_${direction}_${account.accountType}'
+                  .tr(),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                fontSize: 10,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -655,7 +697,7 @@ class _AccountDiagnosticDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = sl<CurrencyService>();
-    final repo = sl<JournalRepository>();
+    final ledgerService = GeneralLedgerService(sl<AppDatabase>());
 
     return Dialog(
       insetPadding: const EdgeInsets.all(16),
@@ -674,14 +716,15 @@ class _AccountDiagnosticDialog extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${account.accountCode} — ${account.accountName}',
+                          '${account.accountCode} — ${localizedAccountName(account)}',
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '${'financial_management.type_${account.accountType}'.tr()} · ${cs.formatCents(account.balanceCents.toBigInt().toInt())}',
+                          'financial_management.type_${account.accountType}'
+                              .tr(),
                           style: theme.textTheme.bodySmall,
                         ),
                       ],
@@ -698,36 +741,34 @@ class _AccountDiagnosticDialog extends StatelessWidget {
 
             // Journal lines stream
             Flexible(
-              child: StreamBuilder<List<JournalEntryLine>>(
-                stream: repo.watchJournalLinesByAccount(account.id),
+              child: StreamBuilder<GeneralLedgerSnapshot>(
+                stream: ledgerService.watch(
+                  accountId: account.id,
+                  startDate: DateTime(1),
+                  endDate: DateTime(9999, 12, 30),
+                ),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
-                  final lines = snapshot.data ?? [];
+                  final ledger = snapshot.data;
+                  final lines =
+                      ledger?.rows.reversed.toList(growable: false) ??
+                      const <GeneralLedgerRow>[];
                   if (lines.isEmpty) {
                     return Padding(
                       padding: const EdgeInsets.all(32),
-                      child: Text('financial_management.no_transactions_yet'.tr()),
+                      child: Text(
+                        'financial_management.no_transactions_yet'.tr(),
+                      ),
                     );
                   }
 
                   // Compute totals
-                  int totalDebits = 0;
-                  int totalCredits = 0;
-                  for (final line in lines) {
-                    totalDebits += line.debitCents.toBigInt().toInt();
-                    totalCredits += line.creditCents.toBigInt().toInt();
-                  }
-
-                  final type = account.accountType.toLowerCase();
-                  int computedBalance;
-                  if (type == 'asset' || type == 'expense') {
-                    computedBalance = totalDebits - totalCredits;
-                  } else {
-                    computedBalance = totalCredits - totalDebits;
-                  }
+                  final totalDebits = ledger!.totalDebitCents;
+                  final totalCredits = ledger.totalCreditCents;
+                  final computedBalance = ledger.closingBalanceCents;
 
                   final cachedBalance = account.balanceCents.toBigInt().toInt();
                   final balanceMatch = cachedBalance == computedBalance;
@@ -736,18 +777,23 @@ class _AccountDiagnosticDialog extends StatelessWidget {
                     children: [
                       // Balance comparison
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 8,
+                        ),
                         child: Row(
                           children: [
                             Expanded(
                               child: _DiagnosticStat(
-                                label: 'financial_management.total_money_in'.tr(),
+                                label: 'financial_management.total_money_in'
+                                    .tr(),
                                 value: cs.formatCents(totalDebits),
                               ),
                             ),
                             Expanded(
                               child: _DiagnosticStat(
-                                label: 'financial_management.total_money_out'.tr(),
+                                label: 'financial_management.total_money_out'
+                                    .tr(),
                                 value: cs.formatCents(totalCredits),
                               ),
                             ),
@@ -760,15 +806,19 @@ class _AccountDiagnosticDialog extends StatelessWidget {
                           children: [
                             Expanded(
                               child: _DiagnosticStat(
-                                label: 'financial_management.stored_balance'.tr(),
+                                label: 'financial_management.stored_balance'
+                                    .tr(),
                                 value: cs.formatCents(cachedBalance),
                               ),
                             ),
                             Expanded(
                               child: _DiagnosticStat(
-                                label: 'financial_management.calculated_balance'.tr(),
+                                label: 'financial_management.calculated_balance'
+                                    .tr(),
                                 value: cs.formatCents(computedBalance),
-                                color: balanceMatch ? null : theme.colorScheme.error,
+                                color: balanceMatch
+                                    ? null
+                                    : theme.colorScheme.error,
                               ),
                             ),
                           ],
@@ -776,17 +826,27 @@ class _AccountDiagnosticDialog extends StatelessWidget {
                       ),
                       if (!balanceMatch)
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 4,
+                          ),
                           child: Row(
                             children: [
-                              Icon(Icons.warning_amber, size: 16, color: theme.colorScheme.error),
+                              Icon(
+                                Icons.warning_amber,
+                                size: 16,
+                                color: theme.colorScheme.error,
+                              ),
                               const SizedBox(width: 8),
-                              Expanded(child: Text(
-                                'financial_management.balance_mismatch_info'.tr(),
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.error,
+                              Expanded(
+                                child: Text(
+                                  'financial_management.balance_mismatch_info'
+                                      .tr(),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.error,
+                                  ),
                                 ),
-                              )),
+                              ),
                             ],
                           ),
                         ),
@@ -797,22 +857,25 @@ class _AccountDiagnosticDialog extends StatelessWidget {
                         child: ListView.separated(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           itemCount: lines.length,
-                          separatorBuilder: (context, index) => const Divider(height: 1),
+                          separatorBuilder: (context, index) =>
+                              const Divider(height: 1),
                           itemBuilder: (context, index) {
                             final line = lines[index];
-                            final debit = line.debitCents.toBigInt().toInt();
-                            final credit = line.creditCents.toBigInt().toInt();
+                            final debit = line.debitCents;
+                            final credit = line.creditCents;
 
                             return ListTile(
                               dense: true,
                               title: Text(
-                                line.description ?? '${'financial_management.transaction_line'.tr()} #${line.lineNumber}',
+                                localizedJournalDescription(line.description),
                                 style: theme.textTheme.bodySmall,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               subtitle: Text(
-                                'financial_management.entry_number'.tr(args: ['${line.journalEntryId}']),
+                                'financial_management.entry_number'.tr(
+                                  args: [line.entryNumber],
+                                ),
                                 style: theme.textTheme.labelSmall?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
@@ -822,34 +885,46 @@ class _AccountDiagnosticDialog extends StatelessWidget {
                                 children: [
                                   if (debit > 0)
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
                                       decoration: BoxDecoration(
-                                        color: Colors.blue.withValues(alpha: 0.1),
+                                        color: Colors.blue.withValues(
+                                          alpha: 0.1,
+                                        ),
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: Text(
                                         '${'financial_management.money_in'.tr()} ${cs.formatCents(debit)}',
-                                        style: theme.textTheme.bodySmall?.copyWith(
-                                          color: Colors.blue,
-                                          fontWeight: FontWeight.w600,
-                                        ),
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color: Colors.blue,
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                       ),
                                     ),
                                   if (debit > 0 && credit > 0)
                                     const SizedBox(width: 4),
                                   if (credit > 0)
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
                                       decoration: BoxDecoration(
-                                        color: Colors.orange.withValues(alpha: 0.1),
+                                        color: Colors.orange.withValues(
+                                          alpha: 0.1,
+                                        ),
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: Text(
                                         '${'financial_management.money_out'.tr()} ${cs.formatCents(credit)}',
-                                        style: theme.textTheme.bodySmall?.copyWith(
-                                          color: Colors.orange,
-                                          fontWeight: FontWeight.w600,
-                                        ),
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color: Colors.orange,
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                       ),
                                     ),
                                 ],
@@ -875,11 +950,7 @@ class _DiagnosticStat extends StatelessWidget {
   final String value;
   final Color? color;
 
-  const _DiagnosticStat({
-    required this.label,
-    required this.value,
-    this.color,
-  });
+  const _DiagnosticStat({required this.label, required this.value, this.color});
 
   @override
   Widget build(BuildContext context) {

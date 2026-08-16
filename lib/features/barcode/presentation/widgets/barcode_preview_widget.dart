@@ -8,6 +8,7 @@ import '../../../products/domain/entities/product_entity.dart';
 import '../../../settings/domain/entities/company_profile.dart';
 import '../../domain/models/barcode_design_state.dart';
 import '../../services/barcode_printer_service.dart';
+import '../../services/barcode_price_formatter.dart';
 
 class BarcodePreviewWidget extends StatelessWidget {
   final Product product;
@@ -30,13 +31,31 @@ class BarcodePreviewWidget extends StatelessWidget {
     final printerService = sl<BarcodePrinterService>();
     final currencyService = sl<CurrencyService>();
     final barcodeData = product.barcode ?? '';
-    final barcodeType = printerService.getBarcodeTypeAuto(barcodeData, settings.barcodeType);
-    final fallbackBarcodeType = printerService.getBarcodeTypeFromString('code128');
+    final barcodeType = printerService.getBarcodeTypeAuto(
+      barcodeData,
+      settings.barcodeType,
+    );
+    final fallbackBarcodeType = printerService.getBarcodeTypeFromString(
+      'code128',
+    );
     final canRenderBarcode = barcodeData.trim().isNotEmpty;
+    final formattedPrice = formatBarcodePrice(
+      product: product,
+      mode: settings.priceDisplayMode,
+      formatCurrency: currencyService.format,
+      retailLabel: 'barcode.retail_price_short'.tr(),
+      wholesaleLabel: 'barcode.wholesale_price_short'.tr(),
+    );
 
     // Convert mm to approximate pixels (1mm ~= 3.78px at 96dpi)
-    final width = (settings.labelWidthMm * 3.78 * scale).clamp(1.0, double.infinity);
-    final height = (settings.labelHeightMm * 3.78 * scale).clamp(1.0, double.infinity);
+    final width = (settings.labelWidthMm * 3.78 * scale).clamp(
+      1.0,
+      double.infinity,
+    );
+    final height = (settings.labelHeightMm * 3.78 * scale).clamp(
+      1.0,
+      double.infinity,
+    );
 
     final padding = (8 * scale).clamp(1.0, height * 0.12);
     final contentHeight = (height - (padding * 2)).clamp(1.0, double.infinity);
@@ -46,14 +65,21 @@ class BarcodePreviewWidget extends StatelessWidget {
 
     final gapSmall = (2 * scale * densityFactor).clamp(0.0, double.infinity);
 
-    final hasCompanyName = settings.includeCompanyName && companyProfile.name.isNotEmpty;
+    final hasCompanyName =
+        settings.includeCompanyName && companyProfile.name.isNotEmpty;
     final hasCompanyAddress =
-        settings.includeCompanyContact && (companyProfile.address?.isNotEmpty ?? false);
+        settings.includeCompanyContact &&
+        (companyProfile.address?.isNotEmpty ?? false);
     final hasCompanyPhone =
-        settings.includeCompanyContact && (companyProfile.phone?.isNotEmpty ?? false);
+        settings.includeCompanyContact &&
+        (companyProfile.phone?.isNotEmpty ?? false);
     final hasProductName = settings.includeName && product.name.isNotEmpty;
-    final hasVariantInfo = settings.includeVariantInfo;
-    final hasSku = settings.includeSku && (product.sku?.trim().isNotEmpty ?? false);
+    final hasVariantInfo =
+        settings.includeVariantInfo &&
+        variantInfo != null &&
+        variantInfo!.trim().isNotEmpty;
+    final hasSku =
+        settings.includeSku && (product.sku?.trim().isNotEmpty ?? false);
     final hasPrice = settings.includePrice;
 
     final companyNameFont = 8 * scale * densityFactor;
@@ -63,7 +89,8 @@ class BarcodePreviewWidget extends StatelessWidget {
     final skuFont = 7 * scale * densityFactor;
     final priceFont = 12 * scale * densityFactor;
 
-    double lineHeight(double fontSize) => (fontSize * 1.35).clamp(1.0, double.infinity);
+    double lineHeight(double fontSize) =>
+        (fontSize * 1.35).clamp(1.0, double.infinity);
 
     var reserved = 0.0;
     if (hasCompanyName) {
@@ -88,11 +115,17 @@ class BarcodePreviewWidget extends StatelessWidget {
       reserved += gapSmall + lineHeight(skuFont);
     }
     if (hasPrice) {
-      reserved += gapSmall + lineHeight(priceFont);
+      final priceLines = settings.priceDisplayMode == PriceDisplayMode.both
+          ? 2
+          : 1;
+      reserved += gapSmall + (lineHeight(priceFont) * priceLines);
     }
 
     final maxBarcodeHeight = (contentHeight * 0.62).clamp(6.0, contentHeight);
-    final barcodeAreaHeight = ((contentHeight - reserved) * 0.92).clamp(6.0, maxBarcodeHeight);
+    final barcodeAreaHeight = ((contentHeight - reserved) * 0.92).clamp(
+      6.0,
+      maxBarcodeHeight,
+    );
 
     return Card(
       elevation: 4,
@@ -119,7 +152,8 @@ class BarcodePreviewWidget extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       // Company name (if enabled)
-                      if (settings.includeCompanyName && companyProfile.name.isNotEmpty) ...[
+                      if (settings.includeCompanyName &&
+                          companyProfile.name.isNotEmpty) ...[
                         Text(
                           companyProfile.name,
                           style: TextStyle(
@@ -134,169 +168,187 @@ class BarcodePreviewWidget extends StatelessWidget {
                         SizedBox(height: gapSmall),
                       ],
 
-              // Company contact (address + phone)
-              if (settings.includeCompanyContact &&
-                  ((companyProfile.address?.isNotEmpty ?? false) ||
-                      (companyProfile.phone?.isNotEmpty ?? false))) ...[
-                if (companyProfile.address?.isNotEmpty ?? false)
-                  Text(
-                    companyProfile.address!,
-                    style: TextStyle(
-                      fontSize: 6 * scale * densityFactor,
-                      color: Colors.black54,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                  ),
-                if (companyProfile.phone?.isNotEmpty ?? false)
-                  Text(
-                    companyProfile.phone!,
-                    style: TextStyle(
-                      fontSize: 6 * scale * densityFactor,
-                      color: Colors.black54,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                  ),
-                SizedBox(height: gapSmall),
-              ],
-
-              // Product name (if enabled)
-              if (settings.includeName && product.name.isNotEmpty) ...[
-                Text(
-                  product.name,
-                  style: TextStyle(
-                    fontSize: 10 * scale * densityFactor,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: gapSmall),
-              ],
-
-              // Variant info (if enabled)
-              if (settings.includeVariantInfo) ...[
-                Text(
-                  (variantInfo != null && variantInfo!.trim().isNotEmpty)
-                      ? variantInfo!
-                      : 'barcode.variant_placeholder'.tr(),
-                  style: TextStyle(
-                    fontSize: 7 * scale * densityFactor,
-                    color: Colors.black54,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: gapSmall),
-              ],
-
-              // Barcode
-              if (settings.includeBarcode)
-                SizedBox(
-                  height: barcodeAreaHeight,
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final barcodeWidth = constraints.maxWidth.clamp(1.0, double.infinity);
-                      final barcodeHeight = constraints.maxHeight.clamp(1.0, double.infinity);
-
-                      if (barcodeWidth < 4 || barcodeHeight < 4) {
-                        return Container(
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade300),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        );
-                      }
-
-                      if (!canRenderBarcode) {
-                        return Container(
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade300),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            'barcode.no_barcode'.tr(),
+                      // Company contact (address + phone)
+                      if (settings.includeCompanyContact &&
+                          ((companyProfile.address?.isNotEmpty ?? false) ||
+                              (companyProfile.phone?.isNotEmpty ?? false))) ...[
+                        if (companyProfile.address?.isNotEmpty ?? false)
+                          Text(
+                            companyProfile.address!,
                             style: TextStyle(
-                              fontSize: 8 * scale,
-                              color: Colors.grey.shade600,
+                              fontSize: 6 * scale * densityFactor,
+                              color: Colors.black54,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.center,
                           ),
-                        );
-                      }
+                        if (companyProfile.phone?.isNotEmpty ?? false)
+                          Text(
+                            companyProfile.phone!,
+                            style: TextStyle(
+                              fontSize: 6 * scale * densityFactor,
+                              color: Colors.black54,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                          ),
+                        SizedBox(height: gapSmall),
+                      ],
 
-                      return BarcodeWidget(
-                        barcode: barcodeType,
-                        data: barcodeData,
-                        width: barcodeWidth,
-                        height: barcodeHeight,
-                        drawText: true,
-                        style: TextStyle(fontSize: 8 * scale * densityFactor),
-                        errorBuilder: (context, error) {
-                          return BarcodeWidget(
-                            barcode: fallbackBarcodeType,
-                            data: barcodeData,
-                            width: barcodeWidth,
-                            height: barcodeHeight,
-                            drawText: true,
-                            style: TextStyle(fontSize: 8 * scale * densityFactor),
-                            errorBuilder: (context, error) {
-                              return Container(
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey.shade300),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  'barcode.invalid_format'.tr(),
-                                  style: TextStyle(
-                                    fontSize: 8 * scale * densityFactor,
-                                    color: Colors.grey.shade600,
+                      // Product name (if enabled)
+                      if (settings.includeName && product.name.isNotEmpty) ...[
+                        Text(
+                          product.name,
+                          style: TextStyle(
+                            fontSize: 10 * scale * densityFactor,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                        ),
+                        SizedBox(height: gapSmall),
+                      ],
+
+                      // Variant info (if enabled)
+                      if (hasVariantInfo) ...[
+                        Text(
+                          variantInfo!,
+                          style: TextStyle(
+                            fontSize: 7 * scale * densityFactor,
+                            color: Colors.black54,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                        ),
+                        SizedBox(height: gapSmall),
+                      ],
+
+                      // Barcode
+                      if (settings.includeBarcode)
+                        SizedBox(
+                          height: barcodeAreaHeight,
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final barcodeWidth = constraints.maxWidth.clamp(
+                                1.0,
+                                double.infinity,
+                              );
+                              final barcodeHeight = constraints.maxHeight.clamp(
+                                1.0,
+                                double.infinity,
+                              );
+
+                              if (barcodeWidth < 4 || barcodeHeight < 4) {
+                                return Container(
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: Colors.grey.shade300,
+                                    ),
+                                    borderRadius: BorderRadius.circular(4),
                                   ),
-                                  textAlign: TextAlign.center,
+                                );
+                              }
+
+                              if (!canRenderBarcode) {
+                                return Container(
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: Colors.grey.shade300,
+                                    ),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    'barcode.no_barcode'.tr(),
+                                    style: TextStyle(
+                                      fontSize: 8 * scale,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                );
+                              }
+
+                              return BarcodeWidget(
+                                barcode: barcodeType,
+                                data: barcodeData,
+                                width: barcodeWidth,
+                                height: barcodeHeight,
+                                drawText: true,
+                                style: TextStyle(
+                                  fontSize: 8 * scale * densityFactor,
                                 ),
+                                errorBuilder: (context, error) {
+                                  return BarcodeWidget(
+                                    barcode: fallbackBarcodeType,
+                                    data: barcodeData,
+                                    width: barcodeWidth,
+                                    height: barcodeHeight,
+                                    drawText: true,
+                                    style: TextStyle(
+                                      fontSize: 8 * scale * densityFactor,
+                                    ),
+                                    errorBuilder: (context, error) {
+                                      return Container(
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                          border: Border.all(
+                                            color: Colors.grey.shade300,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          'barcode.invalid_format'.tr(),
+                                          style: TextStyle(
+                                            fontSize: 8 * scale * densityFactor,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      );
+                                    },
+                                  );
+                                },
                               );
                             },
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
+                          ),
+                        ),
 
-              // SKU (if enabled)
-              if (settings.includeSku && (product.sku?.trim().isNotEmpty ?? false)) ...[
-                SizedBox(height: gapSmall),
-                Text(
-                  'SKU: ${product.sku}',
-                  style: TextStyle(
-                    fontSize: 7 * scale * densityFactor,
-                    color: Colors.black54,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                ),
-              ],
+                      // SKU (if enabled)
+                      if (settings.includeSku &&
+                          (product.sku?.trim().isNotEmpty ?? false)) ...[
+                        SizedBox(height: gapSmall),
+                        Text(
+                          'SKU: ${product.sku}',
+                          style: TextStyle(
+                            fontSize: 7 * scale * densityFactor,
+                            color: Colors.black54,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
 
                       // Price (if enabled)
                       if (settings.includePrice) ...[
                         SizedBox(height: gapSmall),
                         Text(
-                          currencyService.format(product.priceCents.toBigInt().toInt()),
+                          formattedPrice,
                           style: TextStyle(
                             fontSize: 12 * scale * densityFactor,
                             fontWeight: FontWeight.bold,
                             color: Colors.black,
                           ),
+                          textAlign: TextAlign.center,
                         ),
                       ],
                     ],

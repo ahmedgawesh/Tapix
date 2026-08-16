@@ -184,20 +184,78 @@ class ProfitReportsBloc
   final AppDatabase _db;
   ReportDateRange _dateRange;
 
+  // Exact COGS expressions shared by every profit breakdown. FIFO reads the
+  // frozen batch-consumption ledger, WAC reads the posting snapshot, and
+  // service/non-stock products always contribute zero inventory cost.
+  static const _saleCostSql = '''
+    CASE
+      WHEN pr.track_inventory = 0 THEN 0
+      WHEN EXISTS (
+        SELECT 1 FROM batch_consumptions bc
+        WHERE bc.sale_item_id = si.id AND bc.direction = 'out'
+          AND bc.consumption_type = 'sale'
+      ) THEN (
+        SELECT COALESCE(SUM(CAST(ROUND(1.0 * bc.quantity * bc.unit_cost_cents / si.quantity_scale) AS INTEGER)), 0)
+        FROM batch_consumptions bc
+        WHERE bc.sale_item_id = si.id AND bc.direction = 'out'
+          AND bc.consumption_type = 'sale'
+      )
+      ELSE CAST(ROUND(1.0 * COALESCE(si.cost_cents, pv.cost_cents, pr.cost_cents)
+                      * si.quantity / si.quantity_scale) AS INTEGER)
+    END
+  ''';
+
+  static const _linkedReturnCostSql = '''
+    CASE
+      WHEN pr.track_inventory = 0 THEN 0
+      WHEN EXISTS (
+        SELECT 1 FROM batch_consumptions bc
+        WHERE bc.sale_return_item_id = sri.id AND bc.direction = 'in'
+          AND bc.consumption_type = 'sale_return_reverse'
+      ) THEN (
+        SELECT COALESCE(SUM(CAST(ROUND(1.0 * bc.quantity * bc.unit_cost_cents / sri.quantity_scale) AS INTEGER)), 0)
+        FROM batch_consumptions bc
+        WHERE bc.sale_return_item_id = sri.id AND bc.direction = 'in'
+          AND bc.consumption_type = 'sale_return_reverse'
+      )
+      ELSE CAST(ROUND(1.0 * COALESCE(sri.unit_cost_at_post_cents, si.cost_cents,
+                    pv.cost_cents, pr.cost_cents) * sri.quantity
+                    / sri.quantity_scale) AS INTEGER)
+    END
+  ''';
+
+  static const _adjustmentReturnCostSql = '''
+    CASE WHEN pr.track_inventory = 0 THEN 0
+         ELSE CAST(ROUND(1.0 * COALESCE(srai.unit_cost_at_post_cents,
+                       srai.unit_cost_cents) * srai.quantity
+                       / srai.quantity_scale) AS INTEGER)
+    END
+  ''';
+
   ProfitReportsBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
   @override
   Stream<ProfitReportsData> get dataStream {
-    // Watch all three sources: sales, linked returns, and adjustment returns.
-    // Any change in any of these must recompute net profit (Sales − Linked − Adjustment).
-    final trigger = _db.customSelect(
-      'SELECT 1 AS _t',
-      readsFrom: {_db.sales, _db.saleReturns, _db.saleReturnAdjustments},
-    ).watch();
+    // Watch every table that can change revenue or frozen COGS.
+    final trigger = _db
+        .customSelect(
+          'SELECT 1 AS _t',
+          readsFrom: {
+            _db.sales,
+            _db.saleItems,
+            _db.saleReturns,
+            _db.saleReturnItems,
+            _db.saleReturnAdjustments,
+            _db.saleReturnAdjustmentItems,
+            _db.batchConsumptions,
+            _db.products,
+          },
+        )
+        .watch();
     return trigger.asyncMap((_) => _loadAll());
   }
 
@@ -273,40 +331,45 @@ class ProfitReportsBloc
 
     // Net tax = Sales tax − Linked-return tax − Adjustment-return tax.
     // Each source is aggregated independently to avoid any row duplication.
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT
         (SELECT COALESCE(SUM(s.tax_cents), 0)
            FROM sales s
-          WHERE s.status NOT IN ('voided', 'draft')
+          WHERE s.status = 'completed'
             AND s.sale_date >= ? AND s.sale_date <= ?)
         -
         (SELECT COALESCE(SUM(sri.tax_cents), 0)
            FROM sale_return_items sri
            INNER JOIN sale_returns sr ON sr.id = sri.return_id
-          WHERE sr.status NOT IN ('voided', 'draft')
+          WHERE sr.status = 'posted'
             AND sr.return_date >= ? AND sr.return_date <= ?)
         -
         (SELECT COALESCE(SUM(srai.tax_cents), 0)
            FROM sale_return_adjustment_items srai
            INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id
-          WHERE sra.status NOT IN ('voided', 'draft')
+          WHERE sra.status = 'posted'
             AND sra.return_date >= ? AND sra.return_date <= ?)
         AS total_tax
       ''',
-      variables: [
-        Variable.withString(startIso), Variable.withString(endIso),
-        Variable.withString(startIso), Variable.withString(endIso),
-        Variable.withString(startIso), Variable.withString(endIso),
-      ],
-      readsFrom: {
-        _db.sales,
-        _db.saleReturnItems,
-        _db.saleReturns,
-        _db.saleReturnAdjustmentItems,
-        _db.saleReturnAdjustments,
-      },
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.sales,
+            _db.saleReturnItems,
+            _db.saleReturns,
+            _db.saleReturnAdjustmentItems,
+            _db.saleReturnAdjustments,
+          },
+        )
+        .get();
 
     return rows.isNotEmpty ? rows.first.read<int>('total_tax') : 0;
   }
@@ -327,8 +390,9 @@ class ProfitReportsBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT
         product_id,
         MAX(product_name) AS product_name,
@@ -345,16 +409,16 @@ class ProfitReportsBloc
           pr.name AS product_name,
           pc.name AS category_name,
           si.quantity AS qty,
-          si.total_cents AS revenue_cents,
+          (si.total_cents - si.tax_cents) AS revenue_cents,
           si.discount_cents AS discount_cents,
-          COALESCE(si.cost_cents, pv.cost_cents, pr.cost_cents) * si.quantity AS cost_cents,
+          $_saleCostSql AS cost_cents,
           ('S' || s.id) AS tx_key
         FROM sale_items si
         INNER JOIN sales s ON s.id = si.sale_id
         INNER JOIN products pr ON pr.id = si.product_id
         LEFT JOIN product_variants pv ON pv.id = si.variant_id
         LEFT JOIN product_categories pc ON pc.id = pr.category_id
-        WHERE s.status NOT IN ('voided', 'draft')
+        WHERE s.status = 'completed'
           AND s.sale_date >= ? AND s.sale_date <= ?
 
         UNION ALL
@@ -365,9 +429,9 @@ class ProfitReportsBloc
           pr.name,
           pc.name,
           -sri.quantity,
-          -sri.refund_cents,
+          -(sri.refund_cents - sri.tax_cents),
           -sri.discount_cents,
-          -(COALESCE(si.cost_cents, pv.cost_cents, pr.cost_cents) * sri.quantity),
+          -($_linkedReturnCostSql),
           ('LR' || sr.id)
         FROM sale_return_items sri
         INNER JOIN sale_returns sr ON sr.id = sri.return_id
@@ -375,7 +439,7 @@ class ProfitReportsBloc
         INNER JOIN products pr ON pr.id = si.product_id
         LEFT JOIN product_variants pv ON pv.id = si.variant_id
         LEFT JOIN product_categories pc ON pc.id = pr.category_id
-        WHERE sr.status NOT IN ('voided', 'draft')
+        WHERE sr.status = 'posted'
           AND sr.return_date >= ? AND sr.return_date <= ?
 
         UNION ALL
@@ -386,31 +450,41 @@ class ProfitReportsBloc
           pr.name,
           pc.name,
           -srai.quantity,
-          -srai.total_cents,
+          -(srai.total_cents - srai.tax_cents),
           -srai.discount_cents,
-          -(srai.unit_cost_cents * srai.quantity),
+          -($_adjustmentReturnCostSql),
           ('AR' || sra.id)
         FROM sale_return_adjustment_items srai
         INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id
         INNER JOIN products pr ON pr.id = srai.product_id
         LEFT JOIN product_categories pc ON pc.id = pr.category_id
-        WHERE sra.status NOT IN ('voided', 'draft')
+        WHERE sra.status = 'posted'
           AND sra.return_date >= ? AND sra.return_date <= ?
       ) u
       GROUP BY product_id
       ORDER BY (SUM(revenue_cents) - SUM(cost_cents)) DESC
       ''',
-      variables: [
-        Variable.withString(startIso), Variable.withString(endIso),
-        Variable.withString(startIso), Variable.withString(endIso),
-        Variable.withString(startIso), Variable.withString(endIso),
-      ],
-      readsFrom: {
-        _db.saleItems, _db.sales, _db.products, _db.productVariants, _db.productCategories,
-        _db.saleReturnItems, _db.saleReturns,
-        _db.saleReturnAdjustmentItems, _db.saleReturnAdjustments,
-      },
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.saleItems,
+            _db.sales,
+            _db.products,
+            _db.productVariants,
+            _db.productCategories,
+            _db.saleReturnItems,
+            _db.saleReturns,
+            _db.saleReturnAdjustmentItems,
+            _db.saleReturnAdjustments,
+          },
+        )
+        .get();
 
     return rows.map((row) {
       final revenue = row.read<int>('total_revenue_cents');
@@ -439,8 +513,9 @@ class ProfitReportsBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT
         category_id,
         MAX(category_name) AS category_name,
@@ -456,15 +531,15 @@ class ProfitReportsBloc
           COALESCE(pc.name, 'Uncategorized') AS category_name,
           pr.id AS product_id,
           si.quantity AS qty,
-          si.total_cents AS revenue_cents,
-          COALESCE(si.cost_cents, pv.cost_cents, pr.cost_cents) * si.quantity AS cost_cents,
+          (si.total_cents - si.tax_cents) AS revenue_cents,
+          $_saleCostSql AS cost_cents,
           ('S' || s.id) AS tx_key
         FROM sale_items si
         INNER JOIN sales s ON s.id = si.sale_id
         INNER JOIN products pr ON pr.id = si.product_id
         LEFT JOIN product_variants pv ON pv.id = si.variant_id
         LEFT JOIN product_categories pc ON pc.id = pr.category_id
-        WHERE s.status NOT IN ('voided', 'draft')
+        WHERE s.status = 'completed'
           AND s.sale_date >= ? AND s.sale_date <= ?
 
         UNION ALL
@@ -475,8 +550,8 @@ class ProfitReportsBloc
           COALESCE(pc.name, 'Uncategorized'),
           pr.id,
           -sri.quantity,
-          -sri.refund_cents,
-          -(COALESCE(si.cost_cents, pv.cost_cents, pr.cost_cents) * sri.quantity),
+          -(sri.refund_cents - sri.tax_cents),
+          -($_linkedReturnCostSql),
           ('LR' || sr.id)
         FROM sale_return_items sri
         INNER JOIN sale_returns sr ON sr.id = sri.return_id
@@ -484,7 +559,7 @@ class ProfitReportsBloc
         INNER JOIN products pr ON pr.id = si.product_id
         LEFT JOIN product_variants pv ON pv.id = si.variant_id
         LEFT JOIN product_categories pc ON pc.id = pr.category_id
-        WHERE sr.status NOT IN ('voided', 'draft')
+        WHERE sr.status = 'posted'
           AND sr.return_date >= ? AND sr.return_date <= ?
 
         UNION ALL
@@ -495,30 +570,40 @@ class ProfitReportsBloc
           COALESCE(pc.name, 'Uncategorized'),
           pr.id,
           -srai.quantity,
-          -srai.total_cents,
-          -(srai.unit_cost_cents * srai.quantity),
+          -(srai.total_cents - srai.tax_cents),
+          -($_adjustmentReturnCostSql),
           ('AR' || sra.id)
         FROM sale_return_adjustment_items srai
         INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id
         INNER JOIN products pr ON pr.id = srai.product_id
         LEFT JOIN product_categories pc ON pc.id = pr.category_id
-        WHERE sra.status NOT IN ('voided', 'draft')
+        WHERE sra.status = 'posted'
           AND sra.return_date >= ? AND sra.return_date <= ?
       ) u
       GROUP BY category_id
       ORDER BY (SUM(revenue_cents) - SUM(cost_cents)) DESC
       ''',
-      variables: [
-        Variable.withString(startIso), Variable.withString(endIso),
-        Variable.withString(startIso), Variable.withString(endIso),
-        Variable.withString(startIso), Variable.withString(endIso),
-      ],
-      readsFrom: {
-        _db.saleItems, _db.sales, _db.products, _db.productVariants, _db.productCategories,
-        _db.saleReturnItems, _db.saleReturns,
-        _db.saleReturnAdjustmentItems, _db.saleReturnAdjustments,
-      },
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.saleItems,
+            _db.sales,
+            _db.products,
+            _db.productVariants,
+            _db.productCategories,
+            _db.saleReturnItems,
+            _db.saleReturns,
+            _db.saleReturnAdjustmentItems,
+            _db.saleReturnAdjustments,
+          },
+        )
+        .get();
 
     return rows.map((row) {
       final revenue = row.read<int>('total_revenue_cents');
@@ -549,8 +634,9 @@ class ProfitReportsBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT
         customer_id,
         MAX(customer_name) AS customer_name,
@@ -562,15 +648,15 @@ class ProfitReportsBloc
         SELECT
           COALESCE(c.id, 0) AS customer_id,
           COALESCE(c.name, 'Walk-in') AS customer_name,
-          si.total_cents AS revenue_cents,
-          COALESCE(si.cost_cents, pv.cost_cents, pr.cost_cents) * si.quantity AS cost_cents,
+          (si.total_cents - si.tax_cents) AS revenue_cents,
+          $_saleCostSql AS cost_cents,
           ('S' || s.id) AS tx_key
         FROM sale_items si
         INNER JOIN sales s ON s.id = si.sale_id
         INNER JOIN products pr ON pr.id = si.product_id
         LEFT JOIN product_variants pv ON pv.id = si.variant_id
         LEFT JOIN customers c ON c.id = s.customer_id
-        WHERE s.status NOT IN ('voided', 'draft')
+        WHERE s.status = 'completed'
           AND s.sale_date >= ? AND s.sale_date <= ?
 
         UNION ALL
@@ -579,8 +665,8 @@ class ProfitReportsBloc
         SELECT
           COALESCE(c.id, 0),
           COALESCE(c.name, 'Walk-in'),
-          -sri.refund_cents,
-          -(COALESCE(si.cost_cents, pv.cost_cents, pr.cost_cents) * sri.quantity),
+          -(sri.refund_cents - sri.tax_cents),
+          -($_linkedReturnCostSql),
           ('LR' || sr.id)
         FROM sale_return_items sri
         INNER JOIN sale_returns sr ON sr.id = sri.return_id
@@ -589,7 +675,7 @@ class ProfitReportsBloc
         INNER JOIN products pr ON pr.id = si.product_id
         LEFT JOIN product_variants pv ON pv.id = si.variant_id
         LEFT JOIN customers c ON c.id = s.customer_id
-        WHERE sr.status NOT IN ('voided', 'draft')
+        WHERE sr.status = 'posted'
           AND sr.return_date >= ? AND sr.return_date <= ?
 
         UNION ALL
@@ -598,29 +684,40 @@ class ProfitReportsBloc
         SELECT
           COALESCE(c.id, 0),
           COALESCE(c.name, 'Walk-in'),
-          -srai.total_cents,
-          -(srai.unit_cost_cents * srai.quantity),
+          -(srai.total_cents - srai.tax_cents),
+          -($_adjustmentReturnCostSql),
           ('AR' || sra.id)
         FROM sale_return_adjustment_items srai
         INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id
+        INNER JOIN products pr ON pr.id = srai.product_id
         LEFT JOIN customers c ON c.id = sra.customer_id
-        WHERE sra.status NOT IN ('voided', 'draft')
+        WHERE sra.status = 'posted'
           AND sra.return_date >= ? AND sra.return_date <= ?
       ) u
       GROUP BY customer_id
       ORDER BY (SUM(revenue_cents) - SUM(cost_cents)) DESC
       ''',
-      variables: [
-        Variable.withString(startIso), Variable.withString(endIso),
-        Variable.withString(startIso), Variable.withString(endIso),
-        Variable.withString(startIso), Variable.withString(endIso),
-      ],
-      readsFrom: {
-        _db.saleItems, _db.sales, _db.products, _db.productVariants, _db.customers,
-        _db.saleReturnItems, _db.saleReturns,
-        _db.saleReturnAdjustmentItems, _db.saleReturnAdjustments,
-      },
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.saleItems,
+            _db.sales,
+            _db.products,
+            _db.productVariants,
+            _db.customers,
+            _db.saleReturnItems,
+            _db.saleReturns,
+            _db.saleReturnAdjustmentItems,
+            _db.saleReturnAdjustments,
+          },
+        )
+        .get();
 
     return rows.map((row) {
       final revenue = row.read<int>('total_revenue_cents');
@@ -641,71 +738,59 @@ class ProfitReportsBloc
     }).toList();
   }
 
-  /// Profit by invoice — net of linked + adjustment returns.
+  /// Profit by document for the selected accounting period.
   ///
-  /// Display rules (match journal entries):
-  /// - Each sale appears as ONE row with revenue/cost reduced by its linked returns
-  ///   (aggregated per sale_id to prevent any row duplication).
-  /// - Each adjustment return appears as its OWN independent negative row
-  ///   (not joined to any sale; its return_number is shown as the invoice identifier,
-  ///   its saleId is the negative of the SRA id so rows remain uniquely keyed).
+  /// Sales, linked returns, and adjustment returns are independent rows dated
+  /// by their own posting document. Netted-in-place linked returns are wrong
+  /// across period boundaries: a return this month for a sale last month would
+  /// disappear because the parent sale is outside the filter.
   Future<List<ProfitByInvoiceItem>> _loadByInvoice() async {
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    // (A) Sales netted by their linked returns.
-    final saleRows = await _db.customSelect(
-      '''
+    // (A) Completed sales in the period.
+    final saleRows = await _db
+        .customSelect(
+          '''
       SELECT
         s.id AS sale_id,
         s.invoice_number,
         c.name AS customer_name,
-        (s.total_cents - COALESCE(lr.refund_cents, 0)) AS revenue_cents,
-        (s.discount_cents - COALESCE(lr.discount_cents, 0)) AS discount_cents,
+        (s.total_cents - s.tax_cents) AS revenue_cents,
+        s.discount_cents AS discount_cents,
         s.sale_date,
         s.payment_method,
-        (COALESCE(cost_q.total_cost, 0) - COALESCE(lr.cost_reversal, 0)) AS cost_cents
+        COALESCE(cost_q.total_cost, 0) AS cost_cents
       FROM sales s
       LEFT JOIN customers c ON c.id = s.customer_id
       LEFT JOIN (
         SELECT
           si.sale_id,
-          SUM(COALESCE(si.cost_cents, pv.cost_cents, pr.cost_cents) * si.quantity) AS total_cost
+          SUM($_saleCostSql) AS total_cost
         FROM sale_items si
         INNER JOIN products pr ON pr.id = si.product_id
         LEFT JOIN product_variants pv ON pv.id = si.variant_id
         GROUP BY si.sale_id
       ) cost_q ON cost_q.sale_id = s.id
-      LEFT JOIN (
-        -- Aggregate linked returns per parent sale (posted returns within range)
-        SELECT
-          sr.sale_id,
-          SUM(sri.refund_cents) AS refund_cents,
-          SUM(sri.discount_cents) AS discount_cents,
-          SUM(COALESCE(si.cost_cents, pv.cost_cents, pr.cost_cents) * sri.quantity) AS cost_reversal
-        FROM sale_return_items sri
-        INNER JOIN sale_returns sr ON sr.id = sri.return_id
-        INNER JOIN sale_items si ON si.id = sri.sale_item_id
-        INNER JOIN products pr ON pr.id = si.product_id
-        LEFT JOIN product_variants pv ON pv.id = si.variant_id
-        WHERE sr.status NOT IN ('voided', 'draft')
-          AND sr.return_date >= ? AND sr.return_date <= ?
-        GROUP BY sr.sale_id
-      ) lr ON lr.sale_id = s.id
-      WHERE s.status NOT IN ('voided', 'draft')
+      WHERE s.status = 'completed'
         AND s.sale_date >= ? AND s.sale_date <= ?
-      ORDER BY ((s.total_cents - COALESCE(lr.refund_cents, 0))
-               - (COALESCE(cost_q.total_cost, 0) - COALESCE(lr.cost_reversal, 0))) DESC
+      ORDER BY ((s.total_cents - s.tax_cents)
+               - COALESCE(cost_q.total_cost, 0)) DESC
       ''',
-      variables: [
-        Variable.withString(startIso), Variable.withString(endIso),
-        Variable.withString(startIso), Variable.withString(endIso),
-      ],
-      readsFrom: {
-        _db.sales, _db.customers, _db.saleItems, _db.products, _db.productVariants,
-        _db.saleReturnItems, _db.saleReturns,
-      },
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.sales,
+            _db.customers,
+            _db.saleItems,
+            _db.products,
+            _db.productVariants,
+            _db.batchConsumptions,
+          },
+        )
+        .get();
 
     final results = saleRows.map((row) {
       final revenue = row.read<int>('revenue_cents');
@@ -728,58 +813,132 @@ class ProfitReportsBloc
       );
     }).toList();
 
-    // (B) Adjustment returns as independent negative rows (no join to sales).
-    final adjRows = await _db.customSelect(
-      '''
+    // (B) Posted linked returns in the period, even if the parent sale was in
+    // another period. The large negative key cannot collide with sale or SRA.
+    final linkedRows = await _db
+        .customSelect(
+          '''
+      SELECT
+        sr.id AS sr_id,
+        sr.return_number,
+        c.name AS customer_name,
+        -SUM(sri.refund_cents - sri.tax_cents) AS revenue_cents,
+        -SUM(sri.discount_cents) AS discount_cents,
+        -SUM($_linkedReturnCostSql) AS cost_cents,
+        sr.return_date,
+        sr.refund_method
+      FROM sale_returns sr
+      INNER JOIN sale_return_items sri ON sri.return_id = sr.id
+      INNER JOIN sale_items si ON si.id = sri.sale_item_id
+      INNER JOIN products pr ON pr.id = si.product_id
+      LEFT JOIN product_variants pv ON pv.id = si.variant_id
+      INNER JOIN sales s ON s.id = sr.sale_id
+      LEFT JOIN customers c ON c.id = s.customer_id
+      WHERE sr.status = 'posted'
+        AND sr.return_date >= ? AND sr.return_date <= ?
+      GROUP BY sr.id
+      ''',
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.saleReturns,
+            _db.saleReturnItems,
+            _db.saleItems,
+            _db.sales,
+            _db.products,
+            _db.productVariants,
+            _db.customers,
+            _db.batchConsumptions,
+          },
+        )
+        .get();
+
+    for (final row in linkedRows) {
+      final revenue = row.read<int>('revenue_cents');
+      final cost = row.read<int>('cost_cents');
+      final profit = revenue - cost;
+      results.add(
+        ProfitByInvoiceItem(
+          saleId: -(1000000000 + row.read<int>('sr_id')),
+          invoiceNumber: row.read<String>('return_number'),
+          customerName: row.readNullable<String>('customer_name'),
+          revenueCents: revenue,
+          costCents: cost,
+          profitCents: profit,
+          discountCents: row.read<int>('discount_cents'),
+          profitMarginPercent: RatioHelper.percent(
+            numeratorCents: profit,
+            denominatorCents: revenue,
+          ),
+          saleDate: DateTime.parse(row.read<String>('return_date')),
+          paymentMethod: row.read<String>('refund_method'),
+        ),
+      );
+    }
+
+    // (C) Posted adjustment returns as independent negative rows.
+    final adjRows = await _db
+        .customSelect(
+          '''
       SELECT
         sra.id AS sra_id,
         sra.return_number,
         c.name AS customer_name,
-        -SUM(srai.total_cents) AS revenue_cents,
+        -SUM(srai.total_cents - srai.tax_cents) AS revenue_cents,
         -SUM(srai.discount_cents) AS discount_cents,
-        -SUM(srai.unit_cost_cents * srai.quantity) AS cost_cents,
+        -SUM($_adjustmentReturnCostSql) AS cost_cents,
         sra.return_date,
         sra.refund_method
       FROM sale_return_adjustments sra
       INNER JOIN sale_return_adjustment_items srai ON srai.return_id = sra.id
+      INNER JOIN products pr ON pr.id = srai.product_id
       LEFT JOIN customers c ON c.id = sra.customer_id
-      WHERE sra.status NOT IN ('voided', 'draft')
+      WHERE sra.status = 'posted'
         AND sra.return_date >= ? AND sra.return_date <= ?
       GROUP BY sra.id
-      ORDER BY (SUM(srai.total_cents) - SUM(srai.unit_cost_cents * srai.quantity)) ASC
       ''',
-      variables: [
-        Variable.withString(startIso), Variable.withString(endIso),
-      ],
-      readsFrom: {
-        _db.saleReturnAdjustments, _db.saleReturnAdjustmentItems, _db.customers,
-      },
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.saleReturnAdjustments,
+            _db.saleReturnAdjustmentItems,
+            _db.products,
+            _db.customers,
+          },
+        )
+        .get();
 
     for (final row in adjRows) {
       final revenue = row.read<int>('revenue_cents');
       final cost = row.read<int>('cost_cents');
       final profit = revenue - cost;
-      results.add(ProfitByInvoiceItem(
-        // Use negative id so SRA rows never collide with real sale ids downstream.
-        saleId: -row.read<int>('sra_id'),
-        invoiceNumber: row.read<String>('return_number'),
-        customerName: row.readNullable<String>('customer_name'),
-        revenueCents: revenue,
-        costCents: cost,
-        profitCents: profit,
-        discountCents: row.read<int>('discount_cents'),
-        // Margin via SoT — RatioHelper.percent treats `denom == 0` as 0.0
-        // (display-safe). Negative revenue (pure return rows) is preserved.
-        profitMarginPercent: RatioHelper.percent(
-          numeratorCents: profit,
-          denominatorCents: revenue,
+      results.add(
+        ProfitByInvoiceItem(
+          // Use negative id so SRA rows never collide with real sale ids downstream.
+          saleId: -row.read<int>('sra_id'),
+          invoiceNumber: row.read<String>('return_number'),
+          customerName: row.readNullable<String>('customer_name'),
+          revenueCents: revenue,
+          costCents: cost,
+          profitCents: profit,
+          discountCents: row.read<int>('discount_cents'),
+          // Margin via SoT — RatioHelper.percent treats `denom == 0` as 0.0
+          // (display-safe). Negative revenue (pure return rows) is preserved.
+          profitMarginPercent: RatioHelper.percent(
+            numeratorCents: profit,
+            denominatorCents: revenue,
+          ),
+          saleDate: DateTime.parse(row.read<String>('return_date')),
+          paymentMethod: row.read<String>('refund_method'),
         ),
-        saleDate: DateTime.parse(row.read<String>('return_date')),
-        paymentMethod: row.read<String>('refund_method'),
-      ));
+      );
     }
 
+    results.sort((a, b) => b.profitCents.compareTo(a.profitCents));
     return results;
   }
 }

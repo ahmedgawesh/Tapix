@@ -14,10 +14,7 @@ import '../bloc/categories_event.dart';
 class CategoriesScreen extends StatelessWidget {
   final bool isPicker;
 
-  const CategoriesScreen({
-    super.key,
-    this.isPicker = false,
-  });
+  const CategoriesScreen({super.key, this.isPicker = false});
 
   @override
   Widget build(BuildContext context) {
@@ -69,8 +66,14 @@ class _CategoriesViewState extends State<_CategoriesView> {
       builder: (dialogContext) => AlertDialog(
         title: Text('categories.delete_confirm_title'.tr()),
         content: productCount > 0
-            ? Text('categories.delete_with_products'.tr(args: [productCount.toString()]))
-            : Text('categories.delete_confirm_message'.tr(args: [category.name])),
+            ? Text(
+                'categories.delete_with_products'.tr(
+                  args: [productCount.toString()],
+                ),
+              )
+            : Text(
+                'categories.delete_confirm_message'.tr(args: [category.name]),
+              ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
@@ -96,7 +99,9 @@ class _CategoriesViewState extends State<_CategoriesView> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final isDesktop = MediaQuery.of(context).size.width >= 1024;
-    final isTablet = MediaQuery.of(context).size.width >= 600 && MediaQuery.of(context).size.width < 1024;
+    final isTablet =
+        MediaQuery.of(context).size.width >= 600 &&
+        MediaQuery.of(context).size.width < 1024;
 
     return Scaffold(
       appBar: AppBar(
@@ -138,104 +143,114 @@ class _CategoriesViewState extends State<_CategoriesView> {
               ),
             ),
             Expanded(
-              child: BlocConsumer<CategoriesBloc, RealtimeState<List<Category>>>(
-                listener: (context, state) {
-                  if (state is RealtimeError<List<Category>>) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(state.error.toString()),
-                        backgroundColor: colorScheme.error,
-                      ),
-                    );
-                  }
-                },
-                builder: (context, state) {
-                  if (state is RealtimeLoading) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  if (state is RealtimeError<List<Category>>) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            LucideIcons.alertCircle,
-                            size: 64,
-                            color: colorScheme.error,
+              child:
+                  BlocConsumer<CategoriesBloc, RealtimeState<List<Category>>>(
+                    listener: (context, state) {
+                      if (state is RealtimeError<List<Category>>) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(state.error.toString()),
+                            backgroundColor: colorScheme.error,
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'categories.error_loading'.tr(),
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            state.error.toString(),
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: colorScheme.onSurface.withValues(alpha: 0.6),
-                                ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  List<Category>? categories;
-                  if (state is RealtimeSuccess<List<Category>>) {
-                    categories = state.data;
-                  } else if (state is RealtimeOptimistic<List<Category>>) {
-                    categories = state.optimisticData;
-                  }
-
-                  if (categories == null || categories.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            LucideIcons.folderOpen,
-                            size: 64,
-                            color: colorScheme.onSurface.withValues(alpha: 0.3),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'categories.no_categories'.tr(),
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'categories.add_first_category'.tr(),
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: colorScheme.onSurface.withValues(alpha: 0.6),
-                                ),
-                          ),
-                          const SizedBox(height: 24),
-                          FilledButton.icon(
-                            onPressed: () => context.push('/products/categories/new'),
-                            icon: const Icon(LucideIcons.plus),
-                            label: Text('categories.add_category'.tr()),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  _loadProductCounts(categories);
-
-                  return LayoutBuilder(
-                    builder: (context, constraints) {
-                      if (isDesktop) {
-                        return _buildDesktopGrid(context, categories!);
-                      } else if (isTablet) {
-                        return _buildTabletGrid(context, categories!);
-                      } else {
-                        return _buildMobileList(context, categories!);
+                        );
                       }
                     },
-                  );
-                },
-              ),
+                    builder: (context, state) {
+                      if (state is RealtimeLoading) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      if (state is RealtimeError<List<Category>>) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                LucideIcons.alertCircle,
+                                size: 64,
+                                color: colorScheme.error,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'categories.error_loading'.tr(),
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                state.error.toString(),
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: colorScheme.onSurface.withValues(
+                                        alpha: 0.6,
+                                      ),
+                                    ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      List<Category>? categories;
+                      if (state is RealtimeSuccess<List<Category>>) {
+                        categories = state.data;
+                      } else if (state is RealtimeOptimistic<List<Category>>) {
+                        categories = state.optimisticData;
+                      }
+
+                      if (categories == null || categories.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                LucideIcons.folderOpen,
+                                size: 64,
+                                color: colorScheme.onSurface.withValues(
+                                  alpha: 0.3,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'categories.no_categories'.tr(),
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'categories.add_first_category'.tr(),
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: colorScheme.onSurface.withValues(
+                                        alpha: 0.6,
+                                      ),
+                                    ),
+                              ),
+                              const SizedBox(height: 24),
+                              FilledButton.icon(
+                                onPressed: () =>
+                                    context.push('/products/categories/new'),
+                                icon: const Icon(LucideIcons.plus),
+                                label: Text('categories.add_category'.tr()),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      _loadProductCounts(categories);
+
+                      return LayoutBuilder(
+                        builder: (context, constraints) {
+                          if (isDesktop) {
+                            return _buildDesktopGrid(context, categories!);
+                          } else if (isTablet) {
+                            return _buildTabletGrid(context, categories!);
+                          } else {
+                            return _buildMobileList(context, categories!);
+                          }
+                        },
+                      );
+                    },
+                  ),
             ),
           ],
         ),
@@ -296,9 +311,7 @@ class _CategoriesViewState extends State<_CategoriesView> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: colorScheme.outline.withValues(alpha: 0.2),
-        ),
+        side: BorderSide(color: colorScheme.outline.withValues(alpha: 0.2)),
       ),
       child: InkWell(
         onTap: () {
@@ -334,26 +347,29 @@ class _CategoriesViewState extends State<_CategoriesView> {
                     MarqueeText(
                       text: category.name,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                        fontWeight: FontWeight.w600,
+                      ),
                       maxLines: 1,
                     ),
-                    if (category.description != null && category.description!.isNotEmpty) ...[
+                    if (category.description != null &&
+                        category.description!.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       MarqueeText(
                         text: category.description!,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurface.withValues(alpha: 0.6),
-                            ),
+                          color: colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
                         maxLines: 1,
                       ),
                     ],
                     const SizedBox(height: 4),
                     Text(
-                      'categories.product_count'.tr(args: [productCount.toString()]),
+                      'categories.product_count'.tr(
+                        args: [productCount.toString()],
+                      ),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: colorScheme.primary,
-                          ),
+                        color: colorScheme.primary,
+                      ),
                     ),
                   ],
                 ),
@@ -375,7 +391,11 @@ class _CategoriesViewState extends State<_CategoriesView> {
                     value: 'delete',
                     child: Row(
                       children: [
-                        Icon(LucideIcons.trash2, size: 18, color: colorScheme.error),
+                        Icon(
+                          LucideIcons.trash2,
+                          size: 18,
+                          color: colorScheme.error,
+                        ),
                         const SizedBox(width: 12),
                         Text(
                           'common.delete'.tr(),
@@ -401,4 +421,3 @@ class _CategoriesViewState extends State<_CategoriesView> {
     );
   }
 }
-

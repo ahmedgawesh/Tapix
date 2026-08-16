@@ -125,6 +125,57 @@ void main() {
         6250,
       );
     });
+
+    test(
+      'voiding inbound return removes its frozen value from current WAC',
+      () {
+        // Current pool: 10 @ 150. Remove a previously returned unit whose
+        // frozen cost was 100:
+        //   (10×150 - 1×100) / 9 = 155.56 -> 156.
+        expect(
+          ProductCostService.resolveRemovalCostForTest(
+            beforeQty: 10,
+            beforeCostCents: 150,
+            removedQty: 1,
+            removedUnitCostCents: 100,
+          ),
+          156,
+        );
+      },
+    );
+
+    test('inbound return followed by immediate void restores prior WAC', () {
+      final afterReturn = ProductCostService.resolvePurchaseCostForTest(
+        beforeQty: 10,
+        beforeCostCents: 150,
+        addedQty: 2,
+        newPaidCostCents: 100,
+        costingMethod: ProductCostService.methodWac,
+      );
+      expect(afterReturn, 142);
+
+      expect(
+        ProductCostService.resolveRemovalCostForTest(
+          beforeQty: 12,
+          beforeCostCents: afterReturn,
+          removedQty: 2,
+          removedUnitCostCents: 100,
+        ),
+        150,
+      );
+    });
+
+    test('removing all returned stock keeps last visible cost', () {
+      expect(
+        ProductCostService.resolveRemovalCostForTest(
+          beforeQty: 2,
+          beforeCostCents: 100,
+          removedQty: 2,
+          removedUnitCostCents: 100,
+        ),
+        100,
+      );
+    });
   });
 
   group('ProductCostService — FIFO / last-cost math', () {
@@ -194,9 +245,9 @@ void main() {
       dao = PurchaseDao(db);
       await db.customSelect('SELECT 1').get(); // triggers beforeOpen seeds
 
-      final usd = await (db.select(db.currencies)
-            ..where((c) => c.code.equals('USD')))
-          .getSingle();
+      final usd = await (db.select(
+        db.currencies,
+      )..where((c) => c.code.equals('USD'))).getSingle();
       currencyId = usd.id;
     });
 
@@ -215,34 +266,40 @@ void main() {
       List<({int cost, int stock})> variants, {
       String costingMethod = 'wac',
     }) async {
-      final productId = await db.into(db.products).insert(
-        ProductsCompanion.insert(
-          name: 'Test Product ${DateTime.now().microsecondsSinceEpoch}',
-          costCents: Decimal.fromInt(0),
-          priceCents: Decimal.fromInt(0),
-          currencyId: Value(currencyId),
-          hasVariants: const Value(true),
-          costingMethod: Value(costingMethod),
-        ),
-      );
+      final productId = await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              name: 'Test Product ${DateTime.now().microsecondsSinceEpoch}',
+              costCents: Decimal.fromInt(0),
+              priceCents: Decimal.fromInt(0),
+              currencyId: Value(currencyId),
+              hasVariants: const Value(true),
+              costingMethod: Value(costingMethod),
+            ),
+          );
       for (var i = 0; i < variants.length; i++) {
-        final colorId = await db.into(db.productColors).insert(
-          ProductColorsCompanion.insert(
-            name: 'Color-$productId-$i',
-            hexCode: const Value('#000000'),
-          ),
-        );
-        await db.into(db.productVariants).insert(
-          ProductVariantsCompanion.insert(
-            productId: productId,
-            sku: Value('V-$productId-$i'),
-            colorId: Value(colorId),
-            costCents: Decimal.fromInt(variants[i].cost),
-            priceCents: Decimal.fromInt(0),
-            stockQuantity: Value(variants[i].stock),
-            isActive: const Value(true),
-          ),
-        );
+        final colorId = await db
+            .into(db.productColors)
+            .insert(
+              ProductColorsCompanion.insert(
+                name: 'Color-$productId-$i',
+                hexCode: const Value('#000000'),
+              ),
+            );
+        await db
+            .into(db.productVariants)
+            .insert(
+              ProductVariantsCompanion.insert(
+                productId: productId,
+                sku: Value('V-$productId-$i'),
+                colorId: Value(colorId),
+                costCents: Decimal.fromInt(variants[i].cost),
+                priceCents: Decimal.fromInt(0),
+                stockQuantity: Value(variants[i].stock),
+                isActive: const Value(true),
+              ),
+            );
       }
       return productId;
     }
@@ -262,14 +319,11 @@ void main() {
           (cost: 6500, stock: 1),
         ]);
 
-        await ProductCostService.syncProductFromVariants(
-          dao,
-          productId: pid,
-        );
+        await ProductCostService.syncProductFromVariants(dao, productId: pid);
 
-        final row = await (db.select(db.products)
-              ..where((p) => p.id.equals(pid)))
-            .getSingle();
+        final row = await (db.select(
+          db.products,
+        )..where((p) => p.id.equals(pid))).getSingle();
 
         expect(
           row.costCents.toBigInt().toInt(),
@@ -292,14 +346,11 @@ void main() {
           (cost: 9999, stock: 1),
         ]);
 
-        await ProductCostService.syncProductFromVariants(
-          dao,
-          productId: pid,
-        );
+        await ProductCostService.syncProductFromVariants(dao, productId: pid);
 
-        final row = await (db.select(db.products)
-              ..where((p) => p.id.equals(pid)))
-            .getSingle();
+        final row = await (db.select(
+          db.products,
+        )..where((p) => p.id.equals(pid))).getSingle();
 
         expect(row.costCents.toBigInt().toInt(), 5454);
         expect(row.stockQuantity, 11);
@@ -320,14 +371,11 @@ void main() {
           (cost: 7000, stock: 0),
         ]);
 
-        await ProductCostService.syncProductFromVariants(
-          dao,
-          productId: pid,
-        );
+        await ProductCostService.syncProductFromVariants(dao, productId: pid);
 
-        final row = await (db.select(db.products)
-              ..where((p) => p.id.equals(pid)))
-            .getSingle();
+        final row = await (db.select(
+          db.products,
+        )..where((p) => p.id.equals(pid))).getSingle();
 
         expect(row.costCents.toBigInt().toInt(), 6000);
         expect(row.stockQuantity, 0);
@@ -353,14 +401,11 @@ void main() {
         updateKind: UpdateKind.update,
       );
 
-      await ProductCostService.syncProductFromVariants(
-        dao,
-        productId: pid,
-      );
+      await ProductCostService.syncProductFromVariants(dao, productId: pid);
 
-      final row = await (db.select(db.products)
-            ..where((p) => p.id.equals(pid)))
-          .getSingle();
+      final row = await (db.select(
+        db.products,
+      )..where((p) => p.id.equals(pid))).getSingle();
 
       expect(row.costCents.toBigInt().toInt(), 5000);
       expect(row.stockQuantity, 10);
@@ -383,9 +428,9 @@ void main() {
         syncCost: false,
       );
 
-      final row = await (db.select(db.products)
-            ..where((p) => p.id.equals(pid)))
-          .getSingle();
+      final row = await (db.select(
+        db.products,
+      )..where((p) => p.id.equals(pid))).getSingle();
 
       expect(row.costCents.toBigInt().toInt(), 12345);
       // Stock WAS synced (default true), so this also serves as an

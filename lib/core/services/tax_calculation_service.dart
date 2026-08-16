@@ -80,7 +80,8 @@ class LineItemTaxResult {
   /// The tax rate (bps) that was actually used for this item.
   final int taxRateBps;
 
-  /// subtotal − discount + tax.
+  /// For exclusive pricing: subtotal − discount + tax.
+  /// For inclusive pricing: subtotal − discount (tax is already included).
   final Decimal totalCents;
 
   const LineItemTaxResult({
@@ -105,7 +106,8 @@ class InvoiceTaxBreakdown {
   final Decimal totalDiscountCents;
   final Decimal totalTaxCents;
 
-  /// subtotal − discount + tax.
+  /// For exclusive pricing: subtotal − discount + tax.
+  /// For inclusive pricing: subtotal − discount (tax is already included).
   final Decimal totalCents;
   final List<LineItemTaxResult> lineItems;
 
@@ -282,17 +284,33 @@ class TaxCalculationService {
   /// Determine which tax rate (bps) to use for a given item.
   ///
   /// Priority:
-  /// 1. Product's own rate if [isTaxable] **and** rate > 0.
-  /// 2. Otherwise the global [defaultTaxRateBps].
-  /// 3. 0 if neither applies.
+  /// 1. `0` when [isTaxable] is false. A product explicitly marked as
+  ///    non-taxable must never inherit the global default rate.
+  /// 2. The product rate when it is greater than zero.
+  /// 3. Otherwise the global [defaultTaxRateBps].
+  /// 4. `0` if neither rate applies.
   static int resolveLineItemTaxRateBps({
     required bool isTaxable,
     required int productTaxRateBps,
     required int defaultTaxRateBps,
   }) {
-    if (isTaxable && productTaxRateBps > 0) return productTaxRateBps;
+    if (!isTaxable) return 0;
+    if (productTaxRateBps > 0) return productTaxRateBps;
     if (defaultTaxRateBps > 0) return defaultTaxRateBps;
     return 0;
+  }
+
+  /// Compose the payable total from the discounted amount and its tax.
+  ///
+  /// With tax-exclusive prices, tax is added to the discounted amount.
+  /// With tax-inclusive prices, [netCents] already contains the extracted
+  /// tax, so adding [taxCents] again would double-count it.
+  static Decimal composeTotal({
+    required Decimal netCents,
+    required Decimal taxCents,
+    required bool taxInclusivePricing,
+  }) {
+    return taxInclusivePricing ? netCents : netCents + taxCents;
   }
 
   /// Phase 7 — Recover an effective tax rate in basis points from a posted
@@ -336,7 +354,11 @@ class TaxCalculationService {
 
   /// Validate discount does not exceed subtotal (except for returns where
   /// subtotal may be negative).
-  static void _validateDiscount(Decimal discount, Decimal subtotal, [String context = '']) {
+  static void _validateDiscount(
+    Decimal discount,
+    Decimal subtotal, [
+    String context = '',
+  ]) {
     if (discount < Decimal.zero) {
       throw TaxValidationException(
         'Discount must be non-negative, got $discount${context.isNotEmpty ? ' ($context)' : ''}',
@@ -378,7 +400,9 @@ class TaxCalculationService {
 
     // ── Negative symmetry: tax(-X) = -tax(abs(X)) ──
     final bool isNegative = taxableAmountCents < Decimal.zero;
-    final Decimal absAmount = isNegative ? -taxableAmountCents : taxableAmountCents;
+    final Decimal absAmount = isNegative
+        ? -taxableAmountCents
+        : taxableAmountCents;
 
     final rate = Decimal.fromInt(taxRateBps);
     Decimal tax;
@@ -386,14 +410,16 @@ class TaxCalculationService {
     if (taxInclusivePricing) {
       // Tax = Amount − Amount / (1 + Rate/10000)
       final divisor = _bpsDivisor + rate;
-      final preTaxDec = ((absAmount * _bpsDivisor) / divisor)
-          .toDecimal(scaleOnInfinitePrecision: 10);
+      final preTaxDec = ((absAmount * _bpsDivisor) / divisor).toDecimal(
+        scaleOnInfinitePrecision: 10,
+      );
       final preTax = Decimal.fromBigInt(_roundDecimal(preTaxDec, roundingMode));
       tax = absAmount - preTax;
     } else {
       // Tax = Amount × Rate / 10000
-      final rawDec = (absAmount * rate / _bpsDivisor)
-          .toDecimal(scaleOnInfinitePrecision: 10);
+      final rawDec = (absAmount * rate / _bpsDivisor).toDecimal(
+        scaleOnInfinitePrecision: 10,
+      );
       tax = Decimal.fromBigInt(_roundDecimal(rawDec, roundingMode));
     }
 
@@ -479,7 +505,8 @@ class TaxCalculationService {
   /// 3. Taxable amount per item = subtotal − discount
   /// 4. Tax per item = calculateTax(taxable, rate, inclusive)
   /// 5. Total tax = Σ item tax
-  /// 6. Total = subtotal − discount + tax
+  /// 6. Total = subtotal − discount + tax (exclusive), or
+  ///    subtotal − discount (inclusive; tax is already inside the price)
   static InvoiceTaxBreakdown calculateInvoiceTax({
     required List<TaxableLineItem> items,
     required Decimal invoiceDiscountCents,
@@ -488,7 +515,10 @@ class TaxCalculationService {
     required bool taxInclusivePricing,
     TaxRoundingMode roundingMode = TaxRoundingMode.halfUp,
   }) {
-    _validateTaxRate(defaultTaxRateBps, 'calculateInvoiceTax.defaultTaxRateBps');
+    _validateTaxRate(
+      defaultTaxRateBps,
+      'calculateInvoiceTax.defaultTaxRateBps',
+    );
 
     if (items.isEmpty) {
       return InvoiceTaxBreakdown(
@@ -511,11 +541,21 @@ class TaxCalculationService {
     List<Decimal> itemDiscounts;
 
     if (useInvoiceDiscount) {
-      _validateDiscount(invoiceDiscountCents, subtotal, 'invoice-level discount');
-      final weights = items.map((i) => i.subtotalCents.toBigInt().toInt()).toList();
+      _validateDiscount(
+        invoiceDiscountCents,
+        subtotal,
+        'invoice-level discount',
+      );
+      final weights = items
+          .map((i) => i.subtotalCents.toBigInt().toInt())
+          .toList();
       final weightSum = subtotal.toBigInt().toInt();
       final discountInt = invoiceDiscountCents.toBigInt().toInt();
-      final distributed = distributeProportionally(discountInt, weights, weightSum);
+      final distributed = distributeProportionally(
+        discountInt,
+        weights,
+        weightSum,
+      );
       itemDiscounts = distributed.map((d) => Decimal.fromInt(d)).toList();
     } else {
       itemDiscounts = items.map((i) => i.itemDiscountCents).toList();
@@ -532,7 +572,11 @@ class TaxCalculationService {
 
       _validateTaxRate(item.productTaxRateBps, 'item[$i].productTaxRateBps');
       if (!useInvoiceDiscount) {
-        _validateDiscount(item.itemDiscountCents, item.subtotalCents, 'item[$i] discount');
+        _validateDiscount(
+          item.itemDiscountCents,
+          item.subtotalCents,
+          'item[$i] discount',
+        );
       }
 
       final discount = itemDiscounts[i];
@@ -560,19 +604,29 @@ class TaxCalculationService {
       totalDiscount += discount;
       totalTax += tax;
 
-      lineResults.add(LineItemTaxResult(
-        subtotalCents: item.subtotalCents,
-        discountCents: discount,
-        taxableAmountCents: taxable,
-        taxCents: tax,
-        taxRateBps: rateBps,
-        totalCents: item.subtotalCents - discount + tax,
-      ));
+      lineResults.add(
+        LineItemTaxResult(
+          subtotalCents: item.subtotalCents,
+          discountCents: discount,
+          taxableAmountCents: taxable,
+          taxCents: tax,
+          taxRateBps: rateBps,
+          totalCents: composeTotal(
+            netCents: taxable,
+            taxCents: tax,
+            taxInclusivePricing: taxInclusivePricing,
+          ),
+        ),
+      );
     }
 
     // ── Step 6: Final total ──
 
-    final total = subtotal - totalDiscount + totalTax;
+    final total = composeTotal(
+      netCents: subtotal - totalDiscount,
+      taxCents: totalTax,
+      taxInclusivePricing: taxInclusivePricing,
+    );
 
     return InvoiceTaxBreakdown(
       subtotalCents: subtotal,
@@ -600,7 +654,10 @@ class TaxCalculationService {
     required bool taxInclusivePricing,
     TaxRoundingMode roundingMode = TaxRoundingMode.halfUp,
   }) {
-    _validateTaxRate(defaultTaxRateBps, 'calculateInvoiceTaxWithAudit.defaultTaxRateBps');
+    _validateTaxRate(
+      defaultTaxRateBps,
+      'calculateInvoiceTaxWithAudit.defaultTaxRateBps',
+    );
 
     // Compute the standard breakdown first
     final breakdown = calculateInvoiceTax(
@@ -627,7 +684,9 @@ class TaxCalculationService {
       if (anyNegSymmetry == false && isNeg) anyNegSymmetry = true;
 
       Decimal rawTax = Decimal.zero;
-      if (enableTaxCalculations && taxable != Decimal.zero && lineResult.taxRateBps > 0) {
+      if (enableTaxCalculations &&
+          taxable != Decimal.zero &&
+          lineResult.taxRateBps > 0) {
         rawTax = _calculateRawTax(
           absAmount: absTaxable,
           taxRateBps: lineResult.taxRateBps,
@@ -639,17 +698,19 @@ class TaxCalculationService {
       final roundingDelta = lineResult.taxCents - rawTax;
       totalRoundingDelta += roundingDelta;
 
-      auditDetails.add(LineItemAuditDetail(
-        index: i,
-        inputSubtotalCents: item.subtotalCents,
-        effectiveDiscountCents: lineResult.discountCents,
-        taxableAmountCents: taxable,
-        resolvedTaxRateBps: lineResult.taxRateBps,
-        rawTaxBeforeRounding: rawTax,
-        finalTaxCents: lineResult.taxCents,
-        roundingDeltaCents: roundingDelta,
-        negativeSymmetryApplied: isNeg,
-      ));
+      auditDetails.add(
+        LineItemAuditDetail(
+          index: i,
+          inputSubtotalCents: item.subtotalCents,
+          effectiveDiscountCents: lineResult.discountCents,
+          taxableAmountCents: taxable,
+          resolvedTaxRateBps: lineResult.taxRateBps,
+          rawTaxBeforeRounding: rawTax,
+          finalTaxCents: lineResult.taxCents,
+          roundingDeltaCents: roundingDelta,
+          negativeSymmetryApplied: isNeg,
+        ),
+      );
     }
 
     return TaxAuditTrail(
@@ -698,5 +759,4 @@ class TaxCalculationService {
     }
     return result;
   }
-
 }

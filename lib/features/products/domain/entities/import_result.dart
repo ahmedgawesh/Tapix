@@ -24,13 +24,13 @@ class ImportResult extends Equatable {
 
   @override
   List<Object?> get props => [
-        totalRows,
-        successfulRows,
-        failedRows,
-        errors,
-        rowToProductId,
-        duration,
-      ];
+    totalRows,
+    successfulRows,
+    failedRows,
+    errors,
+    rowToProductId,
+    duration,
+  ];
 }
 
 class ImportError extends Equatable {
@@ -52,10 +52,7 @@ class ImportError extends Equatable {
   List<Object?> get props => [rowIndex, field, message, severity, rowData];
 }
 
-enum ImportErrorSeverity {
-  error,
-  warning,
-}
+enum ImportErrorSeverity { error, warning }
 
 class ImportProgress extends Equatable {
   final int processedRows;
@@ -71,5 +68,10 @@ class ImportProgress extends Equatable {
   });
 
   @override
-  List<Object?> get props => [processedRows, totalRows, percentage, currentOperation];
+  List<Object?> get props => [
+    processedRows,
+    totalRows,
+    percentage,
+    currentOperation,
+  ];
 }

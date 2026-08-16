@@ -1,5 +1,6 @@
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
+import '../../measurement/measurement.dart';
 import '../app_database.dart';
 import '../tables/transactions.dart';
 import '../tables/parties.dart';
@@ -7,6 +8,9 @@ import '../tables/products.dart';
 import '../../services/stock_service.dart';
 import '../../services/balance_service.dart';
 import '../../services/batch_service.dart';
+import '../../services/inventory/wac_movement_service.dart';
+import '../../services/inventory/inventory_valuation_delta_service.dart';
+import '../../services/document_number_service.dart';
 import '../../services/journal_entry_service.dart';
 import '../../services/commissions/commission_service.dart';
 import '../../services/loyalty/loyalty_points_service.dart';
@@ -151,23 +155,25 @@ class SaleAdjReturnWithParty {
   });
 }
 
-@DriftAccessor(tables: [
-  PurchaseReturnAdjustments,
-  PurchaseReturnAdjustmentItems,
-  SaleReturnAdjustments,
-  SaleReturnAdjustmentItems,
-  Products,
-  ProductVariants,
-  ProductColors,
-  Suppliers,
-  Customers,
-  SupplierTransactions,
-  CustomerTransactions,
-  Sales,
-  SaleItems,
-  Purchases,
-  PurchaseItems,
-])
+@DriftAccessor(
+  tables: [
+    PurchaseReturnAdjustments,
+    PurchaseReturnAdjustmentItems,
+    SaleReturnAdjustments,
+    SaleReturnAdjustmentItems,
+    Products,
+    ProductVariants,
+    ProductColors,
+    Suppliers,
+    Customers,
+    SupplierTransactions,
+    CustomerTransactions,
+    Sales,
+    SaleItems,
+    Purchases,
+    PurchaseItems,
+  ],
+)
 class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     with _$AdjustmentReturnDaoMixin {
   AdjustmentReturnDao(super.db);
@@ -293,21 +299,22 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
   }) async {
     if (customerId == null) return 0;
     final qtyExp = saleItems.quantity.sum();
-    final query = selectOnly(saleItems).join([
-      innerJoin(sales, sales.id.equalsExp(saleItems.saleId)),
-    ])
-      ..addColumns([qtyExp])
-      // 2026-05-13 — exclude voided / draft / pending sales from the cap.
-      // Without this filter the cap counts items from sales that were
-      // either never delivered (draft / pending) or already reversed
-      // (voided), letting an adjustment return ship goods that the party
-      // never actually received. Confirmed in the field via
-      // tapix_backup_20260513_121448.db: $148.50 inventory drift +
-      // $229.97 AR drift after a sale with a posted adjustment return
-      // was voided. Mirror in `getSupplierProductSuppliedQty`.
-      ..where(sales.status.equals('completed'))
-      ..where(sales.customerId.equals(customerId))
-      ..where(saleItems.productId.equals(productId));
+    final query =
+        selectOnly(
+            saleItems,
+          ).join([innerJoin(sales, sales.id.equalsExp(saleItems.saleId))])
+          ..addColumns([qtyExp])
+          // 2026-05-13 — exclude voided / draft / pending sales from the cap.
+          // Without this filter the cap counts items from sales that were
+          // either never delivered (draft / pending) or already reversed
+          // (voided), letting an adjustment return ship goods that the party
+          // never actually received. Confirmed in the field via
+          // tapix_backup_20260513_121448.db: $148.50 inventory drift +
+          // $229.97 AR drift after a sale with a posted adjustment return
+          // was voided. Mirror in `getSupplierProductSuppliedQty`.
+          ..where(sales.status.equals('completed'))
+          ..where(sales.customerId.equals(customerId))
+          ..where(saleItems.productId.equals(productId));
     if (variantId != null) {
       query.where(saleItems.variantId.equals(variantId));
     }
@@ -337,8 +344,9 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     int? variantId,
   }) async {
     if (employeeId == null) return 0;
-    final variantClause =
-        variantId != null ? 'AND si.variant_id = ${variantId.toString()} ' : '';
+    final variantClause = variantId != null
+        ? 'AND si.variant_id = ${variantId.toString()} '
+        : '';
     final row = await customSelect(
       'SELECT COALESCE(SUM(si.quantity), 0) AS c '
       'FROM sale_items si '
@@ -378,16 +386,20 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     int? variantId,
   }) async {
     final qtyExp = purchaseItems.quantity.sum();
-    final query = selectOnly(purchaseItems).join([
-      innerJoin(purchases, purchases.id.equalsExp(purchaseItems.purchaseId)),
-    ])
-      ..addColumns([qtyExp])
-      // 2026-05-13 — symmetric fix to `getCustomerProductPurchasedQty`.
-      // Only `'posted'` purchases physically delivered goods; `'draft'`
-      // and `'voided'` rows must not feed the adjustment-return cap.
-      ..where(purchases.status.equals('posted'))
-      ..where(purchases.supplierId.equals(supplierId))
-      ..where(purchaseItems.productId.equals(productId));
+    final query =
+        selectOnly(purchaseItems).join([
+            innerJoin(
+              purchases,
+              purchases.id.equalsExp(purchaseItems.purchaseId),
+            ),
+          ])
+          ..addColumns([qtyExp])
+          // 2026-05-13 — symmetric fix to `getCustomerProductPurchasedQty`.
+          // Only `'posted'` purchases physically delivered goods; `'draft'`
+          // and `'voided'` rows must not feed the adjustment-return cap.
+          ..where(purchases.status.equals('posted'))
+          ..where(purchases.supplierId.equals(supplierId))
+          ..where(purchaseItems.productId.equals(productId));
     if (variantId != null) {
       query.where(purchaseItems.variantId.equals(variantId));
     }
@@ -410,8 +422,9 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     int? variantId,
   }) async {
     if (customerId == null) return 0;
-    final variantClause =
-        variantId != null ? 'AND si.variant_id = ${variantId.toString()} ' : '';
+    final variantClause = variantId != null
+        ? 'AND si.variant_id = ${variantId.toString()} '
+        : '';
     final row = await customSelect(
       'SELECT COALESCE(SUM(si.qty_returned_linked + si.qty_returned_adjustment), 0) AS c '
       'FROM sale_items si '
@@ -419,10 +432,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       "WHERE s.status = 'completed' AND s.customer_id = ? "
       '  AND si.product_id = ? '
       '$variantClause',
-      variables: [
-        Variable.withInt(customerId),
-        Variable.withInt(productId),
-      ],
+      variables: [Variable.withInt(customerId), Variable.withInt(productId)],
     ).getSingleOrNull();
     return row?.read<int>('c') ?? 0;
   }
@@ -433,8 +443,9 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     required int productId,
     int? variantId,
   }) async {
-    final variantClause =
-        variantId != null ? 'AND pi.variant_id = ${variantId.toString()} ' : '';
+    final variantClause = variantId != null
+        ? 'AND pi.variant_id = ${variantId.toString()} '
+        : '';
     final row = await customSelect(
       'SELECT COALESCE(SUM(pi.qty_returned_linked + pi.qty_returned_adjustment), 0) AS c '
       'FROM purchase_items pi '
@@ -442,10 +453,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       "WHERE pu.status = 'posted' AND pu.supplier_id = ? "
       '  AND pi.product_id = ? '
       '$variantClause',
-      variables: [
-        Variable.withInt(supplierId),
-        Variable.withInt(productId),
-      ],
+      variables: [Variable.withInt(supplierId), Variable.withInt(productId)],
     ).getSingleOrNull();
     return row?.read<int>('c') ?? 0;
   }
@@ -541,8 +549,9 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     required int requestedQty,
   }) async {
     if (requestedQty <= 0) return const [];
-    final variantClause =
-        variantId != null ? 'AND si.variant_id = ${variantId.toString()} ' : '';
+    final variantClause = variantId != null
+        ? 'AND si.variant_id = ${variantId.toString()} '
+        : '';
     final rows = await customSelect(
       'SELECT si.id AS item_id, si.quantity, '
       '       si.qty_returned_linked, si.qty_returned_adjustment '
@@ -552,10 +561,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       '  AND si.product_id = ? '
       '$variantClause'
       'ORDER BY s.sale_date ASC, si.id ASC',
-      variables: [
-        Variable.withInt(customerId),
-        Variable.withInt(productId),
-      ],
+      variables: [Variable.withInt(customerId), Variable.withInt(productId)],
     ).get();
 
     final out = <({int saleItemId, int qty})>[];
@@ -576,15 +582,16 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
 
   /// Mirror of [_allocateSaleItemsForAdjustment] for the supplier side.
   Future<List<({int purchaseItemId, int qty})>>
-      _allocatePurchaseItemsForAdjustment({
+  _allocatePurchaseItemsForAdjustment({
     required int supplierId,
     required int productId,
     required int? variantId,
     required int requestedQty,
   }) async {
     if (requestedQty <= 0) return const [];
-    final variantClause =
-        variantId != null ? 'AND pi.variant_id = ${variantId.toString()} ' : '';
+    final variantClause = variantId != null
+        ? 'AND pi.variant_id = ${variantId.toString()} '
+        : '';
     final rows = await customSelect(
       'SELECT pi.id AS item_id, pi.quantity, '
       '       pi.qty_returned_linked, pi.qty_returned_adjustment '
@@ -594,10 +601,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       '  AND pi.product_id = ? '
       '$variantClause'
       'ORDER BY pu.purchase_date ASC, pi.id ASC',
-      variables: [
-        Variable.withInt(supplierId),
-        Variable.withInt(productId),
-      ],
+      variables: [Variable.withInt(supplierId), Variable.withInt(productId)],
     ).get();
 
     final out = <({int purchaseItemId, int qty})>[];
@@ -622,14 +626,15 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
 
   /// Watch all purchase adjustment returns
   Stream<List<PurchaseReturnAdjustment>> watchAllPurchaseAdjustmentReturns() {
-    return (select(purchaseReturnAdjustments)
-          ..orderBy([(r) => OrderingTerm.desc(r.returnDate)]))
-        .watch();
+    return (select(
+      purchaseReturnAdjustments,
+    )..orderBy([(r) => OrderingTerm.desc(r.returnDate)])).watch();
   }
 
   /// Watch purchase adjustment returns by supplier
   Stream<List<PurchaseReturnAdjustment>> watchPurchaseAdjReturnsBySupplier(
-      int supplierId) {
+    int supplierId,
+  ) {
     return (select(purchaseReturnAdjustments)
           ..where((r) => r.supplierId.equals(supplierId))
           ..orderBy([(r) => OrderingTerm.desc(r.returnDate)]))
@@ -638,31 +643,14 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
 
   /// Get purchase adjustment return by ID
   Future<PurchaseReturnAdjustment?> getPurchaseAdjReturnById(int id) {
-    return (select(purchaseReturnAdjustments)..where((r) => r.id.equals(id)))
-        .getSingleOrNull();
+    return (select(
+      purchaseReturnAdjustments,
+    )..where((r) => r.id.equals(id))).getSingleOrNull();
   }
 
   /// Generate next purchase adjustment return number
-  Future<String> generatePurchaseAdjReturnNumber() async {
-    final now = DateTime.now();
-    final prefix =
-        'PAR-${now.year}${now.month.toString().padLeft(2, '0')}';
-
-    final last = await (select(purchaseReturnAdjustments)
-          ..where((r) => r.returnNumber.like('$prefix%'))
-          ..orderBy([(r) => OrderingTerm.desc(r.returnNumber)])
-          ..limit(1))
-        .getSingleOrNull();
-
-    int nextNum = 1;
-    if (last != null) {
-      final lastNum =
-          int.tryParse(last.returnNumber.split('-').last) ?? 0;
-      nextNum = lastNum + 1;
-    }
-
-    return '$prefix-${nextNum.toString().padLeft(4, '0')}';
-  }
+  Future<String> generatePurchaseAdjReturnNumber() =>
+      DocumentNumberService(attachedDatabase).nextPurchaseAdjustmentReturn();
 
   /// Create purchase adjustment return with items.
   /// Automatically fetches and freezes each product's current cost_cents
@@ -679,8 +667,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         assert(item.productId.present, 'productId is required');
       }
 
-      final returnId =
-          await into(purchaseReturnAdjustments).insert(returnData);
+      final returnId = await into(purchaseReturnAdjustments).insert(returnData);
 
       // ── Phase 3: approval-policy evaluation at draft time ──
       // Centralized in `ReturnApprovalService.evaluate`. The decision is
@@ -698,14 +685,16 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
             side: 'purchase',
           ),
         );
-        await (update(purchaseReturnAdjustments)
-              ..where((r) => r.id.equals(returnId)))
-            .write(PurchaseReturnAdjustmentsCompanion(
-          approvalStatus: Value(decision.persistedStatus),
-          approvalRequired: Value(decision.required),
-          approvalReason: Value(decision.persistedReason),
-          updatedAt: Value(DateTime.now()),
-        ));
+        await (update(
+          purchaseReturnAdjustments,
+        )..where((r) => r.id.equals(returnId))).write(
+          PurchaseReturnAdjustmentsCompanion(
+            approvalStatus: Value(decision.persistedStatus),
+            approvalRequired: Value(decision.required),
+            approvalReason: Value(decision.persistedReason),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
       }
 
       for (final item in items) {
@@ -829,6 +818,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       // (batch_cost − product_cost) × qty on every FIFO line. Keyed by
       // return-item id so the per-line journal entry stays exact.
       final actualInvCostByItem = <int, int>{};
+      final frozenUnitCostByItem = <int, int>{};
 
       // Per-product track_inventory map. Non-tracked products (services,
       // labour, expense-only items) skip every stock / batch / negative-stock
@@ -853,6 +843,9 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         // the product.
         if (!tracksInventory) {
           actualInvCostByItem[item.id] = 0;
+          frozenUnitCostByItem[item.id] =
+              item.unitCostAtPostCents?.toBigInt().toInt() ??
+              item.unitCostCents.toBigInt().toInt();
           continue;
         }
         affectedProductIds.add(item.productId);
@@ -866,12 +859,32 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           variantId: item.variantId,
         );
         if (resolvedVariantId != item.variantId) {
-          await (update(purchaseReturnAdjustmentItems)
-                ..where((i) => i.id.equals(item.id)))
-              .write(PurchaseReturnAdjustmentItemsCompanion(
-            variantId: Value(resolvedVariantId),
-          ));
+          await (update(
+            purchaseReturnAdjustmentItems,
+          )..where((i) => i.id.equals(item.id))).write(
+            PurchaseReturnAdjustmentItemsCompanion(
+              variantId: Value(resolvedVariantId),
+            ),
+          );
         }
+
+        // Freeze the actual WAC removed immediately before the outflow.
+        // The draft's cost may be older than the posting-time average.
+        final wacSnapshot = await WacMovementService.capture(
+          this,
+          productId: item.productId,
+          variantId: resolvedVariantId,
+        );
+        final valuationSnapshot = await InventoryValuationDeltaService.capture(
+          this,
+          productId: item.productId,
+          variantId: resolvedVariantId,
+        );
+        final frozenUnitCost =
+            wacSnapshot?.unitCostCents ??
+            item.unitCostAtPostCents?.toBigInt().toInt() ??
+            item.unitCostCents.toBigInt().toInt();
+        frozenUnitCostByItem[item.id] = frozenUnitCost;
 
         // Guard against negative stock unless explicitly allowed by policy.
         if (!allowNegativeStock) {
@@ -932,17 +945,24 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
             consumptionType: 'purchase_adj_return',
             purchaseReturnAdjustmentItemId: item.id,
           );
-          final lineCost =
-              consumed.fold<int>(0, (s, c) => s + c.totalCostCents);
+          final lineCost = consumed.fold<int>(
+            0,
+            (s, c) => s + c.totalCostCents,
+          );
           actualInvCostByItem[item.id] = lineCost;
           totalInventoryCostCents += lineCost;
           batchedProductIds.add(item.productId);
         } else {
-          // WAC: the variant carries a single blended cost, so qty × the
-          // frozen snapshot is already the exact valuation delta (an outflow
-          // never changes the WAC unit cost).
-          final lineCost =
-              item.unitCostCents.toBigInt().toInt() * item.quantity;
+          final lineCost = valuationSnapshot != null
+              ? -(await InventoryValuationDeltaService.signedDeltaAfter(
+                  this,
+                  valuationSnapshot,
+                ))
+              : MeasuredAmount.cents(
+                  unitCents: frozenUnitCost,
+                  quantity: item.quantity,
+                  quantityScale: item.quantityScale,
+                );
           actualInvCostByItem[item.id] = lineCost;
           totalInventoryCostCents += lineCost;
         }
@@ -950,8 +970,10 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
 
       // Sync products table from variants
       for (final productId in affectedProductIds) {
-        await StockService.syncProductStockFromVariants(this,
-            productId: productId);
+        await StockService.syncProductStockFromVariants(
+          this,
+          productId: productId,
+        );
       }
 
       // I4 (Invariant I1): assert Σ(batch.remaining) == variant.stock_quantity
@@ -960,19 +982,23 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       // BEFORE the transaction commits — turns Phase A's documented invariant
       // into an enforced one.
       for (final productId in batchedProductIds) {
-        await BatchService.assertInvariantForProduct(this,
-            productId: productId);
+        await BatchService.assertInvariantForProduct(
+          this,
+          productId: productId,
+        );
       }
 
       // Update status to posted (Phase 3: stamp postedBy / postedAt audit)
-      await (update(purchaseReturnAdjustments)
-            ..where((r) => r.id.equals(returnId)))
-          .write(PurchaseReturnAdjustmentsCompanion(
-        status: const Value('posted'),
-        postedBy: Value(userId),
-        postedAt: Value(DateTime.now()),
-        updatedAt: Value(DateTime.now()),
-      ));
+      await (update(
+        purchaseReturnAdjustments,
+      )..where((r) => r.id.equals(returnId))).write(
+        PurchaseReturnAdjustmentsCompanion(
+          status: const Value('posted'),
+          postedBy: Value(userId),
+          postedAt: Value(DateTime.now()),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
 
       // ── Supplier ledger ──
       // The JE policy routes the financial leg as follows:
@@ -996,10 +1022,12 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           SupplierTransactionsCompanion.insert(
             supplierId: returnData.supplierId,
             transactionType: 'adjustment_return',
+            transactionNumber: Value(returnData.returnNumber),
             amountCents: Decimal.fromInt(-refundCents),
             currencyId: returnData.currencyId,
             description: Value(
-                'Purchase Adjustment Return ${returnData.returnNumber}'),
+              'Purchase Adjustment Return ${returnData.returnNumber}',
+            ),
             referenceId: Value(returnId),
             referenceType: const Value('purchase_return_adjustment'),
           ),
@@ -1023,20 +1051,35 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         // subtotal = unitPrice * qty − lineDiscount (pre-tax base).
         final unitPrice = item.unitPriceCents.toBigInt().toInt();
         final discount = item.discountCents.toBigInt().toInt();
-        final subtotal = unitPrice * item.quantity - discount;
+        final subtotal =
+            MeasuredAmount.cents(
+              unitCents: unitPrice,
+              quantity: item.quantity,
+              quantityScale: item.quantityScale,
+            ) -
+            discount;
         final taxOnLine = item.taxCents.toBigInt().toInt();
         // Phase 7 — tax-rate snapshot recovery via SoT.
         final taxRateBps = TaxCalculationService.recoverRateBps(
           taxableSubtotalCents: subtotal,
           taxOnLineCents: taxOnLine,
         );
-        await (update(purchaseReturnAdjustmentItems)
-              ..where((i) => i.id.equals(item.id)))
-            .write(PurchaseReturnAdjustmentItemsCompanion(
-          taxRateBpsAtPost: Value(taxRateBps),
-          unitCostAtPostCents:
-              Value(Decimal.fromInt(item.unitCostCents.toBigInt().toInt())),
-        ));
+        await (update(
+          purchaseReturnAdjustmentItems,
+        )..where((i) => i.id.equals(item.id))).write(
+          PurchaseReturnAdjustmentItemsCompanion(
+            taxRateBpsAtPost: Value(taxRateBps),
+            unitCostAtPostCents: Value(
+              Decimal.fromInt(
+                frozenUnitCostByItem[item.id] ??
+                    item.unitCostCents.toBigInt().toInt(),
+              ),
+            ),
+            inventoryValueAtPostCents: Value(
+              Decimal.fromInt(actualInvCostByItem[item.id] ?? 0),
+            ),
+          ),
+        );
       }
 
       // ── Phase 2.2 + 2.5: build per-line PostedReturnLine list so the
@@ -1052,15 +1095,17 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         final lineInvCost = actualInvCostByItem[item.id] ?? 0;
         final lineTotal = item.totalCents.toBigInt().toInt();
         final lineTax = item.taxCents.toBigInt().toInt();
-        explicitLines.add(PostedReturnLine(
-          totalCents: lineTotal,
-          taxCents: lineTax,
-          inventoryCostCents: lineInvCost,
-          disposition: ReturnDispositionX.fromWire(item.dispositionType),
-          productId: item.productId,
-          variantId: item.variantId,
-          qty: item.quantity,
-        ));
+        explicitLines.add(
+          PostedReturnLine(
+            totalCents: lineTotal,
+            taxCents: lineTax,
+            inventoryCostCents: lineInvCost,
+            disposition: ReturnDispositionX.fromWire(item.dispositionType),
+            productId: item.productId,
+            variantId: item.variantId,
+            qty: item.quantity,
+          ),
+        );
       }
 
       // Create journal entry (financial + tax + inventory) via the unified
@@ -1133,9 +1178,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     return transaction(() async {
       // Generate number atomically inside the transaction
       final number = await generatePurchaseAdjReturnNumber();
-      final dataWithNumber = returnData.copyWith(
-        returnNumber: Value(number),
-      );
+      final dataWithNumber = returnData.copyWith(returnNumber: Value(number));
       final returnId = await createPurchaseAdjReturn(
         dataWithNumber,
         items,
@@ -1193,6 +1236,15 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
             productId: item.productId,
             variantId: item.variantId,
           );
+          final wacSnapshot = await WacMovementService.capture(
+            this,
+            productId: item.productId,
+            variantId: resolvedVariantId,
+          );
+          final frozenUnitCost =
+              item.unitCostAtPostCents?.toBigInt().toInt() ??
+              wacSnapshot?.unitCostCents ??
+              item.unitCostCents.toBigInt().toInt();
 
           // INCREASE stock back (reverse the decrease)
           await StockService.adjustStock(
@@ -1202,6 +1254,15 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
             quantity: item.quantity,
             direction: StockDirection.increase,
           );
+
+          if (wacSnapshot != null) {
+            await WacMovementService.applyInbound(
+              this,
+              snapshot: wacSnapshot,
+              addedQty: item.quantity,
+              inboundUnitCostCents: frozenUnitCost,
+            );
+          }
 
           // FIFO restoration: mirror every 'out' consumption row this
           // return item produced back into its source batch at the
@@ -1219,14 +1280,18 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
 
         // Sync products table from variants
         for (final productId in affectedProductIds) {
-          await StockService.syncProductStockFromVariants(this,
-              productId: productId);
+          await StockService.syncProductStockFromVariants(
+            this,
+            productId: productId,
+          );
         }
 
         // I4 (Invariant I1): cross-table invariant for FIFO products.
         for (final productId in batchedProductIds) {
-          await BatchService.assertInvariantForProduct(this,
-              productId: productId);
+          await BatchService.assertInvariantForProduct(
+            this,
+            productId: productId,
+          );
         }
 
         // ── Supplier ledger reversal (mirrors forward-path gating) ──
@@ -1246,7 +1311,8 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
               amountCents: Decimal.fromInt(refundCents),
               currencyId: returnData.currencyId,
               description: Value(
-                  'Voided Purchase Adjustment Return ${returnData.returnNumber}'),
+                'Voided Purchase Adjustment Return ${returnData.returnNumber}',
+              ),
               referenceId: Value(returnId),
               referenceType: const Value('purchase_return_adjustment'),
             ),
@@ -1264,7 +1330,8 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         await journalEntryService.voidJournalEntriesForSource(
           sourceTable: 'purchase_return_adjustments',
           sourceId: returnId,
-          reason: 'Voided Purchase Adjustment Return ${returnData.returnNumber}',
+          reason:
+              'Voided Purchase Adjustment Return ${returnData.returnNumber}',
         );
 
         // ── Atomic counters: reverse qty_returned_adjustment in the same
@@ -1282,8 +1349,9 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           // Allocate against rows that currently carry adjustment counters,
           // newest-first (LIFO of the post path) — this gives an exact
           // inverse when no concurrent return raced in between.
-          final variantClause =
-              vid != null ? 'AND pi.variant_id = ${vid.toString()} ' : '';
+          final variantClause = vid != null
+              ? 'AND pi.variant_id = ${vid.toString()} '
+              : '';
           final rows = await customSelect(
             'SELECT pi.id AS item_id, pi.qty_returned_adjustment '
             'FROM purchase_items pi '
@@ -1320,51 +1388,57 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       }
 
       // Phase 3 — stamp voidedBy / voidedAt / voidReason audit columns.
-      await (update(purchaseReturnAdjustments)
-            ..where((r) => r.id.equals(returnId)))
-          .write(PurchaseReturnAdjustmentsCompanion(
-        status: const Value('voided'),
-        voidedBy: Value(voidedBy),
-        voidedAt: Value(DateTime.now()),
-        voidReason: Value(voidReason),
-        updatedAt: Value(DateTime.now()),
-      ));
+      await (update(
+        purchaseReturnAdjustments,
+      )..where((r) => r.id.equals(returnId))).write(
+        PurchaseReturnAdjustmentsCompanion(
+          status: const Value('voided'),
+          voidedBy: Value(voidedBy),
+          voidedAt: Value(DateTime.now()),
+          voidReason: Value(voidReason),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
     });
   }
 
   /// Get items for a purchase adjustment return
   Future<List<PurchaseReturnAdjustmentItem>> getPurchaseAdjReturnItems(
-      int returnId) {
-    return (select(purchaseReturnAdjustmentItems)
-          ..where((i) => i.returnId.equals(returnId)))
-        .get();
+    int returnId,
+  ) {
+    return (select(
+      purchaseReturnAdjustmentItems,
+    )..where((i) => i.returnId.equals(returnId))).get();
   }
 
   /// Watch items with product details for a purchase adjustment return
   Stream<List<PurchaseAdjReturnItemWithDetails>>
-      watchPurchaseAdjReturnItemsWithDetails(int returnId) {
+  watchPurchaseAdjReturnItemsWithDetails(int returnId) {
     final pc = alias(db.productColors, 'pc');
     final query = select(purchaseReturnAdjustmentItems).join([
-      innerJoin(products,
-          products.id.equalsExp(purchaseReturnAdjustmentItems.productId)),
+      innerJoin(
+        products,
+        products.id.equalsExp(purchaseReturnAdjustmentItems.productId),
+      ),
       leftOuterJoin(
-          productVariants,
-          productVariants.id
-              .equalsExp(purchaseReturnAdjustmentItems.variantId)),
+        productVariants,
+        productVariants.id.equalsExp(purchaseReturnAdjustmentItems.variantId),
+      ),
       leftOuterJoin(pc, pc.id.equalsExp(productVariants.colorId)),
-    ])
-      ..where(purchaseReturnAdjustmentItems.returnId.equals(returnId));
+    ])..where(purchaseReturnAdjustmentItems.returnId.equals(returnId));
 
-    return query.watch().map((rows) => rows.map((row) {
-          final color = row.readTableOrNull(pc);
-          return PurchaseAdjReturnItemWithDetails(
-            item: row.readTable(purchaseReturnAdjustmentItems),
-            product: row.readTable(products),
-            variant: row.readTableOrNull(productVariants),
-            colorName: color?.name,
-            colorHex: color?.hexCode,
-          );
-        }).toList());
+    return query.watch().map(
+      (rows) => rows.map((row) {
+        final color = row.readTableOrNull(pc);
+        return PurchaseAdjReturnItemWithDetails(
+          item: row.readTable(purchaseReturnAdjustmentItems),
+          product: row.readTable(products),
+          variant: row.readTableOrNull(productVariants),
+          colorName: color?.name,
+          colorHex: color?.hexCode,
+        );
+      }).toList(),
+    );
   }
 
   /// Delete a draft purchase adjustment return
@@ -1374,9 +1448,9 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       if (returnData == null || returnData.status != 'draft') {
         throw Exception('Cannot delete non-draft adjustment return');
       }
-      return (delete(purchaseReturnAdjustments)
-            ..where((r) => r.id.equals(returnId)))
-          .go();
+      return (delete(
+        purchaseReturnAdjustments,
+      )..where((r) => r.id.equals(returnId))).go();
     });
   }
 
@@ -1386,14 +1460,15 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
 
   /// Watch all sale adjustment returns
   Stream<List<SaleReturnAdjustment>> watchAllSaleAdjustmentReturns() {
-    return (select(saleReturnAdjustments)
-          ..orderBy([(r) => OrderingTerm.desc(r.returnDate)]))
-        .watch();
+    return (select(
+      saleReturnAdjustments,
+    )..orderBy([(r) => OrderingTerm.desc(r.returnDate)])).watch();
   }
 
   /// Watch sale adjustment returns by customer
   Stream<List<SaleReturnAdjustment>> watchSaleAdjReturnsByCustomer(
-      int customerId) {
+    int customerId,
+  ) {
     return (select(saleReturnAdjustments)
           ..where((r) => r.customerId.equals(customerId))
           ..orderBy([(r) => OrderingTerm.desc(r.returnDate)]))
@@ -1402,31 +1477,14 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
 
   /// Get sale adjustment return by ID
   Future<SaleReturnAdjustment?> getSaleAdjReturnById(int id) {
-    return (select(saleReturnAdjustments)..where((r) => r.id.equals(id)))
-        .getSingleOrNull();
+    return (select(
+      saleReturnAdjustments,
+    )..where((r) => r.id.equals(id))).getSingleOrNull();
   }
 
   /// Generate next sale adjustment return number
-  Future<String> generateSaleAdjReturnNumber() async {
-    final now = DateTime.now();
-    final prefix =
-        'SAR-${now.year}${now.month.toString().padLeft(2, '0')}';
-
-    final last = await (select(saleReturnAdjustments)
-          ..where((r) => r.returnNumber.like('$prefix%'))
-          ..orderBy([(r) => OrderingTerm.desc(r.returnNumber)])
-          ..limit(1))
-        .getSingleOrNull();
-
-    int nextNum = 1;
-    if (last != null) {
-      final lastNum =
-          int.tryParse(last.returnNumber.split('-').last) ?? 0;
-      nextNum = lastNum + 1;
-    }
-
-    return '$prefix-${nextNum.toString().padLeft(4, '0')}';
-  }
+  Future<String> generateSaleAdjReturnNumber() =>
+      DocumentNumberService(attachedDatabase).nextSaleAdjustmentReturn();
 
   /// Create sale adjustment return with items.
   /// Automatically fetches and freezes each product's current cost_cents
@@ -1443,8 +1501,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         assert(item.productId.present, 'productId is required');
       }
 
-      final returnId =
-          await into(saleReturnAdjustments).insert(returnData);
+      final returnId = await into(saleReturnAdjustments).insert(returnData);
 
       // ── Phase 3: approval-policy evaluation at draft time ──
       // Same single source of truth as the purchase side.
@@ -1460,14 +1517,16 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
             side: 'sale',
           ),
         );
-        await (update(saleReturnAdjustments)
-              ..where((r) => r.id.equals(returnId)))
-            .write(SaleReturnAdjustmentsCompanion(
-          approvalStatus: Value(decision.persistedStatus),
-          approvalRequired: Value(decision.required),
-          approvalReason: Value(decision.persistedReason),
-          updatedAt: Value(DateTime.now()),
-        ));
+        await (update(
+          saleReturnAdjustments,
+        )..where((r) => r.id.equals(returnId))).write(
+          SaleReturnAdjustmentsCompanion(
+            approvalStatus: Value(decision.persistedStatus),
+            approvalRequired: Value(decision.required),
+            approvalReason: Value(decision.persistedReason),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
       }
 
       for (final item in items) {
@@ -1534,6 +1593,31 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         throw Exception('Cannot post a voided adjustment return');
       }
 
+      // Attribute the posted adjustment return to the operator's currently
+      // open till session. Drafts are intentionally not linked: the cashier
+      // who actually posts/settles the refund owns its cash impact.
+      if (returnData.cashierShiftId == null && userId != null) {
+        final openShift =
+            await (select(cashierShifts)
+                  ..where(
+                    (s) =>
+                        s.cashierUserId.equals(userId) &
+                        s.status.equals('open'),
+                  )
+                  ..limit(1))
+                .getSingleOrNull();
+        if (openShift != null) {
+          await (update(
+            saleReturnAdjustments,
+          )..where((r) => r.id.equals(returnId))).write(
+            SaleReturnAdjustmentsCompanion(
+              cashierShiftId: Value(openShift.id),
+              updatedAt: Value(DateTime.now()),
+            ),
+          );
+        }
+      }
+
       // Defense-in-depth: AR/Bank refunds require a real customer — orphan
       // ledger entries make AR aging meaningless. The bloc already prevents
       // this in the UI; we re-assert here so any non-UI caller cannot
@@ -1560,8 +1644,8 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       // approval). For every other case the cap applies; over-history is
       // only permitted via the explicit `allowOverHistory` override which
       // must be passed by an authorised caller.
-      final isWalkInCash = returnData.customerId == null &&
-          returnData.refundMethod == 'cash';
+      final isWalkInCash =
+          returnData.customerId == null && returnData.refundMethod == 'cash';
       final effectiveAllowOver = allowOverHistory || isWalkInCash;
       final requestByLine = <String, int>{};
       for (final item in items) {
@@ -1586,6 +1670,8 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       final batchedProductIds = <int>{};
       int totalInventoryCostCents = 0;
       int totalTaxCents = 0;
+      final frozenUnitCostByItem = <int, int>{};
+      final actualInvCostByItem = <int, int>{};
 
       // Per-product track_inventory map. See `postPurchaseAdjReturn` for the
       // full rationale — same gating contract: non-tracked products skip the
@@ -1596,20 +1682,20 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
 
       for (final item in items) {
         final tracksInventory = trackedByProduct[item.productId] ?? true;
+        final frozenUnitCost =
+            item.unitCostAtPostCents?.toBigInt().toInt() ??
+            item.unitCostCents.toBigInt().toInt();
+        frozenUnitCostByItem[item.id] = frozenUnitCost;
 
-        // Aggregate tax for GL entry. Inventory cost is aggregated only for
-        // tracked products (non-tracked items contribute zero to the
-        // inventory leg of the compound journal entry).
-        if (tracksInventory) {
-          totalInventoryCostCents +=
-              item.unitCostCents.toBigInt().toInt() * item.quantity;
-        }
         totalTaxCents += item.taxCents.toBigInt().toInt();
 
         // Non-tracked products skip stock / batch / variant resolution. They
         // also stay out of `affectedProductIds` so the post-loop sync skips
         // them.
-        if (!tracksInventory) continue;
+        if (!tracksInventory) {
+          actualInvCostByItem[item.id] = 0;
+          continue;
+        }
         affectedProductIds.add(item.productId);
 
         // Resolve a concrete variant before any stock-touching call.
@@ -1619,12 +1705,25 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           variantId: item.variantId,
         );
         if (resolvedVariantId != item.variantId) {
-          await (update(saleReturnAdjustmentItems)
-                ..where((i) => i.id.equals(item.id)))
-              .write(SaleReturnAdjustmentItemsCompanion(
-            variantId: Value(resolvedVariantId),
-          ));
+          await (update(
+            saleReturnAdjustmentItems,
+          )..where((i) => i.id.equals(item.id))).write(
+            SaleReturnAdjustmentItemsCompanion(
+              variantId: Value(resolvedVariantId),
+            ),
+          );
         }
+
+        final wacSnapshot = await WacMovementService.capture(
+          this,
+          productId: item.productId,
+          variantId: resolvedVariantId,
+        );
+        final valuationSnapshot = await InventoryValuationDeltaService.capture(
+          this,
+          productId: item.productId,
+          variantId: resolvedVariantId,
+        );
 
         // INCREASE stock (sale return = goods coming back to our warehouse)
         await StockService.adjustStock(
@@ -1634,6 +1733,15 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           quantity: item.quantity,
           direction: StockDirection.increase,
         );
+
+        if (wacSnapshot != null) {
+          await WacMovementService.applyInbound(
+            this,
+            snapshot: wacSnapshot,
+            addedQty: item.quantity,
+            inboundUnitCostCents: frozenUnitCost,
+          );
+        }
 
         // FIFO sync: a sale-adjustment-return has no original invoice we can
         // restore against, so we materialise a new batch carrying the snapshot
@@ -1649,35 +1757,54 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
             productId: item.productId,
             variantId: resolvedVariantId,
             quantity: item.quantity,
-            unitCostCents: item.unitCostCents.toBigInt().toInt(),
+            unitCostCents: frozenUnitCost,
             source: 'sale_return',
             documentReference: returnData.returnNumber,
           );
           batchedProductIds.add(item.productId);
         }
+
+        final lineCost = valuationSnapshot != null
+            ? await InventoryValuationDeltaService.signedDeltaAfter(
+                this,
+                valuationSnapshot,
+              )
+            : MeasuredAmount.cents(
+                unitCents: frozenUnitCost,
+                quantity: item.quantity,
+                quantityScale: item.quantityScale,
+              );
+        actualInvCostByItem[item.id] = lineCost;
+        totalInventoryCostCents += lineCost;
       }
 
       // Sync products table from variants
       for (final productId in affectedProductIds) {
-        await StockService.syncProductStockFromVariants(this,
-            productId: productId);
+        await StockService.syncProductStockFromVariants(
+          this,
+          productId: productId,
+        );
       }
 
       // I4 (Invariant I1): cross-table invariant for FIFO products.
       for (final productId in batchedProductIds) {
-        await BatchService.assertInvariantForProduct(this,
-            productId: productId);
+        await BatchService.assertInvariantForProduct(
+          this,
+          productId: productId,
+        );
       }
 
       // Update status to posted (Phase 3: stamp postedBy / postedAt audit)
-      await (update(saleReturnAdjustments)
-            ..where((r) => r.id.equals(returnId)))
-          .write(SaleReturnAdjustmentsCompanion(
-        status: const Value('posted'),
-        postedBy: Value(userId),
-        postedAt: Value(DateTime.now()),
-        updatedAt: Value(DateTime.now()),
-      ));
+      await (update(
+        saleReturnAdjustments,
+      )..where((r) => r.id.equals(returnId))).write(
+        SaleReturnAdjustmentsCompanion(
+          status: const Value('posted'),
+          postedBy: Value(userId),
+          postedAt: Value(DateTime.now()),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
 
       // ── Customer ledger (mirror of the purchase-adjustment supplier path) ──
       // For a CREDIT ("رصيد") refund on an adjustment sale return the store
@@ -1705,10 +1832,12 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           CustomerTransactionsCompanion.insert(
             customerId: returnData.customerId!,
             transactionType: 'adjustment_return',
+            transactionNumber: Value(returnData.returnNumber),
             amountCents: Decimal.fromInt(-refundCents),
             currencyId: returnData.currencyId,
-            description:
-                Value('Adjustment sale return ${returnData.returnNumber} (credit)'),
+            description: Value(
+              'Adjustment sale return ${returnData.returnNumber} (credit)',
+            ),
             referenceId: Value(returnId),
             referenceType: const Value('sale_return_adjustment'),
           ),
@@ -1727,20 +1856,35 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       for (final item in items) {
         final unitPrice = item.unitPriceCents.toBigInt().toInt();
         final discount = item.discountCents.toBigInt().toInt();
-        final subtotal = unitPrice * item.quantity - discount;
+        final subtotal =
+            MeasuredAmount.cents(
+              unitCents: unitPrice,
+              quantity: item.quantity,
+              quantityScale: item.quantityScale,
+            ) -
+            discount;
         final taxOnLine = item.taxCents.toBigInt().toInt();
         // Phase 7 — tax-rate snapshot recovery via SoT.
         final taxRateBps = TaxCalculationService.recoverRateBps(
           taxableSubtotalCents: subtotal,
           taxOnLineCents: taxOnLine,
         );
-        await (update(saleReturnAdjustmentItems)
-              ..where((i) => i.id.equals(item.id)))
-            .write(SaleReturnAdjustmentItemsCompanion(
-          taxRateBpsAtPost: Value(taxRateBps),
-          unitCostAtPostCents:
-              Value(Decimal.fromInt(item.unitCostCents.toBigInt().toInt())),
-        ));
+        await (update(
+          saleReturnAdjustmentItems,
+        )..where((i) => i.id.equals(item.id))).write(
+          SaleReturnAdjustmentItemsCompanion(
+            taxRateBpsAtPost: Value(taxRateBps),
+            unitCostAtPostCents: Value(
+              Decimal.fromInt(
+                frozenUnitCostByItem[item.id] ??
+                    item.unitCostCents.toBigInt().toInt(),
+              ),
+            ),
+            inventoryValueAtPostCents: Value(
+              Decimal.fromInt(actualInvCostByItem[item.id] ?? 0),
+            ),
+          ),
+        );
       }
 
       // ── Phase 2.2 + 2.5: per-line PostedReturnLine with disposition +
@@ -1748,21 +1892,20 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       // damaged/scrap→5800 and assert the fiscal period is open.
       final explicitLines = <PostedReturnLine>[];
       for (final item in items) {
-        final tracks = trackedByProduct[item.productId] ?? true;
-        final lineInvCost = tracks
-            ? item.unitCostCents.toBigInt().toInt() * item.quantity
-            : 0;
+        final lineInvCost = actualInvCostByItem[item.id] ?? 0;
         final lineTotal = item.totalCents.toBigInt().toInt();
         final lineTax = item.taxCents.toBigInt().toInt();
-        explicitLines.add(PostedReturnLine(
-          totalCents: lineTotal,
-          taxCents: lineTax,
-          inventoryCostCents: lineInvCost,
-          disposition: ReturnDispositionX.fromWire(item.dispositionType),
-          productId: item.productId,
-          variantId: item.variantId,
-          qty: item.quantity,
-        ));
+        explicitLines.add(
+          PostedReturnLine(
+            totalCents: lineTotal,
+            taxCents: lineTax,
+            inventoryCostCents: lineInvCost,
+            disposition: ReturnDispositionX.fromWire(item.dispositionType),
+            productId: item.productId,
+            variantId: item.variantId,
+            qty: item.quantity,
+          ),
+        );
       }
 
       // Create journal entry (financial + tax + inventory) via the unified
@@ -1834,8 +1977,10 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       // exactly. No-op when no employee is attributed. Runs inside this
       // transaction (shared AppDatabase) so it is atomic with the post.
       if (commissionService != null && returnData.employeeId != null) {
-        final commissionItemCount =
-            items.fold<int>(0, (sum, i) => sum + i.quantity);
+        final commissionItemCount = items.fold<int>(
+          0,
+          (sum, i) => sum + i.quantity,
+        );
         await commissionService.reverseForAdjustmentReturn(
           adjustmentReturnId: returnId,
           employeeId: returnData.employeeId!,
@@ -1887,9 +2032,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     return transaction(() async {
       // Generate number atomically inside the transaction
       final number = await generateSaleAdjReturnNumber();
-      final dataWithNumber = returnData.copyWith(
-        returnNumber: Value(number),
-      );
+      final dataWithNumber = returnData.copyWith(returnNumber: Value(number));
       final returnId = await createSaleAdjReturn(
         dataWithNumber,
         items,
@@ -1954,6 +2097,15 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
             productId: item.productId,
             variantId: item.variantId,
           );
+          final wacSnapshot = await WacMovementService.capture(
+            this,
+            productId: item.productId,
+            variantId: resolvedVariantId,
+          );
+          final frozenUnitCost =
+              item.unitCostAtPostCents?.toBigInt().toInt() ??
+              wacSnapshot?.unitCostCents ??
+              item.unitCostCents.toBigInt().toInt();
 
           // Guard against negative stock unless explicitly allowed by policy.
           if (!allowNegativeStock) {
@@ -1999,6 +2151,15 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
             direction: StockDirection.decrease,
           );
 
+          if (wacSnapshot != null) {
+            await WacMovementService.reverseInbound(
+              this,
+              snapshot: wacSnapshot,
+              removedQty: item.quantity,
+              removedUnitCostCents: frozenUnitCost,
+            );
+          }
+
           // FIFO sync: deduct oldest batches in FIFO order, linked to this
           // return item so the consumption can be audited / replayed. The
           // batch we created on posting (source='sale_return') is amongst
@@ -2020,14 +2181,18 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
 
         // Sync products table from variants
         for (final productId in affectedProductIds) {
-          await StockService.syncProductStockFromVariants(this,
-              productId: productId);
+          await StockService.syncProductStockFromVariants(
+            this,
+            productId: productId,
+          );
         }
 
         // I4 (Invariant I1): cross-table invariant for FIFO products.
         for (final productId in batchedProductIds) {
-          await BatchService.assertInvariantForProduct(this,
-              productId: productId);
+          await BatchService.assertInvariantForProduct(
+            this,
+            productId: productId,
+          );
         }
 
         // ── Customer ledger reversal ──
@@ -2084,8 +2249,9 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
             final parts = entry.key.split(':');
             final pid = int.parse(parts[0]);
             final vid = parts[1] == 'null' ? null : int.parse(parts[1]);
-            final variantClause =
-                vid != null ? 'AND si.variant_id = ${vid.toString()} ' : '';
+            final variantClause = vid != null
+                ? 'AND si.variant_id = ${vid.toString()} '
+                : '';
             final rows = await customSelect(
               'SELECT si.id AS item_id, si.qty_returned_adjustment '
               'FROM sale_items si '
@@ -2139,50 +2305,56 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       }
 
       // Phase 3 — stamp voidedBy / voidedAt / voidReason audit columns.
-      await (update(saleReturnAdjustments)
-            ..where((r) => r.id.equals(returnId)))
-          .write(SaleReturnAdjustmentsCompanion(
-        status: const Value('voided'),
-        voidedBy: Value(voidedBy),
-        voidedAt: Value(DateTime.now()),
-        voidReason: Value(voidReason),
-        updatedAt: Value(DateTime.now()),
-      ));
+      await (update(
+        saleReturnAdjustments,
+      )..where((r) => r.id.equals(returnId))).write(
+        SaleReturnAdjustmentsCompanion(
+          status: const Value('voided'),
+          voidedBy: Value(voidedBy),
+          voidedAt: Value(DateTime.now()),
+          voidReason: Value(voidReason),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
     });
   }
 
   /// Get items for a sale adjustment return
   Future<List<SaleReturnAdjustmentItem>> getSaleAdjReturnItems(int returnId) {
-    return (select(saleReturnAdjustmentItems)
-          ..where((i) => i.returnId.equals(returnId)))
-        .get();
+    return (select(
+      saleReturnAdjustmentItems,
+    )..where((i) => i.returnId.equals(returnId))).get();
   }
 
   /// Watch items with product details for a sale adjustment return
-  Stream<List<SaleAdjReturnItemWithDetails>>
-      watchSaleAdjReturnItemsWithDetails(int returnId) {
+  Stream<List<SaleAdjReturnItemWithDetails>> watchSaleAdjReturnItemsWithDetails(
+    int returnId,
+  ) {
     final pc = alias(db.productColors, 'pc');
     final query = select(saleReturnAdjustmentItems).join([
-      innerJoin(products,
-          products.id.equalsExp(saleReturnAdjustmentItems.productId)),
+      innerJoin(
+        products,
+        products.id.equalsExp(saleReturnAdjustmentItems.productId),
+      ),
       leftOuterJoin(
-          productVariants,
-          productVariants.id
-              .equalsExp(saleReturnAdjustmentItems.variantId)),
+        productVariants,
+        productVariants.id.equalsExp(saleReturnAdjustmentItems.variantId),
+      ),
       leftOuterJoin(pc, pc.id.equalsExp(productVariants.colorId)),
-    ])
-      ..where(saleReturnAdjustmentItems.returnId.equals(returnId));
+    ])..where(saleReturnAdjustmentItems.returnId.equals(returnId));
 
-    return query.watch().map((rows) => rows.map((row) {
-          final color = row.readTableOrNull(pc);
-          return SaleAdjReturnItemWithDetails(
-            item: row.readTable(saleReturnAdjustmentItems),
-            product: row.readTable(products),
-            variant: row.readTableOrNull(productVariants),
-            colorName: color?.name,
-            colorHex: color?.hexCode,
-          );
-        }).toList());
+    return query.watch().map(
+      (rows) => rows.map((row) {
+        final color = row.readTableOrNull(pc);
+        return SaleAdjReturnItemWithDetails(
+          item: row.readTable(saleReturnAdjustmentItems),
+          product: row.readTable(products),
+          variant: row.readTableOrNull(productVariants),
+          colorName: color?.name,
+          colorHex: color?.hexCode,
+        );
+      }).toList(),
+    );
   }
 
   /// Delete a draft sale adjustment return
@@ -2192,9 +2364,9 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       if (returnData == null || returnData.status != 'draft') {
         throw Exception('Cannot delete non-draft adjustment return');
       }
-      return (delete(saleReturnAdjustments)
-            ..where((r) => r.id.equals(returnId)))
-          .go();
+      return (delete(
+        saleReturnAdjustments,
+      )..where((r) => r.id.equals(returnId))).go();
     });
   }
 
@@ -2203,46 +2375,57 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
   // ══════════════════════════════════════════════════════════════════════════
 
   /// Watch all purchase adjustment returns with supplier info
-  Stream<List<PurchaseAdjReturnWithParty>> watchAllPurchaseAdjReturnsWithParty() {
+  Stream<List<PurchaseAdjReturnWithParty>>
+  watchAllPurchaseAdjReturnsWithParty() {
     final query = select(purchaseReturnAdjustments).join([
-      innerJoin(suppliers,
-          suppliers.id.equalsExp(purchaseReturnAdjustments.supplierId)),
-    ])
-      ..orderBy([OrderingTerm.desc(purchaseReturnAdjustments.returnDate)]);
+      innerJoin(
+        suppliers,
+        suppliers.id.equalsExp(purchaseReturnAdjustments.supplierId),
+      ),
+    ])..orderBy([OrderingTerm.desc(purchaseReturnAdjustments.returnDate)]);
 
-    return query.watch().map((rows) => rows.map((row) {
-          return PurchaseAdjReturnWithParty(
-            adjustment: row.readTable(purchaseReturnAdjustments),
-            supplierName: row.readTable(suppliers).name,
-            supplierPhone: row.readTable(suppliers).phone,
-          );
-        }).toList());
+    return query.watch().map(
+      (rows) => rows.map((row) {
+        return PurchaseAdjReturnWithParty(
+          adjustment: row.readTable(purchaseReturnAdjustments),
+          supplierName: row.readTable(suppliers).name,
+          supplierPhone: row.readTable(suppliers).phone,
+        );
+      }).toList(),
+    );
   }
 
   /// Watch all sale adjustment returns with customer info
   Stream<List<SaleAdjReturnWithParty>> watchAllSaleAdjReturnsWithParty() {
     final query = select(saleReturnAdjustments).join([
-      leftOuterJoin(customers,
-          customers.id.equalsExp(saleReturnAdjustments.customerId)),
-    ])
-      ..orderBy([OrderingTerm.desc(saleReturnAdjustments.returnDate)]);
+      leftOuterJoin(
+        customers,
+        customers.id.equalsExp(saleReturnAdjustments.customerId),
+      ),
+    ])..orderBy([OrderingTerm.desc(saleReturnAdjustments.returnDate)]);
 
-    return query.watch().map((rows) => rows.map((row) {
-          return SaleAdjReturnWithParty(
-            adjustment: row.readTable(saleReturnAdjustments),
-            customerName: row.readTableOrNull(customers)?.name,
-            customerPhone: row.readTableOrNull(customers)?.phone,
-          );
-        }).toList());
+    return query.watch().map(
+      (rows) => rows.map((row) {
+        return SaleAdjReturnWithParty(
+          adjustment: row.readTable(saleReturnAdjustments),
+          customerName: row.readTableOrNull(customers)?.name,
+          customerPhone: row.readTableOrNull(customers)?.phone,
+        );
+      }).toList(),
+    );
   }
 
   /// Watch product search terms for purchase adjustment return items
   Stream<Map<String, List<String>>> watchPurchaseAdjReturnProductSearchTerms() {
     final query = select(purchaseReturnAdjustmentItems).join([
-      innerJoin(products,
-          products.id.equalsExp(purchaseReturnAdjustmentItems.productId)),
-      leftOuterJoin(productVariants,
-          productVariants.id.equalsExp(purchaseReturnAdjustmentItems.variantId)),
+      innerJoin(
+        products,
+        products.id.equalsExp(purchaseReturnAdjustmentItems.productId),
+      ),
+      leftOuterJoin(
+        productVariants,
+        productVariants.id.equalsExp(purchaseReturnAdjustmentItems.variantId),
+      ),
     ]);
 
     return query.watch().map((rows) {
@@ -2289,14 +2472,16 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         "'${row.approvalStatus}' (must be '${ApprovalStatus.pending}').",
       );
     }
-    await (update(purchaseReturnAdjustments)
-          ..where((r) => r.id.equals(returnId)))
-        .write(PurchaseReturnAdjustmentsCompanion(
-      approvalStatus: const Value(ApprovalStatus.approved),
-      approvedBy: Value(approvedBy),
-      approvedAt: Value(DateTime.now()),
-      updatedAt: Value(DateTime.now()),
-    ));
+    await (update(
+      purchaseReturnAdjustments,
+    )..where((r) => r.id.equals(returnId))).write(
+      PurchaseReturnAdjustmentsCompanion(
+        approvalStatus: const Value(ApprovalStatus.approved),
+        approvedBy: Value(approvedBy),
+        approvedAt: Value(DateTime.now()),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   Future<void> rejectPurchaseAdjReturn(
@@ -2313,14 +2498,16 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         "'${row.approvalStatus}'.",
       );
     }
-    await (update(purchaseReturnAdjustments)
-          ..where((r) => r.id.equals(returnId)))
-        .write(PurchaseReturnAdjustmentsCompanion(
-      approvalStatus: const Value(ApprovalStatus.rejected),
-      approvedBy: Value(approvedBy),
-      approvedAt: Value(DateTime.now()),
-      updatedAt: Value(DateTime.now()),
-    ));
+    await (update(
+      purchaseReturnAdjustments,
+    )..where((r) => r.id.equals(returnId))).write(
+      PurchaseReturnAdjustmentsCompanion(
+        approvalStatus: const Value(ApprovalStatus.rejected),
+        approvedBy: Value(approvedBy),
+        approvedAt: Value(DateTime.now()),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   Future<void> approveSaleAdjReturn(
@@ -2337,14 +2524,16 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         "'${row.approvalStatus}' (must be '${ApprovalStatus.pending}').",
       );
     }
-    await (update(saleReturnAdjustments)
-          ..where((r) => r.id.equals(returnId)))
-        .write(SaleReturnAdjustmentsCompanion(
-      approvalStatus: const Value(ApprovalStatus.approved),
-      approvedBy: Value(approvedBy),
-      approvedAt: Value(DateTime.now()),
-      updatedAt: Value(DateTime.now()),
-    ));
+    await (update(
+      saleReturnAdjustments,
+    )..where((r) => r.id.equals(returnId))).write(
+      SaleReturnAdjustmentsCompanion(
+        approvalStatus: const Value(ApprovalStatus.approved),
+        approvedBy: Value(approvedBy),
+        approvedAt: Value(DateTime.now()),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   Future<void> rejectSaleAdjReturn(
@@ -2361,23 +2550,29 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         "'${row.approvalStatus}'.",
       );
     }
-    await (update(saleReturnAdjustments)
-          ..where((r) => r.id.equals(returnId)))
-        .write(SaleReturnAdjustmentsCompanion(
-      approvalStatus: const Value(ApprovalStatus.rejected),
-      approvedBy: Value(approvedBy),
-      approvedAt: Value(DateTime.now()),
-      updatedAt: Value(DateTime.now()),
-    ));
+    await (update(
+      saleReturnAdjustments,
+    )..where((r) => r.id.equals(returnId))).write(
+      SaleReturnAdjustmentsCompanion(
+        approvalStatus: const Value(ApprovalStatus.rejected),
+        approvedBy: Value(approvedBy),
+        approvedAt: Value(DateTime.now()),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   /// Watch product search terms for sale adjustment return items
   Stream<Map<String, List<String>>> watchSaleAdjReturnProductSearchTerms() {
     final query = select(saleReturnAdjustmentItems).join([
-      innerJoin(products,
-          products.id.equalsExp(saleReturnAdjustmentItems.productId)),
-      leftOuterJoin(productVariants,
-          productVariants.id.equalsExp(saleReturnAdjustmentItems.variantId)),
+      innerJoin(
+        products,
+        products.id.equalsExp(saleReturnAdjustmentItems.productId),
+      ),
+      leftOuterJoin(
+        productVariants,
+        productVariants.id.equalsExp(saleReturnAdjustmentItems.variantId),
+      ),
     ]);
 
     return query.watch().map((rows) {

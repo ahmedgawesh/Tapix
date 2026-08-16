@@ -68,7 +68,9 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     try {
       final db = sl<AppDatabase>();
       await db.customStatement('PRAGMA wal_checkpoint(TRUNCATE)');
-      debugPrint('[Backup] WAL checkpoint completed — all data flushed to main DB file');
+      debugPrint(
+        '[Backup] WAL checkpoint completed — all data flushed to main DB file',
+      );
     } catch (e) {
       debugPrint('[Backup] WAL checkpoint warning (non-fatal): $e');
     }
@@ -108,7 +110,9 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         return;
       }
 
-      debugPrint('[Backup] Backing up from: $dbPath (${await dbFile.length()} bytes)');
+      debugPrint(
+        '[Backup] Backing up from: $dbPath (${await dbFile.length()} bytes)',
+      );
 
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
       final fileName = 'tapix_backup_$timestamp.db';
@@ -152,7 +156,10 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                 const SizedBox(height: 4),
                 Text(
                   destPath,
-                  style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -186,7 +193,9 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         return;
       }
 
-      debugPrint('[Backup:Share] Sharing from: $dbPath (${await dbFile.length()} bytes)');
+      debugPrint(
+        '[Backup:Share] Sharing from: $dbPath (${await dbFile.length()} bytes)',
+      );
 
       // Copy to temp with a timestamped name
       final tempDir = await getTemporaryDirectory();
@@ -243,7 +252,11 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       builder: (ctx) {
         final colorScheme = Theme.of(ctx).colorScheme;
         return AlertDialog(
-          icon: Icon(LucideIcons.alertTriangle, color: colorScheme.error, size: 32),
+          icon: Icon(
+            LucideIcons.alertTriangle,
+            color: colorScheme.error,
+            size: 32,
+          ),
           title: Text('settings.backup.restore_warning_title'.tr()),
           content: Text('settings.backup.restore_warning_body'.tr()),
           actions: [
@@ -271,7 +284,9 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       // CRITICAL: Close the database connection BEFORE overwriting the file.
       // This ensures no in-memory connection holds a lock on the file and
       // prevents WAL journal replay from overwriting the restored data.
-      debugPrint('[Backup:Restore] Closing database connection before restore...');
+      debugPrint(
+        '[Backup:Restore] Closing database connection before restore...',
+      );
       final db = sl<AppDatabase>();
       await db.close();
       debugPrint('[Backup:Restore] Database connection closed.');
@@ -290,7 +305,9 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
 
       // Overwrite the database file with the backup
       await pickedFile.copy(dbPath);
-      debugPrint('[Backup:Restore] Restored database from: $pickedPath to: $dbPath');
+      debugPrint(
+        '[Backup:Restore] Restored database from: $pickedPath to: $dbPath',
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -371,7 +388,11 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(LucideIcons.info, size: 20, color: colorScheme.primary),
+                      Icon(
+                        LucideIcons.info,
+                        size: 20,
+                        color: colorScheme.primary,
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
@@ -407,7 +428,9 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                       Expanded(
                         child: Text(
                           _lastBackupLabel != null
-                              ? 'settings.backup.last_backup'.tr(args: [_lastBackupLabel!])
+                              ? 'settings.backup.last_backup'.tr(
+                                  args: [_lastBackupLabel!],
+                                )
                               : 'settings.backup.never_backed_up'.tr(),
                           style: theme.textTheme.bodyMedium?.copyWith(
                             fontWeight: FontWeight.w600,
@@ -474,7 +497,11 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(LucideIcons.lightbulb, size: 20, color: Colors.amber),
+                      const Icon(
+                        LucideIcons.lightbulb,
+                        size: 20,
+                        color: Colors.amber,
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
@@ -555,9 +582,7 @@ class _ActionTile extends StatelessWidget {
         ),
         trailing: Icon(LucideIcons.chevronRight, color: color, size: 20),
         onTap: onTap,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     );
   }

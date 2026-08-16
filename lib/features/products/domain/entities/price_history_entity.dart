@@ -31,17 +31,17 @@ class PriceHistory extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        productId,
-        variantId,
-        oldCostCents,
-        newCostCents,
-        oldPriceCents,
-        newPriceCents,
-        oldWholesalePriceCents,
-        newWholesalePriceCents,
-        userId,
-        changeReason,
-        createdAt,
-      ];
+    id,
+    productId,
+    variantId,
+    oldCostCents,
+    newCostCents,
+    oldPriceCents,
+    newPriceCents,
+    oldWholesalePriceCents,
+    newWholesalePriceCents,
+    userId,
+    changeReason,
+    createdAt,
+  ];
 }

@@ -29,8 +29,7 @@ class ColorsBloc extends RealtimeBloc<List<ProductColor>, ColorsEvent> {
   }
 
   @override
-  void registerEventHandlers() {
-  }
+  void registerEventHandlers() {}
 
   Future<void> _onLoadColors(
     LoadColors event,
@@ -87,7 +86,9 @@ class ColorsBloc extends RealtimeBloc<List<ProductColor>, ColorsEvent> {
     try {
       final hasProducts = await _repository.hasProducts(event.colorId);
       if (hasProducts) {
-        emit(RealtimeError(error: 'Cannot delete color with assigned products'));
+        emit(
+          RealtimeError(error: 'Cannot delete color with assigned products'),
+        );
         return;
       }
 

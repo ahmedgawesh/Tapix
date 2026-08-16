@@ -34,9 +34,9 @@ class PurchaseReturnsBloc
     _productTermsSub = _repository
         .watchPurchaseReturnProductSearchTerms()
         .listen((terms) {
-      _productTerms = terms;
-      _refilter();
-    });
+          _productTerms = terms;
+          _refilter();
+        });
   }
 
   @override
@@ -51,10 +51,12 @@ class PurchaseReturnsBloc
 
   @override
   RealtimeState<List<PurchaseReturnEntity>> mapDataToState(
-      List<PurchaseReturnEntity> data) {
+    List<PurchaseReturnEntity> data,
+  ) {
     _allReturns = data;
     return RealtimeSuccess<List<PurchaseReturnEntity>>(
-        data: _applyFilter(data));
+      data: _applyFilter(data),
+    );
   }
 
   void _onSearch(
@@ -103,8 +105,7 @@ class PurchaseReturnsBloc
 
       // 4. Product name / barcode / SKU
       final terms = _productTerms[r.unifiedId];
-      if (terms != null &&
-          terms.any((t) => t.toLowerCase().contains(q))) {
+      if (terms != null && terms.any((t) => t.toLowerCase().contains(q))) {
         matched.add(r);
         productMatched.add(r.unifiedId);
         continue;

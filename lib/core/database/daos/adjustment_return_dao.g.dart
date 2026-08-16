@@ -23,6 +23,7 @@ mixin _$AdjustmentReturnDaoMixin on DatabaseAccessor<AppDatabase> {
   $CustomersTable get customers => attachedDatabase.customers;
   $RolesTable get roles => attachedDatabase.roles;
   $EmployeesTable get employees => attachedDatabase.employees;
+  $CashierShiftsTable get cashierShifts => attachedDatabase.cashierShifts;
   $SaleReturnAdjustmentsTable get saleReturnAdjustments =>
       attachedDatabase.saleReturnAdjustments;
   $SaleReturnAdjustmentItemsTable get saleReturnAdjustmentItems =>
@@ -87,6 +88,8 @@ class AdjustmentReturnDaoManager {
       $$RolesTableTableManager(_db.attachedDatabase, _db.roles);
   $$EmployeesTableTableManager get employees =>
       $$EmployeesTableTableManager(_db.attachedDatabase, _db.employees);
+  $$CashierShiftsTableTableManager get cashierShifts =>
+      $$CashierShiftsTableTableManager(_db.attachedDatabase, _db.cashierShifts);
   $$SaleReturnAdjustmentsTableTableManager get saleReturnAdjustments =>
       $$SaleReturnAdjustmentsTableTableManager(
         _db.attachedDatabase,

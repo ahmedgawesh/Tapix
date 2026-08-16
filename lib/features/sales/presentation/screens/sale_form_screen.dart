@@ -19,9 +19,13 @@ import '../../../../core/services/parties/party_balance_classifier.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../subscription/presentation/widgets/upgrade_prompt.dart';
 import '../../../../core/money/money.dart';
+import '../../../../core/measurement/measurement.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/pricing/discount.dart';
 import '../../../../core/pricing/line_item_pricing_engine.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../../auth/data/services/permission_service.dart';
+import '../../../auth/domain/entities/permission_constants.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../products/domain/entities/product_variant_entity.dart';
@@ -30,6 +34,7 @@ import '../../../products/domain/repositories/product_color_repository.dart';
 import '../../../products/domain/repositories/product_repository.dart';
 import '../../../products/domain/repositories/product_variant_repository.dart';
 import '../../../products/domain/repositories/size_repository.dart';
+import '../../../products/domain/services/product_barcode_resolver.dart';
 import '../../../products/presentation/bloc/categories_bloc.dart';
 import '../../../products/presentation/bloc/categories_event.dart';
 import '../../../products/presentation/bloc/products_bloc.dart';
@@ -59,13 +64,22 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
   int _activeTab = 0;
   late final UserRole _userRole;
   late final int? _userId;
+  late final bool _canViewProductCost;
 
   @override
   void initState() {
     super.initState();
     final authState = context.read<AuthBloc>().state;
-    _userRole = (authState is AuthAuthenticated) ? authState.user.role : UserRole.cashier;
+    _userRole = (authState is AuthAuthenticated)
+        ? authState.user.role
+        : UserRole.cashier;
     _userId = (authState is AuthAuthenticated) ? authState.user.id : null;
+    _canViewProductCost =
+        authState is AuthAuthenticated &&
+        sl<PermissionService>().hasPermission(
+          authState.user,
+          Permissions.viewProductCost,
+        );
     _addTab(saleId: widget.saleId, isEditingPosted: widget.isEditingPosted);
   }
 
@@ -73,28 +87,30 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
     final bloc = sl<SaleFormBloc>();
     bloc.currentUserRole = _userRole;
     bloc.currentUserId = _userId;
-    
+
     // Get global settings from AppSettingsBloc
     final appSettingsState = context.read<AppSettingsBloc>().state;
     final settings = appSettingsState.settings;
     final enableTax = settings.enableTaxCalculations;
     // Convert percentage to basis points (e.g., 15% -> 1500 bps)
     final taxRateBps = (settings.defaultSalesTaxRate * 100).round();
-    
-    bloc.add(SaleFormInitialized(
-      saleId: saleId,
-      currencyId: 1,
-      enableTaxCalculations: enableTax,
-      defaultSalesTaxRateBps: taxRateBps,
-      allowNegativeStock: settings.allowNegativeStock,
-      allowPartialPayments: settings.allowPartialPayments,
-      allowDiscounts: settings.allowDiscounts,
-      maxDiscountPercent: settings.maxDiscountPercent,
-      requireCustomerForSales: settings.requireCustomerForSales,
-      enableLoyaltyPoints: settings.enableLoyaltyPoints,
-      defaultPaymentMethodStr: settings.defaultPaymentMethod,
-      isEditingPosted: isEditingPosted,
-    ));
+
+    bloc.add(
+      SaleFormInitialized(
+        saleId: saleId,
+        currencyId: 1,
+        enableTaxCalculations: enableTax,
+        defaultSalesTaxRateBps: taxRateBps,
+        allowNegativeStock: settings.allowNegativeStock,
+        allowPartialPayments: settings.allowPartialPayments,
+        allowDiscounts: settings.allowDiscounts,
+        maxDiscountPercent: settings.maxDiscountPercent,
+        requireCustomerForSales: settings.requireCustomerForSales,
+        enableLoyaltyPoints: settings.enableLoyaltyPoints,
+        defaultPaymentMethodStr: settings.defaultPaymentMethod,
+        isEditingPosted: isEditingPosted,
+      ),
+    );
     return bloc;
   }
 
@@ -125,8 +141,12 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
 
   @override
   void dispose() {
-    for (final bloc in _tabs) { bloc.close(); }
-    for (final ctrl in _notesControllers) { ctrl.dispose(); }
+    for (final bloc in _tabs) {
+      bloc.close();
+    }
+    for (final ctrl in _notesControllers) {
+      ctrl.dispose();
+    }
     super.dispose();
   }
 
@@ -137,6 +157,7 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
       child: _SaleFormView(
         notesCtrl: _notesControllers[_activeTab],
         isEditMode: _isEditMode,
+        canViewProductCost: _canViewProductCost,
         tabCount: _tabs.length,
         activeTab: _activeTab,
         onAddTab: _isEditMode ? null : () => _addTab(),
@@ -150,6 +171,7 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
 class _SaleFormView extends StatelessWidget {
   final TextEditingController notesCtrl;
   final bool isEditMode;
+  final bool canViewProductCost;
   final int tabCount;
   final int activeTab;
   final VoidCallback? onAddTab;
@@ -159,6 +181,7 @@ class _SaleFormView extends StatelessWidget {
   const _SaleFormView({
     required this.notesCtrl,
     required this.isEditMode,
+    required this.canViewProductCost,
     required this.tabCount,
     required this.activeTab,
     this.onAddTab,
@@ -226,7 +249,11 @@ class _SaleFormView extends StatelessWidget {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             final nav = Navigator.of(context, rootNavigator: true);
             if (nav.context.mounted) {
-              final autoPrint = nav.context.read<AppSettingsBloc>().state.settings.autoPrintReceipt;
+              final autoPrint = nav.context
+                  .read<AppSettingsBloc>()
+                  .state
+                  .settings
+                  .autoPrintReceipt;
               if (autoPrint) {
                 SalePdfService.printFromFormState(
                   context: nav.context,
@@ -255,7 +282,8 @@ class _SaleFormView extends StatelessWidget {
             );
           }
         }
-        if (state.belowCostWarning != null && state.belowCostWarning!.isBelowCost) {
+        if (state.belowCostWarning != null &&
+            state.belowCostWarning!.isBelowCost) {
           _showBelowCostWarningDialog(context, state.belowCostWarning!);
         }
       },
@@ -272,98 +300,135 @@ class _SaleFormView extends StatelessWidget {
                 icon: const Icon(LucideIcons.arrowLeft),
                 onPressed: () => _navigateBack(context),
               ),
-            title: Text(state.saleId == null ? 'sales.new'.tr() : 'sales.edit'.tr()),
-            actions: [
-              if (!isEditMode)
-                _SaleTabBar(
-                  tabCount: tabCount,
-                  activeTab: activeTab,
-                  onSwitchTab: onSwitchTab,
-                  onAddTab: onAddTab,
-                  onCloseTab: onCloseTab,
-                ),
-            ],
-          ),
-          body: Column(
-            children: [
-              // Fixed (non-scrolling) top section keeps the product
-              // search/scan bar always visible while many items are added.
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _invoiceHeaderCard(context, state, theme, cs),
-                    const SizedBox(height: 12),
-                    _searchBarWithScan(context, theme, cs),
-                  ],
-                ),
+              title: Text(
+                state.saleId == null ? 'sales.new'.tr() : 'sales.edit'.tr(),
               ),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                  children: [
-                    _customerEmployeeRow(context, state, theme, cs),
-                    const SizedBox(height: 8),
-                    _salespersonModeToggle(context, state, theme, cs),
-                    const SizedBox(height: 12),
-                    if (state.allowDiscounts) ...[
-                      _discountToggle(context, state, theme, cs),
-                      const SizedBox(height: 16),
+              actions: [
+                if (!isEditMode)
+                  _SaleTabBar(
+                    tabCount: tabCount,
+                    activeTab: activeTab,
+                    onSwitchTab: onSwitchTab,
+                    onAddTab: onAddTab,
+                    onCloseTab: onCloseTab,
+                  ),
+              ],
+            ),
+            body: Column(
+              children: [
+                // Fixed (non-scrolling) top section keeps the product
+                // search/scan bar always visible while many items are added.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _invoiceHeaderCard(context, state, theme, cs),
+                      const SizedBox(height: 12),
+                      _searchBarWithScan(context, theme, cs),
                     ],
-                    _itemsHeader(context, state, theme, cs),
-                    const SizedBox(height: 8),
-                    if (state.items.isEmpty) _emptyHint(theme, cs),
-                    ...state.items.map((i) => _itemTile(context, i, state, theme, cs, curr)),
-                    const SizedBox(height: 16),
-                    _totalsCard(state, theme, cs, curr),
-                    const SizedBox(height: 80),
-                  ],
+                  ),
                 ),
-              ),
-              _bottomBar(context, state, theme, cs, curr),
-            ],
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                    children: [
+                      _customerEmployeeRow(context, state, theme, cs),
+                      const SizedBox(height: 8),
+                      _salespersonModeToggle(context, state, theme, cs),
+                      const SizedBox(height: 12),
+                      if (state.allowDiscounts) ...[
+                        _discountToggle(context, state, theme, cs),
+                        const SizedBox(height: 16),
+                      ],
+                      _itemsHeader(context, state, theme, cs),
+                      const SizedBox(height: 8),
+                      if (state.items.isEmpty) _emptyHint(theme, cs),
+                      ...state.items.map(
+                        (i) => _itemTile(context, i, state, theme, cs, curr),
+                      ),
+                      const SizedBox(height: 16),
+                      _totalsCard(state, theme, cs, curr),
+                      const SizedBox(height: 80),
+                    ],
+                  ),
+                ),
+                _bottomBar(context, state, theme, cs, curr),
+              ],
+            ),
           ),
-        ),
         );
       },
     );
   }
 
-  Widget _customerEmployeeRow(BuildContext ctx, SaleFormState s, ThemeData t, ColorScheme cs) {
+  Widget _customerEmployeeRow(
+    BuildContext ctx,
+    SaleFormState s,
+    ThemeData t,
+    ColorScheme cs,
+  ) {
     final hasEmp = s.employeeId != null && s.employeeId != 0;
     final isPerInvoice = s.salespersonMode == SalespersonMode.perInvoice;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
-          child: _compactPickerCard(cs, t,
-            bgColor: cs.primaryContainer, icon: LucideIcons.user,
-            iconColor: cs.onPrimaryContainer, label: 'sales.customer'.tr(),
-            value: s.customerName ?? 'sales.walk_in'.tr(), hasValue: s.customerId != null,
-            onClear: s.customerId != null ? () => ctx.read<SaleFormBloc>().add(const SaleCustomerChanged()) : null,
-            onTap: () => _showCustomerPicker(ctx)),
+          child: _compactPickerCard(
+            cs,
+            t,
+            bgColor: cs.primaryContainer,
+            icon: LucideIcons.user,
+            iconColor: cs.onPrimaryContainer,
+            label: 'sales.customer'.tr(),
+            value: s.customerName ?? 'sales.walk_in'.tr(),
+            hasValue: s.customerId != null,
+            onClear: s.customerId != null
+                ? () =>
+                      ctx.read<SaleFormBloc>().add(const SaleCustomerChanged())
+                : null,
+            onTap: () => _showCustomerPicker(ctx),
+          ),
         ),
         // Only show invoice-level salesperson when mode is per-invoice
         if (isPerInvoice) ...[
           const SizedBox(width: 8),
           Expanded(
-            child: _compactPickerCard(cs, t,
-              bgColor: cs.tertiaryContainer, icon: LucideIcons.userCheck,
-              iconColor: cs.onTertiaryContainer, label: 'sales.salesperson'.tr(),
-              value: hasEmp ? (s.employeeName ?? '') : 'sales.select_salesperson'.tr(), hasValue: hasEmp,
-              onClear: hasEmp ? () => ctx.read<SaleFormBloc>().add(const SaleEmployeeChanged()) : null,
-              onTap: () => _showEmployeePicker(ctx)),
+            child: _compactPickerCard(
+              cs,
+              t,
+              bgColor: cs.tertiaryContainer,
+              icon: LucideIcons.userCheck,
+              iconColor: cs.onTertiaryContainer,
+              label: 'sales.salesperson'.tr(),
+              value: hasEmp
+                  ? (s.employeeName ?? '')
+                  : 'sales.select_salesperson'.tr(),
+              hasValue: hasEmp,
+              onClear: hasEmp
+                  ? () => ctx.read<SaleFormBloc>().add(
+                      const SaleEmployeeChanged(),
+                    )
+                  : null,
+              onTap: () => _showEmployeePicker(ctx),
+            ),
           ),
         ],
       ],
     );
   }
 
-  Widget _compactPickerCard(ColorScheme cs, ThemeData theme, {
-    required Color bgColor, required IconData icon, required Color iconColor,
-    required String label, required String value, bool hasValue = false,
-    VoidCallback? onClear, required VoidCallback onTap,
+  Widget _compactPickerCard(
+    ColorScheme cs,
+    ThemeData theme, {
+    required Color bgColor,
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required String value,
+    bool hasValue = false,
+    VoidCallback? onClear,
+    required VoidCallback onTap,
   }) {
     return Card(
       elevation: 0,
@@ -376,42 +441,97 @@ class _SaleFormView extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(children: [
-            Container(width: 32, height: 32,
-              decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(8)),
-              child: Icon(icon, color: iconColor, size: 16)),
-            const SizedBox(width: 8),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(label, style: theme.textTheme.labelSmall?.copyWith(
-                color: cs.onSurfaceVariant, fontSize: 10)),
-              Text(value, style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: hasValue ? FontWeight.w600 : FontWeight.normal,
-                color: hasValue ? null : cs.onSurfaceVariant),
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-            ])),
-            if (onClear != null)
-              GestureDetector(
-                onTap: onClear,
-                child: Icon(LucideIcons.x, size: 14, color: cs.onSurfaceVariant)),
-          ]),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: iconColor, size: 16),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        fontSize: 10,
+                      ),
+                    ),
+                    Text(
+                      value,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: hasValue
+                            ? FontWeight.w600
+                            : FontWeight.normal,
+                        color: hasValue ? null : cs.onSurfaceVariant,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              if (onClear != null)
+                GestureDetector(
+                  onTap: onClear,
+                  child: Icon(
+                    LucideIcons.x,
+                    size: 14,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _salespersonModeToggle(BuildContext ctx, SaleFormState s, ThemeData t, ColorScheme cs) => Row(
+  Widget _salespersonModeToggle(
+    BuildContext ctx,
+    SaleFormState s,
+    ThemeData t,
+    ColorScheme cs,
+  ) => Row(
     children: [
-      Icon(LucideIcons.userCheck, size: 16, color: cs.tertiary), const SizedBox(width: 8),
-      Text('sales.salesperson_mode'.tr(), style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+      Icon(LucideIcons.userCheck, size: 16, color: cs.tertiary),
+      const SizedBox(width: 8),
+      Text(
+        'sales.salesperson_mode'.tr(),
+        style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+      ),
       const Spacer(),
       SegmentedButton<SalespersonMode>(
         segments: [
-          ButtonSegment(value: SalespersonMode.perInvoice, label: Text('sales.per_invoice'.tr(), style: const TextStyle(fontSize: 12))),
-          ButtonSegment(value: SalespersonMode.perItem, label: Text('sales.per_item'.tr(), style: const TextStyle(fontSize: 12))),
+          ButtonSegment(
+            value: SalespersonMode.perInvoice,
+            label: Text(
+              'sales.per_invoice'.tr(),
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+          ButtonSegment(
+            value: SalespersonMode.perItem,
+            label: Text(
+              'sales.per_item'.tr(),
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
         ],
         selected: {s.salespersonMode},
-        onSelectionChanged: (v) => ctx.read<SaleFormBloc>().add(SaleSalespersonModeChanged(v.first)),
-        style: const ButtonStyle(visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+        onSelectionChanged: (v) =>
+            ctx.read<SaleFormBloc>().add(SaleSalespersonModeChanged(v.first)),
+        style: const ButtonStyle(
+          visualDensity: VisualDensity.compact,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
       ),
     ],
   );
@@ -419,7 +539,12 @@ class _SaleFormView extends StatelessWidget {
   // ═══════════════════════════════════════════════════════
   // INVOICE HEADER CARD (Invoice # + Date)
   // ═══════════════════════════════════════════════════════
-  Widget _invoiceHeaderCard(BuildContext ctx, SaleFormState s, ThemeData t, ColorScheme cs) {
+  Widget _invoiceHeaderCard(
+    BuildContext ctx,
+    SaleFormState s,
+    ThemeData t,
+    ColorScheme cs,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -434,12 +559,19 @@ class _SaleFormView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('sales.invoice_number'.tr(),
-                    style: t.textTheme.labelSmall?.copyWith(
-                        color: cs.onSurfaceVariant, letterSpacing: 0.5)),
+                Text(
+                  'sales.invoice_number'.tr(),
+                  style: t.textTheme.labelSmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    letterSpacing: 0.5,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: cs.surface,
                     borderRadius: BorderRadius.circular(8),
@@ -448,7 +580,9 @@ class _SaleFormView extends StatelessWidget {
                   child: Text(
                     s.saleNumber ?? '—',
                     style: t.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold, color: cs.primary),
+                      fontWeight: FontWeight.bold,
+                      color: cs.primary,
+                    ),
                   ),
                 ),
               ],
@@ -473,12 +607,19 @@ class _SaleFormView extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('sales.invoice_date'.tr(),
-                      style: t.textTheme.labelSmall?.copyWith(
-                          color: cs.onSurfaceVariant, letterSpacing: 0.5)),
+                  Text(
+                    'sales.invoice_date'.tr(),
+                    style: t.textTheme.labelSmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
                   const SizedBox(height: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: cs.surface,
                       borderRadius: BorderRadius.circular(8),
@@ -492,7 +633,8 @@ class _SaleFormView extends StatelessWidget {
                           child: Text(
                             DateFormat.yMd().format(s.saleDate),
                             style: t.textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w500),
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ],
@@ -522,17 +664,24 @@ class _SaleFormView extends StatelessWidget {
               decoration: BoxDecoration(
                 color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                border: Border.all(
+                  color: cs.outlineVariant.withValues(alpha: 0.5),
+                ),
               ),
               child: Row(
                 children: [
-                  Icon(LucideIcons.search, size: 18, color: cs.onSurfaceVariant),
+                  Icon(
+                    LucideIcons.search,
+                    size: 18,
+                    color: cs.onSurfaceVariant,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       'sales.search_or_scan'.tr(),
                       style: t.textTheme.bodyMedium?.copyWith(
-                          color: cs.onSurfaceVariant),
+                        color: cs.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 ],
@@ -549,9 +698,15 @@ class _SaleFormView extends StatelessWidget {
             decoration: BoxDecoration(
               color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.5),
+              ),
             ),
-            child: Icon(LucideIcons.scanLine, size: 22, color: cs.onSurfaceVariant),
+            child: Icon(
+              LucideIcons.scanLine,
+              size: 22,
+              color: cs.onSurfaceVariant,
+            ),
           ),
         ),
       ],
@@ -562,45 +717,62 @@ class _SaleFormView extends StatelessWidget {
   // BARCODE SCANNER
   // ═══════════════════════════════════════════════════════
   void _openBarcodeScanner(BuildContext context) async {
-    final result = await context.push<String>('/barcode-scanner', extra: {'returnOnScan': true});
+    final result = await context.push<String>(
+      '/barcode-scanner',
+      extra: {'returnOnScan': true},
+    );
     if (result != null && result.isNotEmpty && context.mounted) {
-      final productRepo = sl<ProductRepository>();
-      final variantRepo = sl<ProductVariantRepository>();
+      final resolver = ProductBarcodeResolver(
+        productRepository: sl<ProductRepository>(),
+        variantRepository: sl<ProductVariantRepository>(),
+      );
 
       try {
-        // Try to find variant by barcode first
-        final variant = await variantRepo.getVariantByBarcode(result);
-        if (variant != null && context.mounted) {
-          final product = await productRepo.watchProduct(variant.productId).first;
-          if (product != null && context.mounted) {
-            context.read<SaleFormBloc>().add(SaleLineItemAdded(
-                  product: product,
-                  variant: variant,
-                  quantity: 1,
-                  unitPriceCents: variant.priceCents,
-                ));
-            return;
-          }
-        }
+        final resolution = await resolver.resolve(result);
+        if (!context.mounted) return;
 
-        // Try product barcode
-        final product = await productRepo.findByBarcode(result);
-        if (product != null && context.mounted) {
-          context.read<SaleFormBloc>().add(SaleLineItemAdded(
+        switch (resolution.type) {
+          case ProductBarcodeResolutionType.variant:
+            final product = resolution.product!;
+            final variant = resolution.variant!;
+            context.read<SaleFormBloc>().add(
+              SaleLineItemAdded(
                 product: product,
-                quantity: 1,
+                variant: variant,
+                quantity: product.quantityScale,
+                unitPriceCents: variant.priceCents,
+              ),
+            );
+            return;
+          case ProductBarcodeResolutionType.simpleProduct:
+            final product = resolution.product!;
+            context.read<SaleFormBloc>().add(
+              SaleLineItemAdded(
+                product: product,
+                quantity: product.quantityScale,
                 unitPriceCents: product.priceCents,
-              ));
-          return;
-        }
-
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('sales.no_products'.tr()),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+              ),
+            );
+            return;
+          case ProductBarcodeResolutionType.variantParent:
+            _showAddItemSheet(context, initialProduct: resolution.product!);
+            return;
+          case ProductBarcodeResolutionType.ambiguous:
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('products.barcode_ambiguous'.tr()),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            return;
+          case ProductBarcodeResolutionType.notFound:
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('sales.no_products'.tr()),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            return;
         }
       } catch (_) {
         if (context.mounted) {
@@ -615,115 +787,285 @@ class _SaleFormView extends StatelessWidget {
     }
   }
 
-  Widget _discountToggle(BuildContext ctx, SaleFormState s, ThemeData t, ColorScheme cs) => Row(
+  Widget _discountToggle(
+    BuildContext ctx,
+    SaleFormState s,
+    ThemeData t,
+    ColorScheme cs,
+  ) => Row(
     children: [
-      Icon(LucideIcons.tag, size: 16, color: cs.primary), const SizedBox(width: 8),
-      Text('sales.discount_mode'.tr(), style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+      Icon(LucideIcons.tag, size: 16, color: cs.primary),
+      const SizedBox(width: 8),
+      Text(
+        'sales.discount_mode'.tr(),
+        style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+      ),
       const Spacer(),
       SegmentedButton<SaleDiscountMode>(
         segments: [
-          ButtonSegment(value: SaleDiscountMode.perItem, label: Text('sales.per_item'.tr(), style: const TextStyle(fontSize: 12))),
-          ButtonSegment(value: SaleDiscountMode.invoice, label: Text('sales.invoice'.tr(), style: const TextStyle(fontSize: 12))),
+          ButtonSegment(
+            value: SaleDiscountMode.perItem,
+            label: Text(
+              'sales.per_item'.tr(),
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+          ButtonSegment(
+            value: SaleDiscountMode.invoice,
+            label: Text(
+              'sales.invoice'.tr(),
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
         ],
         selected: {s.discountMode},
-        onSelectionChanged: (v) => ctx.read<SaleFormBloc>().add(SaleDiscountModeChanged(v.first)),
-        style: const ButtonStyle(visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+        onSelectionChanged: (v) =>
+            ctx.read<SaleFormBloc>().add(SaleDiscountModeChanged(v.first)),
+        style: const ButtonStyle(
+          visualDensity: VisualDensity.compact,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
       ),
     ],
   );
 
-  Widget _itemsHeader(BuildContext ctx, SaleFormState s, ThemeData t, ColorScheme cs) => Row(
+  Widget _itemsHeader(
+    BuildContext ctx,
+    SaleFormState s,
+    ThemeData t,
+    ColorScheme cs,
+  ) => Row(
     children: [
-      Icon(LucideIcons.shoppingCart, size: 18, color: cs.primary), const SizedBox(width: 8),
-      Text('sales.items'.tr(), style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-      if (s.items.isNotEmpty) ...[const SizedBox(width: 8),
-        Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(color: cs.primaryContainer, borderRadius: BorderRadius.circular(10)),
-          child: Text('${s.items.length}', style: t.textTheme.labelSmall?.copyWith(color: cs.onPrimaryContainer, fontWeight: FontWeight.bold)))],
+      Icon(LucideIcons.shoppingCart, size: 18, color: cs.primary),
+      const SizedBox(width: 8),
+      Text(
+        'sales.items'.tr(),
+        style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+      ),
+      if (s.items.isNotEmpty) ...[
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: cs.primaryContainer,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            '${s.items.length}',
+            style: t.textTheme.labelSmall?.copyWith(
+              color: cs.onPrimaryContainer,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
     ],
   );
 
   Widget _emptyHint(ThemeData t, ColorScheme cs) => Container(
-    padding: const EdgeInsets.all(32), margin: const EdgeInsets.only(top: 8),
-    decoration: BoxDecoration(color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
-      borderRadius: BorderRadius.circular(14), border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3))),
-    child: Center(child: Column(children: [
-      Icon(LucideIcons.packageOpen, size: 40, color: cs.onSurface.withValues(alpha: 0.15)),
-      const SizedBox(height: 8),
-      Text('sales.no_items_hint'.tr(), style: t.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
-    ])),
+    padding: const EdgeInsets.all(32),
+    margin: const EdgeInsets.only(top: 8),
+    decoration: BoxDecoration(
+      color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+    ),
+    child: Center(
+      child: Column(
+        children: [
+          Icon(
+            LucideIcons.packageOpen,
+            size: 40,
+            color: cs.onSurface.withValues(alpha: 0.15),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'sales.no_items_hint'.tr(),
+            style: t.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+          ),
+        ],
+      ),
+    ),
   );
 
-  Widget _itemTile(BuildContext ctx, SaleLineItem item, SaleFormState state, ThemeData t, ColorScheme cs, CurrencyService curr) {
-    final hasImage = item.product.imagePath != null && item.product.imagePath!.isNotEmpty;
+  Widget _itemTile(
+    BuildContext ctx,
+    SaleLineItem item,
+    SaleFormState state,
+    ThemeData t,
+    ColorScheme cs,
+    CurrencyService curr,
+  ) {
+    final hasImage =
+        item.product.imagePath != null && item.product.imagePath!.isNotEmpty;
     final itemTaxCents = item.taxCentsWithSettings(
       enableTaxCalculations: state.enableTaxCalculations,
       defaultTaxRateBps: state.defaultSalesTaxRateBps,
     );
     return Card(
-      elevation: 0, margin: const EdgeInsets.only(bottom: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4))),
+      elevation: 0,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4)),
+      ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () => _showEditItemSheet(ctx, item),
-        child: Padding(padding: const EdgeInsets.all(12), child: Row(children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(10),
-              image: hasImage
-                  ? DecorationImage(
-                      image: FileImage(File(item.product.imagePath!)),
-                      fit: BoxFit.cover,
-                      onError: (exception, stackTrace) {},
-                    )
-                  : null,
-            ),
-            child: !hasImage
-                ? Icon(LucideIcons.package, size: 20, color: cs.onSurfaceVariant)
-                : null,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(10),
+                  image: hasImage
+                      ? DecorationImage(
+                          image: FileImage(File(item.product.imagePath!)),
+                          fit: BoxFit.cover,
+                          onError: (exception, stackTrace) {},
+                        )
+                      : null,
+                ),
+                child: !hasImage
+                    ? Icon(
+                        LucideIcons.package,
+                        size: 20,
+                        color: cs.onSurfaceVariant,
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.displayName,
+                      style: t.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    if (item.colorHex != null || item.sizeName != null)
+                      _variantChips(item, cs),
+                    Row(
+                      children: [
+                        Text(
+                          '${localizedQuantity(item.quantity, item.product.measurementType)} × ${curr.format(item.unitPriceCents.toBigInt().toInt())}',
+                          style: t.textTheme.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                        if (item.discountCents > Decimal.zero) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: cs.tertiaryContainer,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '-${curr.format(item.discountCents.toBigInt().toInt())}',
+                              style: t.textTheme.labelSmall?.copyWith(
+                                color: cs.onTertiaryContainer,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (itemTaxCents > Decimal.zero) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: cs.secondaryContainer,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '+${curr.format(itemTaxCents.toBigInt().toInt())}',
+                              style: t.textTheme.labelSmall?.copyWith(
+                                color: cs.onSecondaryContainer,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    curr.format(item.totalCents.toBigInt().toInt()),
+                    style: t.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: cs.primary,
+                    ),
+                  ),
+                  if (item.employeeName != null &&
+                      item.employeeName!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: cs.tertiaryContainer,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        item.employeeName!,
+                        style: t.textTheme.labelSmall?.copyWith(
+                          color: cs.onTertiaryContainer,
+                          fontSize: 9,
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (item.itemNote != null && item.itemNote!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Icon(
+                      LucideIcons.stickyNote,
+                      size: 12,
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  InkWell(
+                    onTap: () => ctx.read<SaleFormBloc>().add(
+                      SaleLineItemRemoved(item.tempId),
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(
+                        LucideIcons.trash2,
+                        size: 16,
+                        color: cs.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(item.displayName, style: t.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-              maxLines: 1, overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 4),
-            if (item.colorHex != null || item.sizeName != null) _variantChips(item, cs),
-            Row(children: [
-              Text('${item.quantity} × ${curr.format(item.unitPriceCents.toBigInt().toInt())}',
-                style: t.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-              if (item.discountCents > Decimal.zero) ...[const SizedBox(width: 8),
-                Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                  decoration: BoxDecoration(color: cs.tertiaryContainer, borderRadius: BorderRadius.circular(6)),
-                  child: Text('-${curr.format(item.discountCents.toBigInt().toInt())}',
-                    style: t.textTheme.labelSmall?.copyWith(color: cs.onTertiaryContainer, fontWeight: FontWeight.w600)))],
-              if (itemTaxCents > Decimal.zero) ...[const SizedBox(width: 8),
-                Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                  decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(6)),
-                  child: Text('+${curr.format(itemTaxCents.toBigInt().toInt())}',
-                    style: t.textTheme.labelSmall?.copyWith(color: cs.onSecondaryContainer, fontWeight: FontWeight.w600)))],
-            ]),
-          ])),
-          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text(curr.format(item.totalCents.toBigInt().toInt()),
-              style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold, color: cs.primary)),
-            if (item.employeeName != null && item.employeeName!.isNotEmpty) ...[const SizedBox(height: 2),
-              Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(color: cs.tertiaryContainer, borderRadius: BorderRadius.circular(6)),
-                child: Text(item.employeeName!, style: t.textTheme.labelSmall?.copyWith(
-                  color: cs.onTertiaryContainer, fontSize: 9)))],
-            if (item.itemNote != null && item.itemNote!.isNotEmpty) ...[const SizedBox(height: 2),
-              Icon(LucideIcons.stickyNote, size: 12, color: cs.onSurfaceVariant)],
-            const SizedBox(height: 4),
-            InkWell(onTap: () => ctx.read<SaleFormBloc>().add(SaleLineItemRemoved(item.tempId)),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(padding: const EdgeInsets.all(4),
-                child: Icon(LucideIcons.trash2, size: 16, color: cs.error))),
-          ]),
-        ])),
+        ),
       ),
     );
   }
@@ -740,7 +1082,8 @@ class _SaleFormView extends StatelessWidget {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           if (shade != null) _colorDotChip(cs, shade),
-          if (item.sizeName != null && item.sizeName!.isNotEmpty) _chip(cs, item.sizeName!),
+          if (item.sizeName != null && item.sizeName!.isNotEmpty)
+            _chip(cs, item.sizeName!),
         ],
       ),
     );
@@ -787,124 +1130,296 @@ class _SaleFormView extends StatelessWidget {
 
   Widget _chip(ColorScheme cs, String label) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(6),
-      border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5))),
-    child: Text(label, style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)));
+    decoration: BoxDecoration(
+      color: cs.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
+    ),
+  );
 
-  Widget _totalsCard(SaleFormState s, ThemeData t, ColorScheme cs, CurrencyService curr) {
+  Widget _totalsCard(
+    SaleFormState s,
+    ThemeData t,
+    ColorScheme cs,
+    CurrencyService curr,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(14), border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3))),
-      child: Column(children: [
-        _row(t, 'sales.subtotal'.tr(), curr.format(s.subtotalCents.toBigInt().toInt())),
-        if (s.totalDiscountCents > Decimal.zero) ...[const SizedBox(height: 8),
-          _row(t, 'sales.discount'.tr(), '- ${curr.format(s.totalDiscountCents.toBigInt().toInt())}', valueColor: cs.tertiary)],
-        if (s.taxCents > Decimal.zero) ...[const SizedBox(height: 8),
-          _row(t, 'sales.tax'.tr(), curr.format(s.taxCents.toBigInt().toInt()))],
-        Divider(height: 20, color: cs.outlineVariant.withValues(alpha: 0.5)),
-        _row(t, 'sales.total'.tr(), curr.format(s.totalCents.toBigInt().toInt()), isBold: true, valueColor: cs.primary),
-      ]),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        children: [
+          _row(
+            t,
+            'sales.subtotal'.tr(),
+            curr.format(s.subtotalCents.toBigInt().toInt()),
+          ),
+          if (s.totalDiscountCents > Decimal.zero) ...[
+            const SizedBox(height: 8),
+            _row(
+              t,
+              'sales.discount'.tr(),
+              '- ${curr.format(s.totalDiscountCents.toBigInt().toInt())}',
+              valueColor: cs.tertiary,
+            ),
+          ],
+          if (s.taxCents > Decimal.zero) ...[
+            const SizedBox(height: 8),
+            _row(
+              t,
+              'sales.tax'.tr(),
+              curr.format(s.taxCents.toBigInt().toInt()),
+            ),
+          ],
+          Divider(height: 20, color: cs.outlineVariant.withValues(alpha: 0.5)),
+          _row(
+            t,
+            'sales.total'.tr(),
+            curr.format(s.totalCents.toBigInt().toInt()),
+            isBold: true,
+            valueColor: cs.primary,
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _row(ThemeData t, String l, String v, {bool isBold = false, Color? valueColor}) => Row(
+  Widget _row(
+    ThemeData t,
+    String l,
+    String v, {
+    bool isBold = false,
+    Color? valueColor,
+  }) => Row(
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [
-      Text(l, style: (isBold ? t.textTheme.titleSmall : t.textTheme.bodyMedium)?.copyWith(
-        color: isBold ? null : t.colorScheme.onSurfaceVariant)),
-      Text(v, style: (isBold ? t.textTheme.titleMedium : t.textTheme.bodyMedium)?.copyWith(
-        color: valueColor, fontWeight: isBold ? FontWeight.bold : FontWeight.w500)),
-    ]);
+      Text(
+        l,
+        style: (isBold ? t.textTheme.titleSmall : t.textTheme.bodyMedium)
+            ?.copyWith(color: isBold ? null : t.colorScheme.onSurfaceVariant),
+      ),
+      Text(
+        v,
+        style: (isBold ? t.textTheme.titleMedium : t.textTheme.bodyMedium)
+            ?.copyWith(
+              color: valueColor,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+            ),
+      ),
+    ],
+  );
 
-  Widget _bottomBar(BuildContext ctx, SaleFormState s, ThemeData t, ColorScheme cs, CurrencyService curr) {
+  Widget _bottomBar(
+    BuildContext ctx,
+    SaleFormState s,
+    ThemeData t,
+    ColorScheme cs,
+    CurrencyService curr,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(color: cs.surface,
-        border: Border(top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.3))),
-        boxShadow: [BoxShadow(color: cs.shadow.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, -2))]),
-      child: SafeArea(child: Row(children: [
-        Expanded(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('sales.total'.tr(), style: t.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
-          Text(curr.format(s.totalCents.toBigInt().toInt()),
-            style: t.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: cs.primary)),
-          Text('${s.items.length} ${'sales.items'.tr().toLowerCase()}  •  ${s.totalQuantity} ${'sales.pieces'.tr().toLowerCase()}',
-            style: t.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-        ])),
-        const SizedBox(width: 12),
-        Expanded(child: FilledButton.icon(
-          onPressed: s.items.isEmpty ? null : () => _showCheckoutDialog(ctx, s, curr),
-          icon: const Icon(LucideIcons.shoppingBag, size: 18),
-          label: Text('sales.checkout'.tr()),
-          style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)))),
-      ])),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        border: Border(
+          top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.3)),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: cs.shadow.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'sales.total'.tr(),
+                    style: t.textTheme.labelSmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                  Text(
+                    curr.format(s.totalCents.toBigInt().toInt()),
+                    style: t.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: cs.primary,
+                    ),
+                  ),
+                  Text(
+                    '${s.items.length} ${'sales.items'.tr().toLowerCase()}  •  ${s.totalQuantity} ${'sales.pieces'.tr().toLowerCase()}',
+                    style: t.textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: s.items.isEmpty
+                    ? null
+                    : () => _showCheckoutDialog(ctx, s, curr),
+                icon: const Icon(LucideIcons.shoppingBag, size: 18),
+                label: Text('sales.checkout'.tr()),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   // Dialog launchers
   void _showCustomerPicker(BuildContext ctx) {
     final bloc = ctx.read<SaleFormBloc>();
-    showModalBottomSheet<void>(context: ctx, isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (sc) => _CustomerPickerSheet(onSelected: (c) {
-        bloc.add(SaleCustomerChanged(customerId: c.id, customerName: c.name));
-        Navigator.pop(sc);
-      }));
+    showModalBottomSheet<void>(
+      context: ctx,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sc) => _CustomerPickerSheet(
+        onSelected: (c) {
+          bloc.add(SaleCustomerChanged(customerId: c.id, customerName: c.name));
+          Navigator.pop(sc);
+        },
+      ),
+    );
   }
 
   void _showEmployeePicker(BuildContext ctx) {
     final bloc = ctx.read<SaleFormBloc>();
-    showModalBottomSheet<void>(context: ctx, isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (sc) => _EmployeePickerSheet(onSelected: (e) {
-        bloc.add(SaleEmployeeChanged(employeeId: e.id, employeeName: e.name));
-        Navigator.pop(sc);
-      }));
+    showModalBottomSheet<void>(
+      context: ctx,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sc) => _EmployeePickerSheet(
+        onSelected: (e) {
+          bloc.add(SaleEmployeeChanged(employeeId: e.id, employeeName: e.name));
+          Navigator.pop(sc);
+        },
+      ),
+    );
   }
 
-  void _showAddItemSheet(BuildContext ctx) {
+  void _showAddItemSheet(BuildContext ctx, {Product? initialProduct}) {
     final bloc = ctx.read<SaleFormBloc>();
-    showModalBottomSheet<void>(context: ctx, isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    showModalBottomSheet<void>(
+      context: ctx,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (sc) => MultiBlocProvider(
         providers: [
-          BlocProvider(create: (_) => sl<ProductsBloc>()..add(const ProductSearchRequested(''))),
+          BlocProvider(
+            create: (_) =>
+                sl<ProductsBloc>()..add(const ProductSearchRequested('')),
+          ),
           BlocProvider(create: (_) => sl<VariantPreviewsBloc>()),
-          BlocProvider(create: (_) => sl<CategoriesBloc>()..add(const LoadCategories())),
+          BlocProvider(
+            create: (_) => sl<CategoriesBloc>()..add(const LoadCategories()),
+          ),
         ],
-        child: _AddItemSheet(onItemAdded: (product, variant, qty, price) {
-          bloc.add(SaleLineItemAdded(product: product, variant: variant, quantity: qty, unitPriceCents: price));
-          Navigator.pop(sc);
-        })));
+        child: _AddItemSheet(
+          initialProduct: initialProduct,
+          onItemAdded: (product, variant, qty, price) {
+            bloc.add(
+              SaleLineItemAdded(
+                product: product,
+                variant: variant,
+                quantity: qty,
+                unitPriceCents: price,
+              ),
+            );
+            Navigator.pop(sc);
+          },
+        ),
+      ),
+    );
   }
 
   void _showEditItemSheet(BuildContext ctx, SaleLineItem item) {
     final bloc = ctx.read<SaleFormBloc>();
     final isPerItem = bloc.state.salespersonMode == SalespersonMode.perItem;
-    showModalBottomSheet<void>(context: ctx, isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    showModalBottomSheet<void>(
+      context: ctx,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       // BlocProvider.value re-exposes the SaleFormBloc inside the
       // modal route — without this the sheet's `context.read<SaleFormBloc>()`
       // (used to source live tax flags for the live total preview)
       // walks an empty element tree and throws ProviderNotFoundError.
       // Mirrors the _CheckoutSheet pattern below.
-      builder: (sc) => BlocProvider.value(value: bloc,
-        child: _EditItemSheet(item: item,
+      builder: (sc) => BlocProvider.value(
+        value: bloc,
+        child: _EditItemSheet(
+          item: item,
           showSalesperson: isPerItem,
           allowDiscounts: bloc.state.allowDiscounts,
-          onUpdated: (qty, price, discount, {int? employeeId, String? employeeName, String? itemNote, bool clearEmployee = false}) {
-            bloc.add(SaleLineItemUpdated(
-              tempId: item.tempId, quantity: qty, unitPriceCents: price, discountCents: discount,
-              employeeId: employeeId, employeeName: employeeName, itemNote: itemNote, clearEmployee: clearEmployee));
+          canViewProductCost: canViewProductCost,
+          onUpdated:
+              (
+                qty,
+                price,
+                discount, {
+                int? employeeId,
+                String? employeeName,
+                String? itemNote,
+                bool clearEmployee = false,
+              }) {
+                bloc.add(
+                  SaleLineItemUpdated(
+                    tempId: item.tempId,
+                    quantity: qty,
+                    unitPriceCents: price,
+                    discountCents: discount,
+                    employeeId: employeeId,
+                    employeeName: employeeName,
+                    itemNote: itemNote,
+                    clearEmployee: clearEmployee,
+                  ),
+                );
+                Navigator.pop(sc);
+              },
+          onRemoved: () {
+            bloc.add(SaleLineItemRemoved(item.tempId));
             Navigator.pop(sc);
           },
-          onRemoved: () { bloc.add(SaleLineItemRemoved(item.tempId)); Navigator.pop(sc); })));
+        ),
+      ),
+    );
   }
 
   // ═══════════════════════════════════════════════════════
   // BELOW-COST WARNING DIALOG
   // ═══════════════════════════════════════════════════════
-  void _showBelowCostWarningDialog(BuildContext context, BelowCostCheckResult warning) {
+  void _showBelowCostWarningDialog(
+    BuildContext context,
+    BelowCostCheckResult warning,
+  ) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final curr = sl<CurrencyService>();
@@ -916,11 +1431,15 @@ class _SaleFormView extends StatelessWidget {
       barrierDismissible: false,
       builder: (ctx) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: Row(
             children: [
               Icon(
-                warning.canOverride ? LucideIcons.alertTriangle : LucideIcons.ban,
+                warning.canOverride
+                    ? LucideIcons.alertTriangle
+                    : LucideIcons.ban,
                 color: warning.canOverride ? Colors.deepOrange : cs.error,
                 size: 24,
               ),
@@ -946,44 +1465,74 @@ class _SaleFormView extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: (warning.canOverride ? Colors.deepOrange : cs.error).withValues(alpha: 0.08),
+                    color: (warning.canOverride ? Colors.deepOrange : cs.error)
+                        .withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(warning.productName,
-                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 8),
-                      _belowCostInfoRow(theme, 'sales.below_cost_cost'.tr(),
-                        curr.formatCents(warning.costCents.toBigInt().toInt())),
-                      _belowCostInfoRow(theme, 'sales.below_cost_price'.tr(),
-                        curr.formatCents(warning.sellingPriceCents.toBigInt().toInt())),
-                      const Divider(height: 16),
-                      _belowCostInfoRow(theme, 'sales.below_cost_loss'.tr(),
-                        curr.formatCents(warning.lossCents.toBigInt().toInt()),
-                        valueColor: cs.error),
+                      Text(
+                        warning.productName,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (canViewProductCost) ...[
+                        const SizedBox(height: 8),
+                        _belowCostInfoRow(
+                          theme,
+                          'sales.below_cost_cost'.tr(),
+                          curr.formatCents(
+                            warning.costCents.toBigInt().toInt(),
+                          ),
+                        ),
+                        _belowCostInfoRow(
+                          theme,
+                          'sales.below_cost_price'.tr(),
+                          curr.formatCents(
+                            warning.sellingPriceCents.toBigInt().toInt(),
+                          ),
+                        ),
+                        const Divider(height: 16),
+                        _belowCostInfoRow(
+                          theme,
+                          'sales.below_cost_loss'.tr(),
+                          curr.formatCents(
+                            warning.lossCents.toBigInt().toInt(),
+                          ),
+                          valueColor: cs.error,
+                        ),
+                      ],
                     ],
                   ),
                 ),
                 const SizedBox(height: 12),
                 // Threshold exceeded warning
-                if (warning.exceedsThreshold) ...[
+                if (canViewProductCost && warning.exceedsThreshold) ...[
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: cs.error.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: cs.error.withValues(alpha: 0.3)),
+                      border: Border.all(
+                        color: cs.error.withValues(alpha: 0.3),
+                      ),
                     ),
                     child: Row(
                       children: [
-                        Icon(LucideIcons.shieldAlert, color: cs.error, size: 18),
+                        Icon(
+                          LucideIcons.shieldAlert,
+                          color: cs.error,
+                          size: 18,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'sales.below_cost_threshold_exceeded'.tr(args: [warning.lossPercent.toStringAsFixed(1)]),
+                            'sales.below_cost_threshold_exceeded'.tr(
+                              args: [warning.lossPercent.toStringAsFixed(1)],
+                            ),
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: cs.error,
                               fontWeight: FontWeight.w600,
@@ -1012,8 +1561,13 @@ class _SaleFormView extends StatelessWidget {
                     decoration: InputDecoration(
                       labelText: 'sales.below_cost_reason'.tr(),
                       hintText: 'sales.below_cost_reason_hint'.tr(),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                      prefixIcon: const Icon(LucideIcons.messageSquare, size: 18),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      prefixIcon: const Icon(
+                        LucideIcons.messageSquare,
+                        size: 18,
+                      ),
                     ),
                     maxLines: 2,
                     textInputAction: TextInputAction.done,
@@ -1064,17 +1618,25 @@ class _SaleFormView extends StatelessWidget {
     ).then((_) => reasonCtrl.dispose());
   }
 
-  Widget _belowCostInfoRow(ThemeData theme, String label, String value, {Color? valueColor}) {
+  Widget _belowCostInfoRow(
+    ThemeData theme,
+    String label,
+    String value, {
+    Color? valueColor,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: theme.textTheme.bodySmall),
-          Text(value, style: theme.textTheme.bodySmall?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: valueColor,
-          )),
+          Text(
+            value,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: valueColor,
+            ),
+          ),
         ],
       ),
     );
@@ -1102,12 +1664,18 @@ class _SaleFormView extends StatelessWidget {
                   color: Colors.green.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(LucideIcons.checkCircle2, size: 48, color: Colors.green),
+                child: const Icon(
+                  LucideIcons.checkCircle2,
+                  size: 48,
+                  color: Colors.green,
+                ),
               ),
               const SizedBox(height: 16),
               Text(
                 'sales.invoice_saved_message'.tr(args: [invoiceNumber]),
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -1162,13 +1730,31 @@ class _SaleFormView extends StatelessWidget {
     );
   }
 
-  void _showCheckoutDialog(BuildContext ctx, SaleFormState s, CurrencyService curr) {
+  void _showCheckoutDialog(
+    BuildContext ctx,
+    SaleFormState s,
+    CurrencyService curr,
+  ) {
     final bloc = ctx.read<SaleFormBloc>();
-    showModalBottomSheet<void>(context: ctx, isScrollControlled: true, useSafeArea: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (sc) => BlocProvider.value(value: bloc,
-        child: _CheckoutSheet(currencyService: curr, notesCtrl: notesCtrl,
-          onConfirm: () { bloc.add(const SaleFormSubmitted()); Navigator.pop(sc); })));
+    showModalBottomSheet<void>(
+      context: ctx,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sc) => BlocProvider.value(
+        value: bloc,
+        child: _CheckoutSheet(
+          currencyService: curr,
+          notesCtrl: notesCtrl,
+          onConfirm: () {
+            bloc.add(const SaleFormSubmitted());
+            Navigator.pop(sc);
+          },
+        ),
+      ),
+    );
   }
 }
 
@@ -1208,7 +1794,10 @@ class _SaleTabBar extends StatelessWidget {
                   : null,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: i == activeTab
                       ? cs.primaryContainer
@@ -1228,15 +1817,25 @@ class _SaleTabBar extends StatelessWidget {
                       '${i + 1}',
                       style: TextStyle(
                         fontSize: 12,
-                        fontWeight: i == activeTab ? FontWeight.bold : FontWeight.w500,
-                        color: i == activeTab ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+                        fontWeight: i == activeTab
+                            ? FontWeight.bold
+                            : FontWeight.w500,
+                        color: i == activeTab
+                            ? cs.onPrimaryContainer
+                            : cs.onSurfaceVariant,
                       ),
                     ),
-                    if (i == activeTab && tabCount > 1 && onCloseTab != null) ...[
+                    if (i == activeTab &&
+                        tabCount > 1 &&
+                        onCloseTab != null) ...[
                       const SizedBox(width: 2),
                       GestureDetector(
                         onTap: () => _showCloseConfirm(context, i),
-                        child: Icon(LucideIcons.x, size: 12, color: cs.onPrimaryContainer),
+                        child: Icon(
+                          LucideIcons.x,
+                          size: 12,
+                          color: cs.onPrimaryContainer,
+                        ),
                       ),
                     ],
                   ],
@@ -1257,7 +1856,9 @@ class _SaleTabBar extends StatelessWidget {
               tooltip: 'sales.add_tab'.tr(),
               style: IconButton.styleFrom(
                 backgroundColor: cs.primaryContainer.withValues(alpha: 0.5),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
           ),

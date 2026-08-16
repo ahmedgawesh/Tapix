@@ -4,7 +4,8 @@ import '../../../../core/database/app_database.dart' hide Product;
 import '../../domain/models/barcode_design_state.dart';
 import '../../data/models/invoice_print_data.dart';
 
-export '../../domain/models/barcode_design_state.dart' show LabelPrintMode, QuantityMode;
+export '../../domain/models/barcode_design_state.dart'
+    show LabelPrintMode, PriceDisplayMode, PrintDestination, QuantityMode;
 
 abstract class BarcodeDesignEvent extends RealtimeEvent {
   const BarcodeDesignEvent();
@@ -14,10 +15,12 @@ abstract class BarcodeDesignEvent extends RealtimeEvent {
 class LoadBarcodeDesignData extends BarcodeDesignEvent {
   final List<Product>? initialProducts;
   final Map<int, String>? variantInfoByProductId;
+  final Set<int>? selectedVariantIds;
 
   const LoadBarcodeDesignData({
     this.initialProducts,
     this.variantInfoByProductId,
+    this.selectedVariantIds,
   });
 }
 
@@ -74,6 +77,20 @@ class ToggleIncludePrice extends BarcodeDesignEvent {
   const ToggleIncludePrice(this.value);
 }
 
+/// Choose whether labels show retail, wholesale, or both prices.
+class UpdatePriceDisplayMode extends BarcodeDesignEvent {
+  final PriceDisplayMode priceDisplayMode;
+
+  const UpdatePriceDisplayMode(this.priceDisplayMode);
+}
+
+/// Choose the native system printer or a direct Bluetooth label printer.
+class UpdatePrintDestination extends BarcodeDesignEvent {
+  final PrintDestination printDestination;
+
+  const UpdatePrintDestination(this.printDestination);
+}
+
 /// Toggle include barcode
 class ToggleIncludeBarcode extends BarcodeDesignEvent {
   final bool value;
@@ -128,8 +145,9 @@ class UpdatePrintType extends BarcodeDesignEvent {
 /// Print labels for selected products
 class PrintLabels extends BarcodeDesignEvent {
   final String? printerName;
+  final String? bluetoothAddress;
 
-  const PrintLabels({this.printerName});
+  const PrintLabels({this.printerName, this.bluetoothAddress});
 }
 
 /// Share labels as PDF

@@ -27,6 +27,7 @@ class PermissionService {
       Permissions.adjustStock,
       Permissions.manageCategories,
       Permissions.viewProducts,
+      Permissions.viewProductCost,
       Permissions.manageBarcodes,
       // Financial Operations
       Permissions.viewReports,
@@ -85,6 +86,7 @@ class PermissionService {
       Permissions.adjustStock,
       Permissions.manageCategories,
       Permissions.viewProducts,
+      Permissions.viewProductCost,
       Permissions.manageBarcodes,
       // Financial Operations
       Permissions.viewReports,
@@ -128,6 +130,7 @@ class PermissionService {
       Permissions.viewAuditLogs,
       // View only (read access to data for reconciliation)
       Permissions.viewProducts,
+      Permissions.viewProductCost,
       Permissions.viewCustomers,
       Permissions.viewSuppliers,
       Permissions.viewPurchases,
@@ -192,7 +195,7 @@ class PermissionService {
   bool canAccessRoute(UserEntity? user, String route) {
     if (user == null || !user.isActive) return false;
 
-    final allowedRoles = RoutePermissions.map[route];
+    final allowedRoles = RoutePermissions.rolesForPath(route);
     if (allowedRoles == null) return true;
     return allowedRoles.contains(user.role);
   }

@@ -15,6 +15,7 @@ mixin _$EmployeeDaoMixin on DatabaseAccessor<AppDatabase> {
       attachedDatabase.payrollDeductions;
   $LoyaltyTiersTable get loyaltyTiers => attachedDatabase.loyaltyTiers;
   $CustomersTable get customers => attachedDatabase.customers;
+  $CashierShiftsTable get cashierShifts => attachedDatabase.cashierShifts;
   $SalesTable get sales => attachedDatabase.sales;
   $CommissionsTable get commissions => attachedDatabase.commissions;
   $PerformanceMetricsTable get performanceMetrics =>
@@ -52,6 +53,8 @@ class EmployeeDaoManager {
       $$LoyaltyTiersTableTableManager(_db.attachedDatabase, _db.loyaltyTiers);
   $$CustomersTableTableManager get customers =>
       $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
+  $$CashierShiftsTableTableManager get cashierShifts =>
+      $$CashierShiftsTableTableManager(_db.attachedDatabase, _db.cashierShifts);
   $$SalesTableTableManager get sales =>
       $$SalesTableTableManager(_db.attachedDatabase, _db.sales);
   $$CommissionsTableTableManager get commissions =>

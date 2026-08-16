@@ -743,6 +743,8 @@ class _StatementContent extends StatelessWidget {
         return 'reports.txn_type_credit_note'.tr();
       case 'opening_balance':
         return 'reports.txn_type_opening_balance'.tr();
+      case 'adjustment_return_reversal':
+        return 'reports.txn_type_adjustment_return_reversal'.tr();
       default:
         return type;
     }

@@ -20,10 +20,7 @@ class SizesScreen extends StatelessWidget {
     final providedBloc = bloc;
     if (providedBloc != null) {
       providedBloc.add(const LoadSizes());
-      return BlocProvider.value(
-        value: providedBloc,
-        child: const _SizesView(),
-      );
+      return BlocProvider.value(value: providedBloc, child: const _SizesView());
     }
 
     return BlocProvider(
@@ -72,7 +69,11 @@ class _SizesViewState extends State<_SizesView> {
       builder: (dialogContext) => AlertDialog(
         title: Text('sizes.delete_confirm_title'.tr()),
         content: productCount > 0
-            ? Text('sizes.delete_with_products'.tr(args: [size.name, productCount.toString()]))
+            ? Text(
+                'sizes.delete_with_products'.tr(
+                  args: [size.name, productCount.toString()],
+                ),
+              )
             : Text('sizes.delete_confirm_message'.tr(args: [size.name])),
         actions: [
           TextButton(
@@ -99,7 +100,9 @@ class _SizesViewState extends State<_SizesView> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final isDesktop = MediaQuery.of(context).size.width >= 1024;
-    final isTablet = MediaQuery.of(context).size.width >= 600 && MediaQuery.of(context).size.width < 1024;
+    final isTablet =
+        MediaQuery.of(context).size.width >= 600 &&
+        MediaQuery.of(context).size.width < 1024;
 
     return Scaffold(
       appBar: AppBar(
@@ -168,21 +171,27 @@ class _SizesViewState extends State<_SizesView> {
                             Icon(
                               LucideIcons.ruler,
                               size: 64,
-                              color: colorScheme.onSurface.withValues(alpha: 0.3),
+                              color: colorScheme.onSurface.withValues(
+                                alpha: 0.3,
+                              ),
                             ),
                             const SizedBox(height: 16),
                             Text(
                               _searchController.text.isEmpty
                                   ? 'sizes.no_sizes'.tr()
                                   : 'sizes.no_sizes'.tr(),
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    color: colorScheme.onSurface.withValues(alpha: 0.6),
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(
+                                    color: colorScheme.onSurface.withValues(
+                                      alpha: 0.6,
+                                    ),
                                   ),
                             ),
                             const SizedBox(height: 8),
                             if (_searchController.text.isEmpty)
                               TextButton.icon(
-                                onPressed: () => context.push('/products/sizes/new'),
+                                onPressed: () =>
+                                    context.push('/products/sizes/new'),
                                 icon: const Icon(LucideIcons.plus),
                                 label: Text('sizes.add_first_size'.tr()),
                               ),
@@ -242,15 +251,22 @@ class _SizesViewState extends State<_SizesView> {
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: size.isActive
-                            ? colorScheme.primaryContainer.withValues(alpha: 0.5)
+                            ? colorScheme.primaryContainer.withValues(
+                                alpha: 0.5,
+                              )
                             : colorScheme.errorContainer.withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
-                        size.isActive ? 'sizes.active'.tr() : 'sizes.inactive'.tr(),
+                        size.isActive
+                            ? 'sizes.active'.tr()
+                            : 'sizes.inactive'.tr(),
                         style: TextStyle(
                           fontSize: 12,
                           color: size.isActive
@@ -295,7 +311,11 @@ class _SizesViewState extends State<_SizesView> {
                   value: 'delete',
                   child: Row(
                     children: [
-                      Icon(LucideIcons.trash2, size: 18, color: colorScheme.error),
+                      Icon(
+                        LucideIcons.trash2,
+                        size: 18,
+                        color: colorScheme.error,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         'sizes.delete'.tr(),
@@ -386,12 +406,15 @@ class _SizesViewState extends State<_SizesView> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        if (size.description != null && size.description!.isNotEmpty)
+                        if (size.description != null &&
+                            size.description!.isNotEmpty)
                           Text(
                             size.description!,
                             style: TextStyle(
                               fontSize: 12,
-                              color: colorScheme.onSurface.withValues(alpha: 0.6),
+                              color: colorScheme.onSurface.withValues(
+                                alpha: 0.6,
+                              ),
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -423,7 +446,11 @@ class _SizesViewState extends State<_SizesView> {
                         value: 'delete',
                         child: Row(
                           children: [
-                            Icon(LucideIcons.trash2, size: 18, color: colorScheme.error),
+                            Icon(
+                              LucideIcons.trash2,
+                              size: 18,
+                              color: colorScheme.error,
+                            ),
                             const SizedBox(width: 8),
                             Text(
                               'sizes.delete'.tr(),
@@ -440,7 +467,10 @@ class _SizesViewState extends State<_SizesView> {
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: size.isActive
                           ? colorScheme.primaryContainer.withValues(alpha: 0.5)
@@ -448,7 +478,9 @@ class _SizesViewState extends State<_SizesView> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      size.isActive ? 'sizes.active'.tr() : 'sizes.inactive'.tr(),
+                      size.isActive
+                          ? 'sizes.active'.tr()
+                          : 'sizes.inactive'.tr(),
                       style: TextStyle(
                         fontSize: 12,
                         color: size.isActive

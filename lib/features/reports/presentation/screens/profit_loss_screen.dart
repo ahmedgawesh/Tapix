@@ -79,7 +79,7 @@ class _ProfitLossView extends StatelessWidget {
           }
 
           if (state is RealtimeSuccess<ReportsData>) {
-            final tb = state.data.trialBalance;
+            final tb = state.data.periodTrialBalance;
 
             final revenueItems = tb.getItemsByType('revenue');
             final expenseItems = tb.getItemsByType('expense');
@@ -95,9 +95,9 @@ class _ProfitLossView extends StatelessWidget {
                 // Date range selector
                 DateRangeSelector(
                   dateRange: state.data.dateRange,
-                  onChanged: (range) => context
-                      .read<ReportsBloc>()
-                      .add(ReportsDateRangeChanged(range)),
+                  onChanged: (range) => context.read<ReportsBloc>().add(
+                    ReportsDateRangeChanged(range),
+                  ),
                 ),
                 const SizedBox(height: 12),
 
@@ -141,13 +141,15 @@ class _ProfitLossView extends StatelessWidget {
                 const SizedBox(height: 8),
                 ...revenueItems
                     .where((i) => i.creditCents > 0 || i.debitCents > 0)
-                    .map((item) => _LineItem(
-                          name: item.accountName,
-                          code: item.accountCode,
-                          // Phase 8 — natural-balance routing via the
-                          // [TrialBalanceItem.naturalBalanceCents] SoT.
-                          amount: cs.formatCents(item.naturalBalanceCents),
-                        )),
+                    .map(
+                      (item) => _LineItem(
+                        name: item.accountName,
+                        code: item.accountCode,
+                        // Phase 8 — natural-balance routing via the
+                        // [TrialBalanceItem.naturalBalanceCents] SoT.
+                        amount: cs.formatCents(item.naturalBalanceCents),
+                      ),
+                    ),
                 const Divider(height: 32),
 
                 // Expenses section
@@ -159,11 +161,13 @@ class _ProfitLossView extends StatelessWidget {
                 const SizedBox(height: 8),
                 ...expenseItems
                     .where((i) => i.debitCents > 0 || i.creditCents > 0)
-                    .map((item) => _LineItem(
-                          name: item.accountName,
-                          code: item.accountCode,
-                          amount: cs.formatCents(item.naturalBalanceCents),
-                        )),
+                    .map(
+                      (item) => _LineItem(
+                        name: item.accountName,
+                        code: item.accountCode,
+                        amount: cs.formatCents(item.naturalBalanceCents),
+                      ),
+                    ),
                 const Divider(height: 32),
 
                 // Summary
@@ -207,7 +211,7 @@ class _ProfitLossView extends StatelessWidget {
   }
 
   Future<void> _printReport(BuildContext context, ReportsData data) async {
-    final tb = data.trialBalance;
+    final tb = data.periodTrialBalance;
     final revenueItems = tb.getItemsByType('revenue');
     final expenseItems = tb.getItemsByType('expense');
     final totalRevenue = tb.totalForType('revenue');
@@ -220,11 +224,13 @@ class _ProfitLossView extends StatelessWidget {
           title: 'reports.revenue'.tr(),
           items: revenueItems
               .where((i) => i.creditCents > 0 || i.debitCents > 0)
-              .map((i) => PnlLineItem(
-                    code: i.accountCode,
-                    name: i.accountName,
-                    amountCents: i.naturalBalanceCents,
-                  ))
+              .map(
+                (i) => PnlLineItem(
+                  code: i.accountCode,
+                  name: i.accountName,
+                  amountCents: i.naturalBalanceCents,
+                ),
+              )
               .toList(),
           totalCents: totalRevenue,
         ),
@@ -232,11 +238,13 @@ class _ProfitLossView extends StatelessWidget {
           title: 'reports.expenses'.tr(),
           items: expenseItems
               .where((i) => i.debitCents > 0 || i.creditCents > 0)
-              .map((i) => PnlLineItem(
-                    code: i.accountCode,
-                    name: i.accountName,
-                    amountCents: i.naturalBalanceCents,
-                  ))
+              .map(
+                (i) => PnlLineItem(
+                  code: i.accountCode,
+                  name: i.accountName,
+                  amountCents: i.naturalBalanceCents,
+                ),
+              )
               .toList(),
           totalCents: totalExpenses,
         ),
@@ -244,6 +252,7 @@ class _ProfitLossView extends StatelessWidget {
       totalRevenue: totalRevenue,
       totalExpenses: totalExpenses,
       netProfit: totalRevenue - totalExpenses,
+      startDate: data.dateRange.startDate,
       asOfDate: tb.asOfDate,
     );
     sl<AuditLogService>().log(
@@ -254,7 +263,7 @@ class _ProfitLossView extends StatelessWidget {
   }
 
   Future<void> _shareReport(BuildContext context, ReportsData data) async {
-    final tb = data.trialBalance;
+    final tb = data.periodTrialBalance;
     final revenueItems = tb.getItemsByType('revenue');
     final expenseItems = tb.getItemsByType('expense');
     final totalRevenue = tb.totalForType('revenue');
@@ -267,11 +276,13 @@ class _ProfitLossView extends StatelessWidget {
           title: 'reports.revenue'.tr(),
           items: revenueItems
               .where((i) => i.creditCents > 0 || i.debitCents > 0)
-              .map((i) => PnlLineItem(
-                    code: i.accountCode,
-                    name: i.accountName,
-                    amountCents: i.naturalBalanceCents,
-                  ))
+              .map(
+                (i) => PnlLineItem(
+                  code: i.accountCode,
+                  name: i.accountName,
+                  amountCents: i.naturalBalanceCents,
+                ),
+              )
               .toList(),
           totalCents: totalRevenue,
         ),
@@ -279,11 +290,13 @@ class _ProfitLossView extends StatelessWidget {
           title: 'reports.expenses'.tr(),
           items: expenseItems
               .where((i) => i.debitCents > 0 || i.creditCents > 0)
-              .map((i) => PnlLineItem(
-                    code: i.accountCode,
-                    name: i.accountName,
-                    amountCents: i.naturalBalanceCents,
-                  ))
+              .map(
+                (i) => PnlLineItem(
+                  code: i.accountCode,
+                  name: i.accountName,
+                  amountCents: i.naturalBalanceCents,
+                ),
+              )
               .toList(),
           totalCents: totalExpenses,
         ),
@@ -291,6 +304,7 @@ class _ProfitLossView extends StatelessWidget {
       totalRevenue: totalRevenue,
       totalExpenses: totalExpenses,
       netProfit: totalRevenue - totalExpenses,
+      startDate: data.dateRange.startDate,
       asOfDate: tb.asOfDate,
     );
     sl<AuditLogService>().log(
@@ -318,10 +332,20 @@ class _SectionTitle extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(title, style: theme.textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.bold, color: color)),
-        Text(total, style: theme.textTheme.titleMedium?.copyWith(
-          fontWeight: FontWeight.bold, color: color)),
+        Text(
+          title,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(
+          total,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
       ],
     );
   }
@@ -332,7 +356,11 @@ class _LineItem extends StatelessWidget {
   final String code;
   final String amount;
 
-  const _LineItem({required this.name, required this.code, required this.amount});
+  const _LineItem({
+    required this.name,
+    required this.code,
+    required this.amount,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -341,8 +369,13 @@ class _LineItem extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
       child: Row(
         children: [
-          Text(code, style: theme.textTheme.bodySmall?.copyWith(
-            fontFamily: 'monospace', color: theme.colorScheme.onSurfaceVariant)),
+          Text(
+            code,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontFamily: 'monospace',
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
           const SizedBox(width: 12),
           Expanded(child: Text(name)),
           Text(amount, style: const TextStyle(fontWeight: FontWeight.w500)),
@@ -359,17 +392,26 @@ class _SummaryRow extends StatelessWidget {
   final Color? color;
 
   const _SummaryRow({
-    required this.label, required this.value, this.isBold = false, this.color});
+    required this.label,
+    required this.value,
+    this.isBold = false,
+    this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
     final style = isBold
         ? Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold, color: color)
+            fontWeight: FontWeight.bold,
+            color: color,
+          )
         : Theme.of(context).textTheme.bodyLarge;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [Text(label, style: style), Text(value, style: style)],
+      children: [
+        Text(label, style: style),
+        Text(value, style: style),
+      ],
     );
   }
 }

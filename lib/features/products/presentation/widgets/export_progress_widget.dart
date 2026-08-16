@@ -4,10 +4,7 @@ import 'package:easy_localization/easy_localization.dart';
 class ExportProgressWidget extends StatelessWidget {
   final double? progress;
 
-  const ExportProgressWidget({
-    super.key,
-    this.progress,
-  });
+  const ExportProgressWidget({super.key, this.progress});
 
   @override
   Widget build(BuildContext context) {

@@ -23,25 +23,29 @@ class ReceiptSettingsSection extends StatelessWidget {
               label: 'app_settings.receipt.header_text'.tr(),
               value: s.receiptHeaderText,
               hint: 'app_settings.receipt.header_hint'.tr(),
-              onChanged: (v) => _patch(context, (c) => c.copyWith(receiptHeaderText: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(receiptHeaderText: v)),
             ),
             SettingsTextField(
               label: 'app_settings.receipt.footer_text'.tr(),
               value: s.receiptFooterText,
               hint: 'app_settings.receipt.footer_hint'.tr(),
-              onChanged: (v) => _patch(context, (c) => c.copyWith(receiptFooterText: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(receiptFooterText: v)),
             ),
             SwitchListTile(
               title: Text('app_settings.receipt.show_logo'.tr()),
               subtitle: Text('app_settings.receipt.show_logo_desc'.tr()),
               value: s.showLogoOnReceipt,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(showLogoOnReceipt: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(showLogoOnReceipt: v)),
             ),
             SettingsOptionTile<String>(
               title: 'app_settings.receipt.paper_size'.tr(),
               value: s.receiptPaperSize,
               options: const {'58mm': '58mm', '80mm': '80mm'},
-              onChanged: (v) => _patch(context, (c) => c.copyWith(receiptPaperSize: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(receiptPaperSize: v)),
             ),
             SettingsSliderTile(
               title: 'app_settings.receipt.copies'.tr(),
@@ -49,25 +53,33 @@ class ReceiptSettingsSection extends StatelessWidget {
               min: 1,
               max: 5,
               divisions: 4,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(receiptCopies: v.round())),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(receiptCopies: v.round())),
             ),
             SwitchListTile(
               title: Text('app_settings.receipt.auto_print'.tr()),
               subtitle: Text('app_settings.receipt.auto_print_desc'.tr()),
               value: s.autoPrintReceipt,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(autoPrintReceipt: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(autoPrintReceipt: v)),
             ),
             SwitchListTile(
               title: Text('app_settings.receipt.tax_breakdown'.tr()),
               subtitle: Text('app_settings.receipt.tax_breakdown_desc'.tr()),
               value: s.includeTaxBreakdown,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(includeTaxBreakdown: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(includeTaxBreakdown: v)),
             ),
             SwitchListTile(
               title: Text('app_settings.receipt.show_on_purchases'.tr()),
-              subtitle: Text('app_settings.receipt.show_on_purchases_desc'.tr()),
+              subtitle: Text(
+                'app_settings.receipt.show_on_purchases_desc'.tr(),
+              ),
               value: s.showHeaderFooterOnPurchases,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(showHeaderFooterOnPurchases: v)),
+              onChanged: (v) => _patch(
+                context,
+                (c) => c.copyWith(showHeaderFooterOnPurchases: v),
+              ),
             ),
             SettingsOptionTile<String>(
               title: 'app_settings.receipt.language'.tr(),
@@ -78,7 +90,8 @@ class ReceiptSettingsSection extends StatelessWidget {
                 'ar': 'common.arabic'.tr(),
                 'fr': 'common.french'.tr(),
               },
-              onChanged: (v) => _patch(context, (c) => c.copyWith(receiptLanguage: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(receiptLanguage: v)),
             ),
           ],
         );

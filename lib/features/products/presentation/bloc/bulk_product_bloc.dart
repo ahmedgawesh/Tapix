@@ -13,7 +13,8 @@ class BulkProductBloc extends Bloc<BulkProductEvent, BulkProductState> {
   final ProductRepository _repository;
   final ProductVariantRepository _variantRepository;
 
-  BulkProductBloc(this._repository, this._variantRepository) : super(BulkProductInitial()) {
+  BulkProductBloc(this._repository, this._variantRepository)
+    : super(BulkProductInitial()) {
     on<BulkProductRowAdded>(_onRowAdded);
     on<BulkProductRowRemoved>(_onRowRemoved);
     on<BulkProductRowUpdated>(_onRowUpdated);
@@ -22,10 +23,7 @@ class BulkProductBloc extends Bloc<BulkProductEvent, BulkProductState> {
     on<BulkProductReset>(_onReset);
   }
 
-  void _onRowAdded(
-    BulkProductRowAdded event,
-    Emitter<BulkProductState> emit,
-  ) {
+  void _onRowAdded(BulkProductRowAdded event, Emitter<BulkProductState> emit) {
     final currentState = state;
     List<BulkProductRowData> currentRows;
     Map<int, List<String>> currentErrors;
@@ -41,10 +39,9 @@ class BulkProductBloc extends Bloc<BulkProductEvent, BulkProductState> {
     final newRowIndex = currentRows.isEmpty ? 0 : currentRows.length;
     currentRows.add(BulkProductRowData.empty(newRowIndex));
 
-    emit(BulkProductEditing(
-      rows: currentRows,
-      validationErrors: currentErrors,
-    ));
+    emit(
+      BulkProductEditing(rows: currentRows, validationErrors: currentErrors),
+    );
   }
 
   void _onRowRemoved(
@@ -71,10 +68,9 @@ class BulkProductBloc extends Bloc<BulkProductEvent, BulkProductState> {
       }
     });
 
-    emit(BulkProductEditing(
-      rows: reindexedRows,
-      validationErrors: updatedErrors,
-    ));
+    emit(
+      BulkProductEditing(rows: reindexedRows, validationErrors: updatedErrors),
+    );
   }
 
   void _onRowUpdated(
@@ -108,13 +104,14 @@ class BulkProductBloc extends Bloc<BulkProductEvent, BulkProductState> {
       salesTaxRateBps: event.salesTaxRateBps,
     );
 
-    final updatedErrors = Map<int, List<String>>.from(currentState.validationErrors);
+    final updatedErrors = Map<int, List<String>>.from(
+      currentState.validationErrors,
+    );
     updatedErrors.remove(event.rowIndex);
 
-    emit(BulkProductEditing(
-      rows: updatedRows,
-      validationErrors: updatedErrors,
-    ));
+    emit(
+      BulkProductEditing(rows: updatedRows, validationErrors: updatedErrors),
+    );
   }
 
   Future<void> _onValidationRequested(
@@ -148,7 +145,7 @@ class BulkProductBloc extends Bloc<BulkProductEvent, BulkProductState> {
           errors.add('sku_duplicate');
         } else {
           skuSet.add(row.sku!);
-          
+
           // Check database for existing SKU
           try {
             final existingProduct = await _repository.findBySku(row.sku!);
@@ -166,10 +163,12 @@ class BulkProductBloc extends Bloc<BulkProductEvent, BulkProductState> {
       }
     }
 
-    emit(BulkProductEditing(
-      rows: currentState.rows,
-      validationErrors: validationErrors,
-    ));
+    emit(
+      BulkProductEditing(
+        rows: currentState.rows,
+        validationErrors: validationErrors,
+      ),
+    );
   }
 
   Future<void> _onSubmitRequested(
@@ -204,7 +203,7 @@ class BulkProductBloc extends Bloc<BulkProductEvent, BulkProductState> {
           errors.add('sku_duplicate');
         } else {
           skuSet.add(row.sku!);
-          
+
           try {
             final existingProduct = await _repository.findBySku(row.sku!);
             if (existingProduct != null) {
@@ -222,105 +221,132 @@ class BulkProductBloc extends Bloc<BulkProductEvent, BulkProductState> {
     }
 
     if (validationErrors.isNotEmpty) {
-      emit(BulkProductEditing(
-        rows: currentState.rows,
-        validationErrors: validationErrors,
-      ));
+      emit(
+        BulkProductEditing(
+          rows: currentState.rows,
+          validationErrors: validationErrors,
+        ),
+      );
       return;
     }
 
     final totalCount = currentState.rows.length;
 
-    emit(BulkProductSubmitting(
-      totalCount: totalCount,
-      currentIndex: 0,
-      rows: currentState.rows,
-    ));
+    emit(
+      BulkProductSubmitting(
+        totalCount: totalCount,
+        currentIndex: 0,
+        rows: currentState.rows,
+      ),
+    );
 
     try {
-      final bulkData = currentState.rows.map((row) => BulkProductData(
-        rowIndex: row.rowIndex,
-        name: row.name,
-        nameAr: row.nameAr,
-        nameFr: row.nameFr,
-        sku: row.sku,
-        barcode: row.barcode,
-        costCents: row.costCents,
-        priceCents: row.priceCents,
-        wholesalePriceCents: row.wholesalePriceCents,
-        stockQuantity: row.stockQuantity,
-        minQuantity: row.minQuantity,
-        categoryId: row.categoryId,
-        hasVariants: row.hasVariants,
-        isTaxable: row.isTaxable,
-        purchaseTaxRateBps: row.purchaseTaxRateBps,
-        salesTaxRateBps: row.salesTaxRateBps,
-      )).toList();
+      final bulkData = currentState.rows
+          .map(
+            (row) => BulkProductData(
+              rowIndex: row.rowIndex,
+              name: row.name,
+              nameAr: row.nameAr,
+              nameFr: row.nameFr,
+              sku: row.sku,
+              barcode: row.barcode,
+              costCents: row.costCents,
+              priceCents: row.priceCents,
+              wholesalePriceCents: row.wholesalePriceCents,
+              stockQuantity: row.stockQuantity,
+              minQuantity: row.minQuantity,
+              categoryId: row.categoryId,
+              hasVariants: row.hasVariants,
+              isTaxable: row.isTaxable,
+              purchaseTaxRateBps: row.purchaseTaxRateBps,
+              salesTaxRateBps: row.salesTaxRateBps,
+            ),
+          )
+          .toList();
 
-      final results = await _repository.bulkCreateProducts(bulkData);
-      
-      debugPrint('BulkProductBloc: Created ${results.length} products in transaction');
+      // The product rows, their dimensional variants, and anonymous default
+      // variants form one aggregate. Keep the whole aggregate in the same
+      // Drift transaction: if creating/updating any variant fails, the bulk
+      // product insert is rolled back as well instead of leaving products
+      // that cannot be sold or valued correctly.
+      final results = await _repository.runInTransaction(() async {
+        final created = await _repository.bulkCreateProducts(bulkData);
 
-      for (final entry in results.entries) {
-        final rowIndex = entry.key;
-        final productId = entry.value;
-        final row = currentState.rows.firstWhere((r) => r.rowIndex == rowIndex);
-
-        if (row.colorId != null || row.sizeId != null) {
-          await _variantRepository.createVariant(
-            productId: productId,
-            colorId: row.colorId,
-            sizeId: row.sizeId,
-            costCents: row.costCents,
-            priceCents: row.priceCents,
-            stockQuantity: row.stockQuantity,
-          );
-        } else if (!row.hasVariants) {
-          await _variantRepository.ensureDefaultVariantForProduct(
-            productId: productId,
-            costCents: row.costCents,
-            priceCents: row.priceCents,
-            stockQuantity: row.stockQuantity,
+        for (final entry in created.entries) {
+          final rowIndex = entry.key;
+          final productId = entry.value;
+          final row = currentState.rows.firstWhere(
+            (r) => r.rowIndex == rowIndex,
           );
 
-          final defaultVariant = await _variantRepository.getDefaultVariantByProduct(productId);
-          if (defaultVariant != null) {
-            final updated = defaultVariant.copyWith(
-              sku: (row.sku?.trim().isNotEmpty ?? false) ? row.sku : null,
-              barcode: (row.barcode?.trim().isNotEmpty ?? false) ? row.barcode : null,
+          if (row.colorId != null || row.sizeId != null) {
+            await _variantRepository.createVariant(
+              productId: productId,
+              colorId: row.colorId,
+              sizeId: row.sizeId,
               costCents: row.costCents,
               priceCents: row.priceCents,
               stockQuantity: row.stockQuantity,
-              colorId: null,
-              sizeId: null,
             );
-            await _variantRepository.updateVariant(updated);
+          } else if (!row.hasVariants) {
+            await _variantRepository.ensureDefaultVariantForProduct(
+              productId: productId,
+              costCents: row.costCents,
+              priceCents: row.priceCents,
+              stockQuantity: row.stockQuantity,
+            );
+
+            final defaultVariant = await _variantRepository
+                .getDefaultVariantByProduct(productId);
+            if (defaultVariant != null) {
+              final updated = defaultVariant.copyWith(
+                sku: (row.sku?.trim().isNotEmpty ?? false) ? row.sku : null,
+                barcode: (row.barcode?.trim().isNotEmpty ?? false)
+                    ? row.barcode
+                    : null,
+                costCents: row.costCents,
+                priceCents: row.priceCents,
+                stockQuantity: row.stockQuantity,
+                colorId: null,
+                sizeId: null,
+              );
+              await _variantRepository.updateVariant(updated);
+            }
           }
         }
-      }
 
-      emit(BulkProductSuccess(
-        successCount: results.length,
-        totalCount: totalCount,
-      ));
+        return created;
+      });
+
+      debugPrint(
+        'BulkProductBloc: Atomically created ${results.length} products',
+      );
+
+      emit(
+        BulkProductSuccess(
+          successCount: results.length,
+          totalCount: totalCount,
+        ),
+      );
     } catch (e) {
       debugPrint('BulkProductBloc: Bulk create failed: $e');
-      emit(BulkProductError(
-        message: e.toString(),
-        failedRows: {0: e.toString()},
-        successCount: 0,
-        totalCount: totalCount,
-      ));
+      emit(
+        BulkProductError(
+          message: e.toString(),
+          failedRows: {0: e.toString()},
+          successCount: 0,
+          totalCount: totalCount,
+        ),
+      );
     }
   }
 
-  void _onReset(
-    BulkProductReset event,
-    Emitter<BulkProductState> emit,
-  ) {
-    emit(BulkProductEditing(
-      rows: [BulkProductRowData.empty(0)],
-      validationErrors: const {},
-    ));
+  void _onReset(BulkProductReset event, Emitter<BulkProductState> emit) {
+    emit(
+      BulkProductEditing(
+        rows: [BulkProductRowData.empty(0)],
+        validationErrors: const {},
+      ),
+    );
   }
 }

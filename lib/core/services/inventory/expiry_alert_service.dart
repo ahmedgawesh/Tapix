@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import '../../../features/inventory/domain/entities/expiry_alert_item.dart';
 import '../../database/app_database.dart';
+import '../../measurement/measurement.dart';
 
 /// Centralised query layer for batch-expiry alerts.
 ///
@@ -28,7 +29,7 @@ class ExpiryAlertService {
   final DateTime Function() _now;
 
   ExpiryAlertService(this._db, {DateTime Function()? now})
-      : _now = now ?? DateTime.now;
+    : _now = now ?? DateTime.now;
 
   /// Reactive stream that re-emits whenever a relevant table changes.
   /// Combine with a debounce upstream if you ever wire it to a chatty UI.
@@ -68,6 +69,7 @@ class ExpiryAlertService {
         b.unit_cost_cents   AS unit_cost_cents,
         p.id                AS product_id,
         p.name              AS product_name,
+        p.measurement_type  AS measurement_type,
         v.id                AS variant_id,
         COALESCE(v.sku, p.sku)   AS sku,
         pc.name             AS color_name,
@@ -86,10 +88,7 @@ class ExpiryAlertService {
         AND b.expiry_date <= ?2
       ORDER BY b.expiry_date ASC, b.id ASC
       ''',
-      variables: [
-        Variable.withString(today),
-        Variable.withString(horizon),
-      ],
+      variables: [Variable.withString(today), Variable.withString(horizon)],
       readsFrom: {
         _db.products,
         _db.productVariants,
@@ -127,12 +126,13 @@ class ExpiryAlertService {
 
       final remainingQty = row.read<int>('remaining_quantity');
       final unitCost = row.read<int>('unit_cost_cents');
+      final measurementType = row.read<String>('measurement_type');
       final variantLabel = _composeVariantLabel(
         colorName: row.readNullable<String>('color_name'),
         sizeName: row.readNullable<String>('size_name'),
       );
 
-      items.add(ExpiryAlertItem(
+      final item = ExpiryAlertItem(
         batchId: row.read<int>('batch_id'),
         batchNumber: row.read<String>('batch_number'),
         productId: row.read<int>('product_id'),
@@ -143,14 +143,17 @@ class ExpiryAlertService {
         expiryDate: expiry,
         daysUntilExpiry: diffDays,
         remainingQuantity: remainingQty,
+        quantityScale: MeasurementType.fromDb(measurementType).quantityScale,
+        measurementType: measurementType,
         unitCostCents: unitCost,
         bucket: bucket,
-      ));
+      );
+      items.add(item);
 
       switch (bucket) {
         case ExpiryBucket.expired:
           expiredCount++;
-          expiredCostCents += remainingQty * unitCost;
+          expiredCostCents += item.totalCostCents;
         case ExpiryBucket.in30Days:
           in30++;
         case ExpiryBucket.in60Days:

@@ -74,8 +74,10 @@ class ProductVariant extends Equatable {
       wholesalePriceCents: wholesalePriceCents ?? this.wholesalePriceCents,
       previousCostCents: previousCostCents ?? this.previousCostCents,
       previousPriceCents: previousPriceCents ?? this.previousPriceCents,
-      previousWholesalePriceCents: previousWholesalePriceCents ?? this.previousWholesalePriceCents,
-      lastPurchasePriceCents: lastPurchasePriceCents ?? this.lastPurchasePriceCents,
+      previousWholesalePriceCents:
+          previousWholesalePriceCents ?? this.previousWholesalePriceCents,
+      lastPurchasePriceCents:
+          lastPurchasePriceCents ?? this.lastPurchasePriceCents,
       priceAdjustmentCents: priceAdjustmentCents ?? this.priceAdjustmentCents,
       stockQuantity: stockQuantity ?? this.stockQuantity,
       isActive: isActive ?? this.isActive,
@@ -84,21 +86,21 @@ class ProductVariant extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        productId,
-        sku,
-        barcode,
-        colorId,
-        sizeId,
-        costCents,
-        priceCents,
-        wholesalePriceCents,
-        previousCostCents,
-        previousPriceCents,
-        previousWholesalePriceCents,
-        lastPurchasePriceCents,
-        priceAdjustmentCents,
-        stockQuantity,
-        isActive,
-      ];
+    id,
+    productId,
+    sku,
+    barcode,
+    colorId,
+    sizeId,
+    costCents,
+    priceCents,
+    wholesalePriceCents,
+    previousCostCents,
+    previousPriceCents,
+    previousWholesalePriceCents,
+    lastPurchasePriceCents,
+    priceAdjustmentCents,
+    stockQuantity,
+    isActive,
+  ];
 }

@@ -6,6 +6,7 @@ import '../../../../core/database/app_database.dart' as db;
 import '../../../../core/pricing/pricing_snapshot.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
+import '../../../../core/services/return_calculation_service.dart';
 import '../../../../core/services/void_impact_analyzer.dart';
 import '../../../auth/data/services/session_service.dart';
 import '../../domain/entities/purchase_entity.dart';
@@ -19,7 +20,13 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   final JournalEntryService _journalService;
   final db.AppDatabase _db;
 
-  PurchaseRepositoryImpl(this._datasource, this._auditService, this._sessionService, this._journalService, this._db);
+  PurchaseRepositoryImpl(
+    this._datasource,
+    this._auditService,
+    this._sessionService,
+    this._journalService,
+    this._db,
+  );
 
   /// Get the current user ID from the session for audit logging.
   Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
@@ -103,22 +110,30 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       dueDate: Value(dueDate),
     ).withPricingSnapshot(taxInclusive: taxInclusiveAtPost);
 
-    final itemCompanions = items.map((item) => db.PurchaseItemsCompanion(
-          productId: Value(item.productId),
-          variantId: Value(item.variantId),
-          quantity: Value(item.quantity),
-          unitCostCents: Value(item.unitCostCents),
-          discountCents: Value(item.discountCents),
-          subtotalCents: Value(item.subtotalCents),
-          taxCents: Value(item.taxCents),
-          totalCents: Value(item.totalCents),
-          originalCostCents: Value(item.originalCostCents),
-          originalPriceCents: Value(item.originalPriceCents),
-          originalWholesalePriceCents: Value(item.originalWholesalePriceCents),
-          newSellPriceCents: Value(item.newSellPriceCents),
-          newWholesalePriceCents: Value(item.newWholesalePriceCents),
-          expiryDate: Value(item.expiryDate),
-        )).toList();
+    final itemCompanions = items
+        .map(
+          (item) => db.PurchaseItemsCompanion(
+            productId: Value(item.productId),
+            variantId: Value(item.variantId),
+            quantity: Value(item.quantity),
+            quantityScale: Value(item.quantityScale),
+            measurementType: Value(item.measurementType),
+            unitCostCents: Value(item.unitCostCents),
+            discountCents: Value(item.discountCents),
+            subtotalCents: Value(item.subtotalCents),
+            taxCents: Value(item.taxCents),
+            totalCents: Value(item.totalCents),
+            originalCostCents: Value(item.originalCostCents),
+            originalPriceCents: Value(item.originalPriceCents),
+            originalWholesalePriceCents: Value(
+              item.originalWholesalePriceCents,
+            ),
+            newSellPriceCents: Value(item.newSellPriceCents),
+            newWholesalePriceCents: Value(item.newWholesalePriceCents),
+            expiryDate: Value(item.expiryDate),
+          ),
+        )
+        .toList();
 
     // Create purchase as draft — journal entries are deferred until postPurchase()
     // to keep GL and supplier sub-ledger in sync.
@@ -134,13 +149,18 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
           final companionWithNumber = purchase.copyWith(
             purchaseNumber: Value(purchaseNumber),
           );
-          final id = await _datasource.createPurchase(companionWithNumber, itemCompanions);
+          final id = await _datasource.createPurchase(
+            companionWithNumber,
+            itemCompanions,
+          );
           return id;
         });
         break; // success
       } catch (e) {
         // Retry on UNIQUE constraint violation (concurrent purchase number)
-        final isUniqueViolation = e.toString().contains('UNIQUE constraint failed');
+        final isUniqueViolation = e.toString().contains(
+          'UNIQUE constraint failed',
+        );
         if (isUniqueViolation && attempt < maxRetries) {
           developer.log(
             'Purchase number collision on attempt $attempt, retrying...',
@@ -213,22 +233,30 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       dueDate: Value(dueDate),
     ).withPricingSnapshot(taxInclusive: taxInclusiveAtPost);
 
-    final itemCompanions = items.map((item) => db.PurchaseItemsCompanion(
-          productId: Value(item.productId),
-          variantId: Value(item.variantId),
-          quantity: Value(item.quantity),
-          unitCostCents: Value(item.unitCostCents),
-          discountCents: Value(item.discountCents),
-          subtotalCents: Value(item.subtotalCents),
-          taxCents: Value(item.taxCents),
-          totalCents: Value(item.totalCents),
-          originalCostCents: Value(item.originalCostCents),
-          originalPriceCents: Value(item.originalPriceCents),
-          originalWholesalePriceCents: Value(item.originalWholesalePriceCents),
-          newSellPriceCents: Value(item.newSellPriceCents),
-          newWholesalePriceCents: Value(item.newWholesalePriceCents),
-          expiryDate: Value(item.expiryDate),
-        )).toList();
+    final itemCompanions = items
+        .map(
+          (item) => db.PurchaseItemsCompanion(
+            productId: Value(item.productId),
+            variantId: Value(item.variantId),
+            quantity: Value(item.quantity),
+            quantityScale: Value(item.quantityScale),
+            measurementType: Value(item.measurementType),
+            unitCostCents: Value(item.unitCostCents),
+            discountCents: Value(item.discountCents),
+            subtotalCents: Value(item.subtotalCents),
+            taxCents: Value(item.taxCents),
+            totalCents: Value(item.totalCents),
+            originalCostCents: Value(item.originalCostCents),
+            originalPriceCents: Value(item.originalPriceCents),
+            originalWholesalePriceCents: Value(
+              item.originalWholesalePriceCents,
+            ),
+            newSellPriceCents: Value(item.newSellPriceCents),
+            newWholesalePriceCents: Value(item.newWholesalePriceCents),
+            expiryDate: Value(item.expiryDate),
+          ),
+        )
+        .toList();
 
     // Void any legacy journal entries that may exist from old code flow
     await _journalService.voidJournalEntriesForSource(
@@ -238,7 +266,11 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       userId: await _currentUserId(),
     );
 
-    final ok = await _datasource.updatePurchase(purchaseId, purchase, itemCompanions);
+    final ok = await _datasource.updatePurchase(
+      purchaseId,
+      purchase,
+      itemCompanions,
+    );
 
     if (ok) {
       // Journal entries are NOT created here — they are deferred to postPurchase()
@@ -281,15 +313,32 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       userId: userId,
     );
 
+    final inventoryNetCents = await _db.purchaseDao
+        .computePurchaseInventoryNetCents(purchaseId);
     await _journalService.recordPurchaseJournalEntry(
       purchaseId: purchaseId,
       totalCents: purchase.totalCents.toBigInt().toInt(),
       paidAmountCents: purchase.paidAmountCents.toBigInt().toInt(),
       currencyId: purchase.currencyId,
       taxCents: purchase.taxCents.toBigInt().toInt(),
+      inventoryNetCents: inventoryNetCents,
       paymentMethod: purchase.paymentMethod,
       userId: userId,
     );
+
+    final actualInventoryValue = await _db.purchaseDao
+        .computePurchaseInventoryValueAtPostCents(purchaseId);
+    final roundingDelta = actualInventoryValue - inventoryNetCents;
+    if (roundingDelta != 0) {
+      await _journalService.recordInventoryRoundingJournalEntry(
+        sourceTable: 'purchases',
+        sourceId: purchaseId,
+        deltaValueCents: roundingDelta,
+        currencyId: purchase.currencyId,
+        reason: 'Purchase ${purchase.purchaseNumber}',
+        userId: userId,
+      );
+    }
 
     // Audit: log purchase posting (stock was updated)
     await _auditService.log(
@@ -310,7 +359,9 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     // report so the UI can render an actionable dialog instead of
     // silently producing AP / Inventory drift like the one diagnosed in
     // `tapix_backup_20260513_121448.db`.
-    final report = await VoidImpactAnalyzer(_db).analyzePurchaseVoid(purchaseId);
+    final report = await VoidImpactAnalyzer(
+      _db,
+    ).analyzePurchaseVoid(purchaseId);
     if (report.hasBlockers) {
       throw VoidBlockedByImpactException(report);
     }
@@ -385,16 +436,18 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
 
     // 2. Check accounting period is open for the original purchase date
     final txDate = originalPurchase.purchaseDate;
-    final periodRows = await _db.customSelect(
-      '''SELECT id, is_closed FROM accounting_periods
+    final periodRows = await _db
+        .customSelect(
+          '''SELECT id, is_closed FROM accounting_periods
          WHERE start_date <= ? AND end_date >= ?
          ORDER BY start_date DESC LIMIT 1''',
-      variables: [
-        Variable.withDateTime(txDate),
-        Variable.withDateTime(txDate),
-      ],
-      readsFrom: {_db.accountingPeriods},
-    ).get();
+          variables: [
+            Variable.withDateTime(txDate),
+            Variable.withDateTime(txDate),
+          ],
+          readsFrom: {_db.accountingPeriods},
+        )
+        .get();
     if (periodRows.isNotEmpty && periodRows.first.read<bool>('is_closed')) {
       throw StateError(
         'Cannot edit purchase: the accounting period containing this '
@@ -403,14 +456,16 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     }
 
     // 3. Check if purchase has any non-voided returns - cannot edit if returns exist
-    final returns = await _db.customSelect(
-      'SELECT COUNT(*) as cnt FROM purchase_returns WHERE purchase_id = ? AND status != ?',
-      variables: [
-        Variable.withInt(originalPurchaseId),
-        Variable.withString('voided'),
-      ],
-      readsFrom: {_db.purchaseReturns},
-    ).getSingle();
+    final returns = await _db
+        .customSelect(
+          'SELECT COUNT(*) as cnt FROM purchase_returns WHERE purchase_id = ? AND status != ?',
+          variables: [
+            Variable.withInt(originalPurchaseId),
+            Variable.withString('voided'),
+          ],
+          readsFrom: {_db.purchaseReturns},
+        )
+        .getSingle();
     if (returns.read<int>('cnt') > 0) {
       throw StateError(
         'Cannot edit purchase: it has associated returns. '
@@ -435,7 +490,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       items: items,
       paymentMethod: paymentMethod,
       supplierInvoiceRef: supplierInvoiceRef,
-      notes: notes != null 
+      notes: notes != null
           ? '$notes\n[Edited from ${originalPurchase.purchaseNumber}]'
           : '[Edited from ${originalPurchase.purchaseNumber}]',
       purchaseDate: purchaseDate ?? originalPurchase.purchaseDate,
@@ -508,7 +563,9 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   }
 
   @override
-  Stream<List<PurchaseReturnEntity>> watchPurchaseReturnsByPurchase(int purchaseId) {
+  Stream<List<PurchaseReturnEntity>> watchPurchaseReturnsByPurchase(
+    int purchaseId,
+  ) {
     return _datasource.watchPurchaseReturnsByPurchase(purchaseId);
   }
 
@@ -523,12 +580,16 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   }
 
   @override
-  Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItems(int returnId) {
+  Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItems(
+    int returnId,
+  ) {
     return _datasource.watchPurchaseReturnItems(returnId);
   }
 
   @override
-  Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItemsWithDetails(int returnId) {
+  Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItemsWithDetails(
+    int returnId,
+  ) {
     return _datasource.watchPurchaseReturnItemsWithDetails(returnId);
   }
 
@@ -558,45 +619,117 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     final returnNumber = await generateReturnNumber();
 
     // Phase 14.0 — only persist dueDate when refund method is cheque.
-    final effectiveDueDate =
-        refundMethod == 'cheque' ? dueDate : null;
-
-    final returnData = db.PurchaseReturnsCompanion(
-      purchaseId: Value(purchaseId),
-      returnNumber: Value(returnNumber),
-      subtotalCents: Value(subtotalCents),
-      discountCents: Value(discountCents),
-      taxCents: Value(taxCents),
-      totalCents: Value(totalCents),
-      currencyId: Value(currencyId),
-      status: const Value('draft'),
-      dispositionType: Value(dispositionType),
-      refundMethod: Value(refundMethod),
-      reason: Value(reason),
-      returnDate: Value(returnDate ?? DateTime.now()),
-      dueDate: Value(effectiveDueDate),
-      idempotencyKey: Value(idempotencyKey),
-    ).withPricingSnapshot(taxInclusive: taxInclusiveAtPost);
-
-    final itemCompanions = items.map((item) => db.PurchaseReturnItemsCompanion(
-          purchaseItemId: Value(item.purchaseItemId),
-          quantity: Value(item.quantity),
-          subtotalCents: Value(item.subtotalCents),
-          discountCents: Value(item.discountCents),
-          taxCents: Value(item.taxCents),
-          refundCents: Value(item.refundCents),
-          reason: Value(item.reason),
-        )).toList();
+    final effectiveDueDate = refundMethod == 'cheque' ? dueDate : null;
 
     // ATOMIC: Wrap return creation, stock deduction, and journal entries
     // in a single transaction.
     final userId = await _currentUserId();
+    late int postedSubtotalCents;
+    late int postedDiscountCents;
+    late int postedTaxCents;
+    late int postedTotalCents;
 
     final returnId = await _db.transaction(() async {
-      final id = await _datasource.createPurchaseReturn(returnData, itemCompanions);
+      final originalPurchase = await _datasource.getPurchaseById(purchaseId);
+      if (originalPurchase == null) throw Exception('Purchase not found');
+      final inclusive = originalPurchase.taxInclusiveAtPost;
+      final originalItems = await _datasource.getPurchaseItems(purchaseId);
+      final originalById = {for (final item in originalItems) item.id: item};
+      final histories = <int, LinkedReturnHistory>{};
+      final calculatedItems = <PurchaseReturnItemInput>[];
+
+      for (final input in items) {
+        final original = originalById[input.purchaseItemId];
+        if (original == null) {
+          throw Exception(
+            'Purchase item #${input.purchaseItemId} does not belong to '
+            'purchase #$purchaseId',
+          );
+        }
+        final history =
+            histories[input.purchaseItemId] ??
+            await _db.purchaseDao.getLinkedReturnHistory(input.purchaseItemId);
+        final calculated = ReturnCalculationService.computeProportionalReturn(
+          originalQuantity: original.quantity,
+          returnQuantity: input.quantity,
+          originalSubtotalCents: original.subtotalCents.toBigInt().toInt(),
+          originalDiscountCents: original.discountCents.toBigInt().toInt(),
+          originalTaxCents: original.taxCents.toBigInt().toInt(),
+          previousLinkedHistory: history,
+          taxInclusivePricing: inclusive,
+        );
+        histories[input.purchaseItemId] = history.add(
+          calculated,
+          input.quantity,
+        );
+        calculatedItems.add(
+          input.withCalculatedAmounts(
+            calculated,
+            sourceQuantityScale: original.quantityScale,
+            sourceMeasurementType: original.measurementType,
+          ),
+        );
+      }
+
+      postedSubtotalCents = calculatedItems.fold(
+        0,
+        (sum, item) => sum + item.subtotalCents.toBigInt().toInt(),
+      );
+      postedDiscountCents = calculatedItems.fold(
+        0,
+        (sum, item) => sum + item.discountCents.toBigInt().toInt(),
+      );
+      postedTaxCents = calculatedItems.fold(
+        0,
+        (sum, item) => sum + item.taxCents.toBigInt().toInt(),
+      );
+      postedTotalCents = calculatedItems.fold(
+        0,
+        (sum, item) => sum + item.refundCents.toBigInt().toInt(),
+      );
+
+      final returnData = db.PurchaseReturnsCompanion(
+        purchaseId: Value(purchaseId),
+        returnNumber: Value(returnNumber),
+        subtotalCents: Value(Decimal.fromInt(postedSubtotalCents)),
+        discountCents: Value(Decimal.fromInt(postedDiscountCents)),
+        taxCents: Value(Decimal.fromInt(postedTaxCents)),
+        totalCents: Value(Decimal.fromInt(postedTotalCents)),
+        currencyId: Value(currencyId),
+        status: const Value('draft'),
+        dispositionType: Value(dispositionType),
+        refundMethod: Value(refundMethod),
+        reason: Value(reason),
+        returnDate: Value(returnDate ?? DateTime.now()),
+        dueDate: Value(effectiveDueDate),
+        idempotencyKey: Value(idempotencyKey),
+      ).withPricingSnapshot(taxInclusive: inclusive);
+
+      final itemCompanions = calculatedItems
+          .map(
+            (item) => db.PurchaseReturnItemsCompanion(
+              purchaseItemId: Value(item.purchaseItemId),
+              quantity: Value(item.quantity),
+              quantityScale: Value(item.quantityScale),
+              measurementType: Value(item.measurementType),
+              subtotalCents: Value(item.subtotalCents),
+              discountCents: Value(item.discountCents),
+              taxCents: Value(item.taxCents),
+              refundCents: Value(item.refundCents),
+              reason: Value(item.reason),
+            ),
+          )
+          .toList();
+      final id = await _datasource.createPurchaseReturn(
+        returnData,
+        itemCompanions,
+      );
 
       // Auto-post the return (update stock)
-      await _datasource.postPurchaseReturn(id, allowNegativeStock: allowNegativeStock);
+      await _datasource.postPurchaseReturn(
+        id,
+        allowNegativeStock: allowNegativeStock,
+      );
 
       // Inventory leg = ACTUAL valuation removed by the stock ledger
       // (FIFO batch consumption / WAC current cost), computed AFTER the post
@@ -604,8 +737,8 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       // 1200 to the refund net, which drifts away from Σ(stock×cost) whenever
       // a returned FIFO lot — or the current WAC cost — differs from the
       // original purchase price. The refund vs cost gap flows to 4100.
-      final inventoryCostCents =
-          await _db.purchaseDao.computePurchaseReturnInventoryCostCents(id);
+      final inventoryCostCents = await _db.purchaseDao
+          .computePurchaseReturnInventoryCostCents(id);
 
       // Create journal entries — MANDATORY.
       //
@@ -619,8 +752,8 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       // closed period — centrally, for every return flow.
       await _journalService.recordPurchaseReturnJournalEntry(
         returnId: id,
-        totalCents: totalCents.toBigInt().toInt(),
-        taxCents: taxCents.toBigInt().toInt(),
+        totalCents: postedTotalCents,
+        taxCents: postedTaxCents,
         inventoryCostCents: inventoryCostCents,
         currencyId: currencyId,
         refundMethod: refundMethod,
@@ -639,7 +772,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       newValue: {
         'purchaseId': purchaseId,
         'returnNumber': returnNumber,
-        'totalCents': totalCents.toString(),
+        'totalCents': postedTotalCents.toString(),
         'dispositionType': dispositionType,
         'itemCount': items.length,
       },
@@ -650,8 +783,14 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   }
 
   @override
-  Future<void> postPurchaseReturn(int returnId, {bool allowNegativeStock = false}) async {
-    await _datasource.postPurchaseReturn(returnId, allowNegativeStock: allowNegativeStock);
+  Future<void> postPurchaseReturn(
+    int returnId, {
+    bool allowNegativeStock = false,
+  }) async {
+    await _datasource.postPurchaseReturn(
+      returnId,
+      allowNegativeStock: allowNegativeStock,
+    );
 
     await _auditService.log(
       entityType: 'purchase_return',
@@ -774,6 +913,11 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   @override
   Future<int> getReturnedQuantity(int purchaseItemId) {
     return _datasource.getReturnedQuantity(purchaseItemId);
+  }
+
+  @override
+  Future<LinkedReturnHistory> getLinkedReturnHistory(int purchaseItemId) {
+    return _db.purchaseDao.getLinkedReturnHistory(purchaseItemId);
   }
 
   @override

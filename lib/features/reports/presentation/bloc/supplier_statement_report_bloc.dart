@@ -1,8 +1,7 @@
-import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
-import '../../../../core/services/ledger/ledger_running_balance.dart';
+import '../../services/party_statement_ledger_service.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -129,15 +128,15 @@ class SupplierOption {
 
 // ==================== BLOC ====================
 
-class SupplierStatementReportBloc extends RealtimeBloc<SupplierStatementData,
-    SupplierStatementReportEvent> {
+class SupplierStatementReportBloc
+    extends RealtimeBloc<SupplierStatementData, SupplierStatementReportEvent> {
   final AppDatabase _db;
   ReportDateRange _dateRange;
   int? _supplierId;
 
   SupplierStatementReportBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
   int? get supplierId => _supplierId;
@@ -155,7 +154,10 @@ class SupplierStatementReportBloc extends RealtimeBloc<SupplierStatementData,
 
   Stream<SupplierStatementData> _buildCombinedStream() {
     return _db
-        .select(_db.supplierTransactions)
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {_db.suppliers, _db.supplierTransactions},
+        )
         .watch()
         .asyncMap((_) async => _loadStatementData());
   }
@@ -177,166 +179,52 @@ class SupplierStatementReportBloc extends RealtimeBloc<SupplierStatementData,
   }
 
   Future<SupplierStatementData> _loadStatementData() async {
-    // Load supplier list for the selector
-    final supplierRows = await _db.customSelect(
-      '''
-      SELECT s.id, s.name, s.phone, s.balance_cents
-      FROM suppliers s
-      WHERE s.is_active = 1
-      ORDER BY s.name ASC
-      ''',
-      readsFrom: {_db.suppliers},
-    ).get();
-
-    final suppliers = supplierRows
-        .map((row) => SupplierOption(
-              id: row.read<int>('id'),
-              name: row.read<String>('name'),
-              phone: row.readNullable<String>('phone'),
-              balanceCents: row.read<int>('balance_cents'),
-            ))
+    final snapshot = await PartyStatementLedgerService(_db).loadSupplier(
+      supplierId: _supplierId,
+      startDate: _dateRange.startDate,
+      endDate: _dateRange.endDate,
+    );
+    final suppliers = snapshot.options
+        .map(
+          (option) => SupplierOption(
+            id: option.id,
+            name: option.name,
+            phone: option.phone,
+            balanceCents: option.balanceCents,
+          ),
+        )
         .toList();
-
-    if (_supplierId == null) {
-      return SupplierStatementData(
-        dateRange: _dateRange,
-        suppliers: suppliers,
-      );
+    final supplier = snapshot.party;
+    if (supplier == null) {
+      return SupplierStatementData(dateRange: _dateRange, suppliers: suppliers);
     }
-
-    // Load supplier info
-    final supplierInfoRows = await _db.customSelect(
-      '''
-      SELECT s.id, s.name, s.phone, s.email, s.address
-      FROM suppliers s
-      WHERE s.id = ?
-      ''',
-      variables: [Variable.withInt(_supplierId!)],
-      readsFrom: {_db.suppliers},
-    ).get();
-
-    if (supplierInfoRows.isEmpty) {
-      return SupplierStatementData(
-        dateRange: _dateRange,
-        suppliers: suppliers,
-      );
-    }
-
-    final sInfo = supplierInfoRows.first;
-
-    // Calculate opening balance:
-    // The suppliers.balance_cents includes an initial balance set at creation
-    // which is NOT recorded as a supplier_transaction. So we must derive it:
-    //   initial_balance = balance_cents - SUM(all transactions)
-    //   opening_balance = initial_balance + SUM(transactions before start date)
-    final startIso = _dateRange.startDate.toIso8601String();
-    final endIso = DateTime(
-      _dateRange.endDate.year,
-      _dateRange.endDate.month,
-      _dateRange.endDate.day,
-      23,
-      59,
-      59,
-    ).toIso8601String();
-
-    final openingRows = await _db.customSelect(
-      '''
-      SELECT
-        s.balance_cents AS current_balance,
-        COALESCE(all_txn.total, 0) AS all_txn_total,
-        COALESCE(before_txn.total, 0) AS before_txn_total
-      FROM suppliers s
-      LEFT JOIN (
-        SELECT COALESCE(SUM(amount_cents), 0) AS total
-        FROM supplier_transactions WHERE supplier_id = ?
-      ) all_txn ON 1=1
-      LEFT JOIN (
-        SELECT COALESCE(SUM(amount_cents), 0) AS total
-        FROM supplier_transactions WHERE supplier_id = ? AND transaction_date < ?
-      ) before_txn ON 1=1
-      WHERE s.id = ?
-      ''',
-      variables: [
-        Variable.withInt(_supplierId!),
-        Variable.withInt(_supplierId!),
-        Variable.withString(startIso),
-        Variable.withInt(_supplierId!),
-      ],
-      readsFrom: {_db.suppliers, _db.supplierTransactions},
-    ).get();
-
-    final int openingBalanceCents;
-    if (openingRows.isNotEmpty) {
-      final row = openingRows.first;
-      final currentBalance = row.read<int>('current_balance');
-      final allTxnTotal = row.read<int>('all_txn_total');
-      final beforeTxnTotal = row.read<int>('before_txn_total');
-      openingBalanceCents = (currentBalance - allTxnTotal) + beforeTxnTotal;
-    } else {
-      openingBalanceCents = 0;
-    }
-
-    // Load transactions within date range
-    final txnRows = await _db.customSelect(
-      '''
-      SELECT id, transaction_type, transaction_number, discount_type,
-             amount_cents, description,
-             reference_id, reference_type, transaction_date
-      FROM supplier_transactions
-      WHERE supplier_id = ? AND transaction_date >= ? AND transaction_date <= ?
-      ORDER BY transaction_date ASC, id ASC
-      ''',
-      variables: [
-        Variable.withInt(_supplierId!),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.supplierTransactions},
-    ).get();
-
-    // Phase 7 — running balance via SoT helper.
-    final running = LedgerRunningBalance(openingBalanceCents);
-    int totalDebits = 0;
-    int totalCredits = 0;
-    final transactions = <SupplierStatementTransaction>[];
-
-    for (final row in txnRows) {
-      final amountCents = row.read<int>('amount_cents');
-      final runningBalance = running.apply(amountCents);
-
-      if (amountCents > 0) {
-        totalDebits += amountCents;
-      } else {
-        totalCredits += amountCents.abs();
-      }
-
-      transactions.add(SupplierStatementTransaction(
-        id: row.read<int>('id'),
-        date: DateTime.parse(row.read<String>('transaction_date')),
-        type: row.read<String>('transaction_type'),
-        transactionNumber: row.readNullable<String>('transaction_number'),
-        discountType: row.readNullable<String>('discount_type'),
-        description: row.readNullable<String>('description'),
-        amountCents: amountCents,
-        runningBalanceCents: runningBalance,
-        referenceId: row.readNullable<int>('reference_id'),
-        referenceType: row.readNullable<String>('reference_type'),
-      ));
-    }
-
-    final closingBalanceCents = openingBalanceCents + totalDebits - totalCredits;
 
     return SupplierStatementData(
-      supplierId: _supplierId,
-      supplierName: sInfo.read<String>('name'),
-      supplierPhone: sInfo.readNullable<String>('phone'),
-      supplierEmail: sInfo.readNullable<String>('email'),
-      supplierAddress: sInfo.readNullable<String>('address'),
-      openingBalanceCents: openingBalanceCents,
-      closingBalanceCents: closingBalanceCents,
-      totalDebitsCents: totalDebits,
-      totalCreditsCents: totalCredits,
-      transactions: transactions,
+      supplierId: supplier.id,
+      supplierName: supplier.name,
+      supplierPhone: supplier.phone,
+      supplierEmail: supplier.email,
+      supplierAddress: supplier.address,
+      openingBalanceCents: snapshot.openingBalanceCents,
+      closingBalanceCents: snapshot.closingBalanceCents,
+      totalDebitsCents: snapshot.totalDebitsCents,
+      totalCreditsCents: snapshot.totalCreditsCents,
+      transactions: snapshot.transactions
+          .map(
+            (transaction) => SupplierStatementTransaction(
+              id: transaction.id,
+              date: transaction.date,
+              type: transaction.type,
+              transactionNumber: transaction.transactionNumber,
+              discountType: transaction.discountType,
+              description: transaction.description,
+              amountCents: transaction.amountCents,
+              runningBalanceCents: transaction.runningBalanceCents,
+              referenceId: transaction.referenceId,
+              referenceType: transaction.referenceType,
+            ),
+          )
+          .toList(),
       dateRange: _dateRange,
       suppliers: suppliers,
     );

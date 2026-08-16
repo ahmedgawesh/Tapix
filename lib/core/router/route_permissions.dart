@@ -1,13 +1,60 @@
 import '../../features/auth/domain/entities/user_entity.dart';
 
 class RoutePermissions {
+  static const List<UserRole> productManagers = [
+    UserRole.owner,
+    UserRole.manager,
+  ];
+
   static final Map<String, List<UserRole>> map = {
-    '/dashboard': [UserRole.owner, UserRole.manager, UserRole.accountant, UserRole.cashier, UserRole.salesperson],
-    '/products': [UserRole.owner, UserRole.manager, UserRole.accountant, UserRole.cashier, UserRole.salesperson],
-    '/products/variants': [UserRole.owner, UserRole.manager, UserRole.accountant, UserRole.cashier, UserRole.salesperson],
+    '/dashboard': [
+      UserRole.owner,
+      UserRole.manager,
+      UserRole.accountant,
+      UserRole.cashier,
+      UserRole.salesperson,
+    ],
+    '/cashier-shifts': [
+      UserRole.owner,
+      UserRole.manager,
+      UserRole.accountant,
+      UserRole.cashier,
+      UserRole.salesperson,
+    ],
+    '/products': [
+      UserRole.owner,
+      UserRole.manager,
+      UserRole.accountant,
+      UserRole.cashier,
+      UserRole.salesperson,
+    ],
+    '/products/variants': [
+      UserRole.owner,
+      UserRole.manager,
+      UserRole.accountant,
+      UserRole.cashier,
+      UserRole.salesperson,
+    ],
     '/products/export': [UserRole.owner, UserRole.manager, UserRole.accountant],
-    '/sales': [UserRole.owner, UserRole.manager, UserRole.cashier, UserRole.salesperson],
-    '/customers': [UserRole.owner, UserRole.manager, UserRole.accountant, UserRole.cashier],
+    '/products/new': productManagers,
+    '/products/bulk': productManagers,
+    '/products/edit-prices': productManagers,
+    '/products/import': productManagers,
+    '/products/categories': productManagers,
+    '/products/colors': productManagers,
+    '/products/sizes': productManagers,
+    '/sales': [
+      UserRole.owner,
+      UserRole.manager,
+      UserRole.cashier,
+      UserRole.salesperson,
+    ],
+    '/customers': [
+      UserRole.owner,
+      UserRole.manager,
+      UserRole.accountant,
+      UserRole.cashier,
+    ],
     '/suppliers': [UserRole.owner, UserRole.manager, UserRole.accountant],
     '/purchases': [UserRole.owner, UserRole.manager, UserRole.accountant],
     '/expenses': [UserRole.owner, UserRole.manager, UserRole.accountant],
@@ -23,9 +70,27 @@ class RoutePermissions {
     '/employees/settings': [UserRole.owner, UserRole.manager],
     '/accounting': [UserRole.owner, UserRole.accountant],
     '/financial-management': [UserRole.owner, UserRole.accountant],
-    '/financial-management/chart-of-accounts': [UserRole.owner, UserRole.accountant],
-    '/financial-management/journal-entries': [UserRole.owner, UserRole.accountant],
+    '/financial-management/chart-of-accounts': [
+      UserRole.owner,
+      UserRole.accountant,
+    ],
+    '/financial-management/journal-entries': [
+      UserRole.owner,
+      UserRole.accountant,
+    ],
     '/financial-management/periods': [UserRole.owner, UserRole.accountant],
     '/audit': [UserRole.owner, UserRole.accountant],
   };
+
+  /// Resolves both exact and parameterized routes. Product editing contains
+  /// cost, margin and revaluation data, so a typed URL must not bypass the
+  /// same owner/manager restriction enforced by the visible UI.
+  static List<UserRole>? rolesForPath(String path) {
+    final exact = map[path];
+    if (exact != null) return exact;
+    if (RegExp(r'^/products/\d+/edit$').hasMatch(path)) {
+      return productManagers;
+    }
+    return null;
+  }
 }

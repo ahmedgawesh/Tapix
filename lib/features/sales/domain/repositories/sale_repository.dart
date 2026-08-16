@@ -1,5 +1,6 @@
 import 'package:decimal/decimal.dart';
 
+import '../../../../core/services/return_calculation_service.dart';
 import '../entities/sale_entity.dart';
 
 /// Input class for sale line items
@@ -7,6 +8,8 @@ class SaleItemInput {
   final int productId;
   final int? variantId;
   final int quantity;
+  final int quantityScale;
+  final String measurementType;
   final Decimal unitPriceCents;
   final Decimal subtotalCents;
   final Decimal discountCents;
@@ -19,6 +22,8 @@ class SaleItemInput {
     required this.productId,
     this.variantId,
     required this.quantity,
+    this.quantityScale = 1,
+    this.measurementType = 'piece',
     required this.unitPriceCents,
     required this.subtotalCents,
     required this.discountCents,
@@ -33,6 +38,8 @@ class SaleItemInput {
 class SaleReturnItemInput {
   final int saleItemId;
   final int quantity;
+  final int quantityScale;
+  final String measurementType;
   final Decimal subtotalCents;
   final Decimal discountCents;
   final Decimal taxCents;
@@ -42,12 +49,34 @@ class SaleReturnItemInput {
   const SaleReturnItemInput({
     required this.saleItemId,
     required this.quantity,
+    this.quantityScale = 1,
+    this.measurementType = 'piece',
     required this.subtotalCents,
     required this.discountCents,
     required this.taxCents,
     required this.refundCents,
     this.reason,
   });
+
+  /// Rebuilds the monetary snapshot while requiring the authoritative
+  /// quantity representation from the original invoice line.
+  SaleReturnItemInput withCalculatedAmounts(
+    ProportionalReturnResult result, {
+    required int sourceQuantityScale,
+    required String sourceMeasurementType,
+  }) {
+    return SaleReturnItemInput(
+      saleItemId: saleItemId,
+      quantity: quantity,
+      quantityScale: sourceQuantityScale,
+      measurementType: sourceMeasurementType,
+      subtotalCents: Decimal.fromInt(result.subtotalCents),
+      discountCents: Decimal.fromInt(result.discountCents),
+      taxCents: Decimal.fromInt(result.taxCents),
+      refundCents: Decimal.fromInt(result.refundCents),
+      reason: reason,
+    );
+  }
 }
 
 abstract class SaleRepository {
@@ -85,6 +114,7 @@ abstract class SaleRepository {
     DateTime? saleDate,
     DateTime? dueDate,
     bool allowNegativeStock = false,
+
     /// Phase 11.2 — tax-inclusive flag the engine used to produce the
     /// totals being persisted. Stamped on `sales.tax_inclusive_at_post`.
     bool taxInclusiveAtPost = false,
@@ -106,6 +136,7 @@ abstract class SaleRepository {
     String? notes,
     DateTime? saleDate,
     DateTime? dueDate,
+
     /// Phase 11.2 — tax-inclusive flag the engine used to produce the
     /// totals being persisted.
     bool taxInclusiveAtPost = false,
@@ -137,6 +168,7 @@ abstract class SaleRepository {
     DateTime? saleDate,
     DateTime? dueDate,
     bool allowNegativeStock = false,
+
     /// Phase 11.2 — tax-inclusive flag the engine used to produce the
     /// totals being persisted.
     bool taxInclusiveAtPost = false,
@@ -154,7 +186,9 @@ abstract class SaleRepository {
   Future<SaleReturnEntity?> getSaleReturnById(int id);
 
   /// Watch return items with full product details
-  Stream<List<SaleReturnItemEntity>> watchSaleReturnItemsWithDetails(int returnId);
+  Stream<List<SaleReturnItemEntity>> watchSaleReturnItemsWithDetails(
+    int returnId,
+  );
 
   /// Watch returns for a specific sale
   Stream<List<SaleReturnEntity>> watchSaleReturnsBySale(int saleId);
@@ -224,6 +258,9 @@ abstract class SaleRepository {
 
   /// Get total returned quantity for a sale item
   Future<int> getReturnedQuantity(int saleItemId);
+
+  /// Get financial amounts from linked returns only (adjustments excluded).
+  Future<LinkedReturnHistory> getLinkedReturnHistory(int saleItemId);
 
   // ==================== DASHBOARD ====================
 

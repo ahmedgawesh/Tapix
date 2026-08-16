@@ -9,6 +9,10 @@ import '../../data/models/invoice_print_data.dart';
 class BarcodeDesignData extends Equatable {
   final List<Product> selectedProducts;
   final Map<int, String> variantInfoByProductId;
+
+  /// When non-empty, only these explicit variants are included for products
+  /// that have variants. An empty set means all active dimensional variants.
+  final Set<int> selectedVariantIds;
   final List<BarcodeTemplate> templates;
   final BarcodeTemplate? selectedTemplate;
   final BarcodeDesignSettings settings;
@@ -17,7 +21,7 @@ class BarcodeDesignData extends Equatable {
   final double? progress;
   final String? errorMessage;
   final List<PrintHistory> recentPrintHistory;
-  
+
   // Invoice-related fields
   final InvoicePrintData? invoiceData;
   final Map<int, int> currentQuantities;
@@ -25,6 +29,7 @@ class BarcodeDesignData extends Equatable {
   const BarcodeDesignData({
     this.selectedProducts = const [],
     this.variantInfoByProductId = const {},
+    this.selectedVariantIds = const {},
     this.templates = const [],
     this.selectedTemplate,
     this.settings = const BarcodeDesignSettings(),
@@ -40,6 +45,7 @@ class BarcodeDesignData extends Equatable {
   BarcodeDesignData copyWith({
     List<Product>? selectedProducts,
     Map<int, String>? variantInfoByProductId,
+    Set<int>? selectedVariantIds,
     List<BarcodeTemplate>? templates,
     BarcodeTemplate? selectedTemplate,
     BarcodeDesignSettings? settings,
@@ -55,9 +61,13 @@ class BarcodeDesignData extends Equatable {
   }) {
     return BarcodeDesignData(
       selectedProducts: selectedProducts ?? this.selectedProducts,
-      variantInfoByProductId: variantInfoByProductId ?? this.variantInfoByProductId,
+      variantInfoByProductId:
+          variantInfoByProductId ?? this.variantInfoByProductId,
+      selectedVariantIds: selectedVariantIds ?? this.selectedVariantIds,
       templates: templates ?? this.templates,
-      selectedTemplate: clearTemplate ? null : (selectedTemplate ?? this.selectedTemplate),
+      selectedTemplate: clearTemplate
+          ? null
+          : (selectedTemplate ?? this.selectedTemplate),
       settings: settings ?? this.settings,
       companyProfile: companyProfile ?? this.companyProfile,
       operationStatus: operationStatus ?? this.operationStatus,
@@ -73,36 +83,37 @@ class BarcodeDesignData extends Equatable {
 
   @override
   List<Object?> get props => [
-        selectedProducts,
-        variantInfoByProductId,
-        templates,
-        selectedTemplate,
-        settings,
-        companyProfile,
-        operationStatus,
-        progress,
-        errorMessage,
-        recentPrintHistory,
-        invoiceData,
-        currentQuantities,
-      ];
-  
+    selectedProducts,
+    variantInfoByProductId,
+    selectedVariantIds,
+    templates,
+    selectedTemplate,
+    settings,
+    companyProfile,
+    operationStatus,
+    progress,
+    errorMessage,
+    recentPrintHistory,
+    invoiceData,
+    currentQuantities,
+  ];
+
   /// Check if this state has invoice data
   bool get hasInvoiceData => invoiceData != null;
-  
+
   /// Check if quantities have been modified from original invoice values
   bool get quantitiesModified {
     if (invoiceData == null) return false;
-    
+
     for (final line in invoiceData!.lines) {
       final current = currentQuantities[line.variantId] ?? 0;
       final original = line.quantity;
       if (current != original) return true;
     }
-    
+
     return false;
   }
-  
+
   /// Get total quantity for all invoice lines
   int get totalInvoiceQuantity {
     if (invoiceData == null) return 0;
@@ -114,6 +125,7 @@ class BarcodeDesignData extends Equatable {
 enum LabelPrintMode {
   /// Single label per page (thermal printer)
   thermal,
+
   /// Multiple labels on A4 sheet
   a4Sheet,
 }
@@ -122,12 +134,36 @@ enum LabelPrintMode {
 enum QuantityMode {
   /// Print one label per product
   single,
+
   /// Print specified number of copies
   custom,
+
   /// Print based on invoice quantity
   invoiceQuantity,
+
   /// Print based on stock quantity
   stockQuantity,
+}
+
+/// Which selling price is shown on the barcode label.
+enum PriceDisplayMode {
+  /// Regular retail selling price.
+  retail,
+
+  /// Wholesale selling price.
+  wholesale,
+
+  /// Regular and wholesale selling prices together.
+  both,
+}
+
+/// Destination used when the user presses the print button.
+enum PrintDestination {
+  /// Native print dialog (Android, Windows, Linux, web, etc.).
+  system,
+
+  /// Direct Android Bluetooth Classic connection to a TSPL label printer.
+  bluetooth,
 }
 
 /// Settings for barcode label design
@@ -136,6 +172,8 @@ class BarcodeDesignSettings extends Equatable {
   final double labelHeightMm;
   final bool includeName;
   final bool includePrice;
+  final PriceDisplayMode priceDisplayMode;
+  final PrintDestination printDestination;
   final bool includeBarcode;
   final bool includeSku;
   final bool includeCompanyName;
@@ -144,14 +182,14 @@ class BarcodeDesignSettings extends Equatable {
   final String barcodeType;
   final int copies;
   final String printType; // 'single', 'batch', 'all_quantity'
-  
+
   // A4 Sheet settings
   final LabelPrintMode printMode;
   final int labelsPerRow;
   final double horizontalGapMm;
   final double verticalGapMm;
   final double pageMarginMm;
-  
+
   // Quantity mode
   final QuantityMode quantityMode;
 
@@ -160,11 +198,13 @@ class BarcodeDesignSettings extends Equatable {
     this.labelHeightMm = 40.0,
     this.includeName = true,
     this.includePrice = true,
+    this.priceDisplayMode = PriceDisplayMode.retail,
+    this.printDestination = PrintDestination.system,
     this.includeBarcode = true,
     this.includeSku = false,
     this.includeCompanyName = true,
     this.includeCompanyContact = true,
-    this.includeVariantInfo = false,
+    this.includeVariantInfo = true,
     this.barcodeType = 'auto',
     this.copies = 1,
     this.printType = 'single',
@@ -181,6 +221,8 @@ class BarcodeDesignSettings extends Equatable {
     double? labelHeightMm,
     bool? includeName,
     bool? includePrice,
+    PriceDisplayMode? priceDisplayMode,
+    PrintDestination? printDestination,
     bool? includeBarcode,
     bool? includeSku,
     bool? includeCompanyName,
@@ -201,10 +243,13 @@ class BarcodeDesignSettings extends Equatable {
       labelHeightMm: labelHeightMm ?? this.labelHeightMm,
       includeName: includeName ?? this.includeName,
       includePrice: includePrice ?? this.includePrice,
+      priceDisplayMode: priceDisplayMode ?? this.priceDisplayMode,
+      printDestination: printDestination ?? this.printDestination,
       includeBarcode: includeBarcode ?? this.includeBarcode,
       includeSku: includeSku ?? this.includeSku,
       includeCompanyName: includeCompanyName ?? this.includeCompanyName,
-      includeCompanyContact: includeCompanyContact ?? this.includeCompanyContact,
+      includeCompanyContact:
+          includeCompanyContact ?? this.includeCompanyContact,
       includeVariantInfo: includeVariantInfo ?? this.includeVariantInfo,
       barcodeType: barcodeType ?? this.barcodeType,
       copies: copies ?? this.copies,
@@ -222,7 +267,7 @@ class BarcodeDesignSettings extends Equatable {
   factory BarcodeDesignSettings.fromTemplate(BarcodeTemplate template) {
     // Determine print mode based on paper size
     final isA4 = template.paperSize.toLowerCase() == 'a4';
-    
+
     return BarcodeDesignSettings(
       labelWidthMm: template.widthMm,
       labelHeightMm: template.heightMm,
@@ -236,10 +281,10 @@ class BarcodeDesignSettings extends Equatable {
       printMode: isA4 ? LabelPrintMode.a4Sheet : LabelPrintMode.thermal,
     );
   }
-  
+
   /// Check if using A4 sheet mode
   bool get isA4Mode => printMode == LabelPrintMode.a4Sheet;
-  
+
   /// Calculate how many labels fit per row on A4
   int get calculatedLabelsPerRow {
     const a4WidthMm = 210.0;
@@ -247,7 +292,7 @@ class BarcodeDesignSettings extends Equatable {
     final labelWithGap = labelWidthMm + horizontalGapMm;
     return (availableWidth / labelWithGap).floor().clamp(1, 10);
   }
-  
+
   /// Calculate how many labels fit per column on A4
   int get calculatedLabelsPerColumn {
     const a4HeightMm = 297.0;
@@ -255,38 +300,34 @@ class BarcodeDesignSettings extends Equatable {
     final labelWithGap = labelHeightMm + verticalGapMm;
     return (availableHeight / labelWithGap).floor().clamp(1, 20);
   }
-  
+
   /// Total labels per A4 page
   int get labelsPerPage => labelsPerRow * calculatedLabelsPerColumn;
 
   @override
   List<Object?> get props => [
-        labelWidthMm,
-        labelHeightMm,
-        includeName,
-        includePrice,
-        includeBarcode,
-        includeSku,
-        includeCompanyName,
-        includeCompanyContact,
-        includeVariantInfo,
-        barcodeType,
-        copies,
-        printType,
-        printMode,
-        labelsPerRow,
-        horizontalGapMm,
-        verticalGapMm,
-        pageMarginMm,
-        quantityMode,
-      ];
+    labelWidthMm,
+    labelHeightMm,
+    includeName,
+    includePrice,
+    priceDisplayMode,
+    printDestination,
+    includeBarcode,
+    includeSku,
+    includeCompanyName,
+    includeCompanyContact,
+    includeVariantInfo,
+    barcodeType,
+    copies,
+    printType,
+    printMode,
+    labelsPerRow,
+    horizontalGapMm,
+    verticalGapMm,
+    pageMarginMm,
+    quantityMode,
+  ];
 }
 
 /// Status of print operation
-enum PrintOperationStatus {
-  idle,
-  preparing,
-  printing,
-  success,
-  error,
-}
+enum PrintOperationStatus { idle, preparing, printing, success, error }

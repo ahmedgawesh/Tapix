@@ -1,7 +1,7 @@
-import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../services/party_aging_ledger_service.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -87,7 +87,10 @@ class CustomerAgingReportData {
   });
 
   int get grandTotalOverdueCents =>
-      grandTotal30Cents + grandTotal60Cents + grandTotal90Cents + grandTotalOver90Cents;
+      grandTotal30Cents +
+      grandTotal60Cents +
+      grandTotal90Cents +
+      grandTotalOver90Cents;
 
   CustomerAgingReportData copyWith({
     List<CustomerAgingItem>? customers,
@@ -103,11 +106,13 @@ class CustomerAgingReportData {
   }) {
     return CustomerAgingReportData(
       customers: customers ?? this.customers,
-      grandTotalCurrentCents: grandTotalCurrentCents ?? this.grandTotalCurrentCents,
+      grandTotalCurrentCents:
+          grandTotalCurrentCents ?? this.grandTotalCurrentCents,
       grandTotal30Cents: grandTotal30Cents ?? this.grandTotal30Cents,
       grandTotal60Cents: grandTotal60Cents ?? this.grandTotal60Cents,
       grandTotal90Cents: grandTotal90Cents ?? this.grandTotal90Cents,
-      grandTotalOver90Cents: grandTotalOver90Cents ?? this.grandTotalOver90Cents,
+      grandTotalOver90Cents:
+          grandTotalOver90Cents ?? this.grandTotalOver90Cents,
       grandTotalCents: grandTotalCents ?? this.grandTotalCents,
       customerCount: customerCount ?? this.customerCount,
       dateRange: dateRange ?? this.dateRange,
@@ -125,8 +130,8 @@ class CustomerAgingReportBloc
   CustomerAgingSortType _sort = CustomerAgingSortType.totalDesc;
 
   CustomerAgingReportBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -142,44 +147,46 @@ class CustomerAgingReportBloc
   }
 
   Stream<CustomerAgingReportData> _buildCombinedStream() {
-    // Watch customer_transactions for real-time changes.
-    // Note: This watches ALL transactions (not date-filtered) because Drift
-    // table-level watches don't support WHERE clauses. The asyncMap re-queries
-    // with the current date range, so data is always correct.
-    return _db.select(_db.customerTransactions).watch().asyncMap((_) async {
-      final customers = await _loadAgingData();
+    return _db
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {_db.customers, _db.customerTransactions},
+        )
+        .watch()
+        .asyncMap((_) async {
+          final customers = await _loadAgingData();
 
-      int totalCurrent = 0;
-      int total30 = 0;
-      int total60 = 0;
-      int total90 = 0;
-      int totalOver90 = 0;
-      int grandTotal = 0;
+          int totalCurrent = 0;
+          int total30 = 0;
+          int total60 = 0;
+          int total90 = 0;
+          int totalOver90 = 0;
+          int grandTotal = 0;
 
-      for (final c in customers) {
-        totalCurrent += c.currentCents;
-        total30 += c.days30Cents;
-        total60 += c.days60Cents;
-        total90 += c.days90Cents;
-        totalOver90 += c.over90Cents;
-        grandTotal += c.totalCents;
-      }
+          for (final c in customers) {
+            totalCurrent += c.currentCents;
+            total30 += c.days30Cents;
+            total60 += c.days60Cents;
+            total90 += c.days90Cents;
+            totalOver90 += c.over90Cents;
+            grandTotal += c.totalCents;
+          }
 
-      final sorted = _applySortToCustomers(customers, _sort);
+          final sorted = _applySortToCustomers(customers, _sort);
 
-      return CustomerAgingReportData(
-        customers: sorted,
-        grandTotalCurrentCents: totalCurrent,
-        grandTotal30Cents: total30,
-        grandTotal60Cents: total60,
-        grandTotal90Cents: total90,
-        grandTotalOver90Cents: totalOver90,
-        grandTotalCents: grandTotal,
-        customerCount: customers.length,
-        dateRange: _dateRange,
-        sort: _sort,
-      );
-    });
+          return CustomerAgingReportData(
+            customers: sorted,
+            grandTotalCurrentCents: totalCurrent,
+            grandTotal30Cents: total30,
+            grandTotal60Cents: total60,
+            grandTotal90Cents: total90,
+            grandTotalOver90Cents: totalOver90,
+            grandTotalCents: grandTotal,
+            customerCount: customers.length,
+            dateRange: _dateRange,
+            sort: _sort,
+          );
+        });
   }
 
   Future<void> _onDateRangeChanged(
@@ -198,12 +205,11 @@ class CustomerAgingReportBloc
     final current = currentData;
     if (current != null) {
       final sorted = _applySortToCustomers(current.customers, event.sort);
-      emit(RealtimeSuccess<CustomerAgingReportData>(
-        data: current.copyWith(
-          customers: sorted,
-          sort: event.sort,
+      emit(
+        RealtimeSuccess<CustomerAgingReportData>(
+          data: current.copyWith(customers: sorted, sort: event.sort),
         ),
-      ));
+      );
     }
   }
 
@@ -230,95 +236,23 @@ class CustomerAgingReportBloc
   }
 
   Future<List<CustomerAgingItem>> _loadAgingData() async {
-    // Aging report shows customers with positive balance (they owe us money).
-    // We use customers.balance_cents as the source of truth for the total owed.
-    // The aging buckets are calculated based on the oldest unpaid transaction dates.
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day, 23, 59, 59);
-    final days30 = today.subtract(const Duration(days: 30));
-    final days60 = today.subtract(const Duration(days: 60));
-    final days90 = today.subtract(const Duration(days: 90));
-
-    final rows = await _db.customSelect(
-      '''
-      SELECT 
-        c.id AS customer_id,
-        c.name AS customer_name,
-        c.segment AS segment,
-        c.phone AS phone,
-        c.email AS email,
-        c.balance_cents AS total_cents,
-        -- Calculate aging buckets based on transaction dates
-        -- Current: transactions in last 30 days
-        COALESCE((
-          SELECT SUM(ct.amount_cents) 
-          FROM customer_transactions ct 
-          WHERE ct.customer_id = c.id 
-            AND ct.transaction_date >= ?
-            AND ct.amount_cents > 0
-        ), 0) AS current_cents,
-        -- 1-30 days: transactions 30-60 days ago
-        COALESCE((
-          SELECT SUM(ct.amount_cents) 
-          FROM customer_transactions ct 
-          WHERE ct.customer_id = c.id 
-            AND ct.transaction_date >= ? AND ct.transaction_date < ?
-            AND ct.amount_cents > 0
-        ), 0) AS days_30_cents,
-        -- 31-60 days: transactions 60-90 days ago
-        COALESCE((
-          SELECT SUM(ct.amount_cents) 
-          FROM customer_transactions ct 
-          WHERE ct.customer_id = c.id 
-            AND ct.transaction_date >= ? AND ct.transaction_date < ?
-            AND ct.amount_cents > 0
-        ), 0) AS days_60_cents,
-        -- 61-90 days: transactions 90+ days ago
-        COALESCE((
-          SELECT SUM(ct.amount_cents) 
-          FROM customer_transactions ct 
-          WHERE ct.customer_id = c.id 
-            AND ct.transaction_date >= ? AND ct.transaction_date < ?
-            AND ct.amount_cents > 0
-        ), 0) AS days_90_cents,
-        -- 90+ days: transactions older than 90 days
-        COALESCE((
-          SELECT SUM(ct.amount_cents) 
-          FROM customer_transactions ct 
-          WHERE ct.customer_id = c.id 
-            AND ct.transaction_date < ?
-            AND ct.amount_cents > 0
-        ), 0) AS over_90_cents
-      FROM customers c
-      WHERE c.is_active = 1 AND c.balance_cents > 0
-      ORDER BY c.balance_cents DESC
-      ''',
-      variables: [
-        Variable.withString(days30.toIso8601String()),
-        Variable.withString(days60.toIso8601String()),
-        Variable.withString(days30.toIso8601String()),
-        Variable.withString(days90.toIso8601String()),
-        Variable.withString(days60.toIso8601String()),
-        Variable.withString(today.subtract(const Duration(days: 90)).toIso8601String()),
-        Variable.withString(days90.toIso8601String()),
-        Variable.withString(days90.toIso8601String()),
-      ],
-      readsFrom: {_db.customers, _db.customerTransactions},
-    ).get();
-
+    final rows = await PartyAgingLedgerService(
+      _db,
+    ).loadCustomers(asOf: _dateRange.endDate);
     return rows.map((row) {
+      final buckets = row.buckets;
       return CustomerAgingItem(
-        customerId: row.read<int>('customer_id'),
-        customerName: row.read<String>('customer_name'),
-        segment: row.read<String>('segment'),
-        phone: row.readNullable<String>('phone'),
-        email: row.readNullable<String>('email'),
-        currentCents: row.read<int>('current_cents'),
-        days30Cents: row.read<int>('days_30_cents'),
-        days60Cents: row.read<int>('days_60_cents'),
-        days90Cents: row.read<int>('days_90_cents'),
-        over90Cents: row.read<int>('over_90_cents'),
-        totalCents: row.read<int>('total_cents'),
+        customerId: row.partyId,
+        customerName: row.partyName,
+        segment: row.segment ?? 'retail',
+        phone: row.phone,
+        email: row.email,
+        currentCents: buckets.currentCents,
+        days30Cents: buckets.days30Cents,
+        days60Cents: buckets.days60Cents,
+        days90Cents: buckets.days90Cents,
+        over90Cents: buckets.over90Cents,
+        totalCents: buckets.totalCents,
       );
     }).toList();
   }

@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../../core/di/injection_container.dart';
+import '../../../core/measurement/measurement_localization.dart';
 import '../../../core/services/currency_service.dart';
 import '../../settings/data/services/company_profile_service.dart';
 import '../../settings/domain/entities/company_profile.dart';
@@ -31,7 +32,8 @@ class StockMovementPdfService {
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'StockMovement_${data.selectedProductName ?? ""}_${DateFormat('yyyyMMdd').format(DateTime.now())}',
+      name:
+          'StockMovement_${data.selectedProductName ?? ""}_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
   }
 
@@ -55,7 +57,8 @@ class StockMovementPdfService {
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'StockMovement_${data.selectedProductName ?? ""}_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      filename:
+          'StockMovement_${data.selectedProductName ?? ""}_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
   }
 
@@ -110,7 +113,9 @@ class StockMovementPdfService {
               pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 8),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.grey200,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.centerLeft,
                   1: pw.Alignment.centerLeft,
@@ -134,7 +139,7 @@ class StockMovementPdfService {
                     typeLabel,
                     m.reference,
                     m.counterpartyName ?? '-',
-                    '$sign${m.quantity}',
+                    '$sign${localizedQuantity(m.quantity, m.measurementType)}',
                     cs.formatCents(m.totalCents),
                   ];
                 }).toList(),
@@ -145,7 +150,11 @@ class StockMovementPdfService {
             pw.Divider(),
             pw.Text(
               '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
-              style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+              style: pw.TextStyle(
+                font: fonts.regular,
+                fontSize: 8,
+                color: PdfColors.grey600,
+              ),
             ),
           ];
         },
@@ -176,22 +185,71 @@ class StockMovementPdfService {
         _t('amount', lang),
       ],
       data: [
-        [_t('purchases', lang), '+${summary.totalPurchased}', cs.formatCents(summary.totalPurchaseCents)],
-        [_t('sales', lang), '-${summary.totalSold}', cs.formatCents(summary.totalSalesCents)],
-        [_t('sale_returns_linked', lang), '+${summary.totalSaleReturned}', cs.formatCents(summary.totalSaleReturnCents)],
-        [_t('sale_returns_unlinked', lang), '+${summary.totalSaleReturnAdj}', cs.formatCents(summary.totalSaleReturnAdjCents)],
-        [_t('purchase_returns_linked', lang), '-${summary.totalPurchaseReturned}', cs.formatCents(summary.totalPurchaseReturnCents)],
-        [_t('purchase_returns_unlinked', lang), '-${summary.totalPurchaseReturnAdj}', cs.formatCents(summary.totalPurchaseReturnAdjCents)],
+        [
+          _t('purchases', lang),
+          localizedSignedQuantity(
+            summary.totalPurchased,
+            summary.measurementType,
+            showPositiveSign: true,
+          ),
+          cs.formatCents(summary.totalPurchaseCents),
+        ],
+        [
+          _t('sales', lang),
+          localizedSignedQuantity(-summary.totalSold, summary.measurementType),
+          cs.formatCents(summary.totalSalesCents),
+        ],
+        [
+          _t('sale_returns_linked', lang),
+          localizedSignedQuantity(
+            summary.totalSaleReturned,
+            summary.measurementType,
+            showPositiveSign: true,
+          ),
+          cs.formatCents(summary.totalSaleReturnCents),
+        ],
+        [
+          _t('sale_returns_unlinked', lang),
+          localizedSignedQuantity(
+            summary.totalSaleReturnAdj,
+            summary.measurementType,
+            showPositiveSign: true,
+          ),
+          cs.formatCents(summary.totalSaleReturnAdjCents),
+        ],
+        [
+          _t('purchase_returns_linked', lang),
+          localizedSignedQuantity(
+            -summary.totalPurchaseReturned,
+            summary.measurementType,
+          ),
+          cs.formatCents(summary.totalPurchaseReturnCents),
+        ],
+        [
+          _t('purchase_returns_unlinked', lang),
+          localizedSignedQuantity(
+            -summary.totalPurchaseReturnAdj,
+            summary.measurementType,
+          ),
+          cs.formatCents(summary.totalPurchaseReturnAdjCents),
+        ],
         [
           _t('net_movement', lang),
-          summary.netQuantity >= 0 ? '+${summary.netQuantity}' : '${summary.netQuantity}',
+          localizedSignedQuantity(
+            summary.netQuantity,
+            summary.measurementType,
+            showPositiveSign: true,
+          ),
           '',
         ],
       ],
     );
   }
 
-  static (String, String) _movementTypeInfo(StockMovementType type, String lang) {
+  static (String, String) _movementTypeInfo(
+    StockMovementType type,
+    String lang,
+  ) {
     switch (type) {
       case StockMovementType.purchase:
         return (_t('purchases', lang), '+');
@@ -213,24 +271,60 @@ class StockMovementPdfService {
   // ═══════════════════════════════════════════════════════
 
   static const _translations = {
-    'title': {'en': 'Stock Movement Report', 'ar': 'تقرير حركات المخزون الشامل', 'fr': 'Rapport de Mouvement de Stock'},
+    'title': {
+      'en': 'Stock Movement Report',
+      'ar': 'تقرير حركات المخزون الشامل',
+      'fr': 'Rapport de Mouvement de Stock',
+    },
     'product': {'en': 'Product', 'ar': 'المنتج', 'fr': 'Produit'},
     'period': {'en': 'Period', 'ar': 'الفترة', 'fr': 'Période'},
-    'movement_details': {'en': 'Movement Details', 'ar': 'تفاصيل الحركة', 'fr': 'Détails des Mouvements'},
-    'movement_type': {'en': 'Movement Type', 'ar': 'نوع الحركة', 'fr': 'Type de Mouvement'},
+    'movement_details': {
+      'en': 'Movement Details',
+      'ar': 'تفاصيل الحركة',
+      'fr': 'Détails des Mouvements',
+    },
+    'movement_type': {
+      'en': 'Movement Type',
+      'ar': 'نوع الحركة',
+      'fr': 'Type de Mouvement',
+    },
     'date': {'en': 'Date', 'ar': 'التاريخ', 'fr': 'Date'},
     'type': {'en': 'Type', 'ar': 'النوع', 'fr': 'Type'},
     'reference': {'en': 'Reference', 'ar': 'المرجع', 'fr': 'Référence'},
-    'counterparty': {'en': 'Supplier / Customer', 'ar': 'المورد / العميل', 'fr': 'Fournisseur / Client'},
+    'counterparty': {
+      'en': 'Supplier / Customer',
+      'ar': 'المورد / العميل',
+      'fr': 'Fournisseur / Client',
+    },
     'quantity': {'en': 'Qty', 'ar': 'الكمية', 'fr': 'Qté'},
     'amount': {'en': 'Amount', 'ar': 'المبلغ', 'fr': 'Montant'},
     'purchases': {'en': 'Purchases', 'ar': 'مشتريات', 'fr': 'Achats'},
     'sales': {'en': 'Sales', 'ar': 'مبيعات', 'fr': 'Ventes'},
-    'sale_returns_linked': {'en': 'Sale Returns (Linked)', 'ar': 'مرتجعات بيع (مرتبطة)', 'fr': 'Retours Ventes (Liés)'},
-    'sale_returns_unlinked': {'en': 'Sale Returns (Adjustment)', 'ar': 'مرتجعات بيع (غير مرتبطة)', 'fr': 'Retours Ventes (Ajustement)'},
-    'purchase_returns_linked': {'en': 'Purchase Returns (Linked)', 'ar': 'مرتجعات شراء (مرتبطة)', 'fr': 'Retours Achats (Liés)'},
-    'purchase_returns_unlinked': {'en': 'Purchase Returns (Adjustment)', 'ar': 'مرتجعات شراء (غير مرتبطة)', 'fr': 'Retours Achats (Ajustement)'},
-    'net_movement': {'en': 'Net Movement', 'ar': 'صافي الحركة', 'fr': 'Mouvement Net'},
+    'sale_returns_linked': {
+      'en': 'Sale Returns (Linked)',
+      'ar': 'مرتجعات بيع (مرتبطة)',
+      'fr': 'Retours Ventes (Liés)',
+    },
+    'sale_returns_unlinked': {
+      'en': 'Sale Returns (Adjustment)',
+      'ar': 'مرتجعات بيع (غير مرتبطة)',
+      'fr': 'Retours Ventes (Ajustement)',
+    },
+    'purchase_returns_linked': {
+      'en': 'Purchase Returns (Linked)',
+      'ar': 'مرتجعات شراء (مرتبطة)',
+      'fr': 'Retours Achats (Liés)',
+    },
+    'purchase_returns_unlinked': {
+      'en': 'Purchase Returns (Adjustment)',
+      'ar': 'مرتجعات شراء (غير مرتبطة)',
+      'fr': 'Retours Achats (Ajustement)',
+    },
+    'net_movement': {
+      'en': 'Net Movement',
+      'ar': 'صافي الحركة',
+      'fr': 'Mouvement Net',
+    },
     'printed_on': {'en': 'Printed on', 'ar': 'طُبع في', 'fr': 'Imprimé le'},
   };
 
@@ -258,7 +352,11 @@ class StockMovementPdfService {
         if (company.address != null && company.address!.isNotEmpty)
           pw.Text(
             company.address!,
-            style: pw.TextStyle(font: fonts.regular, fontSize: 9, color: PdfColors.grey600),
+            style: pw.TextStyle(
+              font: fonts.regular,
+              fontSize: 9,
+              color: PdfColors.grey600,
+            ),
           ),
         pw.SizedBox(height: 8),
         pw.Divider(),
@@ -275,8 +373,12 @@ class StockMovementPdfService {
 
   static Future<_PdfFonts> _loadFonts() async {
     try {
-      final regularData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-      final boldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+      final regularData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+      );
+      final boldData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+      );
       return _PdfFonts(
         regular: pw.Font.ttf(regularData),
         bold: pw.Font.ttf(boldData),

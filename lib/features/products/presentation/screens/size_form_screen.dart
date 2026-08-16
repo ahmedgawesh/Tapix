@@ -94,13 +94,15 @@ class _SizeFormViewState extends State<_SizeFormView> {
       final sortOrder = int.tryParse(_sortOrderController.text) ?? 0;
 
       if (widget.sizeId == null) {
-        bloc.add(CreateSize(
-          name: _nameController.text.trim(),
-          description: _descriptionController.text.trim().isEmpty
-              ? null
-              : _descriptionController.text.trim(),
-          sortOrder: sortOrder,
-        ));
+        bloc.add(
+          CreateSize(
+            name: _nameController.text.trim(),
+            description: _descriptionController.text.trim().isEmpty
+                ? null
+                : _descriptionController.text.trim(),
+            sortOrder: sortOrder,
+          ),
+        );
       } else {
         final updatedSize = Size(
           id: widget.sizeId!,
@@ -155,7 +157,9 @@ class _SizeFormViewState extends State<_SizeFormView> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.sizeId == null ? 'sizes.add_size'.tr() : 'sizes.edit_size'.tr(),
+          widget.sizeId == null
+              ? 'sizes.add_size'.tr()
+              : 'sizes.edit_size'.tr(),
         ),
         centerTitle: !isDesktop,
       ),
@@ -180,9 +184,8 @@ class _SizeFormViewState extends State<_SizeFormView> {
                           children: [
                             Text(
                               'sizes.basic_info'.tr(),
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 16),
                             TextFormField(
@@ -267,8 +270,12 @@ class _SizeFormViewState extends State<_SizeFormView> {
                             });
                           },
                           secondary: Icon(
-                            _isActive ? LucideIcons.checkCircle : LucideIcons.xCircle,
-                            color: _isActive ? colorScheme.primary : colorScheme.error,
+                            _isActive
+                                ? LucideIcons.checkCircle
+                                : LucideIcons.xCircle,
+                            color: _isActive
+                                ? colorScheme.primary
+                                : colorScheme.error,
                           ),
                         ),
                       ),

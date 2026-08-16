@@ -56,21 +56,32 @@ class ReturnLineItem extends Equatable {
 
   @override
   List<Object?> get props => [
-        originalItem, returnQuantity,
-        subtotalCents, discountCents, taxCents, refundCents, reason,
-      ];
+    originalItem,
+    returnQuantity,
+    subtotalCents,
+    discountCents,
+    taxCents,
+    refundCents,
+    reason,
+  ];
 }
 
 /// ERP Golden Rule: Proportional reversal of original transaction.
 /// Delegates to [ReturnCalculationService.computeProportionalReturn].
 ReturnLineItem _computeProportionalReturn(
-    PurchaseItemEntity original, int returnQty) {
+  PurchaseItemEntity original,
+  int returnQty, {
+  LinkedReturnHistory previousLinkedHistory = LinkedReturnHistory.zero,
+  bool taxInclusivePricing = false,
+}) {
   final result = ReturnCalculationService.computeProportionalReturn(
     originalQuantity: original.quantity,
     returnQuantity: returnQty,
     originalSubtotalCents: original.subtotalCents.toBigInt().toInt(),
     originalDiscountCents: original.discountCents.toBigInt().toInt(),
     originalTaxCents: original.taxCents.toBigInt().toInt(),
+    previousLinkedHistory: previousLinkedHistory,
+    taxInclusivePricing: taxInclusivePricing,
   );
   return ReturnLineItem(
     originalItem: original,
@@ -87,13 +98,18 @@ class PurchaseReturnFormState extends Equatable {
   final PurchaseEntity? purchase;
   final List<PurchaseItemEntity> availableItems;
   final List<ReturnLineItem> returnItems;
+
   /// Map of purchaseItemId -> quantity already returned in previous returns
   final Map<int, int> alreadyReturnedQty;
+  final Map<int, LinkedReturnHistory> linkedReturnHistory;
   final String? reason;
+
   /// restock, write_off, repair, replace, refund
   final String dispositionType;
+
   /// cash, credit, cheque
   final String refundMethod;
+
   /// Phase 14.0 — cheque due date. Required by `_onSubmitted` when
   /// [refundMethod] == 'cheque'. Ignored (persisted as NULL) otherwise.
   final DateTime? dueDate;
@@ -110,6 +126,7 @@ class PurchaseReturnFormState extends Equatable {
     this.availableItems = const [],
     this.returnItems = const [],
     this.alreadyReturnedQty = const {},
+    this.linkedReturnHistory = const {},
     this.reason,
     this.dispositionType = 'restock',
     this.refundMethod = 'credit',
@@ -122,11 +139,35 @@ class PurchaseReturnFormState extends Equatable {
     this.hasUnsavedChanges = false,
   });
 
-  /// Max returnable quantity for a given purchase item
-  int maxReturnableQty(int purchaseItemId, int originalQty) {
-    final alreadyReturned = alreadyReturnedQty[purchaseItemId] ?? 0;
-    final remaining = originalQty - alreadyReturned;
-    return remaining < 0 ? 0 : remaining;
+  /// Maximum allowed by BOTH:
+  ///   1. invoice entitlement (purchased − linked/adjustment returns), and
+  ///   2. current physical stock for the same product/variant.
+  ///
+  /// An unlinked purchase return can legitimately be FIFO-attributed to an
+  /// older invoice, leaving this invoice's entitlement unchanged while total
+  /// on-hand stock is lower. Showing entitlement alone lets the user select an
+  /// impossible quantity that the DAO only rejects at posting time.
+  int maxReturnableQty(PurchaseItemEntity item) {
+    final alreadyReturned = alreadyReturnedQty[item.id] ?? 0;
+    final invoiceRemaining = item.quantity - alreadyReturned;
+    if (invoiceRemaining <= 0) return 0;
+    if (!item.tracksInventory || item.currentStockQuantity == null) {
+      return invoiceRemaining;
+    }
+
+    final reservedByOtherLines = returnItems
+        .where(
+          (line) =>
+              line.originalItem.id != item.id &&
+              line.originalItem.productId == item.productId &&
+              line.originalItem.variantId == item.variantId,
+        )
+        .fold<int>(0, (sum, line) => sum + line.returnQuantity);
+    final physicalRemaining = item.currentStockQuantity! - reservedByOtherLines;
+    if (physicalRemaining <= 0) return 0;
+    return invoiceRemaining < physicalRemaining
+        ? invoiceRemaining
+        : physicalRemaining;
   }
 
   // ── Rollup layer (single source of truth) ──────────────────────────────
@@ -138,13 +179,15 @@ class PurchaseReturnFormState extends Equatable {
   // state instance; every `total*Cents` / `totalReturnQuantity` getter
   // reads from the same rollup so they can never disagree.
   late final ReturnRollup _rollup = ReturnCalculationService.aggregate(
-    returnItems.map((i) => (
-          subtotalCents: i.subtotalCents.toBigInt().toInt(),
-          discountCents: i.discountCents.toBigInt().toInt(),
-          taxCents: i.taxCents.toBigInt().toInt(),
-          refundCents: i.refundCents.toBigInt().toInt(),
-          quantity: i.returnQuantity,
-        )),
+    returnItems.map(
+      (i) => (
+        subtotalCents: i.subtotalCents.toBigInt().toInt(),
+        discountCents: i.discountCents.toBigInt().toInt(),
+        taxCents: i.taxCents.toBigInt().toInt(),
+        refundCents: i.refundCents.toBigInt().toInt(),
+        quantity: i.returnQuantity,
+      ),
+    ),
   );
 
   Decimal get totalRefundCents => Decimal.fromInt(_rollup.refundCents);
@@ -167,6 +210,7 @@ class PurchaseReturnFormState extends Equatable {
     List<PurchaseItemEntity>? availableItems,
     List<ReturnLineItem>? returnItems,
     Map<int, int>? alreadyReturnedQty,
+    Map<int, LinkedReturnHistory>? linkedReturnHistory,
     String? reason,
     String? dispositionType,
     String? refundMethod,
@@ -184,10 +228,13 @@ class PurchaseReturnFormState extends Equatable {
       availableItems: availableItems ?? this.availableItems,
       returnItems: returnItems ?? this.returnItems,
       alreadyReturnedQty: alreadyReturnedQty ?? this.alreadyReturnedQty,
+      linkedReturnHistory: linkedReturnHistory ?? this.linkedReturnHistory,
       reason: reason ?? this.reason,
       dispositionType: dispositionType ?? this.dispositionType,
       refundMethod: refundMethod ?? this.refundMethod,
-      dueDate: identical(dueDate, _sentinel) ? this.dueDate : dueDate as DateTime?,
+      dueDate: identical(dueDate, _sentinel)
+          ? this.dueDate
+          : dueDate as DateTime?,
       currencyId: currencyId ?? this.currencyId,
       isLoading: isLoading ?? this.isLoading,
       isSubmitting: isSubmitting ?? this.isSubmitting,
@@ -199,10 +246,23 @@ class PurchaseReturnFormState extends Equatable {
 
   @override
   List<Object?> get props => [
-        purchaseId, purchase, availableItems, returnItems,
-        alreadyReturnedQty, reason, dispositionType, refundMethod, dueDate, currencyId,
-        isLoading, isSubmitting, error, isSuccess, hasUnsavedChanges,
-      ];
+    purchaseId,
+    purchase,
+    availableItems,
+    returnItems,
+    alreadyReturnedQty,
+    linkedReturnHistory,
+    reason,
+    dispositionType,
+    refundMethod,
+    dueDate,
+    currencyId,
+    isLoading,
+    isSubmitting,
+    error,
+    isSuccess,
+    hasUnsavedChanges,
+  ];
 }
 
 /// Sentinel for `copyWith` to distinguish "don't touch" from "set to null".
@@ -300,8 +360,7 @@ class PurchaseReturnFormBloc
     extends Bloc<PurchaseReturnFormEvent, PurchaseReturnFormState> {
   final PurchaseRepository _repository;
 
-  PurchaseReturnFormBloc(this._repository)
-      : super(PurchaseReturnFormState()) {
+  PurchaseReturnFormBloc(this._repository) : super(PurchaseReturnFormState()) {
     on<PurchaseReturnFormInitialized>(_onInitialized);
     on<ReturnItemToggled>(_onItemToggled);
     on<ReturnItemQuantityChanged>(_onQuantityChanged);
@@ -325,11 +384,14 @@ class PurchaseReturnFormBloc
 
       // Load already-returned quantities for each item
       final returnedQtyMap = <int, int>{};
+      final linkedHistory = <int, LinkedReturnHistory>{};
       for (final item in items) {
         final returnedQty = await _repository.getReturnedQuantity(item.id);
         if (returnedQty > 0) {
           returnedQtyMap[item.id] = returnedQty;
         }
+        final history = await _repository.getLinkedReturnHistory(item.id);
+        if (history.quantity > 0) linkedHistory[item.id] = history;
       }
 
       // Filter out items that are fully returned
@@ -338,13 +400,16 @@ class PurchaseReturnFormBloc
         return returned < item.quantity;
       }).toList();
 
-      emit(state.copyWith(
-        purchase: purchase,
-        availableItems: availableItems,
-        alreadyReturnedQty: returnedQtyMap,
-        currencyId: purchase?.currencyId ?? 1,
-        isLoading: false,
-      ));
+      emit(
+        state.copyWith(
+          purchase: purchase,
+          availableItems: availableItems,
+          alreadyReturnedQty: returnedQtyMap,
+          linkedReturnHistory: linkedHistory,
+          currencyId: purchase?.currencyId ?? 1,
+          isLoading: false,
+        ),
+      );
     } catch (e) {
       emit(state.copyWith(isLoading: false, error: e.toString()));
     }
@@ -366,10 +431,22 @@ class PurchaseReturnFormBloc
       emit(state.copyWith(returnItems: updated, hasUnsavedChanges: true));
     } else {
       // Add item with max returnable quantity
-      final maxQty = state.maxReturnableQty(event.item.id, event.item.quantity);
+      final maxQty = state.maxReturnableQty(event.item);
       if (maxQty <= 0) return; // Fully returned already
-      final newItem = _computeProportionalReturn(event.item, maxQty);
-      emit(state.copyWith(returnItems: [...state.returnItems, newItem], hasUnsavedChanges: true));
+      final newItem = _computeProportionalReturn(
+        event.item,
+        maxQty,
+        previousLinkedHistory:
+            state.linkedReturnHistory[event.item.id] ??
+            LinkedReturnHistory.zero,
+        taxInclusivePricing: state.purchase?.taxInclusiveAtPost ?? false,
+      );
+      emit(
+        state.copyWith(
+          returnItems: [...state.returnItems, newItem],
+          hasUnsavedChanges: true,
+        ),
+      );
     }
   }
 
@@ -379,9 +456,16 @@ class PurchaseReturnFormBloc
   ) {
     final updated = state.returnItems.map((item) {
       if (item.originalItem.id == event.purchaseItemId) {
-        final maxQty = state.maxReturnableQty(item.originalItem.id, item.originalItem.quantity);
+        final maxQty = state.maxReturnableQty(item.originalItem);
         final qty = event.quantity.clamp(1, maxQty);
-        final computed = _computeProportionalReturn(item.originalItem, qty);
+        final computed = _computeProportionalReturn(
+          item.originalItem,
+          qty,
+          previousLinkedHistory:
+              state.linkedReturnHistory[item.originalItem.id] ??
+              LinkedReturnHistory.zero,
+          taxInclusivePricing: state.purchase?.taxInclusiveAtPost ?? false,
+        );
         return computed.copyWith(reason: item.reason);
       }
       return item;
@@ -421,10 +505,12 @@ class PurchaseReturnFormBloc
     Emitter<PurchaseReturnFormState> emit,
   ) {
     final clearDueDate = event.refundMethod != 'cheque';
-    emit(state.copyWith(
-      refundMethod: event.refundMethod,
-      dueDate: clearDueDate ? null : state.dueDate,
-    ));
+    emit(
+      state.copyWith(
+        refundMethod: event.refundMethod,
+        dueDate: clearDueDate ? null : state.dueDate,
+      ),
+    );
   }
 
   void _onDueDateChanged(
@@ -449,9 +535,11 @@ class PurchaseReturnFormBloc
     }
     // Phase 14.0 — cheque must always carry a due date.
     if (state.isChequeMissingDueDate) {
-      emit(state.copyWith(
-        error: 'Please select a due date for the cheque refund.',
-      ));
+      emit(
+        state.copyWith(
+          error: 'Please select a due date for the cheque refund.',
+        ),
+      );
       return;
     }
 
@@ -459,15 +547,19 @@ class PurchaseReturnFormBloc
 
     try {
       final items = state.returnItems
-          .map((item) => PurchaseReturnItemInput(
-                purchaseItemId: item.originalItem.id,
-                quantity: item.returnQuantity,
-                subtotalCents: item.subtotalCents,
-                discountCents: item.discountCents,
-                taxCents: item.taxCents,
-                refundCents: item.refundCents,
-                reason: item.reason,
-              ))
+          .map(
+            (item) => PurchaseReturnItemInput(
+              purchaseItemId: item.originalItem.id,
+              quantity: item.returnQuantity,
+              quantityScale: item.originalItem.quantityScale,
+              measurementType: item.originalItem.measurementType,
+              subtotalCents: item.subtotalCents,
+              discountCents: item.discountCents,
+              taxCents: item.taxCents,
+              refundCents: item.refundCents,
+              reason: item.reason,
+            ),
+          )
           .toList();
 
       // Idempotency token: caught by UNIQUE on purchase_returns.idempotency_key
@@ -490,9 +582,16 @@ class PurchaseReturnFormBloc
         returnDate: DateTime.now(),
         allowNegativeStock: event.allowNegativeStock,
         idempotencyKey: idempotencyKey,
+        taxInclusiveAtPost: state.purchase?.taxInclusiveAtPost ?? false,
       );
 
-      emit(state.copyWith(isSubmitting: false, isSuccess: true, hasUnsavedChanges: false));
+      emit(
+        state.copyWith(
+          isSubmitting: false,
+          isSuccess: true,
+          hasUnsavedChanges: false,
+        ),
+      );
     } catch (e) {
       emit(state.copyWith(isSubmitting: false, error: e.toString()));
     }

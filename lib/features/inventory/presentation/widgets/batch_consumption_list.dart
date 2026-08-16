@@ -4,6 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../../core/database/daos/batch_audit_dao.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -78,9 +79,7 @@ class BatchConsumptionList extends StatelessWidget {
           padding: padding,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final r in rows) BatchConsumptionRow(record: r),
-            ],
+            children: [for (final r in rows) BatchConsumptionRow(record: r)],
           ),
         );
       },
@@ -105,7 +104,8 @@ class BatchConsumptionRow extends StatelessWidget {
     final tone = isOut ? cs.error : Colors.green.shade700;
     final icon = _iconFor(record.refKind, isOut);
 
-    final qtyLabel = isOut ? '−${record.quantity}' : '+${record.quantity}';
+    final quantity = localizedQuantity(record.quantity, record.measurementType);
+    final qtyLabel = isOut ? '−$quantity' : '+$quantity';
     final ref = record.refLabel ?? _kindLabel(record.refKind);
 
     return Padding(

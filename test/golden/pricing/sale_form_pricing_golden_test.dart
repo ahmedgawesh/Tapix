@@ -41,21 +41,20 @@ Product _product({
   required String name,
   required bool isTaxable,
   required int salesTaxRateBps,
-}) =>
-    Product(
-      id: id,
-      name: name,
-      costCents: Decimal.zero,
-      priceCents: Decimal.zero,
-      stockQuantity: 1000,
-      minQuantity: 0,
-      hasVariants: false,
-      isTaxable: isTaxable,
-      purchaseTaxRateBps: 0,
-      salesTaxRateBps: salesTaxRateBps,
-      isActive: true,
-      trackInventory: true,
-    );
+}) => Product(
+  id: id,
+  name: name,
+  costCents: Decimal.zero,
+  priceCents: Decimal.zero,
+  stockQuantity: 1000,
+  minQuantity: 0,
+  hasVariants: false,
+  isTaxable: isTaxable,
+  purchaseTaxRateBps: 0,
+  salesTaxRateBps: salesTaxRateBps,
+  isActive: true,
+  trackInventory: true,
+);
 
 SaleLineItem _line({
   required String tempId,
@@ -63,14 +62,13 @@ SaleLineItem _line({
   required int qty,
   required int unitPriceCents,
   int discountCents = 0,
-}) =>
-    SaleLineItem(
-      tempId: tempId,
-      product: product,
-      quantity: qty,
-      unitPriceCents: Decimal.fromInt(unitPriceCents),
-      discountCents: Decimal.fromInt(discountCents),
-    );
+}) => SaleLineItem(
+  tempId: tempId,
+  product: product,
+  quantity: qty,
+  unitPriceCents: Decimal.fromInt(unitPriceCents),
+  discountCents: Decimal.fromInt(discountCents),
+);
 
 SaleFormState _state({
   required List<SaleLineItem> items,
@@ -81,19 +79,18 @@ SaleFormState _state({
   bool taxInclusivePricing = false,
   int paidAmountCents = 0,
   int loyaltyDiscountCents = 0,
-}) =>
-    SaleFormState(
-      currencyId: 1,
-      saleDate: DateTime(2026, 1, 15),
-      items: items,
-      discountMode: discountMode,
-      invoiceDiscountCents: Decimal.fromInt(invoiceDiscountCents),
-      enableTaxCalculations: enableTaxCalculations,
-      defaultSalesTaxRateBps: defaultSalesTaxRateBps,
-      taxInclusivePricing: taxInclusivePricing,
-      paidAmountCents: Decimal.fromInt(paidAmountCents),
-      loyaltyDiscountCents: loyaltyDiscountCents,
-    );
+}) => SaleFormState(
+  currencyId: 1,
+  saleDate: DateTime(2026, 1, 15),
+  items: items,
+  discountMode: discountMode,
+  invoiceDiscountCents: Decimal.fromInt(invoiceDiscountCents),
+  enableTaxCalculations: enableTaxCalculations,
+  defaultSalesTaxRateBps: defaultSalesTaxRateBps,
+  taxInclusivePricing: taxInclusivePricing,
+  paidAmountCents: Decimal.fromInt(paidAmountCents),
+  loyaltyDiscountCents: loyaltyDiscountCents,
+);
 
 /// Assert a sale-form-state snapshot. If [remaining]/[change] are omitted,
 /// they default to the natural values derived from [total] and the state's
@@ -110,60 +107,94 @@ void _expectState(
   int? change,
 }) {
   expect(state.subtotalCents, Decimal.fromInt(subtotal), reason: 'subtotal');
-  expect(state.itemDiscountCents, Decimal.fromInt(itemDiscount),
-      reason: 'itemDiscount');
-  expect(state.totalDiscountCents, Decimal.fromInt(totalDiscount),
-      reason: 'totalDiscount');
+  expect(
+    state.itemDiscountCents,
+    Decimal.fromInt(itemDiscount),
+    reason: 'itemDiscount',
+  );
+  expect(
+    state.totalDiscountCents,
+    Decimal.fromInt(totalDiscount),
+    reason: 'totalDiscount',
+  );
   expect(state.taxCents, Decimal.fromInt(tax), reason: 'tax');
-  expect(state.totalBeforeLoyaltyCents, Decimal.fromInt(totalBeforeLoyalty),
-      reason: 'totalBeforeLoyalty');
+  expect(
+    state.totalBeforeLoyaltyCents,
+    Decimal.fromInt(totalBeforeLoyalty),
+    reason: 'totalBeforeLoyalty',
+  );
   expect(state.totalCents, Decimal.fromInt(total), reason: 'total');
 
   final paid = state.paidAmountCents.toBigInt().toInt();
   final expectedRemaining = remaining ?? (total - paid).clamp(0, total);
   final expectedChange = change ?? (paid > total ? paid - total : 0);
-  expect(state.remainingCents, Decimal.fromInt(expectedRemaining),
-      reason: 'remaining');
+  expect(
+    state.remainingCents,
+    Decimal.fromInt(expectedRemaining),
+    reason: 'remaining',
+  );
   expect(state.changeCents, Decimal.fromInt(expectedChange), reason: 'change');
 }
 
 void main() {
   final taxable10 = _product(
-      id: 1, name: 'Taxable 10%', isTaxable: true, salesTaxRateBps: 1000);
+    id: 1,
+    name: 'Taxable 10%',
+    isTaxable: true,
+    salesTaxRateBps: 1000,
+  );
   final taxable15 = _product(
-      id: 2, name: 'Taxable 15%', isTaxable: true, salesTaxRateBps: 1500);
+    id: 2,
+    name: 'Taxable 15%',
+    isTaxable: true,
+    salesTaxRateBps: 1500,
+  );
   final taxable5 = _product(
-      id: 3, name: 'Taxable 5%', isTaxable: true, salesTaxRateBps: 500);
+    id: 3,
+    name: 'Taxable 5%',
+    isTaxable: true,
+    salesTaxRateBps: 500,
+  );
   final nonTaxable = _product(
-      id: 4, name: 'Non-taxable', isTaxable: false, salesTaxRateBps: 0);
+    id: 4,
+    name: 'Non-taxable',
+    isTaxable: false,
+    salesTaxRateBps: 0,
+  );
 
   group('Sale form — Phase 0 golden characterisation', () {
     // ── S01 ────────────────────────────────────────────────────────────
     test('S01 empty invoice → all zeros', () {
       final s = _state(items: const []);
-      _expectState(s,
-          subtotal: 0,
-          itemDiscount: 0,
-          totalDiscount: 0,
-          tax: 0,
-          totalBeforeLoyalty: 0,
-          total: 0);
+      _expectState(
+        s,
+        subtotal: 0,
+        itemDiscount: 0,
+        totalDiscount: 0,
+        tax: 0,
+        totalBeforeLoyalty: 0,
+        total: 0,
+      );
       expect(s.totalQuantity, 0);
     });
 
     // ── S02 ────────────────────────────────────────────────────────────
     test('S02 single taxable line, no discount, tax-exclusive', () {
       // qty=1 × 10000 = 10000; tax 10% = 1000; total = 11000.
-      final s = _state(items: [
-        _line(tempId: '1', product: taxable10, qty: 1, unitPriceCents: 10000),
-      ]);
-      _expectState(s,
-          subtotal: 10000,
-          itemDiscount: 0,
-          totalDiscount: 0,
-          tax: 1000,
-          totalBeforeLoyalty: 11000,
-          total: 11000);
+      final s = _state(
+        items: [
+          _line(tempId: '1', product: taxable10, qty: 1, unitPriceCents: 10000),
+        ],
+      );
+      _expectState(
+        s,
+        subtotal: 10000,
+        itemDiscount: 0,
+        totalDiscount: 0,
+        tax: 1000,
+        totalBeforeLoyalty: 11000,
+        total: 11000,
+      );
       // Line-level pinning
       final line = s.items.single;
       expect(line.subtotalCents, Decimal.fromInt(10000));
@@ -178,21 +209,26 @@ void main() {
     test('S03 per-item discount, taxable 15%', () {
       // qty=2 × 5000 = 10000; discount 1000; net 9000; tax 15% = 1350;
       // total = 10000 - 1000 + 1350 = 10350.
-      final s = _state(items: [
-        _line(
+      final s = _state(
+        items: [
+          _line(
             tempId: '1',
             product: taxable15,
             qty: 2,
             unitPriceCents: 5000,
-            discountCents: 1000),
-      ]);
-      _expectState(s,
-          subtotal: 10000,
-          itemDiscount: 1000,
-          totalDiscount: 1000,
-          tax: 1350,
-          totalBeforeLoyalty: 10350,
-          total: 10350);
+            discountCents: 1000,
+          ),
+        ],
+      );
+      _expectState(
+        s,
+        subtotal: 10000,
+        itemDiscount: 1000,
+        totalDiscount: 1000,
+        tax: 1350,
+        totalBeforeLoyalty: 10350,
+        total: 10350,
+      );
     });
 
     // ── S04 ────────────────────────────────────────────────────────────
@@ -204,27 +240,21 @@ void main() {
       // total = 16000 - 1600 + 900 = 15300.
       final s = _state(
         items: [
-          _line(
-              tempId: '1',
-              product: taxable10,
-              qty: 1,
-              unitPriceCents: 10000),
-          _line(
-              tempId: '2',
-              product: nonTaxable,
-              qty: 1,
-              unitPriceCents: 6000),
+          _line(tempId: '1', product: taxable10, qty: 1, unitPriceCents: 10000),
+          _line(tempId: '2', product: nonTaxable, qty: 1, unitPriceCents: 6000),
         ],
         discountMode: SaleDiscountMode.invoice,
         invoiceDiscountCents: 1600,
       );
-      _expectState(s,
-          subtotal: 16000,
-          itemDiscount: 0,
-          totalDiscount: 1600,
-          tax: 900,
-          totalBeforeLoyalty: 15300,
-          total: 15300);
+      _expectState(
+        s,
+        subtotal: 16000,
+        itemDiscount: 0,
+        totalDiscount: 1600,
+        tax: 900,
+        totalBeforeLoyalty: 15300,
+        total: 15300,
+      );
     });
 
     // ── S05 ────────────────────────────────────────────────────────────
@@ -233,48 +263,54 @@ void main() {
       // Line B: qty=1 × 4000 = 4000, discount   0 → net 4000, tax 10% = 400
       // Line C: qty=2 × 1500 = 3000, discount 300 → net 2700, tax  5% = 135
       // subtotal=13000; itemDiscount=900; tax=1345; total=13445.
-      final s = _state(items: [
-        _line(
+      final s = _state(
+        items: [
+          _line(
             tempId: '1',
             product: taxable15,
             qty: 3,
             unitPriceCents: 2000,
-            discountCents: 600),
-        _line(
-            tempId: '2',
-            product: taxable10,
-            qty: 1,
-            unitPriceCents: 4000),
-        _line(
+            discountCents: 600,
+          ),
+          _line(tempId: '2', product: taxable10, qty: 1, unitPriceCents: 4000),
+          _line(
             tempId: '3',
             product: taxable5,
             qty: 2,
             unitPriceCents: 1500,
-            discountCents: 300),
-      ]);
-      _expectState(s,
-          subtotal: 13000,
-          itemDiscount: 900,
-          totalDiscount: 900,
-          tax: 1345,
-          totalBeforeLoyalty: 13445,
-          total: 13445);
+            discountCents: 300,
+          ),
+        ],
+      );
+      _expectState(
+        s,
+        subtotal: 13000,
+        itemDiscount: 900,
+        totalDiscount: 900,
+        tax: 1345,
+        totalBeforeLoyalty: 13445,
+        total: 13445,
+      );
       expect(s.totalQuantity, 6);
     });
 
     // ── S06 ────────────────────────────────────────────────────────────
     test('S06 tax rounding at the .5 boundary (halfUp)', () {
       // qty=1 × 333; tax 15% = 49.95 → halfUp → 50; total = 383.
-      final s = _state(items: [
-        _line(tempId: '1', product: taxable15, qty: 1, unitPriceCents: 333),
-      ]);
-      _expectState(s,
-          subtotal: 333,
-          itemDiscount: 0,
-          totalDiscount: 0,
-          tax: 50,
-          totalBeforeLoyalty: 383,
-          total: 383);
+      final s = _state(
+        items: [
+          _line(tempId: '1', product: taxable15, qty: 1, unitPriceCents: 333),
+        ],
+      );
+      _expectState(
+        s,
+        subtotal: 333,
+        itemDiscount: 0,
+        totalDiscount: 0,
+        tax: 50,
+        totalBeforeLoyalty: 383,
+        total: 383,
+      );
     });
 
     // ── S07 ────────────────────────────────────────────────────────────
@@ -284,21 +320,19 @@ void main() {
       // post-tax adjustment that will live in _TenderSnapshot post-migration.
       final s = _state(
         items: [
-          _line(
-              tempId: '1',
-              product: taxable10,
-              qty: 1,
-              unitPriceCents: 10000),
+          _line(tempId: '1', product: taxable10, qty: 1, unitPriceCents: 10000),
         ],
         loyaltyDiscountCents: 500,
       );
-      _expectState(s,
-          subtotal: 10000,
-          itemDiscount: 0,
-          totalDiscount: 0,
-          tax: 1000,
-          totalBeforeLoyalty: 11000,
-          total: 10500);
+      _expectState(
+        s,
+        subtotal: 10000,
+        itemDiscount: 0,
+        totalDiscount: 0,
+        tax: 1000,
+        totalBeforeLoyalty: 11000,
+        total: 10500,
+      );
     });
 
     // ── S08 ────────────────────────────────────────────────────────────
@@ -306,23 +340,21 @@ void main() {
       // Total 11000, paid 4000 → remaining 7000, change 0.
       final s = _state(
         items: [
-          _line(
-              tempId: '1',
-              product: taxable10,
-              qty: 1,
-              unitPriceCents: 10000),
+          _line(tempId: '1', product: taxable10, qty: 1, unitPriceCents: 10000),
         ],
         paidAmountCents: 4000,
       );
-      _expectState(s,
-          subtotal: 10000,
-          itemDiscount: 0,
-          totalDiscount: 0,
-          tax: 1000,
-          totalBeforeLoyalty: 11000,
-          total: 11000,
-          remaining: 7000,
-          change: 0);
+      _expectState(
+        s,
+        subtotal: 10000,
+        itemDiscount: 0,
+        totalDiscount: 0,
+        tax: 1000,
+        totalBeforeLoyalty: 11000,
+        total: 11000,
+        remaining: 7000,
+        change: 0,
+      );
     });
 
     // ── S09 ────────────────────────────────────────────────────────────
@@ -330,132 +362,150 @@ void main() {
       // Total 11000, paid 15000 → remaining 0, change 4000.
       final s = _state(
         items: [
-          _line(
-              tempId: '1',
-              product: taxable10,
-              qty: 1,
-              unitPriceCents: 10000),
+          _line(tempId: '1', product: taxable10, qty: 1, unitPriceCents: 10000),
         ],
         paidAmountCents: 15000,
       );
-      _expectState(s,
-          subtotal: 10000,
-          itemDiscount: 0,
-          totalDiscount: 0,
-          tax: 1000,
-          totalBeforeLoyalty: 11000,
-          total: 11000,
-          remaining: 0,
-          change: 4000);
+      _expectState(
+        s,
+        subtotal: 10000,
+        itemDiscount: 0,
+        totalDiscount: 0,
+        tax: 1000,
+        totalBeforeLoyalty: 11000,
+        total: 11000,
+        remaining: 0,
+        change: 4000,
+      );
     });
 
     // ── S10 ────────────────────────────────────────────────────────────
     test('S10 full per-item discount → net clamps, tax = 0', () {
       // qty=1 × 1000, discount 1000; net=0 → tax skipped.
-      final s = _state(items: [
-        _line(
+      final s = _state(
+        items: [
+          _line(
             tempId: '1',
             product: taxable10,
             qty: 1,
             unitPriceCents: 1000,
-            discountCents: 1000),
-      ]);
-      _expectState(s,
-          subtotal: 1000,
-          itemDiscount: 1000,
-          totalDiscount: 1000,
-          tax: 0,
-          totalBeforeLoyalty: 0,
-          total: 0);
+            discountCents: 1000,
+          ),
+        ],
+      );
+      _expectState(
+        s,
+        subtotal: 1000,
+        itemDiscount: 1000,
+        totalDiscount: 1000,
+        tax: 0,
+        totalBeforeLoyalty: 0,
+        total: 0,
+      );
     });
 
     // ── S11 ────────────────────────────────────────────────────────────
-    test('S11 default-tax fallback applies even to non-taxable products', () {
+    test('S11 default-tax fallback only applies to taxable products', () {
       // Documented semantic of TaxCalculationService.resolveLineItemTaxRateBps:
-      //   1. product's rate if isTaxable && rate > 0   (Path A)
-      //   2. else defaultTaxRateBps if > 0             (Path B)
-      //   3. else 0
-      // This means `isTaxable=false` does NOT suppress the default rate —
-      // a potentially surprising behaviour. Golden pins it as-is; any
-      // deliberate change is an ADR-worthy decision.
+      //   1. non-taxable product → 0
+      //   2. taxable product rate when > 0
+      //   3. otherwise the default rate
+      // This keeps an explicit product exemption authoritative.
 
-      // Path B (non-taxable + default rate → default kicks in).
+      // Path 1 (non-taxable + default rate → remains exempt).
       final sDefaultOnNonTax = _state(
         items: [
           _line(
-              tempId: '1',
-              product: nonTaxable,
-              qty: 1,
-              unitPriceCents: 10000),
+            tempId: '1',
+            product: nonTaxable,
+            qty: 1,
+            unitPriceCents: 10000,
+          ),
         ],
         defaultSalesTaxRateBps: 1000, // 10%
       );
-      expect(sDefaultOnNonTax.taxCents, Decimal.fromInt(1000),
-          reason: 'default rate applies even when product is non-taxable');
-      expect(sDefaultOnNonTax.totalCents, Decimal.fromInt(11000));
+      expect(
+        sDefaultOnNonTax.taxCents,
+        Decimal.zero,
+        reason: 'explicitly non-taxable product must remain exempt',
+      );
+      expect(sDefaultOnNonTax.totalCents, Decimal.fromInt(10000));
 
-      // Path B (taxable + own-rate=0 → default kicks in).
+      // Path 3 (taxable + own-rate=0 → default kicks in).
       final taxableZeroRate = _product(
-          id: 99, name: 'T0', isTaxable: true, salesTaxRateBps: 0);
+        id: 99,
+        name: 'T0',
+        isTaxable: true,
+        salesTaxRateBps: 0,
+      );
       final sFallback = _state(
         items: [
           _line(
-              tempId: '1',
-              product: taxableZeroRate,
-              qty: 1,
-              unitPriceCents: 10000),
+            tempId: '1',
+            product: taxableZeroRate,
+            qty: 1,
+            unitPriceCents: 10000,
+          ),
         ],
         defaultSalesTaxRateBps: 1000,
       );
       expect(sFallback.taxCents, Decimal.fromInt(1000));
       expect(sFallback.totalCents, Decimal.fromInt(11000));
 
-      // Path 3 (non-taxable, default=0 → no tax).
+      // Path 1 (non-taxable, default=0 → no tax).
       final sNoTaxAtAll = _state(
         items: [
           _line(
-              tempId: '1',
-              product: nonTaxable,
-              qty: 1,
-              unitPriceCents: 10000),
+            tempId: '1',
+            product: nonTaxable,
+            qty: 1,
+            unitPriceCents: 10000,
+          ),
         ],
       );
       expect(sNoTaxAtAll.taxCents, Decimal.zero);
     });
 
     // ── S12 ────────────────────────────────────────────────────────────
-    test(
-        'S12 invariant: totalBeforeLoyalty == subtotal − totalDiscount + tax '
+    test('S12 invariant: totalBeforeLoyalty == subtotal − totalDiscount + tax '
         '(clamp 0); total == totalBeforeLoyalty − loyalty (clamp 0)', () {
       final scenarios = <SaleFormState>[
         _state(items: const []),
-        _state(items: [
-          _line(
+        _state(
+          items: [
+            _line(
               tempId: '1',
               product: taxable10,
               qty: 1,
-              unitPriceCents: 10000),
-        ]),
-        _state(items: [
-          _line(
+              unitPriceCents: 10000,
+            ),
+          ],
+        ),
+        _state(
+          items: [
+            _line(
               tempId: '1',
               product: taxable15,
               qty: 3,
               unitPriceCents: 2000,
-              discountCents: 600),
-        ]),
+              discountCents: 600,
+            ),
+          ],
+        ),
         _state(
           items: [
             _line(
-                tempId: '1',
-                product: taxable10,
-                qty: 2,
-                unitPriceCents: 5000),
+              tempId: '1',
+              product: taxable10,
+              qty: 2,
+              unitPriceCents: 5000,
+            ),
             _line(
-                tempId: '2',
-                product: nonTaxable,
-                qty: 1,
-                unitPriceCents: 3000),
+              tempId: '2',
+              product: nonTaxable,
+              qty: 1,
+              unitPriceCents: 3000,
+            ),
           ],
           discountMode: SaleDiscountMode.invoice,
           invoiceDiscountCents: 1300,
@@ -465,17 +515,25 @@ void main() {
       for (final s in scenarios) {
         final netPreLoyalty =
             s.subtotalCents - s.totalDiscountCents + s.taxCents;
-        final expectedBefore =
-            netPreLoyalty < Decimal.zero ? Decimal.zero : netPreLoyalty;
-        expect(s.totalBeforeLoyaltyCents, expectedBefore,
-            reason: 'totalBeforeLoyalty invariant violated');
+        final expectedBefore = netPreLoyalty < Decimal.zero
+            ? Decimal.zero
+            : netPreLoyalty;
+        expect(
+          s.totalBeforeLoyaltyCents,
+          expectedBefore,
+          reason: 'totalBeforeLoyalty invariant violated',
+        );
 
         final reconstructed =
             s.totalBeforeLoyaltyCents - Decimal.fromInt(s.loyaltyDiscountCents);
-        final expectedTotal =
-            reconstructed < Decimal.zero ? Decimal.zero : reconstructed;
-        expect(s.totalCents, expectedTotal,
-            reason: 'total invariant violated (after loyalty)');
+        final expectedTotal = reconstructed < Decimal.zero
+            ? Decimal.zero
+            : reconstructed;
+        expect(
+          s.totalCents,
+          expectedTotal,
+          reason: 'total invariant violated (after loyalty)',
+        );
       }
     });
   });

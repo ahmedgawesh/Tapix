@@ -61,7 +61,11 @@ class _ColorsViewState extends State<_ColorsView> {
       builder: (dialogContext) => AlertDialog(
         title: Text('colors.delete_confirm_title'.tr()),
         content: productCount > 0
-            ? Text('colors.delete_with_products'.tr(args: [color.name, productCount.toString()]))
+            ? Text(
+                'colors.delete_with_products'.tr(
+                  args: [color.name, productCount.toString()],
+                ),
+              )
             : Text('colors.delete_confirm_message'.tr(args: [color.name])),
         actions: [
           TextButton(
@@ -88,7 +92,9 @@ class _ColorsViewState extends State<_ColorsView> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final isDesktop = MediaQuery.of(context).size.width >= 1024;
-    final isTablet = MediaQuery.of(context).size.width >= 600 && MediaQuery.of(context).size.width < 1024;
+    final isTablet =
+        MediaQuery.of(context).size.width >= 600 &&
+        MediaQuery.of(context).size.width < 1024;
 
     return Scaffold(
       appBar: AppBar(
@@ -133,7 +139,8 @@ class _ColorsViewState extends State<_ColorsView> {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
-                      onPressed: () => context.push('/products/colors/magazine'),
+                      onPressed: () =>
+                          context.push('/products/colors/magazine'),
                       icon: const Icon(LucideIcons.palette),
                       label: Text('colors.magazine.open'.tr()),
                     ),
@@ -142,104 +149,115 @@ class _ColorsViewState extends State<_ColorsView> {
               ),
             ),
             Expanded(
-              child: BlocConsumer<ColorsBloc, RealtimeState<List<ProductColor>>>(
-                listener: (context, state) {
-                  if (state is RealtimeError<List<ProductColor>>) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(state.error.toString()),
-                        backgroundColor: colorScheme.error,
-                      ),
-                    );
-                  }
-                },
-                builder: (context, state) {
-                  if (state is RealtimeLoading) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  if (state is RealtimeError<List<ProductColor>>) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            LucideIcons.alertCircle,
-                            size: 64,
-                            color: colorScheme.error,
+              child:
+                  BlocConsumer<ColorsBloc, RealtimeState<List<ProductColor>>>(
+                    listener: (context, state) {
+                      if (state is RealtimeError<List<ProductColor>>) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(state.error.toString()),
+                            backgroundColor: colorScheme.error,
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'colors.error_loading'.tr(),
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            state.error.toString(),
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: colorScheme.onSurface.withValues(alpha: 0.6),
-                                ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  List<ProductColor>? colors;
-                  if (state is RealtimeSuccess<List<ProductColor>>) {
-                    colors = state.data;
-                  } else if (state is RealtimeOptimistic<List<ProductColor>>) {
-                    colors = state.optimisticData;
-                  }
-
-                  if (colors == null || colors.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            LucideIcons.palette,
-                            size: 64,
-                            color: colorScheme.onSurface.withValues(alpha: 0.3),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'colors.no_colors'.tr(),
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'colors.add_first_color'.tr(),
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: colorScheme.onSurface.withValues(alpha: 0.6),
-                                ),
-                          ),
-                          const SizedBox(height: 24),
-                          FilledButton.icon(
-                            onPressed: () => context.push('/products/colors/new'),
-                            icon: const Icon(LucideIcons.plus),
-                            label: Text('colors.add_color'.tr()),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  _loadProductCounts(colors);
-
-                  return LayoutBuilder(
-                    builder: (context, constraints) {
-                      if (isDesktop) {
-                        return _buildDesktopGrid(context, colors!);
-                      } else if (isTablet) {
-                        return _buildTabletGrid(context, colors!);
-                      } else {
-                        return _buildMobileList(context, colors!);
+                        );
                       }
                     },
-                  );
-                },
-              ),
+                    builder: (context, state) {
+                      if (state is RealtimeLoading) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      if (state is RealtimeError<List<ProductColor>>) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                LucideIcons.alertCircle,
+                                size: 64,
+                                color: colorScheme.error,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'colors.error_loading'.tr(),
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                state.error.toString(),
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: colorScheme.onSurface.withValues(
+                                        alpha: 0.6,
+                                      ),
+                                    ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      List<ProductColor>? colors;
+                      if (state is RealtimeSuccess<List<ProductColor>>) {
+                        colors = state.data;
+                      } else if (state
+                          is RealtimeOptimistic<List<ProductColor>>) {
+                        colors = state.optimisticData;
+                      }
+
+                      if (colors == null || colors.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                LucideIcons.palette,
+                                size: 64,
+                                color: colorScheme.onSurface.withValues(
+                                  alpha: 0.3,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'colors.no_colors'.tr(),
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'colors.add_first_color'.tr(),
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: colorScheme.onSurface.withValues(
+                                        alpha: 0.6,
+                                      ),
+                                    ),
+                              ),
+                              const SizedBox(height: 24),
+                              FilledButton.icon(
+                                onPressed: () =>
+                                    context.push('/products/colors/new'),
+                                icon: const Icon(LucideIcons.plus),
+                                label: Text('colors.add_color'.tr()),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      _loadProductCounts(colors);
+
+                      return LayoutBuilder(
+                        builder: (context, constraints) {
+                          if (isDesktop) {
+                            return _buildDesktopGrid(context, colors!);
+                          } else if (isTablet) {
+                            return _buildTabletGrid(context, colors!);
+                          } else {
+                            return _buildMobileList(context, colors!);
+                          }
+                        },
+                      );
+                    },
+                  ),
             ),
           ],
         ),
@@ -310,9 +328,7 @@ class _ColorsViewState extends State<_ColorsView> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: colorScheme.outline.withValues(alpha: 0.2),
-        ),
+        side: BorderSide(color: colorScheme.outline.withValues(alpha: 0.2)),
       ),
       child: InkWell(
         onTap: () => context.push('/products/colors/${color.id}/edit'),
@@ -348,8 +364,8 @@ class _ColorsViewState extends State<_ColorsView> {
                     Text(
                       color.name,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                        fontWeight: FontWeight.w600,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -358,18 +374,20 @@ class _ColorsViewState extends State<_ColorsView> {
                       Text(
                         color.hexCode!,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurface.withValues(alpha: 0.6),
-                            ),
+                          color: colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
                     const SizedBox(height: 4),
                     Text(
-                      'colors.product_count'.tr(args: [productCount.toString()]),
+                      'colors.product_count'.tr(
+                        args: [productCount.toString()],
+                      ),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: colorScheme.primary,
-                          ),
+                        color: colorScheme.primary,
+                      ),
                     ),
                   ],
                 ),
@@ -391,7 +409,11 @@ class _ColorsViewState extends State<_ColorsView> {
                     value: 'delete',
                     child: Row(
                       children: [
-                        Icon(LucideIcons.trash2, size: 18, color: colorScheme.error),
+                        Icon(
+                          LucideIcons.trash2,
+                          size: 18,
+                          color: colorScheme.error,
+                        ),
                         const SizedBox(width: 12),
                         Text(
                           'common.delete'.tr(),

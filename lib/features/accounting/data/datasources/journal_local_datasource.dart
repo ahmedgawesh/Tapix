@@ -17,12 +17,18 @@ abstract class JournalLocalDatasource {
 
   // Journal Entries
   Stream<List<JournalEntry>> watchJournalEntries();
-  Stream<List<JournalEntry>> watchJournalEntriesByDateRange(DateTime start, DateTime end);
+  Stream<List<JournalEntry>> watchJournalEntriesByDateRange(
+    DateTime start,
+    DateTime end,
+  );
   Stream<List<JournalEntry>> watchJournalEntriesByType(String entryType);
   Stream<List<JournalEntry>> watchJournalEntriesByStatus(String status);
   Future<JournalEntry?> getJournalEntry(int id);
   Future<JournalEntry?> findJournalEntryByNumber(String entryNumber);
-  Future<JournalEntry?> findJournalEntryBySource(String sourceTable, int sourceId);
+  Future<JournalEntry?> findJournalEntryBySource(
+    String sourceTable,
+    int sourceId,
+  );
   Future<List<JournalEntry>> searchJournalEntries(String query);
   Future<int> createJournalEntry(JournalEntriesCompanion entry);
   Future<bool> updateJournalEntry(JournalEntry entry);
@@ -49,7 +55,8 @@ abstract class JournalLocalDatasource {
   Future<int> getCustomerBalanceTotal();
   Future<int> getSupplierBalanceTotal();
 
-  /// Σ(stock_quantity × cost_cents) across the whole stock ledger — the
+  /// Σ(stock_quantity × cost_cents ÷ quantity_scale) across the whole stock
+  /// ledger — the
   /// physical book value of inventory in cents. Used by the reconciliation
   /// engine to verify that account 1200 Inventory in the GL stays aligned
   /// with the on-hand × cost product of every SKU on the books, regardless
@@ -61,9 +68,14 @@ abstract class JournalLocalDatasource {
 
   // Date-Range Queries
   Stream<List<JournalEntryLine>> watchPostedLinesByDateRange(
-    DateTime startDate, DateTime endDate);
+    DateTime startDate,
+    DateTime endDate,
+  );
   Stream<List<JournalEntryLine>> watchPostedLinesByAccountAndDateRange(
-    int accountId, DateTime startDate, DateTime endDate);
+    int accountId,
+    DateTime startDate,
+    DateTime endDate,
+  );
 }
 
 /// Implementation of JournalLocalDatasource using AccountingDao
@@ -116,8 +128,10 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
       _accountingDao.watchJournalEntries();
 
   @override
-  Stream<List<JournalEntry>> watchJournalEntriesByDateRange(DateTime start, DateTime end) =>
-      _accountingDao.watchJournalEntriesByDateRange(start, end);
+  Stream<List<JournalEntry>> watchJournalEntriesByDateRange(
+    DateTime start,
+    DateTime end,
+  ) => _accountingDao.watchJournalEntriesByDateRange(start, end);
 
   @override
   Stream<List<JournalEntry>> watchJournalEntriesByType(String entryType) =>
@@ -136,8 +150,10 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
       _accountingDao.findJournalEntryByNumber(entryNumber);
 
   @override
-  Future<JournalEntry?> findJournalEntryBySource(String sourceTable, int sourceId) =>
-      _accountingDao.findJournalEntryBySource(sourceTable, sourceId);
+  Future<JournalEntry?> findJournalEntryBySource(
+    String sourceTable,
+    int sourceId,
+  ) => _accountingDao.findJournalEntryBySource(sourceTable, sourceId);
 
   @override
   Future<List<JournalEntry>> searchJournalEntries(String query) =>
@@ -216,20 +232,24 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
   @override
   Future<int> getCustomerBalanceTotal() async {
     final db = _accountingDao.attachedDatabase;
-    final row = await _accountingDao.customSelect(
-      'SELECT COALESCE(SUM(balance_cents), 0) AS total FROM customers',
-      readsFrom: {db.customers},
-    ).getSingle();
+    final row = await _accountingDao
+        .customSelect(
+          'SELECT COALESCE(SUM(balance_cents), 0) AS total FROM customers',
+          readsFrom: {db.customers},
+        )
+        .getSingle();
     return row.read<int>('total');
   }
 
   @override
   Future<int> getSupplierBalanceTotal() async {
     final db = _accountingDao.attachedDatabase;
-    final row = await _accountingDao.customSelect(
-      'SELECT COALESCE(SUM(balance_cents), 0) AS total FROM suppliers',
-      readsFrom: {db.suppliers},
-    ).getSingle();
+    final row = await _accountingDao
+        .customSelect(
+          'SELECT COALESCE(SUM(balance_cents), 0) AS total FROM suppliers',
+          readsFrom: {db.suppliers},
+        )
+        .getSingle();
     return row.read<int>('total');
   }
 
@@ -271,43 +291,56 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
     // The legacy fallback inside Branches 2/3 keeps pre-batch FIFO data
     // visible. Soft-deleted (`is_active = 0`) batches stay excluded so
     // a void cleanly removes a layer from the SoT.
-    final row = await _accountingDao.customSelect(
-      '''
+    final row = await _accountingDao
+        .customSelect(
+          '''
       SELECT
         COALESCE((
           SELECT SUM(
-            CAST(b.remaining_quantity AS INTEGER) *
-            CAST(b.unit_cost_cents AS INTEGER)
+            CAST(ROUND(
+              1.0 * CAST(b.remaining_quantity AS INTEGER) *
+              CAST(b.unit_cost_cents AS INTEGER) /
+              CASE WHEN p.measurement_type = 'piece' THEN 1 ELSE 1000 END
+            ) AS INTEGER)
           )
           FROM product_batches b
           INNER JOIN products p ON p.id = b.product_id
           WHERE b.is_active = 1
+            AND p.track_inventory = 1
             AND (p.inventory_tracking_type IN ('batch', 'batch_expiry')
                  OR p.costing_method = 'fifo')
         ), 0)
         +
         COALESCE((
           SELECT SUM(
-            CAST(v.stock_quantity AS INTEGER) *
-            CAST(v.cost_cents AS INTEGER)
+            CAST(ROUND(
+              1.0 * CAST(v.stock_quantity AS INTEGER) *
+              CAST(v.cost_cents AS INTEGER) /
+              CASE WHEN p.measurement_type = 'piece' THEN 1 ELSE 1000 END
+            ) AS INTEGER)
           )
           FROM product_variants v
           INNER JOIN products p ON p.id = v.product_id
-          WHERE NOT (p.inventory_tracking_type IN ('batch', 'batch_expiry')
+          WHERE p.track_inventory = 1
+            AND (NOT (p.inventory_tracking_type IN ('batch', 'batch_expiry')
                      OR p.costing_method = 'fifo')
              OR NOT EXISTS (
                SELECT 1 FROM product_batches b
                WHERE b.variant_id = v.id AND b.is_active = 1
-             )
+             ))
         ), 0)
         +
         COALESCE((
           SELECT SUM(
-            CAST(p.stock_quantity AS INTEGER) *
-            CAST(p.cost_cents AS INTEGER)
+            CAST(ROUND(
+              1.0 * CAST(p.stock_quantity AS INTEGER) *
+              CAST(p.cost_cents AS INTEGER) /
+              CASE WHEN p.measurement_type = 'piece' THEN 1 ELSE 1000 END
+            ) AS INTEGER)
           )
           FROM products p
-          WHERE NOT EXISTS (
+          WHERE p.track_inventory = 1
+          AND NOT EXISTS (
             SELECT 1 FROM product_variants v WHERE v.product_id = p.id
           )
           AND (
@@ -321,12 +354,9 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
         ), 0)
         AS total
       ''',
-      readsFrom: {
-        db.products,
-        db.productVariants,
-        db.productBatches,
-      },
-    ).getSingle();
+          readsFrom: {db.products, db.productVariants, db.productBatches},
+        )
+        .getSingle();
     return row.read<int>('total');
   }
 
@@ -334,11 +364,18 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
 
   @override
   Stream<List<JournalEntryLine>> watchPostedLinesByDateRange(
-    DateTime startDate, DateTime endDate) =>
-      _accountingDao.watchPostedLinesByDateRange(startDate, endDate);
+    DateTime startDate,
+    DateTime endDate,
+  ) => _accountingDao.watchPostedLinesByDateRange(startDate, endDate);
 
   @override
   Stream<List<JournalEntryLine>> watchPostedLinesByAccountAndDateRange(
-    int accountId, DateTime startDate, DateTime endDate) =>
-      _accountingDao.watchPostedLinesByAccountAndDateRange(accountId, startDate, endDate);
+    int accountId,
+    DateTime startDate,
+    DateTime endDate,
+  ) => _accountingDao.watchPostedLinesByAccountAndDateRange(
+    accountId,
+    startDate,
+    endDate,
+  );
 }

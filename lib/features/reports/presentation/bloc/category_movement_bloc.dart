@@ -47,6 +47,7 @@ class CatMovementEntry {
   final DateTime date;
   final String reference;
   final int quantity;
+  final String measurementType;
   final int totalCents;
   final String? counterpartyName;
   final String productName;
@@ -61,6 +62,7 @@ class CatMovementEntry {
     required this.date,
     required this.reference,
     required this.quantity,
+    this.measurementType = 'piece',
     required this.totalCents,
     required this.productName,
     this.counterpartyName,
@@ -96,6 +98,7 @@ class CategoryProductSummary {
   final int productId;
   final String productName;
   final bool hasVariants;
+  final String measurementType;
   final int purchasedQty;
   final int soldQty;
   final int saleReturnedQty;
@@ -110,6 +113,7 @@ class CategoryProductSummary {
     required this.productId,
     required this.productName,
     this.hasVariants = false,
+    this.measurementType = 'piece',
     this.purchasedQty = 0,
     this.soldQty = 0,
     this.saleReturnedQty = 0,
@@ -121,12 +125,15 @@ class CategoryProductSummary {
     this.variants = const [],
   });
 
-  int get netQty => purchasedQty - soldQty + saleReturnedQty - purchaseReturnedQty;
-  int get totalActivity => purchasedQty + soldQty + saleReturnedQty + purchaseReturnedQty;
+  int get netQty =>
+      purchasedQty - soldQty + saleReturnedQty - purchaseReturnedQty;
+  int get totalActivity =>
+      purchasedQty + soldQty + saleReturnedQty + purchaseReturnedQty;
 }
 
 class CatVariantSummary {
   final String label;
+  final String measurementType;
   final String? colorHex;
   final int purchasedQty;
   final int soldQty;
@@ -135,6 +142,7 @@ class CatVariantSummary {
 
   const CatVariantSummary({
     required this.label,
+    this.measurementType = 'piece',
     this.colorHex,
     this.purchasedQty = 0,
     this.soldQty = 0,
@@ -142,10 +150,14 @@ class CatVariantSummary {
     this.purchaseReturnedQty = 0,
   });
 
-  int get netQty => purchasedQty - soldQty + saleReturnedQty - purchaseReturnedQty;
+  int get netQty =>
+      purchasedQty - soldQty + saleReturnedQty - purchaseReturnedQty;
 }
 
 class CategoryMovementTotals {
+  /// Null means that the category contains quantities from different
+  /// dimensions, which must never be added into one misleading number.
+  final String? measurementType;
   final int totalPurchased;
   final int totalSold;
   final int totalSaleReturned;
@@ -157,6 +169,7 @@ class CategoryMovementTotals {
   final int productCount;
 
   const CategoryMovementTotals({
+    this.measurementType,
     this.totalPurchased = 0,
     this.totalSold = 0,
     this.totalSaleReturned = 0,
@@ -168,7 +181,8 @@ class CategoryMovementTotals {
     this.productCount = 0,
   });
 
-  int get netQuantity => totalPurchased - totalSold + totalSaleReturned - totalPurchaseReturned;
+  int get netQuantity =>
+      totalPurchased - totalSold + totalSaleReturned - totalPurchaseReturned;
 }
 
 class CategoryMovementData {
@@ -209,8 +223,12 @@ class CategoryMovementData {
     return CategoryMovementData(
       dateRange: dateRange ?? this.dateRange,
       searchQuery: searchQuery ?? this.searchQuery,
-      selectedCategoryId: clearCategory ? null : (selectedCategoryId ?? this.selectedCategoryId),
-      selectedCategoryName: clearCategory ? null : (selectedCategoryName ?? this.selectedCategoryName),
+      selectedCategoryId: clearCategory
+          ? null
+          : (selectedCategoryId ?? this.selectedCategoryId),
+      selectedCategoryName: clearCategory
+          ? null
+          : (selectedCategoryName ?? this.selectedCategoryName),
       sort: sort ?? this.sort,
       searchResults: searchResults ?? this.searchResults,
       productSummaries: productSummaries ?? this.productSummaries,
@@ -231,8 +249,8 @@ class CategoryMovementBloc
   CategoryMovementSort _sort = CategoryMovementSort.mostActive;
 
   CategoryMovementBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   @override
   Stream<CategoryMovementData> get dataStream {
@@ -264,10 +282,11 @@ class CategoryMovementBloc
     if (event.query.trim().isEmpty) {
       final current = currentData;
       if (current != null) {
-        emit(RealtimeSuccess(data: current.copyWith(
-          searchQuery: '',
-          searchResults: [],
-        )));
+        emit(
+          RealtimeSuccess(
+            data: current.copyWith(searchQuery: '', searchResults: []),
+          ),
+        );
       }
       return;
     }
@@ -275,10 +294,14 @@ class CategoryMovementBloc
     final results = await _searchCategories(event.query.trim());
     final current = currentData;
     if (current != null) {
-      emit(RealtimeSuccess(data: current.copyWith(
-        searchQuery: event.query,
-        searchResults: results,
-      )));
+      emit(
+        RealtimeSuccess(
+          data: current.copyWith(
+            searchQuery: event.query,
+            searchResults: results,
+          ),
+        ),
+      );
     }
   }
 
@@ -322,22 +345,24 @@ class CategoryMovementBloc
     final endIso = _dateRange.endDate.toIso8601String();
 
     // Get category name
-    final catRow = await (_db.select(_db.productCategories)
-          ..where((c) => c.id.equals(categoryId)))
-        .getSingleOrNull();
+    final catRow = await (_db.select(
+      _db.productCategories,
+    )..where((c) => c.id.equals(categoryId))).getSingleOrNull();
     final categoryName = catRow?.name ?? '';
 
     // Get all active products in this category
-    final productRows = await _db.customSelect(
-      '''
+    final productRows = await _db
+        .customSelect(
+          '''
       SELECT p.id, p.name, p.has_variants
       FROM products p
       WHERE p.category_id = ? AND p.is_active = 1
       ORDER BY p.name
       ''',
-      variables: [Variable.withInt(categoryId)],
-      readsFrom: {_db.products},
-    ).get();
+          variables: [Variable.withInt(categoryId)],
+          readsFrom: {_db.products},
+        )
+        .get();
 
     final allMovements = <CatMovementEntry>[];
     final productSummaryMap = <int, _ProductAccumulator>{};
@@ -369,8 +394,9 @@ class CategoryMovementBloc
     final placeholders = productIds.map((_) => '?').join(',');
 
     // ── Purchases ──
-    final purchaseRows = await _db.customSelect(
-      '''
+    final purchaseRows = await _db
+        .customSelect(
+          '''
       SELECT 
         pu.purchase_date AS dt,
         pu.purchase_number AS ref,
@@ -380,6 +406,7 @@ class CategoryMovementBloc
         sup.name AS counterparty,
         p.name AS product_name,
         p.has_variants AS has_variants,
+        p.measurement_type AS measurement_type,
         pco.name AS color_name,
         pco.hex_code AS color_hex,
         sz.name AS size_name,
@@ -397,13 +424,22 @@ class CategoryMovementBloc
         AND pu.purchase_date >= ? AND pu.purchase_date <= ?
       ORDER BY pu.purchase_date DESC
       ''',
-      variables: [
-        ...productIds.map(Variable.withInt),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.purchaseItems, _db.purchases, _db.products, _db.suppliers, _db.productVariants, _db.productColors, _db.sizes},
-    ).get();
+          variables: [
+            ...productIds.map(Variable.withInt),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.purchaseItems,
+            _db.purchases,
+            _db.products,
+            _db.suppliers,
+            _db.productVariants,
+            _db.productColors,
+            _db.sizes,
+          },
+        )
+        .get();
 
     for (final row in purchaseRows) {
       final pid = row.read<int>('pid');
@@ -416,6 +452,7 @@ class CategoryMovementBloc
         productName: row.read<String>('product_name'),
         counterpartyName: row.readNullable<String>('counterparty'),
         hasVariants: row.read<bool>('has_variants'),
+        measurementType: row.read<String>('measurement_type'),
         colorName: row.readNullable<String>('color_name'),
         colorHex: row.readNullable<String>('color_hex'),
         sizeName: row.readNullable<String>('size_name'),
@@ -426,8 +463,9 @@ class CategoryMovementBloc
     }
 
     // ── Sales ──
-    final saleRows = await _db.customSelect(
-      '''
+    final saleRows = await _db
+        .customSelect(
+          '''
       SELECT 
         s.sale_date AS dt,
         s.invoice_number AS ref,
@@ -437,6 +475,7 @@ class CategoryMovementBloc
         c.name AS counterparty,
         p.name AS product_name,
         p.has_variants AS has_variants,
+        p.measurement_type AS measurement_type,
         pco.name AS color_name,
         pco.hex_code AS color_hex,
         sz.name AS size_name,
@@ -454,13 +493,22 @@ class CategoryMovementBloc
         AND s.sale_date >= ? AND s.sale_date <= ?
       ORDER BY s.sale_date DESC
       ''',
-      variables: [
-        ...productIds.map(Variable.withInt),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.saleItems, _db.sales, _db.products, _db.customers, _db.productVariants, _db.productColors, _db.sizes},
-    ).get();
+          variables: [
+            ...productIds.map(Variable.withInt),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.saleItems,
+            _db.sales,
+            _db.products,
+            _db.customers,
+            _db.productVariants,
+            _db.productColors,
+            _db.sizes,
+          },
+        )
+        .get();
 
     for (final row in saleRows) {
       final pid = row.read<int>('pid');
@@ -473,6 +521,7 @@ class CategoryMovementBloc
         productName: row.read<String>('product_name'),
         counterpartyName: row.readNullable<String>('counterparty'),
         hasVariants: row.read<bool>('has_variants'),
+        measurementType: row.read<String>('measurement_type'),
         colorName: row.readNullable<String>('color_name'),
         colorHex: row.readNullable<String>('color_hex'),
         sizeName: row.readNullable<String>('size_name'),
@@ -483,8 +532,9 @@ class CategoryMovementBloc
     }
 
     // ── Sale Returns ──
-    final saleReturnRows = await _db.customSelect(
-      '''
+    final saleReturnRows = await _db
+        .customSelect(
+          '''
       SELECT 
         sr.return_date AS dt,
         sr.return_number AS ref,
@@ -494,6 +544,7 @@ class CategoryMovementBloc
         c.name AS counterparty,
         p.name AS product_name,
         p.has_variants AS has_variants,
+        p.measurement_type AS measurement_type,
         pco.name AS color_name,
         pco.hex_code AS color_hex,
         sz.name AS size_name,
@@ -513,13 +564,24 @@ class CategoryMovementBloc
         AND sr.return_date >= ? AND sr.return_date <= ?
       ORDER BY sr.return_date DESC
       ''',
-      variables: [
-        ...productIds.map(Variable.withInt),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.saleReturnItems, _db.saleReturns, _db.saleItems, _db.sales, _db.products, _db.customers, _db.productVariants, _db.productColors, _db.sizes},
-    ).get();
+          variables: [
+            ...productIds.map(Variable.withInt),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.saleReturnItems,
+            _db.saleReturns,
+            _db.saleItems,
+            _db.sales,
+            _db.products,
+            _db.customers,
+            _db.productVariants,
+            _db.productColors,
+            _db.sizes,
+          },
+        )
+        .get();
 
     for (final row in saleReturnRows) {
       final pid = row.read<int>('pid');
@@ -532,6 +594,7 @@ class CategoryMovementBloc
         productName: row.read<String>('product_name'),
         counterpartyName: row.readNullable<String>('counterparty'),
         hasVariants: row.read<bool>('has_variants'),
+        measurementType: row.read<String>('measurement_type'),
         colorName: row.readNullable<String>('color_name'),
         colorHex: row.readNullable<String>('color_hex'),
         sizeName: row.readNullable<String>('size_name'),
@@ -542,8 +605,9 @@ class CategoryMovementBloc
     }
 
     // ── Sale Adjustment Returns (unlinked) ──
-    final saleAdjReturnRows = await _db.customSelect(
-      '''
+    final saleAdjReturnRows = await _db
+        .customSelect(
+          '''
       SELECT 
         sra.return_date AS dt,
         sra.return_number AS ref,
@@ -553,6 +617,7 @@ class CategoryMovementBloc
         c.name AS counterparty,
         p.name AS product_name,
         p.has_variants AS has_variants,
+        p.measurement_type AS measurement_type,
         pco.name AS color_name,
         pco.hex_code AS color_hex,
         sz.name AS size_name,
@@ -570,13 +635,22 @@ class CategoryMovementBloc
         AND sra.return_date >= ? AND sra.return_date <= ?
       ORDER BY sra.return_date DESC
       ''',
-      variables: [
-        ...productIds.map(Variable.withInt),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.saleReturnAdjustmentItems, _db.saleReturnAdjustments, _db.products, _db.customers, _db.productVariants, _db.productColors, _db.sizes},
-    ).get();
+          variables: [
+            ...productIds.map(Variable.withInt),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.saleReturnAdjustmentItems,
+            _db.saleReturnAdjustments,
+            _db.products,
+            _db.customers,
+            _db.productVariants,
+            _db.productColors,
+            _db.sizes,
+          },
+        )
+        .get();
 
     for (final row in saleAdjReturnRows) {
       final pid = row.read<int>('pid');
@@ -589,6 +663,7 @@ class CategoryMovementBloc
         productName: row.read<String>('product_name'),
         counterpartyName: row.readNullable<String>('counterparty'),
         hasVariants: row.read<bool>('has_variants'),
+        measurementType: row.read<String>('measurement_type'),
         colorName: row.readNullable<String>('color_name'),
         colorHex: row.readNullable<String>('color_hex'),
         sizeName: row.readNullable<String>('size_name'),
@@ -599,8 +674,9 @@ class CategoryMovementBloc
     }
 
     // ── Purchase Returns ──
-    final purchaseReturnRows = await _db.customSelect(
-      '''
+    final purchaseReturnRows = await _db
+        .customSelect(
+          '''
       SELECT 
         pr.return_date AS dt,
         pr.return_number AS ref,
@@ -610,6 +686,7 @@ class CategoryMovementBloc
         sup.name AS counterparty,
         p.name AS product_name,
         p.has_variants AS has_variants,
+        p.measurement_type AS measurement_type,
         pco.name AS color_name,
         pco.hex_code AS color_hex,
         sz.name AS size_name,
@@ -629,13 +706,24 @@ class CategoryMovementBloc
         AND pr.return_date >= ? AND pr.return_date <= ?
       ORDER BY pr.return_date DESC
       ''',
-      variables: [
-        ...productIds.map(Variable.withInt),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.purchaseReturnItems, _db.purchaseReturns, _db.purchaseItems, _db.purchases, _db.products, _db.suppliers, _db.productVariants, _db.productColors, _db.sizes},
-    ).get();
+          variables: [
+            ...productIds.map(Variable.withInt),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.purchaseReturnItems,
+            _db.purchaseReturns,
+            _db.purchaseItems,
+            _db.purchases,
+            _db.products,
+            _db.suppliers,
+            _db.productVariants,
+            _db.productColors,
+            _db.sizes,
+          },
+        )
+        .get();
 
     for (final row in purchaseReturnRows) {
       final pid = row.read<int>('pid');
@@ -648,6 +736,7 @@ class CategoryMovementBloc
         productName: row.read<String>('product_name'),
         counterpartyName: row.readNullable<String>('counterparty'),
         hasVariants: row.read<bool>('has_variants'),
+        measurementType: row.read<String>('measurement_type'),
         colorName: row.readNullable<String>('color_name'),
         colorHex: row.readNullable<String>('color_hex'),
         sizeName: row.readNullable<String>('size_name'),
@@ -658,8 +747,9 @@ class CategoryMovementBloc
     }
 
     // ── Purchase Adjustment Returns (unlinked) ──
-    final purchaseAdjReturnRows = await _db.customSelect(
-      '''
+    final purchaseAdjReturnRows = await _db
+        .customSelect(
+          '''
       SELECT 
         pra.return_date AS dt,
         pra.return_number AS ref,
@@ -669,6 +759,7 @@ class CategoryMovementBloc
         sup.name AS counterparty,
         p.name AS product_name,
         p.has_variants AS has_variants,
+        p.measurement_type AS measurement_type,
         pco.name AS color_name,
         pco.hex_code AS color_hex,
         sz.name AS size_name,
@@ -686,13 +777,22 @@ class CategoryMovementBloc
         AND pra.return_date >= ? AND pra.return_date <= ?
       ORDER BY pra.return_date DESC
       ''',
-      variables: [
-        ...productIds.map(Variable.withInt),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.purchaseReturnAdjustmentItems, _db.purchaseReturnAdjustments, _db.products, _db.suppliers, _db.productVariants, _db.productColors, _db.sizes},
-    ).get();
+          variables: [
+            ...productIds.map(Variable.withInt),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.purchaseReturnAdjustmentItems,
+            _db.purchaseReturnAdjustments,
+            _db.products,
+            _db.suppliers,
+            _db.productVariants,
+            _db.productColors,
+            _db.sizes,
+          },
+        )
+        .get();
 
     for (final row in purchaseAdjReturnRows) {
       final pid = row.read<int>('pid');
@@ -705,6 +805,7 @@ class CategoryMovementBloc
         productName: row.read<String>('product_name'),
         counterpartyName: row.readNullable<String>('counterparty'),
         hasVariants: row.read<bool>('has_variants'),
+        measurementType: row.read<String>('measurement_type'),
         colorName: row.readNullable<String>('color_name'),
         colorHex: row.readNullable<String>('color_hex'),
         sizeName: row.readNullable<String>('size_name'),
@@ -728,14 +829,24 @@ class CategoryMovementBloc
       case CategoryMovementSort.name:
         productSummaries.sort((a, b) => a.productName.compareTo(b.productName));
       case CategoryMovementSort.mostActive:
-        productSummaries.sort((a, b) => b.totalActivity.compareTo(a.totalActivity));
+        productSummaries.sort(
+          (a, b) => b.totalActivity.compareTo(a.totalActivity),
+        );
       case CategoryMovementSort.netMovement:
-        productSummaries.sort((a, b) => b.netQty.abs().compareTo(a.netQty.abs()));
+        productSummaries.sort(
+          (a, b) => b.netQty.abs().compareTo(a.netQty.abs()),
+        );
     }
 
     // Compute totals
-    int totalPurchased = 0, totalSold = 0, totalSaleReturned = 0, totalPurchaseReturned = 0;
-    int totalPurchaseCents = 0, totalSalesCents = 0, totalSaleReturnCents = 0, totalPurchaseReturnCents = 0;
+    int totalPurchased = 0,
+        totalSold = 0,
+        totalSaleReturned = 0,
+        totalPurchaseReturned = 0;
+    int totalPurchaseCents = 0,
+        totalSalesCents = 0,
+        totalSaleReturnCents = 0,
+        totalPurchaseReturnCents = 0;
 
     for (final m in allMovements) {
       switch (m.type) {
@@ -763,6 +874,13 @@ class CategoryMovementBloc
       productSummaries: productSummaries,
       movements: allMovements,
       totals: CategoryMovementTotals(
+        measurementType:
+            {
+                  for (final movement in allMovements) movement.measurementType,
+                }.length ==
+                1
+            ? allMovements.first.measurementType
+            : null,
         totalPurchased: totalPurchased,
         totalSold: totalSold,
         totalSaleReturned: totalSaleReturned,
@@ -778,8 +896,9 @@ class CategoryMovementBloc
 
   Future<List<CategorySearchResult>> _searchCategories(String query) async {
     final likeQuery = '%$query%';
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         pc.id,
         pc.name,
@@ -792,15 +911,20 @@ class CategoryMovementBloc
       ORDER BY pc.name
       LIMIT 20
       ''',
-      variables: [Variable.withString(likeQuery)],
-      readsFrom: {_db.productCategories, _db.products},
-    ).get();
+          variables: [Variable.withString(likeQuery)],
+          readsFrom: {_db.productCategories, _db.products},
+        )
+        .get();
 
-    return rows.map((row) => CategorySearchResult(
-      categoryId: row.read<int>('id'),
-      name: row.read<String>('name'),
-      productCount: row.read<int>('product_count'),
-    )).toList();
+    return rows
+        .map(
+          (row) => CategorySearchResult(
+            categoryId: row.read<int>('id'),
+            name: row.read<String>('name'),
+            productCount: row.read<int>('product_count'),
+          ),
+        )
+        .toList();
   }
 }
 
@@ -810,6 +934,7 @@ class _ProductAccumulator {
   final int productId;
   final String productName;
   final bool hasVariants;
+  String measurementType = 'piece';
   int purchasedQty = 0;
   int soldQty = 0;
   int saleReturnedQty = 0;
@@ -826,9 +951,11 @@ class _ProductAccumulator {
     required this.hasVariants,
   });
 
-  int get totalActivity => purchasedQty + soldQty + saleReturnedQty + purchaseReturnedQty;
+  int get totalActivity =>
+      purchasedQty + soldQty + saleReturnedQty + purchaseReturnedQty;
 
   void addEntry(CatMovementEntry entry) {
+    measurementType = entry.measurementType;
     switch (entry.type) {
       case CatMovementType.purchase:
         purchasedQty += entry.quantity;
@@ -848,10 +975,10 @@ class _ProductAccumulator {
     if (hasVariants) {
       final vLabel = entry.variantLabel;
       final key = vLabel.isEmpty ? '—' : vLabel;
-      final va = _variants.putIfAbsent(key, () => _VariantAccumulator(
-        label: key,
-        colorHex: entry.colorHex,
-      ));
+      final va = _variants.putIfAbsent(
+        key,
+        () => _VariantAccumulator(label: key, colorHex: entry.colorHex),
+      );
       switch (entry.type) {
         case CatMovementType.purchase:
           va.purchasedQty += entry.quantity;
@@ -870,6 +997,7 @@ class _ProductAccumulator {
       productId: productId,
       productName: productName,
       hasVariants: hasVariants,
+      measurementType: measurementType,
       purchasedQty: purchasedQty,
       soldQty: soldQty,
       saleReturnedQty: saleReturnedQty,
@@ -878,15 +1006,25 @@ class _ProductAccumulator {
       salesCents: salesCents,
       saleReturnCents: saleReturnCents,
       purchaseReturnCents: purchaseReturnCents,
-      variants: _variants.values.map((v) => CatVariantSummary(
-        label: v.label,
-        colorHex: v.colorHex,
-        purchasedQty: v.purchasedQty,
-        soldQty: v.soldQty,
-        saleReturnedQty: v.saleReturnedQty,
-        purchaseReturnedQty: v.purchaseReturnedQty,
-      )).toList()
-        ..sort((a, b) => (b.purchasedQty + b.soldQty).compareTo(a.purchasedQty + a.soldQty)),
+      variants:
+          _variants.values
+              .map(
+                (v) => CatVariantSummary(
+                  label: v.label,
+                  measurementType: measurementType,
+                  colorHex: v.colorHex,
+                  purchasedQty: v.purchasedQty,
+                  soldQty: v.soldQty,
+                  saleReturnedQty: v.saleReturnedQty,
+                  purchaseReturnedQty: v.purchaseReturnedQty,
+                ),
+              )
+              .toList()
+            ..sort(
+              (a, b) => (b.purchasedQty + b.soldQty).compareTo(
+                a.purchasedQty + a.soldQty,
+              ),
+            ),
     );
   }
 }

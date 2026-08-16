@@ -13,14 +13,21 @@ class PriceEditRow extends StatefulWidget {
   final void Function(Decimal newPrice, bool isWholesale) onPriceChanged;
   final bool isSelected;
   final void Function(bool? selected)? onSelectionChanged;
+
   /// Called when user expands variants for the first time; return variants list.
-  final Future<List<ProductVariant>> Function(int productId)? onVariantsRequested;
+  final Future<List<ProductVariant>> Function(int productId)?
+  onVariantsRequested;
+
   /// Called when a variant price is changed inline.
   final void Function(ProductVariant updatedVariant)? onVariantPriceChanged;
+
   /// Currently selected variant IDs for bulk operations.
   final Set<int> selectedVariantIds;
+
   /// Called when a variant checkbox is toggled.
-  final void Function(int variantId, bool isSelected)? onVariantSelectionChanged;
+  final void Function(int variantId, bool isSelected)?
+  onVariantSelectionChanged;
+
   /// Optimistic changes for variants from the bloc state
   final Map<int, Map<String, Decimal>> variantPriceChanges;
 
@@ -72,19 +79,26 @@ class _PriceEditRowState extends State<PriceEditRow> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.product.costCents != widget.product.costCents) {
       final newVal = _formatCents(widget.product.costCents);
-      if (_costController.text != newVal && _parseToCents(_costController.text) != widget.product.costCents) {
+      if (_costController.text != newVal &&
+          _parseToCents(_costController.text) != widget.product.costCents) {
         _costController.text = newVal;
       }
     }
     if (oldWidget.product.priceCents != widget.product.priceCents) {
       final newVal = _formatCents(widget.product.priceCents);
-      if (_priceController.text != newVal && _parseToCents(_priceController.text) != widget.product.priceCents) {
+      if (_priceController.text != newVal &&
+          _parseToCents(_priceController.text) != widget.product.priceCents) {
         _priceController.text = newVal;
       }
     }
-    if (oldWidget.product.wholesalePriceCents != widget.product.wholesalePriceCents) {
-      final newVal = widget.product.wholesalePriceCents != null ? _formatCents(widget.product.wholesalePriceCents!) : '';
-      if (_wholesaleController.text != newVal && _parseToCents(_wholesaleController.text) != (widget.product.wholesalePriceCents ?? Decimal.zero)) {
+    if (oldWidget.product.wholesalePriceCents !=
+        widget.product.wholesalePriceCents) {
+      final newVal = widget.product.wholesalePriceCents != null
+          ? _formatCents(widget.product.wholesalePriceCents!)
+          : '';
+      if (_wholesaleController.text != newVal &&
+          _parseToCents(_wholesaleController.text) !=
+              (widget.product.wholesalePriceCents ?? Decimal.zero)) {
         _wholesaleController.text = newVal;
       }
     }
@@ -99,7 +113,9 @@ class _PriceEditRowState extends State<PriceEditRow> {
   }
 
   String _formatCents(Decimal cents) {
-    final value = (cents / Decimal.fromInt(100)).toDecimal(scaleOnInfinitePrecision: 2);
+    final value = (cents / Decimal.fromInt(100)).toDecimal(
+      scaleOnInfinitePrecision: 2,
+    );
     return value.toStringAsFixed(2);
   }
 
@@ -117,7 +133,9 @@ class _PriceEditRowState extends State<PriceEditRow> {
     final cost = _parseToCents(_costController.text);
     final price = _parseToCents(_priceController.text);
     if (price == Decimal.zero) return Decimal.zero;
-    final ratio = ((price - cost) / price).toDecimal(scaleOnInfinitePrecision: 4);
+    final ratio = ((price - cost) / price).toDecimal(
+      scaleOnInfinitePrecision: 4,
+    );
     return ratio * Decimal.fromInt(100);
   }
 
@@ -153,8 +171,8 @@ class _PriceEditRowState extends State<PriceEditRow> {
     final marginColor = margin < Decimal.fromInt(15)
         ? colorScheme.error
         : margin < Decimal.fromInt(25)
-            ? Colors.orange
-            : colorScheme.primary;
+        ? Colors.orange
+        : colorScheme.primary;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -179,27 +197,30 @@ class _PriceEditRowState extends State<PriceEditRow> {
                     children: [
                       Text(
                         widget.product.name,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       if (widget.product.sku != null)
                         Text(
                           'SKU: ${widget.product.sku}',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: colorScheme.outline,
-                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: colorScheme.outline),
                         ),
                     ],
                   ),
                 ),
                 // Margin indicator
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: marginColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: marginColor.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: marginColor.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Text(
                     '${margin.toStringAsFixed(1)}%',
@@ -216,7 +237,7 @@ class _PriceEditRowState extends State<PriceEditRow> {
             LayoutBuilder(
               builder: (context, constraints) {
                 final isWide = constraints.maxWidth > 500;
-                
+
                 if (isWide) {
                   return Row(
                     children: [
@@ -228,7 +249,7 @@ class _PriceEditRowState extends State<PriceEditRow> {
                     ],
                   );
                 }
-                
+
                 return Column(
                   children: [
                     Row(
@@ -245,7 +266,8 @@ class _PriceEditRowState extends State<PriceEditRow> {
               },
             ),
             // Expand variants button (only for products with variants)
-            if (widget.product.hasVariants && widget.onVariantsRequested != null) ...[
+            if (widget.product.hasVariants &&
+                widget.onVariantsRequested != null) ...[
               const SizedBox(height: 12),
               _buildVariantsToggle(colorScheme),
             ],
@@ -276,7 +298,8 @@ class _PriceEditRowState extends State<PriceEditRow> {
           children: [
             if (_isLoadingVariants)
               const SizedBox(
-                width: 16, height: 16,
+                width: 16,
+                height: 16,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             else
@@ -306,7 +329,11 @@ class _PriceEditRowState extends State<PriceEditRow> {
                 ),
                 child: Text(
                   '${_variants.length}',
-                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -324,20 +351,28 @@ class _PriceEditRowState extends State<PriceEditRow> {
       ),
       child: Column(
         children: _variants.map((variant) {
-          final isVariantSelected = widget.selectedVariantIds.contains(variant.id);
-          
+          final isVariantSelected = widget.selectedVariantIds.contains(
+            variant.id,
+          );
+
           // Apply optimistic variant price changes
           ProductVariant displayVariant = variant;
           final changes = widget.variantPriceChanges[variant.id];
           if (changes != null) {
             if (changes.containsKey('costCents')) {
-              displayVariant = displayVariant.copyWith(costCents: changes['costCents']!);
+              displayVariant = displayVariant.copyWith(
+                costCents: changes['costCents']!,
+              );
             }
             if (changes.containsKey('priceCents')) {
-              displayVariant = displayVariant.copyWith(priceCents: changes['priceCents']!);
+              displayVariant = displayVariant.copyWith(
+                priceCents: changes['priceCents']!,
+              );
             }
             if (changes.containsKey('wholesalePriceCents')) {
-              displayVariant = displayVariant.copyWith(wholesalePriceCents: changes['wholesalePriceCents']!);
+              displayVariant = displayVariant.copyWith(
+                wholesalePriceCents: changes['wholesalePriceCents']!,
+              );
             }
           }
 
@@ -347,7 +382,10 @@ class _PriceEditRowState extends State<PriceEditRow> {
             currencyService: widget.currencyService,
             isSelected: isVariantSelected,
             onSelectionChanged: (selected) {
-              widget.onVariantSelectionChanged?.call(variant.id, selected ?? false);
+              widget.onVariantSelectionChanged?.call(
+                variant.id,
+                selected ?? false,
+              );
             },
             onChanged: (updated) {
               widget.onVariantPriceChanged?.call(updated);
@@ -369,7 +407,10 @@ class _PriceEditRowState extends State<PriceEditRow> {
         labelText: 'edit_prices.cost'.tr(),
         prefixText: widget.currencyService.currencySymbol,
         border: const OutlineInputBorder(),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 12,
+        ),
       ),
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [
@@ -390,7 +431,10 @@ class _PriceEditRowState extends State<PriceEditRow> {
         labelText: 'edit_prices.selling_price'.tr(),
         prefixText: widget.currencyService.currencySymbol,
         border: const OutlineInputBorder(),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 12,
+        ),
       ),
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [
@@ -411,7 +455,10 @@ class _PriceEditRowState extends State<PriceEditRow> {
         labelText: 'edit_prices.wholesale_price'.tr(),
         prefixText: widget.currencyService.currencySymbol,
         border: const OutlineInputBorder(),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 12,
+        ),
       ),
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [
@@ -468,19 +515,25 @@ class _VariantPriceRowState extends State<_VariantPriceRow> {
     super.didUpdateWidget(old);
     if (old.variant.costCents != widget.variant.costCents) {
       final newVal = _fmt(widget.variant.costCents);
-      if (_costCtrl.text != newVal && _toCents(_costCtrl.text) != widget.variant.costCents) {
+      if (_costCtrl.text != newVal &&
+          _toCents(_costCtrl.text) != widget.variant.costCents) {
         _costCtrl.text = newVal;
       }
     }
     if (old.variant.priceCents != widget.variant.priceCents) {
       final newVal = _fmt(widget.variant.priceCents);
-      if (_priceCtrl.text != newVal && _toCents(_priceCtrl.text) != widget.variant.priceCents) {
+      if (_priceCtrl.text != newVal &&
+          _toCents(_priceCtrl.text) != widget.variant.priceCents) {
         _priceCtrl.text = newVal;
       }
     }
     if (old.variant.wholesalePriceCents != widget.variant.wholesalePriceCents) {
-      final newVal = widget.variant.wholesalePriceCents != null ? _fmt(widget.variant.wholesalePriceCents!) : '';
-      if (_wholesaleCtrl.text != newVal && _toCents(_wholesaleCtrl.text) != (widget.variant.wholesalePriceCents ?? Decimal.zero)) {
+      final newVal = widget.variant.wholesalePriceCents != null
+          ? _fmt(widget.variant.wholesalePriceCents!)
+          : '';
+      if (_wholesaleCtrl.text != newVal &&
+          _toCents(_wholesaleCtrl.text) !=
+              (widget.variant.wholesalePriceCents ?? Decimal.zero)) {
         _wholesaleCtrl.text = newVal;
       }
     }
@@ -494,8 +547,9 @@ class _VariantPriceRowState extends State<_VariantPriceRow> {
     super.dispose();
   }
 
-  String _fmt(Decimal cents) =>
-      (cents / Decimal.fromInt(100)).toDecimal(scaleOnInfinitePrecision: 2).toStringAsFixed(2);
+  String _fmt(Decimal cents) => (cents / Decimal.fromInt(100))
+      .toDecimal(scaleOnInfinitePrecision: 2)
+      .toStringAsFixed(2);
 
   Decimal _toCents(String v) {
     if (v.isEmpty) return Decimal.zero;
@@ -510,13 +564,17 @@ class _VariantPriceRowState extends State<_VariantPriceRow> {
     final costCents = _toCents(_costCtrl.text);
     final priceCents = _toCents(_priceCtrl.text);
     final wholesaleText = _wholesaleCtrl.text.trim();
-    final wholesaleCents = wholesaleText.isEmpty ? null : _toCents(wholesaleText);
+    final wholesaleCents = wholesaleText.isEmpty
+        ? null
+        : _toCents(wholesaleText);
 
-    widget.onChanged(widget.variant.copyWith(
-      costCents: costCents,
-      priceCents: priceCents,
-      wholesalePriceCents: wholesaleCents,
-    ));
+    widget.onChanged(
+      widget.variant.copyWith(
+        costCents: costCents,
+        priceCents: priceCents,
+        wholesalePriceCents: wholesaleCents,
+      ),
+    );
   }
 
   @override
@@ -543,7 +601,11 @@ class _VariantPriceRowState extends State<_VariantPriceRow> {
                   visualDensity: VisualDensity.compact,
                 ),
               ),
-              Icon(Icons.subdirectory_arrow_right, size: 16, color: colorScheme.outline),
+              Icon(
+                Icons.subdirectory_arrow_right,
+                size: 16,
+                color: colorScheme.outline,
+              ),
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
@@ -559,16 +621,20 @@ class _VariantPriceRowState extends State<_VariantPriceRow> {
           const SizedBox(height: 6),
           Row(
             children: [
+              Expanded(child: _buildField(_costCtrl, 'edit_prices.cost'.tr())),
+              const SizedBox(width: 8),
               Expanded(
-                child: _buildField(_costCtrl, 'edit_prices.cost'.tr()),
+                child: _buildField(
+                  _priceCtrl,
+                  'edit_prices.selling_price'.tr(),
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _buildField(_priceCtrl, 'edit_prices.selling_price'.tr()),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildField(_wholesaleCtrl, 'edit_prices.wholesale_price'.tr()),
+                child: _buildField(
+                  _wholesaleCtrl,
+                  'edit_prices.wholesale_price'.tr(),
+                ),
               ),
             ],
           ),

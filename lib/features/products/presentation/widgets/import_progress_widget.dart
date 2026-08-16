@@ -19,28 +19,23 @@ class ImportProgressWidget extends StatelessWidget {
 
     return Center(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: isDesktop ? 600 : double.infinity),
+        constraints: BoxConstraints(
+          maxWidth: isDesktop ? 600 : double.infinity,
+        ),
         child: Card(
           child: Padding(
             padding: const EdgeInsets.all(32),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  LucideIcons.loader2,
-                  size: 64,
-                  color: colorScheme.primary,
-                ),
+                Icon(LucideIcons.loader2, size: 64, color: colorScheme.primary),
                 const SizedBox(height: 24),
                 Text(
                   'import_products.importing'.tr(),
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 32),
-                LinearProgressIndicator(
-                  value: state.progress,
-                  minHeight: 8,
-                ),
+                LinearProgressIndicator(value: state.progress, minHeight: 8),
                 const SizedBox(height: 16),
                 Text(
                   'import_products.progress_status'.tr(

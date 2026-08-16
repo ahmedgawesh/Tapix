@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
 
@@ -25,7 +26,7 @@ class ProductTileWidget extends StatelessWidget {
   final void Function(Product)? onLongPress;
   final void Function(Product)? onCheckboxChanged;
   final bool? isSelected;
-  
+
   /// For products with variants: number of variants and total stock across all variants.
   /// If provided, these override the product's stockQuantity for display purposes.
   final int? variantCount;
@@ -83,185 +84,222 @@ class ProductTileWidget extends StatelessWidget {
           title: Text(product.name),
           content: SizedBox(
             width: 520,
-            child: FutureBuilder<({
-              List<ProductVariant> variants,
-              List<ProductColor> colors,
-              List<Size> sizes,
-            })>(
-              future: () async {
-                final variantRepo = sl<ProductVariantRepository>();
-                final colorRepo = sl<ProductColorRepository>();
-                final sizeRepo = sl<SizeRepository>();
+            child:
+                FutureBuilder<
+                  ({
+                    List<ProductVariant> variants,
+                    List<ProductColor> colors,
+                    List<Size> sizes,
+                  })
+                >(
+                  future: () async {
+                    final variantRepo = sl<ProductVariantRepository>();
+                    final colorRepo = sl<ProductColorRepository>();
+                    final sizeRepo = sl<SizeRepository>();
 
-                final results = await Future.wait([
-                  variantRepo.getVariantsByProduct(product.id),
-                  colorRepo.getAllColors(),
-                  sizeRepo.getAllSizes(),
-                ]);
+                    final results = await Future.wait([
+                      variantRepo.getVariantsByProduct(product.id),
+                      colorRepo.getAllColors(),
+                      sizeRepo.getAllSizes(),
+                    ]);
 
-                return (
-                  variants: results[0] as List<ProductVariant>,
-                  colors: results[1] as List<ProductColor>,
-                  sizes: results[2] as List<Size>,
-                );
-              }(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const SizedBox(
-                    height: 120,
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
+                    return (
+                      variants: results[0] as List<ProductVariant>,
+                      colors: results[1] as List<ProductColor>,
+                      sizes: results[2] as List<Size>,
+                    );
+                  }(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const SizedBox(
+                        height: 120,
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
 
-                final variants = snapshot.data!.variants;
-                final colorsById = {for (final c in snapshot.data!.colors) c.id: c};
-                final sizesById = {for (final s in snapshot.data!.sizes) s.id: s};
+                    final variants = snapshot.data!.variants;
+                    final colorsById = {
+                      for (final c in snapshot.data!.colors) c.id: c,
+                    };
+                    final sizesById = {
+                      for (final s in snapshot.data!.sizes) s.id: s,
+                    };
 
-                final distinctColorHexes = <String>{};
-                final distinctSizeNames = <String>{};
+                    final distinctColorHexes = <String>{};
+                    final distinctSizeNames = <String>{};
 
-                for (final v in variants.where((x) => x.isActive)) {
-                  final colorHex = v.colorId == null ? null : colorsById[v.colorId!]?.hexCode;
-                  if (colorHex != null && colorHex.trim().isNotEmpty) {
-                    distinctColorHexes.add(colorHex.trim());
-                  }
-                  final sizeName = v.sizeId == null ? null : sizesById[v.sizeId!]?.name;
-                  if (sizeName != null && sizeName.trim().isNotEmpty) {
-                    distinctSizeNames.add(sizeName.trim());
-                  }
-                }
+                    for (final v in variants.where((x) => x.isActive)) {
+                      final colorHex = v.colorId == null
+                          ? null
+                          : colorsById[v.colorId!]?.hexCode;
+                      if (colorHex != null && colorHex.trim().isNotEmpty) {
+                        distinctColorHexes.add(colorHex.trim());
+                      }
+                      final sizeName = v.sizeId == null
+                          ? null
+                          : sizesById[v.sizeId!]?.name;
+                      if (sizeName != null && sizeName.trim().isNotEmpty) {
+                        distinctSizeNames.add(sizeName.trim());
+                      }
+                    }
 
-                final colorDots = distinctColorHexes
-                    .map(_tryParseHexColor)
-                    .whereType<Color>()
-                    .toList();
-                final sizeList = distinctSizeNames.toList()..sort();
+                    final colorDots = distinctColorHexes
+                        .map(_tryParseHexColor)
+                        .whereType<Color>()
+                        .toList();
+                    final sizeList = distinctSizeNames.toList()..sort();
 
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (variantCount != null)
-                          Text(
-                            '${'products.variants_badge'.tr()}: $variantCount',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        if (totalVariantStock != null) ...[
-                          const SizedBox(width: 12),
-                          Text(
-                            '${'variants.stock'.tr()}: $totalVariantStock',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-
-                    if (colorDots.isNotEmpty) ...[
-                      Text(
-                        'colors.title'.tr(),
-                        style: Theme.of(context).textTheme.labelMedium,
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final c in colorDots)
-                            Container(
-                              width: 14,
-                              height: 14,
-                              decoration: BoxDecoration(
-                                color: c,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: colorScheme.outline),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-
-                    if (sizeList.isNotEmpty) ...[
-                      Text(
-                        'sizes.title'.tr(),
-                        style: Theme.of(context).textTheme.labelMedium,
-                      ),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final s in sizeList)
-                            Chip(
-                              label: Text(
-                                s,
+                        Row(
+                          children: [
+                            if (variantCount != null)
+                              Text(
+                                '${'products.variants_badge'.tr()}: $variantCount',
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                    ],
+                            if (totalVariantStock != null) ...[
+                              const SizedBox(width: 12),
+                              Text(
+                                '${'variants.stock'.tr()}: $totalVariantStock',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 12),
 
-                    Text(
-                      'variants.title'.tr(),
-                      style: Theme.of(context).textTheme.labelMedium,
-                    ),
-                    const SizedBox(height: 6),
-                    SizedBox(
-                      height: 220,
-                      child: ListView.separated(
-                        itemCount: variants.length,
-                        separatorBuilder: (context, index) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final v = variants[index];
-                          final sizeName = v.sizeId == null ? null : sizesById[v.sizeId!]?.name;
-                          final colorHex = v.colorId == null ? null : colorsById[v.colorId!]?.hexCode;
-                          final shade = _tryParseHexColor(colorHex);
-
-                          final title = v.sku?.isNotEmpty == true
-                              ? v.sku!
-                              : 'product_form.variant_item_title'.tr(args: ['${v.id}']);
-
-                          return ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                            subtitle: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (sizeName != null && sizeName.trim().isNotEmpty)
-                                  Text(sizeName, maxLines: 1, overflow: TextOverflow.ellipsis),
-                                if (sizeName != null && sizeName.trim().isNotEmpty && shade != null)
-                                  const SizedBox(width: 8),
-                                if (shade != null)
-                                  Container(
-                                    width: 10,
-                                    height: 10,
-                                    decoration: BoxDecoration(
-                                      color: shade,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(color: colorScheme.outline),
+                        if (colorDots.isNotEmpty) ...[
+                          Text(
+                            'colors.title'.tr(),
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              for (final c in colorDots)
+                                Container(
+                                  width: 14,
+                                  height: 14,
+                                  decoration: BoxDecoration(
+                                    color: c,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: colorScheme.outline,
                                     ),
                                   ),
-                                const Spacer(),
-                                Text(
-                                  '${'variants.stock'.tr()}: ${v.stockQuantity}',
-                                  style: Theme.of(context).textTheme.bodySmall,
                                 ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+
+                        if (sizeList.isNotEmpty) ...[
+                          Text(
+                            'sizes.title'.tr(),
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              for (final s in sizeList)
+                                Chip(
+                                  label: Text(
+                                    s,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+
+                        Text(
+                          'variants.title'.tr(),
+                          style: Theme.of(context).textTheme.labelMedium,
+                        ),
+                        const SizedBox(height: 6),
+                        SizedBox(
+                          height: 220,
+                          child: ListView.separated(
+                            itemCount: variants.length,
+                            separatorBuilder: (context, index) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final v = variants[index];
+                              final sizeName = v.sizeId == null
+                                  ? null
+                                  : sizesById[v.sizeId!]?.name;
+                              final colorHex = v.colorId == null
+                                  ? null
+                                  : colorsById[v.colorId!]?.hexCode;
+                              final shade = _tryParseHexColor(colorHex);
+
+                              final title = v.sku?.isNotEmpty == true
+                                  ? v.sku!
+                                  : 'product_form.variant_item_title'.tr(
+                                      args: ['${v.id}'],
+                                    );
+
+                              return ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(
+                                  title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (sizeName != null &&
+                                        sizeName.trim().isNotEmpty)
+                                      Text(
+                                        sizeName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    if (sizeName != null &&
+                                        sizeName.trim().isNotEmpty &&
+                                        shade != null)
+                                      const SizedBox(width: 8),
+                                    if (shade != null)
+                                      Container(
+                                        width: 10,
+                                        height: 10,
+                                        decoration: BoxDecoration(
+                                          color: shade,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: colorScheme.outline,
+                                          ),
+                                        ),
+                                      ),
+                                    const Spacer(),
+                                    Text(
+                                      '${'variants.stock'.tr()}: ${localizedQuantity(v.stockQuantity, product.measurementType)}',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodySmall,
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
           ),
           actions: [
             TextButton(
@@ -290,10 +328,12 @@ class ProductTileWidget extends StatelessWidget {
     final selected = isSelected ?? false;
     final previewShade = _tryParseHexColor(previewColorHex);
     final showVariantsButton = product.hasVariants;
-    
+
     return Card(
       clipBehavior: Clip.antiAlias,
-      color: selected ? colorScheme.primaryContainer.withValues(alpha: 0.3) : null,
+      color: selected
+          ? colorScheme.primaryContainer.withValues(alpha: 0.3)
+          : null,
       child: InkWell(
         onTap: onTap != null ? () => onTap!(product) : null,
         onLongPress: onLongPress != null ? () => onLongPress!(product) : null,
@@ -306,7 +346,8 @@ class ProductTileWidget extends StatelessWidget {
                   padding: const EdgeInsets.only(right: 12),
                   child: Checkbox(
                     value: selected,
-                    onChanged: (_) => (onCheckboxChanged ?? onTap)?.call(product),
+                    onChanged: (_) =>
+                        (onCheckboxChanged ?? onTap)?.call(product),
                   ),
                 ),
               _buildProductImage(colorScheme),
@@ -332,7 +373,8 @@ class ProductTileWidget extends StatelessWidget {
                           IconButton(
                             icon: const Icon(LucideIcons.info, size: 18),
                             tooltip: 'variants.title'.tr(),
-                            onPressed: () => _showVariantsOverviewDialog(context),
+                            onPressed: () =>
+                                _showVariantsOverviewDialog(context),
                           ),
                       ],
                     ),
@@ -352,7 +394,8 @@ class ProductTileWidget extends StatelessWidget {
                             ),
                           ),
                           if (!product.hasVariants &&
-                              ((previewSizeName != null && previewSizeName!.trim().isNotEmpty) ||
+                              ((previewSizeName != null &&
+                                      previewSizeName!.trim().isNotEmpty) ||
                                   previewShade != null)) ...[
                             const SizedBox(width: 6),
                             Text(
@@ -361,7 +404,8 @@ class ProductTileWidget extends StatelessWidget {
                                 color: colorScheme.onSurfaceVariant,
                               ),
                             ),
-                            if (previewSizeName != null && previewSizeName!.trim().isNotEmpty)
+                            if (previewSizeName != null &&
+                                previewSizeName!.trim().isNotEmpty)
                               Flexible(
                                 child: Text(
                                   previewSizeName!.trim(),
@@ -372,7 +416,9 @@ class ProductTileWidget extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                            if (previewSizeName != null && previewSizeName!.trim().isNotEmpty && previewShade != null)
+                            if (previewSizeName != null &&
+                                previewSizeName!.trim().isNotEmpty &&
+                                previewShade != null)
                               const SizedBox(width: 6),
                             if (previewShade != null)
                               Container(
@@ -381,7 +427,9 @@ class ProductTileWidget extends StatelessWidget {
                                 decoration: BoxDecoration(
                                   color: previewShade,
                                   shape: BoxShape.circle,
-                                  border: Border.all(color: colorScheme.outline),
+                                  border: Border.all(
+                                    color: colorScheme.outline,
+                                  ),
                                 ),
                               ),
                             Text(
@@ -399,7 +447,9 @@ class ProductTileWidget extends StatelessWidget {
                         BlocBuilder<CurrencyBloc, RealtimeState<Currency>>(
                           builder: (context, state) {
                             return Text(
-                              currencyService.format(product.priceCents.toBigInt().toInt()),
+                              currencyService.format(
+                                product.priceCents.toBigInt().toInt(),
+                              ),
                               style: theme.textTheme.titleMedium?.copyWith(
                                 color: colorScheme.primary,
                                 fontWeight: FontWeight.bold,
@@ -474,7 +524,7 @@ class ProductTileWidget extends StatelessWidget {
 
   Widget _buildProductImage(ColorScheme colorScheme) {
     final hasImage = product.imagePath != null && product.imagePath!.isNotEmpty;
-    
+
     return Container(
       width: 64,
       height: 64,
@@ -525,20 +575,23 @@ class ProductTileWidget extends StatelessWidget {
     final colorScheme = theme.colorScheme;
 
     final isExpired = status == ExpiryStatus.expired;
-    final bg =
-        isExpired ? colorScheme.errorContainer : colorScheme.tertiaryContainer;
+    final bg = isExpired
+        ? colorScheme.errorContainer
+        : colorScheme.tertiaryContainer;
     final fg = isExpired
         ? colorScheme.onErrorContainer
         : colorScheme.onTertiaryContainer;
-    final icon =
-        isExpired ? LucideIcons.alertOctagon : LucideIcons.alertTriangle;
+    final icon = isExpired
+        ? LucideIcons.alertOctagon
+        : LucideIcons.alertTriangle;
 
     final String shortLabel;
     final String tooltip;
     if (isExpired) {
       shortLabel = 'products.expiry_badge_expired_label'.tr();
-      tooltip = 'products.expiry_badge_expired_qty'
-          .tr(args: ['${summary.expiredQuantity}']);
+      tooltip = 'products.expiry_badge_expired_qty'.tr(
+        args: ['${summary.expiredQuantity}'],
+      );
     } else {
       final days = summary.daysUntilNearestExpiry ?? 0;
       if (days == 0) {
@@ -546,8 +599,9 @@ class ProductTileWidget extends StatelessWidget {
       } else if (days == 1) {
         shortLabel = 'products.expiry_badge_days_left_one'.tr();
       } else {
-        shortLabel =
-            'products.expiry_badge_days_left_other'.tr(args: ['$days']);
+        shortLabel = 'products.expiry_badge_days_left_other'.tr(
+          args: ['$days'],
+        );
       }
       tooltip = 'products.expiry_badge_near_label'.tr();
     }
@@ -555,9 +609,7 @@ class ProductTileWidget extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: Container(
-        key: Key(
-          isExpired ? 'expiry_badge_expired' : 'expiry_badge_near',
-        ),
+        key: Key(isExpired ? 'expiry_badge_expired' : 'expiry_badge_near'),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: bg,
@@ -634,7 +686,7 @@ class ProductTileWidget extends StatelessWidget {
             ),
             const SizedBox(width: 4),
             Text(
-              '${product.stockQuantity}',
+              localizedQuantity(product.stockQuantity, product.measurementType),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: colorScheme.onTertiaryContainer,
                 fontWeight: FontWeight.bold,
@@ -662,7 +714,7 @@ class ProductTileWidget extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           Text(
-            '${product.stockQuantity}',
+            localizedQuantity(product.stockQuantity, product.measurementType),
             style: theme.textTheme.labelSmall?.copyWith(
               color: colorScheme.onSecondaryContainer,
               fontWeight: FontWeight.bold,

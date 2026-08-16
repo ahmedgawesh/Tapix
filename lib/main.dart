@@ -192,6 +192,16 @@ class _TapixAppState extends State<TapixApp> {
               darkTheme: AppTheme.darkTheme,
               themeMode: themeMode,
               routerConfig: AppRouter.router,
+              // Wrap every route in a bottom-only SafeArea so content never
+              // renders behind the system navigation bar (edge-to-edge mode).
+              // top: false because AppBar handles status-bar insets itself.
+              builder: (context, child) {
+                return SafeArea(
+                  top: false,
+                  bottom: true,
+                  child: child ?? const SizedBox.shrink(),
+                );
+              },
             );
           },
         ),

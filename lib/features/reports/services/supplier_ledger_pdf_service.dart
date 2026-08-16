@@ -95,22 +95,22 @@ class SupplierLedgerPdfService {
         // Purchase columns
         row.purchaseNumber ?? '-',
         row.purchaseItemCount > 0 ? row.purchaseItemCount.toString() : '-',
-        row.purchaseTotalCents > 0
+        row.purchaseTotalCents != 0
             ? cs.formatCents(row.purchaseTotalCents)
             : '-',
         // Return columns
         row.returnNumber ?? '-',
         row.returnItemCount > 0 ? row.returnItemCount.toString() : '-',
-        row.returnTotalCents > 0
+        row.returnTotalCents != 0
             ? cs.formatCents(row.returnTotalCents)
             : '-',
         // Payment columns
-        row.paymentAmountCents > 0
+        row.paymentAmountCents != 0
             ? cs.formatCents(row.paymentAmountCents)
             : '-',
         row.paymentNumber ?? '-',
         // Discount columns
-        row.discountAmountCents > 0
+        row.discountAmountCents != 0
             ? cs.formatCents(row.discountAmountCents)
             : '-',
         row.discountNumber ?? '-',
@@ -123,12 +123,12 @@ class SupplierLedgerPdfService {
     rows.add([
       _t('subtotals', lang),
       '-',
-      data.totalPurchaseItems > 0
+      data.totalPurchaseItems != 0
           ? data.totalPurchaseItems.toString()
           : '-',
       cs.formatCents(data.totalPurchasesCents),
       '-',
-      data.totalReturnItems > 0 ? data.totalReturnItems.toString() : '-',
+      data.totalReturnItems != 0 ? data.totalReturnItems.toString() : '-',
       cs.formatCents(data.totalReturnsCents),
       cs.formatCents(data.totalPaymentsCents),
       '-',

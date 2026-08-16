@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import 'package:easy_localization/easy_localization.dart';
 import '../../domain/entities/product_entity.dart';
 
@@ -34,7 +35,9 @@ class ExportPreviewWidget extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'export_products.preview_description'.tr(args: [products.length.toString()]),
+          'export_products.preview_description'.tr(
+            args: [products.length.toString()],
+          ),
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 12),
@@ -45,7 +48,9 @@ class ExportPreviewWidget extends StatelessWidget {
             columns: [
               DataColumn(
                 label: Checkbox(
-                  value: selectedProductIds.isNotEmpty && selectedProductIds.length == products.length,
+                  value:
+                      selectedProductIds.isNotEmpty &&
+                      selectedProductIds.length == products.length,
                   onChanged: (_) => onToggleSelectAll(),
                 ),
               ),
@@ -53,7 +58,9 @@ class ExportPreviewWidget extends StatelessWidget {
               DataColumn(label: Text('export_products.column_sku'.tr())),
               DataColumn(label: Text('export_products.column_name'.tr())),
               DataColumn(label: Text('export_products.column_cost_cents'.tr())),
-              DataColumn(label: Text('export_products.column_price_cents'.tr())),
+              DataColumn(
+                label: Text('export_products.column_price_cents'.tr()),
+              ),
               DataColumn(label: Text('export_products.column_stock'.tr())),
             ],
             rows: products.map((product) {
@@ -71,9 +78,20 @@ class ExportPreviewWidget extends StatelessWidget {
                   DataCell(Text(product.id.toString())),
                   DataCell(Text(product.sku ?? '-')),
                   DataCell(Text(product.name)),
-                  DataCell(Text(product.costCents.toBigInt().toInt().toString())),
-                  DataCell(Text(product.priceCents.toBigInt().toInt().toString())),
-                  DataCell(Text(product.stockQuantity.toString())),
+                  DataCell(
+                    Text(product.costCents.toBigInt().toInt().toString()),
+                  ),
+                  DataCell(
+                    Text(product.priceCents.toBigInt().toInt().toString()),
+                  ),
+                  DataCell(
+                    Text(
+                      localizedQuantity(
+                        product.stockQuantity,
+                        product.measurementType,
+                      ),
+                    ),
+                  ),
                 ],
               );
             }).toList(),

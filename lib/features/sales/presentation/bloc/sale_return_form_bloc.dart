@@ -56,21 +56,32 @@ class SaleReturnLineItem extends Equatable {
 
   @override
   List<Object?> get props => [
-        originalItem, returnQuantity,
-        subtotalCents, discountCents, taxCents, refundCents, reason,
-      ];
+    originalItem,
+    returnQuantity,
+    subtotalCents,
+    discountCents,
+    taxCents,
+    refundCents,
+    reason,
+  ];
 }
 
 /// ERP Golden Rule: Proportional reversal of original sale transaction.
 /// Delegates to [ReturnCalculationService.computeProportionalReturn].
 SaleReturnLineItem _computeProportionalSaleReturn(
-    SaleItemEntity original, int returnQty) {
+  SaleItemEntity original,
+  int returnQty, {
+  LinkedReturnHistory previousLinkedHistory = LinkedReturnHistory.zero,
+  bool taxInclusivePricing = false,
+}) {
   final result = ReturnCalculationService.computeProportionalReturn(
     originalQuantity: original.quantity,
     returnQuantity: returnQty,
     originalSubtotalCents: original.subtotalCents.toBigInt().toInt(),
     originalDiscountCents: original.discountCents.toBigInt().toInt(),
     originalTaxCents: original.taxCents.toBigInt().toInt(),
+    previousLinkedHistory: previousLinkedHistory,
+    taxInclusivePricing: taxInclusivePricing,
   );
   return SaleReturnLineItem(
     originalItem: original,
@@ -90,6 +101,7 @@ class SaleReturnFormState extends Equatable {
   final String? reason;
   final String dispositionType;
   final String refundMethod;
+
   /// Phase 14.0 — cheque due date. Required by `_onSubmitted` when
   /// [refundMethod] == 'cheque'. Ignored (persisted as NULL) otherwise.
   final DateTime? dueDate;
@@ -99,6 +111,7 @@ class SaleReturnFormState extends Equatable {
   final String? error;
   final bool isSuccess;
   final Map<int, int> alreadyReturnedQty;
+  final Map<int, LinkedReturnHistory> linkedReturnHistory;
 
   SaleReturnFormState({
     this.saleId,
@@ -115,6 +128,7 @@ class SaleReturnFormState extends Equatable {
     this.error,
     this.isSuccess = false,
     this.alreadyReturnedQty = const {},
+    this.linkedReturnHistory = const {},
   });
 
   /// True when refund-method = cheque but the operator has not yet picked
@@ -138,13 +152,15 @@ class SaleReturnFormState extends Equatable {
   // state instance; every `total*Cents` / `totalReturnQuantity` getter
   // reads from the same rollup so they can never disagree.
   late final ReturnRollup _rollup = ReturnCalculationService.aggregate(
-    returnItems.map((i) => (
-          subtotalCents: i.subtotalCents.toBigInt().toInt(),
-          discountCents: i.discountCents.toBigInt().toInt(),
-          taxCents: i.taxCents.toBigInt().toInt(),
-          refundCents: i.refundCents.toBigInt().toInt(),
-          quantity: i.returnQuantity,
-        )),
+    returnItems.map(
+      (i) => (
+        subtotalCents: i.subtotalCents.toBigInt().toInt(),
+        discountCents: i.discountCents.toBigInt().toInt(),
+        taxCents: i.taxCents.toBigInt().toInt(),
+        refundCents: i.refundCents.toBigInt().toInt(),
+        quantity: i.returnQuantity,
+      ),
+    ),
   );
 
   Decimal get totalRefundCents => Decimal.fromInt(_rollup.refundCents);
@@ -172,6 +188,7 @@ class SaleReturnFormState extends Equatable {
     String? error,
     bool? isSuccess,
     Map<int, int>? alreadyReturnedQty,
+    Map<int, LinkedReturnHistory>? linkedReturnHistory,
   }) {
     return SaleReturnFormState(
       saleId: saleId ?? this.saleId,
@@ -181,22 +198,37 @@ class SaleReturnFormState extends Equatable {
       reason: reason ?? this.reason,
       dispositionType: dispositionType ?? this.dispositionType,
       refundMethod: refundMethod ?? this.refundMethod,
-      dueDate: identical(dueDate, _sentinel) ? this.dueDate : dueDate as DateTime?,
+      dueDate: identical(dueDate, _sentinel)
+          ? this.dueDate
+          : dueDate as DateTime?,
       currencyId: currencyId ?? this.currencyId,
       isLoading: isLoading ?? this.isLoading,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       error: error,
       isSuccess: isSuccess ?? this.isSuccess,
       alreadyReturnedQty: alreadyReturnedQty ?? this.alreadyReturnedQty,
+      linkedReturnHistory: linkedReturnHistory ?? this.linkedReturnHistory,
     );
   }
 
   @override
   List<Object?> get props => [
-        saleId, sale, availableItems, returnItems,
-        reason, dispositionType, refundMethod, dueDate, currencyId,
-        isLoading, isSubmitting, error, isSuccess, alreadyReturnedQty,
-      ];
+    saleId,
+    sale,
+    availableItems,
+    returnItems,
+    reason,
+    dispositionType,
+    refundMethod,
+    dueDate,
+    currencyId,
+    isLoading,
+    isSubmitting,
+    error,
+    isSuccess,
+    alreadyReturnedQty,
+    linkedReturnHistory,
+  ];
 }
 
 /// Sentinel for `copyWith` to distinguish "don't touch" from "set to null".
@@ -288,8 +320,7 @@ class SaleReturnFormBloc
     extends Bloc<SaleReturnFormEvent, SaleReturnFormState> {
   final SaleRepository _repository;
 
-  SaleReturnFormBloc(this._repository)
-      : super(SaleReturnFormState()) {
+  SaleReturnFormBloc(this._repository) : super(SaleReturnFormState()) {
     on<SaleReturnFormInitialized>(_onInitialized);
     on<SaleReturnItemToggled>(_onItemToggled);
     on<SaleReturnItemQuantityChanged>(_onQuantityChanged);
@@ -313,9 +344,12 @@ class SaleReturnFormBloc
 
       // Fetch already-returned quantities for each item
       final alreadyReturned = <int, int>{};
+      final linkedHistory = <int, LinkedReturnHistory>{};
       for (final item in items) {
         final qty = await _repository.getReturnedQuantity(item.id);
         if (qty > 0) alreadyReturned[item.id] = qty;
+        final history = await _repository.getLinkedReturnHistory(item.id);
+        if (history.quantity > 0) linkedHistory[item.id] = history;
       }
 
       // Filter out items that are fully returned
@@ -324,13 +358,16 @@ class SaleReturnFormBloc
         return returned < item.quantity;
       }).toList();
 
-      emit(state.copyWith(
-        sale: sale,
-        availableItems: availableItems,
-        currencyId: sale?.currencyId ?? 1,
-        isLoading: false,
-        alreadyReturnedQty: alreadyReturned,
-      ));
+      emit(
+        state.copyWith(
+          sale: sale,
+          availableItems: availableItems,
+          currencyId: sale?.currencyId ?? 1,
+          isLoading: false,
+          alreadyReturnedQty: alreadyReturned,
+          linkedReturnHistory: linkedHistory,
+        ),
+      );
     } catch (e) {
       emit(state.copyWith(isLoading: false, error: e.toString()));
     }
@@ -352,7 +389,14 @@ class SaleReturnFormBloc
     } else {
       final maxQty = state.maxReturnableQty(event.item.id, event.item.quantity);
       if (maxQty <= 0) return; // fully returned already
-      final newItem = _computeProportionalSaleReturn(event.item, maxQty);
+      final newItem = _computeProportionalSaleReturn(
+        event.item,
+        maxQty,
+        previousLinkedHistory:
+            state.linkedReturnHistory[event.item.id] ??
+            LinkedReturnHistory.zero,
+        taxInclusivePricing: state.sale?.taxInclusiveAtPost ?? false,
+      );
       emit(state.copyWith(returnItems: [...state.returnItems, newItem]));
     }
   }
@@ -363,9 +407,19 @@ class SaleReturnFormBloc
   ) {
     final updated = state.returnItems.map((item) {
       if (item.originalItem.id == event.saleItemId) {
-        final maxQty = state.maxReturnableQty(item.originalItem.id, item.originalItem.quantity);
+        final maxQty = state.maxReturnableQty(
+          item.originalItem.id,
+          item.originalItem.quantity,
+        );
         final qty = event.quantity.clamp(1, maxQty > 0 ? maxQty : 1);
-        final computed = _computeProportionalSaleReturn(item.originalItem, qty);
+        final computed = _computeProportionalSaleReturn(
+          item.originalItem,
+          qty,
+          previousLinkedHistory:
+              state.linkedReturnHistory[item.originalItem.id] ??
+              LinkedReturnHistory.zero,
+          taxInclusivePricing: state.sale?.taxInclusiveAtPost ?? false,
+        );
         return computed.copyWith(reason: item.reason);
       }
       return item;
@@ -407,10 +461,12 @@ class SaleReturnFormBloc
     // When switching away from cheque, clear the due date so a stale
     // value cannot be persisted.
     final clearDueDate = event.refundMethod != 'cheque';
-    emit(state.copyWith(
-      refundMethod: event.refundMethod,
-      dueDate: clearDueDate ? null : state.dueDate,
-    ));
+    emit(
+      state.copyWith(
+        refundMethod: event.refundMethod,
+        dueDate: clearDueDate ? null : state.dueDate,
+      ),
+    );
   }
 
   void _onDueDateChanged(
@@ -437,9 +493,11 @@ class SaleReturnFormBloc
     // on the dashboard reminder. Caught here defensively even though
     // the UI also disables the confirm button.
     if (state.isChequeMissingDueDate) {
-      emit(state.copyWith(
-        error: 'Please select a due date for the cheque refund.',
-      ));
+      emit(
+        state.copyWith(
+          error: 'Please select a due date for the cheque refund.',
+        ),
+      );
       return;
     }
 
@@ -447,15 +505,19 @@ class SaleReturnFormBloc
 
     try {
       final items = state.returnItems
-          .map((item) => SaleReturnItemInput(
-                saleItemId: item.originalItem.id,
-                quantity: item.returnQuantity,
-                subtotalCents: item.subtotalCents,
-                discountCents: item.discountCents,
-                taxCents: item.taxCents,
-                refundCents: item.refundCents,
-                reason: item.reason,
-              ))
+          .map(
+            (item) => SaleReturnItemInput(
+              saleItemId: item.originalItem.id,
+              quantity: item.returnQuantity,
+              quantityScale: item.originalItem.quantityScale,
+              measurementType: item.originalItem.measurementType,
+              subtotalCents: item.subtotalCents,
+              discountCents: item.discountCents,
+              taxCents: item.taxCents,
+              refundCents: item.refundCents,
+              reason: item.reason,
+            ),
+          )
           .toList();
 
       // Idempotency token: caught by UNIQUE on sale_returns.idempotency_key
@@ -477,6 +539,7 @@ class SaleReturnFormBloc
         returnDate: DateTime.now(),
         dueDate: state.dueDate,
         idempotencyKey: idempotencyKey,
+        taxInclusiveAtPost: state.sale?.taxInclusiveAtPost ?? false,
       );
 
       emit(state.copyWith(isSubmitting: false, isSuccess: true));

@@ -23,7 +23,9 @@ class SettingsExpansionCard extends StatelessWidget {
           leading: Icon(icon, color: theme.colorScheme.primary, size: 20),
           title: Text(
             title,
-            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
           ),
           childrenPadding: const EdgeInsets.only(bottom: 8),
           children: children,
@@ -164,7 +166,9 @@ class SettingsSliderTile extends StatelessWidget {
       ),
       trailing: Text(
         '${value.round()}$labelSuffix',
-        style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
+        style: Theme.of(
+          context,
+        ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
       ),
     );
   }

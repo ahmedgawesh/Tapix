@@ -30,6 +30,7 @@ class ProductModel extends Product {
     required super.salesTaxRateBps,
     required super.isActive,
     required super.trackInventory,
+    super.measurementType,
     super.costingMethod,
     super.inventoryTrackingType,
   });
@@ -62,6 +63,7 @@ class ProductModel extends Product {
       salesTaxRateBps: product.salesTaxRateBps,
       isActive: product.isActive,
       trackInventory: product.trackInventory,
+      measurementType: product.measurementType,
       costingMethod: product.costingMethod,
       inventoryTrackingType: product.inventoryTrackingType,
     );
@@ -95,6 +97,7 @@ class ProductModel extends Product {
       salesTaxRateBps: entity.salesTaxRateBps,
       isActive: entity.isActive,
       trackInventory: entity.trackInventory,
+      measurementType: entity.measurementType,
       costingMethod: entity.costingMethod,
       inventoryTrackingType: entity.inventoryTrackingType,
     );
@@ -117,7 +120,7 @@ class ProductModel extends Product {
       minQuantity: Value(minQuantity),
       categoryId: Value(categoryId),
       supplierId: Value(supplierId),
-      currencyId: Value(currencyId ?? 1), 
+      currencyId: Value(currencyId ?? 1),
       imagePath: Value(imagePath),
       hasVariants: Value(hasVariants),
       isTaxable: Value(isTaxable),
@@ -125,6 +128,7 @@ class ProductModel extends Product {
       salesTaxRateBps: Value(salesTaxRateBps),
       isActive: Value(isActive),
       trackInventory: Value(trackInventory),
+      measurementType: Value(measurementType),
       costingMethod: Value(costingMethod),
       inventoryTrackingType: Value(inventoryTrackingType),
     );

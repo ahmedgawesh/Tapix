@@ -6,7 +6,6 @@ import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/currency_service.dart';
-import '../../../accounting/domain/repositories/journal_repository.dart';
 import '../../../accounting/presentation/services/journal_pdf_service.dart';
 import '../../../accounting/domain/models/trial_balance.dart';
 import '../bloc/reports_bloc.dart';
@@ -74,7 +73,10 @@ class _TrialBalanceView extends StatelessWidget {
                 children: [
                   Icon(Icons.error_outline, size: 48, color: colorScheme.error),
                   const SizedBox(height: 16),
-                  Text(state.error.toString(), style: theme.textTheme.bodyLarge),
+                  Text(
+                    state.error.toString(),
+                    style: theme.textTheme.bodyLarge,
+                  ),
                 ],
               ),
             );
@@ -90,9 +92,9 @@ class _TrialBalanceView extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                   child: DateRangeSelector(
                     dateRange: state.data.dateRange,
-                    onChanged: (range) => context
-                        .read<ReportsBloc>()
-                        .add(ReportsDateRangeChanged(range)),
+                    onChanged: (range) => context.read<ReportsBloc>().add(
+                      ReportsDateRangeChanged(range),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -118,7 +120,10 @@ class _TrialBalanceView extends StatelessWidget {
                           tb.isBalanced
                               ? 'reports.trial_balance_balanced'.tr()
                               : 'reports.trial_balance_unbalanced'.tr(
-                                  args: [cs.formatCents(tb.differenceCents.abs())]),
+                                  args: [
+                                    cs.formatCents(tb.differenceCents.abs()),
+                                  ],
+                                ),
                           style: theme.textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -144,13 +149,9 @@ class _TrialBalanceView extends StatelessWidget {
   }
 
   Future<void> _printReport(BuildContext context, ReportsData data) async {
-    final repo = sl<JournalRepository>();
-    final rawAccounts = await repo.watchAllAccounts().first;
-    if (!context.mounted) return;
     await JournalPdfService.printTrialBalance(
       context: context,
-      accounts: rawAccounts,
-      asOfDate: data.trialBalance.asOfDate,
+      trialBalance: data.trialBalance,
     );
     sl<AuditLogService>().log(
       entityType: 'report',
@@ -160,13 +161,9 @@ class _TrialBalanceView extends StatelessWidget {
   }
 
   Future<void> _shareReport(BuildContext context, ReportsData data) async {
-    final repo = sl<JournalRepository>();
-    final rawAccounts = await repo.watchAllAccounts().first;
-    if (!context.mounted) return;
     await JournalPdfService.shareTrialBalance(
       context: context,
-      accounts: rawAccounts,
-      asOfDate: data.trialBalance.asOfDate,
+      trialBalance: data.trialBalance,
     );
     sl<AuditLogService>().log(
       entityType: 'report',
@@ -202,8 +199,13 @@ class _TrialBalanceView extends StatelessWidget {
                 children: [
                   Text('reports.debit'.tr()),
                   const SizedBox(width: 4),
-                  Icon(LucideIcons.helpCircle, size: 12,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+                  Icon(
+                    LucideIcons.helpCircle,
+                    size: 12,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                  ),
                 ],
               ),
             ),
@@ -217,8 +219,13 @@ class _TrialBalanceView extends StatelessWidget {
                 children: [
                   Text('reports.credit'.tr()),
                   const SizedBox(width: 4),
-                  Icon(LucideIcons.helpCircle, size: 12,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+                  Icon(
+                    LucideIcons.helpCircle,
+                    size: 12,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                  ),
                 ],
               ),
             ),
@@ -226,25 +233,39 @@ class _TrialBalanceView extends StatelessWidget {
           ),
         ],
         rows: items.map((item) {
-          return DataRow(cells: [
-            DataCell(Text(
-              item.accountCode,
-              style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
-            )),
-            DataCell(Text(item.accountName)),
-            DataCell(Text(
-              item.debitCents > 0 ? cs.formatCents(item.debitCents) : '-',
-              style: TextStyle(
-                fontWeight: item.debitCents > 0 ? FontWeight.bold : FontWeight.normal,
+          return DataRow(
+            cells: [
+              DataCell(
+                Text(
+                  item.accountCode,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontFamily: 'monospace',
+                  ),
+                ),
               ),
-            )),
-            DataCell(Text(
-              item.creditCents > 0 ? cs.formatCents(item.creditCents) : '-',
-              style: TextStyle(
-                fontWeight: item.creditCents > 0 ? FontWeight.bold : FontWeight.normal,
+              DataCell(Text(item.accountName)),
+              DataCell(
+                Text(
+                  item.debitCents > 0 ? cs.formatCents(item.debitCents) : '-',
+                  style: TextStyle(
+                    fontWeight: item.debitCents > 0
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                  ),
+                ),
               ),
-            )),
-          ]);
+              DataCell(
+                Text(
+                  item.creditCents > 0 ? cs.formatCents(item.creditCents) : '-',
+                  style: TextStyle(
+                    fontWeight: item.creditCents > 0
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                  ),
+                ),
+              ),
+            ],
+          );
         }).toList(),
       ),
     );
@@ -272,11 +293,16 @@ class _TrialBalanceView extends StatelessWidget {
               children: [
                 Tooltip(
                   message: 'financial_management.debit_tooltip'.tr(),
-                  child: Text('reports.total_debits'.tr(), style: theme.textTheme.bodySmall),
+                  child: Text(
+                    'reports.total_debits'.tr(),
+                    style: theme.textTheme.bodySmall,
+                  ),
                 ),
                 Text(
                   cs.formatCents(tb.totalDebitCents),
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
@@ -287,11 +313,16 @@ class _TrialBalanceView extends StatelessWidget {
               children: [
                 Tooltip(
                   message: 'financial_management.credit_tooltip'.tr(),
-                  child: Text('reports.total_credits'.tr(), style: theme.textTheme.bodySmall),
+                  child: Text(
+                    'reports.total_credits'.tr(),
+                    style: theme.textTheme.bodySmall,
+                  ),
                 ),
                 Text(
                   cs.formatCents(tb.totalCreditCents),
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),

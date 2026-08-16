@@ -27,8 +27,7 @@ class CategoriesBloc extends RealtimeBloc<List<Category>, RealtimeEvent> {
   }
 
   @override
-  void registerEventHandlers() {
-  }
+  void registerEventHandlers() {}
 
   Future<void> _onLoadCategories(
     LoadCategories event,
@@ -52,9 +51,16 @@ class CategoriesBloc extends RealtimeBloc<List<Category>, RealtimeEvent> {
   ) async {
     try {
       if (event.parentId != null) {
-        final hasCircular = await _repository.hasCircularReference(0, event.parentId);
+        final hasCircular = await _repository.hasCircularReference(
+          0,
+          event.parentId,
+        );
         if (hasCircular) {
-          emit(RealtimeError(error: 'Circular reference detected. Cannot set parent category.'));
+          emit(
+            RealtimeError(
+              error: 'Circular reference detected. Cannot set parent category.',
+            ),
+          );
           return;
         }
       }
@@ -86,7 +92,11 @@ class CategoriesBloc extends RealtimeBloc<List<Category>, RealtimeEvent> {
           event.category.parentId,
         );
         if (hasCircular) {
-          emit(RealtimeError(error: 'Circular reference detected. Cannot set parent category.'));
+          emit(
+            RealtimeError(
+              error: 'Circular reference detected. Cannot set parent category.',
+            ),
+          );
           return;
         }
       }
@@ -107,7 +117,9 @@ class CategoriesBloc extends RealtimeBloc<List<Category>, RealtimeEvent> {
     try {
       final hasProducts = await _repository.hasProducts(event.categoryId);
       if (hasProducts) {
-        emit(RealtimeError(error: 'Cannot delete category with assigned products'));
+        emit(
+          RealtimeError(error: 'Cannot delete category with assigned products'),
+        );
         return;
       }
 
@@ -120,7 +132,9 @@ class CategoriesBloc extends RealtimeBloc<List<Category>, RealtimeEvent> {
   Future<Map<int, int>> getProductCounts(List<Category> categories) async {
     final counts = <int, int>{};
     for (final category in categories) {
-      counts[category.id] = await _repository.getProductCountByCategory(category.id);
+      counts[category.id] = await _repository.getProductCountByCategory(
+        category.id,
+      );
     }
     return counts;
   }

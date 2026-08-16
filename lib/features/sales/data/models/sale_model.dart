@@ -23,6 +23,7 @@ class SaleModel extends SaleEntity {
     super.notes,
     required super.saleDate,
     super.dueDate,
+    super.taxInclusiveAtPost,
     required super.createdAt,
     required super.updatedAt,
   });
@@ -44,6 +45,7 @@ class SaleModel extends SaleEntity {
       notes: sale.notes,
       saleDate: sale.saleDate,
       dueDate: sale.dueDate,
+      taxInclusiveAtPost: sale.taxInclusiveAtPost ?? false,
       createdAt: sale.createdAt,
       updatedAt: sale.updatedAt,
     );
@@ -69,6 +71,7 @@ class SaleModel extends SaleEntity {
       notes: swc.sale.notes,
       saleDate: swc.sale.saleDate,
       dueDate: swc.sale.dueDate,
+      taxInclusiveAtPost: swc.sale.taxInclusiveAtPost ?? false,
       createdAt: swc.sale.createdAt,
       updatedAt: swc.sale.updatedAt,
     );
@@ -88,6 +91,8 @@ class SaleItemModel extends SaleItemEntity {
     super.colorHex,
     super.sizeName,
     required super.quantity,
+    super.quantityScale,
+    super.measurementType,
     required super.unitPriceCents,
     required super.subtotalCents,
     required super.discountCents,
@@ -105,6 +110,8 @@ class SaleItemModel extends SaleItemEntity {
       productId: item.productId,
       variantId: item.variantId,
       quantity: item.quantity,
+      quantityScale: item.quantityScale,
+      measurementType: item.measurementType,
       unitPriceCents: item.unitPriceCents,
       subtotalCents: item.subtotalCents,
       discountCents: item.discountCents,
@@ -127,6 +134,8 @@ class SaleItemModel extends SaleItemEntity {
       colorHex: details.colorHex,
       sizeName: details.sizeName,
       quantity: details.item.quantity,
+      quantityScale: details.item.quantityScale,
+      measurementType: details.item.measurementType,
       unitPriceCents: details.item.unitPriceCents,
       subtotalCents: details.item.subtotalCents,
       discountCents: details.item.discountCents,
@@ -249,6 +258,8 @@ class SaleReturnItemModel extends SaleReturnItemEntity {
     required super.returnId,
     required super.saleItemId,
     required super.quantity,
+    super.quantityScale,
+    super.measurementType,
     super.subtotalCents,
     super.discountCents,
     super.taxCents,
@@ -270,6 +281,8 @@ class SaleReturnItemModel extends SaleReturnItemEntity {
       returnId: item.returnId,
       saleItemId: item.saleItemId,
       quantity: item.quantity,
+      quantityScale: item.quantityScale,
+      measurementType: item.measurementType,
       subtotalCents: item.subtotalCents,
       discountCents: item.discountCents,
       taxCents: item.taxCents,
@@ -280,12 +293,15 @@ class SaleReturnItemModel extends SaleReturnItemEntity {
   }
 
   factory SaleReturnItemModel.fromDriftWithDetails(
-      SaleReturnItemWithDetails d) {
+    SaleReturnItemWithDetails d,
+  ) {
     return SaleReturnItemModel(
       id: d.returnItem.id,
       returnId: d.returnItem.returnId,
       saleItemId: d.returnItem.saleItemId,
       quantity: d.returnItem.quantity,
+      quantityScale: d.returnItem.quantityScale,
+      measurementType: d.returnItem.measurementType,
       subtotalCents: d.returnItem.subtotalCents,
       discountCents: d.returnItem.discountCents,
       taxCents: d.returnItem.taxCents,

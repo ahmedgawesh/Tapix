@@ -33,14 +33,51 @@ void main() {
   late int productId;
   late int variantId;
 
+  test('measured FIFO audit values use the major-unit cost scale', () {
+    final batch = BatchSummary(
+      batchId: 1,
+      batchNumber: 'KG-1',
+      productId: 1,
+      variantId: 0,
+      variantLabel: null,
+      source: 'opening',
+      supplierId: null,
+      supplierName: null,
+      purchaseItemId: null,
+      receivedDate: DateTime.utc(2026),
+      expiryDate: null,
+      receivedQuantity: 250,
+      remainingQuantity: 250,
+      unitCostCents: 10000,
+      quantityScale: 1000,
+      measurementType: 'weight',
+      isActive: true,
+    );
+    const layer = BatchSaleConsumed(
+      batchId: 1,
+      batchNumber: 'KG-1',
+      quantity: 250,
+      unitCostCents: 10000,
+      quantityScale: 1000,
+      measurementType: 'weight',
+      expiryDate: null,
+    );
+
+    expect(batch.totalRemainingValueCents, 2500);
+    expect(layer.totalCostCents, 2500);
+  });
+
   /// Insert the bare-minimum rows needed for the DAO under test.
   Future<void> seedFixture() async {
     // Schema integrity bootstrapping pre-seeds a USD row, so reuse it.
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingleOrNull();
-    currencyId = usd?.id ??
-        await db.into(db.currencies).insert(
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingleOrNull();
+    currencyId =
+        usd?.id ??
+        await db
+            .into(db.currencies)
+            .insert(
               CurrenciesCompanion.insert(
                 code: 'USD',
                 name: 'US Dollar',
@@ -48,13 +85,17 @@ void main() {
                 exchangeRate: Decimal.fromInt(1),
               ),
             );
-    supplierId = await db.into(db.suppliers).insert(
+    supplierId = await db
+        .into(db.suppliers)
+        .insert(
           SuppliersCompanion.insert(
             name: 'Acme Imports',
             currencyId: currencyId,
           ),
         );
-    productId = await db.into(db.products).insert(
+    productId = await db
+        .into(db.products)
+        .insert(
           ProductsCompanion.insert(
             sku: const Value('AUDIT-1'),
             name: 'Audit fixture product',
@@ -64,7 +105,9 @@ void main() {
             inventoryTrackingType: const Value('batch_expiry'),
           ),
         );
-    variantId = await db.into(db.productVariants).insert(
+    variantId = await db
+        .into(db.productVariants)
+        .insert(
           ProductVariantsCompanion.insert(
             productId: productId,
             stockQuantity: const Value(0),
@@ -109,7 +152,9 @@ void main() {
   /// Create a Sale + SaleItem skeleton and consume FEFO against the seeded
   /// batches. Returns the saleItemId so tests can pivot on it.
   Future<({int saleId, int saleItemId})> createSaleConsuming(int qty) async {
-    final saleId = await db.into(db.sales).insert(
+    final saleId = await db
+        .into(db.sales)
+        .insert(
           SalesCompanion.insert(
             invoiceNumber: 'INV-${DateTime.now().microsecondsSinceEpoch}',
             currencyId: currencyId,
@@ -120,7 +165,9 @@ void main() {
             saleDate: Value(DateTime.now()),
           ),
         );
-    final saleItemId = await db.into(db.saleItems).insert(
+    final saleItemId = await db
+        .into(db.saleItems)
+        .insert(
           SaleItemsCompanion.insert(
             saleId: saleId,
             productId: productId,
@@ -192,39 +239,41 @@ void main() {
       expect(batches.last.expiryDate, laterExpiry);
     });
 
-    test('hides depleted batches by default and exposes them on opt-in',
-        () async {
-      await insertBatch(
-        qty: 10,
-        unitCostCents: 100,
-        received: DateTime.utc(2026, 1, 1),
-        expiry: DateTime.utc(2026, 6, 1),
-      );
-      await insertBatch(
-        qty: 20,
-        unitCostCents: 110,
-        received: DateTime.utc(2026, 2, 1),
-        expiry: DateTime.utc(2026, 7, 1),
-      );
-      // Sell down the first batch entirely.
-      await createSaleConsuming(10);
+    test(
+      'hides depleted batches by default and exposes them on opt-in',
+      () async {
+        await insertBatch(
+          qty: 10,
+          unitCostCents: 100,
+          received: DateTime.utc(2026, 1, 1),
+          expiry: DateTime.utc(2026, 6, 1),
+        );
+        await insertBatch(
+          qty: 20,
+          unitCostCents: 110,
+          received: DateTime.utc(2026, 2, 1),
+          expiry: DateTime.utc(2026, 7, 1),
+        );
+        // Sell down the first batch entirely.
+        await createSaleConsuming(10);
 
-      final visible = await audit.getBatchesForProduct(productId: productId);
-      expect(visible, hasLength(1));
-      expect(visible.single.remainingQuantity, 20);
+        final visible = await audit.getBatchesForProduct(productId: productId);
+        expect(visible, hasLength(1));
+        expect(visible.single.remainingQuantity, 20);
 
-      final all = await audit.getBatchesForProduct(
-        productId: productId,
-        includeDepleted: true,
-      );
-      expect(all, hasLength(2));
-      // The depleted batch is still surfaced, with consumedQuantity reflecting
-      // the sale.
-      final depleted = all.firstWhere((b) => b.remainingQuantity == 0);
-      expect(depleted.receivedQuantity, 10);
-      expect(depleted.consumedQuantity, 10);
-      expect(depleted.isDepleted, isTrue);
-    });
+        final all = await audit.getBatchesForProduct(
+          productId: productId,
+          includeDepleted: true,
+        );
+        expect(all, hasLength(2));
+        // The depleted batch is still surfaced, with consumedQuantity reflecting
+        // the sale.
+        final depleted = all.firstWhere((b) => b.remainingQuantity == 0);
+        expect(depleted.receivedQuantity, 10);
+        expect(depleted.consumedQuantity, 10);
+        expect(depleted.isDepleted, isTrue);
+      },
+    );
   });
 
   group('getConsumptionsForBatch', () {
@@ -249,74 +298,79 @@ void main() {
   });
 
   group('getBatchFlowForSale', () {
-    test('reconstructs per-line FEFO consumption with frozen unit costs',
-        () async {
-      // Two batches with different unit costs. The earlier-expiry one is
-      // cheaper, so FEFO should consume that first.
-      await insertBatch(
-        qty: 6,
-        unitCostCents: 100,
-        received: DateTime.utc(2026, 1, 1),
-        expiry: DateTime.utc(2026, 6, 1),
-      );
-      await insertBatch(
-        qty: 4,
-        unitCostCents: 150,
-        received: DateTime.utc(2026, 2, 1),
-        expiry: DateTime.utc(2026, 9, 1),
-      );
+    test(
+      'reconstructs per-line FEFO consumption with frozen unit costs',
+      () async {
+        // Two batches with different unit costs. The earlier-expiry one is
+        // cheaper, so FEFO should consume that first.
+        await insertBatch(
+          qty: 6,
+          unitCostCents: 100,
+          received: DateTime.utc(2026, 1, 1),
+          expiry: DateTime.utc(2026, 6, 1),
+        );
+        await insertBatch(
+          qty: 4,
+          unitCostCents: 150,
+          received: DateTime.utc(2026, 2, 1),
+          expiry: DateTime.utc(2026, 9, 1),
+        );
 
-      final ids = await createSaleConsuming(8);
-      final flow = await audit.getBatchFlowForSale(ids.saleId);
+        final ids = await createSaleConsuming(8);
+        final flow = await audit.getBatchFlowForSale(ids.saleId);
 
-      expect(flow, hasLength(1));
-      final line = flow.single;
-      expect(line.saleItemId, ids.saleItemId);
-      expect(line.totalQuantity, 8);
-      expect(line.batches, hasLength(2));
-      // Cheaper / earlier expiry batch consumed in full first.
-      expect(line.batches[0].quantity, 6);
-      expect(line.batches[0].unitCostCents, 100);
-      // Then 2 of the second batch.
-      expect(line.batches[1].quantity, 2);
-      expect(line.batches[1].unitCostCents, 150);
-      // Reconstructed COGS = 6*100 + 2*150 = 900.
-      expect(line.reconstructedCogsCents, 900);
-      expect(line.isBatchTracked, isTrue);
-    });
+        expect(flow, hasLength(1));
+        final line = flow.single;
+        expect(line.saleItemId, ids.saleItemId);
+        expect(line.totalQuantity, 8);
+        expect(line.batches, hasLength(2));
+        // Cheaper / earlier expiry batch consumed in full first.
+        expect(line.batches[0].quantity, 6);
+        expect(line.batches[0].unitCostCents, 100);
+        // Then 2 of the second batch.
+        expect(line.batches[1].quantity, 2);
+        expect(line.batches[1].unitCostCents, 150);
+        // Reconstructed COGS = 6*100 + 2*150 = 900.
+        expect(line.reconstructedCogsCents, 900);
+        expect(line.isBatchTracked, isTrue);
+      },
+    );
 
-    test('nets partial returns: a 4-unit return shrinks the OUT slice', () async {
-      final batchId = await insertBatch(
-        qty: 10,
-        unitCostCents: 100,
-        received: DateTime.utc(2026, 1, 1),
-        expiry: DateTime.utc(2026, 6, 1),
-      );
-      final ids = await createSaleConsuming(8);
+    test(
+      'nets partial returns: a 4-unit return shrinks the OUT slice',
+      () async {
+        final batchId = await insertBatch(
+          qty: 10,
+          unitCostCents: 100,
+          received: DateTime.utc(2026, 1, 1),
+          expiry: DateTime.utc(2026, 6, 1),
+        );
+        final ids = await createSaleConsuming(8);
 
-      // Simulate a 4-unit return. Production (`SaleDao.postSaleReturn`)
-      // calls `restoreConsumptions` filtered by `saleItemId` only — the
-      // resolver matches against the original `'out'` rows whose FK is
-      // `sale_item_id`. Passing additional FKs (e.g. `saleReturnItemId`)
-      // would AND them into the filter and match nothing, so we mirror
-      // the production call here.
-      final restored = await BatchService.restoreConsumptions(
-        db.purchaseDao,
-        reverseConsumptionType: 'sale_return_reverse',
-        saleItemId: ids.saleItemId,
-        upToQuantity: 4,
-      );
-      expect(restored, 4);
+        // Simulate a 4-unit return. Production (`SaleDao.postSaleReturn`)
+        // calls `restoreConsumptions` filtered by `saleItemId` only — the
+        // resolver matches against the original `'out'` rows whose FK is
+        // `sale_item_id`. Passing additional FKs (e.g. `saleReturnItemId`)
+        // would AND them into the filter and match nothing, so we mirror
+        // the production call here.
+        final restored = await BatchService.restoreConsumptions(
+          db.purchaseDao,
+          reverseConsumptionType: 'sale_return_reverse',
+          saleItemId: ids.saleItemId,
+          upToQuantity: 4,
+        );
+        expect(restored, 4);
 
-      final flow = await audit.getBatchFlowForSale(ids.saleId);
-      final line = flow.single;
-      // Net 'out' = 8 − 4 = 4.
-      expect(line.batches, hasLength(1));
-      expect(line.batches.single.batchId, batchId);
-      expect(line.batches.single.quantity, 4);
-      expect(line.batches.single.unitCostCents, 100);
-      expect(line.reconstructedCogsCents, 400);
-    });
+        final flow = await audit.getBatchFlowForSale(ids.saleId);
+        final line = flow.single;
+        // Net 'out' = 8 − 4 = 4.
+        expect(line.batches, hasLength(1));
+        expect(line.batches.single.batchId, batchId);
+        expect(line.batches.single.quantity, 4);
+        expect(line.batches.single.unitCostCents, 100);
+        expect(line.reconstructedCogsCents, 400);
+      },
+    );
   });
 
   group('getConsumptionsForSaleItem', () {
@@ -347,34 +401,36 @@ void main() {
   });
 
   group('watchAllBatches (Phase H3)', () {
-    test('returns all batches FEFO-ordered with productName/productSku enriched',
-        () async {
-      // Two batches on the seeded product, plus a second product with one batch.
-      await insertBatch(
-        qty: 5,
-        unitCostCents: 100,
-        received: DateTime.utc(2026, 1, 1),
-        expiry: DateTime.utc(2026, 9, 1),
-      );
-      await insertBatch(
-        qty: 7,
-        unitCostCents: 110,
-        received: DateTime.utc(2026, 2, 1),
-        expiry: DateTime.utc(2026, 6, 1), // earlier expiry → first
-      );
+    test(
+      'returns all batches FEFO-ordered with productName/productSku enriched',
+      () async {
+        // Two batches on the seeded product, plus a second product with one batch.
+        await insertBatch(
+          qty: 5,
+          unitCostCents: 100,
+          received: DateTime.utc(2026, 1, 1),
+          expiry: DateTime.utc(2026, 9, 1),
+        );
+        await insertBatch(
+          qty: 7,
+          unitCostCents: 110,
+          received: DateTime.utc(2026, 2, 1),
+          expiry: DateTime.utc(2026, 6, 1), // earlier expiry → first
+        );
 
-      final rows = await audit.watchAllBatches().first;
+        final rows = await audit.watchAllBatches().first;
 
-      expect(rows, hasLength(2));
-      // FEFO ordering: earlier expiry first.
-      expect(rows.first.expiryDate, DateTime.utc(2026, 6, 1));
-      // Cross-product surface populates productName / productSku.
-      for (final r in rows) {
-        expect(r.productName, 'Audit fixture product');
-        expect(r.productSku, 'AUDIT-1');
-        expect(r.supplierName, 'Acme Imports');
-      }
-    });
+        expect(rows, hasLength(2));
+        // FEFO ordering: earlier expiry first.
+        expect(rows.first.expiryDate, DateTime.utc(2026, 6, 1));
+        // Cross-product surface populates productName / productSku.
+        for (final r in rows) {
+          expect(r.productName, 'Audit fixture product');
+          expect(r.productSku, 'AUDIT-1');
+          expect(r.supplierName, 'Acme Imports');
+        }
+      },
+    );
 
     test('source filter narrows by exact source string', () async {
       // Insert one 'opening' batch (default fixture path).
@@ -403,13 +459,13 @@ void main() {
       final all = await audit.watchAllBatches().first;
       expect(all, hasLength(2));
 
-      final purchaseOnly =
-          await audit.watchAllBatches(source: 'opening').first;
+      final purchaseOnly = await audit.watchAllBatches(source: 'opening').first;
       expect(purchaseOnly, hasLength(1));
       expect(purchaseOnly.single.source, 'opening');
 
-      final returnOnly =
-          await audit.watchAllBatches(source: 'sale_return').first;
+      final returnOnly = await audit
+          .watchAllBatches(source: 'sale_return')
+          .first;
       expect(returnOnly, hasLength(1));
       expect(returnOnly.single.source, 'sale_return');
     });
@@ -442,17 +498,16 @@ void main() {
         expiry: today.add(const Duration(days: 45)),
       );
       // 4) No-expiry batch.
-      await insertBatch(
-        qty: 1,
-        unitCostCents: 100,
-        received: today,
-      );
+      await insertBatch(qty: 1, unitCostCents: 100, received: today);
 
       final expired = await audit
           .watchAllBatches(expiryFilter: BatchExpiryFilter.expired)
           .first;
       expect(expired, hasLength(1));
-      expect(expired.single.expiryDate!.isBefore(today.add(const Duration(days: 1))), isTrue);
+      expect(
+        expired.single.expiryDate!.isBefore(today.add(const Duration(days: 1))),
+        isTrue,
+      );
 
       final in30 = await audit
           .watchAllBatches(expiryFilter: BatchExpiryFilter.in30Days)
@@ -517,11 +572,10 @@ void main() {
         received: DateTime.utc(2026, 1, 1),
       );
       // A second supplier with its own batch.
-      final supplier2 = await db.into(db.suppliers).insert(
-            SuppliersCompanion.insert(
-              name: 'Other Co',
-              currencyId: currencyId,
-            ),
+      final supplier2 = await db
+          .into(db.suppliers)
+          .insert(
+            SuppliersCompanion.insert(name: 'Other Co', currencyId: currencyId),
           );
       await insertBatch(
         qty: 2,
@@ -533,53 +587,60 @@ void main() {
       final all = await audit.watchAllBatches().first;
       expect(all, hasLength(2));
 
-      final justOther =
-          await audit.watchAllBatches(supplierId: supplier2).first;
+      final justOther = await audit
+          .watchAllBatches(supplierId: supplier2)
+          .first;
       expect(justOther, hasLength(1));
       expect(justOther.single.supplierName, 'Other Co');
     });
   });
 
   group('standard-tracked sales', () {
-    test('emit no batch consumptions; flow falls back to snapshotCostCents',
-        () async {
-      // Flip the product to standard tracking: no batches will be created.
-      await db.customStatement(
-        "UPDATE products SET inventory_tracking_type = 'standard' WHERE id = ?",
-        [productId],
-      );
-      // Manually create a sale + sale_item with a snapshot cost; do NOT call
-      // BatchService.consumeFifo.
-      final saleId = await db.into(db.sales).insert(
-            SalesCompanion.insert(
-              invoiceNumber: 'INV-STD-1',
-              currencyId: currencyId,
-              subtotalCents: Decimal.fromInt(600),
-              taxCents: Decimal.zero,
-              totalCents: Decimal.fromInt(600),
-              paymentMethod: 'cash',
-              saleDate: Value(DateTime.now()),
-            ),
-          );
-      await db.into(db.saleItems).insert(
-            SaleItemsCompanion.insert(
-              saleId: saleId,
-              productId: productId,
-              variantId: Value(variantId),
-              quantity: 3,
-              unitPriceCents: Decimal.fromInt(200),
-              subtotalCents: Decimal.fromInt(600),
-              totalCents: Decimal.fromInt(600),
-              costCents: Value(Decimal.fromInt(330)),
-            ),
-          );
+    test(
+      'emit no batch consumptions; flow falls back to snapshotCostCents',
+      () async {
+        // Flip the product to standard tracking: no batches will be created.
+        await db.customStatement(
+          "UPDATE products SET inventory_tracking_type = 'standard' WHERE id = ?",
+          [productId],
+        );
+        // Manually create a sale + sale_item with a snapshot cost; do NOT call
+        // BatchService.consumeFifo.
+        final saleId = await db
+            .into(db.sales)
+            .insert(
+              SalesCompanion.insert(
+                invoiceNumber: 'INV-STD-1',
+                currencyId: currencyId,
+                subtotalCents: Decimal.fromInt(600),
+                taxCents: Decimal.zero,
+                totalCents: Decimal.fromInt(600),
+                paymentMethod: 'cash',
+                saleDate: Value(DateTime.now()),
+              ),
+            );
+        await db
+            .into(db.saleItems)
+            .insert(
+              SaleItemsCompanion.insert(
+                saleId: saleId,
+                productId: productId,
+                variantId: Value(variantId),
+                quantity: 3,
+                unitPriceCents: Decimal.fromInt(200),
+                subtotalCents: Decimal.fromInt(600),
+                totalCents: Decimal.fromInt(600),
+                costCents: Value(Decimal.fromInt(330)),
+              ),
+            );
 
-      final flow = await audit.getBatchFlowForSale(saleId);
-      expect(flow, hasLength(1));
-      expect(flow.single.batches, isEmpty);
-      expect(flow.single.isBatchTracked, isFalse);
-      expect(flow.single.snapshotCostCents, 330);
-      expect(flow.single.reconstructedCogsCents, 0);
-    });
+        final flow = await audit.getBatchFlowForSale(saleId);
+        expect(flow, hasLength(1));
+        expect(flow.single.batches, isEmpty);
+        expect(flow.single.isBatchTracked, isFalse);
+        expect(flow.single.snapshotCostCents, 330);
+        expect(flow.single.reconstructedCogsCents, 0);
+      },
+    );
   });
 }

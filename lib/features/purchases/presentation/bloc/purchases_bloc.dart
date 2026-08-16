@@ -54,7 +54,9 @@ class PurchasesHubData {
       }).toList();
     }
     // Limit results for performance
-    if (list.length > searchResultLimit && searchQuery != null && searchQuery!.isNotEmpty) {
+    if (list.length > searchResultLimit &&
+        searchQuery != null &&
+        searchQuery!.isNotEmpty) {
       list = list.sublist(0, searchResultLimit);
     }
     return list;
@@ -72,7 +74,8 @@ class PurchasesHubData {
     for (final purchase in purchases) {
       // Only flag product match if the purchase did NOT match by number/supplier/phone
       final matchesNumber = purchase.purchaseNumber.toLowerCase().contains(q);
-      final matchesSupplier = purchase.supplierName?.toLowerCase().contains(q) ?? false;
+      final matchesSupplier =
+          purchase.supplierName?.toLowerCase().contains(q) ?? false;
       final matchesPhone = purchase.supplierPhone?.contains(q) ?? false;
       if (!matchesNumber && !matchesSupplier && !matchesPhone) {
         final terms = productTerms[purchase.id];
@@ -146,7 +149,9 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
       _returnPurchaseIds = ids;
       _emitCombined();
     });
-    _productTermsSub = _repository.watchPurchaseProductSearchTerms().listen((terms) {
+    _productTermsSub = _repository.watchPurchaseProductSearchTerms().listen((
+      terms,
+    ) {
       _productSearchTerms = terms;
       _emitCombined();
     });
@@ -168,17 +173,25 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
       final terms = _productSearchTerms ?? const {};
       return PurchasesHubData(
         purchases: purchases,
-        stats: _latestStats ?? const PurchaseDashboardStats(
-          totalCount: 0, draftCount: 0, postedCount: 0,
-          totalPayableCents: 0, totalPaidCents: 0,
-          overdueCount: 0, returnsCount: 0,
-        ),
+        stats:
+            _latestStats ??
+            const PurchaseDashboardStats(
+              totalCount: 0,
+              draftCount: 0,
+              postedCount: 0,
+              totalPayableCents: 0,
+              totalPaidCents: 0,
+              overdueCount: 0,
+              returnsCount: 0,
+            ),
         searchQuery: _searchQuery,
         statusFilter: _statusFilter,
         purchaseIdsWithReturns: _returnPurchaseIds ?? const {},
         productSearchTerms: terms,
         productMatchedPurchaseIds: PurchasesHubData.computeProductMatchedIds(
-          purchases, _searchQuery, terms,
+          purchases,
+          _searchQuery,
+          terms,
         ),
       );
     });
@@ -188,17 +201,24 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
     if (_latestPurchases != null && _latestStats != null) {
       final terms = _productSearchTerms ?? const {};
       // ignore: invalid_use_of_visible_for_testing_member
-      emit(RealtimeSuccess(data: PurchasesHubData(
-        purchases: _latestPurchases!,
-        stats: _latestStats!,
-        searchQuery: _searchQuery,
-        statusFilter: _statusFilter,
-        purchaseIdsWithReturns: _returnPurchaseIds ?? const {},
-        productSearchTerms: terms,
-        productMatchedPurchaseIds: PurchasesHubData.computeProductMatchedIds(
-          _latestPurchases!, _searchQuery, terms,
+      emit(
+        RealtimeSuccess(
+          data: PurchasesHubData(
+            purchases: _latestPurchases!,
+            stats: _latestStats!,
+            searchQuery: _searchQuery,
+            statusFilter: _statusFilter,
+            purchaseIdsWithReturns: _returnPurchaseIds ?? const {},
+            productSearchTerms: terms,
+            productMatchedPurchaseIds:
+                PurchasesHubData.computeProductMatchedIds(
+                  _latestPurchases!,
+                  _searchQuery,
+                  terms,
+                ),
+          ),
         ),
-      )));
+      );
     }
   }
 
@@ -210,17 +230,24 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
     final data = currentData;
     if (data != null) {
       final terms = _productSearchTerms ?? const {};
-      emit(RealtimeSuccess(data: PurchasesHubData(
-        purchases: data.purchases,
-        stats: data.stats,
-        searchQuery: _searchQuery,
-        statusFilter: _statusFilter,
-        purchaseIdsWithReturns: data.purchaseIdsWithReturns,
-        productSearchTerms: terms,
-        productMatchedPurchaseIds: PurchasesHubData.computeProductMatchedIds(
-          data.purchases, _searchQuery, terms,
+      emit(
+        RealtimeSuccess(
+          data: PurchasesHubData(
+            purchases: data.purchases,
+            stats: data.stats,
+            searchQuery: _searchQuery,
+            statusFilter: _statusFilter,
+            purchaseIdsWithReturns: data.purchaseIdsWithReturns,
+            productSearchTerms: terms,
+            productMatchedPurchaseIds:
+                PurchasesHubData.computeProductMatchedIds(
+                  data.purchases,
+                  _searchQuery,
+                  terms,
+                ),
+          ),
         ),
-      )));
+      );
     }
   }
 
@@ -232,17 +259,24 @@ class PurchasesBloc extends RealtimeBloc<PurchasesHubData, PurchasesEvent> {
     final data = currentData;
     if (data != null) {
       final terms = _productSearchTerms ?? const {};
-      emit(RealtimeSuccess(data: PurchasesHubData(
-        purchases: data.purchases,
-        stats: data.stats,
-        searchQuery: _searchQuery,
-        statusFilter: _statusFilter,
-        purchaseIdsWithReturns: data.purchaseIdsWithReturns,
-        productSearchTerms: terms,
-        productMatchedPurchaseIds: PurchasesHubData.computeProductMatchedIds(
-          data.purchases, _searchQuery, terms,
+      emit(
+        RealtimeSuccess(
+          data: PurchasesHubData(
+            purchases: data.purchases,
+            stats: data.stats,
+            searchQuery: _searchQuery,
+            statusFilter: _statusFilter,
+            purchaseIdsWithReturns: data.purchaseIdsWithReturns,
+            productSearchTerms: terms,
+            productMatchedPurchaseIds:
+                PurchasesHubData.computeProductMatchedIds(
+                  data.purchases,
+                  _searchQuery,
+                  terms,
+                ),
+          ),
         ),
-      )));
+      );
     }
   }
 

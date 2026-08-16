@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../services/stock_movement_pdf_service.dart';
@@ -30,8 +31,7 @@ class _StockMovementReportView extends StatefulWidget {
       _StockMovementReportViewState();
 }
 
-class _StockMovementReportViewState
-    extends State<_StockMovementReportView> {
+class _StockMovementReportViewState extends State<_StockMovementReportView> {
   final _searchController = TextEditingController();
   final _searchFocusNode = FocusNode();
 
@@ -51,8 +51,10 @@ class _StockMovementReportViewState
       appBar: AppBar(
         title: Text('reports.stock_movement_report'.tr()),
         actions: [
-          BlocBuilder<StockMovementReportBloc,
-              RealtimeState<StockMovementReportData>>(
+          BlocBuilder<
+            StockMovementReportBloc,
+            RealtimeState<StockMovementReportData>
+          >(
             builder: (context, state) {
               if (state is! RealtimeSuccess<StockMovementReportData>) {
                 return const SizedBox.shrink();
@@ -79,72 +81,78 @@ class _StockMovementReportViewState
           ),
         ],
       ),
-      body: BlocBuilder<StockMovementReportBloc,
-          RealtimeState<StockMovementReportData>>(
-        builder: (context, state) {
-          if (state is RealtimeLoading<StockMovementReportData>) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body:
+          BlocBuilder<
+            StockMovementReportBloc,
+            RealtimeState<StockMovementReportData>
+          >(
+            builder: (context, state) {
+              if (state is RealtimeLoading<StockMovementReportData>) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (state is RealtimeError<StockMovementReportData>) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline,
-                      size: 48, color: colorScheme.error),
-                  const SizedBox(height: 16),
-                  Text(state.error.toString(),
-                      style: theme.textTheme.bodyLarge),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    onPressed: () => context
-                        .read<StockMovementReportBloc>()
-                        .refresh(),
-                    icon: const Icon(LucideIcons.refreshCw),
-                    label: Text('reports.retry'.tr()),
+              if (state is RealtimeError<StockMovementReportData>) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        state.error.toString(),
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: () =>
+                            context.read<StockMovementReportBloc>().refresh(),
+                        icon: const Icon(LucideIcons.refreshCw),
+                        label: Text('reports.retry'.tr()),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            );
-          }
+                );
+              }
 
-          if (state is RealtimeSuccess<StockMovementReportData>) {
-            return Column(
-              children: [
-                // Date range selector
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: DateRangeSelector(
-                    dateRange: state.data.dateRange,
-                    onChanged: (range) => context
-                        .read<StockMovementReportBloc>()
-                        .add(StockMovementDateRangeChanged(range)),
-                  ),
-                ),
-                const SizedBox(height: 12),
+              if (state is RealtimeSuccess<StockMovementReportData>) {
+                return Column(
+                  children: [
+                    // Date range selector
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: DateRangeSelector(
+                        dateRange: state.data.dateRange,
+                        onChanged: (range) => context
+                            .read<StockMovementReportBloc>()
+                            .add(StockMovementDateRangeChanged(range)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
 
-                // Search bar
-                _buildSearchBar(context, state.data),
+                    // Search bar
+                    _buildSearchBar(context, state.data),
 
-                // Content
-                Expanded(
-                  child: state.data.selectedProductId == null
-                      ? _buildEmptyState(context, state.data)
-                      : _buildMovementContent(context, state.data),
-                ),
-              ],
-            );
-          }
+                    // Content
+                    Expanded(
+                      child: state.data.selectedProductId == null
+                          ? _buildEmptyState(context, state.data)
+                          : _buildMovementContent(context, state.data),
+                    ),
+                  ],
+                );
+              }
 
-          return const SizedBox.shrink();
-        },
-      ),
+              return const SizedBox.shrink();
+            },
+          ),
     );
   }
 
-  Widget _buildSearchBar(
-      BuildContext context, StockMovementReportData data) {
+  Widget _buildSearchBar(BuildContext context, StockMovementReportData data) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -156,16 +164,18 @@ class _StockMovementReportViewState
           // Selected product chip or search field
           if (data.selectedProductId != null)
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: colorScheme.primaryContainer,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 children: [
-                  Icon(LucideIcons.package,
-                      size: 18, color: colorScheme.onPrimaryContainer),
+                  Icon(
+                    LucideIcons.package,
+                    size: 18,
+                    color: colorScheme.onPrimaryContainer,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -177,18 +187,23 @@ class _StockMovementReportViewState
                     ),
                   ),
                   IconButton(
-                    icon: Icon(LucideIcons.x,
-                        size: 18, color: colorScheme.onPrimaryContainer),
+                    icon: Icon(
+                      LucideIcons.x,
+                      size: 18,
+                      color: colorScheme.onPrimaryContainer,
+                    ),
                     onPressed: () {
                       _searchController.clear();
-                      context
-                          .read<StockMovementReportBloc>()
-                          .add(const StockMovementProductCleared());
+                      context.read<StockMovementReportBloc>().add(
+                        const StockMovementProductCleared(),
+                      );
                     },
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(
-                        minWidth: 32, minHeight: 32),
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
                   ),
                 ],
               ),
@@ -205,9 +220,9 @@ class _StockMovementReportViewState
                         icon: const Icon(LucideIcons.x, size: 18),
                         onPressed: () {
                           _searchController.clear();
-                          context
-                              .read<StockMovementReportBloc>()
-                              .add(const StockMovementSearchChanged(''));
+                          context.read<StockMovementReportBloc>().add(
+                            const StockMovementSearchChanged(''),
+                          );
                         },
                       )
                     : null,
@@ -218,16 +233,17 @@ class _StockMovementReportViewState
                   borderSide: BorderSide.none,
                 ),
                 contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 12),
+                  horizontal: 16,
+                  vertical: 12,
+                ),
               ),
-              onChanged: (value) => context
-                  .read<StockMovementReportBloc>()
-                  .add(StockMovementSearchChanged(value)),
+              onChanged: (value) => context.read<StockMovementReportBloc>().add(
+                StockMovementSearchChanged(value),
+              ),
             ),
 
           // Search results dropdown
-          if (data.searchResults.isNotEmpty &&
-              data.selectedProductId == null)
+          if (data.searchResults.isNotEmpty && data.selectedProductId == null)
             Container(
               margin: const EdgeInsets.only(top: 4),
               constraints: const BoxConstraints(maxHeight: 200),
@@ -252,20 +268,26 @@ class _StockMovementReportViewState
                   final result = data.searchResults[index];
                   return ListTile(
                     dense: true,
-                    leading: Icon(LucideIcons.package,
-                        size: 20, color: colorScheme.primary),
-                    title: Text(result.name,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w500)),
+                    leading: Icon(
+                      LucideIcons.package,
+                      size: 20,
+                      color: colorScheme.primary,
+                    ),
+                    title: Text(
+                      result.name,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                     subtitle: result.sku != null
-                        ? Text(result.sku!,
-                            style: theme.textTheme.bodySmall)
+                        ? Text(result.sku!, style: theme.textTheme.bodySmall)
                         : null,
                     onTap: () {
                       _searchController.clear();
                       _searchFocusNode.unfocus();
                       context.read<StockMovementReportBloc>().add(
-                          StockMovementProductSelected(result.productId));
+                        StockMovementProductSelected(result.productId),
+                      );
                     },
                   );
                 },
@@ -276,8 +298,7 @@ class _StockMovementReportViewState
     );
   }
 
-  Widget _buildEmptyState(
-      BuildContext context, StockMovementReportData data) {
+  Widget _buildEmptyState(BuildContext context, StockMovementReportData data) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -287,8 +308,11 @@ class _StockMovementReportViewState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.search,
-                size: 64, color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4)),
+            Icon(
+              LucideIcons.search,
+              size: 64,
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+            ),
             const SizedBox(height: 16),
             Text(
               'reports.search_product_prompt'.tr(),
@@ -312,7 +336,9 @@ class _StockMovementReportViewState
   }
 
   Widget _buildMovementContent(
-      BuildContext context, StockMovementReportData data) {
+    BuildContext context,
+    StockMovementReportData data,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final cs = sl<CurrencyService>();
@@ -325,9 +351,11 @@ class _StockMovementReportViewState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(LucideIcons.packageOpen,
-                  size: 64,
-                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4)),
+              Icon(
+                LucideIcons.packageOpen,
+                size: 64,
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+              ),
               const SizedBox(height: 16),
               Text(
                 'reports.no_movements'.tr(),
@@ -386,14 +414,16 @@ class _StockMovementReportViewState
             ),
           )
         else
-          ...filtered.map((entry) =>
-              _MovementCard(entry: entry, cs: cs)),
+          ...filtered.map((entry) => _MovementCard(entry: entry, cs: cs)),
       ],
     );
   }
 
   Widget _buildSummaryCards(
-      BuildContext context, StockMovementSummary summary, CurrencyService cs) {
+    BuildContext context,
+    StockMovementSummary summary,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -406,7 +436,10 @@ class _StockMovementReportViewState
               child: _SummaryCard(
                 icon: LucideIcons.shoppingCart,
                 label: 'reports.total_purchased'.tr(),
-                value: '${summary.totalPurchased}',
+                value: localizedQuantity(
+                  summary.totalPurchased,
+                  summary.measurementType,
+                ),
                 subValue: cs.formatCents(summary.totalPurchaseCents),
                 color: Colors.blue,
               ),
@@ -416,7 +449,10 @@ class _StockMovementReportViewState
               child: _SummaryCard(
                 icon: LucideIcons.receipt,
                 label: 'reports.total_sold'.tr(),
-                value: '${summary.totalSold}',
+                value: localizedQuantity(
+                  summary.totalSold,
+                  summary.measurementType,
+                ),
                 subValue: cs.formatCents(summary.totalSalesCents),
                 color: Colors.green,
               ),
@@ -432,7 +468,10 @@ class _StockMovementReportViewState
               child: _SummaryCard(
                 icon: LucideIcons.undo2,
                 label: 'reports.sale_returns_qty'.tr(),
-                value: '${summary.totalSaleReturned}',
+                value: localizedQuantity(
+                  summary.totalSaleReturned,
+                  summary.measurementType,
+                ),
                 subValue: cs.formatCents(summary.totalSaleReturnCents),
                 color: Colors.orange,
               ),
@@ -442,7 +481,10 @@ class _StockMovementReportViewState
               child: _SummaryCard(
                 icon: LucideIcons.undo,
                 label: 'reports.total_sale_return_adj'.tr(),
-                value: '${summary.totalSaleReturnAdj}',
+                value: localizedQuantity(
+                  summary.totalSaleReturnAdj,
+                  summary.measurementType,
+                ),
                 subValue: cs.formatCents(summary.totalSaleReturnAdjCents),
                 color: Colors.amber.shade700,
               ),
@@ -458,7 +500,10 @@ class _StockMovementReportViewState
               child: _SummaryCard(
                 icon: LucideIcons.redo2,
                 label: 'reports.purchase_returns_qty'.tr(),
-                value: '${summary.totalPurchaseReturned}',
+                value: localizedQuantity(
+                  summary.totalPurchaseReturned,
+                  summary.measurementType,
+                ),
                 subValue: cs.formatCents(summary.totalPurchaseReturnCents),
                 color: Colors.red,
               ),
@@ -468,7 +513,10 @@ class _StockMovementReportViewState
               child: _SummaryCard(
                 icon: LucideIcons.redo,
                 label: 'reports.total_purchase_return_adj'.tr(),
-                value: '${summary.totalPurchaseReturnAdj}',
+                value: localizedQuantity(
+                  summary.totalPurchaseReturnAdj,
+                  summary.measurementType,
+                ),
                 subValue: cs.formatCents(summary.totalPurchaseReturnAdjCents),
                 color: Colors.purple,
               ),
@@ -488,8 +536,11 @@ class _StockMovementReportViewState
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(LucideIcons.arrowLeftRight,
-                  size: 18, color: colorScheme.onPrimaryContainer),
+              Icon(
+                LucideIcons.arrowLeftRight,
+                size: 18,
+                color: colorScheme.onPrimaryContainer,
+              ),
               const SizedBox(width: 8),
               Text(
                 '${'reports.net_movement'.tr()}: ',
@@ -498,18 +549,14 @@ class _StockMovementReportViewState
                 ),
               ),
               Text(
-                summary.netQuantity >= 0
-                    ? '+${summary.netQuantity}'
-                    : '${summary.netQuantity}',
+                localizedSignedQuantity(
+                  summary.netQuantity,
+                  summary.measurementType,
+                  showPositiveSign: true,
+                ),
                 style: theme.textTheme.titleMedium?.copyWith(
                   color: colorScheme.onPrimaryContainer,
                   fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                ' ${'reports.units'.tr()}',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: colorScheme.onPrimaryContainer,
                 ),
               ),
             ],
@@ -519,8 +566,7 @@ class _StockMovementReportViewState
     );
   }
 
-  Widget _buildTypeFilter(
-      BuildContext context, StockMovementReportData data) {
+  Widget _buildTypeFilter(BuildContext context, StockMovementReportData data) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -528,50 +574,51 @@ class _StockMovementReportViewState
           _FilterChipItem(
             label: 'reports.filter_all'.tr(),
             selected: data.movementTypeFilter == null,
-            onSelected: () => context
-                .read<StockMovementReportBloc>()
-                .add(const StockMovementTypeFilterChanged(null)),
+            onSelected: () => context.read<StockMovementReportBloc>().add(
+              const StockMovementTypeFilterChanged(null),
+            ),
           ),
           const SizedBox(width: 6),
           _FilterChipItem(
             label: 'reports.filter_purchases'.tr(),
             selected: data.movementTypeFilter == StockMovementType.purchase,
             color: Colors.blue,
-            onSelected: () => context
-                .read<StockMovementReportBloc>()
-                .add(const StockMovementTypeFilterChanged(
-                    StockMovementType.purchase)),
+            onSelected: () => context.read<StockMovementReportBloc>().add(
+              const StockMovementTypeFilterChanged(StockMovementType.purchase),
+            ),
           ),
           const SizedBox(width: 6),
           _FilterChipItem(
             label: 'reports.filter_sales'.tr(),
             selected: data.movementTypeFilter == StockMovementType.sale,
             color: Colors.green,
-            onSelected: () => context
-                .read<StockMovementReportBloc>()
-                .add(const StockMovementTypeFilterChanged(
-                    StockMovementType.sale)),
+            onSelected: () => context.read<StockMovementReportBloc>().add(
+              const StockMovementTypeFilterChanged(StockMovementType.sale),
+            ),
           ),
           const SizedBox(width: 6),
           _FilterChipItem(
             label: 'reports.filter_sale_return_linked'.tr(),
             selected: data.movementTypeFilter == StockMovementType.saleReturn,
             color: Colors.orange,
-            onSelected: () => context
-                .read<StockMovementReportBloc>()
-                .add(const StockMovementTypeFilterChanged(
-                    StockMovementType.saleReturn)),
+            onSelected: () => context.read<StockMovementReportBloc>().add(
+              const StockMovementTypeFilterChanged(
+                StockMovementType.saleReturn,
+              ),
+            ),
           ),
           const SizedBox(width: 6),
           _FilterChipItem(
             label: 'reports.filter_sale_return_adjustment'.tr(),
-            selected: data.movementTypeFilter ==
+            selected:
+                data.movementTypeFilter ==
                 StockMovementType.saleReturnAdjustment,
             color: Colors.amber.shade700,
-            onSelected: () => context
-                .read<StockMovementReportBloc>()
-                .add(const StockMovementTypeFilterChanged(
-                    StockMovementType.saleReturnAdjustment)),
+            onSelected: () => context.read<StockMovementReportBloc>().add(
+              const StockMovementTypeFilterChanged(
+                StockMovementType.saleReturnAdjustment,
+              ),
+            ),
           ),
           const SizedBox(width: 6),
           _FilterChipItem(
@@ -579,21 +626,24 @@ class _StockMovementReportViewState
             selected:
                 data.movementTypeFilter == StockMovementType.purchaseReturn,
             color: Colors.red,
-            onSelected: () => context
-                .read<StockMovementReportBloc>()
-                .add(const StockMovementTypeFilterChanged(
-                    StockMovementType.purchaseReturn)),
+            onSelected: () => context.read<StockMovementReportBloc>().add(
+              const StockMovementTypeFilterChanged(
+                StockMovementType.purchaseReturn,
+              ),
+            ),
           ),
           const SizedBox(width: 6),
           _FilterChipItem(
             label: 'reports.filter_purchase_return_adjustment'.tr(),
-            selected: data.movementTypeFilter ==
+            selected:
+                data.movementTypeFilter ==
                 StockMovementType.purchaseReturnAdjustment,
             color: Colors.purple,
-            onSelected: () => context
-                .read<StockMovementReportBloc>()
-                .add(const StockMovementTypeFilterChanged(
-                    StockMovementType.purchaseReturnAdjustment)),
+            onSelected: () => context.read<StockMovementReportBloc>().add(
+              const StockMovementTypeFilterChanged(
+                StockMovementType.purchaseReturnAdjustment,
+              ),
+            ),
           ),
         ],
       ),
@@ -601,11 +651,10 @@ class _StockMovementReportViewState
   }
 
   Future<void> _printReport(
-      BuildContext context, StockMovementReportData data) async {
-    await StockMovementPdfService.printReport(
-      context: context,
-      data: data,
-    );
+    BuildContext context,
+    StockMovementReportData data,
+  ) async {
+    await StockMovementPdfService.printReport(context: context, data: data);
     sl<AuditLogService>().log(
       entityType: 'report',
       entityId: 0,
@@ -614,11 +663,10 @@ class _StockMovementReportViewState
   }
 
   Future<void> _shareReport(
-      BuildContext context, StockMovementReportData data) async {
-    await StockMovementPdfService.shareReport(
-      context: context,
-      data: data,
-    );
+    BuildContext context,
+    StockMovementReportData data,
+  ) async {
+    await StockMovementPdfService.shareReport(context: context, data: data);
     sl<AuditLogService>().log(
       entityType: 'report',
       entityId: 0,
@@ -661,11 +709,11 @@ class _FilterChipItem extends StatelessWidget {
       selectedColor: effectiveColor,
       backgroundColor: effectiveColor.withValues(alpha: 0.08),
       side: BorderSide(
-        color: selected ? effectiveColor : effectiveColor.withValues(alpha: 0.3),
+        color: selected
+            ? effectiveColor
+            : effectiveColor.withValues(alpha: 0.3),
       ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       showCheckmark: false,
       onSelected: (_) => onSelected(),
       visualDensity: VisualDensity.compact,
@@ -795,7 +843,9 @@ class _MovementCard extends StatelessWidget {
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: color.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(6),
@@ -820,8 +870,11 @@ class _MovementCard extends StatelessWidget {
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      Icon(LucideIcons.fileText,
-                          size: 14, color: colorScheme.onSurfaceVariant),
+                      Icon(
+                        LucideIcons.fileText,
+                        size: 14,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
@@ -864,13 +917,15 @@ class _MovementCard extends StatelessWidget {
                       // Quantity badge
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          '$sign${entry.quantity} ${'reports.units'.tr()}',
+                          '$sign${localizedQuantity(entry.quantity, entry.measurementType)}',
                           style: theme.textTheme.labelMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -908,42 +963,42 @@ class _MovementCard extends StatelessWidget {
           LucideIcons.shoppingCart,
           Colors.blue,
           'reports.movement_purchase',
-          '+'
+          '+',
         );
       case StockMovementType.sale:
         return (
           LucideIcons.receipt,
           Colors.green,
           'reports.movement_sale',
-          '-'
+          '-',
         );
       case StockMovementType.saleReturn:
         return (
           LucideIcons.undo2,
           Colors.orange,
           'reports.movement_sale_return',
-          '+'
+          '+',
         );
       case StockMovementType.saleReturnAdjustment:
         return (
           LucideIcons.undo,
           Colors.amber.shade700,
           'reports.movement_sale_return_adjustment',
-          '+'
+          '+',
         );
       case StockMovementType.purchaseReturn:
         return (
           LucideIcons.redo2,
           Colors.red,
           'reports.movement_purchase_return',
-          '-'
+          '-',
         );
       case StockMovementType.purchaseReturnAdjustment:
         return (
           LucideIcons.redo,
           Colors.purple,
           'reports.movement_purchase_return_adjustment',
-          '-'
+          '-',
         );
     }
   }

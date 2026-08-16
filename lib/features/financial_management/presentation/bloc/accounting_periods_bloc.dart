@@ -74,11 +74,39 @@ class AccountingPeriodsBloc
     Emitter<RealtimeState<AccountingPeriodsData>> emit,
   ) async {
     try {
+      final name = event.name.trim();
+      if (name.isEmpty) {
+        throw StateError('financial_management.period_name_required');
+      }
+      final startDate = DateTime(
+        event.startDate.year,
+        event.startDate.month,
+        event.startDate.day,
+      );
+      final endDate = DateTime(
+        event.endDate.year,
+        event.endDate.month,
+        event.endDate.day,
+      ).add(const Duration(days: 1)).subtract(const Duration(microseconds: 1));
+      if (endDate.isBefore(startDate)) {
+        throw StateError('financial_management.period_dates_invalid');
+      }
+
+      final existingPeriods = await _db.select(_db.accountingPeriods).get();
+      final overlaps = existingPeriods.any(
+        (period) =>
+            !period.endDate.isBefore(startDate) &&
+            !period.startDate.isAfter(endDate),
+      );
+      if (overlaps) {
+        throw StateError('financial_management.period_overlap');
+      }
+
       await (_db.into(_db.accountingPeriods)).insert(
         AccountingPeriodsCompanion.insert(
-          periodName: event.name,
-          startDate: event.startDate,
-          endDate: event.endDate,
+          periodName: name,
+          startDate: startDate,
+          endDate: endDate,
         ),
       );
     } catch (e, st) {

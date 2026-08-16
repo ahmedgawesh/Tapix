@@ -8,6 +8,9 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/widgets/theme_toggle_button.dart';
+import '../../../auth/data/services/permission_service.dart';
+import '../../../auth/domain/entities/permission_constants.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/repositories/product_repository.dart';
 import '../bloc/products_bloc.dart';
@@ -76,7 +79,10 @@ class _ProductListViewState extends State<_ProductListView> {
     return currentScroll >= (maxScroll * 0.9);
   }
 
-  Widget _buildPrintLabelsBar(BuildContext context) {
+  Widget _buildPrintLabelsBar(
+    BuildContext context, {
+    required bool canDeleteProducts,
+  }) {
     return BlocBuilder<ProductsBloc, RealtimeState<List<Product>>>(
       builder: (context, state) {
         List<Product>? products;
@@ -87,7 +93,8 @@ class _ProductListViewState extends State<_ProductListView> {
         }
 
         final productCount = products?.length ?? 0;
-        final allSelected = productCount > 0 && _selectedProductIds.length == productCount;
+        final allSelected =
+            productCount > 0 && _selectedProductIds.length == productCount;
 
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -95,7 +102,9 @@ class _ProductListViewState extends State<_ProductListView> {
             color: Theme.of(context).colorScheme.surfaceContainerHighest,
             border: Border(
               bottom: BorderSide(
-                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                color: Theme.of(
+                  context,
+                ).colorScheme.outline.withValues(alpha: 0.2),
               ),
             ),
           ),
@@ -103,7 +112,7 @@ class _ProductListViewState extends State<_ProductListView> {
             builder: (context, constraints) {
               final isSmallScreen = constraints.maxWidth <= 380;
               final isVerySmallScreen = constraints.maxWidth < 320;
-              
+
               if (isVerySmallScreen) {
                 // For very small screens, stack vertically
                 return Column(
@@ -120,7 +129,9 @@ class _ProductListViewState extends State<_ProductListView> {
                               if (value == true && products != null) {
                                 _isSelectionMode = true;
                                 _selectedProductIds.clear();
-                                _selectedProductIds.addAll(products.map((p) => p.id));
+                                _selectedProductIds.addAll(
+                                  products.map((p) => p.id),
+                                );
                               } else {
                                 _selectedProductIds.clear();
                                 if (_selectedProductIds.isEmpty) {
@@ -134,7 +145,11 @@ class _ProductListViewState extends State<_ProductListView> {
                           child: Text(
                             _selectedProductIds.isEmpty
                                 ? 'products.select_for_print'.tr()
-                                : 'products.selected_count'.tr(args: [_selectedProductIds.length.toString()]),
+                                : 'products.selected_count'.tr(
+                                    args: [
+                                      _selectedProductIds.length.toString(),
+                                    ],
+                                  ),
                             style: Theme.of(context).textTheme.bodyMedium,
                             overflow: TextOverflow.ellipsis,
                             maxLines: 1,
@@ -152,17 +167,18 @@ class _ProductListViewState extends State<_ProductListView> {
                       label: Text('barcode.print_labels'.tr()),
                     ),
                     const SizedBox(height: 8),
-                    FilledButton.tonalIcon(
-                      onPressed: _selectedProductIds.isEmpty
-                          ? null
-                          : () => _deleteSelectedProducts(context),
-                      icon: const Icon(LucideIcons.trash, size: 18),
-                      label: Text('common.delete'.tr()),
-                    ),
+                    if (canDeleteProducts)
+                      FilledButton.tonalIcon(
+                        onPressed: _selectedProductIds.isEmpty
+                            ? null
+                            : () => _deleteSelectedProducts(context),
+                        icon: const Icon(LucideIcons.trash, size: 18),
+                        label: Text('common.delete'.tr()),
+                      ),
                   ],
                 );
               }
-              
+
               final content = Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -186,18 +202,22 @@ class _ProductListViewState extends State<_ProductListView> {
                     },
                   ),
                   ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: isSmallScreen ? 180 : 0),
+                    constraints: BoxConstraints(
+                      minWidth: isSmallScreen ? 180 : 0,
+                    ),
                     child: Text(
                       _selectedProductIds.isEmpty
                           ? 'products.select_for_print'.tr()
-                          : 'products.selected_count'.tr(args: [_selectedProductIds.length.toString()]),
+                          : 'products.selected_count'.tr(
+                              args: [_selectedProductIds.length.toString()],
+                            ),
                       style: Theme.of(context).textTheme.bodyMedium,
                       overflow: TextOverflow.ellipsis,
                       maxLines: isSmallScreen ? 1 : 2,
                     ),
                   ),
                   const SizedBox(width: 8),
-                  if (isSmallScreen)
+                  if (isSmallScreen && canDeleteProducts)
                     IconButton(
                       onPressed: _selectedProductIds.isEmpty
                           ? null
@@ -221,7 +241,7 @@ class _ProductListViewState extends State<_ProductListView> {
                       icon: const Icon(LucideIcons.trash2),
                       tooltip: 'common.delete'.tr(),
                     )
-                  else
+                  else if (canDeleteProducts)
                     Padding(
                       padding: const EdgeInsetsDirectional.only(start: 8),
                       child: FilledButton.tonalIcon(
@@ -251,25 +271,28 @@ class _ProductListViewState extends State<_ProductListView> {
   void _printSelectedLabels(BuildContext context) async {
     final bloc = context.read<ProductsBloc>();
     final state = bloc.state;
-    
+
     List<Product>? allProducts;
     if (state is RealtimeSuccess<List<Product>>) {
       allProducts = state.data;
     } else if (state is RealtimeOptimistic<List<Product>>) {
       allProducts = state.optimisticData;
     }
-    
+
     if (allProducts == null) return;
-    
+
     final selectedProducts = allProducts
         .where((p) => _selectedProductIds.contains(p.id))
         .toList();
-    
+
     if (selectedProducts.isEmpty) return;
-    
+
     // Navigate to barcode design screen
-    await context.push('/products/barcode-design', extra: {'products': selectedProducts});
-    
+    await context.push(
+      '/products/barcode-design',
+      extra: {'products': selectedProducts},
+    );
+
     // Clear selection after printing
     setState(() {
       _isSelectionMode = false;
@@ -308,9 +331,8 @@ class _ProductListViewState extends State<_ProductListView> {
     }
 
     final repository = sl<ProductRepository>();
-    final referencedIds = await repository.findProductIdsReferencedByOpenPurchases(
-      _selectedProductIds.toList(),
-    );
+    final referencedIds = await repository
+        .findProductIdsReferencedByOpenPurchases(_selectedProductIds.toList());
     if (referencedIds.isNotEmpty) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -329,7 +351,9 @@ class _ProductListViewState extends State<_ProductListView> {
         return AlertDialog(
           title: Text('products.delete_title'.tr()),
           content: Text(
-            'products.delete_confirm'.tr(args: [selectedProducts.length.toString()]),
+            'products.delete_confirm'.tr(
+              args: [selectedProducts.length.toString()],
+            ),
           ),
           actions: [
             TextButton(
@@ -390,9 +414,11 @@ class _ProductListViewState extends State<_ProductListView> {
     final base = deactivated == 0
         ? 'products.delete_success'.tr()
         : (hardDeleted == 0
-            ? 'product_form.deactivated_success'.tr(args: [deactivated.toString()])
-            : '${'products.delete_success'.tr()} '
-                '(${'product_form.deactivated_success'.tr(args: [deactivated.toString()])})');
+              ? 'product_form.deactivated_success'.tr(
+                  args: [deactivated.toString()],
+                )
+              : '${'products.delete_success'.tr()} '
+                    '(${'product_form.deactivated_success'.tr(args: [deactivated.toString()])})');
     final summary = writtenOff > 0
         ? '$base · ${'product_form.writeoff_bulk_summary'.tr(args: [writtenOff.toString()])}'
         : base;
@@ -411,10 +437,34 @@ class _ProductListViewState extends State<_ProductListView> {
 
   @override
   Widget build(BuildContext context) {
+    final authState = context.watch<AuthBloc>().state;
+    final user = authState is AuthAuthenticated ? authState.user : null;
+    final permissions = sl<PermissionService>();
+    final canManageProducts = permissions.hasPermission(
+      user,
+      Permissions.editProducts,
+    );
+    final canDeleteProducts = permissions.hasPermission(
+      user,
+      Permissions.deleteProducts,
+    );
+    final canViewProductCost = permissions.hasPermission(
+      user,
+      Permissions.viewProductCost,
+    );
+    final canAccessSettings = permissions.hasPermission(
+      user,
+      Permissions.accessSettings,
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: _isSelectionMode
-            ? Text('products.selected_count'.tr(args: [_selectedProductIds.length.toString()]))
+            ? Text(
+                'products.selected_count'.tr(
+                  args: [_selectedProductIds.length.toString()],
+                ),
+              )
             : Text('dashboard.products'.tr()),
         centerTitle: true,
         leading: _isSelectionMode
@@ -448,157 +498,168 @@ class _ProductListViewState extends State<_ProductListView> {
                       : () => _printSelectedLabels(context),
                   tooltip: 'barcode.print_labels'.tr(),
                 ),
-                IconButton(
-                  icon: const Icon(LucideIcons.trash),
-                  onPressed: _selectedProductIds.isEmpty
-                      ? null
-                      : () => _deleteSelectedProducts(context),
-                  tooltip: 'common.delete'.tr(),
-                ),
+                if (canDeleteProducts)
+                  IconButton(
+                    icon: const Icon(LucideIcons.trash),
+                    onPressed: _selectedProductIds.isEmpty
+                        ? null
+                        : () => _deleteSelectedProducts(context),
+                    tooltip: 'common.delete'.tr(),
+                  ),
               ]
             : [
-          IconButton(
-            icon: const Icon(LucideIcons.layers),
-            onPressed: () async {
-              await context.push('/products/variants');
-              if (!context.mounted) return;
-              context.read<ProductsBloc>().refresh();
-              context.read<VariantSummariesBloc>().refresh();
-            },
-            tooltip: 'variants.title'.tr(),
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(LucideIcons.moreVertical),
-            onSelected: (value) {
-              switch (value) {
-                case 'bulk':
-                  context.push('/products/bulk');
-                  break;
-                case 'edit_prices':
-                  context.push('/products/edit-prices');
-                  break;
-                case 'import':
-                  context.push('/products/import');
-                  break;
-                case 'export':
-                  context.push('/products/export');
-                  break;
-                case 'variants':
-                  context.push('/products/variants');
-                  break;
-                case 'categories':
-                  context.push('/products/categories');
-                  break;
-                case 'colors':
-                  context.push('/products/colors');
-                  break;
-                case 'sizes':
-                  context.push('/products/sizes');
-                  break;
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'bulk',
-                child: Row(
-                  children: [
-                    const Icon(LucideIcons.layers),
-                    const SizedBox(width: 12),
-                    Text('bulk_product.title'.tr()),
+                IconButton(
+                  icon: const Icon(LucideIcons.layers),
+                  onPressed: () async {
+                    await context.push('/products/variants');
+                    if (!context.mounted) return;
+                    context.read<ProductsBloc>().refresh();
+                    context.read<VariantSummariesBloc>().refresh();
+                  },
+                  tooltip: 'variants.title'.tr(),
+                ),
+                PopupMenuButton<String>(
+                  icon: const Icon(LucideIcons.moreVertical),
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'bulk':
+                        context.push('/products/bulk');
+                        break;
+                      case 'edit_prices':
+                        context.push('/products/edit-prices');
+                        break;
+                      case 'import':
+                        context.push('/products/import');
+                        break;
+                      case 'export':
+                        context.push('/products/export');
+                        break;
+                      case 'variants':
+                        context.push('/products/variants');
+                        break;
+                      case 'categories':
+                        context.push('/products/categories');
+                        break;
+                      case 'colors':
+                        context.push('/products/colors');
+                        break;
+                      case 'sizes':
+                        context.push('/products/sizes');
+                        break;
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    if (canManageProducts)
+                      PopupMenuItem(
+                        value: 'bulk',
+                        child: Row(
+                          children: [
+                            const Icon(LucideIcons.layers),
+                            const SizedBox(width: 12),
+                            Text('bulk_product.title'.tr()),
+                          ],
+                        ),
+                      ),
+                    if (canManageProducts)
+                      PopupMenuItem(
+                        value: 'edit_prices',
+                        child: Row(
+                          children: [
+                            const Icon(LucideIcons.dollarSign),
+                            const SizedBox(width: 12),
+                            Text('edit_prices.title'.tr()),
+                          ],
+                        ),
+                      ),
+                    if (canManageProducts)
+                      PopupMenuItem(
+                        value: 'import',
+                        child: Row(
+                          children: [
+                            const Icon(LucideIcons.upload),
+                            const SizedBox(width: 12),
+                            Text('import_products.title'.tr()),
+                          ],
+                        ),
+                      ),
+                    if (canViewProductCost)
+                      PopupMenuItem(
+                        value: 'export',
+                        child: Row(
+                          children: [
+                            const Icon(LucideIcons.download),
+                            const SizedBox(width: 12),
+                            Text('export_products.title'.tr()),
+                          ],
+                        ),
+                      ),
+                    PopupMenuItem(
+                      value: 'variants',
+                      child: Row(
+                        children: [
+                          const Icon(LucideIcons.layers),
+                          const SizedBox(width: 12),
+                          Text('variants.title'.tr()),
+                        ],
+                      ),
+                    ),
+                    if (canManageProducts)
+                      PopupMenuItem(
+                        value: 'categories',
+                        child: Row(
+                          children: [
+                            const Icon(LucideIcons.folder),
+                            const SizedBox(width: 12),
+                            Text('categories.title'.tr()),
+                          ],
+                        ),
+                      ),
+                    if (canManageProducts)
+                      PopupMenuItem(
+                        value: 'colors',
+                        child: Row(
+                          children: [
+                            const Icon(LucideIcons.palette),
+                            const SizedBox(width: 12),
+                            Text('colors.title'.tr()),
+                          ],
+                        ),
+                      ),
+                    if (canManageProducts)
+                      PopupMenuItem(
+                        value: 'sizes',
+                        child: Row(
+                          children: [
+                            const Icon(LucideIcons.ruler),
+                            const SizedBox(width: 12),
+                            Text('sizes.title'.tr()),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
-              ),
-              PopupMenuItem(
-                value: 'edit_prices',
-                child: Row(
-                  children: [
-                    const Icon(LucideIcons.dollarSign),
-                    const SizedBox(width: 12),
-                    Text('edit_prices.title'.tr()),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'import',
-                child: Row(
-                  children: [
-                    const Icon(LucideIcons.upload),
-                    const SizedBox(width: 12),
-                    Text('import_products.title'.tr()),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'export',
-                child: Row(
-                  children: [
-                    const Icon(LucideIcons.download),
-                    const SizedBox(width: 12),
-                    Text('export_products.title'.tr()),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'variants',
-                child: Row(
-                  children: [
-                    const Icon(LucideIcons.layers),
-                    const SizedBox(width: 12),
-                    Text('variants.title'.tr()),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'categories',
-                child: Row(
-                  children: [
-                    const Icon(LucideIcons.folder),
-                    const SizedBox(width: 12),
-                    Text('categories.title'.tr()),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'colors',
-                child: Row(
-                  children: [
-                    const Icon(LucideIcons.palette),
-                    const SizedBox(width: 12),
-                    Text('colors.title'.tr()),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'sizes',
-                child: Row(
-                  children: [
-                    const Icon(LucideIcons.ruler),
-                    const SizedBox(width: 12),
-                    Text('sizes.title'.tr()),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const ThemeToggleButton(),
-          IconButton(
-            icon: const Icon(LucideIcons.settings),
-            onPressed: () {
-              context.push('/settings');
-            },
-          ),
-        ],
+                const ThemeToggleButton(),
+                if (canAccessSettings)
+                  IconButton(
+                    icon: const Icon(LucideIcons.settings),
+                    onPressed: () {
+                      context.push('/settings');
+                    },
+                  ),
+              ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          await context.push('/products/new');
-          if (!context.mounted) return;
-          context.read<ProductsBloc>().refresh();
-          context.read<VariantSummariesBloc>().refresh();
-        },
-        icon: const Icon(LucideIcons.plus),
-        label: Text('common.add'.tr()),
-      ),
+      floatingActionButton: canManageProducts
+          ? FloatingActionButton.extended(
+              onPressed: () async {
+                await context.push('/products/new');
+                if (!context.mounted) return;
+                context.read<ProductsBloc>().refresh();
+                context.read<VariantSummariesBloc>().refresh();
+              },
+              icon: const Icon(LucideIcons.plus),
+              label: Text('common.add'.tr()),
+            )
+          : null,
       body: Column(
         children: [
           ProductSearchWidget(
@@ -611,7 +672,7 @@ class _ProductListViewState extends State<_ProductListView> {
                 '/barcode-scanner',
                 extra: {'returnOnScan': true},
               );
-              
+
               if (barcode != null && barcode.isNotEmpty) {
                 if (mounted) {
                   bloc.add(ProductBarcodeScanned(barcode));
@@ -620,7 +681,7 @@ class _ProductListViewState extends State<_ProductListView> {
             },
           ),
           // Print Labels action bar
-          _buildPrintLabelsBar(context),
+          _buildPrintLabelsBar(context, canDeleteProducts: canDeleteProducts),
           BlocBuilder<ProductsBloc, RealtimeState<List<Product>>>(
             builder: (context, state) {
               final bloc = context.read<ProductsBloc>();
@@ -667,9 +728,17 @@ class _ProductListViewState extends State<_ProductListView> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(LucideIcons.alertTriangle, size: 48, color: Colors.red),
+                        const Icon(
+                          LucideIcons.alertTriangle,
+                          size: 48,
+                          color: Colors.red,
+                        ),
                         const SizedBox(height: 16),
-                        Text('products.error_loading'.tr(args: [(state as RealtimeError).error.toString()])),
+                        Text(
+                          'products.error_loading'.tr(
+                            args: [(state as RealtimeError).error.toString()],
+                          ),
+                        ),
                         const SizedBox(height: 16),
                         FilledButton(
                           onPressed: () {
@@ -689,7 +758,11 @@ class _ProductListViewState extends State<_ProductListView> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(LucideIcons.packageOpen, size: 64, color: Colors.grey),
+                        const Icon(
+                          LucideIcons.packageOpen,
+                          size: 64,
+                          color: Colors.grey,
+                        ),
                         const SizedBox(height: 16),
                         Text('products.no_results'.tr()),
                       ],
@@ -697,21 +770,31 @@ class _ProductListViewState extends State<_ProductListView> {
                   );
                 }
 
-                return BlocBuilder<VariantSummariesBloc, RealtimeState<Map<int, VariantSummary>>>(
+                return BlocBuilder<
+                  VariantSummariesBloc,
+                  RealtimeState<Map<int, VariantSummary>>
+                >(
                   builder: (context, summariesState) {
                     Map<int, VariantSummary> summaries = const {};
-                    if (summariesState is RealtimeSuccess<Map<int, VariantSummary>>) {
+                    if (summariesState
+                        is RealtimeSuccess<Map<int, VariantSummary>>) {
                       summaries = summariesState.data;
-                    } else if (summariesState is RealtimeLoading<Map<int, VariantSummary>>) {
+                    } else if (summariesState
+                        is RealtimeLoading<Map<int, VariantSummary>>) {
                       summaries = summariesState.previousData ?? const {};
                     }
 
-                    return BlocBuilder<VariantPreviewsBloc, RealtimeState<Map<int, VariantPreview>>>(
+                    return BlocBuilder<
+                      VariantPreviewsBloc,
+                      RealtimeState<Map<int, VariantPreview>>
+                    >(
                       builder: (context, previewsState) {
                         Map<int, VariantPreview> previews = const {};
-                        if (previewsState is RealtimeSuccess<Map<int, VariantPreview>>) {
+                        if (previewsState
+                            is RealtimeSuccess<Map<int, VariantPreview>>) {
                           previews = previewsState.data;
-                        } else if (previewsState is RealtimeLoading<Map<int, VariantPreview>>) {
+                        } else if (previewsState
+                            is RealtimeLoading<Map<int, VariantPreview>>) {
                           previews = previewsState.previousData ?? const {};
                         }
 
@@ -734,7 +817,9 @@ class _ProductListViewState extends State<_ProductListView> {
                         return ListView.builder(
                           controller: _scrollController,
                           padding: const EdgeInsets.only(bottom: 80),
-                          itemCount: displayProducts.length + (bloc.isLoadingMore ? 1 : 0),
+                          itemCount:
+                              displayProducts.length +
+                              (bloc.isLoadingMore ? 1 : 0),
                           itemBuilder: (context, index) {
                             if (index >= displayProducts.length) {
                               return const Center(
@@ -757,7 +842,10 @@ class _ProductListViewState extends State<_ProductListView> {
                                 : null;
 
                             return Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 4,
+                              ),
                               child: ProductTileWidget(
                                 product: p,
                                 isSelected: _selectedProductIds.contains(p.id),
@@ -796,10 +884,13 @@ class _ProductListViewState extends State<_ProductListView> {
                                     return;
                                   }
 
+                                  if (!canManageProducts) return;
                                   await context.push('/products/${p.id}/edit');
                                   if (!context.mounted) return;
                                   context.read<ProductsBloc>().refresh();
-                                  context.read<VariantSummariesBloc>().refresh();
+                                  context
+                                      .read<VariantSummariesBloc>()
+                                      .refresh();
                                   context.read<VariantPreviewsBloc>().refresh();
                                   context.read<ExpirySummariesBloc>().refresh();
                                 },
@@ -826,5 +917,4 @@ class _ProductListViewState extends State<_ProductListView> {
       ),
     );
   }
-
 }

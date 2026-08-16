@@ -2,6 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../bloc/customer_invoices_report_bloc.dart' show InvoiceLineItem;
 
 /// Localize a payment method machine code into the active locale.
@@ -65,8 +66,9 @@ class InvoicePartyInfoCard extends StatelessWidget {
                 children: [
                   Text(
                     name,
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   if (phone != null && phone!.isNotEmpty)
                     Text(
@@ -100,7 +102,7 @@ class InvoicePartyInfoCard extends StatelessWidget {
 
 class InvoiceSummaryCardsRow extends StatelessWidget {
   final int invoiceCount;
-  final int totalQuantity;
+  final String totalQuantityText;
   final int totalAmountCents;
   final int totalDiscountCents;
   final int totalPaidCents;
@@ -109,7 +111,7 @@ class InvoiceSummaryCardsRow extends StatelessWidget {
   const InvoiceSummaryCardsRow({
     super.key,
     required this.invoiceCount,
-    required this.totalQuantity,
+    required this.totalQuantityText,
     required this.totalAmountCents,
     required this.totalDiscountCents,
     required this.totalPaidCents,
@@ -131,7 +133,7 @@ class InvoiceSummaryCardsRow extends StatelessWidget {
           const SizedBox(width: 8),
           _SummaryCard(
             label: 'reports.total_quantity'.tr(),
-            value: totalQuantity.toString(),
+            value: totalQuantityText,
             icon: LucideIcons.package,
             color: Colors.teal.shade600,
           ),
@@ -262,8 +264,7 @@ class InvoiceCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
               children: [
-                Icon(LucideIcons.receipt,
-                    size: 16, color: colorScheme.primary),
+                Icon(LucideIcons.receipt, size: 16, color: colorScheme.primary),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
@@ -271,11 +272,11 @@ class InvoiceCard extends StatelessWidget {
                     children: [
                       Text(
                         invoiceNumber,
-                        style: theme.textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.bold),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                      if (referenceLabel != null &&
-                          referenceLabel!.isNotEmpty)
+                      if (referenceLabel != null && referenceLabel!.isNotEmpty)
                         Text(
                           referenceLabel!,
                           style: theme.textTheme.bodySmall?.copyWith(
@@ -295,7 +296,9 @@ class InvoiceCard extends StatelessWidget {
                     Container(
                       margin: const EdgeInsets.only(top: 2),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: colorScheme.secondaryContainer,
                         borderRadius: BorderRadius.circular(10),
@@ -335,26 +338,48 @@ class InvoiceCard extends StatelessWidget {
                     ),
                     children: [
                       _cellHeader(context, 'reports.product'.tr()),
-                      _cellHeader(context, 'reports.qty'.tr(),
-                          align: TextAlign.center),
-                      _cellHeader(context, 'reports.unit_price'.tr(),
-                          align: TextAlign.end),
-                      _cellHeader(context, 'reports.line_total'.tr(),
-                          align: TextAlign.end),
+                      _cellHeader(
+                        context,
+                        'reports.qty'.tr(),
+                        align: TextAlign.center,
+                      ),
+                      _cellHeader(
+                        context,
+                        'reports.unit_price'.tr(),
+                        align: TextAlign.end,
+                      ),
+                      _cellHeader(
+                        context,
+                        'reports.line_total'.tr(),
+                        align: TextAlign.end,
+                      ),
                     ],
                   ),
-                  ...items.map((item) => TableRow(
-                        children: [
-                          _cellProduct(context, item),
-                          _cellText(context, item.quantity.toString(),
-                              align: TextAlign.center),
-                          _cellText(
-                              context, cs.formatCents(item.unitPriceCents),
-                              align: TextAlign.end),
-                          _cellText(context, cs.formatCents(item.totalCents),
-                              align: TextAlign.end),
-                        ],
-                      )),
+                  ...items.map(
+                    (item) => TableRow(
+                      children: [
+                        _cellProduct(context, item),
+                        _cellText(
+                          context,
+                          localizedQuantity(
+                            item.quantity,
+                            item.measurementType,
+                          ),
+                          align: TextAlign.center,
+                        ),
+                        _cellText(
+                          context,
+                          cs.formatCents(item.unitPriceCents),
+                          align: TextAlign.end,
+                        ),
+                        _cellText(
+                          context,
+                          cs.formatCents(item.totalCents),
+                          align: TextAlign.end,
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -366,25 +391,44 @@ class InvoiceCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
             child: Column(
               children: [
-                _totalRow(context, 'reports.subtotal'.tr(),
-                    cs.formatCents(subtotalCents)),
+                _totalRow(
+                  context,
+                  'reports.subtotal'.tr(),
+                  cs.formatCents(subtotalCents),
+                ),
                 if (discountCents > 0)
-                  _totalRow(context, 'reports.discount'.tr(),
-                      '- ${cs.formatCents(discountCents)}',
-                      color: Colors.purple.shade700),
+                  _totalRow(
+                    context,
+                    'reports.discount'.tr(),
+                    '- ${cs.formatCents(discountCents)}',
+                    color: Colors.purple.shade700,
+                  ),
                 if (taxCents > 0)
-                  _totalRow(context, 'reports.tax'.tr(),
-                      cs.formatCents(taxCents)),
-                _totalRow(context, 'reports.total'.tr(),
-                    cs.formatCents(totalCents),
-                    isBold: true),
-                _totalRow(context, 'reports.paid'.tr(),
-                    cs.formatCents(paidAmountCents),
-                    color: Colors.green.shade700),
+                  _totalRow(
+                    context,
+                    'reports.tax'.tr(),
+                    cs.formatCents(taxCents),
+                  ),
+                _totalRow(
+                  context,
+                  'reports.total'.tr(),
+                  cs.formatCents(totalCents),
+                  isBold: true,
+                ),
+                _totalRow(
+                  context,
+                  'reports.paid'.tr(),
+                  cs.formatCents(paidAmountCents),
+                  color: Colors.green.shade700,
+                ),
                 if (dueCents > 0)
-                  _totalRow(context, 'reports.due'.tr(),
-                      cs.formatCents(dueCents),
-                      color: colorScheme.error, isBold: true),
+                  _totalRow(
+                    context,
+                    'reports.due'.tr(),
+                    cs.formatCents(dueCents),
+                    color: colorScheme.error,
+                    isBold: true,
+                  ),
               ],
             ),
           ),
@@ -393,8 +437,11 @@ class InvoiceCard extends StatelessWidget {
     );
   }
 
-  Widget _cellHeader(BuildContext context, String text,
-      {TextAlign align = TextAlign.start}) {
+  Widget _cellHeader(
+    BuildContext context,
+    String text, {
+    TextAlign align = TextAlign.start,
+  }) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
@@ -409,8 +456,11 @@ class InvoiceCard extends StatelessWidget {
     );
   }
 
-  Widget _cellText(BuildContext context, String text,
-      {TextAlign align = TextAlign.start}) {
+  Widget _cellText(
+    BuildContext context,
+    String text, {
+    TextAlign align = TextAlign.start,
+  }) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
@@ -425,8 +475,7 @@ class InvoiceCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(item.productName,
-              style: theme.textTheme.bodySmall, maxLines: 2),
+          Text(item.productName, style: theme.textTheme.bodySmall, maxLines: 2),
           if (item.variantLabel != null)
             Text(
               item.variantLabel!,
@@ -434,18 +483,35 @@ class InvoiceCard extends StatelessWidget {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
+          if (item.sku != null && item.sku!.isNotEmpty)
+            Text(
+              item.sku!,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontFamily: 'monospace',
+                fontSize: 10,
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _totalRow(BuildContext context, String label, String value,
-      {bool isBold = false, Color? color}) {
+  Widget _totalRow(
+    BuildContext context,
+    String label,
+    String value, {
+    bool isBold = false,
+    Color? color,
+  }) {
     final theme = Theme.of(context);
-    final style = (isBold
-            ? theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)
-            : theme.textTheme.bodySmall)
-        ?.copyWith(color: color);
+    final style =
+        (isBold
+                ? theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  )
+                : theme.textTheme.bodySmall)
+            ?.copyWith(color: color);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(

@@ -48,10 +48,7 @@ void main() {
     });
 
     test('negative quantity throws', () {
-      expect(
-        () => _compute(quantity: -1),
-        throwsA(isA<ArgumentError>()),
-      );
+      expect(() => _compute(quantity: -1), throwsA(isA<ArgumentError>()));
     });
   });
 
@@ -136,9 +133,7 @@ void main() {
       expect(r.tax.cents, 1400);
     });
 
-    test('isTaxable=false but defaultTaxRateBps>0 still applies default rate '
-        '(matches existing TaxCalculationService.resolveLineItemTaxRateBps '
-        'semantic — refactor preserves behavior)', () {
+    test('isTaxable=false never inherits the default tax rate', () {
       final r = _compute(
         unitPriceCents: 10000,
         quantity: 1,
@@ -146,8 +141,22 @@ void main() {
         productTaxRateBps: 0,
         defaultTaxRateBps: 1400,
       );
-      expect(r.effectiveTaxRateBps, 1400);
-      expect(r.tax.cents, 1400);
+      expect(r.effectiveTaxRateBps, 0);
+      expect(r.tax.cents, 0);
+      expect(r.total.cents, 10000);
+    });
+
+    test('inclusive price extracts tax without adding it to total again', () {
+      final r = _compute(
+        unitPriceCents: 11500,
+        quantity: 1,
+        isTaxable: true,
+        productTaxRateBps: 1500,
+        taxInclusive: true,
+      );
+      expect(r.net.cents, 11500);
+      expect(r.tax.cents, 1500);
+      expect(r.total.cents, 11500);
     });
   });
 

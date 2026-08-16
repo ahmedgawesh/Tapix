@@ -2,6 +2,7 @@ import 'dart:developer' as developer;
 
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
+import '../../measurement/measurement.dart';
 
 import '../../database/app_database.dart';
 import '../../database/daos/inventory_adjustment_dao.dart';
@@ -38,11 +39,11 @@ enum InventoryAdjustmentType {
   openingBalance;
 
   String get wireName => switch (this) {
-        InventoryAdjustmentType.shrinkage => 'shrinkage',
-        InventoryAdjustmentType.gain => 'gain',
-        InventoryAdjustmentType.revaluation => 'revaluation',
-        InventoryAdjustmentType.openingBalance => 'opening_balance',
-      };
+    InventoryAdjustmentType.shrinkage => 'shrinkage',
+    InventoryAdjustmentType.gain => 'gain',
+    InventoryAdjustmentType.revaluation => 'revaluation',
+    InventoryAdjustmentType.openingBalance => 'opening_balance',
+  };
 }
 
 /// Result of a successful adjustment — returned so UI / tests can render it
@@ -98,10 +99,10 @@ class InventoryAdjustmentService {
     required InventoryAdjustmentDao dao,
     required JournalEntryService journal,
     CostingStrategy? costing,
-  })  : _db = db,
-        _dao = dao,
-        _journal = journal,
-        _costing = costing ?? const WeightedAverageCostingStrategy();
+  }) : _db = db,
+       _dao = dao,
+       _journal = journal,
+       _costing = costing ?? const WeightedAverageCostingStrategy();
 
   /// Perform an inventory adjustment. Returns the created adjustment + its
   /// posted journal entry id.
@@ -203,10 +204,12 @@ class InventoryAdjustmentService {
       // This mirrors how purchase/sale posting now skip stock writes for
       // these products: every sanctioned stock-touching call site honours
       // the same flag.
-      final tracksRow = await _db.customSelect(
-        'SELECT track_inventory FROM products WHERE id = ?',
-        variables: [Variable.withInt(productId)],
-      ).getSingleOrNull();
+      final tracksRow = await _db
+          .customSelect(
+            'SELECT track_inventory FROM products WHERE id = ?',
+            variables: [Variable.withInt(productId)],
+          )
+          .getSingleOrNull();
       final tracks = (tracksRow?.read<int>('track_inventory') ?? 1) != 0;
       if (!tracks) {
         throw InventoryAdjustmentException(
@@ -242,20 +245,43 @@ class InventoryAdjustmentService {
         InventoryAdjustmentType.revaluation => newUnitCostCents!,
         _ => oldUnitCost,
       };
+      final productRow = await _dao
+          .customSelect(
+            'SELECT measurement_type FROM products WHERE id = ?',
+            variables: [Variable.withInt(productId)],
+          )
+          .getSingleOrNull();
+      final quantityScale = MeasurementType.fromDb(
+        productRow?.read<String?>('measurement_type'),
+      ).quantityScale;
+
+      int quantityValue(int unitCents, int quantity) => MeasuredAmount.cents(
+        unitCents: unitCents,
+        quantity: quantity.abs(),
+        quantityScale: quantityScale,
+      );
 
       final int totalValueCents = switch (type) {
-        InventoryAdjustmentType.shrinkage =>
-          quantityDelta.abs() * oldUnitCost,
-        InventoryAdjustmentType.gain =>
-          quantityDelta.abs() * oldUnitCost,
-        InventoryAdjustmentType.revaluation =>
-          (newUnitCostCents! - oldUnitCost) * onHand,
-        InventoryAdjustmentType.openingBalance =>
-          quantityDelta.abs() * oldUnitCost,
+        InventoryAdjustmentType.shrinkage => quantityValue(
+          oldUnitCost,
+          quantityDelta,
+        ),
+        InventoryAdjustmentType.gain => quantityValue(
+          oldUnitCost,
+          quantityDelta,
+        ),
+        InventoryAdjustmentType.revaluation => MeasuredAmount.cents(
+          unitCents: newUnitCostCents! - oldUnitCost,
+          quantity: onHand,
+          quantityScale: quantityScale,
+        ),
+        InventoryAdjustmentType.openingBalance => quantityValue(
+          oldUnitCost,
+          quantityDelta,
+        ),
       };
 
-      if (type != InventoryAdjustmentType.revaluation &&
-          totalValueCents <= 0) {
+      if (type != InventoryAdjustmentType.revaluation && totalValueCents <= 0) {
         throw InventoryAdjustmentException(
           'Adjustment value must be positive for ${type.wireName} '
           '(computed=$totalValueCents, qty=$quantityDelta, cost=$oldUnitCost). '
@@ -263,8 +289,7 @@ class InventoryAdjustmentService {
         );
       }
 
-      if (type == InventoryAdjustmentType.revaluation &&
-          totalValueCents == 0) {
+      if (type == InventoryAdjustmentType.revaluation && totalValueCents == 0) {
         throw const InventoryAdjustmentException(
           'Revaluation produced zero delta (same cost × same qty). '
           'Nothing to post.',
@@ -324,14 +349,17 @@ class InventoryAdjustmentService {
       // the SKU row is. Revaluation never touches `remaining_quantity`
       // because per-batch unit costs are FROZEN — the new cost takes effect
       // on subsequent purchases / opening batches only.
-      final fifoRow = await _db.customSelect(
-        'SELECT inventory_tracking_type, costing_method '
-        'FROM products WHERE id = ?',
-        variables: [Variable.withInt(productId)],
-      ).getSingleOrNull();
+      final fifoRow = await _db
+          .customSelect(
+            'SELECT inventory_tracking_type, costing_method '
+            'FROM products WHERE id = ?',
+            variables: [Variable.withInt(productId)],
+          )
+          .getSingleOrNull();
       final tracking = fifoRow?.read<String?>('inventory_tracking_type');
-      final bool isFifo = (tracking == 'batch' || tracking == 'batch_expiry')
-          || (fifoRow?.read<String?>('costing_method') ?? 'wac') == 'fifo';
+      final bool isFifo =
+          (tracking == 'batch' || tracking == 'batch_expiry') ||
+          (fifoRow?.read<String?>('costing_method') ?? 'wac') == 'fifo';
       if (isFifo && quantityDelta != 0) {
         switch (type) {
           case InventoryAdjustmentType.shrinkage:
@@ -409,18 +437,39 @@ class InventoryAdjustmentService {
           );
         }
 
-        // Centralized price-history audit — revaluation can ONLY move
-        // cost, retail/wholesale stay put. Recording here keeps the
-        // product-edit page's history surface in sync with every other
-        // sanctioned cost-mutating call site.
+        // Centralized price-history audit — revaluation can ONLY move cost,
+        // while retail/wholesale stay put. Persist their real unchanged
+        // values rather than synthetic zeroes so every history row remains a
+        // complete, independently-readable snapshot.
+        final priceRow = variantId == null
+            ? await _dao
+                  .customSelect(
+                    'SELECT price_cents, wholesale_price_cents '
+                    'FROM products WHERE id = ?',
+                    variables: [Variable.withInt(productId)],
+                  )
+                  .getSingle()
+            : await _dao
+                  .customSelect(
+                    'SELECT price_cents, wholesale_price_cents '
+                    'FROM product_variants WHERE id = ?',
+                    variables: [Variable.withInt(variantId)],
+                  )
+                  .getSingle();
+        final unchangedPrice = priceRow.read<int>('price_cents');
+        final unchangedWholesale = priceRow.readNullable<int>(
+          'wholesale_price_cents',
+        );
         await PriceHistoryService.recordIfChanged(
           _dao,
           productId: productId,
           variantId: variantId,
           oldCostCents: oldUnitCost,
           newCostCents: newUnitCostCents,
-          oldPriceCents: 0,
-          newPriceCents: 0,
+          oldPriceCents: unchangedPrice,
+          newPriceCents: unchangedPrice,
+          oldWholesalePriceCents: unchangedWholesale,
+          newWholesalePriceCents: unchangedWholesale,
           userId: userId,
           changeReason: 'inventory_revaluation:#$adjustmentId',
         );
@@ -502,10 +551,12 @@ class InventoryAdjustmentService {
     String? notes,
     int? userId,
   }) async {
-    final row = await _db.customSelect(
-      'SELECT currency_id FROM products WHERE id = ?',
-      variables: [Variable.withInt(productId)],
-    ).getSingleOrNull();
+    final row = await _db
+        .customSelect(
+          'SELECT currency_id FROM products WHERE id = ?',
+          variables: [Variable.withInt(productId)],
+        )
+        .getSingleOrNull();
     final currencyId = row?.readNullable<int>('currency_id') ?? 1;
     return adjust(
       productId: productId,
@@ -542,10 +593,12 @@ class InventoryAdjustmentService {
   }) async {
     if (quantity <= 0) return null;
 
-    final row = await _db.customSelect(
-      'SELECT currency_id FROM products WHERE id = ?',
-      variables: [Variable.withInt(productId)],
-    ).getSingleOrNull();
+    final row = await _db
+        .customSelect(
+          'SELECT currency_id FROM products WHERE id = ?',
+          variables: [Variable.withInt(productId)],
+        )
+        .getSingleOrNull();
     final currencyId = row?.readNullable<int>('currency_id') ?? 1;
 
     return adjust(

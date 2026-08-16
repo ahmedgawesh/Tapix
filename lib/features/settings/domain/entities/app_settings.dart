@@ -12,7 +12,8 @@ class AppSettings {
   final bool autoPrintReceipt;
   final bool includeTaxBreakdown;
   final String receiptLanguage; // 'app', 'en', 'ar', 'fr'
-  final bool showHeaderFooterOnPurchases; // Show header/footer text on purchase invoices
+  final bool
+  showHeaderFooterOnPurchases; // Show header/footer text on purchase invoices
 
   // ── Barcode / Label ──
   final String defaultLabelSize; // 'small', 'medium', 'large'
@@ -36,6 +37,10 @@ class AppSettings {
   final String skuFormat; // e.g. 'PRD-{0000}'
   final bool autoGenerateBarcode;
   final bool defaultTrackInventory;
+  final bool enableMeasuredProducts;
+  final bool enableLengthUnits;
+  final bool enableWeightUnits;
+  final bool enableVolumeUnits;
 
   // ── Sales ──
   final String defaultPaymentMethod; // 'cash', 'card', 'bank_transfer'
@@ -49,7 +54,8 @@ class AppSettings {
   // ── Security ──
   final bool enableSessionTimeout; // Enable/disable session timeout
   final int sessionTimeoutMinutes;
-  final int rememberMeDurationHours; // How long "Remember Me" keeps user logged in (max 168h = 7 days)
+  final int
+  rememberMeDurationHours; // How long "Remember Me" keeps user logged in (max 168h = 7 days)
   final bool requirePinForVoidRefund;
   final bool enableBiometricLogin;
   final bool enableDatabaseEncryption;
@@ -99,6 +105,10 @@ class AppSettings {
     this.skuFormat = 'PRD-{0000}',
     this.autoGenerateBarcode = true,
     this.defaultTrackInventory = true,
+    this.enableMeasuredProducts = false,
+    this.enableLengthUnits = false,
+    this.enableWeightUnits = false,
+    this.enableVolumeUnits = false,
     // Sales
     this.defaultPaymentMethod = 'cash',
     this.allowPartialPayments = false,
@@ -154,6 +164,10 @@ class AppSettings {
     String? skuFormat,
     bool? autoGenerateBarcode,
     bool? defaultTrackInventory,
+    bool? enableMeasuredProducts,
+    bool? enableLengthUnits,
+    bool? enableWeightUnits,
+    bool? enableVolumeUnits,
     String? defaultPaymentMethod,
     bool? allowPartialPayments,
     bool? allowDiscounts,
@@ -185,41 +199,60 @@ class AppSettings {
       autoPrintReceipt: autoPrintReceipt ?? this.autoPrintReceipt,
       includeTaxBreakdown: includeTaxBreakdown ?? this.includeTaxBreakdown,
       receiptLanguage: receiptLanguage ?? this.receiptLanguage,
-      showHeaderFooterOnPurchases: showHeaderFooterOnPurchases ?? this.showHeaderFooterOnPurchases,
+      showHeaderFooterOnPurchases:
+          showHeaderFooterOnPurchases ?? this.showHeaderFooterOnPurchases,
       defaultLabelSize: defaultLabelSize ?? this.defaultLabelSize,
       labelTemplate: labelTemplate ?? this.labelTemplate,
       printerConnection: printerConnection ?? this.printerConnection,
       includePriceOnLabel: includePriceOnLabel ?? this.includePriceOnLabel,
       includeBarcodeText: includeBarcodeText ?? this.includeBarcodeText,
-      defaultPurchaseTaxRate: defaultPurchaseTaxRate ?? this.defaultPurchaseTaxRate,
+      defaultPurchaseTaxRate:
+          defaultPurchaseTaxRate ?? this.defaultPurchaseTaxRate,
       defaultSalesTaxRate: defaultSalesTaxRate ?? this.defaultSalesTaxRate,
-      taxRegistrationNumber: taxRegistrationNumber ?? this.taxRegistrationNumber,
+      taxRegistrationNumber:
+          taxRegistrationNumber ?? this.taxRegistrationNumber,
       taxInclusivePricing: taxInclusivePricing ?? this.taxInclusivePricing,
-      enableTaxCalculations: enableTaxCalculations ?? this.enableTaxCalculations,
+      enableTaxCalculations:
+          enableTaxCalculations ?? this.enableTaxCalculations,
       lowStockThreshold: lowStockThreshold ?? this.lowStockThreshold,
       enableStockAlerts: enableStockAlerts ?? this.enableStockAlerts,
       allowNegativeStock: allowNegativeStock ?? this.allowNegativeStock,
       autoGenerateSku: autoGenerateSku ?? this.autoGenerateSku,
       skuFormat: skuFormat ?? this.skuFormat,
       autoGenerateBarcode: autoGenerateBarcode ?? this.autoGenerateBarcode,
-      defaultTrackInventory: defaultTrackInventory ?? this.defaultTrackInventory,
+      defaultTrackInventory:
+          defaultTrackInventory ?? this.defaultTrackInventory,
+      enableMeasuredProducts:
+          enableMeasuredProducts ?? this.enableMeasuredProducts,
+      enableLengthUnits: enableLengthUnits ?? this.enableLengthUnits,
+      enableWeightUnits: enableWeightUnits ?? this.enableWeightUnits,
+      enableVolumeUnits: enableVolumeUnits ?? this.enableVolumeUnits,
       defaultPaymentMethod: defaultPaymentMethod ?? this.defaultPaymentMethod,
       allowPartialPayments: allowPartialPayments ?? this.allowPartialPayments,
       allowDiscounts: allowDiscounts ?? this.allowDiscounts,
       maxDiscountPercent: maxDiscountPercent ?? this.maxDiscountPercent,
-      requireCustomerForSales: requireCustomerForSales ?? this.requireCustomerForSales,
+      requireCustomerForSales:
+          requireCustomerForSales ?? this.requireCustomerForSales,
       enableLoyaltyPoints: enableLoyaltyPoints ?? this.enableLoyaltyPoints,
-      pointsPerCurrencyUnit: pointsPerCurrencyUnit ?? this.pointsPerCurrencyUnit,
+      pointsPerCurrencyUnit:
+          pointsPerCurrencyUnit ?? this.pointsPerCurrencyUnit,
       enableSessionTimeout: enableSessionTimeout ?? this.enableSessionTimeout,
-      sessionTimeoutMinutes: sessionTimeoutMinutes ?? this.sessionTimeoutMinutes,
-      rememberMeDurationHours: rememberMeDurationHours ?? this.rememberMeDurationHours,
-      requirePinForVoidRefund: requirePinForVoidRefund ?? this.requirePinForVoidRefund,
+      sessionTimeoutMinutes:
+          sessionTimeoutMinutes ?? this.sessionTimeoutMinutes,
+      rememberMeDurationHours:
+          rememberMeDurationHours ?? this.rememberMeDurationHours,
+      requirePinForVoidRefund:
+          requirePinForVoidRefund ?? this.requirePinForVoidRefund,
       enableBiometricLogin: enableBiometricLogin ?? this.enableBiometricLogin,
-      enableDatabaseEncryption: enableDatabaseEncryption ?? this.enableDatabaseEncryption,
-      defaultReportDateRange: defaultReportDateRange ?? this.defaultReportDateRange,
+      enableDatabaseEncryption:
+          enableDatabaseEncryption ?? this.enableDatabaseEncryption,
+      defaultReportDateRange:
+          defaultReportDateRange ?? this.defaultReportDateRange,
       defaultExportFormat: defaultExportFormat ?? this.defaultExportFormat,
-      includeInactiveInReports: includeInactiveInReports ?? this.includeInactiveInReports,
-      lowStockNotifications: lowStockNotifications ?? this.lowStockNotifications,
+      includeInactiveInReports:
+          includeInactiveInReports ?? this.includeInactiveInReports,
+      lowStockNotifications:
+          lowStockNotifications ?? this.lowStockNotifications,
       dailySalesSummary: dailySalesSummary ?? this.dailySalesSummary,
       paymentReminders: paymentReminders ?? this.paymentReminders,
       receiptPrinterName: receiptPrinterName ?? this.receiptPrinterName,
@@ -228,54 +261,58 @@ class AppSettings {
   }
 
   Map<String, dynamic> toMap() => {
-        'receiptHeaderText': receiptHeaderText,
-        'receiptFooterText': receiptFooterText,
-        'showLogoOnReceipt': showLogoOnReceipt,
-        'receiptPaperSize': receiptPaperSize,
-        'receiptCopies': receiptCopies,
-        'autoPrintReceipt': autoPrintReceipt,
-        'includeTaxBreakdown': includeTaxBreakdown,
-        'receiptLanguage': receiptLanguage,
-        'showHeaderFooterOnPurchases': showHeaderFooterOnPurchases,
-        'defaultLabelSize': defaultLabelSize,
-        'labelTemplate': labelTemplate,
-        'printerConnection': printerConnection,
-        'includePriceOnLabel': includePriceOnLabel,
-        'includeBarcodeText': includeBarcodeText,
-        'defaultPurchaseTaxRate': defaultPurchaseTaxRate,
-        'defaultSalesTaxRate': defaultSalesTaxRate,
-        'taxRegistrationNumber': taxRegistrationNumber,
-        'taxInclusivePricing': taxInclusivePricing,
-        'enableTaxCalculations': enableTaxCalculations,
-        'lowStockThreshold': lowStockThreshold,
-        'enableStockAlerts': enableStockAlerts,
-        'allowNegativeStock': allowNegativeStock,
-        'autoGenerateSku': autoGenerateSku,
-        'skuFormat': skuFormat,
-        'autoGenerateBarcode': autoGenerateBarcode,
-        'defaultTrackInventory': defaultTrackInventory,
-        'defaultPaymentMethod': defaultPaymentMethod,
-        'allowPartialPayments': allowPartialPayments,
-        'allowDiscounts': allowDiscounts,
-        'maxDiscountPercent': maxDiscountPercent,
-        'requireCustomerForSales': requireCustomerForSales,
-        'enableLoyaltyPoints': enableLoyaltyPoints,
-        'pointsPerCurrencyUnit': pointsPerCurrencyUnit,
-        'enableSessionTimeout': enableSessionTimeout,
-        'sessionTimeoutMinutes': sessionTimeoutMinutes,
-        'rememberMeDurationHours': rememberMeDurationHours,
-        'requirePinForVoidRefund': requirePinForVoidRefund,
-        'enableBiometricLogin': enableBiometricLogin,
-        'enableDatabaseEncryption': enableDatabaseEncryption,
-        'defaultReportDateRange': defaultReportDateRange,
-        'defaultExportFormat': defaultExportFormat,
-        'includeInactiveInReports': includeInactiveInReports,
-        'lowStockNotifications': lowStockNotifications,
-        'dailySalesSummary': dailySalesSummary,
-        'paymentReminders': paymentReminders,
-        'receiptPrinterName': receiptPrinterName,
-        'labelPrinterName': labelPrinterName,
-      };
+    'receiptHeaderText': receiptHeaderText,
+    'receiptFooterText': receiptFooterText,
+    'showLogoOnReceipt': showLogoOnReceipt,
+    'receiptPaperSize': receiptPaperSize,
+    'receiptCopies': receiptCopies,
+    'autoPrintReceipt': autoPrintReceipt,
+    'includeTaxBreakdown': includeTaxBreakdown,
+    'receiptLanguage': receiptLanguage,
+    'showHeaderFooterOnPurchases': showHeaderFooterOnPurchases,
+    'defaultLabelSize': defaultLabelSize,
+    'labelTemplate': labelTemplate,
+    'printerConnection': printerConnection,
+    'includePriceOnLabel': includePriceOnLabel,
+    'includeBarcodeText': includeBarcodeText,
+    'defaultPurchaseTaxRate': defaultPurchaseTaxRate,
+    'defaultSalesTaxRate': defaultSalesTaxRate,
+    'taxRegistrationNumber': taxRegistrationNumber,
+    'taxInclusivePricing': taxInclusivePricing,
+    'enableTaxCalculations': enableTaxCalculations,
+    'lowStockThreshold': lowStockThreshold,
+    'enableStockAlerts': enableStockAlerts,
+    'allowNegativeStock': allowNegativeStock,
+    'autoGenerateSku': autoGenerateSku,
+    'skuFormat': skuFormat,
+    'autoGenerateBarcode': autoGenerateBarcode,
+    'defaultTrackInventory': defaultTrackInventory,
+    'enableMeasuredProducts': enableMeasuredProducts,
+    'enableLengthUnits': enableLengthUnits,
+    'enableWeightUnits': enableWeightUnits,
+    'enableVolumeUnits': enableVolumeUnits,
+    'defaultPaymentMethod': defaultPaymentMethod,
+    'allowPartialPayments': allowPartialPayments,
+    'allowDiscounts': allowDiscounts,
+    'maxDiscountPercent': maxDiscountPercent,
+    'requireCustomerForSales': requireCustomerForSales,
+    'enableLoyaltyPoints': enableLoyaltyPoints,
+    'pointsPerCurrencyUnit': pointsPerCurrencyUnit,
+    'enableSessionTimeout': enableSessionTimeout,
+    'sessionTimeoutMinutes': sessionTimeoutMinutes,
+    'rememberMeDurationHours': rememberMeDurationHours,
+    'requirePinForVoidRefund': requirePinForVoidRefund,
+    'enableBiometricLogin': enableBiometricLogin,
+    'enableDatabaseEncryption': enableDatabaseEncryption,
+    'defaultReportDateRange': defaultReportDateRange,
+    'defaultExportFormat': defaultExportFormat,
+    'includeInactiveInReports': includeInactiveInReports,
+    'lowStockNotifications': lowStockNotifications,
+    'dailySalesSummary': dailySalesSummary,
+    'paymentReminders': paymentReminders,
+    'receiptPrinterName': receiptPrinterName,
+    'labelPrinterName': labelPrinterName,
+  };
 
   String toJson() => jsonEncode(toMap());
 
@@ -289,14 +326,17 @@ class AppSettings {
       autoPrintReceipt: (m['autoPrintReceipt'] as bool?) ?? false,
       includeTaxBreakdown: (m['includeTaxBreakdown'] as bool?) ?? true,
       receiptLanguage: (m['receiptLanguage'] as String?) ?? 'app',
-      showHeaderFooterOnPurchases: (m['showHeaderFooterOnPurchases'] as bool?) ?? true,
+      showHeaderFooterOnPurchases:
+          (m['showHeaderFooterOnPurchases'] as bool?) ?? true,
       defaultLabelSize: (m['defaultLabelSize'] as String?) ?? 'medium',
       labelTemplate: (m['labelTemplate'] as String?) ?? 'standard',
       printerConnection: (m['printerConnection'] as String?) ?? 'none',
       includePriceOnLabel: (m['includePriceOnLabel'] as bool?) ?? true,
       includeBarcodeText: (m['includeBarcodeText'] as bool?) ?? true,
-      defaultPurchaseTaxRate: (m['defaultPurchaseTaxRate'] as num?)?.toDouble() ?? 0.0,
-      defaultSalesTaxRate: (m['defaultSalesTaxRate'] as num?)?.toDouble() ?? 0.0,
+      defaultPurchaseTaxRate:
+          (m['defaultPurchaseTaxRate'] as num?)?.toDouble() ?? 0.0,
+      defaultSalesTaxRate:
+          (m['defaultSalesTaxRate'] as num?)?.toDouble() ?? 0.0,
       taxRegistrationNumber: (m['taxRegistrationNumber'] as String?) ?? '',
       taxInclusivePricing: (m['taxInclusivePricing'] as bool?) ?? false,
       enableTaxCalculations: (m['enableTaxCalculations'] as bool?) ?? true,
@@ -307,10 +347,15 @@ class AppSettings {
       skuFormat: (m['skuFormat'] as String?) ?? 'PRD-{0000}',
       autoGenerateBarcode: (m['autoGenerateBarcode'] as bool?) ?? true,
       defaultTrackInventory: (m['defaultTrackInventory'] as bool?) ?? true,
+      enableMeasuredProducts: (m['enableMeasuredProducts'] as bool?) ?? false,
+      enableLengthUnits: (m['enableLengthUnits'] as bool?) ?? false,
+      enableWeightUnits: (m['enableWeightUnits'] as bool?) ?? false,
+      enableVolumeUnits: (m['enableVolumeUnits'] as bool?) ?? false,
       defaultPaymentMethod: (m['defaultPaymentMethod'] as String?) ?? 'cash',
       allowPartialPayments: (m['allowPartialPayments'] as bool?) ?? false,
       allowDiscounts: (m['allowDiscounts'] as bool?) ?? true,
-      maxDiscountPercent: (m['maxDiscountPercent'] as num?)?.toDouble() ?? 100.0,
+      maxDiscountPercent:
+          (m['maxDiscountPercent'] as num?)?.toDouble() ?? 100.0,
       requireCustomerForSales: (m['requireCustomerForSales'] as bool?) ?? false,
       enableLoyaltyPoints: (m['enableLoyaltyPoints'] as bool?) ?? false,
       pointsPerCurrencyUnit: (m['pointsPerCurrencyUnit'] as int?) ?? 1,
@@ -319,10 +364,13 @@ class AppSettings {
       rememberMeDurationHours: (m['rememberMeDurationHours'] as int?) ?? 72,
       requirePinForVoidRefund: (m['requirePinForVoidRefund'] as bool?) ?? false,
       enableBiometricLogin: (m['enableBiometricLogin'] as bool?) ?? false,
-      enableDatabaseEncryption: (m['enableDatabaseEncryption'] as bool?) ?? false,
-      defaultReportDateRange: (m['defaultReportDateRange'] as String?) ?? 'month',
+      enableDatabaseEncryption:
+          (m['enableDatabaseEncryption'] as bool?) ?? false,
+      defaultReportDateRange:
+          (m['defaultReportDateRange'] as String?) ?? 'month',
       defaultExportFormat: (m['defaultExportFormat'] as String?) ?? 'pdf',
-      includeInactiveInReports: (m['includeInactiveInReports'] as bool?) ?? false,
+      includeInactiveInReports:
+          (m['includeInactiveInReports'] as bool?) ?? false,
       lowStockNotifications: (m['lowStockNotifications'] as bool?) ?? true,
       dailySalesSummary: (m['dailySalesSummary'] as bool?) ?? false,
       paymentReminders: (m['paymentReminders'] as bool?) ?? false,

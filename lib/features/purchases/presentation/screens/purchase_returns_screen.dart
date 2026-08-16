@@ -43,7 +43,9 @@ class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
     super.dispose();
   }
 
-  List<PurchaseReturnEntity> _applyDateFilter(List<PurchaseReturnEntity> returns) {
+  List<PurchaseReturnEntity> _applyDateFilter(
+    List<PurchaseReturnEntity> returns,
+  ) {
     if (_dateRange == null) return returns;
     return returns.where((r) {
       return !r.returnDate.isBefore(_dateRange!.start) &&
@@ -72,146 +74,168 @@ class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
         title: Text('purchases.returns'.tr()),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => showUnifiedReturnSearchSheet(
-          context,
-          side: ReturnSide.purchase,
-        ),
+        onPressed: () =>
+            showUnifiedReturnSearchSheet(context, side: ReturnSide.purchase),
         icon: const Icon(LucideIcons.plus),
         label: Text('returns.create_purchase_return'.tr()),
       ),
       body: SafeArea(
-        child: BlocBuilder<PurchaseReturnsBloc,
-            RealtimeState<List<PurchaseReturnEntity>>>(
-          builder: (context, state) {
-            if (state is RealtimeLoading<List<PurchaseReturnEntity>> &&
-                state.previousData == null) {
-              return const Center(child: CircularProgressIndicator());
-            }
+        child:
+            BlocBuilder<
+              PurchaseReturnsBloc,
+              RealtimeState<List<PurchaseReturnEntity>>
+            >(
+              builder: (context, state) {
+                if (state is RealtimeLoading<List<PurchaseReturnEntity>> &&
+                    state.previousData == null) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-            if (state is RealtimeError<List<PurchaseReturnEntity>> &&
-                state.previousData == null) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                if (state is RealtimeError<List<PurchaseReturnEntity>> &&
+                    state.previousData == null) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          LucideIcons.alertCircle,
+                          size: 64,
+                          color: colorScheme.error,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'common.error'.tr(),
+                          style: theme.textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton.icon(
+                          onPressed: () =>
+                              context.read<PurchaseReturnsBloc>().refresh(),
+                          icon: const Icon(LucideIcons.rotateCcw),
+                          label: Text('common.retry'.tr()),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                List<PurchaseReturnEntity>? returns;
+                if (state is RealtimeSuccess<List<PurchaseReturnEntity>>) {
+                  returns = state.data;
+                } else if (state
+                    is RealtimeLoading<List<PurchaseReturnEntity>>) {
+                  returns = state.previousData;
+                } else if (state is RealtimeError<List<PurchaseReturnEntity>>) {
+                  returns = state.previousData;
+                }
+
+                final displayReturns = _applyDateFilter(returns ?? []);
+
+                return Column(
                   children: [
-                    Icon(LucideIcons.alertCircle, size: 64, color: colorScheme.error),
-                    const SizedBox(height: 16),
-                    Text('common.error'.tr(), style: theme.textTheme.titleLarge),
-                    const SizedBox(height: 8),
-                    TextButton.icon(
-                      onPressed: () => context.read<PurchaseReturnsBloc>().refresh(),
-                      icon: const Icon(LucideIcons.rotateCcw),
-                      label: Text('common.retry'.tr()),
+                    // Search + Date filter
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _searchController,
+                              decoration: InputDecoration(
+                                hintText: 'purchases.search_returns'.tr(),
+                                prefixIcon: const Icon(LucideIcons.search),
+                                suffixIcon: _searchController.text.isNotEmpty
+                                    ? IconButton(
+                                        icon: const Icon(LucideIcons.x),
+                                        onPressed: () {
+                                          _searchController.clear();
+                                          context.read<PurchaseReturnsBloc>().add(
+                                            const PurchaseReturnsSearchRequested(
+                                              '',
+                                            ),
+                                          );
+                                        },
+                                      )
+                                    : null,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                filled: true,
+                                isDense: true,
+                              ),
+                              onChanged: (value) {
+                                context.read<PurchaseReturnsBloc>().add(
+                                  PurchaseReturnsSearchRequested(value),
+                                );
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          _buildDateFilterButton(context),
+                        ],
+                      ),
+                    ),
+
+                    // Active date filter chip
+                    if (_dateRange != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: Chip(
+                            avatar: Icon(
+                              LucideIcons.calendar,
+                              size: 14,
+                              color: colorScheme.primary,
+                            ),
+                            label: Text(
+                              _datePresetLabel ??
+                                  '${DateFormat.MMMd().format(_dateRange!.start)} – ${DateFormat.MMMd().format(_dateRange!.end)}',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            deleteIcon: const Icon(LucideIcons.x, size: 14),
+                            onDeleted: () => setState(() {
+                              _dateRange = null;
+                              _datePresetLabel = null;
+                            }),
+                            visualDensity: VisualDensity.compact,
+                            side: BorderSide(
+                              color: colorScheme.primary.withValues(alpha: 0.3),
+                            ),
+                            backgroundColor: colorScheme.primaryContainer
+                                .withValues(alpha: 0.3),
+                          ),
+                        ),
+                      ),
+
+                    // Summary bar
+                    if (displayReturns.isNotEmpty)
+                      _buildSummaryBar(context, displayReturns, cs),
+
+                    // List
+                    Expanded(
+                      child: displayReturns.isEmpty
+                          ? _buildEmptyState(context)
+                          : ListView.builder(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              itemCount: displayReturns.length,
+                              itemBuilder: (context, index) {
+                                final ret = displayReturns[index];
+                                return _ReturnTile(
+                                  returnEntity: ret,
+                                  currencyService: cs,
+                                );
+                              },
+                            ),
                     ),
                   ],
-                ),
-              );
-            }
-
-            List<PurchaseReturnEntity>? returns;
-            if (state is RealtimeSuccess<List<PurchaseReturnEntity>>) {
-              returns = state.data;
-            } else if (state is RealtimeLoading<List<PurchaseReturnEntity>>) {
-              returns = state.previousData;
-            } else if (state is RealtimeError<List<PurchaseReturnEntity>>) {
-              returns = state.previousData;
-            }
-
-            final displayReturns = _applyDateFilter(returns ?? []);
-
-            return Column(
-              children: [
-                // Search + Date filter
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _searchController,
-                          decoration: InputDecoration(
-                            hintText: 'purchases.search_returns'.tr(),
-                            prefixIcon: const Icon(LucideIcons.search),
-                            suffixIcon: _searchController.text.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(LucideIcons.x),
-                                    onPressed: () {
-                                      _searchController.clear();
-                                      context.read<PurchaseReturnsBloc>()
-                                          .add(const PurchaseReturnsSearchRequested(''));
-                                    },
-                                  )
-                                : null,
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12)),
-                            filled: true,
-                            isDense: true,
-                          ),
-                          onChanged: (value) {
-                            context.read<PurchaseReturnsBloc>()
-                                .add(PurchaseReturnsSearchRequested(value));
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      _buildDateFilterButton(context),
-                    ],
-                  ),
-                ),
-
-                // Active date filter chip
-                if (_dateRange != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Align(
-                      alignment: AlignmentDirectional.centerStart,
-                      child: Chip(
-                        avatar: Icon(LucideIcons.calendar, size: 14,
-                            color: colorScheme.primary),
-                        label: Text(
-                          _datePresetLabel ??
-                              '${DateFormat.MMMd().format(_dateRange!.start)} – ${DateFormat.MMMd().format(_dateRange!.end)}',
-                          style: theme.textTheme.labelSmall
-                              ?.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                        deleteIcon: const Icon(LucideIcons.x, size: 14),
-                        onDeleted: () => setState(() {
-                          _dateRange = null;
-                          _datePresetLabel = null;
-                        }),
-                        visualDensity: VisualDensity.compact,
-                        side: BorderSide(
-                            color: colorScheme.primary.withValues(alpha: 0.3)),
-                        backgroundColor: colorScheme.primaryContainer
-                            .withValues(alpha: 0.3),
-                      ),
-                    ),
-                  ),
-
-                // Summary bar
-                if (displayReturns.isNotEmpty)
-                  _buildSummaryBar(context, displayReturns, cs),
-
-                // List
-                Expanded(
-                  child: displayReturns.isEmpty
-                      ? _buildEmptyState(context)
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: displayReturns.length,
-                          itemBuilder: (context, index) {
-                            final ret = displayReturns[index];
-                            return _ReturnTile(
-                              returnEntity: ret,
-                              currencyService: cs,
-                            );
-                          },
-                        ),
-                ),
-              ],
-            );
-          },
-        ),
+                );
+              },
+            ),
       ),
     );
   }
@@ -239,19 +263,27 @@ class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
         },
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: Icon(LucideIcons.calendarRange, size: 20,
-              color: hasFilter ? cs.onPrimaryContainer : cs.onSurfaceVariant),
+          child: Icon(
+            LucideIcons.calendarRange,
+            size: 20,
+            color: hasFilter ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildSummaryBar(BuildContext context, List<PurchaseReturnEntity> returns,
-      CurrencyService cs) {
+  Widget _buildSummaryBar(
+    BuildContext context,
+    List<PurchaseReturnEntity> returns,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final totalRefund = returns.fold<int>(
-        0, (sum, r) => sum + r.totalCents.toBigInt().toInt());
+      0,
+      (sum, r) => sum + r.totalCents.toBigInt().toInt(),
+    );
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -267,7 +299,10 @@ class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
             padding: const EdgeInsets.all(7),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [colorScheme.error, colorScheme.error.withValues(alpha: 0.7)],
+                colors: [
+                  colorScheme.error,
+                  colorScheme.error.withValues(alpha: 0.7),
+                ],
               ),
               borderRadius: BorderRadius.circular(8),
             ),
@@ -277,18 +312,28 @@ class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('${returns.length} ${'purchases.returns'.tr().toLowerCase()}',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant)),
-              Text('purchases.return_total'.tr(),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7))),
+              Text(
+                '${returns.length} ${'purchases.returns'.tr().toLowerCase()}',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              Text(
+                'purchases.return_total'.tr(),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                ),
+              ),
             ],
           ),
           const Spacer(),
-          Text(cs.format(totalRefund),
-              style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold, color: colorScheme.error)),
+          Text(
+            cs.format(totalRefund),
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: colorScheme.error,
+            ),
+          ),
         ],
       ),
     );
@@ -307,19 +352,28 @@ class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
               color: cs.errorContainer.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
-            child: Icon(LucideIcons.undo2, size: 48,
-                color: cs.error.withValues(alpha: 0.3)),
+            child: Icon(
+              LucideIcons.undo2,
+              size: 48,
+              color: cs.error.withValues(alpha: 0.3),
+            ),
           ),
           const SizedBox(height: 20),
-          Text('purchases.no_returns'.tr(),
-              style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: cs.onSurfaceVariant)),
+          Text(
+            'purchases.no_returns'.tr(),
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: cs.onSurfaceVariant,
+            ),
+          ),
           const SizedBox(height: 6),
-          Text('purchases.no_returns_hint'.tr(),
-              style: theme.textTheme.bodySmall?.copyWith(
-                  color: cs.onSurfaceVariant.withValues(alpha: 0.7)),
-              textAlign: TextAlign.center),
+          Text(
+            'purchases.no_returns_hint'.tr(),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+            ),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
@@ -339,7 +393,8 @@ class _ReturnTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final supplierInitial = returnEntity.supplierName != null &&
+    final supplierInitial =
+        returnEntity.supplierName != null &&
             returnEntity.supplierName!.isNotEmpty
         ? returnEntity.supplierName![0].toUpperCase()
         : '?';
@@ -361,175 +416,240 @@ class _ReturnTile extends StatelessWidget {
             }
           },
           child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
-          ),
-          child: IntrinsicHeight(
-            child: Row(
-              children: [
-                // Status accent bar
-                Container(
-                  width: 4,
-                  decoration: BoxDecoration(
-                    color: returnEntity.status == 'voided'
-                        ? cs.outlineVariant
-                        : returnEntity.isAdjustment
-                            ? cs.tertiary
-                            : cs.error,
-                    borderRadius: const BorderRadiusDirectional.only(
-                      topStart: Radius.circular(14),
-                      bottomStart: Radius.circular(14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.4),
+              ),
+            ),
+            child: IntrinsicHeight(
+              child: Row(
+                children: [
+                  // Status accent bar
+                  Container(
+                    width: 4,
+                    decoration: BoxDecoration(
+                      color: returnEntity.status == 'voided'
+                          ? cs.outlineVariant
+                          : returnEntity.isAdjustment
+                          ? cs.tertiary
+                          : cs.error,
+                      borderRadius: const BorderRadiusDirectional.only(
+                        topStart: Radius.circular(14),
+                        bottomStart: Radius.circular(14),
+                      ),
                     ),
                   ),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Row(
-                      children: [
-                        // Supplier avatar
-                        Container(
-                          width: 38, height: 38,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: returnEntity.isAdjustment
-                                  ? [cs.tertiaryContainer, cs.tertiaryContainer.withValues(alpha: 0.5)]
-                                  : [cs.errorContainer, cs.errorContainer.withValues(alpha: 0.5)],
-                            ),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          alignment: Alignment.center,
-                          child: returnEntity.isAdjustment
-                              ? Icon(LucideIcons.rotateCcw,
-                                  color: cs.onTertiaryContainer, size: 16)
-                              : Text(supplierInitial,
-                                  style: theme.textTheme.titleSmall?.copyWith(
-                                      color: cs.error, fontWeight: FontWeight.bold)),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(returnEntity.returnNumber,
-                                        style: theme.textTheme.titleSmall?.copyWith(
-                                            fontWeight: FontWeight.w600),
-                                        overflow: TextOverflow.ellipsis),
-                                  ),
-                                  if (returnEntity.isAdjustment) ...[
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 1),
-                                      decoration: BoxDecoration(
-                                        color: cs.tertiaryContainer,
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        'returns.adjustment'.tr(),
-                                        style: theme.textTheme.labelSmall?.copyWith(
-                                          color: cs.onTertiaryContainer,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 9,
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
+                        children: [
+                          // Supplier avatar
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: returnEntity.isAdjustment
+                                    ? [
+                                        cs.tertiaryContainer,
+                                        cs.tertiaryContainer.withValues(
+                                          alpha: 0.5,
                                         ),
-                                      ),
-                                    ),
-                                  ],
-                                ],
+                                      ]
+                                    : [
+                                        cs.errorContainer,
+                                        cs.errorContainer.withValues(
+                                          alpha: 0.5,
+                                        ),
+                                      ],
                               ),
-                              const SizedBox(height: 2),
-                              Row(
-                                children: [
-                                  if (returnEntity.supplierName != null) ...[
-                                    Icon(LucideIcons.building2, size: 11,
-                                        color: cs.onSurfaceVariant),
-                                    const SizedBox(width: 3),
-                                    Flexible(
-                                      child: Text(returnEntity.supplierName!,
-                                          style: theme.textTheme.bodySmall?.copyWith(
-                                              color: cs.onSurfaceVariant, fontSize: 11),
-                                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            alignment: Alignment.center,
+                            child: returnEntity.isAdjustment
+                                ? Icon(
+                                    LucideIcons.rotateCcw,
+                                    color: cs.onTertiaryContainer,
+                                    size: 16,
+                                  )
+                                : Text(
+                                    supplierInitial,
+                                    style: theme.textTheme.titleSmall?.copyWith(
+                                      color: cs.error,
+                                      fontWeight: FontWeight.bold,
                                     ),
-                                    const SizedBox(width: 6),
-                                  ],
-                                  Icon(LucideIcons.calendar, size: 11,
-                                      color: cs.onSurfaceVariant),
-                                  const SizedBox(width: 3),
-                                  Text(DateFormat.yMMMd().format(returnEntity.returnDate),
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                          color: cs.onSurfaceVariant, fontSize: 11)),
-                                ],
-                              ),
-                              if (returnEntity.reason != null &&
-                                  returnEntity.reason!.isNotEmpty) ...[
-                                const SizedBox(height: 3),
+                                  ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                                 Row(
                                   children: [
-                                    Icon(LucideIcons.messageSquare, size: 11,
-                                        color: cs.onSurfaceVariant),
+                                    Flexible(
+                                      child: Text(
+                                        returnEntity.returnNumber,
+                                        style: theme.textTheme.titleSmall
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (returnEntity.isAdjustment) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 1,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: cs.tertiaryContainer,
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          'returns.adjustment'.tr(),
+                                          style: theme.textTheme.labelSmall
+                                              ?.copyWith(
+                                                color: cs.onTertiaryContainer,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 9,
+                                              ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Row(
+                                  children: [
+                                    if (returnEntity.supplierName != null) ...[
+                                      Icon(
+                                        LucideIcons.building2,
+                                        size: 11,
+                                        color: cs.onSurfaceVariant,
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Flexible(
+                                        child: Text(
+                                          returnEntity.supplierName!,
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: cs.onSurfaceVariant,
+                                                fontSize: 11,
+                                              ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                    ],
+                                    Icon(
+                                      LucideIcons.calendar,
+                                      size: 11,
+                                      color: cs.onSurfaceVariant,
+                                    ),
                                     const SizedBox(width: 3),
-                                    Expanded(
-                                      child: Text(returnEntity.reason!,
-                                          style: theme.textTheme.bodySmall?.copyWith(
-                                              color: cs.onSurfaceVariant,
-                                              fontStyle: FontStyle.italic,
-                                              fontSize: 11),
-                                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    Text(
+                                      DateFormat.yMMMd().format(
+                                        returnEntity.returnDate,
+                                      ),
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: cs.onSurfaceVariant,
+                                            fontSize: 11,
+                                          ),
                                     ),
                                   ],
                                 ),
+                                if (returnEntity.reason != null &&
+                                    returnEntity.reason!.isNotEmpty) ...[
+                                  const SizedBox(height: 3),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        LucideIcons.messageSquare,
+                                        size: 11,
+                                        color: cs.onSurfaceVariant,
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Expanded(
+                                        child: Text(
+                                          returnEntity.reason!,
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: cs.onSurfaceVariant,
+                                                fontStyle: FontStyle.italic,
+                                                fontSize: 11,
+                                              ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                currencyService.format(
+                                  returnEntity.totalCents.toBigInt().toInt(),
+                                ),
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  color: cs.error,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: returnEntity.status == 'voided'
+                                      ? cs.error.withValues(alpha: 0.1)
+                                      : Colors.green.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: returnEntity.status == 'voided'
+                                        ? cs.error.withValues(alpha: 0.3)
+                                        : Colors.green.withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: Text(
+                                  returnEntity.status == 'voided'
+                                      ? 'purchases.status_voided'.tr()
+                                      : 'purchases.status_posted'.tr(),
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: returnEntity.status == 'voided'
+                                        ? cs.error
+                                        : Colors.green,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 9,
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              currencyService.format(returnEntity.totalCents.toBigInt().toInt()),
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                  color: cs.error, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: returnEntity.status == 'voided'
-                                    ? cs.error.withValues(alpha: 0.1)
-                                    : Colors.green.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: returnEntity.status == 'voided'
-                                      ? cs.error.withValues(alpha: 0.3)
-                                      : Colors.green.withValues(alpha: 0.3),
-                                ),
-                              ),
-                              child: Text(
-                                returnEntity.status == 'voided'
-                                    ? 'purchases.status_voided'.tr()
-                                    : 'purchases.status_posted'.tr(),
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: returnEntity.status == 'voided' ? cs.error : Colors.green,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 9,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
         ),
       ),
     );

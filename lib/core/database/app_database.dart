@@ -18,6 +18,7 @@ import 'tables/audit.dart';
 import 'tables/barcode.dart';
 import 'tables/inventory.dart';
 import 'tables/cheques.dart';
+import 'tables/cashier_shifts.dart';
 import 'converters/money_converter.dart';
 import 'converters/json_converter.dart';
 import 'converters/timestamp_converter.dart';
@@ -85,6 +86,7 @@ part 'app_database.g.dart';
     EmployeeDocuments,
     OvertimeRules,
     PerformanceMetrics,
+    CashierShifts,
     Sales,
     SaleItems,
     SaleTaxBands,
@@ -101,6 +103,9 @@ part 'app_database.g.dart';
     JournalEntryLines,
     AccountingPeriods,
     Expenses,
+    OwnerFinanceTransactions,
+    FixedAssets,
+    FixedAssetDepreciations,
     AuditLogs,
     VoidLogs,
     Notifications,
@@ -143,7 +148,7 @@ part 'app_database.g.dart';
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
-  
+
   AppDatabase.connect(DatabaseConnection connection) : super(connection);
 
   Future<void> _dedupeUniqueSkuBarcodeIfNeeded() async {
@@ -188,12 +193,16 @@ class AppDatabase extends _$AppDatabase {
         return;
       }
 
-      debugPrint('DB schema fix: rebuilding product_variants to relax NOT NULL constraints');
+      debugPrint(
+        'DB schema fix: rebuilding product_variants to relax NOT NULL constraints',
+      );
       await _ensureSchemaIntegrity();
 
       await customStatement('PRAGMA foreign_keys = OFF');
       foreignKeysDisabled = true;
-      await customStatement('ALTER TABLE product_variants RENAME TO product_variants__old');
+      await customStatement(
+        'ALTER TABLE product_variants RENAME TO product_variants__old',
+      );
 
       final wholesaleColumnRow = await customSelect(
         "SELECT COUNT(*) as cnt FROM pragma_table_info('product_variants__old') WHERE name = 'wholesale_price_cents'",
@@ -324,7 +333,13 @@ FROM product_variants__old
       'sale_returns': ['return_date', 'created_at'],
       'sale_return_items': ['created_at'],
       'sale_payments': ['payment_date', 'created_at'],
-      'purchases': ['purchase_date', 'expected_delivery_date', 'due_date', 'created_at', 'updated_at'],
+      'purchases': [
+        'purchase_date',
+        'expected_delivery_date',
+        'due_date',
+        'created_at',
+        'updated_at',
+      ],
       'purchase_payments': ['payment_date', 'created_at'],
       'purchase_items': ['created_at'],
       'purchase_returns': ['return_date', 'created_at'],
@@ -333,13 +348,42 @@ FROM product_variants__old
       'customer_transactions': ['created_at'],
       'suppliers': ['created_at', 'updated_at'],
       'supplier_transactions': ['created_at'],
-      'employees': ['hire_date', 'termination_date', 'created_at', 'updated_at'],
+      'employees': [
+        'hire_date',
+        'termination_date',
+        'created_at',
+        'updated_at',
+      ],
       'commissions': ['created_at'],
-      'attendances': ['attendance_date', 'check_in_time', 'check_out_time', 'created_at', 'updated_at'],
-      'leave_requests': ['start_date', 'end_date', 'approved_at', 'created_at', 'updated_at'],
-      'payrolls': ['period_start', 'period_end', 'processed_at', 'created_at', 'updated_at'],
+      'attendances': [
+        'attendance_date',
+        'check_in_time',
+        'check_out_time',
+        'created_at',
+        'updated_at',
+      ],
+      'leave_requests': [
+        'start_date',
+        'end_date',
+        'approved_at',
+        'created_at',
+        'updated_at',
+      ],
+      'payrolls': [
+        'period_start',
+        'period_end',
+        'processed_at',
+        'created_at',
+        'updated_at',
+      ],
       'payroll_deductions': ['created_at'],
-      'shift_schedules': ['shift_date', 'start_time', 'end_time', 'created_at', 'updated_at'],
+      'shift_schedules': [
+        'shift_date',
+        'start_time',
+        'end_time',
+        'created_at',
+        'updated_at',
+      ],
       'employee_documents': ['expiry_date', 'created_at'],
       'overtime_rules': ['created_at', 'updated_at'],
       'performance_metrics': ['created_at', 'updated_at'],
@@ -348,6 +392,18 @@ FROM product_variants__old
       'journal_entry_lines': ['created_at'],
       'accounting_periods': ['start_date', 'end_date', 'created_at'],
       'expenses': ['expense_date', 'created_at'],
+      'owner_finance_transactions': [
+        'transaction_date',
+        'created_at',
+        'updated_at',
+      ],
+      'fixed_assets': [
+        'acquisition_date',
+        'in_service_date',
+        'created_at',
+        'updated_at',
+      ],
+      'fixed_asset_depreciations': ['period_start', 'period_end', 'created_at'],
       'audit_logs': ['created_at'],
       'void_logs': ['voided_at'],
       'notifications': ['created_at'],
@@ -358,9 +414,23 @@ FROM product_variants__old
       'users': ['created_at', 'updated_at'],
       'roles': ['created_at', 'updated_at'],
       'loyalty_tiers': ['created_at', 'updated_at'],
-      'loyalty_point_transactions': ['expires_at', 'transaction_date', 'created_at'],
-      'loyalty_rewards': ['valid_from', 'valid_until', 'created_at', 'updated_at'],
-      'customer_reward_redemptions': ['used_at', 'expires_at', 'redeemed_at', 'created_at'],
+      'loyalty_point_transactions': [
+        'expires_at',
+        'transaction_date',
+        'created_at',
+      ],
+      'loyalty_rewards': [
+        'valid_from',
+        'valid_until',
+        'created_at',
+        'updated_at',
+      ],
+      'customer_reward_redemptions': [
+        'used_at',
+        'expires_at',
+        'redeemed_at',
+        'created_at',
+      ],
       'loyalty_settings': ['created_at', 'updated_at'],
     };
 
@@ -387,7 +457,8 @@ FROM product_variants__old
         //   - Otherwise treat as seconds
         // Use COALESCE to guarantee NOT NULL columns don't get set to NULL.
         try {
-          final sql = 'UPDATE $table SET $col = COALESCE('
+          final sql =
+              'UPDATE $table SET $col = COALESCE('
               "CASE WHEN $col > 10000000000 THEN datetime($col / 1000, 'unixepoch') "
               "ELSE datetime($col, 'unixepoch') END, "
               "datetime('now')"
@@ -413,19 +484,25 @@ FROM product_variants__old
 
   Future<bool> _getBoolSetting(String key) async {
     if (!await _appSettingsTableExists()) return false;
-    final result = await (select(appSettings)..where((s) => s.key.equals(key)))
-        .getSingleOrNull();
+    final result = await (select(
+      appSettings,
+    )..where((s) => s.key.equals(key))).getSingleOrNull();
     return (result?.value ?? '').toLowerCase() == 'true';
   }
 
-  Future<void> _setBoolSetting(String key, bool value, {String? description}) async {
+  Future<void> _setBoolSetting(
+    String key,
+    bool value, {
+    String? description,
+  }) async {
     if (!await _appSettingsTableExists()) return;
     await into(appSettings).insert(
       AppSettingsCompanion(
         key: Value(key),
         value: Value(value ? 'true' : 'false'),
-        description:
-            description == null ? const Value.absent() : Value(description),
+        description: description == null
+            ? const Value.absent()
+            : Value(description),
         updatedAt: Value(DateTime.now()),
       ),
       mode: InsertMode.insertOrReplace,
@@ -433,7 +510,9 @@ FROM product_variants__old
   }
 
   Future<void> _convertIntegerTimestampsToTextOnce() async {
-    final alreadyConverted = await _getBoolSetting(_kSettingIntegerTimestampsConverted);
+    final alreadyConverted = await _getBoolSetting(
+      _kSettingIntegerTimestampsConverted,
+    );
     if (alreadyConverted) return;
 
     await _convertIntegerTimestampsToText();
@@ -530,7 +609,7 @@ FROM product_variants__old
     final result = await customSelect(
       "SELECT COUNT(*) as cnt FROM pragma_table_info('$table') WHERE name = '$column'",
     ).getSingle();
-    
+
     final exists = result.read<int>('cnt') > 0;
     if (!exists) {
       debugPrint('DB schema fix: adding missing column $table.$column ($type)');
@@ -543,40 +622,116 @@ FROM product_variants__old
     await _safeAddColumn('products', 'barcode', 'TEXT');
     await _safeAddColumn('products', 'name_ar', 'TEXT');
     await _safeAddColumn('products', 'name_fr', 'TEXT');
-    await _safeAddColumn('products', 'supplier_id', 'INTEGER REFERENCES suppliers(id)');
+    await _safeAddColumn(
+      'products',
+      'supplier_id',
+      'INTEGER REFERENCES suppliers(id)',
+    );
     await _safeAddColumn('products', 'wholesale_price_cents', 'INTEGER');
     await _safeAddColumn('products', 'min_quantity', 'INTEGER DEFAULT 0');
 
     // Ensure boolean-ish and tax fields exist for older DBs.
     // Drift stores booleans as INTEGER 0/1.
-    await _safeAddColumn('products', 'has_variants', 'INTEGER NOT NULL DEFAULT 0');
-    await _safeAddColumn('products', 'is_taxable', 'INTEGER NOT NULL DEFAULT 0');
-    await _safeAddColumn('products', 'purchase_tax_rate_bps', 'INTEGER NOT NULL DEFAULT 0');
-    await _safeAddColumn('products', 'sales_tax_rate_bps', 'INTEGER NOT NULL DEFAULT 0');
-    await _safeAddColumn('products', 'track_inventory', 'INTEGER NOT NULL DEFAULT 1');
-    await _safeAddColumn('products', 'stock_quantity', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn(
+      'products',
+      'has_variants',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _safeAddColumn(
+      'products',
+      'is_taxable',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _safeAddColumn(
+      'products',
+      'purchase_tax_rate_bps',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _safeAddColumn(
+      'products',
+      'sales_tax_rate_bps',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _safeAddColumn(
+      'products',
+      'track_inventory',
+      'INTEGER NOT NULL DEFAULT 1',
+    );
+    await _safeAddColumn(
+      'products',
+      'stock_quantity',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
     await _safeAddColumn('products', 'image_path', 'TEXT');
     await _safeAddColumn('products', 'is_active', 'INTEGER NOT NULL DEFAULT 1');
 
     await _safeAddColumn('product_variants', 'barcode', 'TEXT');
-    await _safeAddColumn('product_variants', 'price_adjustment_cents', 'INTEGER NOT NULL DEFAULT 0');
-    await _safeAddColumn('product_variants', 'cost_cents', 'INTEGER NOT NULL DEFAULT 0');
-    await _safeAddColumn('product_variants', 'price_cents', 'INTEGER NOT NULL DEFAULT 0');
-    await _safeAddColumn('product_variants', 'wholesale_price_cents', 'INTEGER');
+    await _safeAddColumn(
+      'product_variants',
+      'price_adjustment_cents',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _safeAddColumn(
+      'product_variants',
+      'cost_cents',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _safeAddColumn(
+      'product_variants',
+      'price_cents',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _safeAddColumn(
+      'product_variants',
+      'wholesale_price_cents',
+      'INTEGER',
+    );
     // v10055 — supplier reference price (gross of trade discounts).
     await _safeAddColumn('products', 'last_purchase_price_cents', 'INTEGER');
-    await _safeAddColumn('product_variants', 'last_purchase_price_cents', 'INTEGER');
-    
+    await _safeAddColumn(
+      'product_variants',
+      'last_purchase_price_cents',
+      'INTEGER',
+    );
+
     await _safeAddColumn('sizes', 'sort_order', 'INTEGER NOT NULL DEFAULT 0');
 
     // Employee payroll configuration columns
-    await _safeAddColumn('employees', 'pay_period_type', "TEXT NOT NULL DEFAULT 'monthly'");
-    await _safeAddColumn('employees', 'working_days_per_period', 'INTEGER NOT NULL DEFAULT 26');
-    await _safeAddColumn('employees', 'working_hours_per_day', 'INTEGER NOT NULL DEFAULT 8');
-    await _safeAddColumn('employees', 'absence_deduction_rate_bps', 'INTEGER NOT NULL DEFAULT 10000');
-    await _safeAddColumn('employees', 'late_deduction_rate_bps', 'INTEGER NOT NULL DEFAULT 2500');
-    await _safeAddColumn('employees', 'weekly_off_days', "TEXT NOT NULL DEFAULT '[5,6]'");
-    await _safeAddColumn('employees', 'annual_leave_days', 'INTEGER NOT NULL DEFAULT 21');
+    await _safeAddColumn(
+      'employees',
+      'pay_period_type',
+      "TEXT NOT NULL DEFAULT 'monthly'",
+    );
+    await _safeAddColumn(
+      'employees',
+      'working_days_per_period',
+      'INTEGER NOT NULL DEFAULT 26',
+    );
+    await _safeAddColumn(
+      'employees',
+      'working_hours_per_day',
+      'INTEGER NOT NULL DEFAULT 8',
+    );
+    await _safeAddColumn(
+      'employees',
+      'absence_deduction_rate_bps',
+      'INTEGER NOT NULL DEFAULT 10000',
+    );
+    await _safeAddColumn(
+      'employees',
+      'late_deduction_rate_bps',
+      'INTEGER NOT NULL DEFAULT 2500',
+    );
+    await _safeAddColumn(
+      'employees',
+      'weekly_off_days',
+      "TEXT NOT NULL DEFAULT '[5,6]'",
+    );
+    await _safeAddColumn(
+      'employees',
+      'annual_leave_days',
+      'INTEGER NOT NULL DEFAULT 21',
+    );
 
     // Commission economic-event date (v10058) — posting/transaction date used
     // by all commission reports. Backfilled by the 10058 migration; this guard
@@ -593,23 +748,79 @@ FROM product_variants__old
     await _safeAddColumn('customer_transactions', 'discount_type', 'TEXT');
 
     // Customers advanced fields (segmentation + loyalty + analytics)
-    await _safeAddColumn('customers', 'segment', "TEXT NOT NULL DEFAULT 'retail'");
-    await _safeAddColumn('customers', 'loyalty_enabled', 'INTEGER NOT NULL DEFAULT 1');
-    await _safeAddColumn('customers', 'loyalty_tier_id', 'INTEGER REFERENCES loyalty_tiers(id)');
-    await _safeAddColumn('customers', 'loyalty_points_balance', 'INTEGER NOT NULL DEFAULT 0');
-    await _safeAddColumn('customers', 'total_spent_cents', 'INTEGER NOT NULL DEFAULT 0');
-    await _safeAddColumn('customers', 'total_transactions', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn(
+      'customers',
+      'segment',
+      "TEXT NOT NULL DEFAULT 'retail'",
+    );
+    await _safeAddColumn(
+      'customers',
+      'loyalty_enabled',
+      'INTEGER NOT NULL DEFAULT 1',
+    );
+    await _safeAddColumn(
+      'customers',
+      'loyalty_tier_id',
+      'INTEGER REFERENCES loyalty_tiers(id)',
+    );
+    await _safeAddColumn(
+      'customers',
+      'loyalty_points_balance',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _safeAddColumn(
+      'customers',
+      'total_spent_cents',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _safeAddColumn(
+      'customers',
+      'total_transactions',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
     await _safeAddColumn('customers', 'last_transaction_at', 'TEXT');
 
     // Loyalty tiers hybrid benefits columns (for older DBs)
-    await _safeAddColumn('loyalty_tiers', 'free_shipping', 'INTEGER NOT NULL DEFAULT 0');
-    await _safeAddColumn('loyalty_tiers', 'free_shipping_min_order_cents', 'INTEGER');
-    await _safeAddColumn('loyalty_tiers', 'priority_support', 'INTEGER NOT NULL DEFAULT 0');
-    await _safeAddColumn('loyalty_tiers', 'early_access_days', 'INTEGER NOT NULL DEFAULT 0');
-    await _safeAddColumn('loyalty_tiers', 'exclusive_offers', 'INTEGER NOT NULL DEFAULT 0');
-    await _safeAddColumn('loyalty_tiers', 'birthday_bonus', 'INTEGER NOT NULL DEFAULT 0');
-    await _safeAddColumn('loyalty_tiers', 'birthday_bonus_points', 'INTEGER NOT NULL DEFAULT 0');
-    await _safeAddColumn('loyalty_tiers', 'birthday_discount_percent', 'REAL NOT NULL DEFAULT 0.0');
+    await _safeAddColumn(
+      'loyalty_tiers',
+      'free_shipping',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _safeAddColumn(
+      'loyalty_tiers',
+      'free_shipping_min_order_cents',
+      'INTEGER',
+    );
+    await _safeAddColumn(
+      'loyalty_tiers',
+      'priority_support',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _safeAddColumn(
+      'loyalty_tiers',
+      'early_access_days',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _safeAddColumn(
+      'loyalty_tiers',
+      'exclusive_offers',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _safeAddColumn(
+      'loyalty_tiers',
+      'birthday_bonus',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _safeAddColumn(
+      'loyalty_tiers',
+      'birthday_bonus_points',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _safeAddColumn(
+      'loyalty_tiers',
+      'birthday_discount_percent',
+      'REAL NOT NULL DEFAULT 0.0',
+    );
     await _safeAddColumn('loyalty_tiers', 'badge_text', 'TEXT');
 
     // Loyalty program tables (if missing)
@@ -716,33 +927,73 @@ CREATE TABLE IF NOT EXISTS loyalty_settings (
 
     // Purchase item price update columns (v10023)
     await _safeAddColumn('purchase_items', 'new_sell_price_cents', 'INTEGER');
-    await _safeAddColumn('purchase_items', 'new_wholesale_price_cents', 'INTEGER');
+    await _safeAddColumn(
+      'purchase_items',
+      'new_wholesale_price_cents',
+      'INTEGER',
+    );
 
     // Purchase item original price snapshot columns (v10024)
     await _safeAddColumn('purchase_items', 'original_cost_cents', 'INTEGER');
     await _safeAddColumn('purchase_items', 'original_price_cents', 'INTEGER');
-    await _safeAddColumn('purchase_items', 'original_wholesale_price_cents', 'INTEGER');
+    await _safeAddColumn(
+      'purchase_items',
+      'original_wholesale_price_cents',
+      'INTEGER',
+    );
 
     // Previous price tracking on variants and products (v10025)
     await _safeAddColumn('product_variants', 'previous_cost_cents', 'INTEGER');
     await _safeAddColumn('product_variants', 'previous_price_cents', 'INTEGER');
-    await _safeAddColumn('product_variants', 'previous_wholesale_price_cents', 'INTEGER');
+    await _safeAddColumn(
+      'product_variants',
+      'previous_wholesale_price_cents',
+      'INTEGER',
+    );
     await _safeAddColumn('products', 'previous_cost_cents', 'INTEGER');
     await _safeAddColumn('products', 'previous_price_cents', 'INTEGER');
-    await _safeAddColumn('products', 'previous_wholesale_price_cents', 'INTEGER');
+    await _safeAddColumn(
+      'products',
+      'previous_wholesale_price_cents',
+      'INTEGER',
+    );
 
     // Purchase enhancements (v10015)
-    await _safeAddColumn('purchases', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
-    await _safeAddColumn('purchases', 'paid_amount_cents', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn(
+      'purchases',
+      'discount_cents',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _safeAddColumn(
+      'purchases',
+      'paid_amount_cents',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
     await _safeAddColumn('purchases', 'payment_method', 'TEXT');
     await _safeAddColumn('purchases', 'supplier_invoice_ref', 'TEXT');
     await _safeAddColumn('purchases', 'notes', 'TEXT');
     await _safeAddColumn('purchases', 'due_date', 'TEXT');
-    await _safeAddColumn('purchase_returns', 'status', "TEXT NOT NULL DEFAULT 'draft'");
-    await _safeAddColumn('purchase_returns', 'disposition_type', "TEXT NOT NULL DEFAULT 'restock'");
+    await _safeAddColumn(
+      'purchase_returns',
+      'status',
+      "TEXT NOT NULL DEFAULT 'draft'",
+    );
+    await _safeAddColumn(
+      'purchase_returns',
+      'disposition_type',
+      "TEXT NOT NULL DEFAULT 'restock'",
+    );
     // Purchase returns accounting totals (v10018)
-    await _safeAddColumn('purchase_returns', 'subtotal_cents', 'INTEGER NOT NULL DEFAULT 0');
-    await _safeAddColumn('purchase_returns', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn(
+      'purchase_returns',
+      'subtotal_cents',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
+    await _safeAddColumn(
+      'purchase_returns',
+      'tax_cents',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
     await _safeAddColumn('purchase_return_items', 'reason', 'TEXT');
 
     await customStatement('''
@@ -760,12 +1011,28 @@ CREATE TABLE IF NOT EXISTS purchase_payments (
 ''');
 
     // Sale enhancements (v10016)
-    await _safeAddColumn('sales', 'paid_amount_cents', 'INTEGER NOT NULL DEFAULT 0');
+    await _safeAddColumn(
+      'sales',
+      'paid_amount_cents',
+      'INTEGER NOT NULL DEFAULT 0',
+    );
     await _safeAddColumn('sales', 'notes', 'TEXT');
     await _safeAddColumn('sales', 'due_date', 'TEXT');
-    await _safeAddColumn('sale_returns', 'status', "TEXT NOT NULL DEFAULT 'draft'");
-    await _safeAddColumn('sale_returns', 'disposition_type', "TEXT NOT NULL DEFAULT 'restock'");
-    await _safeAddColumn('sale_returns', 'refund_method', "TEXT NOT NULL DEFAULT 'cash'");
+    await _safeAddColumn(
+      'sale_returns',
+      'status',
+      "TEXT NOT NULL DEFAULT 'draft'",
+    );
+    await _safeAddColumn(
+      'sale_returns',
+      'disposition_type',
+      "TEXT NOT NULL DEFAULT 'restock'",
+    );
+    await _safeAddColumn(
+      'sale_returns',
+      'refund_method',
+      "TEXT NOT NULL DEFAULT 'cash'",
+    );
     await _safeAddColumn('sale_return_items', 'reason', 'TEXT');
 
     await customStatement('''
@@ -783,11 +1050,19 @@ CREATE TABLE IF NOT EXISTS sale_payments (
 ''');
 
     // Adjustment return unified flow columns (v10038)
-    await _safeAddColumn('purchase_return_adjustments', 'refund_method', "TEXT NOT NULL DEFAULT 'credit'");
+    await _safeAddColumn(
+      'purchase_return_adjustments',
+      'refund_method',
+      "TEXT NOT NULL DEFAULT 'credit'",
+    );
     await _safeAddColumn('purchase_return_adjustments', 'return_mode', 'TEXT');
     await _safeAddColumn('purchase_return_adjustments', 'mode_reason', 'TEXT');
     await _safeAddColumn('purchase_return_adjustments', 'batch_id', 'TEXT');
-    await _safeAddColumn('sale_return_adjustments', 'refund_method', "TEXT NOT NULL DEFAULT 'cash'");
+    await _safeAddColumn(
+      'sale_return_adjustments',
+      'refund_method',
+      "TEXT NOT NULL DEFAULT 'cash'",
+    );
     await _safeAddColumn('sale_return_adjustments', 'return_mode', 'TEXT');
     await _safeAddColumn('sale_return_adjustments', 'mode_reason', 'TEXT');
     await _safeAddColumn('sale_return_adjustments', 'batch_id', 'TEXT');
@@ -871,14 +1146,565 @@ CREATE TABLE IF NOT EXISTS sale_payments (
     );
   }
 
+  /// Repairs the v10063 linked-return measurement snapshot defect.
+  ///
+  /// The return repositories recompute money from the source invoice before
+  /// inserting the return. In v10063-v10064 that reconstruction dropped the
+  /// frozen quantity scale/type, so 1000 millimetres could be valued as 1000
+  /// metres in the Inventory/COGS journal even though stock moved correctly.
+  Future<void> _repairMeasuredLinkedReturnScalesAndJournals() async {
+    final affectedSaleRows = await customSelect(
+      'SELECT DISTINCT sri.return_id AS return_id '
+      'FROM sale_return_items sri '
+      'JOIN sale_items si ON si.id = sri.sale_item_id '
+      'WHERE sri.quantity_scale != si.quantity_scale '
+      '   OR sri.measurement_type != si.measurement_type',
+    ).get();
+    final affectedPurchaseRows = await customSelect(
+      'SELECT DISTINCT pri.return_id AS return_id '
+      'FROM purchase_return_items pri '
+      'JOIN purchase_items pi ON pi.id = pri.purchase_item_id '
+      'WHERE pri.quantity_scale != pi.quantity_scale '
+      '   OR pri.measurement_type != pi.measurement_type',
+    ).get();
+
+    if (affectedSaleRows.isEmpty && affectedPurchaseRows.isEmpty) return;
+
+    // The parent invoice line is the immutable source of truth for a linked
+    // return's quantity representation.
+    await customStatement(
+      'UPDATE sale_return_items '
+      'SET quantity_scale = ('
+      '      SELECT si.quantity_scale FROM sale_items si '
+      '      WHERE si.id = sale_return_items.sale_item_id'
+      '    ), '
+      '    measurement_type = ('
+      '      SELECT si.measurement_type FROM sale_items si '
+      '      WHERE si.id = sale_return_items.sale_item_id'
+      '    ) '
+      'WHERE EXISTS ('
+      '  SELECT 1 FROM sale_items si '
+      '  WHERE si.id = sale_return_items.sale_item_id '
+      '    AND (si.quantity_scale != sale_return_items.quantity_scale '
+      '      OR si.measurement_type != sale_return_items.measurement_type)'
+      ')',
+    );
+    await customStatement(
+      'UPDATE purchase_return_items '
+      'SET quantity_scale = ('
+      '      SELECT pi.quantity_scale FROM purchase_items pi '
+      '      WHERE pi.id = purchase_return_items.purchase_item_id'
+      '    ), '
+      '    measurement_type = ('
+      '      SELECT pi.measurement_type FROM purchase_items pi '
+      '      WHERE pi.id = purchase_return_items.purchase_item_id'
+      '    ) '
+      'WHERE EXISTS ('
+      '  SELECT 1 FROM purchase_items pi '
+      '  WHERE pi.id = purchase_return_items.purchase_item_id '
+      '    AND (pi.quantity_scale != purchase_return_items.quantity_scale '
+      '      OR pi.measurement_type != purchase_return_items.measurement_type)'
+      ')',
+    );
+
+    for (final row in affectedSaleRows) {
+      final returnId = row.read<int>('return_id');
+      final correctCost = await saleDao.computeSaleReturnCostCents(returnId);
+      final journalRows = await customSelect(
+        'SELECT DISTINCT je.id AS journal_id '
+        'FROM journal_entries je '
+        'JOIN journal_entry_lines inv ON inv.journal_entry_id = je.id '
+        'JOIN accounts inv_a ON inv_a.id = inv.account_id '
+        'JOIN journal_entry_lines cogs ON cogs.journal_entry_id = je.id '
+        'JOIN accounts cogs_a ON cogs_a.id = cogs.account_id '
+        "WHERE je.source_table = 'sale_returns' AND je.source_id = ? "
+        "  AND je.status = 'posted' "
+        "  AND inv_a.account_code = '1200' AND inv.debit_cents > 0 "
+        "  AND cogs_a.account_code = '5300' AND cogs.credit_cents > 0",
+        variables: [Variable.withInt(returnId)],
+      ).get();
+      for (final journalRow in journalRows) {
+        final journalId = journalRow.read<int>('journal_id');
+        await customStatement(
+          'UPDATE journal_entry_lines '
+          'SET debit_cents = ?, credit_cents = 0 '
+          'WHERE journal_entry_id = ? AND account_id = ('
+          "  SELECT id FROM accounts WHERE account_code = '1200'"
+          ') AND debit_cents > 0',
+          [correctCost, journalId],
+        );
+        await customStatement(
+          'UPDATE journal_entry_lines '
+          'SET debit_cents = 0, credit_cents = ? '
+          'WHERE journal_entry_id = ? AND account_id = ('
+          "  SELECT id FROM accounts WHERE account_code = '5300'"
+          ') AND credit_cents > 0',
+          [correctCost, journalId],
+        );
+        await _syncJournalHeaderTotals(journalId);
+      }
+    }
+
+    for (final row in affectedPurchaseRows) {
+      final returnId = row.read<int>('return_id');
+      final correctCost = await purchaseDao
+          .computePurchaseReturnInventoryCostCents(returnId);
+      final returnRow = await customSelect(
+        'SELECT disposition_type FROM purchase_returns WHERE id = ?',
+        variables: [Variable.withInt(returnId)],
+      ).getSingleOrNull();
+      final disposition =
+          returnRow?.readNullable<String>('disposition_type') ?? 'restock';
+      final offsetCode = disposition == 'send_back' ? '1290' : '4100';
+      final journalRows = await customSelect(
+        'SELECT DISTINCT je.id AS journal_id '
+        'FROM journal_entries je '
+        'JOIN journal_entry_lines inv ON inv.journal_entry_id = je.id '
+        'JOIN accounts inv_a ON inv_a.id = inv.account_id '
+        "WHERE je.source_table = 'purchase_returns' AND je.source_id = ? "
+        "  AND je.status = 'posted' "
+        "  AND inv_a.account_code = '1200' AND inv.credit_cents > 0",
+        variables: [Variable.withInt(returnId)],
+      ).get();
+      for (final journalRow in journalRows) {
+        final journalId = journalRow.read<int>('journal_id');
+        await customStatement(
+          'UPDATE journal_entry_lines '
+          'SET debit_cents = 0, credit_cents = ? '
+          'WHERE journal_entry_id = ? AND account_id = ('
+          "  SELECT id FROM accounts WHERE account_code = '1200'"
+          ') AND credit_cents > 0',
+          [correctCost, journalId],
+        );
+        await customStatement(
+          'UPDATE journal_entry_lines '
+          'SET debit_cents = ?, credit_cents = 0 '
+          'WHERE journal_entry_id = ? AND account_id = ('
+          '  SELECT id FROM accounts WHERE account_code = ?'
+          ') AND debit_cents > 0',
+          [correctCost, journalId, offsetCode],
+        );
+        await _syncJournalHeaderTotals(journalId);
+      }
+    }
+
+    // accounts.balance_cents is a cache. Rebuild it through the accounting
+    // boundary after repairing the journal lines; raw balance writes from a
+    // migration would violate the single-writer invariant.
+    await AccountingRepository(
+      this,
+    ).rebuildCachedAccountBalancesFromPostedLedger();
+
+    developer.log(
+      'Migration 10065 repaired ${affectedSaleRows.length} sale return(s) '
+      'and ${affectedPurchaseRows.length} purchase return(s) with lost '
+      'measurement snapshots.',
+      name: 'DB_MIGRATION',
+    );
+  }
+
+  Future<void> _syncJournalHeaderTotals(int journalId) async {
+    await customStatement(
+      'UPDATE journal_entries SET '
+      'total_debit_cents = COALESCE(('
+      '  SELECT SUM(debit_cents) FROM journal_entry_lines '
+      '  WHERE journal_entry_id = journal_entries.id'
+      '), 0), '
+      'total_credit_cents = COALESCE(('
+      '  SELECT SUM(credit_cents) FROM journal_entry_lines '
+      '  WHERE journal_entry_id = journal_entries.id'
+      '), 0), '
+      'updated_at = ? '
+      'WHERE id = ?',
+      [DateTime.now().toIso8601String(), journalId],
+    );
+  }
+
+  /// Adds exact per-line carrying values for measured inventory and repairs
+  /// the small rounded-pool drift that could be produced by the last posted
+  /// unlinked purchase return on pre-10066 builds.
+  Future<void> _repairMeasuredInventoryRounding10066() async {
+    await customStatement(
+      'UPDATE sale_items SET inventory_value_at_post_cents = '
+      'CAST(ROUND(1.0 * quantity * COALESCE(cost_cents, 0) / '
+      'CASE WHEN quantity_scale > 0 THEN quantity_scale ELSE 1 END) AS INTEGER) '
+      'WHERE inventory_value_at_post_cents IS NULL',
+    );
+    await customStatement(
+      'UPDATE purchase_items SET inventory_value_at_post_cents = '
+      'CASE WHEN EXISTS (SELECT 1 FROM products p '
+      '                  WHERE p.id = purchase_items.product_id '
+      '                    AND p.track_inventory = 1) '
+      'THEN MAX(total_cents - tax_cents, 0) ELSE 0 END '
+      'WHERE inventory_value_at_post_cents IS NULL',
+    );
+    await customStatement(
+      'UPDATE sale_return_items SET inventory_value_at_post_cents = '
+      'CAST(ROUND(1.0 * quantity * COALESCE(unit_cost_at_post_cents, '
+      '  (SELECT si.cost_cents FROM sale_items si '
+      '   WHERE si.id = sale_return_items.sale_item_id), 0) / '
+      'CASE WHEN quantity_scale > 0 THEN quantity_scale ELSE 1 END) AS INTEGER) '
+      'WHERE inventory_value_at_post_cents IS NULL',
+    );
+    await customStatement(
+      'UPDATE purchase_return_items SET inventory_value_at_post_cents = '
+      'CAST(ROUND(1.0 * quantity * COALESCE(unit_cost_at_post_cents, '
+      '  (SELECT pi.unit_cost_cents FROM purchase_items pi '
+      '   WHERE pi.id = purchase_return_items.purchase_item_id), 0) / '
+      'CASE WHEN quantity_scale > 0 THEN quantity_scale ELSE 1 END) AS INTEGER) '
+      'WHERE inventory_value_at_post_cents IS NULL',
+    );
+    for (final table in <String>[
+      'purchase_return_adjustment_items',
+      'sale_return_adjustment_items',
+    ]) {
+      await customStatement(
+        'UPDATE $table SET inventory_value_at_post_cents = '
+        'CAST(ROUND(1.0 * quantity * '
+        'COALESCE(unit_cost_at_post_cents, unit_cost_cents, 0) / '
+        'CASE WHEN quantity_scale > 0 THEN quantity_scale ELSE 1 END) AS INTEGER) '
+        'WHERE inventory_value_at_post_cents IS NULL',
+      );
+    }
+
+    final glRow = await customSelect(
+      'SELECT COALESCE(SUM(jel.debit_cents - jel.credit_cents), 0) AS value '
+      'FROM journal_entry_lines jel '
+      'JOIN journal_entries je ON je.id = jel.journal_entry_id '
+      'JOIN accounts a ON a.id = jel.account_id '
+      "WHERE je.status = 'posted' AND a.account_code = '1200'",
+    ).getSingle();
+    final stockRow = await customSelect('''
+      SELECT
+        COALESCE((
+          SELECT SUM(CAST(ROUND(
+            1.0 * b.remaining_quantity * b.unit_cost_cents /
+            CASE WHEN p.measurement_type = 'piece' THEN 1 ELSE 1000 END
+          ) AS INTEGER))
+          FROM product_batches b
+          JOIN products p ON p.id = b.product_id
+          WHERE b.is_active = 1 AND p.track_inventory = 1
+            AND (p.inventory_tracking_type IN ('batch', 'batch_expiry')
+                 OR p.costing_method = 'fifo')
+        ), 0)
+        + COALESCE((
+          SELECT SUM(CAST(ROUND(
+            1.0 * v.stock_quantity * v.cost_cents /
+            CASE WHEN p.measurement_type = 'piece' THEN 1 ELSE 1000 END
+          ) AS INTEGER))
+          FROM product_variants v
+          JOIN products p ON p.id = v.product_id
+          WHERE p.track_inventory = 1
+            AND (NOT (p.inventory_tracking_type IN ('batch', 'batch_expiry')
+                      OR p.costing_method = 'fifo')
+                 OR NOT EXISTS (
+                   SELECT 1 FROM product_batches b
+                   WHERE b.variant_id = v.id AND b.is_active = 1
+                 ))
+        ), 0)
+        + COALESCE((
+          SELECT SUM(CAST(ROUND(
+            1.0 * p.stock_quantity * p.cost_cents /
+            CASE WHEN p.measurement_type = 'piece' THEN 1 ELSE 1000 END
+          ) AS INTEGER))
+          FROM products p
+          WHERE p.track_inventory = 1
+            AND NOT EXISTS (
+              SELECT 1 FROM product_variants v WHERE v.product_id = p.id
+            )
+            AND (NOT (p.inventory_tracking_type IN ('batch', 'batch_expiry')
+                      OR p.costing_method = 'fifo')
+                 OR NOT EXISTS (
+                   SELECT 1 FROM product_batches b
+                   WHERE b.product_id = p.id AND b.is_active = 1
+                 ))
+        ), 0) AS value
+    ''').getSingle();
+    final difference = glRow.read<int>('value') - stockRow.read<int>('value');
+
+    // A measured line can move a rounded pool by one cent more or less than
+    // its independently rounded line value. Restrict the historical repair
+    // to a small rounding-only difference and the latest posted measured
+    // purchase adjustment; larger differences remain visible for diagnosis.
+    if (difference != 0 && difference.abs() <= 100) {
+      final candidate = await customSelect(
+        'SELECT je.id AS journal_id, je.source_id AS return_id '
+        'FROM journal_entries je '
+        "WHERE je.source_table = 'purchase_return_adjustments' "
+        "  AND je.status = 'posted' AND je.is_reversed = 0 "
+        '  AND EXISTS (SELECT 1 FROM purchase_return_adjustment_items i '
+        '              WHERE i.return_id = je.source_id '
+        '                AND i.quantity_scale > 1) '
+        'ORDER BY COALESCE(je.posted_at, je.created_at) DESC, je.id DESC '
+        'LIMIT 1',
+      ).getSingleOrNull();
+      if (candidate != null) {
+        final journalId = candidate.read<int>('journal_id');
+        final returnId = candidate.read<int>('return_id');
+        final inventoryLine = await customSelect(
+          'SELECT jel.id, jel.credit_cents FROM journal_entry_lines jel '
+          'JOIN accounts a ON a.id = jel.account_id '
+          "WHERE jel.journal_entry_id = ? AND a.account_code = '1200' "
+          '  AND jel.credit_cents > 0 LIMIT 1',
+          variables: [Variable.withInt(journalId)],
+        ).getSingleOrNull();
+        final offsetLine = await customSelect(
+          'SELECT jel.id, jel.debit_cents FROM journal_entry_lines jel '
+          'JOIN accounts a ON a.id = jel.account_id '
+          "WHERE jel.journal_entry_id = ? AND a.account_code = '4100' "
+          '  AND jel.debit_cents > 0 LIMIT 1',
+          variables: [Variable.withInt(journalId)],
+        ).getSingleOrNull();
+        if (inventoryLine != null && offsetLine != null) {
+          final newCredit =
+              inventoryLine.read<int>('credit_cents') + difference;
+          final newDebit = offsetLine.read<int>('debit_cents') + difference;
+          if (newCredit >= 0 && newDebit >= 0) {
+            await customStatement(
+              'UPDATE journal_entry_lines SET credit_cents = ? WHERE id = ?',
+              [newCredit, inventoryLine.read<int>('id')],
+            );
+            await customStatement(
+              'UPDATE journal_entry_lines SET debit_cents = ? WHERE id = ?',
+              [newDebit, offsetLine.read<int>('id')],
+            );
+            await customStatement(
+              'UPDATE purchase_return_adjustment_items '
+              'SET inventory_value_at_post_cents = '
+              'COALESCE(inventory_value_at_post_cents, 0) + ? '
+              'WHERE id = (SELECT id FROM purchase_return_adjustment_items '
+              '            WHERE return_id = ? AND quantity_scale > 1 '
+              '            ORDER BY id DESC LIMIT 1)',
+              [difference, returnId],
+            );
+            await _syncJournalHeaderTotals(journalId);
+            await AccountingRepository(
+              this,
+            ).rebuildCachedAccountBalancesFromPostedLedger();
+          }
+        }
+      }
+    }
+
+    developer.log(
+      'Migration 10066 stored exact measured inventory movement values; '
+      'pre-repair GL/stock difference=$difference cents.',
+      name: 'DB_MIGRATION',
+    );
+  }
+
+  /// Normalizes the price/cost audit table to its declared integer-cents
+  /// contract. Pre-10067 writers divided cents by 100 before passing values
+  /// through [MoneyConverter], whose integer SQL representation then
+  /// truncated fractions (e.g. 1188 cents became 11). We can restore the
+  /// surviving major-unit portion deterministically by multiplying it once.
+  ///
+  /// Purchase-origin rows are repaired further from their immutable purchase
+  /// line snapshots, recovering the exact typed cost and pre-change values
+  /// whenever those snapshots exist.
+  Future<void> _normalizePriceHistoryCents10067() async {
+    await transaction(() async {
+      await customStatement(
+        'UPDATE product_price_histories SET '
+        'old_cost_cents = old_cost_cents * 100, '
+        'new_cost_cents = new_cost_cents * 100, '
+        'old_price_cents = old_price_cents * 100, '
+        'new_price_cents = new_price_cents * 100, '
+        'old_wholesale_price_cents = CASE '
+        '  WHEN old_wholesale_price_cents IS NULL THEN NULL '
+        '  ELSE old_wholesale_price_cents * 100 END, '
+        'new_wholesale_price_cents = CASE '
+        '  WHEN new_wholesale_price_cents IS NULL THEN NULL '
+        '  ELSE new_wholesale_price_cents * 100 END',
+      );
+
+      // A purchase history reason carries the purchase id. Use its frozen
+      // line snapshots to recover values that the old truncating convention
+      // could not preserve.
+      await customStatement('''
+        UPDATE product_price_histories AS h
+        SET
+          old_cost_cents = COALESCE((
+            SELECT pi.original_cost_cents
+            FROM purchase_items pi
+            WHERE pi.purchase_id =
+                    CAST(substr(h.change_reason, length('purchase_post:#') + 1) AS INTEGER)
+              AND pi.product_id = h.product_id
+              AND ((pi.variant_id = h.variant_id)
+                   OR (pi.variant_id IS NULL AND h.variant_id IS NULL))
+            ORDER BY pi.id DESC LIMIT 1
+          ), h.old_cost_cents),
+          new_cost_cents = COALESCE((
+            SELECT pi.unit_cost_cents
+            FROM purchase_items pi
+            WHERE pi.purchase_id =
+                    CAST(substr(h.change_reason, length('purchase_post:#') + 1) AS INTEGER)
+              AND pi.product_id = h.product_id
+              AND ((pi.variant_id = h.variant_id)
+                   OR (pi.variant_id IS NULL AND h.variant_id IS NULL))
+            ORDER BY pi.id DESC LIMIT 1
+          ), h.new_cost_cents),
+          old_price_cents = COALESCE((
+            SELECT pi.original_price_cents
+            FROM purchase_items pi
+            WHERE pi.purchase_id =
+                    CAST(substr(h.change_reason, length('purchase_post:#') + 1) AS INTEGER)
+              AND pi.product_id = h.product_id
+              AND ((pi.variant_id = h.variant_id)
+                   OR (pi.variant_id IS NULL AND h.variant_id IS NULL))
+            ORDER BY pi.id DESC LIMIT 1
+          ), h.old_price_cents),
+          new_price_cents = COALESCE((
+            SELECT COALESCE(pi.new_sell_price_cents, pi.original_price_cents)
+            FROM purchase_items pi
+            WHERE pi.purchase_id =
+                    CAST(substr(h.change_reason, length('purchase_post:#') + 1) AS INTEGER)
+              AND pi.product_id = h.product_id
+              AND ((pi.variant_id = h.variant_id)
+                   OR (pi.variant_id IS NULL AND h.variant_id IS NULL))
+            ORDER BY pi.id DESC LIMIT 1
+          ), h.new_price_cents),
+          old_wholesale_price_cents = COALESCE((
+            SELECT pi.original_wholesale_price_cents
+            FROM purchase_items pi
+            WHERE pi.purchase_id =
+                    CAST(substr(h.change_reason, length('purchase_post:#') + 1) AS INTEGER)
+              AND pi.product_id = h.product_id
+              AND ((pi.variant_id = h.variant_id)
+                   OR (pi.variant_id IS NULL AND h.variant_id IS NULL))
+            ORDER BY pi.id DESC LIMIT 1
+          ), h.old_wholesale_price_cents),
+          new_wholesale_price_cents = COALESCE((
+            SELECT COALESCE(
+              pi.new_wholesale_price_cents,
+              pi.original_wholesale_price_cents
+            )
+            FROM purchase_items pi
+            WHERE pi.purchase_id =
+                    CAST(substr(h.change_reason, length('purchase_post:#') + 1) AS INTEGER)
+              AND pi.product_id = h.product_id
+              AND ((pi.variant_id = h.variant_id)
+                   OR (pi.variant_id IS NULL AND h.variant_id IS NULL))
+            ORDER BY pi.id DESC LIMIT 1
+          ), h.new_wholesale_price_cents)
+        WHERE h.change_reason LIKE 'purchase_post:#%'
+      ''');
+    });
+
+    developer.log(
+      'Migration 10067 normalized product price history to integer cents '
+      'and recovered purchase snapshots where available.',
+      name: 'DB_MIGRATION',
+    );
+  }
+
+  /// Repairs a short-lived v10067 regression that split some simple products
+  /// into two active rows:
+  ///
+  /// * the original row retained SKU/barcode and optional colour/size;
+  /// * a new anonymous row received stock, batches and invoice references.
+  ///
+  /// A simple product has exactly one operational variant row. Optional
+  /// colour/size are descriptive attributes on that row and do not turn the
+  /// product into a multi-variant product. We deliberately repair only the
+  /// unambiguous shape (one zero-stock, unreferenced metadata row + one
+  /// anonymous operational row). The operational id is retained so purchase,
+  /// batch and price-history lineage never changes.
+  Future<void> _reconcileSimpleProductRows10068() async {
+    var repaired = 0;
+    await transaction(() async {
+      final rows = await customSelect('''
+        SELECT
+          p.id AS product_id,
+          p.sku AS product_sku,
+          p.barcode AS product_barcode,
+          operational.id AS operational_id,
+          metadata.id AS metadata_id,
+          metadata.sku AS metadata_sku,
+          metadata.barcode AS metadata_barcode,
+          metadata.color_id AS metadata_color_id,
+          metadata.size_id AS metadata_size_id
+        FROM products p
+        JOIN product_variants operational
+          ON operational.product_id = p.id
+         AND operational.is_active = 1
+         AND operational.color_id IS NULL
+         AND operational.size_id IS NULL
+        JOIN product_variants metadata
+          ON metadata.product_id = p.id
+         AND metadata.is_active = 1
+         AND (metadata.color_id IS NOT NULL OR metadata.size_id IS NOT NULL)
+        WHERE p.has_variants = 0
+          AND metadata.stock_quantity = 0
+          AND (SELECT COUNT(*) FROM product_variants all_active
+               WHERE all_active.product_id = p.id
+                 AND all_active.is_active = 1) = 2
+          AND (
+            (SELECT COUNT(*) FROM sale_items WHERE variant_id = metadata.id)
+            + (SELECT COUNT(*) FROM purchase_items WHERE variant_id = metadata.id)
+            + (SELECT COUNT(*) FROM purchase_return_adjustment_items
+               WHERE variant_id = metadata.id)
+            + (SELECT COUNT(*) FROM sale_return_adjustment_items
+               WHERE variant_id = metadata.id)
+            + (SELECT COUNT(*) FROM inventory_adjustments
+               WHERE variant_id = metadata.id)
+            + (SELECT COUNT(*) FROM product_batches
+               WHERE variant_id = metadata.id)
+            + (SELECT COUNT(*) FROM product_price_histories
+               WHERE variant_id = metadata.id)
+          ) = 0
+      ''').get();
+
+      for (final row in rows) {
+        final operationalId = row.read<int>('operational_id');
+        final metadataId = row.read<int>('metadata_id');
+        final productSku = row.readNullable<String>('product_sku');
+        final productBarcode = row.readNullable<String>('product_barcode');
+        final metadataSku = row.readNullable<String>('metadata_sku');
+        final metadataBarcode = row.readNullable<String>('metadata_barcode');
+        final colorId = row.readNullable<int>('metadata_color_id');
+        final sizeId = row.readNullable<int>('metadata_size_id');
+
+        // Printing history is non-accounting, but remapping it avoids losing
+        // the audit trail when the obsolete metadata-only row is removed.
+        await customStatement(
+          'UPDATE print_histories SET variant_id = ? WHERE variant_id = ?',
+          [operationalId, metadataId],
+        );
+        await customStatement('DELETE FROM product_variants WHERE id = ?', [
+          metadataId,
+        ]);
+        await customStatement(
+          'UPDATE product_variants SET sku = ?, barcode = ?, color_id = ?, '
+          'size_id = ?, updated_at = ? WHERE id = ?',
+          [
+            productSku ?? metadataSku,
+            productBarcode ?? metadataBarcode,
+            colorId,
+            sizeId,
+            DateTime.now().toIso8601String(),
+            operationalId,
+          ],
+        );
+        repaired++;
+      }
+    });
+
+    developer.log(
+      'Migration 10068 reconciled $repaired split simple-product rows.',
+      name: 'DB_MIGRATION',
+    );
+  }
+
   @override
-  int get schemaVersion => 10060;
+  int get schemaVersion => 10068;
 
   @override
   MigrationStrategy get migration {
     return MigrationStrategy(
       onCreate: (Migrator m) async {
         await m.createAll();
+        await _ensureDocumentSequencesTable();
         await _createIndexes();
         await _installProductBatchesIntegrityTriggers();
         await _seedInitialData();
@@ -912,13 +1738,21 @@ CREATE TABLE IF NOT EXISTS sale_payments (
           await _safeAddColumn('products', 'name_ar', 'TEXT');
           await _safeAddColumn('products', 'name_fr', 'TEXT');
 
-          await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode) WHERE barcode IS NOT NULL');
-          await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_product_variants_barcode ON product_variants(barcode) WHERE barcode IS NOT NULL');
+          await customStatement(
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode) WHERE barcode IS NOT NULL',
+          );
+          await customStatement(
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_product_variants_barcode ON product_variants(barcode) WHERE barcode IS NOT NULL',
+          );
         }
 
         // Migration from 10001 to 10002: Add supplier_id and wholesale_price_cents columns to products
         if (from < 10002) {
-          await _safeAddColumn('products', 'supplier_id', 'INTEGER REFERENCES suppliers(id)');
+          await _safeAddColumn(
+            'products',
+            'supplier_id',
+            'INTEGER REFERENCES suppliers(id)',
+          );
           await _safeAddColumn('products', 'wholesale_price_cents', 'INTEGER');
         }
 
@@ -926,7 +1760,7 @@ CREATE TABLE IF NOT EXISTS sale_payments (
         if (from < 10003) {
           await _ensureSchemaIntegrity();
         }
-        
+
         // Migration 10003 -> 10004: Force integrity check again to ensure variants/sizes support
         if (from < 10004) {
           await _ensureSchemaIntegrity();
@@ -944,16 +1778,40 @@ CREATE TABLE IF NOT EXISTS sale_payments (
 
         // Migration 10007 -> 10008: Add wholesale_price_cents to product_variants
         if (from < 10008) {
-          await _safeAddColumn('product_variants', 'wholesale_price_cents', 'INTEGER');
+          await _safeAddColumn(
+            'product_variants',
+            'wholesale_price_cents',
+            'INTEGER',
+          );
         }
 
         // Migration 10008 -> 10009: Customers advanced fields + loyalty tables
         if (from < 10009) {
-          await _safeAddColumn('customers', 'segment', "TEXT NOT NULL DEFAULT 'retail'");
-          await _safeAddColumn('customers', 'loyalty_tier_id', 'INTEGER REFERENCES loyalty_tiers(id)');
-          await _safeAddColumn('customers', 'loyalty_points_balance', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('customers', 'total_spent_cents', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('customers', 'total_transactions', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn(
+            'customers',
+            'segment',
+            "TEXT NOT NULL DEFAULT 'retail'",
+          );
+          await _safeAddColumn(
+            'customers',
+            'loyalty_tier_id',
+            'INTEGER REFERENCES loyalty_tiers(id)',
+          );
+          await _safeAddColumn(
+            'customers',
+            'loyalty_points_balance',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'customers',
+            'total_spent_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'customers',
+            'total_transactions',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
           await _safeAddColumn('customers', 'last_transaction_at', 'TEXT');
 
           // Create loyalty tables for existing DBs
@@ -968,19 +1826,31 @@ CREATE TABLE IF NOT EXISTS sale_payments (
         if (from < 10010) {
           // Add new columns to employees table
           await _safeAddColumn('employees', 'employee_code', 'TEXT UNIQUE');
-          await _safeAddColumn('employees', 'user_id', 'INTEGER REFERENCES users(id) ON DELETE SET NULL');
+          await _safeAddColumn(
+            'employees',
+            'user_id',
+            'INTEGER REFERENCES users(id) ON DELETE SET NULL',
+          );
           await _safeAddColumn('employees', 'name_ar', 'TEXT');
           await _safeAddColumn('employees', 'name_fr', 'TEXT');
           await _safeAddColumn('employees', 'department', 'TEXT');
           await _safeAddColumn('employees', 'role_id', 'INTEGER');
           await _safeAddColumn('employees', 'manager_id', 'INTEGER');
-          await _safeAddColumn('employees', 'default_commission_rate_bps', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn(
+            'employees',
+            'default_commission_rate_bps',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
           await _safeAddColumn('employees', 'termination_date', 'TEXT');
           await _safeAddColumn('employees', 'notes', 'TEXT');
 
           // Add new columns to commissions table
           await _safeAddColumn('commissions', 'period', 'TEXT');
-          await _safeAddColumn('commissions', 'status', "TEXT NOT NULL DEFAULT 'pending'");
+          await _safeAddColumn(
+            'commissions',
+            'status',
+            "TEXT NOT NULL DEFAULT 'pending'",
+          );
 
           // Create new employee management tables
           await m.createTable(roles);
@@ -999,32 +1869,88 @@ CREATE TABLE IF NOT EXISTS sale_payments (
 
         // Migration 10010 -> 10011: Loyalty tier hybrid benefits columns
         if (from < 10011) {
-          await _safeAddColumn('loyalty_tiers', 'free_shipping', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('loyalty_tiers', 'free_shipping_min_order_cents', 'INTEGER');
-          await _safeAddColumn('loyalty_tiers', 'priority_support', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('loyalty_tiers', 'early_access_days', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('loyalty_tiers', 'exclusive_offers', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('loyalty_tiers', 'birthday_bonus', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('loyalty_tiers', 'birthday_bonus_points', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('loyalty_tiers', 'birthday_discount_percent', 'REAL NOT NULL DEFAULT 0.0');
+          await _safeAddColumn(
+            'loyalty_tiers',
+            'free_shipping',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'loyalty_tiers',
+            'free_shipping_min_order_cents',
+            'INTEGER',
+          );
+          await _safeAddColumn(
+            'loyalty_tiers',
+            'priority_support',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'loyalty_tiers',
+            'early_access_days',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'loyalty_tiers',
+            'exclusive_offers',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'loyalty_tiers',
+            'birthday_bonus',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'loyalty_tiers',
+            'birthday_bonus_points',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'loyalty_tiers',
+            'birthday_discount_percent',
+            'REAL NOT NULL DEFAULT 0.0',
+          );
           await _safeAddColumn('loyalty_tiers', 'badge_text', 'TEXT');
-          
+
           // Seed default loyalty tiers with hybrid benefits
           await _seedDefaultLoyaltyTiers();
         }
 
         // Migration 10011 -> 10012: Per-customer loyalty enable/disable
         if (from < 10012) {
-          await _safeAddColumn('customers', 'loyalty_enabled', 'INTEGER NOT NULL DEFAULT 1');
+          await _safeAddColumn(
+            'customers',
+            'loyalty_enabled',
+            'INTEGER NOT NULL DEFAULT 1',
+          );
         }
 
         // Migration 10012 -> 10013: Employee payroll configuration columns
         if (from < 10013) {
-          await _safeAddColumn('employees', 'pay_period_type', "TEXT NOT NULL DEFAULT 'monthly'");
-          await _safeAddColumn('employees', 'working_days_per_period', 'INTEGER NOT NULL DEFAULT 26');
-          await _safeAddColumn('employees', 'working_hours_per_day', 'INTEGER NOT NULL DEFAULT 8');
-          await _safeAddColumn('employees', 'absence_deduction_rate_bps', 'INTEGER NOT NULL DEFAULT 10000');
-          await _safeAddColumn('employees', 'late_deduction_rate_bps', 'INTEGER NOT NULL DEFAULT 2500');
+          await _safeAddColumn(
+            'employees',
+            'pay_period_type',
+            "TEXT NOT NULL DEFAULT 'monthly'",
+          );
+          await _safeAddColumn(
+            'employees',
+            'working_days_per_period',
+            'INTEGER NOT NULL DEFAULT 26',
+          );
+          await _safeAddColumn(
+            'employees',
+            'working_hours_per_day',
+            'INTEGER NOT NULL DEFAULT 8',
+          );
+          await _safeAddColumn(
+            'employees',
+            'absence_deduction_rate_bps',
+            'INTEGER NOT NULL DEFAULT 10000',
+          );
+          await _safeAddColumn(
+            'employees',
+            'late_deduction_rate_bps',
+            'INTEGER NOT NULL DEFAULT 2500',
+          );
         }
 
         // Migration 10013 -> 10014: Switch DateTime storage from integer to text (ISO 8601)
@@ -1035,16 +1961,32 @@ CREATE TABLE IF NOT EXISTS sale_payments (
         // Migration 10014 -> 10015: Enhanced purchase invoices & returns
         if (from < 10015) {
           // Purchases: new columns
-          await _safeAddColumn('purchases', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('purchases', 'paid_amount_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn(
+            'purchases',
+            'discount_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'purchases',
+            'paid_amount_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
           await _safeAddColumn('purchases', 'payment_method', 'TEXT');
           await _safeAddColumn('purchases', 'supplier_invoice_ref', 'TEXT');
           await _safeAddColumn('purchases', 'notes', 'TEXT');
           await _safeAddColumn('purchases', 'due_date', 'TEXT');
 
           // PurchaseReturns: status + disposition
-          await _safeAddColumn('purchase_returns', 'status', "TEXT NOT NULL DEFAULT 'draft'");
-          await _safeAddColumn('purchase_returns', 'disposition_type', "TEXT NOT NULL DEFAULT 'restock'");
+          await _safeAddColumn(
+            'purchase_returns',
+            'status',
+            "TEXT NOT NULL DEFAULT 'draft'",
+          );
+          await _safeAddColumn(
+            'purchase_returns',
+            'disposition_type',
+            "TEXT NOT NULL DEFAULT 'restock'",
+          );
 
           // PurchaseReturnItems: per-item reason
           await _safeAddColumn('purchase_return_items', 'reason', 'TEXT');
@@ -1056,13 +1998,25 @@ CREATE TABLE IF NOT EXISTS sale_payments (
         // Migration 10015 -> 10016: Enhanced sales & sale returns
         if (from < 10016) {
           // Sales: new columns
-          await _safeAddColumn('sales', 'paid_amount_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn(
+            'sales',
+            'paid_amount_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
           await _safeAddColumn('sales', 'notes', 'TEXT');
           await _safeAddColumn('sales', 'due_date', 'TEXT');
 
           // SaleReturns: status + disposition
-          await _safeAddColumn('sale_returns', 'status', "TEXT NOT NULL DEFAULT 'draft'");
-          await _safeAddColumn('sale_returns', 'disposition_type', "TEXT NOT NULL DEFAULT 'restock'");
+          await _safeAddColumn(
+            'sale_returns',
+            'status',
+            "TEXT NOT NULL DEFAULT 'draft'",
+          );
+          await _safeAddColumn(
+            'sale_returns',
+            'disposition_type',
+            "TEXT NOT NULL DEFAULT 'restock'",
+          );
 
           // SaleReturnItems: per-item reason
           await _safeAddColumn('sale_return_items', 'reason', 'TEXT');
@@ -1078,72 +2032,180 @@ CREATE TABLE IF NOT EXISTS sale_payments (
 
         // Migration 10017 -> 10018: Purchase return subtotal/tax totals
         if (from < 10018) {
-          await _safeAddColumn('purchase_returns', 'subtotal_cents', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('purchase_returns', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn(
+            'purchase_returns',
+            'subtotal_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'purchase_returns',
+            'tax_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
         }
 
         // Migration 10018 -> 10019: Purchase item discount + expiry date
         if (from < 10019) {
-          await _safeAddColumn('purchase_items', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn(
+            'purchase_items',
+            'discount_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
           await _safeAddColumn('purchase_items', 'expiry_date', 'TEXT');
         }
 
         // Migration 10019 -> 10020: Purchase return refund method
         if (from < 10020) {
-          await _safeAddColumn('purchase_returns', 'refund_method', "TEXT NOT NULL DEFAULT 'credit'");
+          await _safeAddColumn(
+            'purchase_returns',
+            'refund_method',
+            "TEXT NOT NULL DEFAULT 'credit'",
+          );
         }
 
         // Migration 10020 -> 10021: ERP accounting breakdown on return items & headers
         if (from < 10021) {
           // Purchase return items: proportional breakdown
-          await _safeAddColumn('purchase_return_items', 'subtotal_cents', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('purchase_return_items', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('purchase_return_items', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn(
+            'purchase_return_items',
+            'subtotal_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'purchase_return_items',
+            'discount_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'purchase_return_items',
+            'tax_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
           // Purchase returns header: discount breakdown
-          await _safeAddColumn('purchase_returns', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn(
+            'purchase_returns',
+            'discount_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
           // Sale return items: proportional breakdown
-          await _safeAddColumn('sale_return_items', 'subtotal_cents', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('sale_return_items', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('sale_return_items', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn(
+            'sale_return_items',
+            'subtotal_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'sale_return_items',
+            'discount_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'sale_return_items',
+            'tax_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
           // Sale returns header: subtotal, discount, tax breakdown
-          await _safeAddColumn('sale_returns', 'subtotal_cents', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('sale_returns', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('sale_returns', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn(
+            'sale_returns',
+            'subtotal_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'sale_returns',
+            'discount_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'sale_returns',
+            'tax_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
         }
 
         // Migration 10021 -> 10022: Supplier transaction number + discount type
         if (from < 10022) {
-          await _safeAddColumn('supplier_transactions', 'transaction_number', 'TEXT');
-          await _safeAddColumn('supplier_transactions', 'discount_type', 'TEXT');
+          await _safeAddColumn(
+            'supplier_transactions',
+            'transaction_number',
+            'TEXT',
+          );
+          await _safeAddColumn(
+            'supplier_transactions',
+            'discount_type',
+            'TEXT',
+          );
         }
 
         // Migration 10022 -> 10023: Purchase item price update columns
         if (from < 10023) {
-          await _safeAddColumn('purchase_items', 'new_sell_price_cents', 'INTEGER');
-          await _safeAddColumn('purchase_items', 'new_wholesale_price_cents', 'INTEGER');
+          await _safeAddColumn(
+            'purchase_items',
+            'new_sell_price_cents',
+            'INTEGER',
+          );
+          await _safeAddColumn(
+            'purchase_items',
+            'new_wholesale_price_cents',
+            'INTEGER',
+          );
         }
 
         // Migration 10023 -> 10024: Original price snapshot columns
         if (from < 10024) {
-          await _safeAddColumn('purchase_items', 'original_cost_cents', 'INTEGER');
-          await _safeAddColumn('purchase_items', 'original_price_cents', 'INTEGER');
-          await _safeAddColumn('purchase_items', 'original_wholesale_price_cents', 'INTEGER');
+          await _safeAddColumn(
+            'purchase_items',
+            'original_cost_cents',
+            'INTEGER',
+          );
+          await _safeAddColumn(
+            'purchase_items',
+            'original_price_cents',
+            'INTEGER',
+          );
+          await _safeAddColumn(
+            'purchase_items',
+            'original_wholesale_price_cents',
+            'INTEGER',
+          );
         }
 
         // Migration 10024 -> 10025: Previous price tracking on variants and products
         if (from < 10025) {
-          await _safeAddColumn('product_variants', 'previous_cost_cents', 'INTEGER');
-          await _safeAddColumn('product_variants', 'previous_price_cents', 'INTEGER');
-          await _safeAddColumn('product_variants', 'previous_wholesale_price_cents', 'INTEGER');
+          await _safeAddColumn(
+            'product_variants',
+            'previous_cost_cents',
+            'INTEGER',
+          );
+          await _safeAddColumn(
+            'product_variants',
+            'previous_price_cents',
+            'INTEGER',
+          );
+          await _safeAddColumn(
+            'product_variants',
+            'previous_wholesale_price_cents',
+            'INTEGER',
+          );
           await _safeAddColumn('products', 'previous_cost_cents', 'INTEGER');
           await _safeAddColumn('products', 'previous_price_cents', 'INTEGER');
-          await _safeAddColumn('products', 'previous_wholesale_price_cents', 'INTEGER');
+          await _safeAddColumn(
+            'products',
+            'previous_wholesale_price_cents',
+            'INTEGER',
+          );
         }
 
         // Migration 10025 -> 10026: Split taxRateBps into purchaseTaxRateBps + salesTaxRateBps
         if (from < 10026) {
-          await _safeAddColumn('products', 'purchase_tax_rate_bps', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('products', 'sales_tax_rate_bps', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn(
+            'products',
+            'purchase_tax_rate_bps',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'products',
+            'sales_tax_rate_bps',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
           // Migrate old tax_rate_bps data to both new columns
           final hasTaxRateBps = await customSelect(
             "SELECT COUNT(*) as cnt FROM pragma_table_info('products') WHERE name = 'tax_rate_bps'",
@@ -1157,36 +2219,84 @@ CREATE TABLE IF NOT EXISTS sale_payments (
 
         // Migration 10026 -> 10027: Customer transaction number + discount type
         if (from < 10027) {
-          await _safeAddColumn('customer_transactions', 'transaction_number', 'TEXT');
-          await _safeAddColumn('customer_transactions', 'discount_type', 'TEXT');
+          await _safeAddColumn(
+            'customer_transactions',
+            'transaction_number',
+            'TEXT',
+          );
+          await _safeAddColumn(
+            'customer_transactions',
+            'discount_type',
+            'TEXT',
+          );
         }
 
         // Migration 10027 -> 10028: Employee commission & sales target fields
         if (from < 10028) {
-          await _safeAddColumn('employees', 'fixed_commission_cents', 'INTEGER');
-          await _safeAddColumn('employees', 'commission_type', "TEXT NOT NULL DEFAULT 'percentage'");
+          await _safeAddColumn(
+            'employees',
+            'fixed_commission_cents',
+            'INTEGER',
+          );
+          await _safeAddColumn(
+            'employees',
+            'commission_type',
+            "TEXT NOT NULL DEFAULT 'percentage'",
+          );
           await _safeAddColumn('employees', 'sales_target_cents', 'INTEGER');
           await _safeAddColumn('employees', 'target_bonus_cents', 'INTEGER');
-          await _safeAddColumn('employees', 'target_period', "TEXT NOT NULL DEFAULT 'monthly'");
+          await _safeAddColumn(
+            'employees',
+            'target_period',
+            "TEXT NOT NULL DEFAULT 'monthly'",
+          );
         }
 
         // Migration 10028 -> 10029: Per-item salesperson on sale_items
         if (from < 10029) {
-          await _safeAddColumn('sale_items', 'employee_id', 'INTEGER REFERENCES employees(id) ON DELETE SET NULL');
+          await _safeAddColumn(
+            'sale_items',
+            'employee_id',
+            'INTEGER REFERENCES employees(id) ON DELETE SET NULL',
+          );
         }
 
         // Migration 10029 -> 10030: Loyalty points redemption settings
         if (from < 10030) {
-          await _safeAddColumn('loyalty_settings', 'point_value_cents', 'INTEGER NOT NULL DEFAULT 1');
-          await _safeAddColumn('loyalty_settings', 'min_redemption_points', 'INTEGER NOT NULL DEFAULT 100');
-          await _safeAddColumn('loyalty_settings', 'max_redemption_percent_bps', 'INTEGER NOT NULL DEFAULT 5000');
-          await _safeAddColumn('loyalty_settings', 'allow_points_redemption', 'INTEGER NOT NULL DEFAULT 1');
+          await _safeAddColumn(
+            'loyalty_settings',
+            'point_value_cents',
+            'INTEGER NOT NULL DEFAULT 1',
+          );
+          await _safeAddColumn(
+            'loyalty_settings',
+            'min_redemption_points',
+            'INTEGER NOT NULL DEFAULT 100',
+          );
+          await _safeAddColumn(
+            'loyalty_settings',
+            'max_redemption_percent_bps',
+            'INTEGER NOT NULL DEFAULT 5000',
+          );
+          await _safeAddColumn(
+            'loyalty_settings',
+            'allow_points_redemption',
+            'INTEGER NOT NULL DEFAULT 1',
+          );
         }
 
         // Migration 10030 -> 10031: Employee weekly off-days and annual leave
         if (from < 10031) {
-          await _safeAddColumn('employees', 'weekly_off_days', "TEXT NOT NULL DEFAULT '[5,6]'");
-          await _safeAddColumn('employees', 'annual_leave_days', 'INTEGER NOT NULL DEFAULT 21');
+          await _safeAddColumn(
+            'employees',
+            'weekly_off_days',
+            "TEXT NOT NULL DEFAULT '[5,6]'",
+          );
+          await _safeAddColumn(
+            'employees',
+            'annual_leave_days',
+            'INTEGER NOT NULL DEFAULT 21',
+          );
         }
 
         // Migration 10031 -> 10032: Auto-repair supplier opening balance journals.
@@ -1200,8 +2310,16 @@ CREATE TABLE IF NOT EXISTS sale_payments (
 
         // Migration 10032 -> 10033: Employee overtime calculation settings
         if (from < 10033) {
-          await _safeAddColumn('employees', 'overtime_calc_type', "TEXT NOT NULL DEFAULT 'hourly_rate'");
-          await _safeAddColumn('employees', 'overtime_rate_bps', 'INTEGER NOT NULL DEFAULT 15000');
+          await _safeAddColumn(
+            'employees',
+            'overtime_calc_type',
+            "TEXT NOT NULL DEFAULT 'hourly_rate'",
+          );
+          await _safeAddColumn(
+            'employees',
+            'overtime_rate_bps',
+            'INTEGER NOT NULL DEFAULT 15000',
+          );
         }
 
         // Migration 10033 -> 10034: Security question for offline password recovery
@@ -1221,19 +2339,55 @@ CREATE TABLE IF NOT EXISTS sale_payments (
         // Migration 10036 -> 10037: Add unitCostCents to adjustment return items
         // for perpetual inventory GL entries (Inventory 1200 ↔ COGS 5300)
         if (from < 10037) {
-          await _safeAddColumn('purchase_return_adjustment_items', 'unit_cost_cents', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('sale_return_adjustment_items', 'unit_cost_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn(
+            'purchase_return_adjustment_items',
+            'unit_cost_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'sale_return_adjustment_items',
+            'unit_cost_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
         }
 
         // Migration 10037 -> 10038: Unified return flow — audit fields + refund method on adjustment returns
         if (from < 10038) {
-          await _safeAddColumn('purchase_return_adjustments', 'refund_method', "TEXT NOT NULL DEFAULT 'credit'");
-          await _safeAddColumn('purchase_return_adjustments', 'return_mode', 'TEXT');
-          await _safeAddColumn('purchase_return_adjustments', 'mode_reason', 'TEXT');
-          await _safeAddColumn('purchase_return_adjustments', 'batch_id', 'TEXT');
-          await _safeAddColumn('sale_return_adjustments', 'refund_method', "TEXT NOT NULL DEFAULT 'cash'");
-          await _safeAddColumn('sale_return_adjustments', 'return_mode', 'TEXT');
-          await _safeAddColumn('sale_return_adjustments', 'mode_reason', 'TEXT');
+          await _safeAddColumn(
+            'purchase_return_adjustments',
+            'refund_method',
+            "TEXT NOT NULL DEFAULT 'credit'",
+          );
+          await _safeAddColumn(
+            'purchase_return_adjustments',
+            'return_mode',
+            'TEXT',
+          );
+          await _safeAddColumn(
+            'purchase_return_adjustments',
+            'mode_reason',
+            'TEXT',
+          );
+          await _safeAddColumn(
+            'purchase_return_adjustments',
+            'batch_id',
+            'TEXT',
+          );
+          await _safeAddColumn(
+            'sale_return_adjustments',
+            'refund_method',
+            "TEXT NOT NULL DEFAULT 'cash'",
+          );
+          await _safeAddColumn(
+            'sale_return_adjustments',
+            'return_mode',
+            'TEXT',
+          );
+          await _safeAddColumn(
+            'sale_return_adjustments',
+            'mode_reason',
+            'TEXT',
+          );
           await _safeAddColumn('sale_return_adjustments', 'batch_id', 'TEXT');
         }
 
@@ -1275,33 +2429,87 @@ CREATE TABLE IF NOT EXISTS sale_payments (
             FROM sale_return_adjustments
           ''');
           await customStatement('DROP TABLE sale_return_adjustments');
-          await customStatement('ALTER TABLE sale_return_adjustments__new RENAME TO sale_return_adjustments');
+          await customStatement(
+            'ALTER TABLE sale_return_adjustments__new RENAME TO sale_return_adjustments',
+          );
           await customStatement('PRAGMA foreign_keys = ON');
         }
 
         // Migration 10040 -> 10041: Add discount/tax/subtotal/employee columns to adjustment return tables
         if (from < 10041) {
           // Sale return adjustment header
-          await _safeAddColumn('sale_return_adjustments', 'employee_id', 'INTEGER REFERENCES employees(id)');
-          await _safeAddColumn('sale_return_adjustments', 'subtotal_cents', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('sale_return_adjustments', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('sale_return_adjustments', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn(
+            'sale_return_adjustments',
+            'employee_id',
+            'INTEGER REFERENCES employees(id)',
+          );
+          await _safeAddColumn(
+            'sale_return_adjustments',
+            'subtotal_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'sale_return_adjustments',
+            'discount_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'sale_return_adjustments',
+            'tax_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
           // Sale return adjustment items
-          await _safeAddColumn('sale_return_adjustment_items', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('sale_return_adjustment_items', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn(
+            'sale_return_adjustment_items',
+            'discount_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'sale_return_adjustment_items',
+            'tax_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
           // Purchase return adjustment header
-          await _safeAddColumn('purchase_return_adjustments', 'subtotal_cents', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('purchase_return_adjustments', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('purchase_return_adjustments', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn(
+            'purchase_return_adjustments',
+            'subtotal_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'purchase_return_adjustments',
+            'discount_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'purchase_return_adjustments',
+            'tax_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
           // Purchase return adjustment items
-          await _safeAddColumn('purchase_return_adjustment_items', 'discount_cents', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('purchase_return_adjustment_items', 'tax_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn(
+            'purchase_return_adjustment_items',
+            'discount_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'purchase_return_adjustment_items',
+            'tax_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
         }
 
         // Migration 10041 -> 10042: Add dueDate to adjustment return tables (for cheque payments)
         if (from < 10042) {
-          await _safeAddColumn('sale_return_adjustments', 'due_date', 'DATETIME');
-          await _safeAddColumn('purchase_return_adjustments', 'due_date', 'DATETIME');
+          await _safeAddColumn(
+            'sale_return_adjustments',
+            'due_date',
+            'DATETIME',
+          );
+          await _safeAddColumn(
+            'purchase_return_adjustments',
+            'due_date',
+            'DATETIME',
+          );
         }
 
         // Migration 10042 -> 10043: Inventory Adjustments table (manual stock
@@ -1355,8 +2563,16 @@ CREATE TABLE IF NOT EXISTS sale_payments (
         // This stores the initial balance separately from the current balance for display
         // and reporting purposes. Existing balance_cents values are copied as opening balance.
         if (from < 10035) {
-          await _safeAddColumn('suppliers', 'opening_balance_cents', 'INTEGER NOT NULL DEFAULT 0');
-          await _safeAddColumn('customers', 'opening_balance_cents', 'INTEGER NOT NULL DEFAULT 0');
+          await _safeAddColumn(
+            'suppliers',
+            'opening_balance_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+          await _safeAddColumn(
+            'customers',
+            'opening_balance_cents',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
           // Copy existing balance_cents to opening_balance_cents for existing records
           // that were created with an opening balance (balance_cents != 0)
           await customStatement('''
@@ -1614,16 +2830,24 @@ CREATE TABLE IF NOT EXISTS sale_payments (
         if (from < 10050) {
           // 1. Counters on sale_items / purchase_items.
           await _safeAddColumn(
-            'sale_items', 'qty_returned_linked', 'INTEGER NOT NULL DEFAULT 0',
+            'sale_items',
+            'qty_returned_linked',
+            'INTEGER NOT NULL DEFAULT 0',
           );
           await _safeAddColumn(
-            'sale_items', 'qty_returned_adjustment', 'INTEGER NOT NULL DEFAULT 0',
+            'sale_items',
+            'qty_returned_adjustment',
+            'INTEGER NOT NULL DEFAULT 0',
           );
           await _safeAddColumn(
-            'purchase_items', 'qty_returned_linked', 'INTEGER NOT NULL DEFAULT 0',
+            'purchase_items',
+            'qty_returned_linked',
+            'INTEGER NOT NULL DEFAULT 0',
           );
           await _safeAddColumn(
-            'purchase_items', 'qty_returned_adjustment', 'INTEGER NOT NULL DEFAULT 0',
+            'purchase_items',
+            'qty_returned_adjustment',
+            'INTEGER NOT NULL DEFAULT 0',
           );
 
           // Backfill linked counters from existing return items (non-voided).
@@ -1645,8 +2869,16 @@ CREATE TABLE IF NOT EXISTS sale_payments (
           // 2. Idempotency keys on the four return headers.
           await _safeAddColumn('sale_returns', 'idempotency_key', 'TEXT');
           await _safeAddColumn('purchase_returns', 'idempotency_key', 'TEXT');
-          await _safeAddColumn('sale_return_adjustments', 'idempotency_key', 'TEXT');
-          await _safeAddColumn('purchase_return_adjustments', 'idempotency_key', 'TEXT');
+          await _safeAddColumn(
+            'sale_return_adjustments',
+            'idempotency_key',
+            'TEXT',
+          );
+          await _safeAddColumn(
+            'purchase_return_adjustments',
+            'idempotency_key',
+            'TEXT',
+          );
 
           await customStatement(
             'CREATE UNIQUE INDEX IF NOT EXISTS idx_sale_returns_idempotency '
@@ -1710,25 +2942,39 @@ CREATE TABLE IF NOT EXISTS sale_payments (
         if (from < 10051) {
           // 1. Snapshot columns on return-line tables.
           await _safeAddColumn(
-            'sale_return_items', 'tax_rate_bps_at_post', 'INTEGER',
+            'sale_return_items',
+            'tax_rate_bps_at_post',
+            'INTEGER',
           );
           await _safeAddColumn(
-            'sale_return_items', 'unit_cost_at_post_cents', 'INTEGER',
+            'sale_return_items',
+            'unit_cost_at_post_cents',
+            'INTEGER',
           );
           await _safeAddColumn(
-            'purchase_return_items', 'tax_rate_bps_at_post', 'INTEGER',
+            'purchase_return_items',
+            'tax_rate_bps_at_post',
+            'INTEGER',
           );
           await _safeAddColumn(
-            'purchase_return_items', 'unit_cost_at_post_cents', 'INTEGER',
+            'purchase_return_items',
+            'unit_cost_at_post_cents',
+            'INTEGER',
           );
           await _safeAddColumn(
-            'sale_return_adjustment_items', 'tax_rate_bps_at_post', 'INTEGER',
+            'sale_return_adjustment_items',
+            'tax_rate_bps_at_post',
+            'INTEGER',
           );
           await _safeAddColumn(
-            'sale_return_adjustment_items', 'unit_cost_at_post_cents', 'INTEGER',
+            'sale_return_adjustment_items',
+            'unit_cost_at_post_cents',
+            'INTEGER',
           );
           await _safeAddColumn(
-            'sale_return_adjustment_items', 'original_invoice_id', 'INTEGER',
+            'sale_return_adjustment_items',
+            'original_invoice_id',
+            'INTEGER',
           );
           await _safeAddColumn(
             'sale_return_adjustment_items',
@@ -1760,10 +3006,14 @@ CREATE TABLE IF NOT EXISTS sale_payments (
           await _safeAddColumn('sale_returns', 'fx_rate_to_base', 'TEXT');
           await _safeAddColumn('purchase_returns', 'fx_rate_to_base', 'TEXT');
           await _safeAddColumn(
-            'sale_return_adjustments', 'fx_rate_to_base', 'TEXT',
+            'sale_return_adjustments',
+            'fx_rate_to_base',
+            'TEXT',
           );
           await _safeAddColumn(
-            'purchase_return_adjustments', 'fx_rate_to_base', 'TEXT',
+            'purchase_return_adjustments',
+            'fx_rate_to_base',
+            'TEXT',
           );
 
           // 3. New tables: fiscal_periods, customer_credit_notes,
@@ -1912,7 +3162,9 @@ CREATE TABLE IF NOT EXISTS return_reason_codes (
               "TEXT NOT NULL DEFAULT 'auto_approved'",
             );
             await _safeAddColumn(
-              table, 'approval_required', 'INTEGER NOT NULL DEFAULT 0',
+              table,
+              'approval_required',
+              'INTEGER NOT NULL DEFAULT 0',
             );
             await _safeAddColumn(table, 'approval_reason', 'TEXT');
             await _safeAddColumn(table, 'approved_by', 'INTEGER');
@@ -2035,9 +3287,15 @@ CREATE TABLE IF NOT EXISTS e_invoice_documents (
         // both columns going forward (see `purchase_dao.postPurchase`).
         if (from < 10055) {
           await _safeAddColumn(
-              'products', 'last_purchase_price_cents', 'INTEGER');
+            'products',
+            'last_purchase_price_cents',
+            'INTEGER',
+          );
           await _safeAddColumn(
-              'product_variants', 'last_purchase_price_cents', 'INTEGER');
+            'product_variants',
+            'last_purchase_price_cents',
+            'INTEGER',
+          );
           developer.log(
             'Migration 10055: added last_purchase_price_cents (nullable) '
             'to products and product_variants. Decouples supplier reference '
@@ -2126,7 +3384,10 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
         // See `docs/ACCOUNTING_INTEGRITY_GUIDELINES.md` §Phase-15.
         if (from < 10057) {
           await _safeAddColumn(
-              'cheque_confirmations', 'cleared_payment_id', 'INTEGER');
+            'cheque_confirmations',
+            'cleared_payment_id',
+            'INTEGER',
+          );
           developer.log(
             'Migration 10057: added cheque_confirmations.cleared_payment_id. '
             'Phase 15.0 cheque-lifecycle JE wiring. Cleared cheques now '
@@ -2187,7 +3448,10 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
         // rebuild is the recovery path if a retroactive deduction is wanted).
         if (from < 10059) {
           await _safeAddColumn(
-              'commissions', 'sale_return_adjustment_id', 'INTEGER');
+            'commissions',
+            'sale_return_adjustment_id',
+            'INTEGER',
+          );
           developer.log(
             'Migration 10059: added commissions.sale_return_adjustment_id. '
             'Adjustment (unlinked) sale returns attributed to a salesperson '
@@ -2226,6 +3490,126 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
           );
         }
 
+        // Migration 10060 -> 10061: owner finance and fixed-asset sub-ledgers.
+        // Additive tables only; existing business data and journal entries are
+        // untouched. Required system accounts are idempotently seeded in
+        // beforeOpen after the schema upgrade completes.
+        if (from < 10061) {
+          await m.createTable(ownerFinanceTransactions);
+          await m.createTable(fixedAssets);
+          await m.createTable(fixedAssetDepreciations);
+          developer.log(
+            'Migration 10061: added owner finance, fixed assets, and '
+            'fixed-asset depreciation sub-ledgers.',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        // Migration 10061 -> 10062: real POS cashier sessions. Historical
+        // documents stay NULL and are never guessed from timestamps.
+        if (from < 10062) {
+          await m.createTable(cashierShifts);
+          await _safeAddColumn(
+            'sales',
+            'cashier_shift_id',
+            'INTEGER REFERENCES cashier_shifts(id) ON DELETE SET NULL',
+          );
+          await _safeAddColumn(
+            'sale_returns',
+            'cashier_shift_id',
+            'INTEGER REFERENCES cashier_shifts(id) ON DELETE SET NULL',
+          );
+          await _safeAddColumn(
+            'sale_return_adjustments',
+            'cashier_shift_id',
+            'INTEGER REFERENCES cashier_shifts(id) ON DELETE SET NULL',
+          );
+          await _safeAddColumn(
+            'sale_payments',
+            'cashier_shift_id',
+            'INTEGER REFERENCES cashier_shifts(id) ON DELETE SET NULL',
+          );
+          developer.log(
+            'Migration 10062: added cashier shifts and explicit POS '
+            'transaction links.',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        // Migration 10062 -> 10063: exact measured quantities. Existing
+        // products and document lines remain count-based (scale=1), while
+        // new measured products snapshot their dimension and scale on every
+        // invoice/return line for reproducible historical accounting.
+        if (from < 10063) {
+          await _safeAddColumn(
+            'products',
+            'measurement_type',
+            "TEXT NOT NULL DEFAULT 'piece'",
+          );
+          for (final table in <String>[
+            'sale_items',
+            'sale_return_items',
+            'purchase_items',
+            'purchase_return_items',
+            'purchase_return_adjustment_items',
+            'sale_return_adjustment_items',
+          ]) {
+            await _safeAddColumn(
+              table,
+              'quantity_scale',
+              'INTEGER NOT NULL DEFAULT 1 CHECK (quantity_scale > 0)',
+            );
+            await _safeAddColumn(
+              table,
+              'measurement_type',
+              "TEXT NOT NULL DEFAULT 'piece'",
+            );
+          }
+          developer.log(
+            'Migration 10063: added measured product dimensions and frozen '
+            'quantity scales to invoice/return lines.',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        if (from < 10064) {
+          await _ensureDocumentSequencesTable();
+          developer.log(
+            'Migration 10064: added permanent business document sequences.',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        if (from < 10065) {
+          await _repairMeasuredLinkedReturnScalesAndJournals();
+        }
+
+        if (from < 10066) {
+          for (final table in <String>[
+            'sale_items',
+            'purchase_items',
+            'sale_return_items',
+            'purchase_return_items',
+            'purchase_return_adjustment_items',
+            'sale_return_adjustment_items',
+          ]) {
+            await _safeAddColumn(
+              table,
+              'inventory_value_at_post_cents',
+              'INTEGER',
+            );
+          }
+          await _repairMeasuredInventoryRounding10066();
+        }
+
+        if (from < 10067) {
+          await _normalizePriceHistoryCents10067();
+        }
+
+        if (from < 10068) {
+          await _reconcileSimpleProductRows10068();
+        }
+
         await _createIndexes();
         await _seedInitialData();
       },
@@ -2238,6 +3622,7 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
         await customStatement('PRAGMA foreign_keys = ON');
         await customStatement('PRAGMA journal_mode = WAL');
         await customStatement('PRAGMA synchronous = NORMAL');
+        await _ensureDocumentSequencesTable();
         await _ensureSchemaIntegrity();
         await _repairProductVariantsSkuNullabilityIfNeeded();
         await _convertIntegerTimestampsToTextOnce();
@@ -2264,6 +3649,16 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
     );
   }
 
+  Future<void> _ensureDocumentSequencesTable() async {
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS document_sequences (
+        prefix TEXT NOT NULL PRIMARY KEY,
+        last_number INTEGER NOT NULL DEFAULT 0 CHECK (last_number >= 0),
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    ''');
+  }
+
   /// Log pre-migration backup intent.
   /// The actual file-level backup is performed by [createDatabaseBackup] in
   /// database_native.dart, which the DI layer calls before database open.
@@ -2282,79 +3677,209 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
   Future<void> createIndexesForTest() => _createIndexes();
 
   Future<void> _createIndexes() async {
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_sales_customer_date ON sales(customer_id, sale_date)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_products_active ON products(is_active, name)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_journal_entry_date ON journal_entries(entry_date)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_commissions_employee_effective ON commissions(employee_id, effective_date)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_audit_table_record ON audit_logs(target_table, record_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku)');
-    await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode) WHERE barcode IS NOT NULL');
-    await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_product_variants_barcode ON product_variants(barcode) WHERE barcode IS NOT NULL');
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_cashier_shifts_one_open '
+      "ON cashier_shifts(cashier_user_id) WHERE status = 'open'",
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_cashier_shifts_opened '
+      'ON cashier_shifts(opened_at DESC)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sales_cashier_shift '
+      'ON sales(cashier_shift_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sale_returns_cashier_shift '
+      'ON sale_returns(cashier_shift_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sale_return_adj_cashier_shift '
+      'ON sale_return_adjustments(cashier_shift_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sale_payments_cashier_shift '
+      'ON sale_payments(cashier_shift_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sales_customer_date ON sales(customer_id, sale_date)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_products_active ON products(is_active, name)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_journal_entry_date ON journal_entries(entry_date)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_commissions_employee_effective ON commissions(employee_id, effective_date)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_audit_table_record ON audit_logs(target_table, record_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku)',
+    );
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode) WHERE barcode IS NOT NULL',
+    );
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_product_variants_barcode ON product_variants(barcode) WHERE barcode IS NOT NULL',
+    );
     await customStatement(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_product_variants_product_color_size_unique '
       'ON product_variants(product_id, IFNULL(color_id, -1), IFNULL(size_id, -1))',
     );
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_customers_active ON customers(is_active)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_suppliers_active ON suppliers(is_active)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_currency_active ON currencies(is_active)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_barcode_templates_default ON barcode_templates(is_default)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_print_history_product ON print_histories(product_id, print_date)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_print_history_date ON print_histories(print_date)');
-    
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_customers_active ON customers(is_active)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_suppliers_active ON suppliers(is_active)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_currency_active ON currencies(is_active)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_barcode_templates_default ON barcode_templates(is_default)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_print_history_product ON print_histories(product_id, print_date)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_print_history_date ON print_histories(print_date)',
+    );
+
     // Employee management indexes
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_employees_active ON employees(is_active)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_employees_role ON employees(role_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_employees_manager ON employees(manager_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_employees_department ON employees(department)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_attendances_employee_date ON attendances(employee_id, attendance_date)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_attendances_date ON attendances(attendance_date)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_leave_requests_employee ON leave_requests(employee_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_leave_requests_status ON leave_requests(status)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_payrolls_employee ON payrolls(employee_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_payrolls_period ON payrolls(period_start, period_end)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_payrolls_status ON payrolls(status)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_commissions_employee ON commissions(employee_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_commissions_period ON commissions(period)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_commissions_sale_return_adjustment ON commissions(sale_return_adjustment_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_shift_schedules_employee_date ON shift_schedules(employee_id, shift_date)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_performance_metrics_employee ON performance_metrics(employee_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_performance_metrics_period ON performance_metrics(period_identifier)');
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_employees_active ON employees(is_active)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_employees_role ON employees(role_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_employees_manager ON employees(manager_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_employees_department ON employees(department)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_attendances_employee_date ON attendances(employee_id, attendance_date)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_attendances_date ON attendances(attendance_date)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_leave_requests_employee ON leave_requests(employee_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_leave_requests_status ON leave_requests(status)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_payrolls_employee ON payrolls(employee_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_payrolls_period ON payrolls(period_start, period_end)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_payrolls_status ON payrolls(status)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_commissions_employee ON commissions(employee_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_commissions_period ON commissions(period)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_commissions_sale_return_adjustment ON commissions(sale_return_adjustment_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_shift_schedules_employee_date ON shift_schedules(employee_id, shift_date)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_performance_metrics_employee ON performance_metrics(employee_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_performance_metrics_period ON performance_metrics(period_identifier)',
+    );
 
     // Purchase enhancement indexes
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchases_status ON purchases(status)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchases_supplier ON purchases(supplier_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchases_due_date ON purchases(due_date)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchase_payments_purchase ON purchase_payments(purchase_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchase_returns_purchase ON purchase_returns(purchase_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchase_returns_status ON purchase_returns(status)');
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_purchases_status ON purchases(status)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_purchases_supplier ON purchases(supplier_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_purchases_due_date ON purchases(due_date)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_purchase_payments_purchase ON purchase_payments(purchase_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_purchase_returns_purchase ON purchase_returns(purchase_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_purchase_returns_status ON purchase_returns(status)',
+    );
 
     // Sale enhancement indexes
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_sales_status ON sales(status)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_sales_due_date ON sales(due_date)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_sale_payments_sale ON sale_payments(sale_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_sale_returns_sale ON sale_returns(sale_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_sale_returns_status ON sale_returns(status)');
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sales_status ON sales(status)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sales_due_date ON sales(due_date)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sale_payments_sale ON sale_payments(sale_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sale_returns_sale ON sale_returns(sale_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sale_returns_status ON sale_returns(status)',
+    );
 
     // Dashboard aggregation indexes (covering indexes for status + totals)
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_sales_status_total ON sales(status, total_cents)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_sales_status_date_total ON sales(status, sale_date, total_cents)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchases_status_total ON purchases(status, total_cents, paid_amount_cents)');
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sales_status_total ON sales(status, total_cents)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sales_status_date_total ON sales(status, sale_date, total_cents)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_purchases_status_total ON purchases(status, total_cents, paid_amount_cents)',
+    );
 
     // Invoice/purchase number generation (prefix LIKE + ORDER BY)
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_sales_invoice_number ON sales(invoice_number)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchases_number ON purchases(purchase_number)');
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sales_invoice_number ON sales(invoice_number)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_purchases_number ON purchases(purchase_number)',
+    );
 
     // Journal entry source lookups (used by voidJournalEntriesForSource)
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_journal_entries_source ON journal_entries(source_table, source_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_journal_entry_lines_entry ON journal_entry_lines(journal_entry_id)');
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_journal_entries_source ON journal_entries(source_table, source_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_journal_entry_lines_entry ON journal_entry_lines(journal_entry_id)',
+    );
 
     // Customer/supplier transaction lookups
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_customer_transactions_customer ON customer_transactions(customer_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_supplier_transactions_supplier ON supplier_transactions(supplier_id)');
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_customer_transactions_customer ON customer_transactions(customer_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_supplier_transactions_supplier ON supplier_transactions(supplier_id)',
+    );
 
     // Product variant stock lookups (used in postSale stock validation)
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_product_variants_product_active ON product_variants(product_id, is_active)');
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_product_variants_product_active ON product_variants(product_id, is_active)',
+    );
 
     // FIFO batch lookup indexes (v10045) — FIFO consumption hot path:
     //   ORDER BY expiry_date ASC NULLS LAST, received_date ASC
@@ -2386,14 +3911,44 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
     );
 
     // Adjustment return indexes
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchase_return_adj_supplier ON purchase_return_adjustments(supplier_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchase_return_adj_status ON purchase_return_adjustments(status)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchase_return_adj_date ON purchase_return_adjustments(return_date)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_purchase_return_adj_items_return ON purchase_return_adjustment_items(return_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_sale_return_adj_customer ON sale_return_adjustments(customer_id)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_sale_return_adj_status ON sale_return_adjustments(status)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_sale_return_adj_date ON sale_return_adjustments(return_date)');
-    await customStatement('CREATE INDEX IF NOT EXISTS idx_sale_return_adj_items_return ON sale_return_adjustment_items(return_id)');
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_purchase_return_adj_supplier ON purchase_return_adjustments(supplier_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_purchase_return_adj_status ON purchase_return_adjustments(status)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_purchase_return_adj_date ON purchase_return_adjustments(return_date)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_purchase_return_adj_items_return ON purchase_return_adjustment_items(return_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sale_return_adj_customer ON sale_return_adjustments(customer_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sale_return_adj_status ON sale_return_adjustments(status)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sale_return_adj_date ON sale_return_adjustments(return_date)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sale_return_adj_items_return ON sale_return_adjustment_items(return_id)',
+    );
+
+    // Owner-finance and fixed-asset sub-ledger indexes (v10061).
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_owner_finance_date_status '
+      'ON owner_finance_transactions(transaction_date, status)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_fixed_assets_status_date '
+      'ON fixed_assets(status, acquisition_date)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_fixed_asset_dep_asset_status_period '
+      'ON fixed_asset_depreciations(asset_id, status, period_end)',
+    );
   }
 
   /// Defense-in-depth DB-level guards on `product_batches` (Phase I, I3).
@@ -2469,16 +4024,15 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
       required Decimal exchangeRate,
       bool? isBase,
     }) async {
-      final updated = await (update(currencies)
-            ..where((c) => c.code.equals(code)))
-          .write(
-        CurrenciesCompanion(
-          name: Value(name),
-          symbol: Value(symbol),
-          exchangeRate: Value(exchangeRate),
-          isBase: isBase == null ? const Value.absent() : Value(isBase),
-        ),
-      );
+      final updated =
+          await (update(currencies)..where((c) => c.code.equals(code))).write(
+            CurrenciesCompanion(
+              name: Value(name),
+              symbol: Value(symbol),
+              exchangeRate: Value(exchangeRate),
+              isBase: isBase == null ? const Value.absent() : Value(isBase),
+            ),
+          );
 
       if (updated == 0) {
         await into(currencies).insert(
@@ -2499,15 +4053,16 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
       required String accountType,
       required int currencyId,
     }) async {
-      final updated = await (update(accounts)
-            ..where((a) => a.accountCode.equals(accountCode)))
-          .write(
-        AccountsCompanion(
-          accountName: Value(accountName),
-          accountType: Value(accountType),
-          currencyId: Value(currencyId),
-        ),
-      );
+      final updated =
+          await (update(
+            accounts,
+          )..where((a) => a.accountCode.equals(accountCode))).write(
+            AccountsCompanion(
+              accountName: Value(accountName),
+              accountType: Value(accountType),
+              currencyId: Value(currencyId),
+            ),
+          );
 
       if (updated == 0) {
         await into(accounts).insert(
@@ -2526,21 +4081,24 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
       required String value,
       String? description,
     }) async {
-      final updated = await (update(appSettings)
-            ..where((s) => s.key.equals(key)))
-          .write(
-        AppSettingsCompanion(
-          value: Value(value),
-          description: description == null ? const Value.absent() : Value(description),
-        ),
-      );
+      final updated =
+          await (update(appSettings)..where((s) => s.key.equals(key))).write(
+            AppSettingsCompanion(
+              value: Value(value),
+              description: description == null
+                  ? const Value.absent()
+                  : Value(description),
+            ),
+          );
 
       if (updated == 0) {
         await into(appSettings).insert(
           AppSettingsCompanion.insert(
             key: key,
             value: value,
-            description: description == null ? const Value.absent() : Value(description),
+            description: description == null
+                ? const Value.absent()
+                : Value(description),
           ),
         );
       }
@@ -2554,7 +4112,9 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
       isBase: true,
     );
 
-    final usd = await (select(currencies)..where((c) => c.code.equals('USD'))).getSingle();
+    final usd = await (select(
+      currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     final usdId = usd.id;
 
     await upsertCurrency(
@@ -2770,19 +4330,22 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
     await upsertSetting(
       key: 'return_approval_threshold_cents',
       value: '0',
-      description: 'Amount (in cents) at/above which a return requires '
+      description:
+          'Amount (in cents) at/above which a return requires '
           'manager approval before posting. 0 disables the threshold rule.',
     );
     await upsertSetting(
       key: 'require_approval_when_no_invoice',
       value: '1',
-      description: 'When 1, any adjustment return with no original '
+      description:
+          'When 1, any adjustment return with no original '
           'invoice reference requires manager approval before posting.',
     );
     await upsertSetting(
       key: 'require_approval_on_override',
       value: '1',
-      description: 'When 1, any return posted with `allowOverHistory` '
+      description:
+          'When 1, any return posted with `allowOverHistory` '
           '(bypassing the Phase 0 quantity cap) requires manager '
           'approval before posting.',
     );
@@ -2857,12 +4420,7 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
           'INSERT INTO return_reason_codes '
           '(code, label_en, label_ar, side, is_active, is_system) '
           'VALUES (?, ?, ?, ?, 1, 1)',
-          [
-            row['code']!,
-            row['label_en']!,
-            row['label_ar']!,
-            row['side']!,
-          ],
+          [row['code']!, row['label_en']!, row['label_ar']!, row['side']!],
         );
       } else {
         // Keep existing user edits but make sure the system flag + labels
@@ -2872,32 +4430,21 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
           'UPDATE return_reason_codes SET '
           'label_en = ?, label_ar = ?, side = ?, is_system = 1, '
           'updated_at = CURRENT_TIMESTAMP WHERE code = ?',
-          [
-            row['label_en']!,
-            row['label_ar']!,
-            row['side']!,
-            row['code']!,
-          ],
+          [row['label_en']!, row['label_ar']!, row['side']!, row['code']!],
         );
       }
     }
   }
 
   Future<void> _seedDefaultColors() async {
-    Future<void> upsertColor({
-      required String name,
-      String? hexCode,
-    }) async {
-      final existing = await (select(productColors)
-            ..where((c) => c.name.equals(name)))
-          .getSingleOrNull();
+    Future<void> upsertColor({required String name, String? hexCode}) async {
+      final existing = await (select(
+        productColors,
+      )..where((c) => c.name.equals(name))).getSingleOrNull();
 
       if (existing == null) {
         await into(productColors).insert(
-          ProductColorsCompanion.insert(
-            name: name,
-            hexCode: Value(hexCode),
-          ),
+          ProductColorsCompanion.insert(name: name, hexCode: Value(hexCode)),
         );
       }
     }
@@ -2922,9 +4469,9 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
       String? description,
       required int sortOrder,
     }) async {
-      final existing = await (select(sizes)
-            ..where((s) => s.name.equals(name)))
-          .getSingleOrNull();
+      final existing = await (select(
+        sizes,
+      )..where((s) => s.name.equals(name))).getSingleOrNull();
 
       if (existing == null) {
         await into(sizes).insert(
@@ -2942,7 +4489,11 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
     await upsertSize(name: 'Medium', description: 'M', sortOrder: 3);
     await upsertSize(name: 'Large', description: 'L', sortOrder: 4);
     await upsertSize(name: 'Extra Large', description: 'XL', sortOrder: 5);
-    await upsertSize(name: 'Double Extra Large', description: 'XXL', sortOrder: 6);
+    await upsertSize(
+      name: 'Double Extra Large',
+      description: 'XXL',
+      sortOrder: 6,
+    );
   }
 
   Future<void> _seedDefaultRoles() async {
@@ -2954,9 +4505,9 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
       required String permissions,
       bool isSystemRole = false,
     }) async {
-      final existing = await (select(roles)
-            ..where((r) => r.name.equals(name)))
-          .getSingleOrNull();
+      final existing = await (select(
+        roles,
+      )..where((r) => r.name.equals(name))).getSingleOrNull();
 
       if (existing == null) {
         await into(roles).insert(
@@ -2978,7 +4529,8 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
       nameAr: 'مدير النظام',
       nameFr: 'Administrateur',
       description: 'Full system access with all permissions',
-      permissions: '["employees.view","employees.create","employees.edit","employees.delete","employees.manage_permissions","payroll.view","payroll.create","payroll.approve","payroll.process","attendance.view","attendance.manage","attendance.approve","performance.view","performance.manage","reports.view","reports.export","settings.view","settings.manage","system.admin","purchases.view","purchases.create","purchases.edit","purchases.delete","purchases.post","purchases.void","purchases.approve","purchases.returns","purchases.payments"]',
+      permissions:
+          '["employees.view","employees.create","employees.edit","employees.delete","employees.manage_permissions","payroll.view","payroll.create","payroll.approve","payroll.process","attendance.view","attendance.manage","attendance.approve","performance.view","performance.manage","reports.view","reports.export","settings.view","settings.manage","system.admin","purchases.view","purchases.create","purchases.edit","purchases.delete","purchases.post","purchases.void","purchases.approve","purchases.returns","purchases.payments"]',
       isSystemRole: true,
     );
 
@@ -2988,7 +4540,8 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
       nameAr: 'مدير',
       nameFr: 'Gestionnaire',
       description: 'Team management with limited admin access',
-      permissions: '["employees.view","employees.edit","attendance.view","attendance.manage","attendance.approve","performance.view","performance.manage","payroll.view","reports.view","reports.team","purchases.view","purchases.create","purchases.edit","purchases.post","purchases.approve","purchases.returns","purchases.payments"]',
+      permissions:
+          '["employees.view","employees.edit","attendance.view","attendance.manage","attendance.approve","performance.view","performance.manage","payroll.view","reports.view","reports.team","purchases.view","purchases.create","purchases.edit","purchases.post","purchases.approve","purchases.returns","purchases.payments"]',
       isSystemRole: true,
     );
 
@@ -2998,7 +4551,8 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
       nameAr: 'موظف',
       nameFr: 'Employé',
       description: 'Basic employee access',
-      permissions: '["profile.view","profile.edit","attendance.view","attendance.self","performance.view","payslip.view","purchases.view"]',
+      permissions:
+          '["profile.view","profile.edit","attendance.view","attendance.self","performance.view","payslip.view","purchases.view"]',
       isSystemRole: true,
     );
 
@@ -3008,7 +4562,8 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
       nameAr: 'كاشير',
       nameFr: 'Caissier',
       description: 'Point of sale and basic operations',
-      permissions: '["profile.view","attendance.view","attendance.self","sales.view","sales.create","products.view","customers.view","purchases.view"]',
+      permissions:
+          '["profile.view","attendance.view","attendance.self","sales.view","sales.create","products.view","customers.view","purchases.view"]',
       isSystemRole: true,
     );
 
@@ -3018,7 +4573,8 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
       nameAr: 'مندوب مبيعات',
       nameFr: 'Vendeur',
       description: 'Sales operations with commission tracking',
-      permissions: '["profile.view","attendance.view","attendance.self","sales.view","sales.create","products.view","customers.view","customers.create","performance.view","commission.view","purchases.view"]',
+      permissions:
+          '["profile.view","attendance.view","attendance.self","sales.view","sales.create","products.view","customers.view","customers.create","performance.view","commission.view","purchases.view"]',
       isSystemRole: true,
     );
   }
@@ -3028,14 +4584,24 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
     // Permission mappings: role name -> purchase permissions to add
     const rolePermissions = <String, List<String>>{
       'admin': [
-        'purchases.view', 'purchases.create', 'purchases.edit',
-        'purchases.delete', 'purchases.post', 'purchases.void',
-        'purchases.approve', 'purchases.returns', 'purchases.payments',
+        'purchases.view',
+        'purchases.create',
+        'purchases.edit',
+        'purchases.delete',
+        'purchases.post',
+        'purchases.void',
+        'purchases.approve',
+        'purchases.returns',
+        'purchases.payments',
       ],
       'manager': [
-        'purchases.view', 'purchases.create', 'purchases.edit',
-        'purchases.post', 'purchases.approve',
-        'purchases.returns', 'purchases.payments',
+        'purchases.view',
+        'purchases.create',
+        'purchases.edit',
+        'purchases.post',
+        'purchases.approve',
+        'purchases.returns',
+        'purchases.payments',
       ],
       'staff': ['purchases.view'],
       'cashier': ['purchases.view'],
@@ -3046,7 +4612,9 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
       final roleName = entry.key;
       final newPerms = entry.value;
 
-      final role = await (select(roles)..where((r) => r.name.equals(roleName))).getSingleOrNull();
+      final role = await (select(
+        roles,
+      )..where((r) => r.name.equals(roleName))).getSingleOrNull();
       if (role == null) continue;
 
       // Parse existing permissions JSON array
@@ -3060,8 +4628,9 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
           ? '${existingPerms.substring(0, existingPerms.length - 1)},$newPermsStr]'
           : existingPerms;
 
-      await (update(roles)..where((r) => r.name.equals(roleName)))
-          .write(RolesCompanion(permissions: Value(updatedPerms)));
+      await (update(roles)..where((r) => r.name.equals(roleName))).write(
+        RolesCompanion(permissions: Value(updatedPerms)),
+      );
     }
   }
 
@@ -3103,9 +4672,9 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
       String? badgeText,
       required int sortOrder,
     }) async {
-      final existing = await (select(loyaltyTiers)
-            ..where((t) => t.name.equals(name)))
-          .getSingleOrNull();
+      final existing = await (select(
+        loyaltyTiers,
+      )..where((t) => t.name.equals(name))).getSingleOrNull();
 
       if (existing == null) {
         await into(loyaltyTiers).insert(
@@ -3236,9 +4805,9 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
       required double heightMm,
       required bool isDefault,
     }) async {
-      final existing = await (select(barcodeTemplates)
-            ..where((t) => t.name.equals(name)))
-          .getSingleOrNull();
+      final existing = await (select(
+        barcodeTemplates,
+      )..where((t) => t.name.equals(name))).getSingleOrNull();
 
       if (existing == null) {
         await into(barcodeTemplates).insert(
@@ -3253,10 +4822,16 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
             includePrice: const Value(true),
             includeSku: const Value(false),
             includeCompanyName: const Value(false),
-            includeVariantInfo: const Value(false),
+            includeVariantInfo: const Value(true),
             barcodeType: const Value('auto'),
             isDefault: Value(isDefault),
           ),
+        );
+      } else if (!existing.includeVariantInfo) {
+        await (update(
+          barcodeTemplates,
+        )..where((t) => t.id.equals(existing.id))).write(
+          const BarcodeTemplatesCompanion(includeVariantInfo: Value(true)),
         );
       }
     }
@@ -3295,7 +4870,9 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
     final now = DateTime.now();
 
     // Get default currency
-    final defaultCurrencyRow = await (select(currencies)..limit(1)).getSingleOrNull();
+    final defaultCurrencyRow = await (select(
+      currencies,
+    )..limit(1)).getSingleOrNull();
     if (defaultCurrencyRow == null) {
       debugPrint('No currency found, skipping default accounts seed');
       return;
@@ -3305,34 +4882,166 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
     // STRICT Chart of Accounts — matches JournalEntryService requirements
     final defaultAccounts = <Map<String, dynamic>>[
       // ── Assets (1xxx) ──
-      {'code': '1000', 'name': 'Cash', 'type': 'asset', 'system': true, 'order': 1},
-      {'code': '1010', 'name': 'Bank', 'type': 'asset', 'system': true, 'order': 2},
-      {'code': '1100', 'name': 'Accounts Receivable', 'type': 'asset', 'system': true, 'order': 3},
-      {'code': '1200', 'name': 'Inventory', 'type': 'asset', 'system': true, 'order': 4},
+      {
+        'code': '1000',
+        'name': 'Cash',
+        'type': 'asset',
+        'system': true,
+        'order': 1,
+      },
+      {
+        'code': '1010',
+        'name': 'Bank',
+        'type': 'asset',
+        'system': true,
+        'order': 2,
+      },
+      {
+        'code': '1100',
+        'name': 'Accounts Receivable',
+        'type': 'asset',
+        'system': true,
+        'order': 3,
+      },
+      {
+        'code': '1200',
+        'name': 'Inventory',
+        'type': 'asset',
+        'system': true,
+        'order': 4,
+      },
       // 1290 Returns in Transit — asset-class clearing account for the
       // `send_back` disposition on purchase returns. Goods have physically
       // left but the supplier credit memo is still pending; inventory
       // value parks here until reconciled. See seedDefaultAccounts doc.
-      {'code': '1290', 'name': 'Returns in Transit', 'type': 'asset', 'system': true, 'order': 6},
-      {'code': '1300', 'name': 'VAT Receivable', 'type': 'asset', 'system': true, 'order': 7},
+      {
+        'code': '1290',
+        'name': 'Returns in Transit',
+        'type': 'asset',
+        'system': true,
+        'order': 6,
+      },
+      {
+        'code': '1300',
+        'name': 'VAT Receivable',
+        'type': 'asset',
+        'system': true,
+        'order': 7,
+      },
+      {
+        'code': '1500',
+        'name': 'Fixed Assets',
+        'type': 'asset',
+        'system': true,
+        'order': 8,
+      },
+      {
+        'code': '1510',
+        'name': 'Furniture and Fixtures',
+        'type': 'asset',
+        'system': true,
+        'order': 9,
+      },
+      {
+        'code': '1520',
+        'name': 'Equipment and Air Conditioners',
+        'type': 'asset',
+        'system': true,
+        'order': 10,
+      },
+      {
+        'code': '1590',
+        'name': 'Accumulated Depreciation',
+        'type': 'asset',
+        'system': true,
+        'order': 11,
+      },
       // ── Liabilities (2xxx) ──
-      {'code': '2000', 'name': 'Accounts Payable', 'type': 'liability', 'system': true, 'order': 10},
-      {'code': '2100', 'name': 'VAT Payable', 'type': 'liability', 'system': true, 'order': 11},
-      {'code': '2300', 'name': 'Loyalty Points Liability', 'type': 'liability', 'system': true, 'order': 12},
+      {
+        'code': '2000',
+        'name': 'Accounts Payable',
+        'type': 'liability',
+        'system': true,
+        'order': 10,
+      },
+      {
+        'code': '2100',
+        'name': 'VAT Payable',
+        'type': 'liability',
+        'system': true,
+        'order': 11,
+      },
+      {
+        'code': '2200',
+        'name': 'Owner Loan Payable',
+        'type': 'liability',
+        'system': true,
+        'order': 12,
+      },
+      {
+        'code': '2300',
+        'name': 'Loyalty Points Liability',
+        'type': 'liability',
+        'system': true,
+        'order': 12,
+      },
       // 2400 Customer Credit Liability — holds on-account refunds for
       // unlinked sale returns (returns without an original invoice).
       // Keeps 1100 AR clean and prevents orphaned negative-AR balances.
-      {'code': '2400', 'name': 'Customer Credit Liability', 'type': 'liability', 'system': true, 'order': 13},
+      {
+        'code': '2400',
+        'name': 'Customer Credit Liability',
+        'type': 'liability',
+        'system': true,
+        'order': 13,
+      },
       // ── Equity (3xxx) ──
-      {'code': '3000', 'name': 'Owner Capital', 'type': 'equity', 'system': true, 'order': 20},
-      {'code': '3100', 'name': 'Opening Balance Equity', 'type': 'equity', 'system': true, 'order': 21},
+      {
+        'code': '3000',
+        'name': 'Owner Capital',
+        'type': 'equity',
+        'system': true,
+        'order': 20,
+      },
+      {
+        'code': '3100',
+        'name': 'Opening Balance Equity',
+        'type': 'equity',
+        'system': true,
+        'order': 21,
+      },
+      {
+        'code': '3200',
+        'name': 'Owner Drawings',
+        'type': 'equity',
+        'system': true,
+        'order': 22,
+      },
       // ── Income (4xxx) ──
-      {'code': '4000', 'name': 'Sales Revenue', 'type': 'revenue', 'system': true, 'order': 30},
+      {
+        'code': '4000',
+        'name': 'Sales Revenue',
+        'type': 'revenue',
+        'system': true,
+        'order': 30,
+      },
       // 5700 Sales Return Adjustment is a CONTRA-REVENUE account: classified
       // as `revenue` so its debit balance auto-reduces gross sales on the
       // income statement (IFRS/GAAP "Net Sales" presentation).
-      {'code': '5700', 'name': 'Sales Return Adjustment', 'type': 'revenue', 'system': true, 'order': 33},
-      {'code': '4200', 'name': 'Inventory Gain', 'type': 'revenue', 'system': true, 'order': 32},
+      {
+        'code': '5700',
+        'name': 'Sales Return Adjustment',
+        'type': 'revenue',
+        'system': true,
+        'order': 33,
+      },
+      {
+        'code': '4200',
+        'name': 'Inventory Gain',
+        'type': 'revenue',
+        'system': true,
+        'order': 32,
+      },
       // 4900 Purchase Discounts Earned — revenue / "other income" account
       // for after-the-fact, unallocated supplier discounts recorded from
       // the supplier profile screen (transaction_type='discount'). The
@@ -3343,28 +5052,112 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
       // discount as income in the period received (IFRS/GAAP treatment of
       // unallocated supplier rebates that cannot be allocated back to
       // specific PO lines without a landed-cost recalculation).
-      {'code': '4900', 'name': 'Purchase Discounts Earned', 'type': 'revenue', 'system': true, 'order': 34},
+      {
+        'code': '4900',
+        'name': 'Purchase Discounts Earned',
+        'type': 'revenue',
+        'system': true,
+        'order': 34,
+      },
       // ── Expenses (5xxx) ──
       // 4100 Purchase Return Adjustment is a CONTRA-EXPENSE account:
       // classified as `expense` so its credit balance auto-reduces gross
       // COGS on the income statement (IFRS/GAAP "Net Cost of Sales").
-      {'code': '4100', 'name': 'Purchase Return Adjustment', 'type': 'expense', 'system': true, 'order': 40},
-      {'code': '5100', 'name': 'Expenses', 'type': 'expense', 'system': true, 'order': 41},
-      {'code': '5200', 'name': 'Salaries Expense', 'type': 'expense', 'system': true, 'order': 42},
-      {'code': '5300', 'name': 'Cost of Goods Sold', 'type': 'expense', 'system': true, 'order': 43},
-      {'code': '5500', 'name': 'Discounts Given', 'type': 'expense', 'system': true, 'order': 44},
-      {'code': '5600', 'name': 'Commissions Expense', 'type': 'expense', 'system': true, 'order': 45},
-      {'code': '5800', 'name': 'Inventory Shrinkage', 'type': 'expense', 'system': true, 'order': 47},
-      {'code': '5900', 'name': 'Inventory Revaluation', 'type': 'expense', 'system': true, 'order': 48},
+      {
+        'code': '4100',
+        'name': 'Purchase Return Adjustment',
+        'type': 'expense',
+        'system': true,
+        'order': 40,
+      },
+      {
+        'code': '5100',
+        'name': 'Expenses',
+        'type': 'expense',
+        'system': true,
+        'order': 41,
+      },
+      {
+        'code': '5200',
+        'name': 'Salaries Expense',
+        'type': 'expense',
+        'system': true,
+        'order': 42,
+      },
+      {
+        'code': '5300',
+        'name': 'Cost of Goods Sold',
+        'type': 'expense',
+        'system': true,
+        'order': 43,
+      },
+      {
+        'code': '5500',
+        'name': 'Discounts Given',
+        'type': 'expense',
+        'system': true,
+        'order': 44,
+      },
+      {
+        'code': '5600',
+        'name': 'Commissions Expense',
+        'type': 'expense',
+        'system': true,
+        'order': 45,
+      },
+      {
+        'code': '5800',
+        'name': 'Inventory Shrinkage',
+        'type': 'expense',
+        'system': true,
+        'order': 47,
+      },
+      {
+        'code': '5900',
+        'name': 'Inventory Revaluation',
+        'type': 'expense',
+        'system': true,
+        'order': 48,
+      },
+      {
+        'code': '6100',
+        'name': 'Depreciation Expense',
+        'type': 'expense',
+        'system': true,
+        'order': 49,
+      },
     ];
 
-    // Idempotent: skip accounts that already exist
+    // Idempotent and self-healing: legacy databases may already contain the
+    // required codes but with is_system_account=false (older seed versions).
+    // Repair immutable metadata on every open so posting accounts cannot be
+    // edited, deactivated or deleted from the Chart of Accounts screen.
     for (final acct in defaultAccounts) {
       final code = acct['code'] as String;
-      final existing = await (select(accounts)
-            ..where((a) => a.accountCode.equals(code)))
-          .getSingleOrNull();
-      if (existing != null) continue;
+      final existing = await (select(
+        accounts,
+      )..where((a) => a.accountCode.equals(code))).getSingleOrNull();
+      if (existing != null) {
+        final expectedType = acct['type'] as String;
+        final expectedOrder = acct['order'] as int;
+        if (!existing.isSystemAccount ||
+            !existing.isActive ||
+            existing.accountType != expectedType ||
+            existing.displayOrder != expectedOrder) {
+          await (update(
+            accounts,
+          )..where((a) => a.id.equals(existing.id))).write(
+            AccountsCompanion(
+              accountType: Value(expectedType),
+              isSystemAccount: const Value(true),
+              isActive: const Value(true),
+              displayOrder: Value(expectedOrder),
+              updatedAt: Value(now),
+            ),
+          );
+        }
+        continue;
+      }
 
       await into(accounts).insert(
         AccountsCompanion(
@@ -3382,6 +5175,9 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
       );
     }
   }
+
+  @visibleForTesting
+  Future<void> seedDefaultAccountsForTest() => _seedDefaultAccounts();
 }
 
 QueryExecutor _openConnection() {

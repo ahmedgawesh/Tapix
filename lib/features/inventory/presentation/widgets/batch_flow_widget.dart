@@ -4,6 +4,8 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../../core/database/daos/batch_audit_dao.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -131,11 +133,21 @@ class _SaleLineFlowRow extends StatelessWidget {
     // quantity the ledger reflects (post-return), allowing ±1 cent per unit
     // for the blended-cost rounding stamped at sale time.
     final netQty = line.batches.fold<int>(0, (s, b) => s + b.quantity);
-    final expectedFromSnapshot = snapshot * netQty;
-    final hasMismatch = line.isBatchTracked &&
+    final expectedFromSnapshot = MeasuredAmount.cents(
+      unitCents: snapshot,
+      quantity: netQty,
+      quantityScale: line.quantityScale,
+    );
+    final roundingTolerance =
+        ((netQty + line.quantityScale - 1) ~/ line.quantityScale).clamp(
+          1,
+          1 << 31,
+        );
+    final hasMismatch =
+        line.isBatchTracked &&
         snapshot > 0 &&
         netQty > 0 &&
-        (reconstructed - expectedFromSnapshot).abs() > netQty;
+        (reconstructed - expectedFromSnapshot).abs() > roundingTolerance;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
@@ -154,7 +166,7 @@ class _SaleLineFlowRow extends StatelessWidget {
                 ),
               ),
               Text(
-                '× ${line.totalQuantity}',
+                '× ${localizedQuantity(line.totalQuantity, line.measurementType)}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: cs.onSurfaceVariant,
                   fontWeight: FontWeight.w600,
@@ -179,7 +191,7 @@ class _SaleLineFlowRow extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '${b.quantity} × ${currency.format(b.unitCostCents)}',
+                      '${localizedQuantity(b.quantity, b.measurementType)} × ${currency.format(b.unitCostCents)}',
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: cs.onSurfaceVariant,
                       ),
@@ -222,8 +234,9 @@ class _SaleLineFlowRow extends StatelessWidget {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'sales.batch_flow_mismatch'
-                            .tr(args: [currency.format(snapshot)]),
+                        'sales.batch_flow_mismatch'.tr(
+                          args: [currency.format(snapshot)],
+                        ),
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: cs.error,
                           fontWeight: FontWeight.w600,

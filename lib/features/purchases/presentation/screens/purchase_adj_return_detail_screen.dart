@@ -9,6 +9,7 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../../../core/database/daos/adjustment_return_dao.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
 import '../../../../core/widgets/pin_verification_dialog.dart';
@@ -60,9 +61,9 @@ class _PurchaseAdjReturnDetailScreenState
     String? supplierName;
     try {
       final db = sl<AppDatabase>();
-      final supplier = await (db.select(db.suppliers)
-            ..where((s) => s.id.equals(ret.supplierId)))
-          .getSingleOrNull();
+      final supplier = await (db.select(
+        db.suppliers,
+      )..where((s) => s.id.equals(ret.supplierId))).getSingleOrNull();
       supplierName = supplier?.name;
     } catch (_) {}
 
@@ -70,12 +71,12 @@ class _PurchaseAdjReturnDetailScreenState
     _itemsSub = dao
         .watchPurchaseAdjReturnItemsWithDetails(widget.returnId)
         .listen((items) {
-      if (mounted) {
-        setState(() {
-          _returnItems = items;
+          if (mounted) {
+            setState(() {
+              _returnItems = items;
+            });
+          }
         });
-      }
-    });
 
     if (mounted) {
       setState(() {
@@ -106,11 +107,12 @@ class _PurchaseAdjReturnDetailScreenState
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(LucideIcons.alertCircle,
-                  size: 64, color: colorScheme.error),
+              Icon(LucideIcons.alertCircle, size: 64, color: colorScheme.error),
               const SizedBox(height: 16),
-              Text('purchases.not_found'.tr(),
-                  style: theme.textTheme.titleLarge),
+              Text(
+                'purchases.not_found'.tr(),
+                style: theme.textTheme.titleLarge,
+              ),
             ],
           ),
         ),
@@ -143,7 +145,8 @@ class _PurchaseAdjReturnDetailScreenState
                   child: ListTile(
                     leading: const Icon(LucideIcons.printer),
                     title: Text('purchases.print_invoice'.tr()),
-                    dense: true, contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
                   ),
                 ),
                 PopupMenuItem(
@@ -151,25 +154,37 @@ class _PurchaseAdjReturnDetailScreenState
                   child: ListTile(
                     leading: const Icon(LucideIcons.share2),
                     title: Text('purchases.share_invoice'.tr()),
-                    dense: true, contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
                   ),
                 ),
                 const PopupMenuDivider(),
                 PopupMenuItem(
                   value: 'void',
-                  child: Builder(builder: (context) {
-                    final authState = context.read<AuthBloc>().state;
-                    final canVoid = authState is AuthAuthenticated &&
-                        sl<PermissionService>()
-                            .hasPermission(authState.user, Permissions.editTransactions);
-                    if (!canVoid) return const SizedBox.shrink();
-                    return ListTile(
-                      leading: Icon(LucideIcons.ban, color: colorScheme.error),
-                      title: Text('purchases.void_return'.tr(),
-                          style: TextStyle(color: colorScheme.error)),
-                      dense: true, contentPadding: EdgeInsets.zero,
-                    );
-                  }),
+                  child: Builder(
+                    builder: (context) {
+                      final authState = context.read<AuthBloc>().state;
+                      final canVoid =
+                          authState is AuthAuthenticated &&
+                          sl<PermissionService>().hasPermission(
+                            authState.user,
+                            Permissions.editTransactions,
+                          );
+                      if (!canVoid) return const SizedBox.shrink();
+                      return ListTile(
+                        leading: Icon(
+                          LucideIcons.ban,
+                          color: colorScheme.error,
+                        ),
+                        title: Text(
+                          'purchases.void_return'.tr(),
+                          style: TextStyle(color: colorScheme.error),
+                        ),
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
@@ -219,10 +234,12 @@ class _PurchaseAdjReturnDetailScreenState
         supplierName: _supplierName,
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(
-        content: Text(e.toString()),
-        behavior: SnackBarBehavior.floating,
-      ));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -238,10 +255,12 @@ class _PurchaseAdjReturnDetailScreenState
         supplierName: _supplierName,
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(
-        content: Text(e.toString()),
-        behavior: SnackBarBehavior.floating,
-      ));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -304,12 +323,17 @@ class _PurchaseAdjReturnDetailScreenState
   // ═══════════════════════════════════════════════════════
   // RETURN INFO CARD
   // ═══════════════════════════════════════════════════════
-  Widget _buildReturnInfoCard(BuildContext context,
-      PurchaseReturnAdjustment ret, CurrencyService cs) {
+  Widget _buildReturnInfoCard(
+    BuildContext context,
+    PurchaseReturnAdjustment ret,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    final statusColor = ret.status == 'voided' ? colorScheme.error : Colors.green;
+    final statusColor = ret.status == 'voided'
+        ? colorScheme.error
+        : Colors.green;
     final statusLabel = ret.status == 'voided'
         ? 'purchases.status_voided'.tr()
         : 'purchases.status_posted'.tr();
@@ -333,13 +357,16 @@ class _PurchaseAdjReturnDetailScreenState
                     gradient: LinearGradient(
                       colors: [
                         colorScheme.tertiary,
-                        colorScheme.tertiary.withValues(alpha: 0.7)
+                        colorScheme.tertiary.withValues(alpha: 0.7),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(LucideIcons.rotateCcw,
-                      size: 18, color: Colors.white),
+                  child: const Icon(
+                    LucideIcons.rotateCcw,
+                    size: 18,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -348,14 +375,19 @@ class _PurchaseAdjReturnDetailScreenState
                     children: [
                       Row(
                         children: [
-                          Text('purchases.return_number'.tr(),
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
-                                  letterSpacing: 0.5)),
+                          Text(
+                            'purchases.return_number'.tr(),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
                           const SizedBox(width: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 1),
+                              horizontal: 6,
+                              vertical: 1,
+                            ),
                             decoration: BoxDecoration(
                               color: colorScheme.tertiaryContainer,
                               borderRadius: BorderRadius.circular(6),
@@ -371,57 +403,79 @@ class _PurchaseAdjReturnDetailScreenState
                           ),
                         ],
                       ),
-                      Text(ret.returnNumber,
-                          style: theme.textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w600)),
+                      Text(
+                        ret.returnNumber,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border:
-                        Border.all(color: statusColor.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.3),
+                    ),
                   ),
-                  child: Text(statusLabel,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: statusColor, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    statusLabel,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: statusColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ],
             ),
             Divider(
-                height: 24,
-                color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
-            _infoRow(theme, 'purchases.return_date'.tr(),
-                DateFormat.yMMMd().format(ret.returnDate)),
+              height: 24,
+              color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+            ),
+            _infoRow(
+              theme,
+              'purchases.return_date'.tr(),
+              DateFormat.yMMMd().format(ret.returnDate),
+            ),
             const SizedBox(height: 8),
             if (ret.returnMode != null) ...[
-              _infoRow(theme, 'returns.mode'.tr(),
-                  'returns.mode_${ret.returnMode}'.tr()),
+              _infoRow(
+                theme,
+                'returns.mode'.tr(),
+                'returns.mode_${ret.returnMode}'.tr(),
+              ),
               const SizedBox(height: 8),
             ],
             // Parse reason tag out of notes (stored as `[REASON:code] notes`).
             if (ret.notes != null && ret.notes!.isNotEmpty) ...[
-              Builder(builder: (_) {
-                final parsed = parseAdjReturnNotes(ret.notes);
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (parsed.reasonCode != null) ...[
-                      _infoRow(theme, 'returns.reason_label'.tr(),
-                          adjReturnReasonLabel(parsed.reasonCode)),
-                      const SizedBox(height: 8),
+              Builder(
+                builder: (_) {
+                  final parsed = parseAdjReturnNotes(ret.notes);
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (parsed.reasonCode != null) ...[
+                        _infoRow(
+                          theme,
+                          'returns.reason_label'.tr(),
+                          adjReturnReasonLabel(parsed.reasonCode),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      if (parsed.userNotes != null) ...[
+                        _infoRow(theme, 'common.notes'.tr(), parsed.userNotes!),
+                        const SizedBox(height: 8),
+                      ],
                     ],
-                    if (parsed.userNotes != null) ...[
-                      _infoRow(theme, 'common.notes'.tr(), parsed.userNotes!),
-                      const SizedBox(height: 8),
-                    ],
-                  ],
-                );
-              }),
+                  );
+                },
+              ),
             ],
           ],
         ),
@@ -433,7 +487,9 @@ class _PurchaseAdjReturnDetailScreenState
   // SUPPLIER CARD
   // ═══════════════════════════════════════════════════════
   Widget _buildSupplierCard(
-      BuildContext context, PurchaseReturnAdjustment ret) {
+    BuildContext context,
+    PurchaseReturnAdjustment ret,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final initial = _supplierName != null && _supplierName!.isNotEmpty
@@ -458,22 +514,31 @@ class _PurchaseAdjReturnDetailScreenState
                 borderRadius: BorderRadius.circular(10),
               ),
               alignment: Alignment.center,
-              child: Text(initial,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                      color: colorScheme.onPrimaryContainer,
-                      fontWeight: FontWeight.bold)),
+              child: Text(
+                initial,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: colorScheme.onPrimaryContainer,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('purchases.supplier'.tr(),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant)),
-                  Text(_supplierName ?? 'ID: ${ret.supplierId}',
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(fontWeight: FontWeight.w500)),
+                  Text(
+                    'purchases.supplier'.tr(),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  Text(
+                    _supplierName ?? 'ID: ${ret.supplierId}',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -487,7 +552,9 @@ class _PurchaseAdjReturnDetailScreenState
   // REFUND METHOD CARD
   // ═══════════════════════════════════════════════════════
   Widget _buildRefundMethodCard(
-      BuildContext context, PurchaseReturnAdjustment ret) {
+    BuildContext context,
+    PurchaseReturnAdjustment ret,
+  ) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
@@ -522,13 +589,15 @@ class _PurchaseAdjReturnDetailScreenState
               child: Icon(LucideIcons.creditCard, size: 16, color: cs.primary),
             ),
             const SizedBox(width: 10),
-            Text('purchases.refund_method'.tr(),
-                style: theme.textTheme.titleSmall
-                    ?.copyWith(fontWeight: FontWeight.w600)),
+            Text(
+              'purchases.refund_method'.tr(),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             const Spacer(),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: cs.primaryContainer.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(10),
@@ -539,10 +608,12 @@ class _PurchaseAdjReturnDetailScreenState
                   Icon(methodIcon, size: 16, color: cs.primary),
                   const SizedBox(width: 6),
                   Text(
-                      'purchases.refund_method_${ret.refundMethod}'.tr(),
-                      style: theme.textTheme.labelMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: cs.primary)),
+                    'purchases.refund_method_${ret.refundMethod}'.tr(),
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: cs.primary,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -555,8 +626,11 @@ class _PurchaseAdjReturnDetailScreenState
   // ═══════════════════════════════════════════════════════
   // RETURN ITEMS CARD
   // ═══════════════════════════════════════════════════════
-  Widget _buildReturnItemsCard(BuildContext context,
-      List<PurchaseAdjReturnItemWithDetails> items, CurrencyService cs) {
+  Widget _buildReturnItemsCard(
+    BuildContext context,
+    List<PurchaseAdjReturnItemWithDetails> items,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -565,7 +639,8 @@ class _PurchaseAdjReturnDetailScreenState
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -580,30 +655,41 @@ class _PurchaseAdjReturnDetailScreenState
                     gradient: LinearGradient(
                       colors: [
                         colorScheme.tertiary,
-                        colorScheme.tertiary.withValues(alpha: 0.7)
+                        colorScheme.tertiary.withValues(alpha: 0.7),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(LucideIcons.undo2,
-                      size: 16, color: Colors.white),
+                  child: const Icon(
+                    LucideIcons.undo2,
+                    size: 16,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('purchases.return_items'.tr(),
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600)),
+                Text(
+                  'purchases.return_items'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(width: 8),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: colorScheme.tertiaryContainer,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text('${items.length}',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: colorScheme.onTertiaryContainer,
-                          fontWeight: FontWeight.bold)),
+                  child: Text(
+                    '${items.length}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onTertiaryContainer,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -612,9 +698,12 @@ class _PurchaseAdjReturnDetailScreenState
               Center(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Text('purchases.no_items_to_return'.tr(),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant)),
+                  child: Text(
+                    'purchases.no_items_to_return'.tr(),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ),
               )
             else
@@ -623,9 +712,9 @@ class _PurchaseAdjReturnDetailScreenState
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: items.length,
                 separatorBuilder: (context2, index2) => Divider(
-                    height: 1,
-                    color:
-                        colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  height: 1,
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                ),
                 itemBuilder: (context, index) {
                   final d = items[index];
                   final productName = d.product.name;
@@ -647,79 +736,102 @@ class _PurchaseAdjReturnDetailScreenState
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     child: Row(
                       children: [
-                        if (d.colorHex != null &&
-                            d.colorHex!.isNotEmpty)
+                        if (d.colorHex != null && d.colorHex!.isNotEmpty)
                           Container(
                             width: 32,
                             height: 32,
                             decoration: BoxDecoration(
-                              color: Color(int.parse(
+                              color: Color(
+                                int.parse(
                                   'FF${d.colorHex!.replaceAll('#', '')}',
-                                  radix: 16)),
+                                  radix: 16,
+                                ),
+                              ),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                  color: colorScheme.outlineVariant),
+                                color: colorScheme.outlineVariant,
+                              ),
                             ),
                             alignment: Alignment.center,
-                            child: Text('${index + 1}',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    shadows: [
-                                      const Shadow(
-                                          blurRadius: 2,
-                                          color: Colors.black54)
-                                    ])),
+                            child: Text(
+                              '${index + 1}',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                shadows: [
+                                  const Shadow(
+                                    blurRadius: 2,
+                                    color: Colors.black54,
+                                  ),
+                                ],
+                              ),
+                            ),
                           )
                         else
                           Container(
                             width: 32,
                             height: 32,
                             decoration: BoxDecoration(
-                              color: colorScheme.tertiaryContainer
-                                  .withValues(alpha: 0.3),
+                              color: colorScheme.tertiaryContainer.withValues(
+                                alpha: 0.3,
+                              ),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             alignment: Alignment.center,
-                            child: Text('${index + 1}',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                    color: colorScheme.tertiary,
-                                    fontWeight: FontWeight.bold)),
+                            child: Text(
+                              '${index + 1}',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: colorScheme.tertiary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(productName,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                      fontWeight: FontWeight.w500)),
-                              if (variantLine != null)
-                                Text(variantLine,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                        color: colorScheme.primary,
-                                        fontSize: 11)),
                               Text(
-                                  '${'purchases.qty'.tr()}: ${d.item.quantity}',
+                                productName,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              if (variantLine != null)
+                                Text(
+                                  variantLine,
                                   style: theme.textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.onSurfaceVariant,
-                                      fontSize: 11)),
+                                    color: colorScheme.primary,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              Text(
+                                '${'purchases.qty'.tr()}: ${localizedQuantity(d.item.quantity, d.item.measurementType)}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                  fontSize: 11,
+                                ),
+                              ),
                               if (d.item.reason != null &&
                                   d.item.reason!.isNotEmpty)
-                                Text(d.item.reason!,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                        color: colorScheme.onSurfaceVariant,
-                                        fontStyle: FontStyle.italic,
-                                        fontSize: 10)),
+                                Text(
+                                  d.item.reason!,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                    fontStyle: FontStyle.italic,
+                                    fontSize: 10,
+                                  ),
+                                ),
                             ],
                           ),
                         ),
                         Text(
-                            cs.format(
-                                d.item.totalCents.toBigInt().toInt()),
-                            style: theme.textTheme.titleSmall?.copyWith(
-                                color: colorScheme.error,
-                                fontWeight: FontWeight.bold)),
+                          cs.format(d.item.totalCents.toBigInt().toInt()),
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: colorScheme.error,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ],
                     ),
                   );
@@ -734,8 +846,11 @@ class _PurchaseAdjReturnDetailScreenState
   // ═══════════════════════════════════════════════════════
   // TOTAL CARD
   // ═══════════════════════════════════════════════════════
-  Widget _buildTotalCard(BuildContext context, PurchaseReturnAdjustment ret,
-      CurrencyService cs) {
+  Widget _buildTotalCard(
+    BuildContext context,
+    PurchaseReturnAdjustment ret,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -744,8 +859,10 @@ class _PurchaseAdjReturnDetailScreenState
     final tax = ret.taxCents.toBigInt().toInt();
     final total = ret.totalCents.toBigInt().toInt();
     final totalItems = _returnItems.length;
-    final totalPieces =
-        _returnItems.fold<int>(0, (sum, d) => sum + d.item.quantity);
+    final totalPieces = _returnItems.fold<int>(
+      0,
+      (sum, d) => sum + d.item.quantity,
+    );
 
     return Card(
       elevation: 0,
@@ -761,35 +878,53 @@ class _PurchaseAdjReturnDetailScreenState
         ),
         child: Column(
           children: [
+            _totalRow(theme, 'purchases.total_items_count'.tr(), '$totalItems'),
             _totalRow(
-                theme, 'purchases.total_items_count'.tr(), '$totalItems'),
-            _totalRow(
-                theme, 'purchases.total_pieces_count'.tr(), '$totalPieces'),
+              theme,
+              'purchases.total_pieces_count'.tr(),
+              '$totalPieces',
+            ),
             Divider(
-                height: 16,
-                color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+              height: 16,
+              color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+            ),
             if (subtotal > 0)
               _totalRow(theme, 'purchases.subtotal'.tr(), cs.format(subtotal)),
             if (discount > 0)
-              _totalRow(theme, 'purchases.discount'.tr(), '-${cs.format(discount)}',
-                  valueColor: Colors.orange),
+              _totalRow(
+                theme,
+                'purchases.discount'.tr(),
+                '-${cs.format(discount)}',
+                valueColor: Colors.orange,
+              ),
             if (tax > 0)
-              _totalRow(theme, 'purchases.tax'.tr(), '+${cs.format(tax)}',
-                  valueColor: colorScheme.tertiary),
+              _totalRow(
+                theme,
+                'purchases.tax'.tr(),
+                '+${cs.format(tax)}',
+                valueColor: colorScheme.tertiary,
+              ),
             if (subtotal > 0 || discount > 0 || tax > 0)
               Divider(
-                  height: 16,
-                  color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                height: 16,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+              ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('purchases.return_total'.tr(),
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w700)),
-                Text(cs.format(total),
-                    style: theme.textTheme.titleMedium?.copyWith(
-                        color: colorScheme.error,
-                        fontWeight: FontWeight.bold)),
+                Text(
+                  'purchases.return_total'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  cs.format(total),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: colorScheme.error,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
             ),
           ],
@@ -798,19 +933,30 @@ class _PurchaseAdjReturnDetailScreenState
     );
   }
 
-  Widget _totalRow(ThemeData theme, String label, String value,
-      {Color? valueColor}) {
+  Widget _totalRow(
+    ThemeData theme,
+    String label,
+    String value, {
+    Color? valueColor,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant)),
-          Text(value,
-              style: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w600, color: valueColor)),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          Text(
+            value,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: valueColor,
+            ),
+          ),
         ],
       ),
     );
@@ -822,14 +968,20 @@ class _PurchaseAdjReturnDetailScreenState
       children: [
         SizedBox(
           width: 120,
-          child: Text(label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant)),
+          child: Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
         ),
         Expanded(
-          child: Text(value,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(fontWeight: FontWeight.w500)),
+          child: Text(
+            value,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ),
       ],
     );

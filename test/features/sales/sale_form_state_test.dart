@@ -1,5 +1,6 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tapix/core/database/app_database.dart' hide Product;
 import 'package:tapix/features/products/domain/entities/product_entity.dart';
 import 'package:tapix/features/sales/presentation/bloc/sale_form_bloc.dart';
 
@@ -21,6 +22,29 @@ void main() {
   );
 
   group('SaleFormState', () {
+    LoyaltySettings loyaltySettings({
+      bool enabled = true,
+      bool allowRedemption = true,
+      int minimumPoints = 200,
+    }) {
+      final now = DateTime(2026, 8, 16);
+      return LoyaltySettings(
+        id: 1,
+        pointsPerCurrencyUnit: 1,
+        minSpendForPoints: 0,
+        referralBonusPoints: 100,
+        signupBonusPoints: 50,
+        reviewBonusPoints: 10,
+        isEnabled: enabled,
+        pointValueCents: 1,
+        minRedemptionPoints: minimumPoints,
+        maxRedemptionPercentBps: 5000,
+        allowPointsRedemption: allowRedemption,
+        createdAt: now,
+        updatedAt: now,
+      );
+    }
+
     test('initial state has correct defaults', () {
       final state = SaleFormState(
         currencyId: 1,
@@ -33,6 +57,31 @@ void main() {
       expect(state.isSubmitting, isFalse);
       expect(state.isSuccess, isFalse);
       expect(state.error, isNull);
+    });
+
+    test('eligible customer can redeem even when legacy sales flag is off', () {
+      final state = SaleFormState(
+        currencyId: 1,
+        saleDate: DateTime(2026, 8, 16),
+        customerId: 7,
+        loyaltyPointsBalance: 200,
+        loyaltySettings: loyaltySettings(),
+        enableLoyaltyPoints: false,
+      );
+
+      expect(state.canOfferLoyaltyRedemption, isTrue);
+    });
+
+    test('redemption remains hidden below the configured minimum', () {
+      final state = SaleFormState(
+        currencyId: 1,
+        saleDate: DateTime(2026, 8, 16),
+        customerId: 7,
+        loyaltyPointsBalance: 199,
+        loyaltySettings: loyaltySettings(),
+      );
+
+      expect(state.canOfferLoyaltyRedemption, isFalse);
     });
 
     test('subtotalCents calculates sum of item subtotals', () {
@@ -142,7 +191,7 @@ void main() {
         isActive: true,
         trackInventory: true,
       );
-      
+
       final state = SaleFormState(
         currencyId: 1,
         saleDate: DateTime(2026, 1, 15),
@@ -177,7 +226,7 @@ void main() {
         isActive: true,
         trackInventory: true,
       );
-      
+
       final state = SaleFormState(
         currencyId: 1,
         saleDate: DateTime(2026, 1, 15),
@@ -296,7 +345,7 @@ void main() {
       expect(tax, equals(Decimal.fromInt(1500)));
     });
 
-    test('taxCentsWithSettings uses default rate when product has no tax', () {
+    test('taxCentsWithSettings keeps a non-taxable product exempt', () {
       final nonTaxableProduct = Product(
         id: 2,
         name: 'Non-Taxable Product',
@@ -325,8 +374,8 @@ void main() {
         defaultTaxRateBps: 1000, // 10% default
       );
 
-      // Uses default 10% rate: 10000 * 0.10 = 1000
-      expect(tax, equals(Decimal.fromInt(1000)));
+      // The explicit product exemption overrides the global default rate.
+      expect(tax, equals(Decimal.zero));
     });
 
     test('taxCentsWithSettings returns zero when tax disabled', () {

@@ -17,6 +17,7 @@ class Permissions {
   static const String adjustStock = 'adjust_stock';
   static const String manageCategories = 'manage_categories';
   static const String viewProducts = 'view_products';
+  static const String viewProductCost = 'view_product_cost';
   static const String manageBarcodes = 'manage_barcodes';
 
   // Financial Operations
@@ -85,6 +86,7 @@ class Permissions {
     adjustStock,
     manageCategories,
     viewProducts,
+    viewProductCost,
     manageBarcodes,
     viewReports,
     manageExpenses,

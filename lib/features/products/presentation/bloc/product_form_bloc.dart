@@ -5,7 +5,7 @@ import 'package:equatable/equatable.dart';
 import '../../../barcode/services/barcode_generation_service.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/free_quota_service.dart';
-import '../../domain/entities/price_history_entity.dart';
+import '../../../../core/measurement/measurement.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/repositories/product_repository.dart';
 import '../../domain/repositories/product_variant_repository.dart';
@@ -33,7 +33,12 @@ class ProductFormInitialized extends ProductFormEvent {
   });
 
   @override
-  List<Object?> get props => [productId, initialBarcode, defaultTrackInventory, defaultMinQuantity];
+  List<Object?> get props => [
+    productId,
+    initialBarcode,
+    defaultTrackInventory,
+    defaultMinQuantity,
+  ];
 }
 
 class ProductFormFieldChanged extends ProductFormEvent {
@@ -85,6 +90,7 @@ class ProductFormState extends Equatable {
   final int salesTaxRateBps;
   final bool isActive;
   final bool trackInventory;
+  final String measurementType;
 
   /// `null` when [inventoryTrackingType] is editable, otherwise one of:
   ///   - `'has_stock'`        → on-hand stock > 0 prevents the change.
@@ -139,14 +145,15 @@ class ProductFormState extends Equatable {
     this.salesTaxRateBps = 0,
     this.isActive = true,
     this.trackInventory = true,
+    this.measurementType = 'piece',
     this.costingMethodLockReason,
     this.inventoryTrackingType = 'standard',
     this.selectedColorId,
     this.selectedSizeId,
     this.fieldErrors = const {},
     this.fieldWarnings = const {},
-  })  : costCents = costCents ?? Decimal.zero,
-        priceCents = priceCents ?? Decimal.zero;
+  }) : costCents = costCents ?? Decimal.zero,
+       priceCents = priceCents ?? Decimal.zero;
 
   static final ProductFormState initial = ProductFormState();
 
@@ -188,6 +195,7 @@ class ProductFormState extends Equatable {
     int? salesTaxRateBps,
     bool? isActive,
     bool? trackInventory,
+    String? measurementType,
     Object? costingMethodLockReason = _unset,
     String? inventoryTrackingType,
     int? selectedColorId,
@@ -223,6 +231,7 @@ class ProductFormState extends Equatable {
       salesTaxRateBps: salesTaxRateBps ?? this.salesTaxRateBps,
       isActive: isActive ?? this.isActive,
       trackInventory: trackInventory ?? this.trackInventory,
+      measurementType: measurementType ?? this.measurementType,
       costingMethodLockReason: identical(costingMethodLockReason, _unset)
           ? this.costingMethodLockReason
           : costingMethodLockReason as String?,
@@ -237,40 +246,41 @@ class ProductFormState extends Equatable {
 
   @override
   List<Object?> get props => [
-        isLoading,
-        isSubmitting,
-        isEditing,
-        productId,
-        error,
-        isSuccess,
-        name,
-        nameAr,
-        nameFr,
-        description,
-        sku,
-        barcode,
-        costCents,
-        priceCents,
-        wholesalePriceCents,
-        stockQuantity,
-        minQuantity,
-        categoryId,
-        supplierId,
-        currencyId,
-        imagePath,
-        hasVariants,
-        isTaxable,
-        purchaseTaxRateBps,
-        salesTaxRateBps,
-        isActive,
-        trackInventory,
-        costingMethodLockReason,
-        inventoryTrackingType,
-        selectedColorId,
-        selectedSizeId,
-        fieldErrors,
-        fieldWarnings,
-      ];
+    isLoading,
+    isSubmitting,
+    isEditing,
+    productId,
+    error,
+    isSuccess,
+    name,
+    nameAr,
+    nameFr,
+    description,
+    sku,
+    barcode,
+    costCents,
+    priceCents,
+    wholesalePriceCents,
+    stockQuantity,
+    minQuantity,
+    categoryId,
+    supplierId,
+    currencyId,
+    imagePath,
+    hasVariants,
+    isTaxable,
+    purchaseTaxRateBps,
+    salesTaxRateBps,
+    isActive,
+    trackInventory,
+    measurementType,
+    costingMethodLockReason,
+    inventoryTrackingType,
+    selectedColorId,
+    selectedSizeId,
+    fieldErrors,
+    fieldWarnings,
+  ];
 }
 
 /// Sentinel used by [ProductFormState.copyWith] to distinguish "caller did
@@ -296,8 +306,11 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
   /// because the form's `inventoryTrackingType` state is the *desired*
   /// value, not necessarily the persisted one.
   String _originalInventoryTrackingType = 'standard';
+  String _originalMeasurementType = 'piece';
+  bool _originalTrackInventory = true;
 
-  ProductFormBloc(this._repository, this._variantRepository) : super(ProductFormState()) {
+  ProductFormBloc(this._repository, this._variantRepository)
+    : super(ProductFormState()) {
     on<ProductFormInitialized>(_onInitialized);
     on<ProductFormFieldChanged>(_onFieldChanged);
     on<ProductFormSubmitted>(_onSubmitted);
@@ -320,15 +333,29 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
       return;
     }
 
-    emit(state.copyWith(isLoading: true, isEditing: true, productId: event.productId));
+    emit(
+      state.copyWith(
+        isLoading: true,
+        isEditing: true,
+        productId: event.productId,
+      ),
+    );
 
     try {
       final product = await _repository.watchProduct(event.productId!).first;
       if (product != null) {
         _originalHasVariants = product.hasVariants;
         _originalInventoryTrackingType = product.inventoryTrackingType;
-        final lockReason =
-            await _repository.getCostingMethodLockReason(product.id);
+        _originalMeasurementType = product.measurementType;
+        _originalTrackInventory = product.trackInventory;
+        final lockReason = await _repository.getCostingMethodLockReason(
+          product.id,
+        );
+        final referenceCount = await _repository.countProductReferences(
+          product.id,
+        );
+        final effectiveLockReason =
+            lockReason ?? (referenceCount > 0 ? 'has_transactions' : null);
         // Display the SUPPLIER REFERENCE PRICE (gross of trade discounts)
         // rather than the IAS-2 inventory cost basis. The user-typed "آخر
         // سعر شراء" is what merchants expect to see on the product card —
@@ -339,18 +366,19 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
         // is preserved from the DB via `_repository.updateProduct` (the
         // cost field is read-only on edit anyway), so this only affects
         // what the user sees, never what is persisted as the cost basis.
-        Decimal costCents =
-            product.lastPurchasePriceCents ?? product.costCents;
+        Decimal costCents = product.lastPurchasePriceCents ?? product.costCents;
         Decimal priceCents = product.priceCents;
         int stockQuantity = product.stockQuantity;
         int? selectedColorId;
         int? selectedSizeId;
 
         if (!product.hasVariants) {
-          final defaultVariant = await _variantRepository.getDefaultVariantByProduct(product.id);
+          final defaultVariant = await _variantRepository
+              .getDefaultVariantByProduct(product.id);
           if (defaultVariant != null) {
             costCents =
-                defaultVariant.lastPurchasePriceCents ?? defaultVariant.costCents;
+                defaultVariant.lastPurchasePriceCents ??
+                defaultVariant.costCents;
             priceCents = defaultVariant.priceCents;
             stockQuantity = defaultVariant.stockQuantity;
             selectedColorId = defaultVariant.colorId;
@@ -383,7 +411,8 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
           salesTaxRateBps: product.salesTaxRateBps,
           isActive: product.isActive,
           trackInventory: product.trackInventory,
-          costingMethodLockReason: lockReason,
+          measurementType: product.measurementType,
+          costingMethodLockReason: effectiveLockReason,
           inventoryTrackingType: product.inventoryTrackingType,
           selectedColorId: product.hasVariants ? null : selectedColorId,
           selectedSizeId: product.hasVariants ? null : selectedSizeId,
@@ -406,57 +435,122 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
 
     switch (event.field) {
       case 'name':
-        emit(state.copyWith(name: event.value as String, fieldErrors: newErrors));
+        emit(
+          state.copyWith(name: event.value as String, fieldErrors: newErrors),
+        );
         break;
       case 'nameAr':
-        emit(state.copyWith(nameAr: event.value as String?, fieldErrors: newErrors));
+        emit(
+          state.copyWith(
+            nameAr: event.value as String?,
+            fieldErrors: newErrors,
+          ),
+        );
         break;
       case 'nameFr':
-        emit(state.copyWith(nameFr: event.value as String?, fieldErrors: newErrors));
+        emit(
+          state.copyWith(
+            nameFr: event.value as String?,
+            fieldErrors: newErrors,
+          ),
+        );
         break;
       case 'description':
-        emit(state.copyWith(description: event.value as String?, fieldErrors: newErrors));
+        emit(
+          state.copyWith(
+            description: event.value as String?,
+            fieldErrors: newErrors,
+          ),
+        );
         break;
       case 'sku':
-        emit(state.copyWith(sku: event.value as String?, fieldErrors: newErrors));
+        emit(
+          state.copyWith(sku: event.value as String?, fieldErrors: newErrors),
+        );
         break;
       case 'barcode':
-        emit(state.copyWith(barcode: event.value as String?, fieldErrors: newErrors));
+        emit(
+          state.copyWith(
+            barcode: event.value as String?,
+            fieldErrors: newErrors,
+          ),
+        );
         break;
       case 'costCents':
         {
           final newCost = event.value as Decimal;
-          final next = state.copyWith(costCents: newCost, fieldErrors: newErrors);
+          final next = state.copyWith(
+            costCents: newCost,
+            fieldErrors: newErrors,
+          );
           emit(next.copyWith(fieldWarnings: _computeWarningsFor(next)));
         }
         break;
       case 'priceCents':
         {
           final newPrice = event.value as Decimal;
-          final next = state.copyWith(priceCents: newPrice, fieldErrors: newErrors);
+          final next = state.copyWith(
+            priceCents: newPrice,
+            fieldErrors: newErrors,
+          );
           emit(next.copyWith(fieldWarnings: _computeWarningsFor(next)));
         }
         break;
       case 'wholesalePriceCents':
-        emit(state.copyWith(wholesalePriceCents: event.value as Decimal?, fieldErrors: newErrors));
+        emit(
+          state.copyWith(
+            wholesalePriceCents: event.value as Decimal?,
+            fieldErrors: newErrors,
+          ),
+        );
         break;
       case 'stockQuantity':
-        emit(state.copyWith(stockQuantity: event.value as int, fieldErrors: newErrors));
+        emit(
+          state.copyWith(
+            stockQuantity: event.value as int,
+            fieldErrors: newErrors,
+          ),
+        );
         break;
       case 'minQuantity':
-        emit(state.copyWith(minQuantity: event.value as int, fieldErrors: newErrors));
+        emit(
+          state.copyWith(
+            minQuantity: event.value as int,
+            fieldErrors: newErrors,
+          ),
+        );
         break;
       case 'categoryId':
-        emit(state.copyWith(categoryId: event.value as int?, fieldErrors: newErrors));
+        emit(
+          state.copyWith(
+            categoryId: event.value as int?,
+            fieldErrors: newErrors,
+          ),
+        );
         break;
       case 'supplierId':
-        emit(state.copyWith(supplierId: event.value as int?, fieldErrors: newErrors));
+        emit(
+          state.copyWith(
+            supplierId: event.value as int?,
+            fieldErrors: newErrors,
+          ),
+        );
         break;
       case 'currencyId':
-        emit(state.copyWith(currencyId: event.value as int?, fieldErrors: newErrors));
+        emit(
+          state.copyWith(
+            currencyId: event.value as int?,
+            fieldErrors: newErrors,
+          ),
+        );
         break;
       case 'imagePath':
-        emit(state.copyWith(imagePath: event.value as String?, fieldErrors: newErrors));
+        emit(
+          state.copyWith(
+            imagePath: event.value as String?,
+            fieldErrors: newErrors,
+          ),
+        );
         break;
       case 'hasVariants':
         final hasVariants = event.value as bool;
@@ -470,25 +564,85 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
         );
         break;
       case 'isTaxable':
-        emit(state.copyWith(isTaxable: event.value as bool, fieldErrors: newErrors));
+        emit(
+          state.copyWith(
+            isTaxable: event.value as bool,
+            fieldErrors: newErrors,
+          ),
+        );
         break;
       case 'purchaseTaxRateBps':
-        emit(state.copyWith(purchaseTaxRateBps: event.value as int, fieldErrors: newErrors));
+        emit(
+          state.copyWith(
+            purchaseTaxRateBps: event.value as int,
+            fieldErrors: newErrors,
+          ),
+        );
         break;
       case 'salesTaxRateBps':
-        emit(state.copyWith(salesTaxRateBps: event.value as int, fieldErrors: newErrors));
+        emit(
+          state.copyWith(
+            salesTaxRateBps: event.value as int,
+            fieldErrors: newErrors,
+          ),
+        );
         break;
       case 'isActive':
-        emit(state.copyWith(isActive: event.value as bool, fieldErrors: newErrors));
+        emit(
+          state.copyWith(isActive: event.value as bool, fieldErrors: newErrors),
+        );
         break;
       case 'trackInventory':
-        emit(state.copyWith(trackInventory: event.value as bool, fieldErrors: newErrors));
+        if (state.costingMethodLockReason != null &&
+            event.value as bool != state.trackInventory) {
+          break;
+        }
+        emit(
+          state.copyWith(
+            trackInventory: event.value as bool,
+            fieldErrors: newErrors,
+          ),
+        );
+        break;
+      case 'measurementType':
+        {
+          final next = MeasurementType.fromDb(event.value as String);
+          final current = MeasurementType.fromDb(state.measurementType);
+          if (state.costingMethodLockReason != null && next != current) {
+            break;
+          }
+          // A unit-system change reinterprets the raw integer quantity. For
+          // a new product reset opening/reorder stock explicitly instead of
+          // silently turning 5 pieces into 0.005 kg (or vice versa).
+          emit(
+            state.copyWith(
+              measurementType: next.dbValue,
+              stockQuantity: next.quantityScale == current.quantityScale
+                  ? state.stockQuantity
+                  : 0,
+              minQuantity: next.quantityScale == current.quantityScale
+                  ? state.minQuantity
+                  : 0,
+              fieldErrors: newErrors,
+            ),
+          );
+        }
         break;
       case 'selectedColorId':
-        emit(state.copyWith(selectedColorId: event.value as int?, fieldErrors: newErrors));
+        emit(
+          state.copyWith(
+            selectedColorId: event.value as int?,
+            fieldErrors: newErrors,
+          ),
+        );
         break;
       case 'selectedSizeId':
-        emit(state.copyWith(selectedSizeId: event.value as int?, fieldErrors: newErrors));
+        emit(
+          state.copyWith(
+            selectedSizeId: event.value as int?,
+            fieldErrors: newErrors,
+          ),
+        );
         break;
       case 'inventoryTrackingType':
         {
@@ -506,10 +660,7 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
           // (`standard → wac`, otherwise `fifo`) on the persisted row at
           // submit time, so we do not duplicate that mapping here.
           emit(
-            state.copyWith(
-              inventoryTrackingType: next,
-              fieldErrors: newErrors,
-            ),
+            state.copyWith(inventoryTrackingType: next, fieldErrors: newErrors),
           );
         }
         break;
@@ -553,7 +704,9 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
       errors['minQuantity'] = 'products.validation_min_qty_negative';
     }
 
-    if (state.isTaxable && state.purchaseTaxRateBps <= 0 && state.salesTaxRateBps <= 0) {
+    if (state.isTaxable &&
+        state.purchaseTaxRateBps <= 0 &&
+        state.salesTaxRateBps <= 0) {
       errors['purchaseTaxRateBps'] = 'products.validation_tax_rate_required';
     }
 
@@ -597,13 +750,6 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
     return errors;
   }
 
-  /// Convert a money [Decimal] (e.g. `12.34`) to integer cents (`1234`).
-  /// Shared by price-history writes so stored values match the rest of the
-  /// ledger which is cents-integer everywhere.
-  int _decimalToCents(Decimal value) {
-    return (value * Decimal.fromInt(100)).toBigInt().toInt();
-  }
-
   int? _normalizeOptionalId(int? id) {
     if (id == null) return null;
     if (id == 0) return null;
@@ -612,7 +758,8 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
 
   /// Generate a valid EAN-13 barcode via the central [BarcodeGenerationService].
   /// Kept as a thin wrapper so call-sites in this bloc stay unchanged.
-  String _generateBarcode() => sl<BarcodeGenerationService>().generateRandomEan13();
+  String _generateBarcode() =>
+      sl<BarcodeGenerationService>().generateRandomEan13();
 
   Future<void> _onSubmitted(
     ProductFormSubmitted event,
@@ -679,6 +826,27 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
               currentProduct?.stockQuantity ?? state.stockQuantity;
           final preservedCostCents =
               currentProduct?.costCents ?? state.costCents;
+
+          // Unit and stock-tracking changes are semantic inventory changes,
+          // not ordinary product metadata. Route them through DAO setters
+          // that re-check the lock inside this same transaction, closing the
+          // race where a sale/purchase is posted after the form was opened.
+          if (currentProduct != null &&
+              state.measurementType != currentProduct.measurementType) {
+            final reason = await _repository.setMeasurementType(
+              productId: productId,
+              measurementType: state.measurementType,
+            );
+            if (reason != null) throw _CostingMethodLockedException(reason);
+          }
+          if (currentProduct != null &&
+              state.trackInventory != currentProduct.trackInventory) {
+            final reason = await _repository.setTrackInventory(
+              productId: productId,
+              trackInventory: state.trackInventory,
+            );
+            if (reason != null) throw _CostingMethodLockedException(reason);
+          }
           final product = Product(
             id: productId,
             name: state.name,
@@ -702,6 +870,7 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
             salesTaxRateBps: state.salesTaxRateBps,
             isActive: state.isActive,
             trackInventory: state.trackInventory,
+            measurementType: state.measurementType,
           );
           await _repository.updateProduct(product);
 
@@ -725,39 +894,6 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
             }
           }
 
-          // Price-history audit — funnels through `PriceHistoryService` via
-          // the repository so this manual edit shares ONE append path with
-          // purchase-posting WAC/last-cost mutations and inventory
-          // revaluations. Cost is WAC-managed elsewhere, so we pass the
-          // unchanged DB cost for both sides; the service no-ops when no
-          // field actually changed, keeping the audit log free of phantom
-          // rows.
-          if (currentProduct != null) {
-            final oldPrice = currentProduct.priceCents;
-            final newPrice = state.priceCents;
-            final oldWholesale = currentProduct.wholesalePriceCents;
-            final newWholesale = state.wholesalePriceCents;
-            await _repository.createPriceHistory(
-              PriceHistory(
-                id: 0,
-                productId: productId,
-                oldCostCents: _decimalToCents(currentProduct.costCents),
-                newCostCents: _decimalToCents(currentProduct.costCents),
-                oldPriceCents: _decimalToCents(oldPrice),
-                newPriceCents: _decimalToCents(newPrice),
-                oldWholesalePriceCents: oldWholesale == null
-                    ? null
-                    : _decimalToCents(oldWholesale),
-                newWholesalePriceCents: newWholesale == null
-                    ? null
-                    : _decimalToCents(newWholesale),
-                userId: 0,
-                changeReason: 'product_form_edit',
-                createdAt: DateTime.now(),
-              ),
-            );
-          }
-
           // has-variants → single-variant transition: soft-delete every
           // dimensional variant so POS, stock reports and the default
           // variant sync stay consistent. Historical invoice references
@@ -772,16 +908,18 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
             // exist (first save). Subsequent edits must NEVER re-seed stock,
             // otherwise any posted purchase/sale/adjustment since the row
             // was created would be silently overwritten.
-            final existingDefault =
-                await _variantRepository.getDefaultVariantByProduct(productId);
+            final existingDefault = await _variantRepository
+                .getDefaultVariantByProduct(productId);
             await _variantRepository.ensureDefaultVariantForProduct(
               productId: productId,
               costCents: existingDefault?.costCents ?? state.costCents,
               priceCents: state.priceCents,
-              stockQuantity: existingDefault?.stockQuantity ?? state.stockQuantity,
+              stockQuantity:
+                  existingDefault?.stockQuantity ?? state.stockQuantity,
             );
 
-            final defaultVariant = existingDefault ??
+            final defaultVariant =
+                existingDefault ??
                 await _variantRepository.getDefaultVariantByProduct(productId);
             if (defaultVariant != null) {
               // Ledger-controlled fields (stockQuantity, costCents) are
@@ -789,8 +927,9 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
               // rationale as the product-level preservation above.
               final updated = defaultVariant.copyWith(
                 sku: (state.sku?.trim().isNotEmpty ?? false) ? state.sku : null,
-                barcode:
-                    (state.barcode?.trim().isNotEmpty ?? false) ? state.barcode : null,
+                barcode: (state.barcode?.trim().isNotEmpty ?? false)
+                    ? state.barcode
+                    : null,
                 costCents: defaultVariant.costCents,
                 priceCents: state.priceCents,
                 stockQuantity: defaultVariant.stockQuantity,
@@ -823,13 +962,15 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
             salesTaxRateBps: state.salesTaxRateBps,
             isActive: state.isActive,
             trackInventory: state.trackInventory,
+            measurementType: state.measurementType,
             // Mirror Layer-1 (`costing_method`) from the chosen Layer-2
             // tracking type at create-time. The DAO `createProduct` signature
             // still requires the legacy column for one release window
             // (offline-installed apps + migration backfills); a future Phase
             // can drop the parameter once that window closes.
-            costingMethod:
-                state.inventoryTrackingType == 'standard' ? 'wac' : 'fifo',
+            costingMethod: state.inventoryTrackingType == 'standard'
+                ? 'wac'
+                : 'fifo',
             // Layer 2: persist the user-selected tracking type in the INSERT
             // itself. Previously omitted — the DB fell back to its default
             // ('standard') and the first save silently lost the choice for
@@ -852,8 +993,9 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
             if (defaultVariant != null) {
               final updated = defaultVariant.copyWith(
                 sku: (state.sku?.trim().isNotEmpty ?? false) ? state.sku : null,
-                barcode:
-                    (state.barcode?.trim().isNotEmpty ?? false) ? state.barcode : null,
+                barcode: (state.barcode?.trim().isNotEmpty ?? false)
+                    ? state.barcode
+                    : null,
                 costCents: state.costCents,
                 priceCents: state.priceCents,
                 stockQuantity: state.stockQuantity,
@@ -868,27 +1010,34 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
 
       _originalHasVariants = state.hasVariants;
       _originalInventoryTrackingType = state.inventoryTrackingType;
+      _originalMeasurementType = state.measurementType;
+      _originalTrackInventory = state.trackInventory;
       emit(state.copyWith(isSubmitting: false, isSuccess: true));
     } on FreeQuotaExceededException catch (e) {
       // Free-tier cumulative cap reached. Surface a recognizable code so the
       // screen can present the paywall instead of a generic error.
-      emit(state.copyWith(
-        isSubmitting: false,
-        error: 'quota_exceeded:products:${e.limit}',
-      ));
+      emit(
+        state.copyWith(
+          isSubmitting: false,
+          error: 'quota_exceeded:products:${e.limit}',
+        ),
+      );
       return;
     } on _CostingMethodLockedException catch (e) {
-      final key = e.lockReason == 'has_consumptions'
-          ? 'products.costing_method_locked_consumptions'
-          : 'products.costing_method_locked_stock';
+      final key = switch (e.lockReason) {
+        'has_consumptions' => 'products.costing_method_locked_consumptions',
+        'has_transactions' => 'products.costing_method_locked_transactions',
+        _ => 'products.costing_method_locked_stock',
+      };
       // Refresh the lock reason from the DB so the form reflects reality
       // even if the lock formed between load and submit (e.g. a sale was
       // posted on another device).
       String? freshLock;
       if (state.productId != null) {
         try {
-          freshLock =
-              await _repository.getCostingMethodLockReason(state.productId!);
+          freshLock = await _repository.getCostingMethodLockReason(
+            state.productId!,
+          );
         } catch (_) {
           freshLock = e.lockReason;
         }
@@ -899,6 +1048,8 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
         state.copyWith(
           isSubmitting: false,
           inventoryTrackingType: _originalInventoryTrackingType,
+          measurementType: _originalMeasurementType,
+          trackInventory: _originalTrackInventory,
           costingMethodLockReason: freshLock,
           fieldErrors: {
             ...state.fieldErrors,
@@ -908,7 +1059,21 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
             // `state.fieldErrors['costingMethod']` continues to work.
             'costingMethod': key,
             'inventoryTrackingType': key,
+            'measurementType': key,
+            'trackInventory': key,
           },
+        ),
+      );
+      return;
+    } on VariantStockConflictException catch (e) {
+      // The DAO rejected a race-safe attempt to hide dimensional variants
+      // that still carry quantity. The enclosing product transaction rolls
+      // back, including the earlier has_variants/product metadata update.
+      emit(
+        state.copyWith(
+          isSubmitting: false,
+          hasVariants: true,
+          error: 'variant_stock_conflict:${e.variantCount}',
         ),
       );
       return;
@@ -941,7 +1106,9 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
         );
         return;
       }
-      final missingColumnMatch = RegExp(r'no column named ([a-zA-Z0-9_]+)').firstMatch(msg);
+      final missingColumnMatch = RegExp(
+        r'no column named ([a-zA-Z0-9_]+)',
+      ).firstMatch(msg);
       if (missingColumnMatch != null) {
         final missingColumn = missingColumnMatch.group(1);
         emit(

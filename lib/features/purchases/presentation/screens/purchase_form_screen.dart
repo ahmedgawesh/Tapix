@@ -12,6 +12,8 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/pricing/discount_converter.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
+import '../../../../core/measurement/measurement.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/database/app_database.dart' show Supplier;
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../products/domain/entities/product_variant_entity.dart';
@@ -19,6 +21,7 @@ import '../../../products/domain/repositories/product_color_repository.dart';
 import '../../../products/domain/repositories/product_repository.dart';
 import '../../../products/domain/repositories/size_repository.dart';
 import '../../../products/domain/repositories/product_variant_repository.dart';
+import '../../../products/domain/services/product_barcode_resolver.dart';
 import '../../../products/domain/entities/category_entity.dart';
 import '../../../products/presentation/bloc/categories_bloc.dart';
 import '../../../products/presentation/bloc/categories_event.dart';
@@ -36,7 +39,11 @@ class PurchaseFormScreen extends StatelessWidget {
   final int? purchaseId;
   final bool isEditingPosted;
 
-  const PurchaseFormScreen({super.key, this.purchaseId, this.isEditingPosted = false});
+  const PurchaseFormScreen({
+    super.key,
+    this.purchaseId,
+    this.isEditingPosted = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -46,18 +53,22 @@ class PurchaseFormScreen extends StatelessWidget {
     final enableTax = settings.enableTaxCalculations;
     // Convert percentage to basis points (e.g., 15% -> 1500 bps)
     final taxRateBps = (settings.defaultPurchaseTaxRate * 100).round();
-    
+
     return MultiBlocProvider(
       providers: [
-        BlocProvider(create: (context) => sl<PurchaseFormBloc>()
-          ..add(PurchaseFormInitialized(
-            purchaseId: purchaseId,
-            currencyId: 1,
-            enableTaxCalculations: enableTax,
-            defaultPurchaseTaxRateBps: taxRateBps,
-            taxInclusivePricing: settings.taxInclusivePricing,
-            isEditingPosted: isEditingPosted,
-          ))),
+        BlocProvider(
+          create: (context) => sl<PurchaseFormBloc>()
+            ..add(
+              PurchaseFormInitialized(
+                purchaseId: purchaseId,
+                currencyId: 1,
+                enableTaxCalculations: enableTax,
+                defaultPurchaseTaxRateBps: taxRateBps,
+                taxInclusivePricing: settings.taxInclusivePricing,
+                isEditingPosted: isEditingPosted,
+              ),
+            ),
+        ),
         BlocProvider(create: (context) => sl<ProductsBloc>()),
       ],
       child: const _PurchaseFormView(),
@@ -68,9 +79,14 @@ class PurchaseFormScreen extends StatelessWidget {
 class _PurchaseFormView extends StatelessWidget {
   const _PurchaseFormView();
 
-  InvoicePrintData _buildInvoicePrintDataFromPurchaseFormState(PurchaseFormState state) {
+  InvoicePrintData _buildInvoicePrintDataFromPurchaseFormState(
+    PurchaseFormState state,
+  ) {
     final lines = state.items
-        .where((i) => (i.variant?.barcode ?? i.product.barcode ?? '').trim().isNotEmpty)
+        .where(
+          (i) =>
+              (i.variant?.barcode ?? i.product.barcode ?? '').trim().isNotEmpty,
+        )
         .map((i) {
           final barcode = (i.variant?.barcode ?? i.product.barcode)!.trim();
           final skuValue = (i.variant?.sku ?? i.product.sku ?? '').trim();
@@ -81,8 +97,18 @@ class _PurchaseFormView extends StatelessWidget {
             colorName: i.colorName,
             sizeName: i.sizeName,
             barcode: barcode,
-            sku: skuValue.isEmpty ? '${i.variant?.id ?? i.product.id}' : skuValue,
+            sku: skuValue.isEmpty
+                ? '${i.variant?.id ?? i.product.id}'
+                : skuValue,
             unitPriceCents: i.unitCostCents.toBigInt().toInt(),
+            sellingPriceCents: (i.variant?.priceCents ?? i.product.priceCents)
+                .toBigInt()
+                .toInt(),
+            wholesalePriceCents:
+                (i.variant?.wholesalePriceCents ??
+                        i.product.wholesalePriceCents)
+                    ?.toBigInt()
+                    .toInt(),
             isActive: true,
           );
         })
@@ -181,9 +207,11 @@ class _PurchaseFormView extends StatelessWidget {
                 icon: const Icon(LucideIcons.arrowLeft),
                 onPressed: () => _navigateBack(context),
               ),
-              title: Text(state.purchaseId == null
-                  ? 'purchases.title'.tr()
-                  : 'purchases.edit'.tr()),
+              title: Text(
+                state.purchaseId == null
+                    ? 'purchases.title'.tr()
+                    : 'purchases.edit'.tr(),
+              ),
               actions: [
                 if (state.purchaseId != null)
                   TextButton.icon(
@@ -191,7 +219,9 @@ class _PurchaseFormView extends StatelessWidget {
                     label: Text('purchases.post'.tr()),
                     onPressed: state.isSubmitting
                         ? null
-                        : () => context.read<PurchaseFormBloc>().add(const PurchaseFormPosted()),
+                        : () => context.read<PurchaseFormBloc>().add(
+                            const PurchaseFormPosted(),
+                          ),
                   ),
                 Builder(
                   builder: (ctx) => IconButton(
@@ -220,7 +250,11 @@ class _PurchaseFormView extends StatelessWidget {
   // ═══════════════════════════════════════════════════════
   // WIDE LAYOUT (Desktop/Tablet split-pane)
   // ═══════════════════════════════════════════════════════
-  Widget _buildWideLayout(BuildContext context, PurchaseFormState state, CurrencyService cs) {
+  Widget _buildWideLayout(
+    BuildContext context,
+    PurchaseFormState state,
+    CurrencyService cs,
+  ) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -270,7 +304,11 @@ class _PurchaseFormView extends StatelessWidget {
   // ═══════════════════════════════════════════════════════
   // NARROW LAYOUT (Mobile stacked)
   // ═══════════════════════════════════════════════════════
-  Widget _buildNarrowLayout(BuildContext context, PurchaseFormState state, CurrencyService cs) {
+  Widget _buildNarrowLayout(
+    BuildContext context,
+    PurchaseFormState state,
+    CurrencyService cs,
+  ) {
     return Column(
       children: [
         // Fixed top section: invoice header, discount mode + supplier ref row,
@@ -286,7 +324,14 @@ class _PurchaseFormView extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(child: _buildDiscountModeCard(context, state, cs, compact: true)),
+                    Expanded(
+                      child: _buildDiscountModeCard(
+                        context,
+                        state,
+                        cs,
+                        compact: true,
+                      ),
+                    ),
                     const SizedBox(width: 8),
                     Expanded(child: _buildRefCard(context, state)),
                   ],
@@ -319,7 +364,10 @@ class _PurchaseFormView extends StatelessWidget {
   // ═══════════════════════════════════════════════════════
   // INVOICE HEADER CARD (Invoice # + Date)
   // ═══════════════════════════════════════════════════════
-  Widget _buildInvoiceHeaderCard(BuildContext context, PurchaseFormState state) {
+  Widget _buildInvoiceHeaderCard(
+    BuildContext context,
+    PurchaseFormState state,
+  ) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
@@ -337,12 +385,19 @@ class _PurchaseFormView extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('purchases.invoice_number'.tr(),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                        color: cs.onSurfaceVariant, letterSpacing: 0.5)),
+                Text(
+                  'purchases.invoice_number'.tr(),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    letterSpacing: 0.5,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: cs.surface,
                     borderRadius: BorderRadius.circular(8),
@@ -351,7 +406,9 @@ class _PurchaseFormView extends StatelessWidget {
                   child: Text(
                     state.purchaseNumber ?? '—',
                     style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold, color: cs.primary),
+                      fontWeight: FontWeight.bold,
+                      color: cs.primary,
+                    ),
                   ),
                 ),
               ],
@@ -370,18 +427,27 @@ class _PurchaseFormView extends StatelessWidget {
                   lastDate: DateTime.now().add(const Duration(days: 365)),
                 );
                 if (date != null && context.mounted) {
-                  context.read<PurchaseFormBloc>().add(PurchaseDateChanged(date));
+                  context.read<PurchaseFormBloc>().add(
+                    PurchaseDateChanged(date),
+                  );
                 }
               },
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('purchases.invoice_date'.tr(),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: cs.onSurfaceVariant, letterSpacing: 0.5)),
+                  Text(
+                    'purchases.invoice_date'.tr(),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
                   const SizedBox(height: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: cs.surface,
                       borderRadius: BorderRadius.circular(8),
@@ -395,7 +461,8 @@ class _PurchaseFormView extends StatelessWidget {
                           child: Text(
                             DateFormat.yMd().format(state.purchaseDate),
                             style: theme.textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w500),
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ],
@@ -428,17 +495,24 @@ class _PurchaseFormView extends StatelessWidget {
               decoration: BoxDecoration(
                 color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                border: Border.all(
+                  color: cs.outlineVariant.withValues(alpha: 0.5),
+                ),
               ),
               child: Row(
                 children: [
-                  Icon(LucideIcons.search, size: 18, color: cs.onSurfaceVariant),
+                  Icon(
+                    LucideIcons.search,
+                    size: 18,
+                    color: cs.onSurfaceVariant,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       'purchases.search_or_scan'.tr(),
                       style: theme.textTheme.bodyMedium?.copyWith(
-                          color: cs.onSurfaceVariant),
+                        color: cs.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 ],
@@ -455,9 +529,15 @@ class _PurchaseFormView extends StatelessWidget {
             decoration: BoxDecoration(
               color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.5),
+              ),
             ),
-            child: Icon(LucideIcons.scanLine, size: 22, color: cs.onSurfaceVariant),
+            child: Icon(
+              LucideIcons.scanLine,
+              size: 22,
+              color: cs.onSurfaceVariant,
+            ),
           ),
         ),
       ],
@@ -478,9 +558,12 @@ class _PurchaseFormView extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text('purchases.menu'.tr(),
-                  style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold)),
+              child: Text(
+                'purchases.menu'.tr(),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
             const Divider(),
             ListTile(
@@ -503,10 +586,12 @@ class _PurchaseFormView extends StatelessWidget {
               leading: Icon(LucideIcons.fileEdit, color: cs.primary),
               title: Text('purchases.edit_purchase'.tr()),
               enabled: state.purchaseId != null,
-              onTap: state.purchaseId != null ? () {
-                Navigator.pop(context);
-                context.push('/purchases/${state.purchaseId}/edit');
-              } : null,
+              onTap: state.purchaseId != null
+                  ? () {
+                      Navigator.pop(context);
+                      context.push('/purchases/${state.purchaseId}/edit');
+                    }
+                  : null,
             ),
             ListTile(
               leading: Icon(LucideIcons.fileInput, color: cs.primary),
@@ -545,8 +630,10 @@ class _PurchaseFormView extends StatelessWidget {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('purchases.enter_invoice_number'.tr(),
-                  style: theme.textTheme.bodyMedium),
+              Text(
+                'purchases.enter_invoice_number'.tr(),
+                style: theme.textTheme.bodyMedium,
+              ),
               const SizedBox(height: 12),
               TextField(
                 controller: controller,
@@ -587,7 +674,10 @@ class _PurchaseFormView extends StatelessWidget {
   // ═══════════════════════════════════════════════════════
   // IMPORT FROM PO / DISPATCH DIALOG
   // ═══════════════════════════════════════════════════════
-  void _showImportFromPurchaseDialog(BuildContext context, {required bool isPO}) async {
+  void _showImportFromPurchaseDialog(
+    BuildContext context, {
+    required bool isPO,
+  }) async {
     final repo = sl<PurchaseRepository>();
     final cs = sl<CurrencyService>();
 
@@ -597,8 +687,12 @@ class _PurchaseFormView extends StatelessWidget {
 
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final title = isPO ? 'purchases.select_po'.tr() : 'purchases.select_dispatch'.tr();
-    final emptyMsg = isPO ? 'purchases.no_po_found'.tr() : 'purchases.no_dispatch_found'.tr();
+    final title = isPO
+        ? 'purchases.select_po'.tr()
+        : 'purchases.select_dispatch'.tr();
+    final emptyMsg = isPO
+        ? 'purchases.no_po_found'.tr()
+        : 'purchases.no_dispatch_found'.tr();
 
     showModalBottomSheet<void>(
       context: context,
@@ -627,12 +721,17 @@ class _PurchaseFormView extends StatelessWidget {
                         ),
                         child: Icon(
                           isPO ? LucideIcons.fileInput : LucideIcons.fileOutput,
-                          size: 18, color: colorScheme.primary,
+                          size: 18,
+                          color: colorScheme.primary,
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Text(title, style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600)),
+                      Text(
+                        title,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       const Spacer(),
                       IconButton(
                         icon: const Icon(LucideIcons.x),
@@ -648,11 +747,20 @@ class _PurchaseFormView extends StatelessWidget {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(LucideIcons.fileX, size: 48,
-                              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.3)),
+                          Icon(
+                            LucideIcons.fileX,
+                            size: 48,
+                            color: colorScheme.onSurfaceVariant.withValues(
+                              alpha: 0.3,
+                            ),
+                          ),
                           const SizedBox(height: 12),
-                          Text(emptyMsg, style: theme.textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.onSurfaceVariant)),
+                          Text(
+                            emptyMsg,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -673,21 +781,33 @@ class _PurchaseFormView extends StatelessWidget {
                               color: colorScheme.primaryContainer,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Icon(LucideIcons.fileText, size: 18,
-                                color: colorScheme.onPrimaryContainer),
+                            child: Icon(
+                              LucideIcons.fileText,
+                              size: 18,
+                              color: colorScheme.onPrimaryContainer,
+                            ),
                           ),
-                          title: Text(purchase.purchaseNumber.isNotEmpty ? purchase.purchaseNumber : '#${purchase.id}',
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w600)),
+                          title: Text(
+                            purchase.purchaseNumber.isNotEmpty
+                                ? purchase.purchaseNumber
+                                : '#${purchase.id}',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                           subtitle: Text(
                             '${DateFormat.yMMMd().format(purchase.purchaseDate)} • ${cs.format(purchase.totalCents.toBigInt().toInt())}',
                             style: theme.textTheme.bodySmall?.copyWith(
-                                color: colorScheme.onSurfaceVariant),
+                              color: colorScheme.onSurfaceVariant,
+                            ),
                           ),
                           trailing: FilledButton.tonal(
                             onPressed: () async {
                               Navigator.pop(sheetCtx);
-                              await _importItemsFromPurchase(context, purchase.id);
+                              await _importItemsFromPurchase(
+                                context,
+                                purchase.id,
+                              );
                             },
                             child: Text('purchases.import_items'.tr()),
                           ),
@@ -703,7 +823,10 @@ class _PurchaseFormView extends StatelessWidget {
     );
   }
 
-  Future<void> _importItemsFromPurchase(BuildContext context, int purchaseId) async {
+  Future<void> _importItemsFromPurchase(
+    BuildContext context,
+    int purchaseId,
+  ) async {
     final repo = sl<PurchaseRepository>();
     final productRepo = sl<ProductRepository>();
 
@@ -720,12 +843,14 @@ class _PurchaseFormView extends StatelessWidget {
             final variantRepo = sl<ProductVariantRepository>();
             variant = await variantRepo.getVariantById(item.variantId!);
           }
-          bloc.add(PurchaseLineItemAdded(
-                product: product,
-                variant: variant,
-                quantity: item.quantity,
-                unitCostCents: item.unitCostCents,
-              ));
+          bloc.add(
+            PurchaseLineItemAdded(
+              product: product,
+              variant: variant,
+              quantity: item.quantity,
+              unitCostCents: item.unitCostCents,
+            ),
+          );
         }
       }
 
@@ -753,7 +878,10 @@ class _PurchaseFormView extends StatelessWidget {
   // SAVE CONFIRMATION OVERLAY (Print / Barcode / Finish)
   // Shown AFTER navigating back to the purchases list.
   // ═══════════════════════════════════════════════════════
-  void _showSaveConfirmationOverlay(BuildContext context, PurchaseFormState state) {
+  void _showSaveConfirmationOverlay(
+    BuildContext context,
+    PurchaseFormState state,
+  ) {
     final theme = Theme.of(context);
     final invoiceNumber = state.purchaseNumber ?? '${state.purchaseId ?? ''}';
 
@@ -771,13 +899,18 @@ class _PurchaseFormView extends StatelessWidget {
                   color: Colors.green.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(LucideIcons.checkCircle2, size: 48, color: Colors.green),
+                child: const Icon(
+                  LucideIcons.checkCircle2,
+                  size: 48,
+                  color: Colors.green,
+                ),
               ),
               const SizedBox(height: 16),
               Text(
                 'purchases.invoice_saved_message'.tr(args: [invoiceNumber]),
                 style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold),
+                  fontWeight: FontWeight.bold,
+                ),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -826,16 +959,13 @@ class _PurchaseFormView extends StatelessWidget {
               label: Text('purchases.generate_barcode'.tr()),
               onPressed: () {
                 Navigator.pop(ctx);
-                final invoiceData = _buildInvoicePrintDataFromPurchaseFormState(state);
-                final products = state.items
-                    .map((i) => i.product)
-                    .toList();
+                final invoiceData = _buildInvoicePrintDataFromPurchaseFormState(
+                  state,
+                );
+                final products = state.items.map((i) => i.product).toList();
                 context.push(
                   '/products/barcode-design',
-                  extra: {
-                    'products': products,
-                    'invoiceData': invoiceData,
-                  },
+                  extra: {'products': products, 'invoiceData': invoiceData},
                 );
               },
             ),
@@ -856,53 +986,70 @@ class _PurchaseFormView extends StatelessWidget {
   // BARCODE SCANNER
   // ═══════════════════════════════════════════════════════
   void _openBarcodeScanner(BuildContext context) async {
-    final result = await context.push<String>('/barcode-scanner', extra: {'returnOnScan': true});
+    final result = await context.push<String>(
+      '/barcode-scanner',
+      extra: {'returnOnScan': true},
+    );
     if (result != null && result.isNotEmpty && context.mounted) {
-      final productRepo = sl<ProductRepository>();
-      final variantRepo = sl<ProductVariantRepository>();
+      final resolver = ProductBarcodeResolver(
+        productRepository: sl<ProductRepository>(),
+        variantRepository: sl<ProductVariantRepository>(),
+      );
 
       try {
-        // Try to find variant by barcode first
-        final variant = await variantRepo.getVariantByBarcode(result);
-        if (variant != null && context.mounted) {
-          final product = await productRepo.watchProduct(variant.productId).first;
-          if (product != null && context.mounted) {
-            context.read<PurchaseFormBloc>().add(PurchaseLineItemAdded(
-                  product: product,
-                  variant: variant,
-                  quantity: 1,
-                  // GROSS supplier reference price (with NET fallback for
-                  // legacy variants pre-migration 10055). Same convention as
-                  // VariantEditDialog so the form value the user sees here
-                  // matches what they typed on the last purchase — removes
-                  // the variant-vs-no-variant asymmetry where the cost field
-                  // silently dropped to the post-discount IAS-2 net basis.
-                  unitCostCents: variant.lastPurchasePriceCents ?? variant.costCents,
-                ));
-            return;
-          }
-        }
+        final resolution = await resolver.resolve(result);
+        if (!context.mounted) return;
 
-        // Try product barcode
-        final product = await productRepo.findByBarcode(result);
-        if (product != null && context.mounted) {
-          context.read<PurchaseFormBloc>().add(PurchaseLineItemAdded(
+        switch (resolution.type) {
+          case ProductBarcodeResolutionType.variant:
+            final product = resolution.product!;
+            final variant = resolution.variant!;
+            context.read<PurchaseFormBloc>().add(
+              PurchaseLineItemAdded(
                 product: product,
-                quantity: 1,
-                // GROSS supplier reference price (see sibling variant
-                // branch above for the full rationale).
-                unitCostCents: product.lastPurchasePriceCents ?? product.costCents,
-              ));
-          return;
-        }
-
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('purchases.no_products_found'.tr()),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+                variant: variant,
+                quantity: product.quantityScale,
+                // GROSS supplier reference price (with NET fallback for
+                // legacy variants pre-migration 10055). Same convention as
+                // VariantEditDialog so the form value the user sees here
+                // matches what they typed on the last purchase — removes
+                // the variant-vs-no-variant asymmetry where the cost field
+                // silently dropped to the post-discount IAS-2 net basis.
+                unitCostCents:
+                    variant.lastPurchasePriceCents ?? variant.costCents,
+              ),
+            );
+            return;
+          case ProductBarcodeResolutionType.simpleProduct:
+            final product = resolution.product!;
+            context.read<PurchaseFormBloc>().add(
+              PurchaseLineItemAdded(
+                product: product,
+                quantity: product.quantityScale,
+                unitCostCents:
+                    product.lastPurchasePriceCents ?? product.costCents,
+              ),
+            );
+            return;
+          case ProductBarcodeResolutionType.variantParent:
+            _showAddItemSheet(context, initialProduct: resolution.product!);
+            return;
+          case ProductBarcodeResolutionType.ambiguous:
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('products.barcode_ambiguous'.tr()),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            return;
+          case ProductBarcodeResolutionType.notFound:
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('purchases.no_products_found'.tr()),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            return;
         }
       } catch (_) {
         if (context.mounted) {
@@ -935,7 +1082,9 @@ class _PurchaseFormView extends StatelessWidget {
         onTap: () async {
           final date = await showDatePicker(
             context: context,
-            initialDate: state.dueDate ?? state.purchaseDate.add(const Duration(days: 30)),
+            initialDate:
+                state.dueDate ??
+                state.purchaseDate.add(const Duration(days: 30)),
             firstDate: state.purchaseDate,
             lastDate: state.purchaseDate.add(const Duration(days: 365)),
           );
@@ -955,24 +1104,36 @@ class _PurchaseFormView extends StatelessWidget {
                       : cs.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(LucideIcons.calendarClock, size: 16,
-                    color: state.dueDate != null ? cs.tertiary : cs.onSurfaceVariant),
+                child: Icon(
+                  LucideIcons.calendarClock,
+                  size: 16,
+                  color: state.dueDate != null
+                      ? cs.tertiary
+                      : cs.onSurfaceVariant,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('purchases.due_date'.tr(),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                            color: cs.onSurfaceVariant)),
+                    Text(
+                      'purchases.due_date'.tr(),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
                     Text(
                       state.dueDate != null
                           ? DateFormat.yMMMd().format(state.dueDate!)
                           : 'purchases.set_due_date'.tr(),
                       style: theme.textTheme.bodyLarge?.copyWith(
-                        fontWeight: state.dueDate != null ? FontWeight.w500 : FontWeight.normal,
-                        color: state.dueDate != null ? null : cs.onSurfaceVariant,
+                        fontWeight: state.dueDate != null
+                            ? FontWeight.w500
+                            : FontWeight.normal,
+                        color: state.dueDate != null
+                            ? null
+                            : cs.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -1009,7 +1170,11 @@ class _PurchaseFormView extends StatelessWidget {
                 color: cs.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(LucideIcons.fileText, size: 16, color: cs.onSurfaceVariant),
+              child: Icon(
+                LucideIcons.fileText,
+                size: 16,
+                color: cs.onSurfaceVariant,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1022,9 +1187,9 @@ class _PurchaseFormView extends StatelessWidget {
                   contentPadding: EdgeInsets.zero,
                 ),
                 style: theme.textTheme.bodyLarge,
-                onChanged: (v) => context
-                    .read<PurchaseFormBloc>()
-                    .add(PurchaseSupplierRefChanged(v)),
+                onChanged: (v) => context.read<PurchaseFormBloc>().add(
+                  PurchaseSupplierRefChanged(v),
+                ),
               ),
             ),
           ],
@@ -1036,7 +1201,12 @@ class _PurchaseFormView extends StatelessWidget {
   // ═══════════════════════════════════════════════════════
   // DISCOUNT MODE CARD (Toggle per-item vs invoice)
   // ═══════════════════════════════════════════════════════
-  Widget _buildDiscountModeCard(BuildContext context, PurchaseFormState state, CurrencyService cs, {bool compact = false}) {
+  Widget _buildDiscountModeCard(
+    BuildContext context,
+    PurchaseFormState state,
+    CurrencyService cs, {
+    bool compact = false,
+  }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -1055,12 +1225,10 @@ class _PurchaseFormView extends StatelessWidget {
       ],
       selected: {state.discountMode},
       showSelectedIcon: !compact,
-      onSelectionChanged: (v) => context
-          .read<PurchaseFormBloc>()
-          .add(PurchaseDiscountModeChanged(v.first)),
-      style: const ButtonStyle(
-        visualDensity: VisualDensity.compact,
+      onSelectionChanged: (v) => context.read<PurchaseFormBloc>().add(
+        PurchaseDiscountModeChanged(v.first),
       ),
+      style: const ButtonStyle(visualDensity: VisualDensity.compact),
     );
 
     return Card(
@@ -1076,11 +1244,18 @@ class _PurchaseFormView extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(LucideIcons.percent, size: 20, color: colorScheme.tertiary),
+                Icon(
+                  LucideIcons.percent,
+                  size: 20,
+                  color: colorScheme.tertiary,
+                ),
                 const SizedBox(width: 8),
-                Text('purchases.discount'.tr(),
-                    style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600)),
+                Text(
+                  'purchases.discount'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -1097,15 +1272,19 @@ class _PurchaseFormView extends StatelessWidget {
               const SizedBox(height: 8),
               state.effectiveInvoiceDiscountCents > Decimal.zero
                   ? Text(
-                      cs.format(state.effectiveInvoiceDiscountCents.toBigInt().toInt()),
+                      cs.format(
+                        state.effectiveInvoiceDiscountCents.toBigInt().toInt(),
+                      ),
                       style: theme.textTheme.titleMedium?.copyWith(
-                          color: colorScheme.tertiary,
-                          fontWeight: FontWeight.w600),
+                        color: colorScheme.tertiary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     )
                   : Text(
                       'purchases.invoice_discount_checkout_hint'.tr(),
                       style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant),
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                     ),
             ],
             if (state.discountMode == DiscountMode.perItem &&
@@ -1114,7 +1293,8 @@ class _PurchaseFormView extends StatelessWidget {
               Text(
                 '${'purchases.total_item_discounts'.tr()}: ${cs.format(state.itemDiscountCents.toBigInt().toInt())}',
                 style: theme.textTheme.bodySmall?.copyWith(
-                    color: colorScheme.tertiary),
+                  color: colorScheme.tertiary,
+                ),
               ),
             ],
           ],
@@ -1126,7 +1306,11 @@ class _PurchaseFormView extends StatelessWidget {
   // ═══════════════════════════════════════════════════════
   // ITEMS CARD (Premium)
   // ═══════════════════════════════════════════════════════
-  Widget _buildItemsCard(BuildContext context, PurchaseFormState state, CurrencyService cs) {
+  Widget _buildItemsCard(
+    BuildContext context,
+    PurchaseFormState state,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -1134,7 +1318,9 @@ class _PurchaseFormView extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -1147,28 +1333,44 @@ class _PurchaseFormView extends StatelessWidget {
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [colorScheme.primary, colorScheme.primary.withValues(alpha: 0.7)],
+                      colors: [
+                        colorScheme.primary,
+                        colorScheme.primary.withValues(alpha: 0.7),
+                      ],
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(LucideIcons.shoppingCart, size: 16, color: Colors.white),
+                  child: const Icon(
+                    LucideIcons.shoppingCart,
+                    size: 16,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('purchases.items'.tr(),
-                    style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600)),
+                Text(
+                  'purchases.items'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 if (state.items.isNotEmpty) ...[
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: colorScheme.primaryContainer,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Text('${state.items.length}',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                            color: colorScheme.onPrimaryContainer,
-                            fontWeight: FontWeight.bold)),
+                    child: Text(
+                      '${state.items.length}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
                 const Spacer(),
@@ -1177,7 +1379,10 @@ class _PurchaseFormView extends StatelessWidget {
                   icon: const Icon(LucideIcons.plus, size: 16),
                   label: Text('purchases.add_item'.tr()),
                   style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     textStyle: theme.textTheme.labelMedium,
                   ),
                 ),
@@ -1193,20 +1398,33 @@ class _PurchaseFormView extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: colorScheme.primaryContainer.withValues(alpha: 0.2),
+                        color: colorScheme.primaryContainer.withValues(
+                          alpha: 0.2,
+                        ),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(LucideIcons.packageOpen, size: 36,
-                          color: colorScheme.primary.withValues(alpha: 0.3)),
+                      child: Icon(
+                        LucideIcons.packageOpen,
+                        size: 36,
+                        color: colorScheme.primary.withValues(alpha: 0.3),
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    Text('purchases.no_items'.tr(),
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant)),
+                    Text(
+                      'purchases.no_items'.tr(),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text('purchases.add_items_hint'.tr(),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7))),
+                    Text(
+                      'purchases.add_items_hint'.tr(),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.7,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               )
@@ -1216,22 +1434,28 @@ class _PurchaseFormView extends StatelessWidget {
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: state.items.length,
                 separatorBuilder: (_, idx) => Divider(
-                    height: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                  height: 1,
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+                ),
                 itemBuilder: (context, index) {
                   final item = state.items[index];
                   return _PurchaseItemTile(
                     item: item,
                     index: index,
                     currencyService: cs,
-                    showItemDiscount: state.discountMode == DiscountMode.perItem,
+                    showItemDiscount:
+                        state.discountMode == DiscountMode.perItem,
                     onTap: () => _showEditItemDialog(context, item),
-                    onRemove: () => context
-                        .read<PurchaseFormBloc>()
-                        .add(PurchaseLineItemRemoved(item.tempId)),
-                    onQuantityChanged: (qty) => context
-                        .read<PurchaseFormBloc>()
-                        .add(PurchaseLineItemUpdated(
-                            tempId: item.tempId, quantity: qty)),
+                    onRemove: () => context.read<PurchaseFormBloc>().add(
+                      PurchaseLineItemRemoved(item.tempId),
+                    ),
+                    onQuantityChanged: (qty) =>
+                        context.read<PurchaseFormBloc>().add(
+                          PurchaseLineItemUpdated(
+                            tempId: item.tempId,
+                            quantity: qty,
+                          ),
+                        ),
                   );
                 },
               ),
@@ -1244,7 +1468,11 @@ class _PurchaseFormView extends StatelessWidget {
   // ═══════════════════════════════════════════════════════
   // TOTALS CARD (Invoice footer style)
   // ═══════════════════════════════════════════════════════
-  Widget _buildTotalsCard(BuildContext context, PurchaseFormState state, CurrencyService cs) {
+  Widget _buildTotalsCard(
+    BuildContext context,
+    PurchaseFormState state,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -1252,7 +1480,9 @@ class _PurchaseFormView extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Column(
         children: [
@@ -1260,8 +1490,11 @@ class _PurchaseFormView extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Column(
               children: [
-                _summaryRow(theme, 'purchases.subtotal'.tr(),
-                    cs.format(state.subtotalCents.toBigInt().toInt())),
+                _summaryRow(
+                  theme,
+                  'purchases.subtotal'.tr(),
+                  cs.format(state.subtotalCents.toBigInt().toInt()),
+                ),
                 if (state.totalDiscountCents > Decimal.zero) ...[
                   const SizedBox(height: 8),
                   _summaryRow(
@@ -1272,8 +1505,11 @@ class _PurchaseFormView extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 8),
-                _summaryRow(theme, 'purchases.tax'.tr(),
-                    cs.format(state.taxCents.toBigInt().toInt())),
+                _summaryRow(
+                  theme,
+                  'purchases.tax'.tr(),
+                  cs.format(state.taxCents.toBigInt().toInt()),
+                ),
               ],
             ),
           ),
@@ -1287,20 +1523,26 @@ class _PurchaseFormView extends StatelessWidget {
                 bottomRight: Radius.circular(14),
               ),
               border: Border(
-                top: BorderSide(color: colorScheme.primary.withValues(alpha: 0.2)),
+                top: BorderSide(
+                  color: colorScheme.primary.withValues(alpha: 0.2),
+                ),
               ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('purchases.total'.tr(),
-                    style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold)),
+                Text(
+                  'purchases.total'.tr(),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 Text(
                   cs.format(state.totalCents.toBigInt().toInt()),
                   style: theme.textTheme.titleLarge?.copyWith(
-                      color: colorScheme.primary,
-                      fontWeight: FontWeight.bold),
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
@@ -1310,20 +1552,34 @@ class _PurchaseFormView extends StatelessWidget {
     );
   }
 
-  Widget _summaryRow(ThemeData theme, String label, String value,
-      {bool isBold = false, Color? valueColor, TextStyle? labelStyle}) {
+  Widget _summaryRow(
+    ThemeData theme,
+    String label,
+    String value, {
+    bool isBold = false,
+    Color? valueColor,
+    TextStyle? labelStyle,
+  }) {
     final cs = theme.colorScheme;
     final style = labelStyle ?? theme.textTheme.bodyMedium;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: style?.copyWith(
-            color: isBold ? null : cs.onSurfaceVariant)),
-        Text(value,
-            style: (isBold ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium)
-                ?.copyWith(
+        Text(
+          label,
+          style: style?.copyWith(color: isBold ? null : cs.onSurfaceVariant),
+        ),
+        Text(
+          value,
+          style:
+              (isBold
+                      ? theme.textTheme.titleMedium
+                      : theme.textTheme.bodyMedium)
+                  ?.copyWith(
                     color: valueColor,
-                    fontWeight: isBold ? FontWeight.bold : FontWeight.w500)),
+                    fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+                  ),
+        ),
       ],
     );
   }
@@ -1331,7 +1587,11 @@ class _PurchaseFormView extends StatelessWidget {
   // ═══════════════════════════════════════════════════════
   // BOTTOM BAR (Premium)
   // ═══════════════════════════════════════════════════════
-  Widget _buildBottomBar(BuildContext context, PurchaseFormState state, CurrencyService cs) {
+  Widget _buildBottomBar(
+    BuildContext context,
+    PurchaseFormState state,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -1339,7 +1599,11 @@ class _PurchaseFormView extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        border: Border(top: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.3))),
+        border: Border(
+          top: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+          ),
+        ),
         boxShadow: [
           BoxShadow(
             color: colorScheme.shadow.withValues(alpha: 0.05),
@@ -1358,12 +1622,17 @@ class _PurchaseFormView extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(LucideIcons.shoppingCart, size: 12, color: colorScheme.onSurfaceVariant),
+                    Icon(
+                      LucideIcons.shoppingCart,
+                      size: 12,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       '${state.items.length} ${'purchases.items_count'.tr()}  •  ${state.totalQuantity} ${'purchases.pieces_count'.tr()}',
                       style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant),
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
@@ -1371,15 +1640,19 @@ class _PurchaseFormView extends StatelessWidget {
                 Text(
                   cs.format(state.totalCents.toBigInt().toInt()),
                   style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold, color: colorScheme.primary),
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
+                  ),
                 ),
               ],
             ),
             const Spacer(),
             OutlinedButton(
-              onPressed: state.isSubmitting ? null : () {
-                if (context.canPop()) context.pop();
-              },
+              onPressed: state.isSubmitting
+                  ? null
+                  : () {
+                      if (context.canPop()) context.pop();
+                    },
               child: Text('common.cancel'.tr()),
             ),
             const SizedBox(width: 8),
@@ -1389,8 +1662,10 @@ class _PurchaseFormView extends StatelessWidget {
                   : () => _showCheckoutDialog(context, state),
               icon: state.isSubmitting
                   ? const SizedBox(
-                      width: 16, height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : const Icon(LucideIcons.shoppingBag, size: 18),
               label: Text('purchases.checkout'.tr()),
             ),
@@ -1404,7 +1679,7 @@ class _PurchaseFormView extends StatelessWidget {
   // DIALOGS & SHEETS
   // ═══════════════════════════════════════════════════════
 
-  void _showAddItemSheet(BuildContext context) {
+  void _showAddItemSheet(BuildContext context, {Product? initialProduct}) {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1415,16 +1690,21 @@ class _PurchaseFormView extends StatelessWidget {
         providers: [
           BlocProvider.value(value: context.read<ProductsBloc>()),
           BlocProvider(create: (_) => sl<VariantPreviewsBloc>()),
-          BlocProvider(create: (_) => sl<CategoriesBloc>()..add(const LoadCategories())),
+          BlocProvider(
+            create: (_) => sl<CategoriesBloc>()..add(const LoadCategories()),
+          ),
         ],
         child: _AddItemSheet(
+          initialProduct: initialProduct,
           onItemAdded: (product, variant, quantity, unitCost) {
-            context.read<PurchaseFormBloc>().add(PurchaseLineItemAdded(
-                  product: product,
-                  variant: variant,
-                  quantity: quantity,
-                  unitCostCents: unitCost,
-                ));
+            context.read<PurchaseFormBloc>().add(
+              PurchaseLineItemAdded(
+                product: product,
+                variant: variant,
+                quantity: quantity,
+                unitCostCents: unitCost,
+              ),
+            );
             Navigator.pop(sheetContext);
           },
         ),
@@ -1443,24 +1723,38 @@ class _PurchaseFormView extends StatelessWidget {
         item: item,
         currencyService: sl<CurrencyService>(),
         discountMode: context.read<PurchaseFormBloc>().state.discountMode,
-        onSave: (qty, cost, discount, expiry, clearExpiry, sellPriceCents, wholesalePriceCents) {
-          context.read<PurchaseFormBloc>().add(PurchaseLineItemUpdated(
-                tempId: item.tempId,
-                quantity: qty,
-                unitCostCents: cost,
-                discountCents: discount,
-                expiryDate: expiry,
-                clearExpiry: clearExpiry,
-                newSellPriceCents: sellPriceCents,
-                newWholesalePriceCents: wholesalePriceCents,
-              ));
-          Navigator.pop(sheetCtx);
-        },
+        onSave:
+            (
+              qty,
+              cost,
+              discount,
+              expiry,
+              clearExpiry,
+              sellPriceCents,
+              wholesalePriceCents,
+            ) {
+              context.read<PurchaseFormBloc>().add(
+                PurchaseLineItemUpdated(
+                  tempId: item.tempId,
+                  quantity: qty,
+                  unitCostCents: cost,
+                  discountCents: discount,
+                  expiryDate: expiry,
+                  clearExpiry: clearExpiry,
+                  newSellPriceCents: sellPriceCents,
+                  newWholesalePriceCents: wholesalePriceCents,
+                ),
+              );
+              Navigator.pop(sheetCtx);
+            },
       ),
     );
   }
 
-  void _showCheckoutDialog(BuildContext context, PurchaseFormState state) async {
+  void _showCheckoutDialog(
+    BuildContext context,
+    PurchaseFormState state,
+  ) async {
     final suppliers = await sl<SupplierRepository>().searchSuppliers('');
     if (!context.mounted) return;
 
@@ -1547,7 +1841,8 @@ class _SupplierPickerSheetState extends State<_SupplierPickerSheet> {
                   hintText: 'suppliers.search_hint'.tr(),
                   prefixIcon: const Icon(LucideIcons.search),
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 onChanged: (_) => setState(() {}),
               ),
@@ -1555,8 +1850,11 @@ class _SupplierPickerSheetState extends State<_SupplierPickerSheet> {
             Expanded(
               child: filtered.isEmpty
                   ? Center(
-                      child: Text('suppliers.empty'.tr(),
-                          style: Theme.of(context).textTheme.bodyMedium))
+                      child: Text(
+                        'suppliers.empty'.tr(),
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    )
                   : ListView.builder(
                       controller: scrollController,
                       itemCount: filtered.length,
@@ -1570,7 +1868,8 @@ class _SupplierPickerSheetState extends State<_SupplierPickerSheet> {
                                   ? supplier.name[0].toUpperCase()
                                   : '?',
                               style: TextStyle(
-                                  color: colorScheme.onPrimaryContainer),
+                                color: colorScheme.onPrimaryContainer,
+                              ),
                             ),
                           ),
                           title: Text(supplier.name),
@@ -1623,7 +1922,10 @@ class _PurchaseItemTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final hasVariantInfo = item.colorName != null || item.sizeName != null || item.variant?.sku != null;
+    final hasVariantInfo =
+        item.colorName != null ||
+        item.sizeName != null ||
+        item.variant?.sku != null;
 
     return InkWell(
       onTap: onTap,
@@ -1635,15 +1937,20 @@ class _PurchaseItemTile extends StatelessWidget {
           children: [
             // Index badge
             Container(
-              width: 28, height: 28,
+              width: 28,
+              height: 28,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: cs.primaryContainer,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text('${index + 1}',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                      color: cs.onPrimaryContainer, fontWeight: FontWeight.bold)),
+              child: Text(
+                '${index + 1}',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: cs.onPrimaryContainer,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
             const SizedBox(width: 12),
             // Product info
@@ -1651,10 +1958,14 @@ class _PurchaseItemTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.product.name,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600),
-                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                  Text(
+                    item.product.name,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   if (hasVariantInfo) ...[
                     const SizedBox(height: 4),
                     Wrap(
@@ -1665,11 +1976,19 @@ class _PurchaseItemTile extends StatelessWidget {
                           _VariantChip(
                             icon: item.colorHex != null
                                 ? Container(
-                                    width: 10, height: 10,
+                                    width: 10,
+                                    height: 10,
                                     decoration: BoxDecoration(
-                                      color: _parseHexColor(item.colorHex) ?? cs.primary,
+                                      color:
+                                          _parseHexColor(item.colorHex) ??
+                                          cs.primary,
                                       shape: BoxShape.circle,
-                                      border: Border.all(color: cs.outline.withValues(alpha: 0.3), width: 0.5),
+                                      border: Border.all(
+                                        color: cs.outline.withValues(
+                                          alpha: 0.3,
+                                        ),
+                                        width: 0.5,
+                                      ),
                                     ),
                                   )
                                 : null,
@@ -1694,15 +2013,17 @@ class _PurchaseItemTile extends StatelessWidget {
                   ],
                   const SizedBox(height: 2),
                   Text(
-                    '${currencyService.format(item.unitCostCents.toBigInt().toInt())} × ${item.quantity}',
+                    '${currencyService.format(item.unitCostCents.toBigInt().toInt())} × ${localizedQuantity(item.quantity, item.product.measurementType)}',
                     style: theme.textTheme.bodySmall?.copyWith(
-                        color: cs.onSurfaceVariant),
+                      color: cs.onSurfaceVariant,
+                    ),
                   ),
                   if (showItemDiscount && item.discountCents > Decimal.zero)
                     Text(
                       '${'purchases.discount'.tr()}: -${currencyService.format(item.discountCents.toBigInt().toInt())}',
                       style: theme.textTheme.bodySmall?.copyWith(
-                          color: cs.tertiary),
+                        color: cs.tertiary,
+                      ),
                     ),
                   if (item.expiryDate != null)
                     Padding(
@@ -1710,12 +2031,18 @@ class _PurchaseItemTile extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(LucideIcons.clock, size: 12, color: Colors.orange),
+                          const Icon(
+                            LucideIcons.clock,
+                            size: 12,
+                            color: Colors.orange,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             DateFormat.yMMMd().format(item.expiryDate!),
                             style: theme.textTheme.bodySmall?.copyWith(
-                                color: Colors.orange, fontSize: 11),
+                              color: Colors.orange,
+                              fontSize: 11,
+                            ),
                           ),
                         ],
                       ),
@@ -1734,27 +2061,46 @@ class _PurchaseItemTile extends StatelessWidget {
                 children: [
                   InkWell(
                     borderRadius: BorderRadius.circular(8),
-                    onTap: item.quantity > 1
-                        ? () => onQuantityChanged(item.quantity - 1)
+                    onTap: item.quantity > item.product.quantityScale
+                        ? () => onQuantityChanged(
+                            item.quantity - item.product.quantityScale,
+                          )
                         : null,
                     child: Padding(
                       padding: const EdgeInsets.all(6),
-                      child: Icon(LucideIcons.minus, size: 14,
-                          color: item.quantity > 1 ? cs.onSurface : cs.onSurface.withValues(alpha: 0.3)),
+                      child: Icon(
+                        LucideIcons.minus,
+                        size: 14,
+                        color: item.quantity > item.product.quantityScale
+                            ? cs.onSurface
+                            : cs.onSurface.withValues(alpha: 0.3),
+                      ),
                     ),
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Text('${item.quantity}',
-                        style: theme.textTheme.labelLarge?.copyWith(
-                            fontWeight: FontWeight.bold)),
+                    child: Text(
+                      localizedQuantity(
+                        item.quantity,
+                        item.product.measurementType,
+                      ),
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                   InkWell(
                     borderRadius: BorderRadius.circular(8),
-                    onTap: () => onQuantityChanged(item.quantity + 1),
+                    onTap: () => onQuantityChanged(
+                      item.quantity + item.product.quantityScale,
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(6),
-                      child: Icon(LucideIcons.plus, size: 14, color: cs.onSurface),
+                      child: Icon(
+                        LucideIcons.plus,
+                        size: 14,
+                        color: cs.onSurface,
+                      ),
                     ),
                   ),
                 ],
@@ -1768,7 +2114,8 @@ class _PurchaseItemTile extends StatelessWidget {
                 Text(
                   currencyService.format(item.totalCents.toBigInt().toInt()),
                   style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 InkWell(
@@ -1813,12 +2160,15 @@ class _VariantChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (icon != null) ...[
-            icon!,
-            const SizedBox(width: 4),
-          ],
-          Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: textColor, fontWeight: FontWeight.w500, fontSize: 10)),
+          if (icon != null) ...[icon!, const SizedBox(width: 4)],
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: textColor,
+              fontWeight: FontWeight.w500,
+              fontSize: 10,
+            ),
+          ),
         ],
       ),
     );
@@ -1832,7 +2182,16 @@ class _EditItemSheet extends StatefulWidget {
   final PurchaseLineItem item;
   final CurrencyService currencyService;
   final DiscountMode discountMode;
-  final void Function(int qty, Decimal cost, Decimal? discount, DateTime? expiry, bool clearExpiry, Decimal? sellPriceCents, Decimal? wholesalePriceCents) onSave;
+  final void Function(
+    int qty,
+    Decimal cost,
+    Decimal? discount,
+    DateTime? expiry,
+    bool clearExpiry,
+    Decimal? sellPriceCents,
+    Decimal? wholesalePriceCents,
+  )
+  onSave;
 
   const _EditItemSheet({
     required this.item,
@@ -1847,6 +2206,7 @@ class _EditItemSheet extends StatefulWidget {
 
 class _EditItemSheetState extends State<_EditItemSheet> {
   late final TextEditingController _qtyCtrl;
+  late MeasurementUnit _quantityUnit;
   late final TextEditingController _costCtrl;
   late final TextEditingController _sellPriceCtrl;
   late final TextEditingController _wholesalePriceCtrl;
@@ -1879,30 +2239,47 @@ class _EditItemSheetState extends State<_EditItemSheet> {
   @override
   void initState() {
     super.initState();
-    _qtyCtrl = TextEditingController(text: '${widget.item.quantity}');
+    _quantityUnit = widget.item.product.measurement.majorUnit;
+    _qtyCtrl = TextEditingController(
+      text: MeasuredQuantity.editableValue(widget.item.quantity, _quantityUnit),
+    );
     _costCtrl = TextEditingController(
-        text: (widget.item.unitCostCents.toBigInt().toInt() / 100).toStringAsFixed(2));
+      text: (widget.item.unitCostCents.toBigInt().toInt() / 100)
+          .toStringAsFixed(2),
+    );
 
     // Use previously-set new prices if available, otherwise fall back to variant/product prices
-    final sellPriceCents = widget.item.newSellPriceCents?.toBigInt().toInt()
-        ?? widget.item.variant?.priceCents.toBigInt().toInt()
-        ?? widget.item.product.priceCents.toBigInt().toInt();
-    final wholesaleCents = widget.item.newWholesalePriceCents?.toBigInt().toInt()
-        ?? widget.item.variant?.wholesalePriceCents?.toBigInt().toInt()
-        ?? widget.item.product.wholesalePriceCents?.toBigInt().toInt();
+    final sellPriceCents =
+        widget.item.newSellPriceCents?.toBigInt().toInt() ??
+        widget.item.variant?.priceCents.toBigInt().toInt() ??
+        widget.item.product.priceCents.toBigInt().toInt();
+    final wholesaleCents =
+        widget.item.newWholesalePriceCents?.toBigInt().toInt() ??
+        widget.item.variant?.wholesalePriceCents?.toBigInt().toInt() ??
+        widget.item.product.wholesalePriceCents?.toBigInt().toInt();
     _sellPriceCtrl = TextEditingController(
-        text: (sellPriceCents / 100).toStringAsFixed(2));
+      text: (sellPriceCents / 100).toStringAsFixed(2),
+    );
     _wholesalePriceCtrl = TextEditingController(
-        text: wholesaleCents == null ? '' : (wholesaleCents / 100).toStringAsFixed(2));
+      text: wholesaleCents == null
+          ? ''
+          : (wholesaleCents / 100).toStringAsFixed(2),
+    );
 
     final discCents = widget.item.discountCents.toBigInt().toInt();
-    final subtotalCents = widget.item.unitCostCents.toBigInt().toInt() * widget.item.quantity;
+    final subtotalCents = MeasuredAmount.cents(
+      unitCents: widget.item.unitCostCents.toBigInt().toInt(),
+      quantity: widget.item.quantity,
+      quantityScale: widget.item.product.quantityScale,
+    );
     _discountFixedCtrl = TextEditingController(
-        text: discCents > 0 ? (discCents / 100).toStringAsFixed(2) : '');
+      text: discCents > 0 ? (discCents / 100).toStringAsFixed(2) : '',
+    );
     _discountPercentCtrl = TextEditingController(
-        text: discCents > 0 && subtotalCents > 0
-            ? ((discCents / subtotalCents) * 100).toStringAsFixed(2)
-            : '');
+      text: discCents > 0 && subtotalCents > 0
+          ? ((discCents / subtotalCents) * 100).toStringAsFixed(2)
+          : '',
+    );
 
     _expiryDate = widget.item.expiryDate;
 
@@ -1925,8 +2302,23 @@ class _EditItemSheetState extends State<_EditItemSheet> {
 
   int get _currentSubtotalCents {
     final costVal = double.tryParse(_costCtrl.text) ?? 0;
-    final qty = int.tryParse(_qtyCtrl.text) ?? 1;
-    return (costVal * 100).round() * (qty < 1 ? 1 : qty);
+    return MeasuredAmount.cents(
+      unitCents: (costVal * 100).round(),
+      quantity: _storedQuantity,
+      quantityScale: widget.item.product.quantityScale,
+    );
+  }
+
+  int get _storedQuantity {
+    try {
+      final parsed = MeasuredQuantity.parseToStored(
+        _qtyCtrl.text,
+        _quantityUnit,
+      );
+      return parsed > 0 ? parsed : _quantityUnit.internalFactor;
+    } on FormatException {
+      return _quantityUnit.internalFactor;
+    }
   }
 
   void _syncFromPercent() {
@@ -1993,7 +2385,8 @@ class _EditItemSheetState extends State<_EditItemSheet> {
     final oldCostCents = item.originalCostCents;
     final sellPriceCents = item.originalPriceCents;
     final oldWholesaleCents = item.originalWholesalePriceCents;
-    final currentStock = item.variant?.stockQuantity ?? item.product.stockQuantity;
+    final currentStock =
+        item.variant?.stockQuantity ?? item.product.stockQuantity;
 
     return Padding(
       padding: EdgeInsets.only(
@@ -2012,7 +2405,8 @@ class _EditItemSheetState extends State<_EditItemSheet> {
               // Handle
               Center(
                 child: Container(
-                  width: 40, height: 4,
+                  width: 40,
+                  height: 4,
                   margin: const EdgeInsets.only(bottom: 12),
                   decoration: BoxDecoration(
                     color: cs.onSurfaceVariant.withValues(alpha: 0.4),
@@ -2031,17 +2425,25 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                       ),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(LucideIcons.edit3, size: 18, color: Colors.white),
+                    child: const Icon(
+                      LucideIcons.edit3,
+                      size: 18,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(item.product.name,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600),
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text(
+                          item.product.name,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                         if (item.colorName != null || item.sizeName != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 2),
@@ -2053,22 +2455,32 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Container(
-                                        width: 10, height: 10,
+                                        width: 10,
+                                        height: 10,
                                         decoration: BoxDecoration(
-                                          color: _parseHexColor(item.colorHex) ?? cs.tertiary,
+                                          color:
+                                              _parseHexColor(item.colorHex) ??
+                                              cs.tertiary,
                                           shape: BoxShape.circle,
                                         ),
                                       ),
                                       const SizedBox(width: 4),
-                                      Text(item.colorName!,
-                                          style: theme.textTheme.bodySmall?.copyWith(
-                                              color: cs.onSurfaceVariant)),
+                                      Text(
+                                        item.colorName!,
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color: cs.onSurfaceVariant,
+                                            ),
+                                      ),
                                     ],
                                   ),
                                 if (item.sizeName != null)
-                                  Text(item.sizeName!,
-                                      style: theme.textTheme.bodySmall?.copyWith(
-                                          color: cs.onSurfaceVariant)),
+                                  Text(
+                                    item.sizeName!,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -2087,7 +2499,9 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                        color: cs.surfaceContainerHighest.withValues(
+                          alpha: 0.5,
+                        ),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Wrap(
@@ -2102,16 +2516,27 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                                   child: _InfoCell(
                                     icon: LucideIcons.warehouse,
                                     label: 'purchases.current_stock'.tr(),
-                                    value: '$currentStock',
+                                    value: localizedQuantity(
+                                      currentStock,
+                                      item.product.measurementType,
+                                    ),
                                     iconColor: cs.primary,
                                   ),
                                 ),
-                                Container(width: 1, height: 36, color: cs.outlineVariant.withValues(alpha: 0.3)),
+                                Container(
+                                  width: 1,
+                                  height: 36,
+                                  color: cs.outlineVariant.withValues(
+                                    alpha: 0.3,
+                                  ),
+                                ),
                                 Expanded(
                                   child: _InfoCell(
                                     icon: LucideIcons.history,
                                     label: 'purchases.old_cost'.tr(),
-                                    value: widget.currencyService.format(oldCostCents),
+                                    value: widget.currencyService.format(
+                                      oldCostCents,
+                                    ),
                                     iconColor: cs.onSurfaceVariant,
                                   ),
                                 ),
@@ -2126,17 +2551,27 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                                   child: _InfoCell(
                                     icon: LucideIcons.tag,
                                     label: 'purchases.old_sell_price'.tr(),
-                                    value: widget.currencyService.format(sellPriceCents),
+                                    value: widget.currencyService.format(
+                                      sellPriceCents,
+                                    ),
                                     iconColor: cs.tertiary,
                                   ),
                                 ),
-                                Container(width: 1, height: 36, color: cs.outlineVariant.withValues(alpha: 0.3)),
+                                Container(
+                                  width: 1,
+                                  height: 36,
+                                  color: cs.outlineVariant.withValues(
+                                    alpha: 0.3,
+                                  ),
+                                ),
                                 Expanded(
                                   child: _InfoCell(
                                     icon: LucideIcons.badgePercent,
                                     label: 'purchases.old_wholesale_price'.tr(),
                                     value: oldWholesaleCents != null
-                                        ? widget.currencyService.format(oldWholesaleCents)
+                                        ? widget.currencyService.format(
+                                            oldWholesaleCents,
+                                          )
                                         : '-',
                                     iconColor: cs.onSurfaceVariant,
                                   ),
@@ -2148,25 +2583,45 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                       ),
                     ),
                     // ── Purchase Tax Rate (read-only info) ──
-                    if (item.product.isTaxable && item.product.purchaseTaxRateBps > 0) ...[
+                    if (item.product.isTaxable &&
+                        item.product.purchaseTaxRateBps > 0) ...[
                       const SizedBox(height: 12),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
                         decoration: BoxDecoration(
                           color: cs.tertiaryContainer.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: cs.tertiary.withValues(alpha: 0.3)),
+                          border: Border.all(
+                            color: cs.tertiary.withValues(alpha: 0.3),
+                          ),
                         ),
-                        child: Row(children: [
-                          Icon(LucideIcons.percent, size: 16, color: cs.tertiary),
-                          const SizedBox(width: 8),
-                          Text('purchases.product_tax_rate'.tr(),
-                            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                          const Spacer(),
-                          Text('${(item.product.purchaseTaxRateBps / 100).toStringAsFixed(2)}%',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.bold, color: cs.tertiary)),
-                        ]),
+                        child: Row(
+                          children: [
+                            Icon(
+                              LucideIcons.percent,
+                              size: 16,
+                              color: cs.tertiary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'purchases.product_tax_rate'.tr(),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              '${(item.product.purchaseTaxRateBps / 100).toStringAsFixed(2)}%',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: cs.tertiary,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                     const SizedBox(height: 16),
@@ -2176,13 +2631,57 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                         Expanded(
                           child: TextField(
                             controller: _qtyCtrl,
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[\d.,]'),
+                              ),
+                            ],
                             onTap: () => selectAllText(_qtyCtrl),
                             decoration: InputDecoration(
                               labelText: 'purchases.quantity'.tr(),
                               border: const OutlineInputBorder(),
-                              prefixIcon: const Icon(LucideIcons.hash, size: 18),
+                              prefixIcon: const Icon(
+                                LucideIcons.hash,
+                                size: 18,
+                              ),
+                              suffixIcon:
+                                  item.product.measurement.minorUnit == null
+                                  ? null
+                                  : DropdownButtonHideUnderline(
+                                      child: DropdownButton<MeasurementUnit>(
+                                        value: _quantityUnit,
+                                        isDense: true,
+                                        items: item
+                                            .product
+                                            .measurement
+                                            .inputUnits
+                                            .map(
+                                              (unit) => DropdownMenuItem(
+                                                value: unit,
+                                                child: Text(
+                                                  'measurement.units.${unit.dbValue}'
+                                                      .tr(),
+                                                ),
+                                              ),
+                                            )
+                                            .toList(),
+                                        onChanged: (unit) {
+                                          if (unit == null) return;
+                                          final stored = _storedQuantity;
+                                          setState(() {
+                                            _quantityUnit = unit;
+                                            _qtyCtrl.text =
+                                                MeasuredQuantity.editableValue(
+                                                  stored,
+                                                  unit,
+                                                );
+                                          });
+                                        },
+                                      ),
+                                    ),
                             ),
                           ),
                         ),
@@ -2190,13 +2689,22 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                         Expanded(
                           child: TextField(
                             controller: _costCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[\d.]'),
+                              ),
+                            ],
                             onTap: () => selectAllText(_costCtrl),
                             decoration: InputDecoration(
                               labelText: 'purchases.new_cost'.tr(),
                               border: const OutlineInputBorder(),
-                              prefixIcon: const Icon(LucideIcons.coins, size: 18),
+                              prefixIcon: const Icon(
+                                LucideIcons.coins,
+                                size: 18,
+                              ),
                             ),
                           ),
                         ),
@@ -2209,8 +2717,14 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                         Expanded(
                           child: TextField(
                             controller: _sellPriceCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[\d.]'),
+                              ),
+                            ],
                             onTap: () => selectAllText(_sellPriceCtrl),
                             decoration: InputDecoration(
                               labelText: 'purchases.new_sell_price'.tr(),
@@ -2223,56 +2737,83 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                         Expanded(
                           child: TextField(
                             controller: _wholesalePriceCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[\d.]'),
+                              ),
+                            ],
                             onTap: () => selectAllText(_wholesalePriceCtrl),
                             decoration: InputDecoration(
                               labelText: 'purchases.new_wholesale_price'.tr(),
                               border: const OutlineInputBorder(),
-                              prefixIcon: const Icon(LucideIcons.badgePercent, size: 18),
+                              prefixIcon: const Icon(
+                                LucideIcons.badgePercent,
+                                size: 18,
+                              ),
                             ),
                           ),
                         ),
                       ],
                     ),
                     // ── Below-cost warning (sell or wholesale price < cost) ──
-                    Builder(builder: (context) {
-                      final costVal = double.tryParse(_costCtrl.text) ?? 0;
-                      final sellVal = double.tryParse(_sellPriceCtrl.text) ?? 0;
-                      final wholesaleVal = double.tryParse(_wholesalePriceCtrl.text) ?? 0;
-                      final sellBelow = sellVal > 0 && costVal > 0 && sellVal < costVal;
-                      final wholesaleBelow = wholesaleVal > 0 && costVal > 0 && wholesaleVal < costVal;
-                      if (!sellBelow && !wholesaleBelow) {
-                        return const SizedBox.shrink();
-                      }
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: cs.tertiaryContainer.withValues(alpha: 0.35),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: cs.tertiary.withValues(alpha: 0.4)),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(LucideIcons.alertTriangle,
-                                  size: 16, color: cs.tertiary),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'products.warning_price_below_cost'.tr(),
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: cs.tertiary,
-                                    fontWeight: FontWeight.w500,
+                    Builder(
+                      builder: (context) {
+                        final costVal = double.tryParse(_costCtrl.text) ?? 0;
+                        final sellVal =
+                            double.tryParse(_sellPriceCtrl.text) ?? 0;
+                        final wholesaleVal =
+                            double.tryParse(_wholesalePriceCtrl.text) ?? 0;
+                        final sellBelow =
+                            sellVal > 0 && costVal > 0 && sellVal < costVal;
+                        final wholesaleBelow =
+                            wholesaleVal > 0 &&
+                            costVal > 0 &&
+                            wholesaleVal < costVal;
+                        if (!sellBelow && !wholesaleBelow) {
+                          return const SizedBox.shrink();
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: cs.tertiaryContainer.withValues(
+                                alpha: 0.35,
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: cs.tertiary.withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  LucideIcons.alertTriangle,
+                                  size: 16,
+                                  color: cs.tertiary,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'products.warning_price_below_cost'.tr(),
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: cs.tertiary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    }),
+                        );
+                      },
+                    ),
                     // ── Discount (% and fixed, auto-sync) ──
                     if (widget.discountMode == DiscountMode.perItem) ...[
                       const SizedBox(height: 16),
@@ -2281,13 +2822,23 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                           Expanded(
                             child: TextField(
                               controller: _discountPercentCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r'[\d.]'),
+                                ),
+                              ],
                               onTap: () => selectAllText(_discountPercentCtrl),
                               decoration: InputDecoration(
                                 labelText: 'purchases.discount_percent'.tr(),
                                 border: const OutlineInputBorder(),
-                                prefixIcon: const Icon(LucideIcons.percent, size: 18),
+                                prefixIcon: const Icon(
+                                  LucideIcons.percent,
+                                  size: 18,
+                                ),
                                 suffixText: '%',
                               ),
                             ),
@@ -2296,13 +2847,23 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                           Expanded(
                             child: TextField(
                               controller: _discountFixedCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r'[\d.]'),
+                                ),
+                              ],
                               onTap: () => selectAllText(_discountFixedCtrl),
                               decoration: InputDecoration(
                                 labelText: 'purchases.discount_fixed'.tr(),
                                 border: const OutlineInputBorder(),
-                                prefixIcon: const Icon(LucideIcons.coins, size: 18),
+                                prefixIcon: const Icon(
+                                  LucideIcons.coins,
+                                  size: 18,
+                                ),
                               ),
                             ),
                           ),
@@ -2316,162 +2877,240 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                     // error palette until the user picks a date, and the
                     // Save button is disabled in the same condition.
                     const SizedBox(height: 16),
-                    Builder(builder: (context) {
-                      final requiresExpiry =
-                          widget.item.product.inventoryTrackingType ==
-                              'batch_expiry';
-                      final missingRequired =
-                          requiresExpiry && _expiryDate == null;
-                      final borderColor = missingRequired
-                          ? cs.error
-                          : (_expiryDate != null
-                              ? Colors.orange
-                              : cs.outline);
-                      final iconColor = missingRequired
-                          ? cs.error
-                          : (_expiryDate != null
-                              ? Colors.orange
-                              : cs.onSurfaceVariant);
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          InkWell(
-                            borderRadius: BorderRadius.circular(8),
-                            onTap: () async {
-                              final date = await showDatePicker(
-                                context: context,
-                                initialDate: _expiryDate ??
-                                    DateTime.now()
-                                        .add(const Duration(days: 180)),
-                                firstDate: DateTime.now(),
-                                lastDate: DateTime.now()
-                                    .add(const Duration(days: 3650)),
-                              );
-                              if (date != null) {
-                                setState(() => _expiryDate = date);
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 14),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: borderColor),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(LucideIcons.calendarClock,
-                                      size: 18, color: iconColor),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      _expiryDate != null
-                                          ? '${'purchases.expiry'.tr()}: ${DateFormat.yMMMd().format(_expiryDate!)}'
-                                          : (requiresExpiry
-                                              ? 'purchases.expiry_required'
-                                                  .tr()
-                                              : 'purchases.set_expiry'.tr()),
-                                      style: theme.textTheme.bodyMedium
-                                          ?.copyWith(
+                    Builder(
+                      builder: (context) {
+                        final requiresExpiry =
+                            widget.item.product.inventoryTrackingType ==
+                            'batch_expiry';
+                        final missingRequired =
+                            requiresExpiry && _expiryDate == null;
+                        final borderColor = missingRequired
+                            ? cs.error
+                            : (_expiryDate != null
+                                  ? Colors.orange
+                                  : cs.outline);
+                        final iconColor = missingRequired
+                            ? cs.error
+                            : (_expiryDate != null
+                                  ? Colors.orange
+                                  : cs.onSurfaceVariant);
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: () async {
+                                final date = await showDatePicker(
+                                  context: context,
+                                  initialDate:
+                                      _expiryDate ??
+                                      DateTime.now().add(
+                                        const Duration(days: 180),
+                                      ),
+                                  firstDate: DateTime.now(),
+                                  lastDate: DateTime.now().add(
+                                    const Duration(days: 3650),
+                                  ),
+                                );
+                                if (date != null) {
+                                  setState(() => _expiryDate = date);
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 14,
+                                ),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: borderColor),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      LucideIcons.calendarClock,
+                                      size: 18,
+                                      color: iconColor,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        _expiryDate != null
+                                            ? '${'purchases.expiry'.tr()}: ${DateFormat.yMMMd().format(_expiryDate!)}'
+                                            : (requiresExpiry
+                                                  ? 'purchases.expiry_required'
+                                                        .tr()
+                                                  : 'purchases.set_expiry'
+                                                        .tr()),
+                                        style: theme.textTheme.bodyMedium
+                                            ?.copyWith(
                                               color: missingRequired
                                                   ? cs.error
                                                   : (_expiryDate != null
-                                                      ? null
-                                                      : cs.onSurfaceVariant),
+                                                        ? null
+                                                        : cs.onSurfaceVariant),
                                               fontWeight: missingRequired
                                                   ? FontWeight.w600
-                                                  : null),
+                                                  : null,
+                                            ),
+                                      ),
                                     ),
-                                  ),
-                                  if (_expiryDate != null && !requiresExpiry)
-                                    InkWell(
-                                      onTap: () => setState(
-                                          () => _expiryDate = null),
-                                      child: Icon(LucideIcons.x,
+                                    if (_expiryDate != null && !requiresExpiry)
+                                      InkWell(
+                                        onTap: () =>
+                                            setState(() => _expiryDate = null),
+                                        child: Icon(
+                                          LucideIcons.x,
                                           size: 16,
-                                          color: cs.onSurfaceVariant),
-                                    ),
-                                ],
+                                          color: cs.onSurfaceVariant,
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                          if (missingRequired) ...[
-                            const SizedBox(height: 6),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Icon(LucideIcons.alertTriangle,
-                                    size: 14, color: cs.error),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    'purchases.expiry_required_help'.tr(),
-                                    style: theme.textTheme.bodySmall
-                                        ?.copyWith(color: cs.error),
+                            if (missingRequired) ...[
+                              const SizedBox(height: 6),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Icon(
+                                    LucideIcons.alertTriangle,
+                                    size: 14,
+                                    color: cs.error,
                                   ),
-                                ),
-                              ],
-                            ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'purchases.expiry_required_help'.tr(),
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(color: cs.error),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
-                        ],
-                      );
-                    }),
+                        );
+                      },
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
               // ── Totals Preview (before & after tax) ──
-              Builder(builder: (context) {
-                final qty = int.tryParse(_qtyCtrl.text) ?? 1;
-                final costVal = double.tryParse(_costCtrl.text) ?? 0;
-                final costCents = (costVal * 100).round();
-                final subtotalCents = costCents * (qty < 1 ? 1 : qty);
-                final discVal = double.tryParse(_discountFixedCtrl.text) ?? 0;
-                final discCents = (discVal * 100).round();
-                final netCents = subtotalCents - discCents;
-                final product = widget.item.product;
-                final taxBps = product.isTaxable ? product.purchaseTaxRateBps : 0;
-                final taxCents = taxBps > 0 && netCents > 0
-                    ? ((netCents * taxBps) / 10000).round()
-                    : 0;
-                final totalAfterTax = netCents + taxCents;
-                return Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: cs.primaryContainer.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(children: [
-                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                      Text('purchases.subtotal'.tr(), style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
-                      Text(widget.currencyService.format(subtotalCents > 0 ? subtotalCents : 0),
-                        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500)),
-                    ]),
-                    if (discCents > 0) ...[
-                      const SizedBox(height: 4),
-                      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                        Text('purchases.discount'.tr(), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                        Text('- ${widget.currencyService.format(discCents)}',
-                          style: theme.textTheme.bodySmall?.copyWith(color: cs.tertiary)),
-                      ]),
-                    ],
-                    if (taxCents > 0) ...[
-                      const SizedBox(height: 4),
-                      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                        Text('purchases.tax'.tr(), style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                        Text('+${widget.currencyService.format(taxCents)}',
-                          style: theme.textTheme.bodySmall?.copyWith(color: cs.tertiary)),
-                      ]),
-                    ],
-                    const Divider(height: 12),
-                    Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                      Text('purchases.total'.tr(), style: theme.textTheme.titleSmall),
-                      Text(widget.currencyService.format(totalAfterTax > 0 ? totalAfterTax : 0),
-                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: cs.primary)),
-                    ]),
-                  ]),
-                );
-              }),
+              Builder(
+                builder: (context) {
+                  final qty = _storedQuantity;
+                  final costVal = double.tryParse(_costCtrl.text) ?? 0;
+                  final costCents = (costVal * 100).round();
+                  final subtotalCents = MeasuredAmount.cents(
+                    unitCents: costCents,
+                    quantity: qty,
+                    quantityScale: item.product.quantityScale,
+                  );
+                  final discVal = double.tryParse(_discountFixedCtrl.text) ?? 0;
+                  final discCents = (discVal * 100).round();
+                  final netCents = subtotalCents - discCents;
+                  final product = widget.item.product;
+                  final taxBps = product.isTaxable
+                      ? product.purchaseTaxRateBps
+                      : 0;
+                  final taxCents = taxBps > 0 && netCents > 0
+                      ? ((netCents * taxBps) / 10000).round()
+                      : 0;
+                  final totalAfterTax = netCents + taxCents;
+                  return Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: cs.primaryContainer.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'purchases.subtotal'.tr(),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                            Text(
+                              widget.currencyService.format(
+                                subtotalCents > 0 ? subtotalCents : 0,
+                              ),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (discCents > 0) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'purchases.discount'.tr(),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                              Text(
+                                '- ${widget.currencyService.format(discCents)}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: cs.tertiary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        if (taxCents > 0) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'purchases.tax'.tr(),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                              Text(
+                                '+${widget.currencyService.format(taxCents)}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: cs.tertiary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        const Divider(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'purchases.total'.tr(),
+                              style: theme.textTheme.titleSmall,
+                            ),
+                            Text(
+                              widget.currencyService.format(
+                                totalAfterTax > 0 ? totalAfterTax : 0,
+                              ),
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: cs.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
               const SizedBox(height: 16),
               // ── Actions ──
               Row(
@@ -2484,60 +3123,85 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Builder(builder: (context) {
-                      final requiresExpiry =
-                          widget.item.product.inventoryTrackingType ==
-                              'batch_expiry';
-                      final missingRequired =
-                          requiresExpiry && _expiryDate == null;
-                      return FilledButton.icon(
-                      icon: const Icon(LucideIcons.check, size: 18),
-                      label: Text('common.save'.tr()),
-                      onPressed: _saving || missingRequired
-                          ? null
-                          : () {
-                              setState(() => _saving = true);
-                              try {
-                                final qty = int.tryParse(_qtyCtrl.text) ?? 1;
-                                final costVal = double.tryParse(_costCtrl.text) ?? 0;
-                                final costCents = Decimal.fromInt((costVal * 100).round());
-                                Decimal? discountCents;
-                                if (widget.discountMode == DiscountMode.perItem) {
-                                  final discVal = double.tryParse(_discountFixedCtrl.text) ?? 0;
-                                  discountCents = Decimal.fromInt((discVal * 100).round());
-                                }
+                    child: Builder(
+                      builder: (context) {
+                        final requiresExpiry =
+                            widget.item.product.inventoryTrackingType ==
+                            'batch_expiry';
+                        final missingRequired =
+                            requiresExpiry && _expiryDate == null;
+                        return FilledButton.icon(
+                          icon: const Icon(LucideIcons.check, size: 18),
+                          label: Text('common.save'.tr()),
+                          onPressed: _saving || missingRequired
+                              ? null
+                              : () {
+                                  setState(() => _saving = true);
+                                  try {
+                                    final qty = _storedQuantity;
+                                    final costVal =
+                                        double.tryParse(_costCtrl.text) ?? 0;
+                                    final costCents = Decimal.fromInt(
+                                      (costVal * 100).round(),
+                                    );
+                                    Decimal? discountCents;
+                                    if (widget.discountMode ==
+                                        DiscountMode.perItem) {
+                                      final discVal =
+                                          double.tryParse(
+                                            _discountFixedCtrl.text,
+                                          ) ??
+                                          0;
+                                      discountCents = Decimal.fromInt(
+                                        (discVal * 100).round(),
+                                      );
+                                    }
 
-                                final sellVal = double.tryParse(_sellPriceCtrl.text) ?? 0;
-                                final sellCents = Decimal.fromInt((sellVal * 100).round());
-                                final wholesaleVal = double.tryParse(_wholesalePriceCtrl.text);
-                                final wholesaleCents = wholesaleVal == null
-                                    ? null
-                                    : Decimal.fromInt((wholesaleVal * 100).round());
+                                    final sellVal =
+                                        double.tryParse(_sellPriceCtrl.text) ??
+                                        0;
+                                    final sellCents = Decimal.fromInt(
+                                      (sellVal * 100).round(),
+                                    );
+                                    final wholesaleVal = double.tryParse(
+                                      _wholesalePriceCtrl.text,
+                                    );
+                                    final wholesaleCents = wholesaleVal == null
+                                        ? null
+                                        : Decimal.fromInt(
+                                            (wholesaleVal * 100).round(),
+                                          );
 
-                                widget.onSave(
-                                  qty < 1 ? 1 : qty,
-                                  costCents,
-                                  discountCents,
-                                  _expiryDate,
-                                  _expiryDate == null && widget.item.expiryDate != null,
-                                  sellCents,
-                                  wholesaleCents,
-                                );
-                              } catch (e) {
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(e.toString()),
-                                      behavior: SnackBarBehavior.floating,
-                                    ),
-                                  );
-                                }
-                              } finally {
-                                if (mounted) setState(() => _saving = false);
-                              }
-                            },
-                      );
-                    }),
+                                    widget.onSave(
+                                      qty,
+                                      costCents,
+                                      discountCents,
+                                      _expiryDate,
+                                      _expiryDate == null &&
+                                          widget.item.expiryDate != null,
+                                      sellCents,
+                                      wholesaleCents,
+                                    );
+                                  } catch (e) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(e.toString()),
+                                          behavior: SnackBarBehavior.floating,
+                                        ),
+                                      );
+                                    }
+                                  } finally {
+                                    if (mounted) {
+                                      setState(() => _saving = false);
+                                    }
+                                  }
+                                },
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -2570,11 +3234,20 @@ class _InfoCell extends StatelessWidget {
       children: [
         Icon(icon, size: 16, color: iconColor),
         const SizedBox(height: 4),
-        Text(label, style: theme.textTheme.labelSmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant, fontSize: 9)),
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontSize: 9,
+          ),
+        ),
         const SizedBox(height: 2),
-        Text(value, style: theme.textTheme.labelMedium?.copyWith(
-            fontWeight: FontWeight.w600)),
+        Text(
+          value,
+          style: theme.textTheme.labelMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ],
     );
   }
@@ -2611,19 +3284,22 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     super.initState();
     final state = context.read<PurchaseFormBloc>().state;
     _paidCtrl = TextEditingController(
-        text: state.paidAmountCents > Decimal.zero
-            ? (state.paidAmountCents.toBigInt().toInt() / 100).toStringAsFixed(2)
-            : '');
+      text: state.paidAmountCents > Decimal.zero
+          ? (state.paidAmountCents.toBigInt().toInt() / 100).toStringAsFixed(2)
+          : '',
+    );
     _notesCtrl = TextEditingController(text: state.notes ?? '');
 
     final discCents = state.invoiceDiscountCents.toBigInt().toInt();
     final subtotalCents = state.subtotalCents.toBigInt().toInt();
     _discountFixedCtrl = TextEditingController(
-        text: discCents > 0 ? (discCents / 100).toStringAsFixed(2) : '');
+      text: discCents > 0 ? (discCents / 100).toStringAsFixed(2) : '',
+    );
     _discountPercentCtrl = TextEditingController(
-        text: discCents > 0 && subtotalCents > 0
-            ? ((discCents / subtotalCents) * 100).toStringAsFixed(2)
-            : '');
+      text: discCents > 0 && subtotalCents > 0
+          ? ((discCents / subtotalCents) * 100).toStringAsFixed(2)
+          : '',
+    );
 
     _discountPercentCtrl.addListener(_syncDiscountFromPercent);
     _discountFixedCtrl.addListener(_syncDiscountFromFixed);
@@ -2649,15 +3325,21 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
       // pure display helper derived from it via the central converter.
       final discCents = state.effectiveInvoiceDiscountCents.toBigInt().toInt();
       final subtotalCents = state.subtotalCents.toBigInt().toInt();
-      final fixedText = discCents > 0 ? (discCents / 100).toStringAsFixed(2) : '';
+      final fixedText = discCents > 0
+          ? (discCents / 100).toStringAsFixed(2)
+          : '';
       final pct = sl<DiscountConverter>().percentFromFixed(
         subtotalCents: subtotalCents,
         fixedCents: discCents,
       );
       final pctText = pct == Decimal.zero ? '' : pct.toString();
 
-      if (_discountFixedCtrl.text != fixedText) _discountFixedCtrl.text = fixedText;
-      if (_discountPercentCtrl.text != pctText) _discountPercentCtrl.text = pctText;
+      if (_discountFixedCtrl.text != fixedText) {
+        _discountFixedCtrl.text = fixedText;
+      }
+      if (_discountPercentCtrl.text != pctText) {
+        _discountPercentCtrl.text = pctText;
+      }
 
       _hasHydratedFromBloc = true;
     }
@@ -2668,8 +3350,14 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     _updatingDiscount = true;
     // Percent → fixed handled by the central converter so this screen can
     // never drift from the sales/line-edit discount helpers.
-    final pct = Decimal.tryParse(_discountPercentCtrl.text.trim()) ?? Decimal.zero;
-    final sub = context.read<PurchaseFormBloc>().state.subtotalCents.toBigInt().toInt();
+    final pct =
+        Decimal.tryParse(_discountPercentCtrl.text.trim()) ?? Decimal.zero;
+    final sub = context
+        .read<PurchaseFormBloc>()
+        .state
+        .subtotalCents
+        .toBigInt()
+        .toInt();
     final cents = sl<DiscountConverter>().fixedFromPercent(
       subtotalCents: sub,
       percent: pct,
@@ -2682,10 +3370,18 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   void _syncDiscountFromFixed() {
     if (_updatingDiscount) return;
     _updatingDiscount = true;
-    final fixedVal = Decimal.tryParse(_discountFixedCtrl.text.trim()) ?? Decimal.zero;
-    final fixedCents =
-        (fixedVal * Decimal.fromInt(100)).round().toBigInt().toInt();
-    final sub = context.read<PurchaseFormBloc>().state.subtotalCents.toBigInt().toInt();
+    final fixedVal =
+        Decimal.tryParse(_discountFixedCtrl.text.trim()) ?? Decimal.zero;
+    final fixedCents = (fixedVal * Decimal.fromInt(100))
+        .round()
+        .toBigInt()
+        .toInt();
+    final sub = context
+        .read<PurchaseFormBloc>()
+        .state
+        .subtotalCents
+        .toBigInt()
+        .toInt();
     final pct = sl<DiscountConverter>().percentFromFixed(
       subtotalCents: sub,
       fixedCents: fixedCents,
@@ -2702,8 +3398,8 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     final fixedVal = double.tryParse(_discountFixedCtrl.text) ?? 0;
     final cents = (fixedVal * 100).round();
     context.read<PurchaseFormBloc>().add(
-          PurchaseInvoiceDiscountChanged(Decimal.fromInt(cents)),
-        );
+      PurchaseInvoiceDiscountChanged(Decimal.fromInt(cents)),
+    );
   }
 
   @override
@@ -2731,7 +3427,9 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
           builder: (context, scrollController) => Container(
             decoration: BoxDecoration(
               color: cs.surface,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
             ),
             child: Column(
               children: [
@@ -2742,7 +3440,8 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                     children: [
                       Center(
                         child: Container(
-                          width: 40, height: 4,
+                          width: 40,
+                          height: 4,
                           margin: const EdgeInsets.only(bottom: 12),
                           decoration: BoxDecoration(
                             color: cs.onSurfaceVariant.withValues(alpha: 0.4),
@@ -2756,23 +3455,36 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
-                                colors: [cs.primary, cs.primary.withValues(alpha: 0.7)],
+                                colors: [
+                                  cs.primary,
+                                  cs.primary.withValues(alpha: 0.7),
+                                ],
                               ),
                               borderRadius: BorderRadius.circular(10),
                             ),
-                            child: const Icon(LucideIcons.shoppingBag, size: 20, color: Colors.white),
+                            child: const Icon(
+                              LucideIcons.shoppingBag,
+                              size: 20,
+                              color: Colors.white,
+                            ),
                           ),
                           const SizedBox(width: 10),
-                          Text('purchases.checkout_title'.tr(),
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                  fontWeight: FontWeight.bold)),
+                          Text(
+                            'purchases.checkout_title'.tr(),
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ],
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 12),
-                Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.3)),
+                Divider(
+                  height: 1,
+                  color: cs.outlineVariant.withValues(alpha: 0.3),
+                ),
                 // Scrollable content
                 Expanded(
                   child: ListView(
@@ -2789,7 +3501,10 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                           borderRadius: BorderRadius.circular(10),
                           onTap: () => _showSupplierPickerInCheckout(context),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
                             decoration: BoxDecoration(
                               border: Border.all(color: cs.outlineVariant),
                               borderRadius: BorderRadius.circular(10),
@@ -2803,23 +3518,33 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                                     child: Text(
                                       state.supplierName![0].toUpperCase(),
                                       style: TextStyle(
-                                          color: cs.onPrimaryContainer,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14),
+                                        color: cs.onPrimaryContainer,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(width: 10),
                                 ],
                                 Expanded(
                                   child: Text(
-                                    state.supplierName ?? 'purchases.select_supplier'.tr(),
+                                    state.supplierName ??
+                                        'purchases.select_supplier'.tr(),
                                     style: theme.textTheme.bodyLarge?.copyWith(
-                                      fontWeight: state.supplierName != null ? FontWeight.w500 : FontWeight.normal,
-                                      color: state.supplierName != null ? null : cs.onSurfaceVariant,
+                                      fontWeight: state.supplierName != null
+                                          ? FontWeight.w500
+                                          : FontWeight.normal,
+                                      color: state.supplierName != null
+                                          ? null
+                                          : cs.onSurfaceVariant,
                                     ),
                                   ),
                                 ),
-                                Icon(LucideIcons.chevronDown, size: 18, color: cs.onSurfaceVariant),
+                                Icon(
+                                  LucideIcons.chevronDown,
+                                  size: 18,
+                                  color: cs.onSurfaceVariant,
+                                ),
                               ],
                             ),
                           ),
@@ -2831,8 +3556,12 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                           padding: const EdgeInsets.only(top: 8, bottom: 8),
                           child: _SupplierBalanceInfo(
                             supplierId: state.supplierId!,
-                            invoiceTotalCents: state.totalCents.toBigInt().toInt(),
-                            paidAmountCents: state.paidAmountCents.toBigInt().toInt(),
+                            invoiceTotalCents: state.totalCents
+                                .toBigInt()
+                                .toInt(),
+                            paidAmountCents: state.paidAmountCents
+                                .toBigInt()
+                                .toInt(),
                             paymentMethod: state.paymentMethod,
                             currencyService: widget.currencyService,
                           ),
@@ -2855,7 +3584,10 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                               onSelected: (_) => context
                                   .read<PurchaseFormBloc>()
                                   .add(PurchasePaymentMethodChanged(method)),
-                              avatar: Icon(_paymentMethodIcon(method), size: 16),
+                              avatar: Icon(
+                                _paymentMethodIcon(method),
+                                size: 16,
+                              ),
                               selectedColor: cs.primaryContainer,
                               showCheckmark: false,
                             );
@@ -2864,7 +3596,8 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                       ),
                       const SizedBox(height: 16),
                       // ── Cheque due date (only for cheque) ──
-                      if (state.paymentMethod == PurchasePaymentMethod.cheque) ...[
+                      if (state.paymentMethod ==
+                          PurchasePaymentMethod.cheque) ...[
                         _buildCheckoutSection(
                           theme: theme,
                           cs: cs,
@@ -2875,110 +3608,162 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                             onTap: () async {
                               final picked = await showDatePicker(
                                 context: context,
-                                initialDate: state.dueDate ?? DateTime.now().add(const Duration(days: 30)),
+                                initialDate:
+                                    state.dueDate ??
+                                    DateTime.now().add(
+                                      const Duration(days: 30),
+                                    ),
                                 firstDate: DateTime.now(),
-                                lastDate: DateTime.now().add(const Duration(days: 365)),
+                                lastDate: DateTime.now().add(
+                                  const Duration(days: 365),
+                                ),
                               );
                               if (picked != null && context.mounted) {
-                                context.read<PurchaseFormBloc>().add(PurchaseDueDateChanged(picked));
+                                context.read<PurchaseFormBloc>().add(
+                                  PurchaseDueDateChanged(picked),
+                                );
                               }
                             },
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 12,
+                              ),
                               decoration: BoxDecoration(
                                 border: Border.all(color: cs.outlineVariant),
                                 borderRadius: BorderRadius.circular(10),
                               ),
-                              child: Row(children: [
-                                Icon(LucideIcons.calendar, size: 18, color: cs.primary),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    state.dueDate != null
-                                      ? '${state.dueDate!.year}-${state.dueDate!.month.toString().padLeft(2, '0')}-${state.dueDate!.day.toString().padLeft(2, '0')}'
-                                      : 'purchases.select_due_date'.tr(),
-                                    style: theme.textTheme.bodyLarge?.copyWith(
-                                      color: state.dueDate != null ? null : cs.onSurfaceVariant,
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    LucideIcons.calendar,
+                                    size: 18,
+                                    color: cs.primary,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      state.dueDate != null
+                                          ? '${state.dueDate!.year}-${state.dueDate!.month.toString().padLeft(2, '0')}-${state.dueDate!.day.toString().padLeft(2, '0')}'
+                                          : 'purchases.select_due_date'.tr(),
+                                      style: theme.textTheme.bodyLarge
+                                          ?.copyWith(
+                                            color: state.dueDate != null
+                                                ? null
+                                                : cs.onSurfaceVariant,
+                                          ),
                                     ),
                                   ),
-                                ),
-                                Icon(LucideIcons.chevronDown, size: 18, color: cs.onSurfaceVariant),
-                              ]),
+                                  Icon(
+                                    LucideIcons.chevronDown,
+                                    size: 18,
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(height: 16),
                       ],
                       // ── Payment method info message ──
-                      Builder(builder: (_) {
-                        final infoKey = switch (state.paymentMethod) {
-                          PurchasePaymentMethod.cash => 'purchases.balance_explain_cash',
-                          PurchasePaymentMethod.card => 'purchases.balance_explain_card',
-                          PurchasePaymentMethod.credit => 'purchases.balance_explain_credit',
-                          PurchasePaymentMethod.cheque => 'purchases.balance_explain_cheque',
-                          PurchasePaymentMethod.purchaseOrder => 'purchases.balance_explain_po',
-                        };
-                        final isPo = state.paymentMethod == PurchasePaymentMethod.purchaseOrder;
-                        final isCredit = state.paymentMethod == PurchasePaymentMethod.credit;
-                        final containerColor = isPo
-                            ? cs.surfaceContainerHighest.withValues(alpha: 0.5)
-                            : cs.tertiaryContainer.withValues(alpha: 0.3);
-                        final borderColor = isPo
-                            ? cs.outlineVariant.withValues(alpha: 0.3)
-                            : cs.tertiary.withValues(alpha: 0.3);
-                        final iconColor = isPo ? cs.onSurfaceVariant : cs.tertiary;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: Column(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: containerColor,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: borderColor),
-                                ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Icon(LucideIcons.info, size: 16, color: iconColor),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        infoKey.tr(),
-                                        style: theme.textTheme.bodySmall?.copyWith(
-                                          color: cs.onSurfaceVariant,
-                                          height: 1.4,
+                      Builder(
+                        builder: (_) {
+                          final infoKey = switch (state.paymentMethod) {
+                            PurchasePaymentMethod.cash =>
+                              'purchases.balance_explain_cash',
+                            PurchasePaymentMethod.card =>
+                              'purchases.balance_explain_card',
+                            PurchasePaymentMethod.credit =>
+                              'purchases.balance_explain_credit',
+                            PurchasePaymentMethod.cheque =>
+                              'purchases.balance_explain_cheque',
+                            PurchasePaymentMethod.purchaseOrder =>
+                              'purchases.balance_explain_po',
+                          };
+                          final isPo =
+                              state.paymentMethod ==
+                              PurchasePaymentMethod.purchaseOrder;
+                          final isCredit =
+                              state.paymentMethod ==
+                              PurchasePaymentMethod.credit;
+                          final containerColor = isPo
+                              ? cs.surfaceContainerHighest.withValues(
+                                  alpha: 0.5,
+                                )
+                              : cs.tertiaryContainer.withValues(alpha: 0.3);
+                          final borderColor = isPo
+                              ? cs.outlineVariant.withValues(alpha: 0.3)
+                              : cs.tertiary.withValues(alpha: 0.3);
+                          final iconColor = isPo
+                              ? cs.onSurfaceVariant
+                              : cs.tertiary;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Column(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: containerColor,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: borderColor),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Icon(
+                                        LucideIcons.info,
+                                        size: 16,
+                                        color: iconColor,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          infoKey.tr(),
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: cs.onSurfaceVariant,
+                                                height: 1.4,
+                                              ),
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              // Add Payment button for credit purchases
-                              if (isCredit && state.supplierId != null) ...[
-                                const SizedBox(height: 12),
-                                SizedBox(
-                                  width: double.infinity,
-                                  child: OutlinedButton.icon(
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      // Navigate to supplier profile screen where payment can be made
-                                      context.push('/suppliers/${state.supplierId}');
-                                    },
-                                    icon: const Icon(LucideIcons.banknote, size: 18),
-                                    label: Text('purchases.add_payment'.tr()),
-                                    style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(vertical: 12),
-                                      side: BorderSide(color: cs.primary),
-                                    ),
+                                    ],
                                   ),
                                 ),
+                                // Add Payment button for credit purchases
+                                if (isCredit && state.supplierId != null) ...[
+                                  const SizedBox(height: 12),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: OutlinedButton.icon(
+                                      onPressed: () {
+                                        Navigator.pop(context);
+                                        // Navigate to supplier profile screen where payment can be made
+                                        context.push(
+                                          '/suppliers/${state.supplierId}',
+                                        );
+                                      },
+                                      icon: const Icon(
+                                        LucideIcons.banknote,
+                                        size: 18,
+                                      ),
+                                      label: Text('purchases.add_payment'.tr()),
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 12,
+                                        ),
+                                        side: BorderSide(color: cs.primary),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ],
-                            ],
-                          ),
-                        );
-                      }),
+                            ),
+                          );
+                        },
+                      ),
                       // ── Tax (read-only, sum of line item taxes) ──
                       if (state.taxCents > Decimal.zero)
                         _buildCheckoutSection(
@@ -2987,73 +3772,107 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                           icon: LucideIcons.percent,
                           title: 'purchases.tax'.tr(),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
                             decoration: BoxDecoration(
-                              color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                              color: cs.surfaceContainerHighest.withValues(
+                                alpha: 0.3,
+                              ),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(color: cs.outlineVariant),
                             ),
-                            child: Row(children: [
-                              Icon(LucideIcons.receipt, size: 16, color: cs.onSurfaceVariant),
-                              const SizedBox(width: 8),
-                              Text(
-                                widget.currencyService.format(state.taxCents.toBigInt().toInt()),
-                                style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
-                              ),
-                              const Spacer(),
-                              Text(
-                                'purchases.tax_from_products'.tr(),
-                                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                              ),
-                            ]),
-                          ),
-                        ),
-                      const SizedBox(height: 16),
-                      // ── Invoice Discount (% and fixed) ──
-                      if (state.discountMode == DiscountMode.invoice)
-                        ...[
-                          _buildCheckoutSection(
-                            theme: theme,
-                            cs: cs,
-                            icon: LucideIcons.tag,
-                            title: 'purchases.invoice_discount'.tr(),
                             child: Row(
                               children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: _discountPercentCtrl,
-                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-                                    onTap: () => selectAllText(_discountPercentCtrl),
-                                    decoration: InputDecoration(
-                                      labelText: 'purchases.discount_percent'.tr(),
-                                      border: const OutlineInputBorder(),
-                                      suffixText: '%',
-                                      isDense: true,
-                                    ),
+                                Icon(
+                                  LucideIcons.receipt,
+                                  size: 16,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  widget.currencyService.format(
+                                    state.taxCents.toBigInt().toInt(),
+                                  ),
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: TextField(
-                                    controller: _discountFixedCtrl,
-                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
-                                    onTap: () => selectAllText(_discountFixedCtrl),
-                                    decoration: InputDecoration(
-                                      labelText: 'purchases.discount_fixed'.tr(),
-                                      border: const OutlineInputBorder(),
-                                      isDense: true,
-                                    ),
+                                const Spacer(),
+                                Text(
+                                  'purchases.tax_from_products'.tr(),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          const SizedBox(height: 16),
-                        ],
+                        ),
+                      const SizedBox(height: 16),
+                      // ── Invoice Discount (% and fixed) ──
+                      if (state.discountMode == DiscountMode.invoice) ...[
+                        _buildCheckoutSection(
+                          theme: theme,
+                          cs: cs,
+                          icon: LucideIcons.tag,
+                          title: 'purchases.invoice_discount'.tr(),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _discountPercentCtrl,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.allow(
+                                      RegExp(r'[\d.]'),
+                                    ),
+                                  ],
+                                  onTap: () =>
+                                      selectAllText(_discountPercentCtrl),
+                                  decoration: InputDecoration(
+                                    labelText: 'purchases.discount_percent'
+                                        .tr(),
+                                    border: const OutlineInputBorder(),
+                                    suffixText: '%',
+                                    isDense: true,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: TextField(
+                                  controller: _discountFixedCtrl,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.allow(
+                                      RegExp(r'[\d.]'),
+                                    ),
+                                  ],
+                                  onTap: () =>
+                                      selectAllText(_discountFixedCtrl),
+                                  decoration: InputDecoration(
+                                    labelText: 'purchases.discount_fixed'.tr(),
+                                    border: const OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       // ── Paid Amount (only for cash) ──
-                      if (state.paymentMethod == PurchasePaymentMethod.cash) ...[
+                      if (state.paymentMethod ==
+                          PurchasePaymentMethod.cash) ...[
                         _buildCheckoutSection(
                           theme: theme,
                           cs: cs,
@@ -3061,19 +3880,29 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                           title: 'purchases.paid_amount'.tr(),
                           child: TextField(
                             controller: _paidCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[\d.]'),
+                              ),
+                            ],
                             onTap: () => selectAllText(_paidCtrl),
                             decoration: InputDecoration(
                               border: const OutlineInputBorder(),
-                              hintText: (state.totalCents.toBigInt().toInt() / 100).toStringAsFixed(2),
+                              hintText:
+                                  (state.totalCents.toBigInt().toInt() / 100)
+                                      .toStringAsFixed(2),
                               isDense: true,
                             ),
                             onChanged: (v) {
                               final val = double.tryParse(v) ?? 0;
                               context.read<PurchaseFormBloc>().add(
-                                    PurchasePaidAmountChanged(Decimal.fromInt((val * 100).round())),
-                                  );
+                                PurchasePaidAmountChanged(
+                                  Decimal.fromInt((val * 100).round()),
+                                ),
+                              );
                             },
                           ),
                         ),
@@ -3083,89 +3912,175 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: state.changeCents > Decimal.zero
-                              ? Colors.green.withValues(alpha: 0.08)
-                              : state.remainingCents > Decimal.zero
+                                ? Colors.green.withValues(alpha: 0.08)
+                                : state.remainingCents > Decimal.zero
                                 ? cs.errorContainer.withValues(alpha: 0.3)
                                 : cs.primaryContainer.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: state.changeCents > Decimal.zero
-                              ? Colors.green.withValues(alpha: 0.3)
-                              : state.remainingCents > Decimal.zero
-                                ? cs.error.withValues(alpha: 0.2)
-                                : cs.primary.withValues(alpha: 0.2)),
+                            border: Border.all(
+                              color: state.changeCents > Decimal.zero
+                                  ? Colors.green.withValues(alpha: 0.3)
+                                  : state.remainingCents > Decimal.zero
+                                  ? cs.error.withValues(alpha: 0.2)
+                                  : cs.primary.withValues(alpha: 0.2),
+                            ),
                           ),
-                          child: Column(children: [
-                            // Underpayment warning (cash with supplier selected)
-                            if (state.remainingCents > Decimal.zero && state.supplierId != null)
-                              Column(children: [
-                                Row(children: [
-                                  Icon(LucideIcons.alertTriangle, size: 16, color: cs.error),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'purchases.underpayment_warning'.tr(),
-                                      style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
+                          child: Column(
+                            children: [
+                              // Underpayment warning (cash with supplier selected)
+                              if (state.remainingCents > Decimal.zero &&
+                                  state.supplierId != null)
+                                Column(
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          LucideIcons.alertTriangle,
+                                          size: 16,
+                                          color: cs.error,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'purchases.underpayment_warning'
+                                                .tr(),
+                                            style: theme.textTheme.bodySmall
+                                                ?.copyWith(color: cs.error),
+                                          ),
+                                        ),
+                                      ],
                                     ),
+                                    const SizedBox(height: 8),
+                                    _checkoutRow(
+                                      theme,
+                                      'purchases.remaining'.tr(),
+                                      widget.currencyService.format(
+                                        state.remainingCents.toBigInt().toInt(),
+                                      ),
+                                      isBold: true,
+                                      valueColor: cs.error,
+                                    ),
+                                  ],
+                                )
+                              // Underpayment without supplier (walk-in)
+                              else if (state.remainingCents > Decimal.zero)
+                                _checkoutRow(
+                                  theme,
+                                  'purchases.remaining'.tr(),
+                                  widget.currencyService.format(
+                                    state.remainingCents.toBigInt().toInt(),
                                   ),
-                                ]),
+                                  isBold: true,
+                                  valueColor: cs.error,
+                                ),
+                              // Overpayment with supplier - show options
+                              if (state.changeCents > Decimal.zero &&
+                                  state.supplierId != null) ...[
+                                _checkoutRow(
+                                  theme,
+                                  'purchases.overpayment_amount'.tr(),
+                                  widget.currencyService.format(
+                                    state.changeCents.toBigInt().toInt(),
+                                  ),
+                                  isBold: true,
+                                  valueColor: Colors.green,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'purchases.overpayment_handling'.tr(),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
                                 const SizedBox(height: 8),
-                                _checkoutRow(theme, 'purchases.remaining'.tr(),
-                                  widget.currencyService.format(state.remainingCents.toBigInt().toInt()),
-                                  isBold: true, valueColor: cs.error),
-                              ])
-                            // Underpayment without supplier (walk-in)
-                            else if (state.remainingCents > Decimal.zero)
-                              _checkoutRow(theme, 'purchases.remaining'.tr(),
-                                widget.currencyService.format(state.remainingCents.toBigInt().toInt()),
-                                isBold: true, valueColor: cs.error),
-                            // Overpayment with supplier - show options
-                            if (state.changeCents > Decimal.zero && state.supplierId != null) ...[
-                              _checkoutRow(theme, 'purchases.overpayment_amount'.tr(),
-                                widget.currencyService.format(state.changeCents.toBigInt().toInt()),
-                                isBold: true, valueColor: Colors.green),
-                              const SizedBox(height: 12),
-                              Text('purchases.overpayment_handling'.tr(),
-                                style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                              const SizedBox(height: 8),
-                              Row(children: [
-                                Expanded(
-                                  child: ChoiceChip(
-                                    label: Text('purchases.return_change'.tr()),
-                                    selected: state.overpaymentHandling == OverpaymentHandling.returnChange,
-                                    onSelected: (_) => context.read<PurchaseFormBloc>().add(
-                                      const PurchaseOverpaymentHandlingChanged(OverpaymentHandling.returnChange)),
-                                    avatar: const Icon(LucideIcons.banknote, size: 16),
-                                    selectedColor: cs.primaryContainer,
-                                    showCheckmark: false,
-                                  ),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: ChoiceChip(
+                                        label: Text(
+                                          'purchases.return_change'.tr(),
+                                        ),
+                                        selected:
+                                            state.overpaymentHandling ==
+                                            OverpaymentHandling.returnChange,
+                                        onSelected: (_) => context
+                                            .read<PurchaseFormBloc>()
+                                            .add(
+                                              const PurchaseOverpaymentHandlingChanged(
+                                                OverpaymentHandling
+                                                    .returnChange,
+                                              ),
+                                            ),
+                                        avatar: const Icon(
+                                          LucideIcons.banknote,
+                                          size: 16,
+                                        ),
+                                        selectedColor: cs.primaryContainer,
+                                        showCheckmark: false,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: ChoiceChip(
+                                        label: Text(
+                                          'purchases.add_to_balance'.tr(),
+                                        ),
+                                        selected:
+                                            state.overpaymentHandling ==
+                                            OverpaymentHandling.addToBalance,
+                                        onSelected: (_) => context
+                                            .read<PurchaseFormBloc>()
+                                            .add(
+                                              const PurchaseOverpaymentHandlingChanged(
+                                                OverpaymentHandling
+                                                    .addToBalance,
+                                              ),
+                                            ),
+                                        avatar: const Icon(
+                                          LucideIcons.wallet,
+                                          size: 16,
+                                        ),
+                                        selectedColor: cs.primaryContainer,
+                                        showCheckmark: false,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: ChoiceChip(
-                                    label: Text('purchases.add_to_balance'.tr()),
-                                    selected: state.overpaymentHandling == OverpaymentHandling.addToBalance,
-                                    onSelected: (_) => context.read<PurchaseFormBloc>().add(
-                                      const PurchaseOverpaymentHandlingChanged(OverpaymentHandling.addToBalance)),
-                                    avatar: const Icon(LucideIcons.wallet, size: 16),
-                                    selectedColor: cs.primaryContainer,
-                                    showCheckmark: false,
+                              ]
+                              // Overpayment without supplier (walk-in) - just show change
+                              else if (state.changeCents > Decimal.zero)
+                                _checkoutRow(
+                                  theme,
+                                  'purchases.change'.tr(),
+                                  widget.currencyService.format(
+                                    state.changeCents.toBigInt().toInt(),
                                   ),
+                                  isBold: true,
+                                  valueColor: Colors.green,
                                 ),
-                              ]),
-                            ]
-                            // Overpayment without supplier (walk-in) - just show change
-                            else if (state.changeCents > Decimal.zero)
-                              _checkoutRow(theme, 'purchases.change'.tr(),
-                                widget.currencyService.format(state.changeCents.toBigInt().toInt()),
-                                isBold: true, valueColor: Colors.green),
-                            if (state.remainingCents == Decimal.zero && state.changeCents == Decimal.zero)
-                              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                                Icon(LucideIcons.checkCircle, size: 16, color: cs.primary),
-                                const SizedBox(width: 6),
-                                Text('purchases.fully_paid'.tr(), style: theme.textTheme.titleSmall?.copyWith(
-                                  color: cs.primary, fontWeight: FontWeight.w600)),
-                              ]),
-                          ]),
+                              if (state.remainingCents == Decimal.zero &&
+                                  state.changeCents == Decimal.zero)
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      LucideIcons.checkCircle,
+                                      size: 16,
+                                      color: cs.primary,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'purchases.fully_paid'.tr(),
+                                      style: theme.textTheme.titleSmall
+                                          ?.copyWith(
+                                            color: cs.primary,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 16),
                       ],
@@ -3180,7 +4095,9 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                           maxLines: 2,
                           decoration: InputDecoration(
                             hintText: 'purchases.notes_hint'.tr(),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                             isDense: true,
                           ),
                           onChanged: (v) => context
@@ -3193,29 +4110,55 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                          color: cs.surfaceContainerHighest.withValues(
+                            alpha: 0.5,
+                          ),
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+                          border: Border.all(
+                            color: cs.outlineVariant.withValues(alpha: 0.3),
+                          ),
                         ),
                         child: Column(
                           children: [
-                            _checkoutRow(theme, 'purchases.subtotal'.tr(),
-                                widget.currencyService.format(state.subtotalCents.toBigInt().toInt())),
+                            _checkoutRow(
+                              theme,
+                              'purchases.subtotal'.tr(),
+                              widget.currencyService.format(
+                                state.subtotalCents.toBigInt().toInt(),
+                              ),
+                            ),
                             if (state.totalDiscountCents > Decimal.zero) ...[
                               const SizedBox(height: 8),
-                              _checkoutRow(theme, 'purchases.discount'.tr(),
-                                  '- ${widget.currencyService.format(state.totalDiscountCents.toBigInt().toInt())}',
-                                  valueColor: cs.tertiary),
+                              _checkoutRow(
+                                theme,
+                                'purchases.discount'.tr(),
+                                '- ${widget.currencyService.format(state.totalDiscountCents.toBigInt().toInt())}',
+                                valueColor: cs.tertiary,
+                              ),
                             ],
                             if (state.taxCents > Decimal.zero) ...[
                               const SizedBox(height: 8),
-                              _checkoutRow(theme, 'purchases.tax'.tr(),
-                                  widget.currencyService.format(state.taxCents.toBigInt().toInt())),
+                              _checkoutRow(
+                                theme,
+                                'purchases.tax'.tr(),
+                                widget.currencyService.format(
+                                  state.taxCents.toBigInt().toInt(),
+                                ),
+                              ),
                             ],
-                            Divider(height: 20, color: cs.outlineVariant.withValues(alpha: 0.5)),
-                            _checkoutRow(theme, 'purchases.total'.tr(),
-                                widget.currencyService.format(state.totalCents.toBigInt().toInt()),
-                                isBold: true, valueColor: cs.primary),
+                            Divider(
+                              height: 20,
+                              color: cs.outlineVariant.withValues(alpha: 0.5),
+                            ),
+                            _checkoutRow(
+                              theme,
+                              'purchases.total'.tr(),
+                              widget.currencyService.format(
+                                state.totalCents.toBigInt().toInt(),
+                              ),
+                              isBold: true,
+                              valueColor: cs.primary,
+                            ),
                           ],
                         ),
                       ),
@@ -3225,10 +4168,17 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                 ),
                 // ── Bottom Actions ──
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: cs.surface,
-                    border: Border(top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.3))),
+                    border: Border(
+                      top: BorderSide(
+                        color: cs.outlineVariant.withValues(alpha: 0.3),
+                      ),
+                    ),
                     boxShadow: [
                       BoxShadow(
                         color: cs.shadow.withValues(alpha: 0.05),
@@ -3249,24 +4199,41 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                         const SizedBox(width: 12),
                         Expanded(
                           flex: 2,
-                          child: Builder(builder: (ctx) {
-                            final cashInsufficient = state.paymentMethod == PurchasePaymentMethod.cash &&
-                                state.paidAmountCents < state.totalCents;
-                            final chequeNoDueDate = state.paymentMethod == PurchasePaymentMethod.cheque &&
-                                state.dueDate == null;
-                            final canConfirm = state.supplierId != null &&
-                                !state.isSubmitting && !cashInsufficient && !chequeNoDueDate;
-                            return FilledButton.icon(
-                              onPressed: canConfirm ? widget.onConfirm : null,
-                              icon: state.isSubmitting
-                                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                                : const Icon(LucideIcons.check, size: 18),
-                              label: Text('purchases.confirm_save'.tr()),
-                              style: FilledButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                              ),
-                            );
-                          }),
+                          child: Builder(
+                            builder: (ctx) {
+                              final cashInsufficient =
+                                  state.paymentMethod ==
+                                      PurchasePaymentMethod.cash &&
+                                  state.paidAmountCents < state.totalCents;
+                              final chequeNoDueDate =
+                                  state.paymentMethod ==
+                                      PurchasePaymentMethod.cheque &&
+                                  state.dueDate == null;
+                              final canConfirm =
+                                  state.supplierId != null &&
+                                  !state.isSubmitting &&
+                                  !cashInsufficient &&
+                                  !chequeNoDueDate;
+                              return FilledButton.icon(
+                                onPressed: canConfirm ? widget.onConfirm : null,
+                                icon: state.isSubmitting
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(LucideIcons.check, size: 18),
+                                label: Text('purchases.confirm_save'.tr()),
+                                style: FilledButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                         ),
                       ],
                     ),
@@ -3294,8 +4261,12 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
           children: [
             Icon(icon, size: 16, color: cs.primary),
             const SizedBox(width: 8),
-            Text(title, style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600)),
+            Text(
+              title,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -3304,17 +4275,35 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     );
   }
 
-  Widget _checkoutRow(ThemeData theme, String label, String value,
-      {bool isBold = false, Color? valueColor}) {
+  Widget _checkoutRow(
+    ThemeData theme,
+    String label,
+    String value, {
+    bool isBold = false,
+    Color? valueColor,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: (isBold ? theme.textTheme.titleSmall : theme.textTheme.bodyMedium)
-            ?.copyWith(color: isBold ? null : theme.colorScheme.onSurfaceVariant)),
-        Text(value, style: (isBold ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium)
-            ?.copyWith(
-                color: valueColor,
-                fontWeight: isBold ? FontWeight.bold : FontWeight.w500)),
+        Text(
+          label,
+          style:
+              (isBold ? theme.textTheme.titleSmall : theme.textTheme.bodyMedium)
+                  ?.copyWith(
+                    color: isBold ? null : theme.colorScheme.onSurfaceVariant,
+                  ),
+        ),
+        Text(
+          value,
+          style:
+              (isBold
+                      ? theme.textTheme.titleMedium
+                      : theme.textTheme.bodyMedium)
+                  ?.copyWith(
+                    color: valueColor,
+                    fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+                  ),
+        ),
       ],
     );
   }
@@ -3360,8 +4349,8 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
         suppliers: widget.suppliers,
         onSelected: (supplier) {
           context.read<PurchaseFormBloc>().add(
-                PurchaseSupplierChanged(supplier.id, supplierName: supplier.name),
-              );
+            PurchaseSupplierChanged(supplier.id, supplierName: supplier.name),
+          );
           Navigator.pop(sheetCtx);
         },
       ),
@@ -3440,7 +4429,9 @@ class _SupplierBalanceInfo extends StatelessWidget {
             decoration: BoxDecoration(
               color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+              border: Border.all(
+                color: cs.outlineVariant.withValues(alpha: 0.3),
+              ),
             ),
             child: Row(
               children: [
@@ -3467,7 +4458,11 @@ class _SupplierBalanceInfo extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      Icon(LucideIcons.arrowRight, size: 14, color: cs.onSurfaceVariant),
+                      Icon(
+                        LucideIcons.arrowRight,
+                        size: 14,
+                        color: cs.onSurfaceVariant,
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         currencyService.format(projectedBalanceCents),
@@ -3548,7 +4543,9 @@ class _SupplierBalanceInfo extends StatelessWidget {
                     radius: 18,
                     backgroundColor: cs.primaryContainer,
                     child: Text(
-                      supplier.name.isNotEmpty ? supplier.name[0].toUpperCase() : '?',
+                      supplier.name.isNotEmpty
+                          ? supplier.name[0].toUpperCase()
+                          : '?',
                       style: TextStyle(
                         color: cs.onPrimaryContainer,
                         fontWeight: FontWeight.bold,
@@ -3619,7 +4616,10 @@ class _SupplierBalanceInfo extends StatelessWidget {
                 ],
               ),
             ),
-            Divider(height: 24, color: cs.outlineVariant.withValues(alpha: 0.5)),
+            Divider(
+              height: 24,
+              color: cs.outlineVariant.withValues(alpha: 0.5),
+            ),
             // Projected balance
             _balanceRow(
               theme: theme,
@@ -3670,23 +4670,33 @@ class _SupplierBalanceInfo extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: theme.textTheme.bodySmall?.copyWith(
-                color: cs.onSurfaceVariant,
-              )),
+              Text(
+                label,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
               if (subtitle != null)
-                Text(subtitle, style: theme.textTheme.labelSmall?.copyWith(
-                  color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-                  fontSize: 10,
-                )),
+                Text(
+                  subtitle,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                    fontSize: 10,
+                  ),
+                ),
             ],
           ),
         ),
         Text(
           amount,
-          style: (isBold ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium)?.copyWith(
-            fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-            color: amountColor,
-          ),
+          style:
+              (isBold
+                      ? theme.textTheme.titleMedium
+                      : theme.textTheme.bodyMedium)
+                  ?.copyWith(
+                    fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+                    color: amountColor,
+                  ),
         ),
       ],
     );
@@ -3697,11 +4707,16 @@ class _SupplierBalanceInfo extends StatelessWidget {
 // ADD ITEM SHEET (Story 6.6 - Product Selection Dialog)
 // ═══════════════════════════════════════════════════════
 class _AddItemSheet extends StatefulWidget {
+  final Product? initialProduct;
   final void Function(
-      Product product, ProductVariant? variant, int quantity, Decimal unitCost)
-      onItemAdded;
+    Product product,
+    ProductVariant? variant,
+    int quantity,
+    Decimal unitCost,
+  )
+  onItemAdded;
 
-  const _AddItemSheet({required this.onItemAdded});
+  const _AddItemSheet({this.initialProduct, required this.onItemAdded});
 
   @override
   State<_AddItemSheet> createState() => _AddItemSheetState();
@@ -3709,9 +4724,14 @@ class _AddItemSheet extends StatefulWidget {
 
 class _AddItemSheetState extends State<_AddItemSheet> {
   Product? _selectedProduct;
-  final int _quantity = 1;
   final _searchController = TextEditingController();
   int? _selectedCategoryId;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedProduct = widget.initialProduct;
+  }
 
   Color? _tryParseHexColor(String? hex) {
     if (hex == null) return null;
@@ -3738,168 +4758,206 @@ class _AddItemSheetState extends State<_AddItemSheet> {
           title: Text(product.name),
           content: SizedBox(
             width: 520,
-            child: FutureBuilder<({
-              List<ProductVariant> variants,
-              Map<int, String> sizeNameById,
-              Map<int, String?> colorHexById,
-            })>(
-              future: () async {
-                final variantRepo = sl<ProductVariantRepository>();
-                final colorRepo = sl<ProductColorRepository>();
-                final sizeRepo = sl<SizeRepository>();
+            child:
+                FutureBuilder<
+                  ({
+                    List<ProductVariant> variants,
+                    Map<int, String> sizeNameById,
+                    Map<int, String?> colorHexById,
+                  })
+                >(
+                  future: () async {
+                    final variantRepo = sl<ProductVariantRepository>();
+                    final colorRepo = sl<ProductColorRepository>();
+                    final sizeRepo = sl<SizeRepository>();
 
-                final results = await Future.wait([
-                  variantRepo.getVariantsByProduct(product.id),
-                  colorRepo.getAllColors(),
-                  sizeRepo.getAllSizes(),
-                ]);
+                    final results = await Future.wait([
+                      variantRepo.getVariantsByProduct(product.id),
+                      colorRepo.getAllColors(),
+                      sizeRepo.getAllSizes(),
+                    ]);
 
-                final variants = results[0] as List<ProductVariant>;
-                final colors = results[1] as List<dynamic>;
-                final sizes = results[2] as List<dynamic>;
+                    final variants = results[0] as List<ProductVariant>;
+                    final colors = results[1] as List<dynamic>;
+                    final sizes = results[2] as List<dynamic>;
 
-                final sizeNameById = <int, String>{};
-                for (final s in sizes) {
-                  sizeNameById[(s as dynamic).id as int] = (s as dynamic).name as String;
-                }
-                final colorHexById = <int, String?>{};
-                for (final c in colors) {
-                  colorHexById[(c as dynamic).id as int] = (c as dynamic).hexCode as String?;
-                }
+                    final sizeNameById = <int, String>{};
+                    for (final s in sizes) {
+                      sizeNameById[(s as dynamic).id as int] =
+                          (s as dynamic).name as String;
+                    }
+                    final colorHexById = <int, String?>{};
+                    for (final c in colors) {
+                      colorHexById[(c as dynamic).id as int] =
+                          (c as dynamic).hexCode as String?;
+                    }
 
-                return (
-                  variants: variants,
-                  sizeNameById: sizeNameById,
-                  colorHexById: colorHexById,
-                );
-              }(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const SizedBox(
-                    height: 120,
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
+                    return (
+                      variants: variants,
+                      sizeNameById: sizeNameById,
+                      colorHexById: colorHexById,
+                    );
+                  }(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const SizedBox(
+                        height: 120,
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
 
-                final variants = snapshot.data!.variants;
-                final sizeNameById = snapshot.data!.sizeNameById;
-                final colorHexById = snapshot.data!.colorHexById;
+                    final variants = snapshot.data!.variants;
+                    final sizeNameById = snapshot.data!.sizeNameById;
+                    final colorHexById = snapshot.data!.colorHexById;
 
-                final distinctColorHexes = <String>{};
-                final distinctSizeNames = <String>{};
-                for (final v in variants.where((x) => x.isActive)) {
-                  final hex = v.colorId == null ? null : colorHexById[v.colorId!];
-                  if (hex != null && hex.trim().isNotEmpty) {
-                    distinctColorHexes.add(hex.trim());
-                  }
-                  final sizeName = v.sizeId == null ? null : sizeNameById[v.sizeId!];
-                  if (sizeName != null && sizeName.trim().isNotEmpty) {
-                    distinctSizeNames.add(sizeName.trim());
-                  }
-                }
+                    final distinctColorHexes = <String>{};
+                    final distinctSizeNames = <String>{};
+                    for (final v in variants.where((x) => x.isActive)) {
+                      final hex = v.colorId == null
+                          ? null
+                          : colorHexById[v.colorId!];
+                      if (hex != null && hex.trim().isNotEmpty) {
+                        distinctColorHexes.add(hex.trim());
+                      }
+                      final sizeName = v.sizeId == null
+                          ? null
+                          : sizeNameById[v.sizeId!];
+                      if (sizeName != null && sizeName.trim().isNotEmpty) {
+                        distinctSizeNames.add(sizeName.trim());
+                      }
+                    }
 
-                final dots = distinctColorHexes
-                    .map(_tryParseHexColor)
-                    .whereType<Color>()
-                    .toList();
-                final sizeList = distinctSizeNames.toList()..sort();
+                    final dots = distinctColorHexes
+                        .map(_tryParseHexColor)
+                        .whereType<Color>()
+                        .toList();
+                    final sizeList = distinctSizeNames.toList()..sort();
 
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (dots.isNotEmpty) ...[
-                      Text('colors.title'.tr(), style: Theme.of(context).textTheme.labelMedium),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final c in dots)
-                            Container(
-                              width: 14,
-                              height: 14,
-                              decoration: BoxDecoration(
-                                color: c,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: colorScheme.outline),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    if (sizeList.isNotEmpty) ...[
-                      Text('sizes.title'.tr(), style: Theme.of(context).textTheme.labelMedium),
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final s in sizeList) Chip(label: Text(s)),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    Text('variants.title'.tr(), style: Theme.of(context).textTheme.labelMedium),
-                    const SizedBox(height: 6),
-                    SizedBox(
-                      height: 220,
-                      child: ListView.separated(
-                        itemCount: variants.length,
-                        separatorBuilder: (context, index) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final v = variants[index];
-                          final sizeName = v.sizeId == null ? null : sizeNameById[v.sizeId!];
-                          final hex = v.colorId == null ? null : colorHexById[v.colorId!];
-                          final shade = _tryParseHexColor(hex);
-
-                          final title = v.sku?.isNotEmpty == true
-                              ? v.sku!
-                              : 'product_form.variant_item_title'.tr(args: ['${v.id}']);
-
-                          return ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-                            subtitle: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (sizeName != null && sizeName.trim().isNotEmpty)
-                                  Flexible(
-                                    child: Text(
-                                      sizeName,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (dots.isNotEmpty) ...[
+                          Text(
+                            'colors.title'.tr(),
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              for (final c in dots)
+                                Container(
+                                  width: 14,
+                                  height: 14,
+                                  decoration: BoxDecoration(
+                                    color: c,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: colorScheme.outline,
                                     ),
                                   ),
-                                if (sizeName != null && sizeName.trim().isNotEmpty && shade != null)
-                                  const SizedBox(width: 8),
-                                if (shade != null)
-                                  Container(
-                                    width: 10,
-                                    height: 10,
-                                    decoration: BoxDecoration(
-                                      color: shade,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(color: colorScheme.outline),
-                                    ),
-                                  ),
-                                const Spacer(),
-                                Text(
-                                  '${'variants.stock'.tr()}: ${v.stockQuantity}',
-                                  style: Theme.of(context).textTheme.bodySmall,
                                 ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        if (sizeList.isNotEmpty) ...[
+                          Text(
+                            'sizes.title'.tr(),
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              for (final s in sizeList) Chip(label: Text(s)),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        Text(
+                          'variants.title'.tr(),
+                          style: Theme.of(context).textTheme.labelMedium,
+                        ),
+                        const SizedBox(height: 6),
+                        SizedBox(
+                          height: 220,
+                          child: ListView.separated(
+                            itemCount: variants.length,
+                            separatorBuilder: (context, index) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final v = variants[index];
+                              final sizeName = v.sizeId == null
+                                  ? null
+                                  : sizeNameById[v.sizeId!];
+                              final hex = v.colorId == null
+                                  ? null
+                                  : colorHexById[v.colorId!];
+                              final shade = _tryParseHexColor(hex);
+
+                              final title = v.sku?.isNotEmpty == true
+                                  ? v.sku!
+                                  : 'product_form.variant_item_title'.tr(
+                                      args: ['${v.id}'],
+                                    );
+
+                              return ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(
+                                  title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (sizeName != null &&
+                                        sizeName.trim().isNotEmpty)
+                                      Flexible(
+                                        child: Text(
+                                          sizeName,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    if (sizeName != null &&
+                                        sizeName.trim().isNotEmpty &&
+                                        shade != null)
+                                      const SizedBox(width: 8),
+                                    if (shade != null)
+                                      Container(
+                                        width: 10,
+                                        height: 10,
+                                        decoration: BoxDecoration(
+                                          color: shade,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: colorScheme.outline,
+                                          ),
+                                        ),
+                                      ),
+                                    const Spacer(),
+                                    Text(
+                                      '${'variants.stock'.tr()}: ${localizedQuantity(v.stockQuantity, product.measurementType)}',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodySmall,
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
           ),
           actions: [
             TextButton(
@@ -3935,7 +4993,8 @@ class _AddItemSheetState extends State<_AddItemSheet> {
             Center(
               child: Container(
                 margin: const EdgeInsets.symmetric(vertical: 8),
-                width: 40, height: 4,
+                width: 40,
+                height: 4,
                 decoration: BoxDecoration(
                   color: cs.onSurfaceVariant.withValues(alpha: 0.4),
                   borderRadius: BorderRadius.circular(2),
@@ -3958,7 +5017,8 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                           ? _selectedProduct!.name
                           : 'purchases.add_item'.tr(),
                       style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
@@ -3973,7 +5033,9 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                   decoration: InputDecoration(
                     hintText: 'purchases.search_product'.tr(),
                     prefixIcon: const Icon(LucideIcons.search),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     filled: true,
                   ),
                   onChanged: (_) => setState(() {}),
@@ -4001,25 +5063,31 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                           child: ChoiceChip(
                             label: Text('purchases.all_categories'.tr()),
                             selected: _selectedCategoryId == null,
-                            onSelected: (_) => setState(() => _selectedCategoryId = null),
+                            onSelected: (_) =>
+                                setState(() => _selectedCategoryId = null),
                             showCheckmark: false,
                             selectedColor: cs.primaryContainer,
                             visualDensity: VisualDensity.compact,
                           ),
                         ),
-                        ...categories.map((cat) => Padding(
-                              padding: const EdgeInsetsDirectional.only(end: 6),
-                              child: ChoiceChip(
-                                label: Text(cat.name),
-                                selected: _selectedCategoryId == cat.id,
-                                onSelected: (_) => setState(() {
-                                  _selectedCategoryId = _selectedCategoryId == cat.id ? null : cat.id;
-                                }),
-                                showCheckmark: false,
-                                selectedColor: cs.primaryContainer,
-                                visualDensity: VisualDensity.compact,
-                              ),
-                            )),
+                        ...categories.map(
+                          (cat) => Padding(
+                            padding: const EdgeInsetsDirectional.only(end: 6),
+                            child: ChoiceChip(
+                              label: Text(cat.name),
+                              selected: _selectedCategoryId == cat.id,
+                              onSelected: (_) => setState(() {
+                                _selectedCategoryId =
+                                    _selectedCategoryId == cat.id
+                                    ? null
+                                    : cat.id;
+                              }),
+                              showCheckmark: false,
+                              selectedColor: cs.primaryContainer,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   );
@@ -4028,10 +5096,16 @@ class _AddItemSheetState extends State<_AddItemSheet> {
               const SizedBox(height: 8),
             ] else
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Text('purchases.select_variant'.tr(),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                        color: cs.onSurfaceVariant)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: Text(
+                  'purchases.select_variant'.tr(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
               ),
             const Divider(height: 1),
             Expanded(
@@ -4049,7 +5123,10 @@ class _AddItemSheetState extends State<_AddItemSheet> {
     final cs = Theme.of(context).colorScheme;
     final currencyService = sl<CurrencyService>();
 
-    return BlocBuilder<VariantPreviewsBloc, RealtimeState<Map<int, VariantPreview>>>(
+    return BlocBuilder<
+      VariantPreviewsBloc,
+      RealtimeState<Map<int, VariantPreview>>
+    >(
       builder: (context, previewState) {
         Map<int, VariantPreview> previews = const {};
         if (previewState is RealtimeSuccess<Map<int, VariantPreview>>) {
@@ -4074,7 +5151,8 @@ class _AddItemSheetState extends State<_AddItemSheet> {
             final query = _searchController.text.toLowerCase();
             final filtered = products.where((p) {
               // Category filter
-              if (_selectedCategoryId != null && p.categoryId != _selectedCategoryId) {
+              if (_selectedCategoryId != null &&
+                  p.categoryId != _selectedCategoryId) {
                 return false;
               }
               if (query.isEmpty) return true;
@@ -4088,14 +5166,18 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(LucideIcons.searchX,
-                        size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.3)),
+                    Icon(
+                      LucideIcons.searchX,
+                      size: 48,
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.3),
+                    ),
                     const SizedBox(height: 12),
-                    Text('purchases.no_products_found'.tr(),
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium
-                            ?.copyWith(color: cs.onSurfaceVariant)),
+                    Text(
+                      'purchases.no_products_found'.tr(),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                 ),
               );
@@ -4112,8 +5194,12 @@ class _AddItemSheetState extends State<_AddItemSheet> {
               itemBuilder: (context, index) {
                 final product = filtered[index];
                 final preview = previews[product.id];
-                final sizeName = (!product.hasVariants ? preview?.sizeName?.trim() : null);
-                final colorHex = (!product.hasVariants ? preview?.colorHex?.trim() : null);
+                final sizeName = (!product.hasVariants
+                    ? preview?.sizeName?.trim()
+                    : null);
+                final colorHex = (!product.hasVariants
+                    ? preview?.colorHex?.trim()
+                    : null);
 
                 Color? shade;
                 if (colorHex != null && colorHex.isNotEmpty) {
@@ -4127,7 +5213,10 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                 }
 
                 return ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
                   leading: Container(
                     width: 40,
                     height: 40,
@@ -4136,12 +5225,17 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
-                      product.hasVariants ? LucideIcons.layers : LucideIcons.package,
+                      product.hasVariants
+                          ? LucideIcons.layers
+                          : LucideIcons.package,
                       size: 20,
                       color: cs.primary,
                     ),
                   ),
-                  title: Text(product.name, style: const TextStyle(fontWeight: FontWeight.w500)),
+                  title: Text(
+                    product.name,
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
                   subtitle: Row(
                     children: [
                       // Identifier group takes the available space so the SKU is
@@ -4153,7 +5247,10 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                               Flexible(
                                 child: Text(
                                   'SKU: ${product.sku}',
-                                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: cs.onSurfaceVariant,
+                                  ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -4164,7 +5261,10 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                               Flexible(
                                 child: Text(
                                   sizeName,
-                                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: cs.onSurfaceVariant,
+                                  ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -4186,11 +5286,21 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                       ),
                       if (!product.hasVariants) ...[
                         const SizedBox(width: 8),
-                        Icon(LucideIcons.warehouse, size: 12, color: cs.onSurfaceVariant),
+                        Icon(
+                          LucideIcons.warehouse,
+                          size: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
                         const SizedBox(width: 4),
                         Text(
-                          '${product.stockQuantity}',
-                          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                          localizedQuantity(
+                            product.stockQuantity,
+                            product.measurementType,
+                          ),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Text(
@@ -4200,7 +5310,8 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                           // purchase. Mirrors the rule used at
                           // `onItemAdded` below and in `_buildVariantSelection`.
                           currencyService.format(
-                            (product.lastPurchasePriceCents ?? product.costCents)
+                            (product.lastPurchasePriceCents ??
+                                    product.costCents)
                                 .toBigInt()
                                 .toInt(),
                           ),
@@ -4221,7 +5332,11 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                               icon: const Icon(LucideIcons.info, size: 18),
                               onPressed: () => _showVariantsInfoDialog(product),
                             ),
-                            Icon(LucideIcons.chevronRight, size: 20, color: cs.primary),
+                            Icon(
+                              LucideIcons.chevronRight,
+                              size: 20,
+                              color: cs.primary,
+                            ),
                           ],
                         )
                       : Icon(
@@ -4238,7 +5353,7 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                       widget.onItemAdded(
                         product,
                         null,
-                        _quantity,
+                        product.quantityScale,
                         product.lastPurchasePriceCents ?? product.costCents,
                       );
                     }
@@ -4258,8 +5373,9 @@ class _AddItemSheetState extends State<_AddItemSheet> {
     final currencyService = sl<CurrencyService>();
 
     return BlocProvider(
-      create: (context) => sl<ProductVariantsBloc>()
-        ..add(ProductVariantsInitialized(_selectedProduct!.id)),
+      create: (context) =>
+          sl<ProductVariantsBloc>()
+            ..add(ProductVariantsInitialized(_selectedProduct!.id)),
       child: BlocBuilder<ProductVariantsBloc, RealtimeState<List<ProductVariant>>>(
         builder: (context, state) {
           List<ProductVariant>? variants;
@@ -4273,7 +5389,9 @@ class _AddItemSheetState extends State<_AddItemSheet> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          return FutureBuilder<({Map<int, String> sizeNameById, Map<int, String?> colorHexById})>(
+          return FutureBuilder<
+            ({Map<int, String> sizeNameById, Map<int, String?> colorHexById})
+          >(
             future: () async {
               final colorRepo = sl<ProductColorRepository>();
               final sizeRepo = sl<SizeRepository>();
@@ -4288,19 +5406,23 @@ class _AddItemSheetState extends State<_AddItemSheet> {
 
               final sizeNameById = <int, String>{};
               for (final s in sizes) {
-                sizeNameById[(s as dynamic).id as int] = (s as dynamic).name as String;
+                sizeNameById[(s as dynamic).id as int] =
+                    (s as dynamic).name as String;
               }
 
               final colorHexById = <int, String?>{};
               for (final c in colors) {
-                colorHexById[(c as dynamic).id as int] = (c as dynamic).hexCode as String?;
+                colorHexById[(c as dynamic).id as int] =
+                    (c as dynamic).hexCode as String?;
               }
 
               return (sizeNameById: sizeNameById, colorHexById: colorHexById);
             }(),
             builder: (context, snapshot) {
-              final sizeNameById = snapshot.data?.sizeNameById ?? const <int, String>{};
-              final colorHexById = snapshot.data?.colorHexById ?? const <int, String?>{};
+              final sizeNameById =
+                  snapshot.data?.sizeNameById ?? const <int, String>{};
+              final colorHexById =
+                  snapshot.data?.colorHexById ?? const <int, String?>{};
 
               final variantsList = variants;
               if (variantsList == null) {
@@ -4316,12 +5438,19 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                 ),
                 itemBuilder: (context, index) {
                   final variant = variantsList[index];
-                  final sizeName = variant.sizeId == null ? null : sizeNameById[variant.sizeId!];
-                  final colorHex = variant.colorId == null ? null : colorHexById[variant.colorId!];
+                  final sizeName = variant.sizeId == null
+                      ? null
+                      : sizeNameById[variant.sizeId!];
+                  final colorHex = variant.colorId == null
+                      ? null
+                      : colorHexById[variant.colorId!];
                   final shade = _tryParseHexColor(colorHex);
 
                   return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
                     leading: Container(
                       width: 40,
                       height: 40,
@@ -4329,7 +5458,11 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                         color: cs.tertiaryContainer.withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(LucideIcons.tag, size: 18, color: cs.tertiary),
+                      child: Icon(
+                        LucideIcons.tag,
+                        size: 18,
+                        color: cs.tertiary,
+                      ),
                     ),
                     title: Text(
                       variant.sku ?? 'Variant ${variant.id}',
@@ -4341,7 +5474,10 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                           Flexible(
                             child: Text(
                               sizeName,
-                              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: cs.onSurfaceVariant,
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -4360,11 +5496,21 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                           ),
                           const SizedBox(width: 12),
                         ],
-                        Icon(LucideIcons.warehouse, size: 12, color: cs.onSurfaceVariant),
+                        Icon(
+                          LucideIcons.warehouse,
+                          size: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
                         const SizedBox(width: 4),
                         Text(
-                          '${variant.stockQuantity}',
-                          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                          localizedQuantity(
+                            variant.stockQuantity,
+                            _selectedProduct!.measurementType,
+                          ),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: cs.onSurfaceVariant,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Icon(LucideIcons.coins, size: 12, color: cs.primary),
@@ -4376,7 +5522,8 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                           // consistent and removes the variant-vs-no-variant
                           // asymmetry the user reported.
                           currencyService.format(
-                            (variant.lastPurchasePriceCents ?? variant.costCents)
+                            (variant.lastPurchasePriceCents ??
+                                    variant.costCents)
                                 .toBigInt()
                                 .toInt(),
                           ),
@@ -4388,13 +5535,17 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                         ),
                       ],
                     ),
-                    trailing: Icon(LucideIcons.plusCircle, size: 20, color: cs.primary),
+                    trailing: Icon(
+                      LucideIcons.plusCircle,
+                      size: 20,
+                      color: cs.primary,
+                    ),
                     onTap: () {
                       // GROSS supplier reference price (see picker text above).
                       widget.onItemAdded(
                         _selectedProduct!,
                         variant,
-                        _quantity,
+                        _selectedProduct!.quantityScale,
                         variant.lastPurchasePriceCents ?? variant.costCents,
                       );
                     },

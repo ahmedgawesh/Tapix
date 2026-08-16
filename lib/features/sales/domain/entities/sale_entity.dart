@@ -20,6 +20,7 @@ class SaleEntity extends Equatable {
   final String? notes;
   final DateTime saleDate;
   final DateTime? dueDate;
+  final bool taxInclusiveAtPost;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -42,6 +43,7 @@ class SaleEntity extends Equatable {
     this.notes,
     required this.saleDate,
     this.dueDate,
+    this.taxInclusiveAtPost = false,
     required this.createdAt,
     required this.updatedAt,
   }) : paidAmountCents = paidAmountCents ?? Decimal.zero;
@@ -53,15 +55,32 @@ class SaleEntity extends Equatable {
 
   Decimal get remainingCents => totalCents - paidAmountCents;
   bool get isFullyPaid => paidAmountCents >= totalCents;
-  bool get isOverdue => dueDate != null && !isFullyPaid && DateTime.now().isAfter(dueDate!);
+  bool get isOverdue =>
+      dueDate != null && !isFullyPaid && DateTime.now().isAfter(dueDate!);
 
   @override
   List<Object?> get props => [
-        id, invoiceNumber, customerId, customerName, customerPhone, employeeId,
-        subtotalCents, taxCents, discountCents, totalCents, paidAmountCents,
-        currencyId, paymentMethod, status, notes, saleDate, dueDate,
-        createdAt, updatedAt,
-      ];
+    id,
+    invoiceNumber,
+    customerId,
+    customerName,
+    customerPhone,
+    employeeId,
+    subtotalCents,
+    taxCents,
+    discountCents,
+    totalCents,
+    paidAmountCents,
+    currencyId,
+    paymentMethod,
+    status,
+    notes,
+    saleDate,
+    dueDate,
+    taxInclusiveAtPost,
+    createdAt,
+    updatedAt,
+  ];
 }
 
 class SaleItemEntity extends Equatable {
@@ -76,6 +95,8 @@ class SaleItemEntity extends Equatable {
   final String? colorHex;
   final String? sizeName;
   final int quantity;
+  final int quantityScale;
+  final String measurementType;
   final Decimal unitPriceCents;
   final Decimal subtotalCents;
   final Decimal discountCents;
@@ -97,6 +118,8 @@ class SaleItemEntity extends Equatable {
     this.colorHex,
     this.sizeName,
     required this.quantity,
+    this.quantityScale = 1,
+    this.measurementType = 'piece',
     required this.unitPriceCents,
     required this.subtotalCents,
     required this.discountCents,
@@ -122,11 +145,28 @@ class SaleItemEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id, saleId, productId, productName, variantId, variantSku, productSku,
-        colorName, colorHex, sizeName,
-        quantity, unitPriceCents, subtotalCents, discountCents,
-        taxCents, totalCents, employeeId, employeeName, createdAt,
-      ];
+    id,
+    saleId,
+    productId,
+    productName,
+    variantId,
+    variantSku,
+    productSku,
+    colorName,
+    colorHex,
+    sizeName,
+    quantity,
+    quantityScale,
+    measurementType,
+    unitPriceCents,
+    subtotalCents,
+    discountCents,
+    taxCents,
+    totalCents,
+    employeeId,
+    employeeName,
+    createdAt,
+  ];
 }
 
 class SaleReturnEntity extends Equatable {
@@ -188,12 +228,27 @@ class SaleReturnEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id, saleId, saleInvoiceNumber, customerName, customerPhone,
-        customerId, returnNumber,
-        subtotalCents, discountCents, taxCents, totalCents,
-        currencyId, status, dispositionType, refundMethod, reason,
-        returnDate, createdAt, isAdjustment, unifiedId,
-      ];
+    id,
+    saleId,
+    saleInvoiceNumber,
+    customerName,
+    customerPhone,
+    customerId,
+    returnNumber,
+    subtotalCents,
+    discountCents,
+    taxCents,
+    totalCents,
+    currencyId,
+    status,
+    dispositionType,
+    refundMethod,
+    reason,
+    returnDate,
+    createdAt,
+    isAdjustment,
+    unifiedId,
+  ];
 }
 
 class SaleReturnItemEntity extends Equatable {
@@ -201,6 +256,8 @@ class SaleReturnItemEntity extends Equatable {
   final int returnId;
   final int saleItemId;
   final int quantity;
+  final int quantityScale;
+  final String measurementType;
   final Decimal subtotalCents;
   final Decimal discountCents;
   final Decimal taxCents;
@@ -220,6 +277,8 @@ class SaleReturnItemEntity extends Equatable {
     required this.returnId,
     required this.saleItemId,
     required this.quantity,
+    this.quantityScale = 1,
+    this.measurementType = 'piece',
     Decimal? subtotalCents,
     Decimal? discountCents,
     Decimal? taxCents,
@@ -252,11 +311,26 @@ class SaleReturnItemEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id, returnId, saleItemId, quantity,
-        subtotalCents, discountCents, taxCents, refundCents,
-        reason, productName, variantSku, productSku, variantBarcode,
-        colorName, colorHex, sizeName, createdAt,
-      ];
+    id,
+    returnId,
+    saleItemId,
+    quantity,
+    quantityScale,
+    measurementType,
+    subtotalCents,
+    discountCents,
+    taxCents,
+    refundCents,
+    reason,
+    productName,
+    variantSku,
+    productSku,
+    variantBarcode,
+    colorName,
+    colorHex,
+    sizeName,
+    createdAt,
+  ];
 }
 
 class SalePaymentEntity extends Equatable {
@@ -284,9 +358,16 @@ class SalePaymentEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id, saleId, amountCents, currencyId, paymentMethod,
-        reference, notes, paymentDate, createdAt,
-      ];
+    id,
+    saleId,
+    amountCents,
+    currencyId,
+    paymentMethod,
+    reference,
+    notes,
+    paymentDate,
+    createdAt,
+  ];
 }
 
 class SaleDashboardStats extends Equatable {
@@ -316,8 +397,15 @@ class SaleDashboardStats extends Equatable {
 
   @override
   List<Object?> get props => [
-        totalCount, completedCount, voidedCount, totalSalesCents,
-        totalPaidCents, overdueCount,
-        returnsCount, totalReturnsCents, todaySalesCents, todayCount,
-      ];
+    totalCount,
+    completedCount,
+    voidedCount,
+    totalSalesCents,
+    totalPaidCents,
+    overdueCount,
+    returnsCount,
+    totalReturnsCents,
+    todaySalesCents,
+    todayCount,
+  ];
 }

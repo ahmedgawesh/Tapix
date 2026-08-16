@@ -9,7 +9,9 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../../../core/database/daos/adjustment_return_dao.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/cashier_shift_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
 import '../../../../core/services/commissions/commission_service.dart';
 import '../../../../core/services/loyalty/loyalty_points_service.dart';
@@ -34,6 +36,7 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
   SaleReturnAdjustment? _returnEntity;
   String? _customerName;
   String? _employeeName;
+  CashierShiftView? _cashierShift;
   List<SaleAdjReturnItemWithDetails> _returnItems = [];
   bool _loading = true;
   StreamSubscription<List<SaleAdjReturnItemWithDetails>>? _itemsSub;
@@ -63,9 +66,9 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
     if (ret.customerId != null) {
       try {
         final db = sl<AppDatabase>();
-        final customer = await (db.select(db.customers)
-              ..where((c) => c.id.equals(ret.customerId!)))
-            .getSingleOrNull();
+        final customer = await (db.select(
+          db.customers,
+        )..where((c) => c.id.equals(ret.customerId!))).getSingleOrNull();
         customerName = customer?.name;
       } catch (_) {}
     }
@@ -75,17 +78,20 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
     if (ret.employeeId != null) {
       try {
         final db = sl<AppDatabase>();
-        final employee = await (db.select(db.employees)
-              ..where((e) => e.id.equals(ret.employeeId!)))
-            .getSingleOrNull();
+        final employee = await (db.select(
+          db.employees,
+        )..where((e) => e.id.equals(ret.employeeId!))).getSingleOrNull();
         employeeName = employee?.name;
       } catch (_) {}
     }
 
+    final cashierShift = await sl<CashierShiftService>()
+        .getSaleAdjustmentReturnShift(widget.returnId);
+
     _itemsSub?.cancel();
-    _itemsSub = dao
-        .watchSaleAdjReturnItemsWithDetails(widget.returnId)
-        .listen((items) {
+    _itemsSub = dao.watchSaleAdjReturnItemsWithDetails(widget.returnId).listen((
+      items,
+    ) {
       if (mounted) {
         setState(() {
           _returnItems = items;
@@ -98,6 +104,7 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
         _returnEntity = ret;
         _customerName = customerName;
         _employeeName = employeeName;
+        _cashierShift = cashierShift;
         _loading = false;
       });
     }
@@ -123,11 +130,9 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(LucideIcons.alertCircle,
-                  size: 64, color: colorScheme.error),
+              Icon(LucideIcons.alertCircle, size: 64, color: colorScheme.error),
               const SizedBox(height: 16),
-              Text('sales.not_found'.tr(),
-                  style: theme.textTheme.titleLarge),
+              Text('sales.not_found'.tr(), style: theme.textTheme.titleLarge),
             ],
           ),
         ),
@@ -160,7 +165,8 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
                   child: ListTile(
                     leading: const Icon(LucideIcons.printer),
                     title: Text('sales.print_invoice'.tr()),
-                    dense: true, contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
                   ),
                 ),
                 PopupMenuItem(
@@ -168,25 +174,37 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
                   child: ListTile(
                     leading: const Icon(LucideIcons.share2),
                     title: Text('sales.share_invoice'.tr()),
-                    dense: true, contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
                   ),
                 ),
                 const PopupMenuDivider(),
                 PopupMenuItem(
                   value: 'void',
-                  child: Builder(builder: (context) {
-                    final authState = context.read<AuthBloc>().state;
-                    final canVoid = authState is AuthAuthenticated &&
-                        sl<PermissionService>()
-                            .hasPermission(authState.user, Permissions.editTransactions);
-                    if (!canVoid) return const SizedBox.shrink();
-                    return ListTile(
-                      leading: Icon(LucideIcons.ban, color: colorScheme.error),
-                      title: Text('sales.void_return'.tr(),
-                          style: TextStyle(color: colorScheme.error)),
-                      dense: true, contentPadding: EdgeInsets.zero,
-                    );
-                  }),
+                  child: Builder(
+                    builder: (context) {
+                      final authState = context.read<AuthBloc>().state;
+                      final canVoid =
+                          authState is AuthAuthenticated &&
+                          sl<PermissionService>().hasPermission(
+                            authState.user,
+                            Permissions.editTransactions,
+                          );
+                      if (!canVoid) return const SizedBox.shrink();
+                      return ListTile(
+                        leading: Icon(
+                          LucideIcons.ban,
+                          color: colorScheme.error,
+                        ),
+                        title: Text(
+                          'sales.void_return'.tr(),
+                          style: TextStyle(color: colorScheme.error),
+                        ),
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
@@ -241,10 +259,12 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
         employeeName: _employeeName,
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(
-        content: Text(e.toString()),
-        behavior: SnackBarBehavior.floating,
-      ));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -261,10 +281,12 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
         employeeName: _employeeName,
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(
-        content: Text(e.toString()),
-        behavior: SnackBarBehavior.floating,
-      ));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(e.toString()),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -333,11 +355,16 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
   // RETURN INFO CARD
   // ═══════════════════════════════════════════════════════
   Widget _buildReturnInfoCard(
-      BuildContext context, SaleReturnAdjustment ret, CurrencyService cs) {
+    BuildContext context,
+    SaleReturnAdjustment ret,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    final statusColor = ret.status == 'voided' ? colorScheme.error : Colors.green;
+    final statusColor = ret.status == 'voided'
+        ? colorScheme.error
+        : Colors.green;
     final statusLabel = ret.status == 'voided'
         ? 'sales.status_voided'.tr()
         : 'sales.status_posted'.tr();
@@ -361,13 +388,16 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
                     gradient: LinearGradient(
                       colors: [
                         colorScheme.tertiary,
-                        colorScheme.tertiary.withValues(alpha: 0.7)
+                        colorScheme.tertiary.withValues(alpha: 0.7),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(LucideIcons.rotateCcw,
-                      size: 18, color: Colors.white),
+                  child: const Icon(
+                    LucideIcons.rotateCcw,
+                    size: 18,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -376,14 +406,19 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
                     children: [
                       Row(
                         children: [
-                          Text('sales.return_number'.tr(),
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
-                                  letterSpacing: 0.5)),
+                          Text(
+                            'sales.return_number'.tr(),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
                           const SizedBox(width: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 1),
+                              horizontal: 6,
+                              vertical: 1,
+                            ),
                             decoration: BoxDecoration(
                               color: colorScheme.tertiaryContainer,
                               borderRadius: BorderRadius.circular(6),
@@ -399,57 +434,93 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
                           ),
                         ],
                       ),
-                      Text(ret.returnNumber,
-                          style: theme.textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w600)),
+                      Text(
+                        ret.returnNumber,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border:
-                        Border.all(color: statusColor.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.3),
+                    ),
                   ),
-                  child: Text(statusLabel,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: statusColor, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    statusLabel,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: statusColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ],
             ),
             Divider(
-                height: 24,
-                color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
-            _infoRow(theme, 'sales.date'.tr(),
-                DateFormat.yMMMd().format(ret.returnDate)),
+              height: 24,
+              color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+            ),
+            _infoRow(
+              theme,
+              'sales.date'.tr(),
+              DateFormat.yMMMd().format(ret.returnDate),
+            ),
+            if (_cashierShift != null) ...[
+              const SizedBox(height: 8),
+              _infoRow(
+                theme,
+                'cashier_shifts.cashier'.tr(),
+                _cashierShift!.cashierName,
+              ),
+              const SizedBox(height: 8),
+              _infoRow(
+                theme,
+                'cashier_shifts.shift_number'.tr(),
+                _cashierShift!.shift.shiftNumber,
+              ),
+            ],
             const SizedBox(height: 8),
             if (ret.returnMode != null) ...[
-              _infoRow(theme, 'returns.mode'.tr(),
-                  'returns.mode_${ret.returnMode}'.tr()),
+              _infoRow(
+                theme,
+                'returns.mode'.tr(),
+                'returns.mode_${ret.returnMode}'.tr(),
+              ),
               const SizedBox(height: 8),
             ],
             // Parse reason tag out of notes (stored as `[REASON:code] notes`).
             if (ret.notes != null && ret.notes!.isNotEmpty) ...[
-              Builder(builder: (_) {
-                final parsed = parseAdjReturnNotes(ret.notes);
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (parsed.reasonCode != null) ...[
-                      _infoRow(theme, 'returns.reason_label'.tr(),
-                          adjReturnReasonLabel(parsed.reasonCode)),
-                      const SizedBox(height: 8),
+              Builder(
+                builder: (_) {
+                  final parsed = parseAdjReturnNotes(ret.notes);
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (parsed.reasonCode != null) ...[
+                        _infoRow(
+                          theme,
+                          'returns.reason_label'.tr(),
+                          adjReturnReasonLabel(parsed.reasonCode),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      if (parsed.userNotes != null) ...[
+                        _infoRow(theme, 'common.notes'.tr(), parsed.userNotes!),
+                        const SizedBox(height: 8),
+                      ],
                     ],
-                    if (parsed.userNotes != null) ...[
-                      _infoRow(theme, 'common.notes'.tr(), parsed.userNotes!),
-                      const SizedBox(height: 8),
-                    ],
-                  ],
-                );
-              }),
+                  );
+                },
+              ),
             ],
           ],
         ),
@@ -460,8 +531,7 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
   // ═══════════════════════════════════════════════════════
   // CUSTOMER CARD
   // ═══════════════════════════════════════════════════════
-  Widget _buildCustomerCard(
-      BuildContext context, SaleReturnAdjustment ret) {
+  Widget _buildCustomerCard(BuildContext context, SaleReturnAdjustment ret) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isWalkIn = ret.customerId == null;
@@ -490,24 +560,33 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
                 borderRadius: BorderRadius.circular(10),
               ),
               alignment: Alignment.center,
-              child: Text(initial,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                      color: colorScheme.onPrimaryContainer,
-                      fontWeight: FontWeight.bold)),
+              child: Text(
+                initial,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: colorScheme.onPrimaryContainer,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('sales.customer'.tr(),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant)),
-                  Text(displayName,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w500,
-                          color: isWalkIn ? colorScheme.onSurfaceVariant : null,
-                          fontStyle: isWalkIn ? FontStyle.italic : null)),
+                  Text(
+                    'sales.customer'.tr(),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  Text(
+                    displayName,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: isWalkIn ? colorScheme.onSurfaceVariant : null,
+                      fontStyle: isWalkIn ? FontStyle.italic : null,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -523,7 +602,9 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
   Widget _buildSalespersonCard(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final initial = _employeeName!.isNotEmpty ? _employeeName![0].toUpperCase() : '?';
+    final initial = _employeeName!.isNotEmpty
+        ? _employeeName![0].toUpperCase()
+        : '?';
 
     return Card(
       elevation: 0,
@@ -543,22 +624,31 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
                 borderRadius: BorderRadius.circular(10),
               ),
               alignment: Alignment.center,
-              child: Text(initial,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                      color: colorScheme.onTertiaryContainer,
-                      fontWeight: FontWeight.bold)),
+              child: Text(
+                initial,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: colorScheme.onTertiaryContainer,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('sales.salesperson'.tr(),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant)),
-                  Text(_employeeName!,
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(fontWeight: FontWeight.w500)),
+                  Text(
+                    'sales.salesperson'.tr(),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  Text(
+                    _employeeName!,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -572,7 +662,9 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
   // REFUND METHOD CARD
   // ═══════════════════════════════════════════════════════
   Widget _buildRefundMethodCard(
-      BuildContext context, SaleReturnAdjustment ret) {
+    BuildContext context,
+    SaleReturnAdjustment ret,
+  ) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
@@ -607,13 +699,15 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
               child: Icon(LucideIcons.creditCard, size: 16, color: cs.primary),
             ),
             const SizedBox(width: 10),
-            Text('sales.refund_method'.tr(),
-                style: theme.textTheme.titleSmall
-                    ?.copyWith(fontWeight: FontWeight.w600)),
+            Text(
+              'sales.refund_method'.tr(),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             const Spacer(),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: cs.primaryContainer.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(10),
@@ -624,10 +718,12 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
                   Icon(methodIcon, size: 16, color: cs.primary),
                   const SizedBox(width: 6),
                   Text(
-                      'sales.refund_method_${ret.refundMethod}'.tr(),
-                      style: theme.textTheme.labelMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: cs.primary)),
+                    'sales.refund_method_${ret.refundMethod}'.tr(),
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: cs.primary,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -640,8 +736,11 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
   // ═══════════════════════════════════════════════════════
   // RETURN ITEMS CARD
   // ═══════════════════════════════════════════════════════
-  Widget _buildReturnItemsCard(BuildContext context,
-      List<SaleAdjReturnItemWithDetails> items, CurrencyService cs) {
+  Widget _buildReturnItemsCard(
+    BuildContext context,
+    List<SaleAdjReturnItemWithDetails> items,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -650,7 +749,8 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -665,30 +765,41 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
                     gradient: LinearGradient(
                       colors: [
                         colorScheme.tertiary,
-                        colorScheme.tertiary.withValues(alpha: 0.7)
+                        colorScheme.tertiary.withValues(alpha: 0.7),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(LucideIcons.undo2,
-                      size: 16, color: Colors.white),
+                  child: const Icon(
+                    LucideIcons.undo2,
+                    size: 16,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('sales.return_items'.tr(),
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600)),
+                Text(
+                  'sales.return_items'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(width: 8),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: colorScheme.tertiaryContainer,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text('${items.length}',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: colorScheme.onTertiaryContainer,
-                          fontWeight: FontWeight.bold)),
+                  child: Text(
+                    '${items.length}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onTertiaryContainer,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -697,9 +808,12 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
               Center(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Text('sales.no_items_to_return'.tr(),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant)),
+                  child: Text(
+                    'sales.no_items_to_return'.tr(),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ),
               )
             else
@@ -708,9 +822,9 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: items.length,
                 separatorBuilder: (context2, index2) => Divider(
-                    height: 1,
-                    color:
-                        colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  height: 1,
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                ),
                 itemBuilder: (context, index) {
                   final d = items[index];
                   final productName = d.product.name;
@@ -732,79 +846,102 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     child: Row(
                       children: [
-                        if (d.colorHex != null &&
-                            d.colorHex!.isNotEmpty)
+                        if (d.colorHex != null && d.colorHex!.isNotEmpty)
                           Container(
                             width: 32,
                             height: 32,
                             decoration: BoxDecoration(
-                              color: Color(int.parse(
+                              color: Color(
+                                int.parse(
                                   'FF${d.colorHex!.replaceAll('#', '')}',
-                                  radix: 16)),
+                                  radix: 16,
+                                ),
+                              ),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                  color: colorScheme.outlineVariant),
+                                color: colorScheme.outlineVariant,
+                              ),
                             ),
                             alignment: Alignment.center,
-                            child: Text('${index + 1}',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    shadows: [
-                                      const Shadow(
-                                          blurRadius: 2,
-                                          color: Colors.black54)
-                                    ])),
+                            child: Text(
+                              '${index + 1}',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                shadows: [
+                                  const Shadow(
+                                    blurRadius: 2,
+                                    color: Colors.black54,
+                                  ),
+                                ],
+                              ),
+                            ),
                           )
                         else
                           Container(
                             width: 32,
                             height: 32,
                             decoration: BoxDecoration(
-                              color: colorScheme.tertiaryContainer
-                                  .withValues(alpha: 0.3),
+                              color: colorScheme.tertiaryContainer.withValues(
+                                alpha: 0.3,
+                              ),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             alignment: Alignment.center,
-                            child: Text('${index + 1}',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                    color: colorScheme.tertiary,
-                                    fontWeight: FontWeight.bold)),
+                            child: Text(
+                              '${index + 1}',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: colorScheme.tertiary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(productName,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                      fontWeight: FontWeight.w500)),
-                              if (variantLine != null)
-                                Text(variantLine,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                        color: colorScheme.primary,
-                                        fontSize: 11)),
                               Text(
-                                  '${'sales.return_qty'.tr()}: ${d.item.quantity}',
+                                productName,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              if (variantLine != null)
+                                Text(
+                                  variantLine,
                                   style: theme.textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.onSurfaceVariant,
-                                      fontSize: 11)),
+                                    color: colorScheme.primary,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              Text(
+                                '${'sales.return_qty'.tr()}: ${localizedQuantity(d.item.quantity, d.item.measurementType)}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                  fontSize: 11,
+                                ),
+                              ),
                               if (d.item.reason != null &&
                                   d.item.reason!.isNotEmpty)
-                                Text(d.item.reason!,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                        color: colorScheme.onSurfaceVariant,
-                                        fontStyle: FontStyle.italic,
-                                        fontSize: 10)),
+                                Text(
+                                  d.item.reason!,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                    fontStyle: FontStyle.italic,
+                                    fontSize: 10,
+                                  ),
+                                ),
                             ],
                           ),
                         ),
                         Text(
-                            cs.format(
-                                d.item.totalCents.toBigInt().toInt()),
-                            style: theme.textTheme.titleSmall?.copyWith(
-                                color: colorScheme.error,
-                                fontWeight: FontWeight.bold)),
+                          cs.format(d.item.totalCents.toBigInt().toInt()),
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: colorScheme.error,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ],
                     ),
                   );
@@ -820,7 +957,10 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
   // TOTAL CARD
   // ═══════════════════════════════════════════════════════
   Widget _buildTotalCard(
-      BuildContext context, SaleReturnAdjustment ret, CurrencyService cs) {
+    BuildContext context,
+    SaleReturnAdjustment ret,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -829,8 +969,10 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
     final tax = ret.taxCents.toBigInt().toInt();
     final total = ret.totalCents.toBigInt().toInt();
     final totalItems = _returnItems.length;
-    final totalPieces =
-        _returnItems.fold<int>(0, (sum, d) => sum + d.item.quantity);
+    final totalPieces = _returnItems.fold<int>(
+      0,
+      (sum, d) => sum + d.item.quantity,
+    );
 
     return Card(
       elevation: 0,
@@ -849,30 +991,46 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
             _totalRow(theme, 'sales.total_items_count'.tr(), '$totalItems'),
             _totalRow(theme, 'sales.total_pieces_count'.tr(), '$totalPieces'),
             Divider(
-                height: 16,
-                color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+              height: 16,
+              color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+            ),
             if (subtotal > 0)
               _totalRow(theme, 'sales.subtotal'.tr(), cs.format(subtotal)),
             if (discount > 0)
-              _totalRow(theme, 'sales.discount'.tr(), '-${cs.format(discount)}',
-                  valueColor: Colors.orange),
+              _totalRow(
+                theme,
+                'sales.discount'.tr(),
+                '-${cs.format(discount)}',
+                valueColor: Colors.orange,
+              ),
             if (tax > 0)
-              _totalRow(theme, 'sales.tax'.tr(), '+${cs.format(tax)}',
-                  valueColor: colorScheme.tertiary),
+              _totalRow(
+                theme,
+                'sales.tax'.tr(),
+                '+${cs.format(tax)}',
+                valueColor: colorScheme.tertiary,
+              ),
             if (subtotal > 0 || discount > 0 || tax > 0)
               Divider(
-                  height: 16,
-                  color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                height: 16,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+              ),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('common.total'.tr(),
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w700)),
-                Text(cs.format(total),
-                    style: theme.textTheme.titleMedium?.copyWith(
-                        color: colorScheme.error,
-                        fontWeight: FontWeight.bold)),
+                Text(
+                  'common.total'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  cs.format(total),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: colorScheme.error,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
             ),
           ],
@@ -881,19 +1039,30 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
     );
   }
 
-  Widget _totalRow(ThemeData theme, String label, String value,
-      {Color? valueColor}) {
+  Widget _totalRow(
+    ThemeData theme,
+    String label,
+    String value, {
+    Color? valueColor,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant)),
-          Text(value,
-              style: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w600, color: valueColor)),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          Text(
+            value,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: valueColor,
+            ),
+          ),
         ],
       ),
     );
@@ -905,14 +1074,20 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
       children: [
         SizedBox(
           width: 120,
-          child: Text(label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant)),
+          child: Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
         ),
         Expanded(
-          child: Text(value,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(fontWeight: FontWeight.w500)),
+          child: Text(
+            value,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ),
       ],
     );

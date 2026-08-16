@@ -23,19 +23,26 @@ class NotificationSettingsSection extends StatelessWidget {
               title: Text('app_settings.notifications.low_stock'.tr()),
               subtitle: Text('app_settings.notifications.low_stock_desc'.tr()),
               value: s.lowStockNotifications,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(lowStockNotifications: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(lowStockNotifications: v)),
             ),
             SwitchListTile(
               title: Text('app_settings.notifications.daily_summary'.tr()),
-              subtitle: Text('app_settings.notifications.daily_summary_desc'.tr()),
+              subtitle: Text(
+                'app_settings.notifications.daily_summary_desc'.tr(),
+              ),
               value: s.dailySalesSummary,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(dailySalesSummary: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(dailySalesSummary: v)),
             ),
             SwitchListTile(
               title: Text('app_settings.notifications.payment_reminders'.tr()),
-              subtitle: Text('app_settings.notifications.payment_reminders_desc'.tr()),
+              subtitle: Text(
+                'app_settings.notifications.payment_reminders_desc'.tr(),
+              ),
               value: s.paymentReminders,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(paymentReminders: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(paymentReminders: v)),
             ),
           ],
         );

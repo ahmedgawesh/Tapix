@@ -134,7 +134,8 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
   Stream<List<Product>> get dataStream {
     // For filter-based views, use DB streams so UI updates instantly
     // (especially for stock status which depends on variants).
-    final hasDbFilters = _currentCategoryFilter != null || _currentStockStatusFilter != null;
+    final hasDbFilters =
+        _currentCategoryFilter != null || _currentStockStatusFilter != null;
     if (hasDbFilters) {
       // Get global lowStockThreshold from settings (default 5 if not available)
       final threshold = _getLowStockThreshold();
@@ -146,9 +147,7 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
       );
     }
 
-    return _repository.watchAllProducts(
-      isActive: _currentIsActiveFilter,
-    );
+    return _repository.watchAllProducts(isActive: _currentIsActiveFilter);
   }
 
   int _getLowStockThreshold() {
@@ -216,7 +215,8 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     }).toList();
 
     await performOptimisticUpdate(
-      operationId: 'update_${event.product.id}_${DateTime.now().millisecondsSinceEpoch}',
+      operationId:
+          'update_${event.product.id}_${DateTime.now().millisecondsSinceEpoch}',
       optimisticData: optimisticProducts,
       operation: () => _repository.updateProduct(event.product),
     );
@@ -234,12 +234,13 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
         .toList();
 
     // Route through smart-delete so referenced products are deactivated
-     // (soft-delete) rather than triggering a SQL FK restrict failure. This
-     // matches the UI flow in `product_form_screen._handleSmartDelete` and
-     // mirrors QuickBooks/Xero/Odoo: history-bearing rows must never be
-     // hard-deleted because audit trail and journal entries depend on them.
+    // (soft-delete) rather than triggering a SQL FK restrict failure. This
+    // matches the UI flow in `product_form_screen._handleSmartDelete` and
+    // mirrors QuickBooks/Xero/Odoo: history-bearing rows must never be
+    // hard-deleted because audit trail and journal entries depend on them.
     await performOptimisticUpdate(
-      operationId: 'delete_${event.productId}_${DateTime.now().millisecondsSinceEpoch}',
+      operationId:
+          'delete_${event.productId}_${DateTime.now().millisecondsSinceEpoch}',
       optimisticData: optimisticProducts,
       operation: () => _repository.smartDeleteProduct(event.productId),
     );
@@ -295,12 +296,16 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     if (_currentSearchQuery == null) {
       _hasMoreData = true;
       _isLoadingMore = false;
-      debugPrint('ProductsBloc.search cleared -> refresh (hasMoreData=$_hasMoreData)');
+      debugPrint(
+        'ProductsBloc.search cleared -> refresh (hasMoreData=$_hasMoreData)',
+      );
       refresh();
       return;
     }
 
-    debugPrint('ProductsBloc.search active -> disable pagination (hasMoreData=$_hasMoreData)');
+    debugPrint(
+      'ProductsBloc.search active -> disable pagination (hasMoreData=$_hasMoreData)',
+    );
     emit(RealtimeLoading<List<Product>>(previousData: currentData));
 
     try {
@@ -324,20 +329,25 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     debugPrint(
       'ProductsBloc.filter categoryId=${event.categoryId} stockStatus=${event.stockStatus} currentData=${currentData?.length ?? 0}',
     );
-    if (event.categoryId != null || (event.categoryId == null && _currentCategoryFilter != null)) {
+    if (event.categoryId != null ||
+        (event.categoryId == null && _currentCategoryFilter != null)) {
       _currentCategoryFilter = event.categoryId;
     }
-    if (event.stockStatus != null || (event.stockStatus == null && _currentStockStatusFilter != null)) {
+    if (event.stockStatus != null ||
+        (event.stockStatus == null && _currentStockStatusFilter != null)) {
       _currentStockStatusFilter = event.stockStatus;
     }
-    if (event.isActive != null || (event.isActive == null && _currentIsActiveFilter != null)) {
+    if (event.isActive != null ||
+        (event.isActive == null && _currentIsActiveFilter != null)) {
       _currentIsActiveFilter = event.isActive;
     }
     _currentPage = 0;
     _hasMoreData = true;
     _isLoadingMore = false;
 
-    debugPrint('ProductsBloc.filter -> emit loading (hasMoreData=$_hasMoreData page=$_currentPage)');
+    debugPrint(
+      'ProductsBloc.filter -> emit loading (hasMoreData=$_hasMoreData page=$_currentPage)',
+    );
     // With DB streams, refresh will re-subscribe and emit latest data.
     // Pagination is handled only in the unfiltered list.
     emit(RealtimeLoading<List<Product>>(previousData: currentData));

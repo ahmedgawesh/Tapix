@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/measurement/measurement.dart';
 import '../widgets/report_date_range.dart';
 import 'customer_invoices_report_bloc.dart' show InvoiceLineItem;
 
@@ -124,8 +125,8 @@ class SupplierReturnsReportBloc
   int? _supplierId;
 
   SupplierReturnsReportBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
   int? get supplierId => _supplierId;
@@ -168,22 +169,26 @@ class SupplierReturnsReportBloc
 
   Future<SupplierReturnsData> _loadData() async {
     // ── Supplier list for the selector ──
-    final supplierRows = await _db.customSelect(
-      '''
+    final supplierRows = await _db
+        .customSelect(
+          '''
       SELECT s.id, s.name, s.phone, s.balance_cents
       FROM suppliers s WHERE s.is_active = 1
       ORDER BY s.name ASC
       ''',
-      readsFrom: {_db.suppliers},
-    ).get();
+          readsFrom: {_db.suppliers},
+        )
+        .get();
 
     final suppliers = supplierRows
-        .map((r) => SupplierReturnOption(
-              id: r.read<int>('id'),
-              name: r.read<String>('name'),
-              phone: r.readNullable<String>('phone'),
-              balanceCents: r.read<int>('balance_cents'),
-            ))
+        .map(
+          (r) => SupplierReturnOption(
+            id: r.read<int>('id'),
+            name: r.read<String>('name'),
+            phone: r.readNullable<String>('phone'),
+            balanceCents: r.read<int>('balance_cents'),
+          ),
+        )
         .toList();
 
     if (_supplierId == null) {
@@ -191,11 +196,13 @@ class SupplierReturnsReportBloc
     }
 
     // ── Supplier info ──
-    final sRows = await _db.customSelect(
-      'SELECT name, phone, address FROM suppliers WHERE id = ?',
-      variables: [Variable.withInt(_supplierId!)],
-      readsFrom: {_db.suppliers},
-    ).get();
+    final sRows = await _db
+        .customSelect(
+          'SELECT name, phone, address FROM suppliers WHERE id = ?',
+          variables: [Variable.withInt(_supplierId!)],
+          readsFrom: {_db.suppliers},
+        )
+        .get();
     if (sRows.isEmpty) {
       return SupplierReturnsData(dateRange: _dateRange, suppliers: suppliers);
     }
@@ -206,14 +213,17 @@ class SupplierReturnsReportBloc
       _dateRange.endDate.year,
       _dateRange.endDate.month,
       _dateRange.endDate.day,
-      23, 59, 59,
+      23,
+      59,
+      59,
     ).toIso8601String();
 
     final returns = <SupplierReturnInvoice>[];
 
     // ── Linked returns (purchase_returns via purchases) ──
-    final linkedRows = await _db.customSelect(
-      '''
+    final linkedRows = await _db
+        .customSelect(
+          '''
       SELECT pr.id, pr.return_number, pr.subtotal_cents, pr.discount_cents,
              pr.tax_cents, pr.total_cents, pr.refund_method, pr.status,
              pr.return_date, p.purchase_number AS original_invoice
@@ -225,36 +235,40 @@ class SupplierReturnsReportBloc
         AND pr.return_date <= ?
       ORDER BY pr.return_date ASC, pr.id ASC
       ''',
-      variables: [
-        Variable.withInt(_supplierId!),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.purchaseReturns, _db.purchases},
-    ).get();
+          variables: [
+            Variable.withInt(_supplierId!),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {_db.purchaseReturns, _db.purchases},
+        )
+        .get();
 
     for (final row in linkedRows) {
       final returnId = row.read<int>('id');
       final items = await _loadLinkedReturnItems(returnId);
-      returns.add(SupplierReturnInvoice(
-        id: returnId,
-        returnNumber: row.read<String>('return_number'),
-        isLinked: true,
-        originalInvoiceNumber: row.readNullable<String>('original_invoice'),
-        date: DateTime.parse(row.read<String>('return_date')),
-        subtotalCents: row.read<int>('subtotal_cents'),
-        discountCents: row.read<int>('discount_cents'),
-        taxCents: row.read<int>('tax_cents'),
-        totalCents: row.read<int>('total_cents'),
-        refundMethod: row.read<String>('refund_method'),
-        status: row.read<String>('status'),
-        items: items,
-      ));
+      returns.add(
+        SupplierReturnInvoice(
+          id: returnId,
+          returnNumber: row.read<String>('return_number'),
+          isLinked: true,
+          originalInvoiceNumber: row.readNullable<String>('original_invoice'),
+          date: DateTime.parse(row.read<String>('return_date')),
+          subtotalCents: row.read<int>('subtotal_cents'),
+          discountCents: row.read<int>('discount_cents'),
+          taxCents: row.read<int>('tax_cents'),
+          totalCents: row.read<int>('total_cents'),
+          refundMethod: row.read<String>('refund_method'),
+          status: row.read<String>('status'),
+          items: items,
+        ),
+      );
     }
 
     // ── Adjustment (unlinked) returns (purchase_return_adjustments) ──
-    final adjRows = await _db.customSelect(
-      '''
+    final adjRows = await _db
+        .customSelect(
+          '''
       SELECT pra.id, pra.return_number, pra.subtotal_cents, pra.discount_cents,
              pra.tax_cents, pra.total_cents, pra.refund_method, pra.status,
              pra.return_date
@@ -265,30 +279,33 @@ class SupplierReturnsReportBloc
         AND pra.return_date <= ?
       ORDER BY pra.return_date ASC, pra.id ASC
       ''',
-      variables: [
-        Variable.withInt(_supplierId!),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.purchaseReturnAdjustments},
-    ).get();
+          variables: [
+            Variable.withInt(_supplierId!),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {_db.purchaseReturnAdjustments},
+        )
+        .get();
 
     for (final row in adjRows) {
       final returnId = row.read<int>('id');
       final items = await _loadAdjustmentReturnItems(returnId);
-      returns.add(SupplierReturnInvoice(
-        id: returnId,
-        returnNumber: row.read<String>('return_number'),
-        isLinked: false,
-        date: DateTime.parse(row.read<String>('return_date')),
-        subtotalCents: row.read<int>('subtotal_cents'),
-        discountCents: row.read<int>('discount_cents'),
-        taxCents: row.read<int>('tax_cents'),
-        totalCents: row.read<int>('total_cents'),
-        refundMethod: row.read<String>('refund_method'),
-        status: row.read<String>('status'),
-        items: items,
-      ));
+      returns.add(
+        SupplierReturnInvoice(
+          id: returnId,
+          returnNumber: row.read<String>('return_number'),
+          isLinked: false,
+          date: DateTime.parse(row.read<String>('return_date')),
+          subtotalCents: row.read<int>('subtotal_cents'),
+          discountCents: row.read<int>('discount_cents'),
+          taxCents: row.read<int>('tax_cents'),
+          totalCents: row.read<int>('total_cents'),
+          refundMethod: row.read<String>('refund_method'),
+          status: row.read<String>('status'),
+          items: items,
+        ),
+      );
     }
 
     // ── Chronological merge ──
@@ -330,12 +347,16 @@ class SupplierReturnsReportBloc
   }
 
   Future<List<InvoiceLineItem>> _loadLinkedReturnItems(int returnId) async {
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT p.name AS product_name,
+             COALESCE(pv.sku, p.sku) AS sku,
              pc.name AS color_name,
              sz.name AS size_name,
              pri.quantity AS quantity,
+             pri.quantity_scale AS quantity_scale,
+             pri.measurement_type AS measurement_type,
              pri.refund_cents AS refund_cents
       FROM purchase_return_items pri
       INNER JOIN purchase_items pit ON pit.id = pri.purchase_item_id
@@ -346,28 +367,36 @@ class SupplierReturnsReportBloc
       WHERE pri.return_id = ?
       ORDER BY pri.id ASC
       ''',
-      variables: [Variable.withInt(returnId)],
-      readsFrom: {
-        _db.purchaseReturnItems,
-        _db.purchaseItems,
-        _db.products,
-        _db.productVariants,
-        _db.productColors,
-        _db.sizes,
-      },
-    ).get();
+          variables: [Variable.withInt(returnId)],
+          readsFrom: {
+            _db.purchaseReturnItems,
+            _db.purchaseItems,
+            _db.products,
+            _db.productVariants,
+            _db.productColors,
+            _db.sizes,
+          },
+        )
+        .get();
 
     return rows.map((r) {
       final quantity = r.read<int>('quantity');
       final refund = r.read<int>('refund_cents');
-      final unit = quantity > 0 ? (refund / quantity).round() : refund;
+      final quantityScale = r.read<int>('quantity_scale');
+      final unit = MeasuredAmount.unitCentsFromTotal(
+        totalCents: refund,
+        quantity: quantity,
+        quantityScale: quantityScale,
+      );
       return InvoiceLineItem(
         productName: r.read<String>('product_name'),
+        sku: r.readNullable<String>('sku'),
         variantLabel: _variantLabel(
           r.readNullable<String>('color_name'),
           r.readNullable<String>('size_name'),
         ),
         quantity: quantity,
+        measurementType: r.read<String>('measurement_type'),
         unitPriceCents: unit,
         totalCents: refund,
       );
@@ -375,12 +404,15 @@ class SupplierReturnsReportBloc
   }
 
   Future<List<InvoiceLineItem>> _loadAdjustmentReturnItems(int returnId) async {
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT p.name AS product_name,
+             COALESCE(pv.sku, p.sku) AS sku,
              pc.name AS color_name,
              sz.name AS size_name,
              pria.quantity AS quantity,
+             pria.measurement_type AS measurement_type,
              pria.unit_price_cents AS unit_price_cents,
              pria.total_cents AS total_cents
       FROM purchase_return_adjustment_items pria
@@ -391,24 +423,27 @@ class SupplierReturnsReportBloc
       WHERE pria.return_id = ?
       ORDER BY pria.id ASC
       ''',
-      variables: [Variable.withInt(returnId)],
-      readsFrom: {
-        _db.purchaseReturnAdjustmentItems,
-        _db.products,
-        _db.productVariants,
-        _db.productColors,
-        _db.sizes,
-      },
-    ).get();
+          variables: [Variable.withInt(returnId)],
+          readsFrom: {
+            _db.purchaseReturnAdjustmentItems,
+            _db.products,
+            _db.productVariants,
+            _db.productColors,
+            _db.sizes,
+          },
+        )
+        .get();
 
     return rows.map((r) {
       return InvoiceLineItem(
         productName: r.read<String>('product_name'),
+        sku: r.readNullable<String>('sku'),
         variantLabel: _variantLabel(
           r.readNullable<String>('color_name'),
           r.readNullable<String>('size_name'),
         ),
         quantity: r.read<int>('quantity'),
+        measurementType: r.read<String>('measurement_type'),
         unitPriceCents: r.read<int>('unit_price_cents'),
         totalCents: r.read<int>('total_cents'),
       );

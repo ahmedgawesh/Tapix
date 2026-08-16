@@ -19,6 +19,43 @@ class ProportionalReturnResult {
   });
 }
 
+/// Financial history of non-voided returns that are linked to one invoice
+/// line. Adjustment returns are deliberately excluded: they have their own
+/// price and journal policy and only participate in the quantity cap.
+class LinkedReturnHistory {
+  final int quantity;
+  final int subtotalCents;
+  final int discountCents;
+  final int taxCents;
+  final int refundCents;
+
+  const LinkedReturnHistory({
+    required this.quantity,
+    required this.subtotalCents,
+    required this.discountCents,
+    required this.taxCents,
+    required this.refundCents,
+  });
+
+  static const zero = LinkedReturnHistory(
+    quantity: 0,
+    subtotalCents: 0,
+    discountCents: 0,
+    taxCents: 0,
+    refundCents: 0,
+  );
+
+  LinkedReturnHistory add(ProportionalReturnResult value, int addedQuantity) {
+    return LinkedReturnHistory(
+      quantity: quantity + addedQuantity,
+      subtotalCents: subtotalCents + value.subtotalCents,
+      discountCents: discountCents + value.discountCents,
+      taxCents: taxCents + value.taxCents,
+      refundCents: refundCents + value.refundCents,
+    );
+  }
+}
+
 /// Shape of one line's contribution to a return rollup. Mirrors the four
 /// integer-cent components produced by [ReturnCalculationService.computeProportionalReturn]
 /// plus the return quantity, expressed as a Dart record so callers can build
@@ -74,8 +111,14 @@ class ReturnCalculationService {
 
   /// Compute proportional reversal amounts.
   ///
-  /// Each component = original × (returnQty / origQty) using truncating
-  /// integer division (matching existing behaviour).
+  /// Each component is the difference between the cumulative proportional
+  /// target and the amounts already reversed by earlier *linked* returns.
+  /// This preserves integer-cent rounding across sequential partial returns:
+  /// the last linked return receives the remaining cents.
+  ///
+  /// Adjustment returns must never be included in [previousLinkedHistory].
+  /// They are independent transactions and do not reverse this invoice line
+  /// frozen discount/tax amounts.
   ///
   /// Returns zeroes when [originalQuantity] <= 0.
   static ProportionalReturnResult computeProportionalReturn({
@@ -84,6 +127,8 @@ class ReturnCalculationService {
     required int originalSubtotalCents,
     required int originalDiscountCents,
     required int originalTaxCents,
+    LinkedReturnHistory previousLinkedHistory = LinkedReturnHistory.zero,
+    bool taxInclusivePricing = false,
   }) {
     assert(returnQuantity >= 0, 'returnQuantity must be non-negative');
 
@@ -96,13 +141,35 @@ class ReturnCalculationService {
       );
     }
 
-    final subtotal =
-        (originalSubtotalCents * returnQuantity) ~/ originalQuantity;
-    final discount =
-        (originalDiscountCents * returnQuantity) ~/ originalQuantity;
-    final tax = (originalTaxCents * returnQuantity) ~/ originalQuantity;
-    // refund = subtotal - discount + tax  (net value + tax)
-    final refund = subtotal - discount + tax;
+    final cumulativeQuantity = previousLinkedHistory.quantity + returnQuantity;
+    if (cumulativeQuantity > originalQuantity) {
+      throw ArgumentError.value(
+        cumulativeQuantity,
+        'cumulativeReturnQuantity',
+        'Linked returns cannot exceed the original invoice quantity',
+      );
+    }
+
+    int remainingAllocation(int originalCents, int previouslyReturnedCents) {
+      final cumulativeTarget =
+          (originalCents * cumulativeQuantity) ~/ originalQuantity;
+      return cumulativeTarget - previouslyReturnedCents;
+    }
+
+    final subtotal = remainingAllocation(
+      originalSubtotalCents,
+      previousLinkedHistory.subtotalCents,
+    );
+    final discount = remainingAllocation(
+      originalDiscountCents,
+      previousLinkedHistory.discountCents,
+    );
+    final tax = remainingAllocation(
+      originalTaxCents,
+      previousLinkedHistory.taxCents,
+    );
+    // Exclusive prices add tax; inclusive prices already contain it.
+    final refund = subtotal - discount + (taxInclusivePricing ? 0 : tax);
 
     return ProportionalReturnResult(
       subtotalCents: subtotal,

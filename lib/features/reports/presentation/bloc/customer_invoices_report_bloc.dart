@@ -25,15 +25,19 @@ class CustomerInvoicesCustomerChanged extends CustomerInvoicesReportEvent {
 /// A single line item within an invoice.
 class InvoiceLineItem {
   final String productName;
+  final String? sku;
   final String? variantLabel;
   final int quantity;
+  final String measurementType;
   final int unitPriceCents;
   final int totalCents;
 
   const InvoiceLineItem({
     required this.productName,
+    this.sku,
     this.variantLabel,
     required this.quantity,
+    this.measurementType = 'piece',
     required this.unitPriceCents,
     required this.totalCents,
   });
@@ -130,8 +134,8 @@ class CustomerInvoicesReportBloc
   int? _customerId;
 
   CustomerInvoicesReportBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
   int? get customerId => _customerId;
@@ -167,22 +171,26 @@ class CustomerInvoicesReportBloc
 
   Future<CustomerInvoicesData> _loadData() async {
     // ── Customer list for the selector ──
-    final customerRows = await _db.customSelect(
-      '''
+    final customerRows = await _db
+        .customSelect(
+          '''
       SELECT c.id, c.name, c.phone, c.balance_cents
       FROM customers c WHERE c.is_active = 1
       ORDER BY c.name ASC
       ''',
-      readsFrom: {_db.customers},
-    ).get();
+          readsFrom: {_db.customers},
+        )
+        .get();
 
     final customers = customerRows
-        .map((r) => CustomerInvoiceOption(
-              id: r.read<int>('id'),
-              name: r.read<String>('name'),
-              phone: r.readNullable<String>('phone'),
-              balanceCents: r.read<int>('balance_cents'),
-            ))
+        .map(
+          (r) => CustomerInvoiceOption(
+            id: r.read<int>('id'),
+            name: r.read<String>('name'),
+            phone: r.readNullable<String>('phone'),
+            balanceCents: r.read<int>('balance_cents'),
+          ),
+        )
         .toList();
 
     if (_customerId == null) {
@@ -190,11 +198,13 @@ class CustomerInvoicesReportBloc
     }
 
     // ── Customer info ──
-    final cRows = await _db.customSelect(
-      'SELECT name, phone, address FROM customers WHERE id = ?',
-      variables: [Variable.withInt(_customerId!)],
-      readsFrom: {_db.customers},
-    ).get();
+    final cRows = await _db
+        .customSelect(
+          'SELECT name, phone, address FROM customers WHERE id = ?',
+          variables: [Variable.withInt(_customerId!)],
+          readsFrom: {_db.customers},
+        )
+        .get();
     if (cRows.isEmpty) {
       return CustomerInvoicesData(dateRange: _dateRange, customers: customers);
     }
@@ -205,12 +215,15 @@ class CustomerInvoicesReportBloc
       _dateRange.endDate.year,
       _dateRange.endDate.month,
       _dateRange.endDate.day,
-      23, 59, 59,
+      23,
+      59,
+      59,
     ).toIso8601String();
 
     // ── Invoices (sales) in range ──
-    final saleRows = await _db.customSelect(
-      '''
+    final saleRows = await _db
+        .customSelect(
+          '''
       SELECT s.id, s.invoice_number, s.subtotal_cents, s.discount_cents,
              s.tax_cents, s.total_cents, s.paid_amount_cents,
              s.payment_method, s.status, s.sale_date
@@ -221,13 +234,14 @@ class CustomerInvoicesReportBloc
         AND s.sale_date <= ?
       ORDER BY s.sale_date ASC, s.id ASC
       ''',
-      variables: [
-        Variable.withInt(_customerId!),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.sales},
-    ).get();
+          variables: [
+            Variable.withInt(_customerId!),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {_db.sales},
+        )
+        .get();
 
     int totalAmount = 0;
     int totalDiscount = 0;
@@ -278,12 +292,15 @@ class CustomerInvoicesReportBloc
   }
 
   Future<List<InvoiceLineItem>> _loadInvoiceItems(int saleId) async {
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT p.name AS product_name,
+             COALESCE(pv.sku, p.sku) AS sku,
              pc.name AS color_name,
              sz.name AS size_name,
              si.quantity AS quantity,
+             si.measurement_type AS measurement_type,
              si.unit_price_cents AS unit_price_cents,
              si.total_cents AS total_cents
       FROM sale_items si
@@ -294,15 +311,16 @@ class CustomerInvoicesReportBloc
       WHERE si.sale_id = ?
       ORDER BY si.id ASC
       ''',
-      variables: [Variable.withInt(saleId)],
-      readsFrom: {
-        _db.saleItems,
-        _db.products,
-        _db.productVariants,
-        _db.productColors,
-        _db.sizes,
-      },
-    ).get();
+          variables: [Variable.withInt(saleId)],
+          readsFrom: {
+            _db.saleItems,
+            _db.products,
+            _db.productVariants,
+            _db.productColors,
+            _db.sizes,
+          },
+        )
+        .get();
 
     return rows.map((r) {
       final parts = <String>[];
@@ -312,8 +330,10 @@ class CustomerInvoicesReportBloc
       if (size != null && size.isNotEmpty) parts.add(size);
       return InvoiceLineItem(
         productName: r.read<String>('product_name'),
+        sku: r.readNullable<String>('sku'),
         variantLabel: parts.isEmpty ? null : parts.join(' · '),
         quantity: r.read<int>('quantity'),
+        measurementType: r.read<String>('measurement_type'),
         unitPriceCents: r.read<int>('unit_price_cents'),
         totalCents: r.read<int>('total_cents'),
       );

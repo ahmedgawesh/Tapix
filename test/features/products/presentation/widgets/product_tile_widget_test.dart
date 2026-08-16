@@ -34,16 +34,26 @@ void main() {
       currencyBloc = MockCurrencyBloc();
       when(() => currencyService.currencySymbol).thenReturn('\$');
       when(() => currencyService.currencyCode).thenReturn('USD');
-      when(() => currencyService.getCurrency()).thenReturn(Currency.fromCode('USD'));
-      when(() => currencyService.currencyStream).thenAnswer((_) => Stream.value(Currency.fromCode('USD')));
+      when(
+        () => currencyService.getCurrency(),
+      ).thenReturn(Currency.fromCode('USD'));
+      when(
+        () => currencyService.currencyStream,
+      ).thenAnswer((_) => Stream.value(Currency.fromCode('USD')));
       when(() => currencyService.format(any())).thenAnswer((invocation) {
         final cents = invocation.positionalArguments[0] as int;
         return '\$${(cents / 100).toStringAsFixed(2)}';
       });
-      when(() => currencyBloc.state).thenReturn(RealtimeSuccess<Currency>(data: Currency.fromCode('USD')));
-      when(() => currencyBloc.stream).thenAnswer((_) => Stream.value(RealtimeSuccess<Currency>(data: Currency.fromCode('USD'))));
+      when(
+        () => currencyBloc.state,
+      ).thenReturn(RealtimeSuccess<Currency>(data: Currency.fromCode('USD')));
+      when(() => currencyBloc.stream).thenAnswer(
+        (_) => Stream.value(
+          RealtimeSuccess<Currency>(data: Currency.fromCode('USD')),
+        ),
+      );
       when(() => currencyBloc.close()).thenAnswer((_) async {});
-      
+
       testProduct = Product(
         id: 1,
         name: 'Test Product',
@@ -85,7 +95,9 @@ void main() {
             home: Scaffold(
               body: MultiBlocProvider(
                 providers: [
-                  RepositoryProvider<CurrencyService>.value(value: currencyService),
+                  RepositoryProvider<CurrencyService>.value(
+                    value: currencyService,
+                  ),
                   BlocProvider<CurrencyBloc>.value(value: currencyBloc),
                 ],
                 child: child,
@@ -97,9 +109,9 @@ void main() {
     }
 
     testWidgets('displays product name and SKU', (tester) async {
-      await tester.pumpWidget(createWidget(
-        ProductTileWidget(product: testProduct),
-      ));
+      await tester.pumpWidget(
+        createWidget(ProductTileWidget(product: testProduct)),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Test Product'), findsOneWidget);
@@ -107,42 +119,60 @@ void main() {
     });
 
     testWidgets('displays formatted price', (tester) async {
-      await tester.pumpWidget(createWidget(
-        ProductTileWidget(product: testProduct),
-      ));
+      await tester.pumpWidget(
+        createWidget(ProductTileWidget(product: testProduct)),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('\$15.00'), findsOneWidget);
     });
 
-    testWidgets('displays normal stock indicator when stock is adequate', (tester) async {
-      await tester.pumpWidget(createWidget(
-        ProductTileWidget(product: testProduct),
-      ));
+    testWidgets('displays normal stock indicator when stock is adequate', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        createWidget(ProductTileWidget(product: testProduct)),
+      );
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('normal_stock_indicator')), findsOneWidget);
-      expect(find.text('50'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('normal_stock_indicator')),
+          matching: find.textContaining('50'),
+        ),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('displays low stock indicator when stock is low', (tester) async {
+    testWidgets('displays low stock indicator when stock is low', (
+      tester,
+    ) async {
       final lowStockProduct = testProduct.copyWith(stockQuantity: 5);
 
-      await tester.pumpWidget(createWidget(
-        ProductTileWidget(product: lowStockProduct),
-      ));
+      await tester.pumpWidget(
+        createWidget(ProductTileWidget(product: lowStockProduct)),
+      );
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('low_stock_indicator')), findsOneWidget);
-      expect(find.text('5'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('low_stock_indicator')),
+          matching: find.textContaining('5'),
+        ),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('displays out of stock indicator when stock is zero', (tester) async {
+    testWidgets('displays out of stock indicator when stock is zero', (
+      tester,
+    ) async {
       final outOfStockProduct = testProduct.copyWith(stockQuantity: 0);
 
-      await tester.pumpWidget(createWidget(
-        ProductTileWidget(product: outOfStockProduct),
-      ));
+      await tester.pumpWidget(
+        createWidget(ProductTileWidget(product: outOfStockProduct)),
+      );
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('out_of_stock_indicator')), findsOneWidget);
@@ -152,14 +182,16 @@ void main() {
     testWidgets('calls onTap when tapped', (tester) async {
       Product? tappedProduct;
 
-      await tester.pumpWidget(createWidget(
-        ProductTileWidget(
-          product: testProduct,
-          onTap: (product) {
-            tappedProduct = product;
-          },
+      await tester.pumpWidget(
+        createWidget(
+          ProductTileWidget(
+            product: testProduct,
+            onTap: (product) {
+              tappedProduct = product;
+            },
+          ),
         ),
-      ));
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.byType(InkWell));
@@ -171,14 +203,16 @@ void main() {
     testWidgets('calls onLongPress when long pressed', (tester) async {
       Product? longPressedProduct;
 
-      await tester.pumpWidget(createWidget(
-        ProductTileWidget(
-          product: testProduct,
-          onLongPress: (product) {
-            longPressedProduct = product;
-          },
+      await tester.pumpWidget(
+        createWidget(
+          ProductTileWidget(
+            product: testProduct,
+            onLongPress: (product) {
+              longPressedProduct = product;
+            },
+          ),
         ),
-      ));
+      );
       await tester.pumpAndSettle();
 
       await tester.longPress(find.byType(InkWell));
@@ -190,9 +224,9 @@ void main() {
     testWidgets('handles empty SKU gracefully', (tester) async {
       final noSkuProduct = testProduct.copyWith(sku: '');
 
-      await tester.pumpWidget(createWidget(
-        ProductTileWidget(product: noSkuProduct),
-      ));
+      await tester.pumpWidget(
+        createWidget(ProductTileWidget(product: noSkuProduct)),
+      );
       await tester.pumpAndSettle();
 
       expect(find.textContaining('SKU:'), findsNothing);

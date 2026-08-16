@@ -3,11 +3,13 @@ import 'package:decimal/decimal.dart';
 import '../app_database.dart';
 import '../tables/parties.dart';
 import '../../services/balance_service.dart';
+import '../../services/document_number_service.dart';
 
 part 'customer_dao.g.dart';
 
 @DriftAccessor(tables: [Customers, CustomerTransactions])
-class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin {
+class CustomerDao extends DatabaseAccessor<AppDatabase>
+    with _$CustomerDaoMixin {
   CustomerDao(super.db);
 
   Stream<List<Customer>> watchAllCustomers({bool? isActive}) {
@@ -20,7 +22,9 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
   }
 
   Stream<Customer?> watchCustomer(int id) {
-    return (select(customers)..where((c) => c.id.equals(id))).watchSingleOrNull();
+    return (select(
+      customers,
+    )..where((c) => c.id.equals(id))).watchSingleOrNull();
   }
 
   Future<Customer?> getCustomer(int id) {
@@ -29,7 +33,12 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
 
   Future<List<Customer>> searchCustomers(String query, {bool? isActive}) {
     final q = select(customers)
-      ..where((c) => c.name.like('%$query%') | c.phone.like('%$query%') | c.email.like('%$query%'));
+      ..where(
+        (c) =>
+            c.name.like('%$query%') |
+            c.phone.like('%$query%') |
+            c.email.like('%$query%'),
+      );
     if (isActive != null) {
       q.where((c) => c.isActive.equals(isActive));
     }
@@ -48,16 +57,8 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
     return (delete(customers)..where((c) => c.id.equals(id))).go();
   }
 
-  /// Generate the next sequential transaction number for a given prefix.
-  /// e.g. PAY-0001, DSC-0001, SAL-0001, RET-0001
-  Future<String> _nextTransactionNumber(String prefix) async {
-    final result = await customSelect(
-      'SELECT COUNT(*) AS cnt FROM customer_transactions WHERE transaction_number LIKE ?',
-      variables: [Variable<String>('$prefix-%')],
-    ).getSingle();
-    final count = result.read<int>('cnt');
-    return '$prefix-${(count + 1).toString().padLeft(4, '0')}';
-  }
+  Future<String> _nextTransactionNumber(String prefix) =>
+      DocumentNumberService(attachedDatabase).nextCustomerTransaction(prefix);
 
   /// Transaction types that are managed by SaleDao and must NOT be routed
   /// through this method. SaleDao updates customer balance directly, so
@@ -87,10 +88,10 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
         String prefix;
         switch (type) {
           case 'payment':
-            prefix = 'CPAY';
+            prefix = 'CPC';
             break;
           case 'discount':
-            prefix = 'CDSC';
+            prefix = 'DC';
             break;
           case 'sale':
             prefix = 'SAL';
@@ -122,7 +123,8 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
       final customerId = tx.customerId.value;
       final deltaCents = tx.amountCents.value.toBigInt().toInt();
 
-      final affectsBalance = type == 'payment' ||
+      final affectsBalance =
+          type == 'payment' ||
           type == 'payment_reversal' ||
           type == 'discount' ||
           type == 'adjustment' ||
@@ -135,7 +137,8 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
         return txId;
       }
 
-      await BalanceService.adjustCustomerBalance(this,
+      await BalanceService.adjustCustomerBalance(
+        this,
         customerId: customerId,
         deltaCents: deltaCents,
       );
@@ -156,9 +159,9 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
     String? newDescription,
   }) {
     return transaction(() async {
-      final existing = await (select(customerTransactions)
-            ..where((t) => t.id.equals(transactionId)))
-          .getSingleOrNull();
+      final existing = await (select(
+        customerTransactions,
+      )..where((t) => t.id.equals(transactionId))).getSingleOrNull();
       if (existing == null) {
         throw StateError('Transaction #$transactionId not found');
       }
@@ -172,20 +175,27 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
       final oldCents = existing.amountCents.toBigInt().toInt();
       // For payments/discounts the stored amount is negative (reduces balance).
       // The caller passes the absolute new amount; we preserve the sign.
-      final signedNewAmount = oldCents < 0 ? -newAmountCents.abs() : newAmountCents.abs();
+      final signedNewAmount = oldCents < 0
+          ? -newAmountCents.abs()
+          : newAmountCents.abs();
       final deltaCents = signedNewAmount - oldCents;
 
       // Update the transaction row
-      await (update(customerTransactions)
-            ..where((t) => t.id.equals(transactionId)))
-          .write(CustomerTransactionsCompanion(
-        amountCents: Value(Decimal.fromInt(signedNewAmount)),
-        description: newDescription != null ? Value(newDescription) : const Value.absent(),
-      ));
+      await (update(
+        customerTransactions,
+      )..where((t) => t.id.equals(transactionId))).write(
+        CustomerTransactionsCompanion(
+          amountCents: Value(Decimal.fromInt(signedNewAmount)),
+          description: newDescription != null
+              ? Value(newDescription)
+              : const Value.absent(),
+        ),
+      );
 
       // Adjust customer balance by the delta
       if (deltaCents != 0) {
-        await BalanceService.adjustCustomerBalance(this,
+        await BalanceService.adjustCustomerBalance(
+          this,
           customerId: existing.customerId,
           deltaCents: deltaCents,
         );
@@ -196,14 +206,20 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
   }
 
   Future<CustomerTransaction?> getTransaction(int transactionId) {
-    return (select(customerTransactions)..where((t) => t.id.equals(transactionId)))
-        .getSingleOrNull();
+    return (select(
+      customerTransactions,
+    )..where((t) => t.id.equals(transactionId))).getSingleOrNull();
   }
 
   Stream<List<CustomerTransaction>> watchCustomerTransactions(int customerId) {
     return (select(customerTransactions)
           ..where((t) => t.customerId.equals(customerId))
-          ..orderBy([(t) => OrderingTerm(expression: t.transactionDate, mode: OrderingMode.desc)]))
+          ..orderBy([
+            (t) => OrderingTerm(
+              expression: t.transactionDate,
+              mode: OrderingMode.desc,
+            ),
+          ]))
         .watch();
   }
 
@@ -212,14 +228,18 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
     DateTime? startDate,
     DateTime? endDate,
   }) {
-    final query = select(customerTransactions)..where((t) => t.customerId.equals(customerId));
+    final query = select(customerTransactions)
+      ..where((t) => t.customerId.equals(customerId));
     if (startDate != null) {
       query.where((t) => t.transactionDate.isBiggerOrEqualValue(startDate));
     }
     if (endDate != null) {
       query.where((t) => t.transactionDate.isSmallerOrEqualValue(endDate));
     }
-    query.orderBy([(t) => OrderingTerm(expression: t.transactionDate, mode: OrderingMode.desc)]);
+    query.orderBy([
+      (t) =>
+          OrderingTerm(expression: t.transactionDate, mode: OrderingMode.desc),
+    ]);
     return query.get();
   }
 
@@ -228,27 +248,44 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
     if (isActive != null) {
       query.where(customers.isActive.equals(isActive));
     }
-    return query.map((row) => row.read(customers.id.count()) ?? 0).watchSingle();
+    return query
+        .map((row) => row.read(customers.id.count()) ?? 0)
+        .watchSingle();
   }
 
   Stream<int> watchTotalBalanceCents() {
     final query = selectOnly(customers)
       ..addColumns([customers.balanceCents.sum()])
       ..where(customers.isActive.equals(true));
-    return query.map((row) => row.read(customers.balanceCents.sum()) ?? 0).watchSingle();
+    return query
+        .map((row) => row.read(customers.balanceCents.sum()) ?? 0)
+        .watchSingle();
   }
 
   Stream<List<Customer>> watchCustomersWithPositiveBalance() {
     return (select(customers)
-          ..where((c) => c.balanceCents.isBiggerThanValue(0) & c.isActive.equals(true))
-          ..orderBy([(c) => OrderingTerm(expression: c.balanceCents, mode: OrderingMode.desc)]))
+          ..where(
+            (c) =>
+                c.balanceCents.isBiggerThanValue(0) & c.isActive.equals(true),
+          )
+          ..orderBy([
+            (c) => OrderingTerm(
+              expression: c.balanceCents,
+              mode: OrderingMode.desc,
+            ),
+          ]))
         .watch();
   }
 
   Stream<List<Customer>> watchTopCustomersByBalance({int limit = 5}) {
     return (select(customers)
           ..where((c) => c.isActive.equals(true))
-          ..orderBy([(c) => OrderingTerm(expression: c.balanceCents, mode: OrderingMode.desc)])
+          ..orderBy([
+            (c) => OrderingTerm(
+              expression: c.balanceCents,
+              mode: OrderingMode.desc,
+            ),
+          ])
           ..limit(limit))
         .watch();
   }
@@ -272,7 +309,10 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
   ///
   /// See `docs/adr/0001-pricing-engines-as-sot.md` § Phase 1.
   @Deprecated('Use BalanceService.adjustCustomerBalance or recalculateBalance')
-  Future<void> updateCustomerBalance(int customerId, int newBalanceCents) async {
+  Future<void> updateCustomerBalance(
+    int customerId,
+    int newBalanceCents,
+  ) async {
     await (update(customers)..where((c) => c.id.equals(customerId))).write(
       CustomersCompanion(
         balanceCents: Value(Decimal.fromInt(newBalanceCents)),
@@ -281,7 +321,10 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
     );
   }
 
-  Future<void> updateCustomerLoyaltyEnabled(int customerId, bool loyaltyEnabled) async {
+  Future<void> updateCustomerLoyaltyEnabled(
+    int customerId,
+    bool loyaltyEnabled,
+  ) async {
     await (update(customers)..where((c) => c.id.equals(customerId))).write(
       CustomersCompanion(
         loyaltyEnabled: Value(loyaltyEnabled),
@@ -290,16 +333,20 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
     );
   }
 
-  /// Recalculate customer balance from the transaction ledger (single source of truth).
-  /// This derives the balance from SUM(customer_transactions.amount_cents) and
-  /// overwrites the cached customers.balance_cents field.
+  /// Recalculate customer balance from opening balance plus the transaction ledger.
+  /// The opening balance is stored on the customer and is not duplicated as a
+  /// customer transaction, so omitting it would erase it during reconciliation.
   /// Use this for reconciliation or to fix any balance drift.
   Future<int> recalculateBalance(int customerId) async {
     return transaction(() async {
       final result = await customSelect(
-        'SELECT COALESCE(SUM(amount_cents), 0) AS derived_balance '
-        'FROM customer_transactions WHERE customer_id = ?',
-        variables: [Variable.withInt(customerId)],
+        'SELECT '
+        'COALESCE((SELECT opening_balance_cents FROM customers WHERE id = ?), 0) + '
+        'COALESCE((SELECT SUM(amount_cents) FROM customer_transactions '
+        "WHERE customer_id = ? AND transaction_type NOT IN ('refund', 'refund_reversal')), 0) "
+        'AS derived_balance',
+        variables: [Variable.withInt(customerId), Variable.withInt(customerId)],
+        readsFrom: {customers, customerTransactions},
       ).getSingle();
 
       final derivedBalance = result.read<int>('derived_balance');

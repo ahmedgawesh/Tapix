@@ -13,12 +13,14 @@ import 'package:mockito/src/dummies.dart' as _i10;
 import 'package:pdf/widgets.dart' as _i8;
 import 'package:tapix/core/database/app_database.dart' as _i2;
 import 'package:tapix/core/database/daos/barcode_template_dao.dart' as _i5;
+import 'package:tapix/features/barcode/domain/models/barcode_design_state.dart'
+    as _i13;
 import 'package:tapix/features/barcode/services/barcode_printer_service.dart'
     as _i7;
 import 'package:tapix/features/products/domain/entities/product_entity.dart'
     as _i11;
 import 'package:tapix/features/settings/data/services/company_profile_service.dart'
-    as _i13;
+    as _i14;
 import 'package:tapix/features/settings/domain/entities/company_profile.dart'
     as _i9;
 
@@ -984,6 +986,24 @@ class MockBarcodePrinterService extends _i1.Mock
   }
 
   @override
+  bool get isBluetoothPrintingSupported =>
+      (super.noSuchMethod(
+            Invocation.getter(#isBluetoothPrintingSupported),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
+  _i6.Future<List<_i7.BluetoothPrinterDevice>> getBondedBluetoothPrinters() =>
+      (super.noSuchMethod(
+            Invocation.method(#getBondedBluetoothPrinters, []),
+            returnValue: _i6.Future<List<_i7.BluetoothPrinterDevice>>.value(
+              <_i7.BluetoothPrinterDevice>[],
+            ),
+          )
+          as _i6.Future<List<_i7.BluetoothPrinterDevice>>);
+
+  @override
   _i6.Future<void> saveSettings({
     double? widthMm,
     double? heightMm,
@@ -1249,6 +1269,7 @@ class MockBarcodePrinterService extends _i1.Mock
     required double? heightMm,
     required bool? includeName,
     required bool? includePrice,
+    required _i13.PriceDisplayMode? priceDisplayMode,
     required bool? includeBarcode,
     required bool? includeSku,
     required bool? includeCompanyName,
@@ -1272,6 +1293,7 @@ class MockBarcodePrinterService extends _i1.Mock
               #heightMm: heightMm,
               #includeName: includeName,
               #includePrice: includePrice,
+              #priceDisplayMode: priceDisplayMode,
               #includeBarcode: includeBarcode,
               #includeSku: includeSku,
               #includeCompanyName: includeCompanyName,
@@ -1301,6 +1323,7 @@ class MockBarcodePrinterService extends _i1.Mock
     required double? heightMm,
     required bool? includeName,
     required bool? includePrice,
+    required _i13.PriceDisplayMode? priceDisplayMode,
     required bool? includeBarcode,
     required bool? includeSku,
     required bool? includeCompanyName,
@@ -1323,6 +1346,7 @@ class MockBarcodePrinterService extends _i1.Mock
               #heightMm: heightMm,
               #includeName: includeName,
               #includePrice: includePrice,
+              #priceDisplayMode: priceDisplayMode,
               #includeBarcode: includeBarcode,
               #includeSku: includeSku,
               #includeCompanyName: includeCompanyName,
@@ -1335,6 +1359,50 @@ class MockBarcodePrinterService extends _i1.Mock
               #horizontalGapMm: horizontalGapMm,
               #verticalGapMm: verticalGapMm,
               #pageMarginMm: pageMarginMm,
+              #includeVariantInfo: includeVariantInfo,
+            }),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
+
+  @override
+  _i6.Future<void> printLabelsBluetoothBatch({
+    required String? bluetoothAddress,
+    required List<({int copies, _i11.Product product, String? variantInfo})>?
+    jobs,
+    required _i8.Barcode? barcode,
+    required double? widthMm,
+    required double? heightMm,
+    required bool? includeName,
+    required bool? includePrice,
+    required _i13.PriceDisplayMode? priceDisplayMode,
+    required bool? includeBarcode,
+    required bool? includeSku,
+    required bool? includeCompanyName,
+    required String? companyName,
+    required bool? includeCompanyContact,
+    required String? companyAddress,
+    required String? companyPhone,
+    required bool? includeVariantInfo,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#printLabelsBluetoothBatch, [], {
+              #bluetoothAddress: bluetoothAddress,
+              #jobs: jobs,
+              #barcode: barcode,
+              #widthMm: widthMm,
+              #heightMm: heightMm,
+              #includeName: includeName,
+              #includePrice: includePrice,
+              #priceDisplayMode: priceDisplayMode,
+              #includeBarcode: includeBarcode,
+              #includeSku: includeSku,
+              #includeCompanyName: includeCompanyName,
+              #companyName: companyName,
+              #includeCompanyContact: includeCompanyContact,
+              #companyAddress: companyAddress,
+              #companyPhone: companyPhone,
               #includeVariantInfo: includeVariantInfo,
             }),
             returnValue: _i6.Future<void>.value(),
@@ -1369,7 +1437,7 @@ class MockBarcodePrinterService extends _i1.Mock
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockCompanyProfileService extends _i1.Mock
-    implements _i13.CompanyProfileService {
+    implements _i14.CompanyProfileService {
   MockCompanyProfileService() {
     _i1.throwOnMissingStub(this);
   }

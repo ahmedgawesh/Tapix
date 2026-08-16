@@ -1,33 +1,123 @@
-import 'package:decimal/decimal.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
-import '../../../../core/database/app_database.dart' hide Product;
-import '../../../../core/database/daos/product_variant_dao.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../products/domain/entities/product_entity.dart';
 import '../../domain/models/barcode_design_state.dart';
 import '../../data/models/invoice_print_data.dart';
+import '../../services/barcode_label_job_builder.dart';
+import '../../services/barcode_printer_service.dart';
 import '../bloc/barcode_design_bloc.dart';
 import '../bloc/barcode_design_event.dart';
 import '../widgets/a4_preview_widget.dart';
-import '../widgets/barcode_preview_widget.dart';
 import '../widgets/design_settings_widget.dart';
 import '../widgets/product_selection_widget.dart';
+import '../widgets/thermal_preview_widget.dart';
+
+Future<void> _startBarcodePrint(
+  BuildContext context,
+  BarcodeDesignData data,
+) async {
+  final bloc = context.read<BarcodeDesignBloc>();
+  if (data.settings.printDestination == PrintDestination.system) {
+    bloc.add(const PrintLabels());
+    return;
+  }
+
+  final printerService = sl<BarcodePrinterService>();
+  if (!printerService.isBluetoothPrintingSupported) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('barcode.bluetooth_android_only'.tr())),
+    );
+    return;
+  }
+
+  try {
+    final devices = await printerService.getBondedBluetoothPrinters();
+    if (!context.mounted) return;
+    if (devices.isEmpty) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('barcode.no_bluetooth_printers'.tr()),
+          content: Text('barcode.pair_printer_first'.tr()),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('common.ok'.tr()),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final selected = await showDialog<BluetoothPrinterDevice>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: Text('barcode.select_bluetooth_printer'.tr()),
+        children: devices
+            .map(
+              (device) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(dialogContext, device),
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.bluetooth),
+                  title: Text(device.name),
+                  subtitle: Text(device.address),
+                ),
+              ),
+            )
+            .toList(growable: false),
+      ),
+    );
+    if (selected == null || !context.mounted) return;
+    bloc.add(
+      PrintLabels(
+        printerName: selected.name,
+        bluetoothAddress: selected.address,
+      ),
+    );
+  } catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(_localizedBluetoothError(error))));
+  }
+}
+
+String _localizedBluetoothError(Object error) {
+  if (error is PlatformException) {
+    switch (error.code) {
+      case 'bluetooth_disabled':
+        return 'barcode.bluetooth_disabled'.tr();
+      case 'bluetooth_permission_denied':
+        return 'barcode.bluetooth_permission_denied'.tr();
+      case 'bluetooth_unavailable':
+        return 'barcode.bluetooth_unavailable'.tr();
+      case 'bluetooth_print_failed':
+        return 'barcode.bluetooth_connection_failed'.tr();
+    }
+  }
+  return 'barcode.bluetooth_error'.tr(args: [error.toString()]);
+}
 
 class BarcodeDesignScreen extends StatelessWidget {
   final List<Product>? initialProducts;
   final Map<int, String>? variantInfoByProductId;
+  final Set<int>? selectedVariantIds;
   final InvoicePrintData? invoiceData;
 
   const BarcodeDesignScreen({
     super.key,
     this.initialProducts,
     this.variantInfoByProductId,
+    this.selectedVariantIds,
     this.invoiceData,
   });
 
@@ -40,6 +130,7 @@ class BarcodeDesignScreen extends StatelessWidget {
             LoadBarcodeDesignData(
               initialProducts: initialProducts,
               variantInfoByProductId: variantInfoByProductId,
+              selectedVariantIds: selectedVariantIds,
             ),
           );
 
@@ -70,97 +161,18 @@ class _BarcodeDesignScreenContent extends StatelessWidget {
   Future<List<({Product product, String? variantInfo})>> _buildPreviewLabels(
     BarcodeDesignData data,
   ) async {
-    final dao = sl<ProductVariantDao>();
-    final settings = data.settings;
-
-    if (settings.quantityMode == QuantityMode.invoiceQuantity &&
-        data.invoiceData != null &&
-        data.invoiceData!.lines.isNotEmpty) {
-      final labels = <({Product product, String? variantInfo})>[];
-      for (final line in data.invoiceData!.lines) {
-        final qty = data.currentQuantities[line.variantId] ?? line.quantity;
-        if (qty <= 0) continue;
-        final info = [line.sizeName, line.colorName]
-            .whereType<String>()
-            .where((x) => x.trim().isNotEmpty)
-            .join(' / ');
-        final p = Product(
-          id: line.variantId,
-          name: line.productName,
-          sku: line.sku,
-          barcode: line.barcode,
-          costCents: Decimal.zero,
-          priceCents: Decimal.fromInt(line.unitPriceCents),
-          wholesalePriceCents: null,
-          stockQuantity: 0,
-          minQuantity: 0,
-          categoryId: null,
-          supplierId: null,
-          currencyId: null,
-          imagePath: null,
-          hasVariants: false,
-          isTaxable: false,
-          purchaseTaxRateBps: 0,
-          salesTaxRateBps: 0,
-          isActive: true,
-          trackInventory: false,
-        );
-        for (int i = 0; i < qty; i++) {
-          labels.add((product: p, variantInfo: info.isEmpty ? null : info));
-        }
-      }
-      return labels;
-    }
-
+    final jobs = await BarcodeLabelJobBuilder(sl()).build(
+      selectedProducts: data.selectedProducts,
+      settings: data.settings,
+      variantInfoByProductId: data.variantInfoByProductId,
+      selectedVariantIds: data.selectedVariantIds,
+      invoiceData: data.invoiceData,
+      currentQuantities: data.currentQuantities,
+    );
     final labels = <({Product product, String? variantInfo})>[];
-    
-    // When data comes from an invoice, selectedProducts are already variants
-    // (id = variantId), so we should NOT try to fetch variants for them again.
-    final isFromInvoice = data.invoiceData != null;
-    
-    for (final product in data.selectedProducts) {
-      // Skip variant lookup if products came from invoice data
-      final variants = isFromInvoice ? <ProductVariant>[] : await dao.getVariantsByProduct(product.id);
-      if (variants.isEmpty) {
-        int qty;
-        switch (settings.quantityMode) {
-          case QuantityMode.single:
-            qty = 1;
-          case QuantityMode.custom:
-            qty = settings.copies;
-          case QuantityMode.stockQuantity:
-            qty = product.stockQuantity;
-          case QuantityMode.invoiceQuantity:
-            qty = 1;
-        }
-        if (qty <= 0) continue;
-        final fallbackInfo = data.variantInfoByProductId[product.id];
-        for (int i = 0; i < qty; i++) {
-          labels.add((product: product, variantInfo: fallbackInfo));
-        }
-        continue;
-      }
-
-      final infoByVariantId =
-          await dao.getVariantInfoByVariantIds(variants.map((v) => v.id).toList());
-      for (final v in variants) {
-        int qty;
-        switch (settings.quantityMode) {
-          case QuantityMode.single:
-            qty = 1;
-          case QuantityMode.custom:
-            qty = settings.copies;
-          case QuantityMode.stockQuantity:
-            qty = v.stockQuantity;
-          case QuantityMode.invoiceQuantity:
-            qty = 1;
-        }
-        if (qty <= 0) continue;
-        final vp = product.copyWith(sku: v.sku, barcode: v.barcode);
-        final info = infoByVariantId[v.id];
-        for (int i = 0; i < qty; i++) {
-          labels.add((product: vp, variantInfo: info));
-        }
+    for (final job in jobs) {
+      for (int i = 0; i < job.copies; i++) {
+        labels.add((product: job.product, variantInfo: job.variantInfo));
       }
     }
     return labels;
@@ -190,7 +202,8 @@ class _BarcodeDesignScreenContent extends StatelessWidget {
             builder: (context, state) {
               final data = _extractData(state);
               final hasProducts = data?.selectedProducts.isNotEmpty ?? false;
-              final isProcessing = data?.operationStatus == PrintOperationStatus.preparing ||
+              final isProcessing =
+                  data?.operationStatus == PrintOperationStatus.preparing ||
                   data?.operationStatus == PrintOperationStatus.printing;
 
               return Row(
@@ -199,14 +212,16 @@ class _BarcodeDesignScreenContent extends StatelessWidget {
                   IconButton(
                     icon: const Icon(LucideIcons.share2),
                     onPressed: hasProducts && !isProcessing
-                        ? () => context.read<BarcodeDesignBloc>().add(const ShareLabels())
+                        ? () => context.read<BarcodeDesignBloc>().add(
+                            const ShareLabels(),
+                          )
                         : null,
                     tooltip: 'common.share'.tr(),
                   ),
                   IconButton(
                     icon: const Icon(LucideIcons.printer),
                     onPressed: hasProducts && !isProcessing
-                        ? () => context.read<BarcodeDesignBloc>().add(const PrintLabels())
+                        ? () => _startBarcodePrint(context, data!)
                         : null,
                     tooltip: 'common.print'.tr(),
                   ),
@@ -217,102 +232,117 @@ class _BarcodeDesignScreenContent extends StatelessWidget {
         ],
       ),
       body: SafeArea(
-        child: BlocConsumer<BarcodeDesignBloc, RealtimeState<BarcodeDesignData>>(
-          listenWhen: (previous, current) {
-            final prevData = _extractData(previous);
-            final currData = _extractData(current);
+        child:
+            BlocConsumer<BarcodeDesignBloc, RealtimeState<BarcodeDesignData>>(
+              listenWhen: (previous, current) {
+                final prevData = _extractData(previous);
+                final currData = _extractData(current);
 
-            final prevError = prevData?.errorMessage;
-            final currError = currData?.errorMessage;
-            final errorChanged = currError != null && currError.isNotEmpty && currError != prevError;
+                final prevError = prevData?.errorMessage;
+                final currError = currData?.errorMessage;
+                final errorChanged =
+                    currError != null &&
+                    currError.isNotEmpty &&
+                    currError != prevError;
 
-            final prevStatus = prevData?.operationStatus;
-            final currStatus = currData?.operationStatus;
-            final statusChanged = currStatus == PrintOperationStatus.success && prevStatus != currStatus;
+                final prevStatus = prevData?.operationStatus;
+                final currStatus = currData?.operationStatus;
+                final statusChanged =
+                    currStatus == PrintOperationStatus.success &&
+                    prevStatus != currStatus;
 
-            return errorChanged || statusChanged;
-          },
-          listener: (context, state) {
-            if (state is RealtimeSuccess<BarcodeDesignData>) {
-              final data = state.data;
+                return errorChanged || statusChanged;
+              },
+              listener: (context, state) {
+                if (state is RealtimeSuccess<BarcodeDesignData>) {
+                  final data = state.data;
 
-              if (data.operationStatus == PrintOperationStatus.success) {
-                _showSnackBarSafe(
-                  context,
-                  SnackBar(
-                    content: Text('barcode.print_success'.tr()),
-                    backgroundColor: colorScheme.primary,
-                  ),
-                );
-                context.read<BarcodeDesignBloc>().add(const AcknowledgePrintResult());
-              }
-
-              if (data.errorMessage != null && data.errorMessage!.isNotEmpty) {
-                _showSnackBarSafe(
-                  context,
-                  SnackBar(
-                    content: Text(data.errorMessage!),
-                    backgroundColor: colorScheme.error,
-                  ),
-                );
-                context.read<BarcodeDesignBloc>().add(const AcknowledgePrintResult());
-              }
-            }
-          },
-          builder: (context, state) {
-            if (state is RealtimeLoading<BarcodeDesignData>) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            if (state is RealtimeError<BarcodeDesignData>) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(LucideIcons.alertCircle, size: 64, color: colorScheme.error),
-                    const SizedBox(height: 16),
-                    Text(
-                      'common.error'.tr(),
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    Text('barcode.unexpected_error'.tr()),
-                    const SizedBox(height: 24),
-                    FilledButton(
-                      onPressed: () => context
-                          .read<BarcodeDesignBloc>()
-                          .add(const LoadBarcodeDesignData()),
-                      child: Text('common.retry'.tr()),
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            final data = _extractData(state) ?? BarcodeDesignData.empty();
-
-            if (!data.settings.isA4Mode) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!context.mounted) return;
-                context.read<BarcodeDesignBloc>().add(
-                      const UpdatePrintMode(LabelPrintMode.a4Sheet),
+                  if (data.operationStatus == PrintOperationStatus.success) {
+                    _showSnackBarSafe(
+                      context,
+                      SnackBar(
+                        content: Text('barcode.print_success'.tr()),
+                        backgroundColor: colorScheme.primary,
+                      ),
                     );
-              });
-            }
+                    context.read<BarcodeDesignBloc>().add(
+                      const AcknowledgePrintResult(),
+                    );
+                  }
 
-            return LayoutBuilder(
-              builder: (context, constraints) {
-                if (constraints.maxWidth < 600) {
-                  return _MobileLayout(data: data);
-                } else if (constraints.maxWidth < 1024) {
-                  return _TabletLayout(data: data);
-                } else {
-                  return _DesktopLayout(data: data);
+                  if (data.errorMessage != null &&
+                      data.errorMessage!.isNotEmpty) {
+                    _showSnackBarSafe(
+                      context,
+                      SnackBar(
+                        content: Text(data.errorMessage!),
+                        backgroundColor: colorScheme.error,
+                      ),
+                    );
+                    context.read<BarcodeDesignBloc>().add(
+                      const AcknowledgePrintResult(),
+                    );
+                  }
                 }
               },
-            );
-          },
-        ),
+              builder: (context, state) {
+                if (state is RealtimeLoading<BarcodeDesignData>) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (state is RealtimeError<BarcodeDesignData>) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          LucideIcons.alertCircle,
+                          size: 64,
+                          color: colorScheme.error,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'common.error'.tr(),
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        Text('barcode.unexpected_error'.tr()),
+                        const SizedBox(height: 24),
+                        FilledButton(
+                          onPressed: () => context
+                              .read<BarcodeDesignBloc>()
+                              .add(const LoadBarcodeDesignData()),
+                          child: Text('common.retry'.tr()),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                final data = _extractData(state) ?? BarcodeDesignData.empty();
+
+                if (!data.settings.isA4Mode) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (!context.mounted) return;
+                    context.read<BarcodeDesignBloc>().add(
+                      const UpdatePrintMode(LabelPrintMode.a4Sheet),
+                    );
+                  });
+                }
+
+                return LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth < 600) {
+                      return _MobileLayout(data: data);
+                    } else if (constraints.maxWidth < 1024) {
+                      return _TabletLayout(data: data);
+                    } else {
+                      return _DesktopLayout(data: data);
+                    }
+                  },
+                );
+              },
+            ),
       ),
     );
   }
@@ -330,17 +360,22 @@ class _BarcodeDesignScreenContent extends StatelessWidget {
 }
 
 /// Stateful widget that caches the labels Future so it doesn't rebuild infinitely.
-class _CachedA4Preview extends StatefulWidget {
+class _CachedPrintPreview extends StatefulWidget {
   final BarcodeDesignData data;
-  final double scale;
+  final double a4Scale;
+  final double thermalScale;
 
-  const _CachedA4Preview({required this.data, required this.scale});
+  const _CachedPrintPreview({
+    required this.data,
+    required this.a4Scale,
+    required this.thermalScale,
+  });
 
   @override
-  State<_CachedA4Preview> createState() => _CachedA4PreviewState();
+  State<_CachedPrintPreview> createState() => _CachedPrintPreviewState();
 }
 
-class _CachedA4PreviewState extends State<_CachedA4Preview> {
+class _CachedPrintPreviewState extends State<_CachedPrintPreview> {
   Future<List<({Product product, String? variantInfo})>>? _labelsFuture;
 
   @override
@@ -350,7 +385,7 @@ class _CachedA4PreviewState extends State<_CachedA4Preview> {
   }
 
   @override
-  void didUpdateWidget(covariant _CachedA4Preview oldWidget) {
+  void didUpdateWidget(covariant _CachedPrintPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (_shouldRefresh(oldWidget.data, widget.data)) {
       _refreshFuture();
@@ -362,11 +397,15 @@ class _CachedA4PreviewState extends State<_CachedA4Preview> {
         oldData.settings != newData.settings ||
         oldData.invoiceData != newData.invoiceData ||
         oldData.currentQuantities != newData.currentQuantities ||
+        oldData.variantInfoByProductId != newData.variantInfoByProductId ||
+        oldData.selectedVariantIds != newData.selectedVariantIds ||
         oldData.companyProfile != newData.companyProfile;
   }
 
   void _refreshFuture() {
-    _labelsFuture = const _BarcodeDesignScreenContent()._buildPreviewLabels(widget.data);
+    _labelsFuture = const _BarcodeDesignScreenContent()._buildPreviewLabels(
+      widget.data,
+    );
   }
 
   @override
@@ -379,11 +418,22 @@ class _CachedA4PreviewState extends State<_CachedA4Preview> {
         }
         final labels = snapshot.data ?? const [];
         if (labels.isEmpty) return const _EmptyPreview();
-        return A4BatchPreviewWidget(
+        final showA4 =
+            widget.data.settings.printDestination == PrintDestination.system &&
+            widget.data.settings.isA4Mode;
+        if (showA4) {
+          return A4BatchPreviewWidget(
+            labels: labels,
+            settings: widget.data.settings,
+            companyProfile: widget.data.companyProfile,
+            scale: widget.a4Scale,
+          );
+        }
+        return ThermalBatchPreviewWidget(
           labels: labels,
           settings: widget.data.settings,
           companyProfile: widget.data.companyProfile,
-          scale: widget.scale,
+          scale: widget.thermalScale,
         );
       },
     );
@@ -415,14 +465,11 @@ class _MobileLayout extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: data.selectedProducts.isNotEmpty
-                    ? (data.settings.isA4Mode
-                        ? _CachedA4Preview(data: data, scale: 0.35)
-                        : BarcodePreviewWidget(
-                            product: data.selectedProducts.first,
-                            settings: data.settings,
-                            companyProfile: data.companyProfile,
-                            variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
-                          ))
+                    ? _CachedPrintPreview(
+                        data: data,
+                        a4Scale: 0.35,
+                        thermalScale: 0.9,
+                      )
                     : const _EmptyPreview(),
               ),
             ),
@@ -477,9 +524,9 @@ class _TabletLayout extends StatelessWidget {
                   onRemove: (productId) => context
                       .read<BarcodeDesignBloc>()
                       .add(RemoveProductFromSelection(productId)),
-                  onClear: () => context
-                      .read<BarcodeDesignBloc>()
-                      .add(const ClearProductSelection()),
+                  onClear: () => context.read<BarcodeDesignBloc>().add(
+                    const ClearProductSelection(),
+                  ),
                 ),
               ),
             ],
@@ -502,15 +549,11 @@ class _TabletLayout extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: data.selectedProducts.isNotEmpty
-                          ? (data.settings.isA4Mode
-                              ? _CachedA4Preview(data: data, scale: 0.45)
-                              : BarcodePreviewWidget(
-                                  product: data.selectedProducts.first,
-                                  settings: data.settings,
-                                  companyProfile: data.companyProfile,
-                                  variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
-                                  scale: 1.5,
-                                ))
+                          ? _CachedPrintPreview(
+                              data: data,
+                              a4Scale: 0.45,
+                              thermalScale: 1.2,
+                            )
                           : const _EmptyPreview(),
                     ),
                   ),
@@ -568,9 +611,9 @@ class _DesktopLayout extends StatelessWidget {
                   onRemove: (productId) => context
                       .read<BarcodeDesignBloc>()
                       .add(RemoveProductFromSelection(productId)),
-                  onClear: () => context
-                      .read<BarcodeDesignBloc>()
-                      .add(const ClearProductSelection()),
+                  onClear: () => context.read<BarcodeDesignBloc>().add(
+                    const ClearProductSelection(),
+                  ),
                 ),
               ),
             ],
@@ -596,15 +639,11 @@ class _DesktopLayout extends StatelessWidget {
                       child: Padding(
                         padding: const EdgeInsets.all(24),
                         child: data.selectedProducts.isNotEmpty
-                            ? (data.settings.isA4Mode
-                                ? _CachedA4Preview(data: data, scale: 0.6)
-                                : BarcodePreviewWidget(
-                                    product: data.selectedProducts.first,
-                                    settings: data.settings,
-                                    companyProfile: data.companyProfile,
-                                    variantInfo: data.variantInfoByProductId[data.selectedProducts.first.id],
-                                    scale: 2.0,
-                                  ))
+                            ? _CachedPrintPreview(
+                                data: data,
+                                a4Scale: 0.6,
+                                thermalScale: 1.6,
+                              )
                             : const _EmptyPreview(),
                       ),
                     ),
@@ -631,10 +670,7 @@ class _DesktopLayout extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 16),
-                DesignSettingsWidget(
-                  settings: data.settings,
-                  isCompact: false,
-                ),
+                DesignSettingsWidget(settings: data.settings, isCompact: false),
                 const SizedBox(height: 24),
                 _PrintActionsWidget(data: data),
               ],
@@ -656,24 +692,20 @@ class _EmptyPreview extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(
-          LucideIcons.scan,
-          size: 64,
-          color: colorScheme.outline,
-        ),
+        Icon(LucideIcons.scan, size: 64, color: colorScheme.outline),
         const SizedBox(height: 16),
         Text(
           'barcode.no_product_selected'.tr(),
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: colorScheme.outline,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodyLarge?.copyWith(color: colorScheme.outline),
         ),
         const SizedBox(height: 8),
         Text(
           'barcode.select_product_hint'.tr(),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: colorScheme.outline,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: colorScheme.outline),
           textAlign: TextAlign.center,
         ),
       ],
@@ -709,9 +741,9 @@ class _ProductSelectionSummary extends StatelessWidget {
           ),
           if (count > 0)
             TextButton(
-              onPressed: () => context
-                  .read<BarcodeDesignBloc>()
-                  .add(const ClearProductSelection()),
+              onPressed: () => context.read<BarcodeDesignBloc>().add(
+                const ClearProductSelection(),
+              ),
               child: Text('common.clear'.tr()),
             ),
         ],
@@ -729,7 +761,8 @@ class _PrintActionsWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasProducts = data.selectedProducts.isNotEmpty;
-    final isProcessing = data.operationStatus == PrintOperationStatus.preparing ||
+    final isProcessing =
+        data.operationStatus == PrintOperationStatus.preparing ||
         data.operationStatus == PrintOperationStatus.printing;
 
     return Column(
@@ -742,7 +775,7 @@ class _PrintActionsWidget extends StatelessWidget {
         const SizedBox(height: 16),
         FilledButton.icon(
           onPressed: hasProducts && !isProcessing
-              ? () => context.read<BarcodeDesignBloc>().add(const PrintLabels())
+              ? () => _startBarcodePrint(context, data)
               : null,
           icon: isProcessing
               ? const SizedBox(
@@ -752,7 +785,9 @@ class _PrintActionsWidget extends StatelessWidget {
                 )
               : const Icon(LucideIcons.printer),
           label: Text(
-            isProcessing ? 'barcode.printing'.tr() : 'barcode.print_labels'.tr(),
+            isProcessing
+                ? 'barcode.printing'.tr()
+                : 'barcode.print_labels'.tr(),
           ),
         ),
         const SizedBox(height: 8),

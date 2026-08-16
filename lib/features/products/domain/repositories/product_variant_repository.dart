@@ -18,7 +18,7 @@ abstract class ProductVariantRepository {
     required Decimal priceCents,
     required int stockQuantity,
   });
-  
+
   Future<int> createVariant({
     required int productId,
     String? sku,
@@ -73,6 +73,11 @@ abstract class ProductVariantRepository {
   /// the product form to confirm the exact number before disabling variants.
   Future<int> countActiveDimensionalVariants(int productId);
 
+  /// Number of active colour/size variants whose on-hand quantity is not
+  /// zero. Such variants cannot be hidden until an auditable inventory
+  /// adjustment brings them to zero.
+  Future<int> countActiveDimensionalVariantsWithStock(int productId);
+
   /// Deactivate (soft-delete) every dimension-bearing variant so the product
   /// reverts to a single default variant behaviour. History is preserved.
   Future<int> deactivateDimensionalVariants(int productId);
@@ -97,7 +102,7 @@ abstract class ProductVariantRepository {
     required int currencyId,
     int? userId,
   });
-  
+
   // Validation helpers
   Future<bool> isSkuTaken(String sku, {int? excludeVariantId});
   Future<bool> isBarcodeTaken(String barcode, {int? excludeVariantId});
@@ -107,11 +112,14 @@ abstract class ProductVariantRepository {
     int? sizeId,
     int? excludeVariantId,
   });
-  
+
   // Variant summaries
   Stream<Map<int, ({int count, int totalStock})>> watchVariantSummaries();
-  Stream<Map<int, ({String? sizeName, String? colorHex})>> watchVariantPreviews();
-  Future<({int count, int totalStock})?> getVariantSummaryByProduct(int productId);
+  Stream<Map<int, ({String? sizeName, String? colorHex})>>
+  watchVariantPreviews();
+  Future<({int count, int totalStock})?> getVariantSummaryByProduct(
+    int productId,
+  );
 
   // Colors
   Stream<List<ProductColor>> watchAllColors();
@@ -139,4 +147,16 @@ class VariantDeletionResult {
     required this.wasDeleted,
     required this.referenceCount,
   });
+}
+
+/// Domain-safe error surfaced whenever an operation would hide stock from
+/// POS and stock reports. The user must first post an inventory adjustment;
+/// callers must never silently discard or merge the quantity.
+class VariantStockConflictException implements Exception {
+  final int variantCount;
+  const VariantStockConflictException(this.variantCount);
+
+  @override
+  String toString() =>
+      'VariantStockConflictException(variantCount: $variantCount)';
 }

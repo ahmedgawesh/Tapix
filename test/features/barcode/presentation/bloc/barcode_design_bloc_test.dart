@@ -1,4 +1,5 @@
 import 'package:bloc_test/bloc_test.dart';
+import 'package:barcode_widget/barcode_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
@@ -16,13 +17,26 @@ import 'package:tapix/features/settings/data/services/company_profile_service.da
 import 'package:tapix/features/settings/domain/entities/company_profile.dart';
 import 'package:decimal/decimal.dart';
 
-@GenerateMocks([BarcodeTemplateDao, BarcodePrinterService, CompanyProfileService])
+@GenerateMocks([
+  BarcodeTemplateDao,
+  BarcodePrinterService,
+  CompanyProfileService,
+])
 import 'barcode_design_bloc_test.mocks.dart';
 
 class MockProductVariantDao extends Mock implements ProductVariantDao {
+  final Map<int, String> productInfoById = <int, String>{};
+
   @override
-  Future<Map<int, String>> getVariantInfoByProductIds(List<int> productIds) async {
-    return <int, String>{};
+  Future<Map<int, String>> getVariantInfoByProductIds(
+    List<int> productIds,
+  ) async {
+    final requestedIds = productIds.toSet();
+    return Map<int, String>.fromEntries(
+      productInfoById.entries.where(
+        (entry) => requestedIds.contains(entry.key),
+      ),
+    );
   }
 }
 
@@ -76,18 +90,38 @@ void main() {
     mockCompanyProfileService = MockCompanyProfileService();
     mockProductVariantDao = MockProductVariantDao();
 
-    when(mockCompanyProfileService.watchProfile())
-        .thenAnswer((_) => Stream.value(CompanyProfile.empty()));
-    when(mockCompanyProfileService.getProfile())
-        .thenAnswer((_) async => CompanyProfile.empty());
+    when(
+      mockCompanyProfileService.watchProfile(),
+    ).thenAnswer((_) => Stream.value(CompanyProfile.empty()));
+    when(
+      mockCompanyProfileService.getProfile(),
+    ).thenAnswer((_) async => CompanyProfile.empty());
 
     // Default stubs
-    when(mockTemplateDao.watchTemplates())
-        .thenAnswer((_) => Stream.value([testTemplate]));
-    when(mockTemplateDao.getTemplates())
-        .thenAnswer((_) async => [testTemplate]);
-    when(mockTemplateDao.getDefaultTemplate())
-        .thenAnswer((_) async => testTemplate);
+    when(
+      mockTemplateDao.watchTemplates(),
+    ).thenAnswer((_) => Stream.value([testTemplate]));
+    when(
+      mockTemplateDao.getTemplates(),
+    ).thenAnswer((_) async => [testTemplate]);
+    when(
+      mockTemplateDao.getDefaultTemplate(),
+    ).thenAnswer((_) async => testTemplate);
+    when(
+      mockPrinterService.getBarcodeTypeFromString(any),
+    ).thenReturn(Barcode.code128());
+    when(
+      mockTemplateDao.logPrint(
+        productId: anyNamed('productId'),
+        variantId: anyNamed('variantId'),
+        templateId: anyNamed('templateId'),
+        quantityPrinted: anyNamed('quantityPrinted'),
+        printerName: anyNamed('printerName'),
+        printType: anyNamed('printType'),
+        status: anyNamed('status'),
+        errorMessage: anyNamed('errorMessage'),
+      ),
+    ).thenAnswer((_) async => 1);
 
     bloc = BarcodeDesignBloc(
       templateDao: mockTemplateDao,
@@ -131,7 +165,8 @@ void main() {
     blocTest<BarcodeDesignBloc, RealtimeState<BarcodeDesignData>>(
       'loads initial products when provided',
       build: () => bloc,
-      act: (bloc) => bloc.add(LoadBarcodeDesignData(initialProducts: [testProduct])),
+      act: (bloc) =>
+          bloc.add(LoadBarcodeDesignData(initialProducts: [testProduct])),
       wait: const Duration(milliseconds: 100),
       verify: (bloc) {
         expect(bloc.state, isA<RealtimeSuccess<BarcodeDesignData>>());
@@ -148,8 +183,11 @@ void main() {
       act: (bloc) => bloc.add(AddProductsToSelection([testProduct])),
       skip: 1,
       expect: () => [
-        isA<RealtimeSuccess<BarcodeDesignData>>()
-            .having((s) => s.data.selectedProducts.length, 'products length', 1),
+        isA<RealtimeSuccess<BarcodeDesignData>>().having(
+          (s) => s.data.selectedProducts.length,
+          'products length',
+          1,
+        ),
       ],
     );
 
@@ -162,8 +200,11 @@ void main() {
       act: (bloc) => bloc.add(const RemoveProductFromSelection(1)),
       skip: 1,
       expect: () => [
-        isA<RealtimeSuccess<BarcodeDesignData>>()
-            .having((s) => s.data.selectedProducts.length, 'products length', 0),
+        isA<RealtimeSuccess<BarcodeDesignData>>().having(
+          (s) => s.data.selectedProducts.length,
+          'products length',
+          0,
+        ),
       ],
     );
 
@@ -176,8 +217,11 @@ void main() {
       act: (bloc) => bloc.add(const ClearProductSelection()),
       skip: 1,
       expect: () => [
-        isA<RealtimeSuccess<BarcodeDesignData>>()
-            .having((s) => s.data.selectedProducts.isEmpty, 'products empty', true),
+        isA<RealtimeSuccess<BarcodeDesignData>>().having(
+          (s) => s.data.selectedProducts.isEmpty,
+          'products empty',
+          true,
+        ),
       ],
     );
 
@@ -199,7 +243,8 @@ void main() {
       'updates label dimensions',
       build: () => bloc,
       seed: () => RealtimeSuccess(data: BarcodeDesignData.empty()),
-      act: (bloc) => bloc.add(const UpdateLabelDimensions(widthMm: 80.0, heightMm: 50.0)),
+      act: (bloc) =>
+          bloc.add(const UpdateLabelDimensions(widthMm: 80.0, heightMm: 50.0)),
       skip: 1,
       expect: () => [
         isA<RealtimeSuccess<BarcodeDesignData>>()
@@ -215,8 +260,11 @@ void main() {
       act: (bloc) => bloc.add(const ToggleIncludeName(false)),
       skip: 1,
       expect: () => [
-        isA<RealtimeSuccess<BarcodeDesignData>>()
-            .having((s) => s.data.settings.includeName, 'includeName', false),
+        isA<RealtimeSuccess<BarcodeDesignData>>().having(
+          (s) => s.data.settings.includeName,
+          'includeName',
+          false,
+        ),
       ],
     );
 
@@ -227,8 +275,29 @@ void main() {
       act: (bloc) => bloc.add(const ToggleIncludePrice(false)),
       skip: 1,
       expect: () => [
+        isA<RealtimeSuccess<BarcodeDesignData>>().having(
+          (s) => s.data.settings.includePrice,
+          'includePrice',
+          false,
+        ),
+      ],
+    );
+
+    blocTest<BarcodeDesignBloc, RealtimeState<BarcodeDesignData>>(
+      'selects both retail and wholesale prices and enables price display',
+      build: () => bloc,
+      seed: () => RealtimeSuccess(data: BarcodeDesignData.empty()),
+      act: (bloc) =>
+          bloc.add(const UpdatePriceDisplayMode(PriceDisplayMode.both)),
+      skip: 1,
+      expect: () => [
         isA<RealtimeSuccess<BarcodeDesignData>>()
-            .having((s) => s.data.settings.includePrice, 'includePrice', false),
+            .having(
+              (s) => s.data.settings.priceDisplayMode,
+              'priceDisplayMode',
+              PriceDisplayMode.both,
+            )
+            .having((s) => s.data.settings.includePrice, 'includePrice', true),
       ],
     );
 
@@ -239,8 +308,11 @@ void main() {
       act: (bloc) => bloc.add(const ToggleIncludeSku(true)),
       skip: 1,
       expect: () => [
-        isA<RealtimeSuccess<BarcodeDesignData>>()
-            .having((s) => s.data.settings.includeSku, 'includeSku', true),
+        isA<RealtimeSuccess<BarcodeDesignData>>().having(
+          (s) => s.data.settings.includeSku,
+          'includeSku',
+          true,
+        ),
       ],
     );
 
@@ -251,8 +323,11 @@ void main() {
       act: (bloc) => bloc.add(const UpdateBarcodeType('qr')),
       skip: 1,
       expect: () => [
-        isA<RealtimeSuccess<BarcodeDesignData>>()
-            .having((s) => s.data.settings.barcodeType, 'barcodeType', 'qr'),
+        isA<RealtimeSuccess<BarcodeDesignData>>().having(
+          (s) => s.data.settings.barcodeType,
+          'barcodeType',
+          'qr',
+        ),
       ],
     );
 
@@ -263,8 +338,11 @@ void main() {
       act: (bloc) => bloc.add(const UpdateCopies(5)),
       skip: 1,
       expect: () => [
-        isA<RealtimeSuccess<BarcodeDesignData>>()
-            .having((s) => s.data.settings.copies, 'copies', 5),
+        isA<RealtimeSuccess<BarcodeDesignData>>().having(
+          (s) => s.data.settings.copies,
+          'copies',
+          5,
+        ),
       ],
     );
 
@@ -275,8 +353,11 @@ void main() {
       act: (bloc) => bloc.add(const UpdateCopies(1000)),
       skip: 1,
       expect: () => [
-        isA<RealtimeSuccess<BarcodeDesignData>>()
-            .having((s) => s.data.settings.copies, 'copies', 999),
+        isA<RealtimeSuccess<BarcodeDesignData>>().having(
+          (s) => s.data.settings.copies,
+          'copies',
+          999,
+        ),
       ],
     );
 
@@ -287,8 +368,11 @@ void main() {
       act: (bloc) => bloc.add(const UpdatePrintType('batch')),
       skip: 1,
       expect: () => [
-        isA<RealtimeSuccess<BarcodeDesignData>>()
-            .having((s) => s.data.settings.printType, 'printType', 'batch'),
+        isA<RealtimeSuccess<BarcodeDesignData>>().having(
+          (s) => s.data.settings.printType,
+          'printType',
+          'batch',
+        ),
       ],
     );
 
@@ -299,9 +383,74 @@ void main() {
       act: (bloc) => bloc.add(const PrintLabels()),
       skip: 1,
       expect: () => [
-        isA<RealtimeSuccess<BarcodeDesignData>>()
-            .having((s) => s.data.errorMessage, 'errorMessage', 'No products selected for printing'),
+        isA<RealtimeSuccess<BarcodeDesignData>>().having(
+          (s) => s.data.errorMessage,
+          'errorMessage',
+          'No products selected for printing',
+        ),
       ],
+    );
+
+    test(
+      'passes simple-product color and size to PDF jobs when enabled',
+      () async {
+        mockProductVariantDao.productInfoById[testProduct.id] = 'Large / Red';
+
+        final loaded = bloc.stream.firstWhere(
+          (state) =>
+              state is RealtimeSuccess<BarcodeDesignData> &&
+              state.data.selectedProducts.isNotEmpty,
+        );
+        bloc.add(LoadBarcodeDesignData(initialProducts: [testProduct]));
+        await loaded;
+
+        final enabled = bloc.stream.firstWhere(
+          (state) =>
+              state is RealtimeSuccess<BarcodeDesignData> &&
+              state.data.settings.includeVariantInfo,
+        );
+        bloc.add(const ToggleIncludeVariantInfo(true));
+        await enabled;
+
+        final printed = bloc.stream.firstWhere(
+          (state) =>
+              state is RealtimeSuccess<BarcodeDesignData> &&
+              state.data.operationStatus == PrintOperationStatus.success,
+        );
+        bloc.add(const PrintLabels());
+        await printed;
+
+        final captured = verify(
+          mockPrinterService.printLabelsPdfBatch(
+            jobs: captureAnyNamed('jobs'),
+            barcode: anyNamed('barcode'),
+            widthMm: anyNamed('widthMm'),
+            heightMm: anyNamed('heightMm'),
+            includeName: anyNamed('includeName'),
+            includePrice: anyNamed('includePrice'),
+            priceDisplayMode: anyNamed('priceDisplayMode'),
+            includeBarcode: anyNamed('includeBarcode'),
+            includeSku: anyNamed('includeSku'),
+            includeCompanyName: anyNamed('includeCompanyName'),
+            companyName: anyNamed('companyName'),
+            includeCompanyContact: anyNamed('includeCompanyContact'),
+            companyAddress: anyNamed('companyAddress'),
+            companyPhone: anyNamed('companyPhone'),
+            isA4Mode: anyNamed('isA4Mode'),
+            labelsPerRow: anyNamed('labelsPerRow'),
+            horizontalGapMm: anyNamed('horizontalGapMm'),
+            verticalGapMm: anyNamed('verticalGapMm'),
+            pageMarginMm: anyNamed('pageMarginMm'),
+            includeVariantInfo: true,
+          ),
+        ).captured.single;
+
+        final jobs =
+            captured
+                as List<({Product product, int copies, String? variantInfo})>;
+        expect(jobs, hasLength(1));
+        expect(jobs.single.variantInfo, 'Large / Red');
+      },
     );
 
     blocTest<BarcodeDesignBloc, RealtimeState<BarcodeDesignData>>(
@@ -311,8 +460,11 @@ void main() {
       act: (bloc) => bloc.add(const ShareLabels()),
       skip: 1,
       expect: () => [
-        isA<RealtimeSuccess<BarcodeDesignData>>()
-            .having((s) => s.data.errorMessage, 'errorMessage', 'No products selected for sharing'),
+        isA<RealtimeSuccess<BarcodeDesignData>>().having(
+          (s) => s.data.errorMessage,
+          'errorMessage',
+          'No products selected for sharing',
+        ),
       ],
     );
 
@@ -329,7 +481,11 @@ void main() {
       skip: 1,
       expect: () => [
         isA<RealtimeSuccess<BarcodeDesignData>>()
-            .having((s) => s.data.operationStatus, 'status', PrintOperationStatus.idle)
+            .having(
+              (s) => s.data.operationStatus,
+              'status',
+              PrintOperationStatus.idle,
+            )
             .having((s) => s.data.errorMessage, 'errorMessage', null),
       ],
     );

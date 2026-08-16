@@ -6,10 +6,12 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../settings/data/services/company_profile_service.dart';
 import '../../../settings/domain/entities/company_profile.dart';
 import '../../../../core/database/app_database.dart';
+import '../../domain/models/trial_balance.dart';
 import '../../../reports/presentation/bloc/customer_reports_bloc.dart';
 import '../../../reports/presentation/bloc/customer_sales_returns_reports_bloc.dart';
 import '../../../reports/presentation/widgets/report_date_range.dart';
@@ -72,56 +74,51 @@ class JournalPdfService {
     );
   }
 
-  /// Print a trial balance report
+  /// Print a trial balance report.
+  /// The PDF consumes the same posted-journal-derived model shown on screen.
   static Future<void> printTrialBalance({
     required BuildContext context,
-    required List<Account> accounts,
-    required DateTime asOfDate,
+    required TrialBalance trialBalance,
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
     final company = await sl<CompanyProfileService>().getProfile();
-
     final pdf = await _buildTrialBalancePdf(
-      accounts: accounts,
-      asOfDate: asOfDate,
+      trialBalance: trialBalance,
       cs: cs,
       locale: locale,
       isRtl: isRtl,
       company: company,
     );
-
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'TrialBalance_${DateFormat('yyyyMMdd').format(asOfDate)}',
+      name:
+          'TrialBalance_${DateFormat('yyyyMMdd').format(trialBalance.asOfDate)}',
     );
   }
 
-  /// Share a trial balance report
+  /// Share a trial balance report.
   static Future<void> shareTrialBalance({
     required BuildContext context,
-    required List<Account> accounts,
-    required DateTime asOfDate,
+    required TrialBalance trialBalance,
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
     final company = await sl<CompanyProfileService>().getProfile();
-
     final pdf = await _buildTrialBalancePdf(
-      accounts: accounts,
-      asOfDate: asOfDate,
+      trialBalance: trialBalance,
       cs: cs,
       locale: locale,
       isRtl: isRtl,
       company: company,
     );
-
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'TrialBalance_${DateFormat('yyyyMMdd').format(asOfDate)}.pdf',
+      filename:
+          'TrialBalance_${DateFormat('yyyyMMdd').format(trialBalance.asOfDate)}.pdf',
     );
   }
 
@@ -132,6 +129,7 @@ class JournalPdfService {
     required int totalRevenue,
     required int totalExpenses,
     required int netProfit,
+    required DateTime startDate,
     required DateTime asOfDate,
   }) async {
     final cs = sl<CurrencyService>();
@@ -144,6 +142,7 @@ class JournalPdfService {
       totalRevenue: totalRevenue,
       totalExpenses: totalExpenses,
       netProfit: netProfit,
+      startDate: startDate,
       asOfDate: asOfDate,
       cs: cs,
       locale: locale,
@@ -164,6 +163,7 @@ class JournalPdfService {
     required int totalRevenue,
     required int totalExpenses,
     required int netProfit,
+    required DateTime startDate,
     required DateTime asOfDate,
   }) async {
     final cs = sl<CurrencyService>();
@@ -176,6 +176,7 @@ class JournalPdfService {
       totalRevenue: totalRevenue,
       totalExpenses: totalExpenses,
       netProfit: netProfit,
+      startDate: startDate,
       asOfDate: asOfDate,
       cs: cs,
       locale: locale,
@@ -285,7 +286,12 @@ class JournalPdfService {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               // Header
-              _buildHeader(company, 'accounting.journal_entry'.tr(), fonts, dir),
+              _buildHeader(
+                company,
+                'accounting.journal_entry'.tr(),
+                fonts,
+                dir,
+              ),
               pw.SizedBox(height: 20),
 
               // Entry info
@@ -343,11 +349,15 @@ class JournalPdfService {
                   'accounting.credit'.tr(),
                 ],
                 data: lines.map((line) {
-                  final account = accounts.where((a) => a.id == line.accountId).firstOrNull;
+                  final account = accounts
+                      .where((a) => a.id == line.accountId)
+                      .firstOrNull;
                   final debit = line.debitCents.toBigInt().toInt();
                   final credit = line.creditCents.toBigInt().toInt();
                   return [
-                    account != null ? '${account.accountCode} - ${account.accountName}' : '?',
+                    account != null
+                        ? '${account.accountCode} - ${account.accountName}'
+                        : '?',
                     line.description ?? '',
                     debit > 0 ? cs.formatCents(debit) : '-',
                     credit > 0 ? cs.formatCents(credit) : '-',
@@ -383,7 +393,11 @@ class JournalPdfService {
               pw.Divider(),
               pw.Text(
                 '${'accounting.printed_on'.tr()}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
-                style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                style: pw.TextStyle(
+                  font: fonts.regular,
+                  fontSize: 8,
+                  color: PdfColors.grey600,
+                ),
               ),
             ],
           );
@@ -399,8 +413,7 @@ class JournalPdfService {
   // ═══════════════════════════════════════════════════════
 
   static Future<pw.Document> _buildTrialBalancePdf({
-    required List<Account> accounts,
-    required DateTime asOfDate,
+    required TrialBalance trialBalance,
     required CurrencyService cs,
     required Locale locale,
     required bool isRtl,
@@ -410,43 +423,18 @@ class JournalPdfService {
     final pdf = pw.Document();
     final dir = isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr;
 
-    // Calculate trial balance
-    int totalDebits = 0;
-    int totalCredits = 0;
-    final rows = <List<String>>[];
-
-    for (final account in accounts) {
-      final balance = account.balanceCents.toBigInt().toInt();
-      if (balance == 0) continue;
-
-      final isDebitNormal = account.accountType == 'asset' || account.accountType == 'expense';
-      int debit = 0;
-      int credit = 0;
-
-      if (isDebitNormal) {
-        if (balance >= 0) {
-          debit = balance;
-        } else {
-          credit = -balance;
-        }
-      } else {
-        if (balance >= 0) {
-          credit = balance;
-        } else {
-          debit = -balance;
-        }
-      }
-
-      totalDebits += debit;
-      totalCredits += credit;
-
-      rows.add([
-        account.accountCode,
-        account.accountName,
-        debit > 0 ? cs.formatCents(debit) : '-',
-        credit > 0 ? cs.formatCents(credit) : '-',
-      ]);
-    }
+    final rows = trialBalance.nonZeroItems
+        .map(
+          (item) => [
+            item.accountCode,
+            item.accountName,
+            item.debitCents > 0 ? cs.formatCents(item.debitCents) : '-',
+            item.creditCents > 0 ? cs.formatCents(item.creditCents) : '-',
+          ],
+        )
+        .toList(growable: false);
+    final totalDebits = trialBalance.totalDebitCents;
+    final totalCredits = trialBalance.totalCreditCents;
 
     pdf.addPage(
       pw.Page(
@@ -456,10 +444,15 @@ class JournalPdfService {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _buildHeader(company, 'accounting.trial_balance'.tr(), fonts, dir),
+              _buildHeader(
+                company,
+                'accounting.trial_balance'.tr(),
+                fonts,
+                dir,
+              ),
               pw.SizedBox(height: 8),
               pw.Text(
-                '${'accounting.as_of'.tr()}: ${DateFormat.yMMMd().format(asOfDate)}',
+                '${'accounting.as_of'.tr()}: ${DateFormat.yMMMd().format(trialBalance.asOfDate)}',
                 style: pw.TextStyle(font: fonts.regular, fontSize: 10),
               ),
               pw.SizedBox(height: 16),
@@ -467,7 +460,9 @@ class JournalPdfService {
               pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 9),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 9),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.grey200,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.centerLeft,
                   1: pw.Alignment.centerLeft,
@@ -522,7 +517,11 @@ class JournalPdfService {
               pw.Divider(),
               pw.Text(
                 '${'accounting.printed_on'.tr()}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
-                style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                style: pw.TextStyle(
+                  font: fonts.regular,
+                  fontSize: 8,
+                  color: PdfColors.grey600,
+                ),
               ),
             ],
           );
@@ -542,6 +541,7 @@ class JournalPdfService {
     required int totalRevenue,
     required int totalExpenses,
     required int netProfit,
+    required DateTime startDate,
     required DateTime asOfDate,
     required CurrencyService cs,
     required Locale locale,
@@ -563,48 +563,57 @@ class JournalPdfService {
               _buildHeader(company, 'reports.profit_loss'.tr(), fonts, dir),
               pw.SizedBox(height: 8),
               pw.Text(
-                '${'accounting.as_of'.tr()}: ${DateFormat.yMMMd().format(asOfDate)}',
+                '${DateFormat.yMMMd().format(startDate)} – '
+                '${DateFormat.yMMMd().format(asOfDate)}',
                 style: pw.TextStyle(font: fonts.regular, fontSize: 10),
               ),
               pw.SizedBox(height: 16),
 
               // Sections
-              ...sections.expand((section) => [
-                pw.Text(
-                  section.title,
-                  style: pw.TextStyle(font: fonts.bold, fontSize: 11),
-                ),
-                pw.SizedBox(height: 4),
-                pw.TableHelper.fromTextArray(
-                  headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 9),
-                  cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 9),
-                  headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-                  cellAlignments: {
-                    0: pw.Alignment.centerLeft,
-                    1: pw.Alignment.centerLeft,
-                    2: pw.Alignment.centerRight,
-                  },
-                  headers: [
-                    'accounting.code'.tr(),
-                    'accounting.account'.tr(),
-                    'reports.balance'.tr(),
-                  ],
-                  data: section.items.map((item) => [
-                    item.code,
-                    item.name,
-                    cs.formatCents(item.amountCents),
-                  ]).toList(),
-                ),
-                pw.Container(
-                  alignment: pw.Alignment.centerRight,
-                  padding: const pw.EdgeInsets.symmetric(vertical: 4),
-                  child: pw.Text(
-                    '${section.title}: ${cs.formatCents(section.totalCents)}',
-                    style: pw.TextStyle(font: fonts.bold, fontSize: 10),
+              ...sections.expand(
+                (section) => [
+                  pw.Text(
+                    section.title,
+                    style: pw.TextStyle(font: fonts.bold, fontSize: 11),
                   ),
-                ),
-                pw.SizedBox(height: 12),
-              ]),
+                  pw.SizedBox(height: 4),
+                  pw.TableHelper.fromTextArray(
+                    headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 9),
+                    cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 9),
+                    headerDecoration: const pw.BoxDecoration(
+                      color: PdfColors.grey200,
+                    ),
+                    cellAlignments: {
+                      0: pw.Alignment.centerLeft,
+                      1: pw.Alignment.centerLeft,
+                      2: pw.Alignment.centerRight,
+                    },
+                    headers: [
+                      'accounting.code'.tr(),
+                      'accounting.account'.tr(),
+                      'reports.balance'.tr(),
+                    ],
+                    data: section.items
+                        .map(
+                          (item) => [
+                            item.code,
+                            item.name,
+                            cs.formatCents(item.amountCents),
+                          ],
+                        )
+                        .toList(),
+                  ),
+                  pw.Container(
+                    alignment: pw.Alignment.centerRight,
+                    padding: const pw.EdgeInsets.symmetric(vertical: 4),
+                    child: pw.Text(
+                      '${section.title}: ${cs.formatCents(section.totalCents)}',
+                      style: pw.TextStyle(font: fonts.bold, fontSize: 10),
+                    ),
+                  ),
+                  pw.SizedBox(height: 12),
+                ],
+              ),
 
               // Summary
               pw.Divider(),
@@ -618,20 +627,34 @@ class JournalPdfService {
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        pw.Text('reports.total_revenue'.tr(),
-                            style: pw.TextStyle(font: fonts.regular, fontSize: 10)),
-                        pw.Text(cs.formatCents(totalRevenue),
-                            style: pw.TextStyle(font: fonts.bold, fontSize: 10)),
+                        pw.Text(
+                          'reports.total_revenue'.tr(),
+                          style: pw.TextStyle(
+                            font: fonts.regular,
+                            fontSize: 10,
+                          ),
+                        ),
+                        pw.Text(
+                          cs.formatCents(totalRevenue),
+                          style: pw.TextStyle(font: fonts.bold, fontSize: 10),
+                        ),
                       ],
                     ),
                     pw.SizedBox(height: 4),
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        pw.Text('reports.total_expenses'.tr(),
-                            style: pw.TextStyle(font: fonts.regular, fontSize: 10)),
-                        pw.Text('(${cs.formatCents(totalExpenses)})',
-                            style: pw.TextStyle(font: fonts.bold, fontSize: 10)),
+                        pw.Text(
+                          'reports.total_expenses'.tr(),
+                          style: pw.TextStyle(
+                            font: fonts.regular,
+                            fontSize: 10,
+                          ),
+                        ),
+                        pw.Text(
+                          '(${cs.formatCents(totalExpenses)})',
+                          style: pw.TextStyle(font: fonts.bold, fontSize: 10),
+                        ),
                       ],
                     ),
                     pw.Divider(),
@@ -639,7 +662,9 @@ class JournalPdfService {
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
                         pw.Text(
-                          netProfit >= 0 ? 'reports.net_profit'.tr() : 'reports.net_loss'.tr(),
+                          netProfit >= 0
+                              ? 'reports.net_profit'.tr()
+                              : 'reports.net_loss'.tr(),
                           style: pw.TextStyle(font: fonts.bold, fontSize: 12),
                         ),
                         pw.Text(
@@ -647,7 +672,9 @@ class JournalPdfService {
                           style: pw.TextStyle(
                             font: fonts.bold,
                             fontSize: 12,
-                            color: netProfit >= 0 ? PdfColors.green700 : PdfColors.red700,
+                            color: netProfit >= 0
+                                ? PdfColors.green700
+                                : PdfColors.red700,
                           ),
                         ),
                       ],
@@ -660,7 +687,11 @@ class JournalPdfService {
               pw.Divider(),
               pw.Text(
                 '${'accounting.printed_on'.tr()}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
-                style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                style: pw.TextStyle(
+                  font: fonts.regular,
+                  fontSize: 8,
+                  color: PdfColors.grey600,
+                ),
               ),
             ],
           );
@@ -708,42 +739,50 @@ class JournalPdfService {
               pw.SizedBox(height: 16),
 
               // Sections
-              ...sections.expand((section) => [
-                pw.Text(
-                  section.title,
-                  style: pw.TextStyle(font: fonts.bold, fontSize: 11),
-                ),
-                pw.SizedBox(height: 4),
-                pw.TableHelper.fromTextArray(
-                  headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 9),
-                  cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 9),
-                  headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-                  cellAlignments: {
-                    0: pw.Alignment.centerLeft,
-                    1: pw.Alignment.centerLeft,
-                    2: pw.Alignment.centerRight,
-                  },
-                  headers: [
-                    'accounting.code'.tr(),
-                    'accounting.account'.tr(),
-                    'reports.balance'.tr(),
-                  ],
-                  data: section.items.map((item) => [
-                    item.code,
-                    item.name,
-                    cs.formatCents(item.amountCents),
-                  ]).toList(),
-                ),
-                pw.Container(
-                  alignment: pw.Alignment.centerRight,
-                  padding: const pw.EdgeInsets.symmetric(vertical: 4),
-                  child: pw.Text(
-                    '${section.title}: ${cs.formatCents(section.totalCents)}',
-                    style: pw.TextStyle(font: fonts.bold, fontSize: 10),
+              ...sections.expand(
+                (section) => [
+                  pw.Text(
+                    section.title,
+                    style: pw.TextStyle(font: fonts.bold, fontSize: 11),
                   ),
-                ),
-                pw.SizedBox(height: 12),
-              ]),
+                  pw.SizedBox(height: 4),
+                  pw.TableHelper.fromTextArray(
+                    headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 9),
+                    cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 9),
+                    headerDecoration: const pw.BoxDecoration(
+                      color: PdfColors.grey200,
+                    ),
+                    cellAlignments: {
+                      0: pw.Alignment.centerLeft,
+                      1: pw.Alignment.centerLeft,
+                      2: pw.Alignment.centerRight,
+                    },
+                    headers: [
+                      'accounting.code'.tr(),
+                      'accounting.account'.tr(),
+                      'reports.balance'.tr(),
+                    ],
+                    data: section.items
+                        .map(
+                          (item) => [
+                            item.code,
+                            item.name,
+                            cs.formatCents(item.amountCents),
+                          ],
+                        )
+                        .toList(),
+                  ),
+                  pw.Container(
+                    alignment: pw.Alignment.centerRight,
+                    padding: const pw.EdgeInsets.symmetric(vertical: 4),
+                    child: pw.Text(
+                      '${section.title}: ${cs.formatCents(section.totalCents)}',
+                      style: pw.TextStyle(font: fonts.bold, fontSize: 10),
+                    ),
+                  ),
+                  pw.SizedBox(height: 12),
+                ],
+              ),
 
               // Summary
               pw.Divider(),
@@ -757,20 +796,28 @@ class JournalPdfService {
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        pw.Text('reports.total_assets'.tr(),
-                            style: pw.TextStyle(font: fonts.bold, fontSize: 11)),
-                        pw.Text(cs.formatCents(totalAssets),
-                            style: pw.TextStyle(font: fonts.bold, fontSize: 11)),
+                        pw.Text(
+                          'reports.total_assets'.tr(),
+                          style: pw.TextStyle(font: fonts.bold, fontSize: 11),
+                        ),
+                        pw.Text(
+                          cs.formatCents(totalAssets),
+                          style: pw.TextStyle(font: fonts.bold, fontSize: 11),
+                        ),
                       ],
                     ),
                     pw.SizedBox(height: 4),
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        pw.Text('reports.total_liabilities_equity'.tr(),
-                            style: pw.TextStyle(font: fonts.bold, fontSize: 11)),
-                        pw.Text(cs.formatCents(totalLiabilitiesAndEquity),
-                            style: pw.TextStyle(font: fonts.bold, fontSize: 11)),
+                        pw.Text(
+                          'reports.total_liabilities_equity'.tr(),
+                          style: pw.TextStyle(font: fonts.bold, fontSize: 11),
+                        ),
+                        pw.Text(
+                          cs.formatCents(totalLiabilitiesAndEquity),
+                          style: pw.TextStyle(font: fonts.bold, fontSize: 11),
+                        ),
                       ],
                     ),
                   ],
@@ -796,7 +843,11 @@ class JournalPdfService {
                     if (!isBalanced)
                       pw.Text(
                         'reports.balance_sheet_difference'.tr(
-                          args: [cs.formatCents((totalAssets - totalLiabilitiesAndEquity).abs())],
+                          args: [
+                            cs.formatCents(
+                              (totalAssets - totalLiabilitiesAndEquity).abs(),
+                            ),
+                          ],
                         ),
                         style: pw.TextStyle(
                           font: fonts.regular,
@@ -815,31 +866,48 @@ class JournalPdfService {
                   padding: const pw.EdgeInsets.all(6),
                   decoration: pw.BoxDecoration(
                     border: pw.Border.all(color: PdfColors.orange),
-                    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                    borderRadius: const pw.BorderRadius.all(
+                      pw.Radius.circular(4),
+                    ),
                   ),
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
                       pw.Text(
                         'reports.diag_panel_title'.tr(),
-                        style: pw.TextStyle(font: fonts.bold, fontSize: 9, color: PdfColors.orange),
+                        style: pw.TextStyle(
+                          font: fonts.bold,
+                          fontSize: 9,
+                          color: PdfColors.orange,
+                        ),
                       ),
                       pw.SizedBox(height: 4),
-                      ...diagnosticHints.map((hint) => pw.Padding(
-                        padding: const pw.EdgeInsets.only(bottom: 2),
-                        child: pw.Row(
-                          crossAxisAlignment: pw.CrossAxisAlignment.start,
-                          children: [
-                            pw.Text('• ', style: pw.TextStyle(font: fonts.regular, fontSize: 8)),
-                            pw.Expanded(
-                              child: pw.Text(
-                                hint,
-                                style: pw.TextStyle(font: fonts.regular, fontSize: 8),
+                      ...diagnosticHints.map(
+                        (hint) => pw.Padding(
+                          padding: const pw.EdgeInsets.only(bottom: 2),
+                          child: pw.Row(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text(
+                                '• ',
+                                style: pw.TextStyle(
+                                  font: fonts.regular,
+                                  fontSize: 8,
+                                ),
                               ),
-                            ),
-                          ],
+                              pw.Expanded(
+                                child: pw.Text(
+                                  hint,
+                                  style: pw.TextStyle(
+                                    font: fonts.regular,
+                                    fontSize: 8,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      )),
+                      ),
                     ],
                   ),
                 ),
@@ -849,7 +917,11 @@ class JournalPdfService {
               pw.Divider(),
               pw.Text(
                 '${'accounting.printed_on'.tr()}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
-                style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                style: pw.TextStyle(
+                  font: fonts.regular,
+                  fontSize: 8,
+                  color: PdfColors.grey600,
+                ),
               ),
             ],
           );
@@ -896,7 +968,8 @@ class JournalPdfService {
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'CustomerReport_${DateFormat('yyyyMMdd').format(dateRange.endDate)}',
+      name:
+          'CustomerReport_${DateFormat('yyyyMMdd').format(dateRange.endDate)}',
     );
   }
 
@@ -932,7 +1005,8 @@ class JournalPdfService {
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'CustomerReport_${DateFormat('yyyyMMdd').format(dateRange.endDate)}.pdf',
+      filename:
+          'CustomerReport_${DateFormat('yyyyMMdd').format(dateRange.endDate)}.pdf',
     );
   }
 
@@ -977,7 +1051,11 @@ class JournalPdfService {
                   ),
                   pw.Text(
                     '${'reports.total_overdue'.tr()}: ${cs.formatCents(totalOverdueCents)}',
-                    style: pw.TextStyle(font: fonts.bold, fontSize: 11, color: PdfColors.red700),
+                    style: pw.TextStyle(
+                      font: fonts.bold,
+                      fontSize: 11,
+                      color: PdfColors.red700,
+                    ),
                   ),
                 ],
               ),
@@ -987,7 +1065,9 @@ class JournalPdfService {
                 pw.TableHelper.fromTextArray(
                   headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 8),
                   cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
-                  headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                  headerDecoration: const pw.BoxDecoration(
+                    color: PdfColors.grey200,
+                  ),
                   cellAlignments: {
                     0: pw.Alignment.centerLeft,
                     1: pw.Alignment.centerRight,
@@ -1006,22 +1086,40 @@ class JournalPdfService {
                     'reports.aging_over_90'.tr(),
                     'reports.aging_total'.tr(),
                   ],
-                  data: agingItems.map((item) => [
-                    item.customerName,
-                    item.currentCents > 0 ? cs.formatCents(item.currentCents) : '-',
-                    item.days30Cents > 0 ? cs.formatCents(item.days30Cents) : '-',
-                    item.days60Cents > 0 ? cs.formatCents(item.days60Cents) : '-',
-                    item.days90Cents > 0 ? cs.formatCents(item.days90Cents) : '-',
-                    item.over90Cents > 0 ? cs.formatCents(item.over90Cents) : '-',
-                    cs.formatCents(item.totalCents),
-                  ]).toList(),
+                  data: agingItems
+                      .map(
+                        (item) => [
+                          item.customerName,
+                          item.currentCents > 0
+                              ? cs.formatCents(item.currentCents)
+                              : '-',
+                          item.days30Cents > 0
+                              ? cs.formatCents(item.days30Cents)
+                              : '-',
+                          item.days60Cents > 0
+                              ? cs.formatCents(item.days60Cents)
+                              : '-',
+                          item.days90Cents > 0
+                              ? cs.formatCents(item.days90Cents)
+                              : '-',
+                          item.over90Cents > 0
+                              ? cs.formatCents(item.over90Cents)
+                              : '-',
+                          cs.formatCents(item.totalCents),
+                        ],
+                      )
+                      .toList(),
                 ),
 
               pw.Spacer(),
               pw.Divider(),
               pw.Text(
                 '${'accounting.printed_on'.tr()}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
-                style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                style: pw.TextStyle(
+                  font: fonts.regular,
+                  fontSize: 8,
+                  color: PdfColors.grey600,
+                ),
               ),
             ],
           );
@@ -1039,7 +1137,12 @@ class JournalPdfService {
             return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                _buildHeader(company, 'reports.customer_statement'.tr(), fonts, dir),
+                _buildHeader(
+                  company,
+                  'reports.customer_statement'.tr(),
+                  fonts,
+                  dir,
+                ),
                 pw.SizedBox(height: 8),
                 pw.Text(
                   customer.customerName,
@@ -1069,20 +1172,31 @@ class JournalPdfService {
                 pw.TableHelper.fromTextArray(
                   headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 9),
                   cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 9),
-                  headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                  headerDecoration: const pw.BoxDecoration(
+                    color: PdfColors.grey200,
+                  ),
                   cellAlignments: {
                     0: pw.Alignment.centerLeft,
                     1: pw.Alignment.centerRight,
                   },
-                  headers: [
-                    'reports.type'.tr(),
-                    'reports.amount'.tr(),
-                  ],
+                  headers: ['reports.type'.tr(), 'reports.amount'.tr()],
                   data: [
-                    ['reports.total_sales'.tr(), cs.formatCents(customer.totalSalesCents)],
-                    ['reports.total_payments'.tr(), cs.formatCents(customer.totalPaymentsCents)],
-                    ['reports.total_discounts'.tr(), cs.formatCents(customer.totalDiscountsCents)],
-                    ['reports.total_returns'.tr(), cs.formatCents(customer.totalReturnsCents)],
+                    [
+                      'reports.total_sales'.tr(),
+                      cs.formatCents(customer.totalSalesCents),
+                    ],
+                    [
+                      'reports.total_payments'.tr(),
+                      cs.formatCents(customer.totalPaymentsCents),
+                    ],
+                    [
+                      'reports.total_discounts'.tr(),
+                      cs.formatCents(customer.totalDiscountsCents),
+                    ],
+                    [
+                      'reports.total_returns'.tr(),
+                      cs.formatCents(customer.totalReturnsCents),
+                    ],
                   ],
                 ),
                 pw.SizedBox(height: 12),
@@ -1111,7 +1225,11 @@ class JournalPdfService {
                 pw.Divider(),
                 pw.Text(
                   '${'accounting.printed_on'.tr()}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
-                  style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                  style: pw.TextStyle(
+                    font: fonts.regular,
+                    fontSize: 8,
+                    color: PdfColors.grey600,
+                  ),
                 ),
               ],
             );
@@ -1159,7 +1277,8 @@ class JournalPdfService {
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'CustomerReturnsReport_${DateFormat('yyyyMMdd').format(dateRange.endDate)}',
+      name:
+          'CustomerReturnsReport_${DateFormat('yyyyMMdd').format(dateRange.endDate)}',
     );
   }
 
@@ -1196,7 +1315,8 @@ class JournalPdfService {
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'CustomerReturnsReport_${DateFormat('yyyyMMdd').format(dateRange.endDate)}.pdf',
+      filename:
+          'CustomerReturnsReport_${DateFormat('yyyyMMdd').format(dateRange.endDate)}.pdf',
     );
   }
 
@@ -1226,7 +1346,12 @@ class JournalPdfService {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _buildHeader(company, 'reports.customer_returns'.tr(), fonts, dir),
+              _buildHeader(
+                company,
+                'reports.customer_returns'.tr(),
+                fonts,
+                dir,
+              ),
               pw.SizedBox(height: 8),
               pw.Text(
                 '${DateFormat.yMMMd().format(dateRange.startDate)} — ${DateFormat.yMMMd().format(dateRange.endDate)}',
@@ -1238,7 +1363,11 @@ class JournalPdfService {
                 children: [
                   pw.Text(
                     '${'reports.total_returns_value'.tr()}: ${cs.formatCents(totalReturnsCents)}',
-                    style: pw.TextStyle(font: fonts.bold, fontSize: 11, color: PdfColors.red700),
+                    style: pw.TextStyle(
+                      font: fonts.bold,
+                      fontSize: 11,
+                      color: PdfColors.red700,
+                    ),
                   ),
                   pw.Text(
                     '${'reports.total_return_count'.tr()}: $totalReturnCount',
@@ -1256,7 +1385,11 @@ class JournalPdfService {
               pw.Divider(),
               pw.Text(
                 '${'accounting.printed_on'.tr()}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
-                style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                style: pw.TextStyle(
+                  font: fonts.regular,
+                  fontSize: 8,
+                  color: PdfColors.grey600,
+                ),
               ),
             ],
           );
@@ -1267,7 +1400,9 @@ class JournalPdfService {
               pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 8),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.grey200,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.centerLeft,
                   1: pw.Alignment.centerRight,
@@ -1284,16 +1419,20 @@ class JournalPdfService {
                   'reports.avg_return'.tr(),
                   'reports.last_return'.tr(),
                 ],
-                data: customerSummaries.map((item) => [
-                  item.customerName,
-                  item.returnCount.toString(),
-                  item.totalItemsReturned.toString(),
-                  cs.formatCents(item.totalReturnedCents),
-                  cs.formatCents(item.averageReturnCents),
-                  item.lastReturnDate != null
-                      ? DateFormat.yMd().format(item.lastReturnDate!)
-                      : '-',
-                ]).toList(),
+                data: customerSummaries
+                    .map(
+                      (item) => [
+                        item.customerName,
+                        item.returnCount.toString(),
+                        item.totalItemsReturned.toString(),
+                        cs.formatCents(item.totalReturnedCents),
+                        cs.formatCents(item.averageReturnCents),
+                        item.lastReturnDate != null
+                            ? DateFormat.yMd().format(item.lastReturnDate!)
+                            : '-',
+                      ],
+                    )
+                    .toList(),
               ),
 
             // Returned Items Detail (product-level)
@@ -1307,7 +1446,9 @@ class JournalPdfService {
               pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 8),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.grey200,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.centerLeft,
                   1: pw.Alignment.centerLeft,
@@ -1332,7 +1473,7 @@ class JournalPdfService {
                     item.sku ?? '-',
                     item.colorName ?? '-',
                     item.sizeName ?? '-',
-                    item.quantity.toString(),
+                    localizedQuantity(item.quantity, item.measurementType),
                     cs.formatCents(item.refundCents),
                     item.reason != null ? _pdfReasonLabel(item.reason!) : '-',
                   ];
@@ -1359,7 +1500,12 @@ class JournalPdfService {
             return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                _buildHeader(company, 'reports.return_reason_breakdown'.tr(), fonts, dir),
+                _buildHeader(
+                  company,
+                  'reports.return_reason_breakdown'.tr(),
+                  fonts,
+                  dir,
+                ),
                 pw.SizedBox(height: 8),
                 pw.Text(
                   '${DateFormat.yMMMd().format(dateRange.startDate)} — ${DateFormat.yMMMd().format(dateRange.endDate)}',
@@ -1370,7 +1516,9 @@ class JournalPdfService {
                 pw.TableHelper.fromTextArray(
                   headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 9),
                   cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 9),
-                  headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                  headerDecoration: const pw.BoxDecoration(
+                    color: PdfColors.grey200,
+                  ),
                   cellAlignments: {
                     0: pw.Alignment.centerLeft,
                     1: pw.Alignment.centerRight,
@@ -1400,7 +1548,11 @@ class JournalPdfService {
                 pw.Divider(),
                 pw.Text(
                   '${'accounting.printed_on'.tr()}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
-                  style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                  style: pw.TextStyle(
+                    font: fonts.regular,
+                    fontSize: 8,
+                    color: PdfColors.grey600,
+                  ),
                 ),
               ],
             );
@@ -1419,7 +1571,12 @@ class JournalPdfService {
             return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                _buildHeader(company, 'reports.return_details'.tr(), fonts, dir),
+                _buildHeader(
+                  company,
+                  'reports.return_details'.tr(),
+                  fonts,
+                  dir,
+                ),
                 pw.SizedBox(height: 8),
                 pw.Text(
                   '${DateFormat.yMMMd().format(dateRange.startDate)} — ${DateFormat.yMMMd().format(dateRange.endDate)}',
@@ -1435,7 +1592,11 @@ class JournalPdfService {
                 pw.Divider(),
                 pw.Text(
                   '${'accounting.printed_on'.tr()}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
-                  style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                  style: pw.TextStyle(
+                    font: fonts.regular,
+                    fontSize: 8,
+                    color: PdfColors.grey600,
+                  ),
                 ),
               ],
             );
@@ -1445,7 +1606,9 @@ class JournalPdfService {
               pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 8),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.grey200,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.centerLeft,
                   1: pw.Alignment.centerLeft,
@@ -1462,14 +1625,18 @@ class JournalPdfService {
                   'reports.items_returned'.tr(),
                   'reports.total_returned'.tr(),
                 ],
-                data: returnDetails.map((item) => [
-                  item.returnNumber,
-                  DateFormat.yMd().format(item.returnDate),
-                  item.originalInvoiceNumber ?? '-',
-                  item.reason ?? '-',
-                  item.itemCount.toString(),
-                  cs.formatCents(item.totalCents),
-                ]).toList(),
+                data: returnDetails
+                    .map(
+                      (item) => [
+                        item.returnNumber,
+                        DateFormat.yMd().format(item.returnDate),
+                        item.originalInvoiceNumber ?? '-',
+                        item.reason ?? '-',
+                        item.itemCount.toString(),
+                        cs.formatCents(item.totalCents),
+                      ],
+                    )
+                    .toList(),
               ),
             ];
           },
@@ -1517,7 +1684,11 @@ class JournalPdfService {
         if (company.address != null && company.address!.isNotEmpty)
           pw.Text(
             company.address!,
-            style: pw.TextStyle(font: fonts.regular, fontSize: 9, color: PdfColors.grey600),
+            style: pw.TextStyle(
+              font: fonts.regular,
+              fontSize: 9,
+              color: PdfColors.grey600,
+            ),
           ),
         pw.SizedBox(height: 8),
         pw.Divider(),
@@ -1534,8 +1705,12 @@ class JournalPdfService {
 
   static Future<_PdfFonts> _loadFonts() async {
     try {
-      final regularData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-      final boldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+      final regularData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+      );
+      final boldData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+      );
       return _PdfFonts(
         regular: pw.Font.ttf(regularData),
         bold: pw.Font.ttf(boldData),
@@ -1565,7 +1740,11 @@ class PnlLineItem {
   final String name;
   final int amountCents;
 
-  const PnlLineItem({required this.code, required this.name, required this.amountCents});
+  const PnlLineItem({
+    required this.code,
+    required this.name,
+    required this.amountCents,
+  });
 }
 
 class PnlSection {
@@ -1573,7 +1752,11 @@ class PnlSection {
   final List<PnlLineItem> items;
   final int totalCents;
 
-  const PnlSection({required this.title, required this.items, required this.totalCents});
+  const PnlSection({
+    required this.title,
+    required this.items,
+    required this.totalCents,
+  });
 }
 
 class BalanceSheetLineItem {
@@ -1581,7 +1764,11 @@ class BalanceSheetLineItem {
   final String name;
   final int amountCents;
 
-  const BalanceSheetLineItem({required this.code, required this.name, required this.amountCents});
+  const BalanceSheetLineItem({
+    required this.code,
+    required this.name,
+    required this.amountCents,
+  });
 }
 
 class BalanceSheetSection {
@@ -1589,5 +1776,9 @@ class BalanceSheetSection {
   final List<BalanceSheetLineItem> items;
   final int totalCents;
 
-  const BalanceSheetSection({required this.title, required this.items, required this.totalCents});
+  const BalanceSheetSection({
+    required this.title,
+    required this.items,
+    required this.totalCents,
+  });
 }

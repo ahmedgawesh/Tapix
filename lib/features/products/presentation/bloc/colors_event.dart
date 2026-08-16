@@ -19,10 +19,7 @@ class CreateColor extends ColorsEvent {
   final String name;
   final String? hexCode;
 
-  const CreateColor({
-    required this.name,
-    this.hexCode,
-  });
+  const CreateColor({required this.name, this.hexCode});
 }
 
 class UpdateColor extends ColorsEvent {

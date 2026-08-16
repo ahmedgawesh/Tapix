@@ -7,6 +7,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/loyalty/loyalty_point_value.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../domain/repositories/loyalty_repository.dart';
 
@@ -75,13 +76,15 @@ class _LoyaltySettingsScreenState extends State<LoyaltySettingsScreen>
             _isEnabled = settings.isEnabled;
             _allowRedemption = settings.allowPointsRedemption;
             _businessBirthdayDate = settings.businessBirthdayDate;
-            _pointValueCtrl.text = settings.pointValueCents.toString();
+            _pointValueCtrl.text = LoyaltyPointValue.toInputText(
+              settings.pointValueCents,
+            );
             _minRedemptionCtrl.text = settings.minRedemptionPoints.toString();
-            _maxPercentCtrl.text =
-                (settings.maxRedemptionPercentBps / 100).toStringAsFixed(0);
+            _maxPercentCtrl.text = (settings.maxRedemptionPercentBps / 100)
+                .toStringAsFixed(0);
             _pointsPerUnitCtrl.text = settings.pointsPerCurrencyUnit.toString();
-            _minSpendCtrl.text =
-                (settings.minSpendForPoints / 100).toStringAsFixed(2);
+            _minSpendCtrl.text = (settings.minSpendForPoints / 100)
+                .toStringAsFixed(2);
           }
           _isLoading = false;
         });
@@ -97,7 +100,9 @@ class _LoyaltySettingsScreenState extends State<LoyaltySettingsScreen>
 
     try {
       final repo = sl<LoyaltyRepository>();
-      final pointValueCents = int.tryParse(_pointValueCtrl.text) ?? 1;
+      final pointValueCents = LoyaltyPointValue.fromInputText(
+        _pointValueCtrl.text,
+      );
       final minRedemptionPoints = int.tryParse(_minRedemptionCtrl.text) ?? 100;
       final maxPercent = int.tryParse(_maxPercentCtrl.text) ?? 50;
       final pointsPerUnit = int.tryParse(_pointsPerUnitCtrl.text) ?? 1;
@@ -113,7 +118,7 @@ class _LoyaltySettingsScreenState extends State<LoyaltySettingsScreen>
         signupBonusPoints: _currentSettings!.signupBonusPoints,
         reviewBonusPoints: _currentSettings!.reviewBonusPoints,
         isEnabled: _isEnabled,
-        pointValueCents: pointValueCents.clamp(1, 10000),
+        pointValueCents: pointValueCents,
         minRedemptionPoints: minRedemptionPoints.clamp(0, 100000),
         maxRedemptionPercentBps: (maxPercent * 100).clamp(0, 10000),
         allowPointsRedemption: _allowRedemption,
@@ -130,9 +135,9 @@ class _LoyaltySettingsScreenState extends State<LoyaltySettingsScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -156,9 +161,9 @@ class _LoyaltySettingsScreenState extends State<LoyaltySettingsScreen>
         _loadData();
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Error: $e')));
         }
       }
     }
@@ -169,7 +174,9 @@ class _LoyaltySettingsScreenState extends State<LoyaltySettingsScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('customers.loyalty_delete_tier_title'.tr()),
-        content: Text('customers.loyalty_delete_tier_confirm'.tr(args: [tier.name])),
+        content: Text(
+          'customers.loyalty_delete_tier_confirm'.tr(args: [tier.name]),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -198,9 +205,9 @@ class _LoyaltySettingsScreenState extends State<LoyaltySettingsScreen>
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Error: $e')));
         }
       }
     }
@@ -322,22 +329,30 @@ class _LoyaltySettingsScreenState extends State<LoyaltySettingsScreen>
                   const SizedBox(height: 16),
                   TextField(
                     controller: _pointsPerUnitCtrl,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                        RegExp(r'^\d*[\.,]?\d{0,2}'),
+                      ),
+                    ],
                     onTap: () => selectAllText(_pointsPerUnitCtrl),
                     decoration: InputDecoration(
                       labelText: 'customers.loyalty_points_per_unit'.tr(),
                       helperText: 'customers.loyalty_points_per_unit_hint'.tr(),
                       prefixIcon: const Icon(LucideIcons.star),
                       border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10)),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: _minSpendCtrl,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     onTap: () => selectAllText(_minSpendCtrl),
                     decoration: InputDecoration(
                       labelText: 'customers.loyalty_min_spend'.tr(),
@@ -345,7 +360,8 @@ class _LoyaltySettingsScreenState extends State<LoyaltySettingsScreen>
                       prefixIcon: const Icon(LucideIcons.shoppingCart),
                       suffixText: currencyService.currencySymbol,
                       border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10)),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                 ],
@@ -383,16 +399,23 @@ class _LoyaltySettingsScreenState extends State<LoyaltySettingsScreen>
                   const SizedBox(height: 12),
                   TextField(
                     controller: _pointValueCtrl,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                        RegExp(r'^\d*[\.,]?\d{0,2}'),
+                      ),
+                    ],
                     onTap: () => selectAllText(_pointValueCtrl),
                     decoration: InputDecoration(
                       labelText: 'customers.loyalty_point_value'.tr(),
                       helperText: 'customers.loyalty_point_value_hint'.tr(),
                       prefixIcon: const Icon(LucideIcons.dollarSign),
-                      suffixText: 'customers.loyalty_cents'.tr(),
+                      suffixText: currencyService.currencySymbol,
                       border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10)),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -406,7 +429,8 @@ class _LoyaltySettingsScreenState extends State<LoyaltySettingsScreen>
                       helperText: 'customers.loyalty_min_redemption_hint'.tr(),
                       prefixIcon: const Icon(LucideIcons.arrowDownCircle),
                       border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10)),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -421,7 +445,8 @@ class _LoyaltySettingsScreenState extends State<LoyaltySettingsScreen>
                       prefixIcon: const Icon(LucideIcons.percent),
                       suffixText: '%',
                       border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10)),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                 ],
@@ -595,10 +620,12 @@ class _TierCard extends StatelessWidget {
           ),
         ),
         subtitle: Text(
-          'customers.loyalty_tier_points_range'.tr(args: [
-            tier.minPoints.toString(),
-            tier.maxPoints?.toString() ?? '∞',
-          ]),
+          'customers.loyalty_tier_points_range'.tr(
+            args: [
+              tier.minPoints.toString(),
+              tier.maxPoints?.toString() ?? '∞',
+            ],
+          ),
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
@@ -662,8 +689,8 @@ class _TierCard extends StatelessWidget {
                   'customers.loyalty_birthday_bonus'.tr(),
                   tier.birthdayBonus
                       ? (tier.birthdayBonusPoints > 0
-                          ? '+${tier.birthdayBonusPoints} pts'
-                          : '${tier.birthdayDiscountPercent.toStringAsFixed(0)}%')
+                            ? '+${tier.birthdayBonusPoints} pts'
+                            : '${tier.birthdayDiscountPercent.toStringAsFixed(0)}%')
                       : '✗',
                   tier.birthdayBonus,
                 ),
@@ -687,18 +714,12 @@ class _TierCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Icon(
-            icon,
-            size: 18,
-            color: isActive ? cs.primary : cs.outline,
-          ),
+          Icon(icon, size: 18, color: isActive ? cs.primary : cs.outline),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               label,
-              style: TextStyle(
-                color: isActive ? null : cs.outline,
-              ),
+              style: TextStyle(color: isActive ? null : cs.outline),
             ),
           ),
           Text(
@@ -768,7 +789,9 @@ class _TierEditDialogState extends State<_TierEditDialog> {
       _discountCtrl.text = tier.discountPercent.toString();
       _earlyAccessCtrl.text = tier.earlyAccessDays.toString();
       _birthdayPointsCtrl.text = tier.birthdayBonusPoints.toString();
-      _birthdayDiscountCtrl.text = tier.birthdayDiscountPercent.toStringAsFixed(0);
+      _birthdayDiscountCtrl.text = tier.birthdayDiscountPercent.toStringAsFixed(
+        0,
+      );
       _freeShipping = tier.freeShipping;
       _prioritySupport = tier.prioritySupport;
       _exclusiveOffers = tier.exclusiveOffers;
@@ -820,7 +843,8 @@ class _TierEditDialogState extends State<_TierEditDialog> {
       exclusiveOffers: _exclusiveOffers,
       birthdayBonus: _birthdayBonus,
       birthdayBonusPoints: int.tryParse(_birthdayPointsCtrl.text) ?? 0,
-      birthdayDiscountPercent: double.tryParse(_birthdayDiscountCtrl.text) ?? 0.0,
+      birthdayDiscountPercent:
+          double.tryParse(_birthdayDiscountCtrl.text) ?? 0.0,
       color: _selectedColor,
       icon: null,
       badgeText: null,
@@ -921,7 +945,11 @@ class _TierEditDialogState extends State<_TierEditDialog> {
                               : null,
                         ),
                         child: isSelected
-                            ? const Icon(Icons.check, color: Colors.white, size: 20)
+                            ? const Icon(
+                                Icons.check,
+                                color: Colors.white,
+                                size: 20,
+                              )
                             : null,
                       ),
                     );
@@ -936,7 +964,9 @@ class _TierEditDialogState extends State<_TierEditDialog> {
                       child: TextFormField(
                         controller: _minPointsCtrl,
                         keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
                         onTap: () => selectAllText(_minPointsCtrl),
                         decoration: InputDecoration(
                           labelText: 'customers.loyalty_min_points'.tr(),
@@ -950,7 +980,9 @@ class _TierEditDialogState extends State<_TierEditDialog> {
                       child: TextField(
                         controller: _maxPointsCtrl,
                         keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
                         onTap: () => selectAllText(_maxPointsCtrl),
                         decoration: InputDecoration(
                           labelText: 'customers.loyalty_max_points'.tr(),
@@ -967,9 +999,9 @@ class _TierEditDialogState extends State<_TierEditDialog> {
                 // Benefits
                 Text(
                   'customers.loyalty_tier_benefits'.tr(),
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 8),
 
@@ -978,8 +1010,9 @@ class _TierEditDialogState extends State<_TierEditDialog> {
                     Expanded(
                       child: TextField(
                         controller: _multiplierCtrl,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
                         onTap: () => selectAllText(_multiplierCtrl),
                         decoration: InputDecoration(
                           labelText: 'customers.loyalty_points_multiplier'.tr(),
@@ -993,17 +1026,22 @@ class _TierEditDialogState extends State<_TierEditDialog> {
                     Expanded(
                       child: TextField(
                         controller: _discountCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
                         onTap: () => selectAllText(_discountCtrl),
                         inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'^\d*\.?\d*'),
+                          ),
                         ],
                         decoration: InputDecoration(
                           labelText: 'customers.loyalty_bonus_points'.tr(),
                           suffixText: '%',
                           border: const OutlineInputBorder(),
                           isDense: true,
-                          helperText: 'customers.loyalty_bonus_points_hint'.tr(),
+                          helperText: 'customers.loyalty_bonus_points_hint'
+                              .tr(),
                           helperMaxLines: 3,
                         ),
                       ),
@@ -1021,14 +1059,16 @@ class _TierEditDialogState extends State<_TierEditDialog> {
                 ),
                 CheckboxListTile(
                   value: _prioritySupport,
-                  onChanged: (v) => setState(() => _prioritySupport = v ?? false),
+                  onChanged: (v) =>
+                      setState(() => _prioritySupport = v ?? false),
                   title: Text('customers.loyalty_priority_support'.tr()),
                   contentPadding: EdgeInsets.zero,
                   dense: true,
                 ),
                 CheckboxListTile(
                   value: _exclusiveOffers,
-                  onChanged: (v) => setState(() => _exclusiveOffers = v ?? false),
+                  onChanged: (v) =>
+                      setState(() => _exclusiveOffers = v ?? false),
                   title: Text('customers.loyalty_exclusive_offers'.tr()),
                   contentPadding: EdgeInsets.zero,
                   dense: true,
@@ -1071,7 +1111,9 @@ class _TierEditDialogState extends State<_TierEditDialog> {
                         child: TextField(
                           controller: _birthdayPointsCtrl,
                           keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           onTap: () => selectAllText(_birthdayPointsCtrl),
                           decoration: InputDecoration(
                             labelText: 'customers.loyalty_birthday_points'.tr(),
@@ -1087,10 +1129,13 @@ class _TierEditDialogState extends State<_TierEditDialog> {
                         child: TextField(
                           controller: _birthdayDiscountCtrl,
                           keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           onTap: () => selectAllText(_birthdayDiscountCtrl),
                           decoration: InputDecoration(
-                            labelText: 'customers.loyalty_birthday_discount'.tr(),
+                            labelText: 'customers.loyalty_birthday_discount'
+                                .tr(),
                             suffixText: '%',
                             border: const OutlineInputBorder(),
                             isDense: true,
@@ -1112,10 +1157,7 @@ class _TierEditDialogState extends State<_TierEditDialog> {
           onPressed: () => Navigator.pop(context),
           child: Text('common.cancel'.tr()),
         ),
-        FilledButton(
-          onPressed: _save,
-          child: Text('common.save'.tr()),
-        ),
+        FilledButton(onPressed: _save, child: Text('common.save'.tr())),
       ],
     );
   }

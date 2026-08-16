@@ -96,11 +96,34 @@ void main() {
 
       expect(
         () => quota.guardProductCreation(),
-        throwsA(isA<FreeQuotaExceededException>()
-            .having((e) => e.kind, 'kind', FreeQuotaKind.products)
-            .having((e) => e.limit, 'limit', 3)
-            .having((e) => e.currentCount, 'current', 3)),
+        throwsA(
+          isA<FreeQuotaExceededException>()
+              .having((e) => e.kind, 'kind', FreeQuotaKind.products)
+              .having((e) => e.limit, 'limit', 3)
+              .having((e) => e.currentCount, 'current', 3),
+        ),
       );
+    });
+
+    test('atomic batch guard rejects the whole batch before the cap', () async {
+      await quota.incrementProductsCreated();
+      expect(
+        () => quota.guardProductCreations(3),
+        throwsA(
+          isA<FreeQuotaExceededException>()
+              .having((e) => e.currentCount, 'current', 1)
+              .having((e) => e.limit, 'limit', 3),
+        ),
+      );
+      expect(quota.productsCreatedLifetime, 1);
+    });
+
+    test('rolled-back batch restores the pre-transaction counter', () async {
+      await quota.incrementProductsCreatedBy(2);
+      final snapshot = quota.productsCreatedLifetime;
+      await quota.incrementProductsCreatedBy(1);
+      await quota.restoreProductsCreatedAfterRollback(snapshot);
+      expect(quota.productsCreatedLifetime, 2);
     });
 
     test('guardSaleCreation throws at exact cap', () async {
@@ -110,8 +133,13 @@ void main() {
 
       expect(
         () => quota.guardSaleCreation(),
-        throwsA(isA<FreeQuotaExceededException>()
-            .having((e) => e.kind, 'kind', FreeQuotaKind.sales)),
+        throwsA(
+          isA<FreeQuotaExceededException>().having(
+            (e) => e.kind,
+            'kind',
+            FreeQuotaKind.sales,
+          ),
+        ),
       );
     });
 
@@ -170,7 +198,10 @@ void main() {
       fakeGate.isPro = false;
 
       // Counter is 5, cap is 3 → already past cap, guard throws.
-      expect(() => quota.guardProductCreation(), throwsA(isA<FreeQuotaExceededException>()));
+      expect(
+        () => quota.guardProductCreation(),
+        throwsA(isA<FreeQuotaExceededException>()),
+      );
       expect(quota.canCreateProduct(), isFalse);
     });
   });

@@ -11,25 +11,31 @@ void main() {
     test('uses product rate when isTaxable and rate > 0', () {
       expect(
         TaxCalculationService.resolveLineItemTaxRateBps(
-          isTaxable: true, productTaxRateBps: 1500, defaultTaxRateBps: 1000,
+          isTaxable: true,
+          productTaxRateBps: 1500,
+          defaultTaxRateBps: 1000,
         ),
         1500,
       );
     });
 
-    test('uses default rate when product not taxable', () {
+    test('returns zero when product is explicitly non-taxable', () {
       expect(
         TaxCalculationService.resolveLineItemTaxRateBps(
-          isTaxable: false, productTaxRateBps: 1500, defaultTaxRateBps: 1000,
+          isTaxable: false,
+          productTaxRateBps: 1500,
+          defaultTaxRateBps: 1000,
         ),
-        1000,
+        0,
       );
     });
 
     test('uses default rate when product taxable but rate is 0', () {
       expect(
         TaxCalculationService.resolveLineItemTaxRateBps(
-          isTaxable: true, productTaxRateBps: 0, defaultTaxRateBps: 1000,
+          isTaxable: true,
+          productTaxRateBps: 0,
+          defaultTaxRateBps: 1000,
         ),
         1000,
       );
@@ -38,7 +44,9 @@ void main() {
     test('returns 0 when neither product nor default has rate', () {
       expect(
         TaxCalculationService.resolveLineItemTaxRateBps(
-          isTaxable: false, productTaxRateBps: 0, defaultTaxRateBps: 0,
+          isTaxable: false,
+          productTaxRateBps: 0,
+          defaultTaxRateBps: 0,
         ),
         0,
       );
@@ -149,19 +157,22 @@ void main() {
       expect(negTax, Decimal.fromInt(-1500));
     });
 
-    test('negative with rounding maintains symmetry: tax(-333) = -tax(333)', () {
-      final posTax = TaxCalculationService.calculateTax(
-        taxableAmountCents: Decimal.fromInt(333),
-        taxRateBps: 1500,
-        taxInclusivePricing: false,
-      );
-      final negTax = TaxCalculationService.calculateTax(
-        taxableAmountCents: Decimal.fromInt(-333),
-        taxRateBps: 1500,
-        taxInclusivePricing: false,
-      );
-      expect(negTax, -posTax);
-    });
+    test(
+      'negative with rounding maintains symmetry: tax(-333) = -tax(333)',
+      () {
+        final posTax = TaxCalculationService.calculateTax(
+          taxableAmountCents: Decimal.fromInt(333),
+          taxRateBps: 1500,
+          taxInclusivePricing: false,
+        );
+        final negTax = TaxCalculationService.calculateTax(
+          taxableAmountCents: Decimal.fromInt(-333),
+          taxRateBps: 1500,
+          taxInclusivePricing: false,
+        );
+        expect(negTax, -posTax);
+      },
+    );
 
     test('negative amount + zero rate = zero', () {
       final tax = TaxCalculationService.calculateTax(
@@ -281,7 +292,7 @@ void main() {
       expect(tax, Decimal.fromInt(1500));
     });
 
-    test('uses default rate when product has no rate', () {
+    test('non-taxable line never inherits the default rate', () {
       final tax = TaxCalculationService.calculateLineItemTax(
         netCents: Decimal.fromInt(10000),
         enableTaxCalculations: true,
@@ -290,7 +301,7 @@ void main() {
         defaultTaxRateBps: 1000, // 10%
         taxInclusivePricing: false,
       );
-      expect(tax, Decimal.fromInt(1000));
+      expect(tax, Decimal.zero);
     });
 
     test('returns zero when tax disabled', () {
@@ -470,7 +481,7 @@ void main() {
       expect(result.totalTaxCents, Decimal.fromInt(1500));
     });
 
-    test('non-taxable items use default rate', () {
+    test('non-taxable items do not use the default rate', () {
       final result = TaxCalculationService.calculateInvoiceTax(
         items: [
           TaxableLineItem(
@@ -486,8 +497,8 @@ void main() {
         taxInclusivePricing: false,
       );
 
-      expect(result.totalTaxCents, Decimal.fromInt(1000));
-      expect(result.lineItems[0].taxRateBps, 1000);
+      expect(result.totalTaxCents, Decimal.zero);
+      expect(result.lineItems[0].taxRateBps, 0);
     });
 
     test('tax calculations disabled returns zero tax', () {
@@ -528,6 +539,12 @@ void main() {
       );
 
       expect(result.totalTaxCents, Decimal.fromInt(1500));
+      expect(
+        result.totalCents,
+        Decimal.fromInt(11500),
+        reason: 'inclusive tax is extracted, not added a second time',
+      );
+      expect(result.lineItems.single.totalCents, Decimal.fromInt(11500));
     });
   });
 
@@ -754,8 +771,14 @@ void main() {
       );
       final after = DateTime.now().toUtc();
 
-      expect(audit.calculatedAt.isAfter(before.subtract(const Duration(seconds: 1))), true);
-      expect(audit.calculatedAt.isBefore(after.add(const Duration(seconds: 1))), true);
+      expect(
+        audit.calculatedAt.isAfter(before.subtract(const Duration(seconds: 1))),
+        true,
+      );
+      expect(
+        audit.calculatedAt.isBefore(after.add(const Duration(seconds: 1))),
+        true,
+      );
     });
 
     test('audit trail toString() produces readable output', () {
@@ -809,48 +832,53 @@ void main() {
 
   group('distributeProportionally', () {
     test('distributes evenly when possible', () {
-      final result = TaxCalculationService.distributeProportionally(
-        300, [100, 100, 100], 300,
-      );
+      final result = TaxCalculationService.distributeProportionally(300, [
+        100,
+        100,
+        100,
+      ], 300);
       expect(result, [100, 100, 100]);
     });
 
     test('handles uneven distribution with largest remainder', () {
-      final result = TaxCalculationService.distributeProportionally(
-        10, [1, 1, 1], 3,
-      );
+      final result = TaxCalculationService.distributeProportionally(10, [
+        1,
+        1,
+        1,
+      ], 3);
       // 10/3 = 3.33 each, floor = 3 each = 9, remainder 1
       // Distribute 1 to first item with largest remainder
       expect(result.reduce((a, b) => a + b), 10);
     });
 
     test('sums exactly to total', () {
-      final result = TaxCalculationService.distributeProportionally(
-        3000, [20000, 10000], 30000,
-      );
+      final result = TaxCalculationService.distributeProportionally(3000, [
+        20000,
+        10000,
+      ], 30000);
       expect(result.reduce((a, b) => a + b), 3000);
       expect(result[0], 2000); // 3000 * 20000/30000 = 2000
       expect(result[1], 1000); // 3000 * 10000/30000 = 1000
     });
 
     test('handles zero total', () {
-      final result = TaxCalculationService.distributeProportionally(
-        0, [100, 200], 300,
-      );
+      final result = TaxCalculationService.distributeProportionally(0, [
+        100,
+        200,
+      ], 300);
       expect(result, [0, 0]);
     });
 
     test('handles empty weights', () {
-      final result = TaxCalculationService.distributeProportionally(
-        100, [], 0,
-      );
+      final result = TaxCalculationService.distributeProportionally(100, [], 0);
       expect(result, isEmpty);
     });
 
     test('handles zero weight sum', () {
-      final result = TaxCalculationService.distributeProportionally(
-        100, [0, 0], 0,
-      );
+      final result = TaxCalculationService.distributeProportionally(100, [
+        0,
+        0,
+      ], 0);
       expect(result, [0, 0]);
     });
   });

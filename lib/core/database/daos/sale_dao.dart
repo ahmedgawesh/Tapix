@@ -1,5 +1,6 @@
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
+import '../../measurement/measurement.dart';
 import '../app_database.dart';
 import '../tables/transactions.dart';
 import '../tables/parties.dart';
@@ -9,6 +10,10 @@ import '../../services/stock_service.dart';
 import '../../services/balance_service.dart';
 import '../../services/batch_service.dart';
 import '../../services/journal_entry_service.dart';
+import '../../services/return_calculation_service.dart';
+import '../../services/inventory/wac_movement_service.dart';
+import '../../services/inventory/inventory_valuation_delta_service.dart';
+import '../../services/document_number_service.dart';
 
 part 'sale_dao.g.dart';
 
@@ -99,19 +104,21 @@ class SaleDashboardStats {
   });
 }
 
-@DriftAccessor(tables: [
-  Sales,
-  SaleItems,
-  SaleTaxBands,
-  SaleReturns,
-  SaleReturnItems,
-  SalePayments,
-  Customers,
-  CustomerTransactions,
-  Products,
-  ProductVariants,
-  Employees,
-])
+@DriftAccessor(
+  tables: [
+    Sales,
+    SaleItems,
+    SaleTaxBands,
+    SaleReturns,
+    SaleReturnItems,
+    SalePayments,
+    Customers,
+    CustomerTransactions,
+    Products,
+    ProductVariants,
+    Employees,
+  ],
+)
 class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   SaleDao(super.db);
 
@@ -135,13 +142,21 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     return (row.read<String?>('costing_method') ?? 'wac') == 'fifo';
   }
 
+  Future<bool> _tracksInventory(int productId) async {
+    final row = await customSelect(
+      'SELECT track_inventory FROM products WHERE id = ?',
+      variables: [Variable.withInt(productId)],
+    ).getSingleOrNull();
+    return (row?.read<int?>('track_inventory') ?? 1) != 0;
+  }
+
   // ==================== SALES ====================
 
   /// Watch all sales ordered by date descending
   Stream<List<Sale>> watchAllSales() {
-    return (select(sales)
-          ..orderBy([(s) => OrderingTerm.desc(s.saleDate)]))
-        .watch();
+    return (select(
+      sales,
+    )..orderBy([(s) => OrderingTerm.desc(s.saleDate)])).watch();
   }
 
   /// Watch all sales with customer and employee info
@@ -149,16 +164,17 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     final query = select(sales).join([
       leftOuterJoin(customers, customers.id.equalsExp(sales.customerId)),
       leftOuterJoin(employees, employees.id.equalsExp(sales.employeeId)),
-    ])
-      ..orderBy([OrderingTerm.desc(sales.saleDate)]);
+    ])..orderBy([OrderingTerm.desc(sales.saleDate)]);
 
-    return query.watch().map((rows) => rows.map((row) {
-          return SaleWithCustomer(
-            sale: row.readTable(sales),
-            customer: row.readTableOrNull(customers),
-            employee: row.readTableOrNull(employees),
-          );
-        }).toList());
+    return query.watch().map(
+      (rows) => rows.map((row) {
+        return SaleWithCustomer(
+          sale: row.readTable(sales),
+          customer: row.readTableOrNull(customers),
+          employee: row.readTableOrNull(employees),
+        );
+      }).toList(),
+    );
   }
 
   /// Watch a single sale
@@ -176,8 +192,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     final query = select(sales).join([
       leftOuterJoin(customers, customers.id.equalsExp(sales.customerId)),
       leftOuterJoin(employees, employees.id.equalsExp(sales.employeeId)),
-    ])
-      ..where(sales.id.equals(id));
+    ])..where(sales.id.equals(id));
 
     final row = await query.getSingleOrNull();
     if (row == null) return null;
@@ -208,22 +223,27 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   /// Search sales by invoice number, customer name, or customer phone
   Stream<List<SaleWithCustomer>> searchSales(String query) {
     final searchQuery = '%$query%';
-    final joinQuery = select(sales).join([
-      leftOuterJoin(customers, customers.id.equalsExp(sales.customerId)),
-      leftOuterJoin(employees, employees.id.equalsExp(sales.employeeId)),
-    ])
-      ..where(sales.invoiceNumber.like(searchQuery) |
-          customers.name.like(searchQuery) |
-          customers.phone.like(searchQuery))
-      ..orderBy([OrderingTerm.desc(sales.saleDate)]);
+    final joinQuery =
+        select(sales).join([
+            leftOuterJoin(customers, customers.id.equalsExp(sales.customerId)),
+            leftOuterJoin(employees, employees.id.equalsExp(sales.employeeId)),
+          ])
+          ..where(
+            sales.invoiceNumber.like(searchQuery) |
+                customers.name.like(searchQuery) |
+                customers.phone.like(searchQuery),
+          )
+          ..orderBy([OrderingTerm.desc(sales.saleDate)]);
 
-    return joinQuery.watch().map((rows) => rows.map((row) {
-          return SaleWithCustomer(
-            sale: row.readTable(sales),
-            customer: row.readTableOrNull(customers),
-            employee: row.readTableOrNull(employees),
-          );
-        }).toList());
+    return joinQuery.watch().map(
+      (rows) => rows.map((row) {
+        return SaleWithCustomer(
+          sale: row.readTable(sales),
+          customer: row.readTableOrNull(customers),
+          employee: row.readTableOrNull(employees),
+        );
+      }).toList(),
+    );
   }
 
   /// Watch a map of saleId → list of product search terms (name, barcode, sku)
@@ -231,7 +251,10 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   Stream<Map<int, List<String>>> watchSaleProductSearchTerms() {
     final query = select(saleItems).join([
       innerJoin(products, products.id.equalsExp(saleItems.productId)),
-      leftOuterJoin(productVariants, productVariants.id.equalsExp(saleItems.variantId)),
+      leftOuterJoin(
+        productVariants,
+        productVariants.id.equalsExp(saleItems.variantId),
+      ),
     ]);
 
     return query.watch().map((rows) {
@@ -257,33 +280,24 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   /// Get sales by date range
   Future<List<Sale>> getSalesByDateRange(DateTime start, DateTime end) {
     return (select(sales)
-          ..where((s) => s.saleDate.isBiggerOrEqualValue(start) & s.saleDate.isSmallerOrEqualValue(end))
+          ..where(
+            (s) =>
+                s.saleDate.isBiggerOrEqualValue(start) &
+                s.saleDate.isSmallerOrEqualValue(end),
+          )
           ..orderBy([(s) => OrderingTerm.desc(s.saleDate)]))
         .get();
   }
 
   /// Generate next invoice number
-  Future<String> generateInvoiceNumber() async {
-    final now = DateTime.now();
-    final prefix = 'INV-${now.year}${now.month.toString().padLeft(2, '0')}';
-
-    final lastSale = await (select(sales)
-          ..where((s) => s.invoiceNumber.like('$prefix%'))
-          ..orderBy([(s) => OrderingTerm.desc(s.invoiceNumber)])
-          ..limit(1))
-        .getSingleOrNull();
-
-    int nextNum = 1;
-    if (lastSale != null) {
-      final lastNum = int.tryParse(lastSale.invoiceNumber.split('-').last) ?? 0;
-      nextNum = lastNum + 1;
-    }
-
-    return '$prefix-${nextNum.toString().padLeft(4, '0')}';
-  }
+  Future<String> generateInvoiceNumber() =>
+      DocumentNumberService(attachedDatabase).nextSaleInvoice();
 
   /// Create sale with items in a transaction
-  Future<int> createSaleWithItems(SalesCompanion sale, List<SaleItemsCompanion> items) {
+  Future<int> createSaleWithItems(
+    SalesCompanion sale,
+    List<SaleItemsCompanion> items,
+  ) {
     return transaction(() async {
       final saleId = await into(sales).insert(sale);
 
@@ -310,8 +324,9 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     List<SaleItemsCompanion> items,
   ) {
     return transaction(() async {
-      final existing = await (select(sales)..where((s) => s.id.equals(saleId)))
-          .getSingleOrNull();
+      final existing = await (select(
+        sales,
+      )..where((s) => s.id.equals(saleId))).getSingleOrNull();
       if (existing == null) return false;
       if (existing.status != 'draft' && existing.status != 'pending') {
         throw StateError(
@@ -392,7 +407,8 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
                 'WHERE pv.id = ?',
                 variables: [Variable.withInt(variantId)],
               ).getSingleOrNull();
-              final productName = infoRow?.read<String>('product_name') ?? 'Unknown';
+              final productName =
+                  infoRow?.read<String>('product_name') ?? 'Unknown';
               throw Exception(
                 'Insufficient stock for "$productName" (variant #$variantId): '
                 'available $currentStock, required ${item.quantity}.',
@@ -417,13 +433,21 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
 
       // 2. Deduct stock (validated above) — skipped for non-tracked products.
       final affectedProductIds = <int>{};
+      final valuationSnapshotByItem = <int, InventoryValuationSnapshot?>{};
       // I4 (Invariant I1): products whose batch ledger was actually mutated.
       // Populated inside the cost-snapshot loop below under `consumeFromBatches`.
       final batchedProductIds = <int>{};
       for (final item in items) {
         if (trackedProductIds[item.productId] == false) continue;
         affectedProductIds.add(item.productId);
-        await StockService.adjustStock(this,
+        valuationSnapshotByItem[item.id] =
+            await InventoryValuationDeltaService.capture(
+              this,
+              productId: item.productId,
+              variantId: item.variantId,
+            );
+        await StockService.adjustStock(
+          this,
           productId: item.productId,
           variantId: item.variantId,
           quantity: item.quantity,
@@ -433,7 +457,10 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
 
       // 2b. Sync products.stock_quantity from variants
       for (final productId in affectedProductIds) {
-        await StockService.syncProductStockFromVariants(this, productId: productId);
+        await StockService.syncProductStockFromVariants(
+          this,
+          productId: productId,
+        );
       }
 
       // 2c. Freeze unit cost onto each SaleItem for historical COGS accuracy.
@@ -451,7 +478,19 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         // Non-tracked products carry no cost basis — leave sale_items.cost_cents
         // at its default of 0 so the COGS journal entry posts as zero, which
         // is the correct behaviour for services (no inventory movement).
-        if (trackedProductIds[item.productId] == false) continue;
+        if (trackedProductIds[item.productId] == false) {
+          // Persist an explicit zero. Legacy rows may have a nullable cost
+          // and computeSaleCostCents must never fall back to a live service
+          // cost after the document is posted.
+          await customUpdate(
+            'UPDATE sale_items SET cost_cents = 0, '
+            'inventory_value_at_post_cents = 0 WHERE id = ?',
+            variables: [Variable.withInt(item.id)],
+            updates: {saleItems},
+            updateKind: UpdateKind.update,
+          );
+          continue;
+        }
 
         // Phase D (two-layer inventory architecture): the consumption gate is
         // the per-product `inventory_tracking_type`. When tracking is
@@ -470,14 +509,15 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           'FROM products WHERE id = ?',
           variables: [Variable.withInt(item.productId)],
         ).getSingleOrNull();
-        final trackingType =
-            methodRow?.read<String?>('inventory_tracking_type');
+        final trackingType = methodRow?.read<String?>(
+          'inventory_tracking_type',
+        );
         final legacyMethod =
             methodRow?.read<String?>('costing_method') ?? 'wac';
         final consumeFromBatches =
             trackingType == 'batch' ||
-                trackingType == 'batch_expiry' ||
-                legacyMethod == 'fifo';
+            trackingType == 'batch_expiry' ||
+            legacyMethod == 'fifo';
 
         int unitCost;
         int totalCogsCents;
@@ -498,9 +538,11 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           );
           // Blended unit cost = total / qty (rounded). Used purely for the
           // snapshot column; per-batch breakdown lives in batch_consumptions.
-          unitCost = item.quantity == 0
-              ? 0
-              : (totalCogsCents / item.quantity).round();
+          unitCost = MeasuredAmount.unitCentsFromTotal(
+            totalCents: totalCogsCents,
+            quantity: item.quantity,
+            quantityScale: item.quantityScale,
+          );
         } else {
           if (item.variantId != null) {
             final row = await customSelect(
@@ -515,13 +557,25 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             ).getSingleOrNull();
             unitCost = row?.read<int>('cost_cents') ?? 0;
           }
-          totalCogsCents = unitCost * item.quantity;
+          final valuationSnapshot = valuationSnapshotByItem[item.id];
+          totalCogsCents = valuationSnapshot != null
+              ? -(await InventoryValuationDeltaService.signedDeltaAfter(
+                  this,
+                  valuationSnapshot,
+                ))
+              : MeasuredAmount.cents(
+                  unitCents: unitCost,
+                  quantity: item.quantity,
+                  quantityScale: item.quantityScale,
+                );
         }
 
         await customUpdate(
-          'UPDATE sale_items SET cost_cents = ? WHERE id = ?',
+          'UPDATE sale_items SET cost_cents = ?, '
+          'inventory_value_at_post_cents = ? WHERE id = ?',
           variables: [
             Variable.withInt(unitCost),
+            Variable.withInt(totalCogsCents),
             Variable.withInt(item.id),
           ],
           updates: {saleItems},
@@ -539,8 +593,10 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       // desync BEFORE the transaction commits — turns Phase A's documented
       // invariant into an enforced one.
       for (final productId in batchedProductIds) {
-        await BatchService.assertInvariantForProduct(this,
-            productId: productId);
+        await BatchService.assertInvariantForProduct(
+          this,
+          productId: productId,
+        );
       }
 
       // 2d. Update status
@@ -556,14 +612,19 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
 
       // 3a. Ensure paidAmountCents is backed by sale_payments rows
       //     (mirrors purchase_dao.postPurchase pattern)
-      var totalPaidCents = (await getSalePayments(saleId))
-          .fold<int>(0, (sum, p) => sum + p.amountCents.toBigInt().toInt());
+      var totalPaidCents = (await getSalePayments(
+        saleId,
+      )).fold<int>(0, (sum, p) => sum + p.amountCents.toBigInt().toInt());
       int? backfilledPaymentId;
       int? excessPaymentId;
       if (totalPaidCents == 0 && headerPaidCents > 0) {
         // If overpaying, split into invoice payment + excess credit payment
-        final invoicePayment = headerPaidCents > totalCents ? totalCents : headerPaidCents;
-        final excessPayment = headerPaidCents > totalCents ? headerPaidCents - totalCents : 0;
+        final invoicePayment = headerPaidCents > totalCents
+            ? totalCents
+            : headerPaidCents;
+        final excessPayment = headerPaidCents > totalCents
+            ? headerPaidCents - totalCents
+            : 0;
 
         backfilledPaymentId = await into(salePayments).insert(
           SalePaymentsCompanion.insert(
@@ -595,17 +656,19 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       }
 
       // 3b. Keep sales.paid_amount_cents consistent with payment rows
-      await (update(sales)..where((s) => s.id.equals(saleId)))
-          .write(SalesCompanion(
-            paidAmountCents: Value(Decimal.fromInt(totalPaidCents)),
-            updatedAt: Value(DateTime.now()),
-          ));
+      await (update(sales)..where((s) => s.id.equals(saleId))).write(
+        SalesCompanion(
+          paidAmountCents: Value(Decimal.fromInt(totalPaidCents)),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
 
       // 3c. Record sale transaction in customer ledger
       await into(db.customerTransactions).insert(
         CustomerTransactionsCompanion.insert(
           customerId: customerId,
           transactionType: 'sale',
+          transactionNumber: Value(sale.invoiceNumber),
           amountCents: Decimal.fromInt(totalCents),
           currencyId: sale.currencyId,
           description: Value('Sale ${sale.invoiceNumber}'),
@@ -617,12 +680,18 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       // 3d. Record payment transaction(s) only when we backfilled payment rows.
       //     Later payments are logged via recordPayment().
       if (backfilledPaymentId != null) {
-        final invoicePayment = headerPaidCents > totalCents ? totalCents : headerPaidCents;
+        final invoicePayment = headerPaidCents > totalCents
+            ? totalCents
+            : headerPaidCents;
         if (invoicePayment > 0) {
+          final paymentNumber = await DocumentNumberService(
+            attachedDatabase,
+          ).nextCustomerTransaction('CPC');
           await into(db.customerTransactions).insert(
             CustomerTransactionsCompanion.insert(
               customerId: customerId,
               transactionType: 'payment',
+              transactionNumber: Value(paymentNumber),
               amountCents: Decimal.fromInt(-invoicePayment),
               currencyId: sale.currencyId,
               description: Value('Payment for ${sale.invoiceNumber}'),
@@ -636,13 +705,19 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       // 3d2. Record excess cash as a separate payment transaction
       if (excessPaymentId != null) {
         final excessPayment = headerPaidCents - totalCents;
+        final paymentNumber = await DocumentNumberService(
+          attachedDatabase,
+        ).nextCustomerTransaction('CPC');
         await into(db.customerTransactions).insert(
           CustomerTransactionsCompanion.insert(
             customerId: customerId,
             transactionType: 'payment',
+            transactionNumber: Value(paymentNumber),
             amountCents: Decimal.fromInt(-excessPayment),
             currencyId: sale.currencyId,
-            description: Value('Excess cash added to balance — ${sale.invoiceNumber}'),
+            description: Value(
+              'Excess cash added to balance — ${sale.invoiceNumber}',
+            ),
             referenceId: Value(excessPaymentId),
             referenceType: const Value('sale_payment'),
           ),
@@ -653,7 +728,8 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       //     For cash/card: delta = 0 (fully paid)
       //     For credit/cheque: delta = totalCents (full amount owed)
       final deltaCents = totalCents - totalPaidCents;
-      await BalanceService.adjustCustomerBalance(this,
+      await BalanceService.adjustCustomerBalance(
+        this,
         customerId: customerId,
         deltaCents: deltaCents,
       );
@@ -682,9 +758,9 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       if (sale.status == 'voided') throw Exception('Sale already voided');
 
       // Cascade-void all associated returns first (reverses their stock/accounting)
-      final associatedReturns = await (select(saleReturns)
-            ..where((r) => r.saleId.equals(saleId)))
-          .get();
+      final associatedReturns = await (select(
+        saleReturns,
+      )..where((r) => r.saleId.equals(saleId))).get();
       for (final ret in associatedReturns) {
         if (ret.status != 'voided') {
           // 2026-05-13 — emit the JE reversal BEFORE flipping the row's
@@ -712,13 +788,33 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         // I4: products whose batch ledger we touch on void.
         final voidBatchedProductIds = <int>{};
         for (final item in items) {
+          if (!await _tracksInventory(item.productId)) continue;
           voidAffectedProductIds.add(item.productId);
-          await StockService.adjustStock(this,
+          final wacSnapshot = await WacMovementService.capture(
+            this,
+            productId: item.productId,
+            variantId: item.variantId,
+          );
+          final frozenUnitCost =
+              item.costCents?.toBigInt().toInt() ??
+              wacSnapshot?.unitCostCents ??
+              0;
+          await StockService.adjustStock(
+            this,
             productId: item.productId,
             variantId: item.variantId,
             quantity: item.quantity,
             direction: StockDirection.increase,
           );
+
+          if (wacSnapshot != null) {
+            await WacMovementService.applyInbound(
+              this,
+              snapshot: wacSnapshot,
+              addedQty: item.quantity,
+              inboundUnitCostCents: frozenUnitCost,
+            );
+          }
 
           // 1a. FIFO restoration — for FIFO products, restore each batch the
           //     original sale consumed at its FROZEN unit cost so future
@@ -736,13 +832,18 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
 
         // 1b. Sync products.stock_quantity from variants
         for (final productId in voidAffectedProductIds) {
-          await StockService.syncProductStockFromVariants(this, productId: productId);
+          await StockService.syncProductStockFromVariants(
+            this,
+            productId: productId,
+          );
         }
 
         // 1c. I4 (Invariant I1): cross-table invariant for FIFO products.
         for (final productId in voidBatchedProductIds) {
-          await BatchService.assertInvariantForProduct(this,
-              productId: productId);
+          await BatchService.assertInvariantForProduct(
+            this,
+            productId: productId,
+          );
         }
 
         // 2. Reverse customer accounting
@@ -751,7 +852,8 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           final totalCents = sale.totalCents.toBigInt().toInt();
           final payments = await getSalePayments(saleId);
           final totalPaidCents = payments.fold<int>(
-            0, (sum, p) => sum + p.amountCents.toBigInt().toInt(),
+            0,
+            (sum, p) => sum + p.amountCents.toBigInt().toInt(),
           );
 
           // Record reversal transaction for the sale (negative = undo receivable)
@@ -775,7 +877,9 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
                 transactionType: 'payment_reversal',
                 amountCents: Decimal.fromInt(totalPaidCents),
                 currencyId: sale.currencyId,
-                description: Value('Reversed payments for voided sale ${sale.invoiceNumber}'),
+                description: Value(
+                  'Reversed payments for voided sale ${sale.invoiceNumber}',
+                ),
                 referenceId: Value(saleId),
                 referenceType: const Value('sale'),
               ),
@@ -785,7 +889,8 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           // Net balance change: -(totalCents - totalPaidCents)
           // Undoes the delta that was applied on posting
           final netReversalCents = totalCents - totalPaidCents;
-          await BalanceService.adjustCustomerBalance(this,
+          await BalanceService.adjustCustomerBalance(
+            this,
             customerId: customerId,
             deltaCents: -netReversalCents,
           );
@@ -800,7 +905,8 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   Future<int> deleteSale(int saleId) {
     return transaction(() async {
       final sale = await getSaleById(saleId);
-      if (sale == null || (sale.status != 'draft' && sale.status != 'pending')) {
+      if (sale == null ||
+          (sale.status != 'draft' && sale.status != 'pending')) {
         throw Exception('Cannot delete non-draft sale');
       }
       return (delete(sales)..where((s) => s.id.equals(saleId))).go();
@@ -810,10 +916,12 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   /// Update sale status
   Future<bool> updateSaleStatus(int saleId, String status) {
     return (update(sales)..where((s) => s.id.equals(saleId)))
-        .write(SalesCompanion(
-          status: Value(status),
-          updatedAt: Value(DateTime.now()),
-        ))
+        .write(
+          SalesCompanion(
+            status: Value(status),
+            updatedAt: Value(DateTime.now()),
+          ),
+        )
         .then((rows) => rows > 0);
   }
 
@@ -831,16 +939,41 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
 
   /// Compute total cost of goods sold for a sale.
   ///
-  /// Prefers the frozen cost snapshot stored on each SaleItem (set during
-  /// postSale). Falls back to live product/variant cost for legacy rows
-  /// that were created before the cost_cents column existed (NULL).
+  /// For FIFO lines, the append-only batch-consumption ledger is authoritative:
+  /// summing each consumed layer preserves the exact total even when the blended
+  /// per-unit snapshot cannot represent that total without a rounding remainder.
+  /// WAC lines use the frozen cost snapshot stored on each SaleItem (set during
+  /// postSale). Legacy rows with neither source fall back to the live cost.
   Future<int> computeSaleCostCents(int saleId) async {
     final items = await getSaleItems(saleId);
     int totalCost = 0;
     for (final item in items) {
+      if (!await _tracksInventory(item.productId)) continue;
+      if (item.inventoryValueAtPostCents != null) {
+        totalCost += item.inventoryValueAtPostCents!.toBigInt().toInt();
+        continue;
+      }
+      final batchCostRow = await customSelect(
+        'SELECT COUNT(*) AS row_count, '
+        'CAST((COALESCE(SUM(quantity * unit_cost_cents), 0) + '
+        '${item.quantityScale ~/ 2}) / ${item.quantityScale} AS INTEGER) AS cost_cents '
+        'FROM batch_consumptions '
+        "WHERE sale_item_id = ? AND direction = 'out' "
+        "AND consumption_type = 'sale'",
+        variables: [Variable.withInt(item.id)],
+      ).getSingle();
+      if (batchCostRow.read<int>('row_count') > 0) {
+        totalCost += batchCostRow.read<int>('cost_cents');
+        continue;
+      }
+
       if (item.costCents != null) {
         // Frozen cost snapshot — historically accurate
-        totalCost += item.costCents!.toBigInt().toInt() * item.quantity;
+        totalCost += MeasuredAmount.cents(
+          unitCents: item.costCents!.toBigInt().toInt(),
+          quantity: item.quantity,
+          quantityScale: item.quantityScale,
+        );
       } else {
         // Legacy fallback: read current cost from product/variant
         int unitCost = 0;
@@ -861,7 +994,11 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             unitCost = row.read<int>('cost_cents');
           }
         }
-        totalCost += unitCost * item.quantity;
+        totalCost += MeasuredAmount.cents(
+          unitCents: unitCost,
+          quantity: item.quantity,
+          quantityScale: item.quantityScale,
+        );
       }
     }
     return totalCost;
@@ -869,22 +1006,59 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
 
   /// Compute total cost of returned items for a sale return.
   ///
-  /// Prefers the frozen cost snapshot from the original SaleItem. Falls back
-  /// to live product/variant cost for legacy rows (NULL cost_cents).
+  /// For FIFO lines, uses the exact `in` rows written when the return restored
+  /// its original layers. This keeps the Inventory / COGS reversal equal to
+  /// the physical batch-ledger increase, including any sub-cent-per-unit
+  /// rounding remainder. WAC lines use the return-time frozen unit cost when
+  /// available, then the original sale snapshot, then the legacy live cost.
   Future<int> computeSaleReturnCostCents(int returnId) async {
     final query = select(saleReturnItems).join([
       innerJoin(saleItems, saleItems.id.equalsExp(saleReturnItems.saleItemId)),
-    ])
-      ..where(saleReturnItems.returnId.equals(returnId));
+    ])..where(saleReturnItems.returnId.equals(returnId));
 
     final rows = await query.get();
     int totalCost = 0;
     for (final row in rows) {
       final returnItem = row.readTable(saleReturnItems);
       final saleItem = row.readTable(saleItems);
-      if (saleItem.costCents != null) {
+      if (!await _tracksInventory(saleItem.productId)) continue;
+
+      // New postings freeze the exact inventory-pool delta. This is more
+      // precise than rounding quantity x unit-cost independently for every
+      // movement (for example 1.8 m x 11.88 can move a rounded pool by
+      // 21.39 even though the isolated line rounds to 21.38).
+      if (returnItem.inventoryValueAtPostCents != null) {
+        totalCost += returnItem.inventoryValueAtPostCents!.toBigInt().toInt();
+        continue;
+      }
+
+      final batchCostRow = await customSelect(
+        'SELECT COUNT(*) AS row_count, '
+        'CAST((COALESCE(SUM(quantity * unit_cost_cents), 0) + '
+        '${returnItem.quantityScale ~/ 2}) / ${returnItem.quantityScale} AS INTEGER) AS cost_cents '
+        'FROM batch_consumptions '
+        "WHERE sale_return_item_id = ? AND direction = 'in' "
+        "AND consumption_type = 'sale_return_reverse'",
+        variables: [Variable.withInt(returnItem.id)],
+      ).getSingle();
+      if (batchCostRow.read<int>('row_count') > 0) {
+        totalCost += batchCostRow.read<int>('cost_cents');
+        continue;
+      }
+
+      if (returnItem.unitCostAtPostCents != null) {
+        totalCost += MeasuredAmount.cents(
+          unitCents: returnItem.unitCostAtPostCents!.toBigInt().toInt(),
+          quantity: returnItem.quantity,
+          quantityScale: returnItem.quantityScale,
+        );
+      } else if (saleItem.costCents != null) {
         // Frozen cost snapshot — historically accurate
-        totalCost += saleItem.costCents!.toBigInt().toInt() * returnItem.quantity;
+        totalCost += MeasuredAmount.cents(
+          unitCents: saleItem.costCents!.toBigInt().toInt(),
+          quantity: returnItem.quantity,
+          quantityScale: returnItem.quantityScale,
+        );
       } else {
         // Legacy fallback: read current cost from product/variant
         int unitCost = 0;
@@ -905,7 +1079,11 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             unitCost = costRow.read<int>('cost_cents');
           }
         }
-        totalCost += unitCost * returnItem.quantity;
+        totalCost += MeasuredAmount.cents(
+          unitCents: unitCost,
+          quantity: returnItem.quantity,
+          quantityScale: returnItem.quantityScale,
+        );
       }
     }
     return totalCost;
@@ -915,12 +1093,17 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   Future<List<SaleItemWithDetails>> getSaleItemsWithDetails(int saleId) async {
     final query = select(saleItems).join([
       innerJoin(products, products.id.equalsExp(saleItems.productId)),
-      leftOuterJoin(productVariants, productVariants.id.equalsExp(saleItems.variantId)),
-      leftOuterJoin(productColors, productColors.id.equalsExp(productVariants.colorId)),
+      leftOuterJoin(
+        productVariants,
+        productVariants.id.equalsExp(saleItems.variantId),
+      ),
+      leftOuterJoin(
+        productColors,
+        productColors.id.equalsExp(productVariants.colorId),
+      ),
       leftOuterJoin(sizes, sizes.id.equalsExp(productVariants.sizeId)),
       leftOuterJoin(employees, employees.id.equalsExp(saleItems.employeeId)),
-    ])
-      ..where(saleItems.saleId.equals(saleId));
+    ])..where(saleItems.saleId.equals(saleId));
 
     final rows = await query.get();
     return rows.map((row) {
@@ -940,24 +1123,31 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   Stream<List<SaleItemWithDetails>> watchSaleItemsWithDetails(int saleId) {
     final query = select(saleItems).join([
       innerJoin(products, products.id.equalsExp(saleItems.productId)),
-      leftOuterJoin(productVariants, productVariants.id.equalsExp(saleItems.variantId)),
-      leftOuterJoin(productColors, productColors.id.equalsExp(productVariants.colorId)),
+      leftOuterJoin(
+        productVariants,
+        productVariants.id.equalsExp(saleItems.variantId),
+      ),
+      leftOuterJoin(
+        productColors,
+        productColors.id.equalsExp(productVariants.colorId),
+      ),
       leftOuterJoin(sizes, sizes.id.equalsExp(productVariants.sizeId)),
       leftOuterJoin(employees, employees.id.equalsExp(saleItems.employeeId)),
-    ])
-      ..where(saleItems.saleId.equals(saleId));
+    ])..where(saleItems.saleId.equals(saleId));
 
-    return query.watch().map((rows) => rows.map((row) {
-          return SaleItemWithDetails(
-            item: row.readTable(saleItems),
-            product: row.readTable(products),
-            variant: row.readTableOrNull(productVariants),
-            colorName: row.readTableOrNull(productColors)?.name,
-            colorHex: row.readTableOrNull(productColors)?.hexCode,
-            sizeName: row.readTableOrNull(sizes)?.name,
-            employee: row.readTableOrNull(employees),
-          );
-        }).toList());
+    return query.watch().map(
+      (rows) => rows.map((row) {
+        return SaleItemWithDetails(
+          item: row.readTable(saleItems),
+          product: row.readTable(products),
+          variant: row.readTableOrNull(productVariants),
+          colorName: row.readTableOrNull(productColors)?.name,
+          colorHex: row.readTableOrNull(productColors)?.hexCode,
+          sizeName: row.readTableOrNull(sizes)?.name,
+          employee: row.readTableOrNull(employees),
+        );
+      }).toList(),
+    );
   }
 
   // ==================== SALE RETURNS ====================
@@ -968,24 +1158,25 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     final query = select(saleReturns).join([
       leftOuterJoin(sales, sales.id.equalsExp(saleReturns.saleId)),
       leftOuterJoin(customers, customers.id.equalsExp(sales.customerId)),
-    ])
-      ..orderBy([OrderingTerm.desc(saleReturns.returnDate)]);
+    ])..orderBy([OrderingTerm.desc(saleReturns.returnDate)]);
 
-    return query.watch().map((rows) => rows.map((row) {
-          return SaleReturnWithParty(
-            saleReturn: row.readTable(saleReturns),
-            customerName: row.readTableOrNull(customers)?.name,
-            customerPhone: row.readTableOrNull(customers)?.phone,
-            saleInvoiceNumber: row.readTableOrNull(sales)?.invoiceNumber,
-          );
-        }).toList());
+    return query.watch().map(
+      (rows) => rows.map((row) {
+        return SaleReturnWithParty(
+          saleReturn: row.readTable(saleReturns),
+          customerName: row.readTableOrNull(customers)?.name,
+          customerPhone: row.readTableOrNull(customers)?.phone,
+          saleInvoiceNumber: row.readTableOrNull(sales)?.invoiceNumber,
+        );
+      }).toList(),
+    );
   }
 
   /// Watch all sale returns (raw, without party info)
   Stream<List<SaleReturn>> watchAllSaleReturns() {
-    return (select(saleReturns)
-          ..orderBy([(r) => OrderingTerm.desc(r.returnDate)]))
-        .watch();
+    return (select(
+      saleReturns,
+    )..orderBy([(r) => OrderingTerm.desc(r.returnDate)])).watch();
   }
 
   /// Watch product search terms for sale return items.
@@ -995,8 +1186,10 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     final linkedQuery = select(saleReturnItems).join([
       innerJoin(saleItems, saleItems.id.equalsExp(saleReturnItems.saleItemId)),
       innerJoin(products, products.id.equalsExp(saleItems.productId)),
-      leftOuterJoin(productVariants,
-          productVariants.id.equalsExp(saleItems.variantId)),
+      leftOuterJoin(
+        productVariants,
+        productVariants.id.equalsExp(saleItems.variantId),
+      ),
     ]);
 
     return linkedQuery.watch().map((rows) {
@@ -1022,33 +1215,21 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
 
   /// Get sale return by ID
   Future<SaleReturn?> getSaleReturnById(int id) {
-    return (select(saleReturns)..where((r) => r.id.equals(id))).getSingleOrNull();
+    return (select(
+      saleReturns,
+    )..where((r) => r.id.equals(id))).getSingleOrNull();
   }
 
   /// Watch return items
   Stream<List<SaleReturnItem>> watchSaleReturnItems(int returnId) {
-    return (select(saleReturnItems)..where((i) => i.returnId.equals(returnId))).watch();
+    return (select(
+      saleReturnItems,
+    )..where((i) => i.returnId.equals(returnId))).watch();
   }
 
   /// Generate next sale return number
-  Future<String> generateSaleReturnNumber() async {
-    final now = DateTime.now();
-    final prefix = 'SR-${now.year}${now.month.toString().padLeft(2, '0')}';
-
-    final lastReturn = await (select(saleReturns)
-          ..where((r) => r.returnNumber.like('$prefix%'))
-          ..orderBy([(r) => OrderingTerm.desc(r.returnNumber)])
-          ..limit(1))
-        .getSingleOrNull();
-
-    int nextNum = 1;
-    if (lastReturn != null) {
-      final lastNum = int.tryParse(lastReturn.returnNumber.split('-').last) ?? 0;
-      nextNum = lastNum + 1;
-    }
-
-    return '$prefix-${nextNum.toString().padLeft(4, '0')}';
-  }
+  Future<String> generateSaleReturnNumber() =>
+      DocumentNumberService(attachedDatabase).nextSaleReturn();
 
   /// Recompute and persist sale return header totals from its line items.
   /// Mirrors `PurchaseDao.updatePurchaseReturnTotals`.
@@ -1111,13 +1292,17 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     return transaction(() async {
       final returnData = await getSaleReturnById(returnId);
       if (returnData == null) throw Exception('Return not found');
-      if (returnData.status == 'posted') throw Exception('Return already posted');
+      if (returnData.status == 'posted') {
+        throw Exception('Return already posted');
+      }
 
       // Validate return quantities don't exceed available (sold - already returned)
       final returnItemsQuery = select(saleReturnItems).join([
-        innerJoin(saleItems, saleItems.id.equalsExp(saleReturnItems.saleItemId)),
-      ])
-        ..where(saleReturnItems.returnId.equals(returnId));
+        innerJoin(
+          saleItems,
+          saleItems.id.equalsExp(saleReturnItems.saleItemId),
+        ),
+      ])..where(saleReturnItems.returnId.equals(returnId));
 
       final returnItemRows = await returnItemsQuery.get();
       for (final row in returnItemRows) {
@@ -1148,13 +1333,61 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         for (final row in returnItemRows) {
           final returnItem = row.readTable(saleReturnItems);
           final saleItem = row.readTable(saleItems);
+          if (!await _tracksInventory(saleItem.productId)) {
+            await (update(
+              saleReturnItems,
+            )..where((i) => i.id.equals(returnItem.id))).write(
+              SaleReturnItemsCompanion(
+                unitCostAtPostCents: Value(Decimal.zero),
+              ),
+            );
+            continue;
+          }
           returnAffectedProductIds.add(saleItem.productId);
-          await StockService.adjustStock(this,
+
+          // Freeze the value entering inventory before changing quantity.
+          // A linked sale return comes back at its original sale-time cost,
+          // not at whatever WAC happens to be current on the return date.
+          final wacSnapshot = await WacMovementService.capture(
+            this,
+            productId: saleItem.productId,
+            variantId: saleItem.variantId,
+          );
+          final valuationSnapshot =
+              await InventoryValuationDeltaService.capture(
+                this,
+                productId: saleItem.productId,
+                variantId: saleItem.variantId,
+              );
+          final frozenUnitCost =
+              returnItem.unitCostAtPostCents?.toBigInt().toInt() ??
+              saleItem.costCents?.toBigInt().toInt() ??
+              wacSnapshot?.unitCostCents ??
+              0;
+          await (update(
+            saleReturnItems,
+          )..where((i) => i.id.equals(returnItem.id))).write(
+            SaleReturnItemsCompanion(
+              unitCostAtPostCents: Value(Decimal.fromInt(frozenUnitCost)),
+            ),
+          );
+
+          await StockService.adjustStock(
+            this,
             productId: saleItem.productId,
             variantId: saleItem.variantId,
             quantity: returnItem.quantity,
             direction: StockDirection.increase,
           );
+
+          if (wacSnapshot != null) {
+            await WacMovementService.applyInbound(
+              this,
+              snapshot: wacSnapshot,
+              addedQty: returnItem.quantity,
+              inboundUnitCostCents: frozenUnitCost,
+            );
+          }
 
           // FIFO restoration — for FIFO products, push the units back into
           // the exact batches they came from at the FROZEN unit cost. The
@@ -1168,6 +1401,22 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             saleReturnItemId: returnItem.id,
             upToQuantity: returnItem.quantity,
           );
+          final inventoryValue = valuationSnapshot != null
+              ? await InventoryValuationDeltaService.signedDeltaAfter(
+                  this,
+                  valuationSnapshot,
+                )
+              : await _saleReturnBatchValueCents(
+                  returnItem.id,
+                  returnItem.quantityScale,
+                );
+          await (update(
+            saleReturnItems,
+          )..where((i) => i.id.equals(returnItem.id))).write(
+            SaleReturnItemsCompanion(
+              inventoryValueAtPostCents: Value(Decimal.fromInt(inventoryValue)),
+            ),
+          );
           if (await _isFifoProduct(saleItem.productId)) {
             returnBatchedProductIds.add(saleItem.productId);
           }
@@ -1175,13 +1424,18 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
 
         // Sync products.stock_quantity from variants
         for (final productId in returnAffectedProductIds) {
-          await StockService.syncProductStockFromVariants(this, productId: productId);
+          await StockService.syncProductStockFromVariants(
+            this,
+            productId: productId,
+          );
         }
 
         // I4 (Invariant I1): cross-table invariant for FIFO products.
         for (final productId in returnBatchedProductIds) {
-          await BatchService.assertInvariantForProduct(this,
-              productId: productId);
+          await BatchService.assertInvariantForProduct(
+            this,
+            productId: productId,
+          );
         }
       }
 
@@ -1199,8 +1453,9 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       }
 
       // 2. Update return status to posted
-      await (update(saleReturns)..where((r) => r.id.equals(returnId)))
-          .write(const SaleReturnsCompanion(status: Value('posted')));
+      await (update(saleReturns)..where((r) => r.id.equals(returnId))).write(
+        const SaleReturnsCompanion(status: Value('posted')),
+      );
 
       // 3. Customer accounting
       final sale = await getSaleById(returnData.saleId);
@@ -1220,9 +1475,12 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           CustomerTransactionsCompanion.insert(
             customerId: customerId,
             transactionType: txType,
+            transactionNumber: Value(returnData.returnNumber),
             amountCents: Decimal.fromInt(-refundCents),
             currencyId: sale.currencyId,
-            description: Value('Sale return ${returnData.returnNumber} ($refundMethod)'),
+            description: Value(
+              'Sale return ${returnData.returnNumber} ($refundMethod)',
+            ),
             referenceId: Value(returnId),
             referenceType: const Value('sale_return'),
           ),
@@ -1232,7 +1490,8 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         // Cash/cheque means we already gave the customer money back,
         // so the balance (what they owe us) doesn't change.
         if (isCreditRefund) {
-          await BalanceService.adjustCustomerBalance(this,
+          await BalanceService.adjustCustomerBalance(
+            this,
             customerId: customerId,
             deltaCents: -refundCents,
           );
@@ -1252,15 +1511,19 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     return transaction(() async {
       final returnData = await getSaleReturnById(returnId);
       if (returnData == null) throw Exception('Return not found');
-      if (returnData.status == 'voided') throw Exception('Return already voided');
+      if (returnData.status == 'voided') {
+        throw Exception('Return already voided');
+      }
 
       if (returnData.status == 'posted') {
         // 1. Always reverse stock changes (mirrors postSaleReturn).
         {
           final query = select(saleReturnItems).join([
-            innerJoin(saleItems, saleItems.id.equalsExp(saleReturnItems.saleItemId)),
-          ])
-            ..where(saleReturnItems.returnId.equals(returnId));
+            innerJoin(
+              saleItems,
+              saleItems.id.equalsExp(saleReturnItems.saleItemId),
+            ),
+          ])..where(saleReturnItems.returnId.equals(returnId));
 
           final items = await query.get();
 
@@ -1271,6 +1534,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             for (final row in items) {
               final returnItem = row.readTable(saleReturnItems);
               final saleItem = row.readTable(saleItems);
+              if (!await _tracksInventory(saleItem.productId)) continue;
               final variantId = saleItem.variantId;
               final productId = saleItem.productId;
 
@@ -1287,7 +1551,8 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
                     'WHERE pv.id = ?',
                     variables: [Variable.withInt(variantId)],
                   ).getSingleOrNull();
-                  final productName = infoRow?.read<String>('product_name') ?? 'Unknown';
+                  final productName =
+                      infoRow?.read<String>('product_name') ?? 'Unknown';
                   throw Exception(
                     'Insufficient stock for "$productName" (variant #$variantId): '
                     'available $currentStock, required ${returnItem.quantity}.',
@@ -1316,13 +1581,48 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           for (final row in items) {
             final returnItem = row.readTable(saleReturnItems);
             final saleItem = row.readTable(saleItems);
+
+            // The linked-return counter is financial/history state, not
+            // inventory state, so it must reverse for services too.
+            await customStatement(
+              'UPDATE sale_items SET qty_returned_linked = qty_returned_linked - ? '
+              'WHERE id = ? AND qty_returned_linked >= ?',
+              [returnItem.quantity, returnItem.saleItemId, returnItem.quantity],
+            );
+            if (!await _tracksInventory(saleItem.productId)) continue;
+
             voidReturnAffectedProductIds.add(saleItem.productId);
-            await StockService.adjustStock(this,
+
+            final wacSnapshot = await WacMovementService.capture(
+              this,
+              productId: saleItem.productId,
+              variantId: saleItem.variantId,
+            );
+            final frozenUnitCost =
+                returnItem.unitCostAtPostCents?.toBigInt().toInt() ??
+                saleItem.costCents?.toBigInt().toInt() ??
+                wacSnapshot?.unitCostCents ??
+                0;
+
+            await StockService.adjustStock(
+              this,
               productId: saleItem.productId,
               variantId: saleItem.variantId,
               quantity: returnItem.quantity,
               direction: StockDirection.decrease,
             );
+
+            // Remove the exact value that this return added. A normal WAC
+            // outflow leaves unit cost unchanged, but voiding an inbound
+            // return is a value-specific inverse movement.
+            if (wacSnapshot != null) {
+              await WacMovementService.reverseInbound(
+                this,
+                snapshot: wacSnapshot,
+                removedQty: returnItem.quantity,
+                removedUnitCostCents: frozenUnitCost,
+              );
+            }
 
             // FIFO: voiding a sale return removes the units from inventory
             // again. We mirror this by deducting from the SAME batches the
@@ -1336,27 +1636,22 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             if (await _isFifoProduct(saleItem.productId)) {
               voidReturnBatchedProductIds.add(saleItem.productId);
             }
-
-            // Atomic counter: decrement linked-return counter, guarded so
-            // it never goes negative. If a manual data fix bypassed the
-            // counter and it is already zero, we silently swallow rather
-            // than failing the void (mirrors voidPurchaseReturn).
-            await customStatement(
-              'UPDATE sale_items SET qty_returned_linked = qty_returned_linked - ? '
-              'WHERE id = ? AND qty_returned_linked >= ?',
-              [returnItem.quantity, returnItem.saleItemId, returnItem.quantity],
-            );
           }
 
           // Sync products.stock_quantity from variants
           for (final productId in voidReturnAffectedProductIds) {
-            await StockService.syncProductStockFromVariants(this, productId: productId);
+            await StockService.syncProductStockFromVariants(
+              this,
+              productId: productId,
+            );
           }
 
           // I4 (Invariant I1): cross-table invariant for FIFO products.
           for (final productId in voidReturnBatchedProductIds) {
-            await BatchService.assertInvariantForProduct(this,
-                productId: productId);
+            await BatchService.assertInvariantForProduct(
+              this,
+              productId: productId,
+            );
           }
         }
 
@@ -1368,14 +1663,18 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           final isCreditRefund = returnData.refundMethod == 'credit';
 
           // Record reversal transaction for audit trail (always)
-          final reversalType = isCreditRefund ? 'credit_note_reversal' : 'refund_reversal';
+          final reversalType = isCreditRefund
+              ? 'credit_note_reversal'
+              : 'refund_reversal';
           await into(db.customerTransactions).insert(
             CustomerTransactionsCompanion.insert(
               customerId: customerId,
               transactionType: reversalType,
               amountCents: Decimal.fromInt(refundCents),
               currencyId: sale.currencyId,
-              description: Value('Voided sale return ${returnData.returnNumber}'),
+              description: Value(
+                'Voided sale return ${returnData.returnNumber}',
+              ),
               referenceId: Value(returnId),
               referenceType: const Value('sale_return'),
             ),
@@ -1385,7 +1684,8 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           // Cash/cheque refunds did not change the balance on posting,
           // so voiding them should not change it either.
           if (isCreditRefund) {
-            await BalanceService.adjustCustomerBalance(this,
+            await BalanceService.adjustCustomerBalance(
+              this,
               customerId: customerId,
               deltaCents: refundCents,
             );
@@ -1393,8 +1693,9 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         }
       }
 
-      await (update(saleReturns)..where((r) => r.id.equals(returnId)))
-          .write(const SaleReturnsCompanion(status: Value('voided')));
+      await (update(saleReturns)..where((r) => r.id.equals(returnId))).write(
+        const SaleReturnsCompanion(status: Value('voided')),
+      );
     });
   }
 
@@ -1429,22 +1730,34 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       // Recalculate total paid
       final allPayments = await getSalePayments(payment.saleId.value);
       final totalPaid = allPayments.fold<int>(
-          0, (sum, p) => sum + p.amountCents.toBigInt().toInt());
+        0,
+        (sum, p) => sum + p.amountCents.toBigInt().toInt(),
+      );
 
-      await (update(sales)..where((s) => s.id.equals(payment.saleId.value)))
-          .write(SalesCompanion(
-            paidAmountCents: Value(Decimal.fromInt(totalPaid)),
-            updatedAt: Value(DateTime.now()),
-          ));
+      await (update(
+        sales,
+      )..where((s) => s.id.equals(payment.saleId.value))).write(
+        SalesCompanion(
+          paidAmountCents: Value(Decimal.fromInt(totalPaid)),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
 
-      final isOnAccount = sale.paymentMethod == 'credit' || sale.paymentMethod == 'cheque';
-      if (sale.customerId != null && sale.status == 'completed' && isOnAccount) {
+      final isOnAccount =
+          sale.paymentMethod == 'credit' || sale.paymentMethod == 'cheque';
+      if (sale.customerId != null &&
+          sale.status == 'completed' &&
+          isOnAccount) {
         final amountCents = payment.amountCents.value.toBigInt().toInt();
+        final paymentNumber = await DocumentNumberService(
+          attachedDatabase,
+        ).nextCustomerTransaction('CPC');
 
         await into(db.customerTransactions).insert(
           CustomerTransactionsCompanion.insert(
             customerId: sale.customerId!,
             transactionType: 'payment',
+            transactionNumber: Value(paymentNumber),
             amountCents: Decimal.fromInt(-amountCents),
             currencyId: sale.currencyId,
             description: Value('Payment for ${sale.invoiceNumber}'),
@@ -1453,7 +1766,8 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           ),
         );
 
-        await BalanceService.adjustCustomerBalance(this,
+        await BalanceService.adjustCustomerBalance(
+          this,
           customerId: sale.customerId!,
           deltaCents: -amountCents,
         );
@@ -1466,7 +1780,9 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   /// Delete a payment and recalculate paid_amount_cents
   Future<void> deletePayment(int paymentId) {
     return transaction(() async {
-      final payment = await (select(salePayments)..where((p) => p.id.equals(paymentId))).getSingleOrNull();
+      final payment = await (select(
+        salePayments,
+      )..where((p) => p.id.equals(paymentId))).getSingleOrNull();
       if (payment == null) return;
 
       final sale = await getSaleById(payment.saleId);
@@ -1475,16 +1791,23 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
 
       final remaining = await getSalePayments(payment.saleId);
       final totalPaid = remaining.fold<int>(
-          0, (sum, p) => sum + p.amountCents.toBigInt().toInt());
+        0,
+        (sum, p) => sum + p.amountCents.toBigInt().toInt(),
+      );
 
-      await (update(sales)..where((s) => s.id.equals(payment.saleId)))
-          .write(SalesCompanion(
-            paidAmountCents: Value(Decimal.fromInt(totalPaid)),
-            updatedAt: Value(DateTime.now()),
-          ));
+      await (update(sales)..where((s) => s.id.equals(payment.saleId))).write(
+        SalesCompanion(
+          paidAmountCents: Value(Decimal.fromInt(totalPaid)),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
 
-      final isOnAccount = sale?.paymentMethod == 'credit' || sale?.paymentMethod == 'cheque';
-      if (sale != null && sale.customerId != null && sale.status == 'completed' && isOnAccount) {
+      final isOnAccount =
+          sale?.paymentMethod == 'credit' || sale?.paymentMethod == 'cheque';
+      if (sale != null &&
+          sale.customerId != null &&
+          sale.status == 'completed' &&
+          isOnAccount) {
         final amountCents = payment.amountCents.toBigInt().toInt();
 
         await into(db.customerTransactions).insert(
@@ -1499,7 +1822,8 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           ),
         );
 
-        await BalanceService.adjustCustomerBalance(this,
+        await BalanceService.adjustCustomerBalance(
+          this,
           customerId: sale.customerId!,
           deltaCents: amountCents,
         );
@@ -1543,6 +1867,34 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     return result.read<int>('total');
   }
 
+  /// Amounts already reversed by non-voided returns linked to this sale line.
+  ///
+  /// Adjustment-return amounts are intentionally excluded because they are
+  /// independently priced and posted. Their quantity is still included by
+  /// [getReturnedQuantity] for the over-return cap.
+  Future<LinkedReturnHistory> getLinkedReturnHistory(int saleItemId) async {
+    final row = await customSelect(
+      'SELECT '
+      '  COALESCE(SUM(sri.quantity), 0) AS quantity, '
+      '  COALESCE(SUM(sri.subtotal_cents), 0) AS subtotal_cents, '
+      '  COALESCE(SUM(sri.discount_cents), 0) AS discount_cents, '
+      '  COALESCE(SUM(sri.tax_cents), 0) AS tax_cents, '
+      '  COALESCE(SUM(sri.refund_cents), 0) AS refund_cents '
+      'FROM sale_return_items sri '
+      'JOIN sale_returns sr ON sr.id = sri.return_id '
+      "WHERE sri.sale_item_id = ? AND sr.status != 'voided'",
+      variables: [Variable.withInt(saleItemId)],
+    ).getSingle();
+
+    return LinkedReturnHistory(
+      quantity: row.read<int>('quantity'),
+      subtotalCents: row.read<int>('subtotal_cents'),
+      discountCents: row.read<int>('discount_cents'),
+      taxCents: row.read<int>('tax_cents'),
+      refundCents: row.read<int>('refund_cents'),
+    );
+  }
+
   // ==================== DASHBOARD STATS ====================
 
   /// Get dashboard stats using SQL aggregation (no full-table load).
@@ -1561,7 +1913,10 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       "  COALESCE(SUM(CASE WHEN status = 'completed' AND sale_date >= ? THEN total_cents ELSE 0 END), 0) AS today_sales_cents, "
       "  COALESCE(SUM(CASE WHEN status = 'completed' AND sale_date >= ? THEN 1 ELSE 0 END), 0) AS today_count "
       'FROM sales',
-      variables: [Variable.withString(todayStart), Variable.withString(todayStart)],
+      variables: [
+        Variable.withString(todayStart),
+        Variable.withString(todayStart),
+      ],
     ).getSingle();
 
     // Single aggregation query for returns
@@ -1590,36 +1945,46 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
 
   /// Watch sale return items
   Stream<List<SaleReturnItem>> watchSaleReturnItemsList(int returnId) {
-    return (select(saleReturnItems)..where((i) => i.returnId.equals(returnId))).watch();
+    return (select(
+      saleReturnItems,
+    )..where((i) => i.returnId.equals(returnId))).watch();
   }
 
   /// Watch sale return items with full product details (name, color, size, SKU)
-  Stream<List<SaleReturnItemWithDetails>> watchSaleReturnItemsWithDetails(int returnId) {
+  Stream<List<SaleReturnItemWithDetails>> watchSaleReturnItemsWithDetails(
+    int returnId,
+  ) {
     final query = select(saleReturnItems).join([
       innerJoin(saleItems, saleItems.id.equalsExp(saleReturnItems.saleItemId)),
       innerJoin(products, products.id.equalsExp(saleItems.productId)),
-      leftOuterJoin(productVariants, productVariants.id.equalsExp(saleItems.variantId)),
-      leftOuterJoin(productColors, productColors.id.equalsExp(productVariants.colorId)),
+      leftOuterJoin(
+        productVariants,
+        productVariants.id.equalsExp(saleItems.variantId),
+      ),
+      leftOuterJoin(
+        productColors,
+        productColors.id.equalsExp(productVariants.colorId),
+      ),
       leftOuterJoin(sizes, sizes.id.equalsExp(productVariants.sizeId)),
-    ])
-      ..where(saleReturnItems.returnId.equals(returnId));
+    ])..where(saleReturnItems.returnId.equals(returnId));
 
-    return query.watch().map((rows) => rows.map((row) {
-      return SaleReturnItemWithDetails(
-        returnItem: row.readTable(saleReturnItems),
-        product: row.readTable(products),
-        variant: row.readTableOrNull(productVariants),
-        colorName: row.readTableOrNull(productColors)?.name,
-        colorHex: row.readTableOrNull(productColors)?.hexCode,
-        sizeName: row.readTableOrNull(sizes)?.name,
-      );
-    }).toList());
+    return query.watch().map(
+      (rows) => rows.map((row) {
+        return SaleReturnItemWithDetails(
+          returnItem: row.readTable(saleReturnItems),
+          product: row.readTable(products),
+          variant: row.readTableOrNull(productVariants),
+          colorName: row.readTableOrNull(productColors)?.name,
+          colorHex: row.readTableOrNull(productColors)?.hexCode,
+          sizeName: row.readTableOrNull(sizes)?.name,
+        );
+      }).toList(),
+    );
   }
 
   /// Watch set of sale IDs that have at least one non-voided return
   Stream<Set<int>> watchSaleIdsWithReturns() {
-    return (select(saleReturns)
-          ..where((r) => r.status.equals('posted')))
+    return (select(saleReturns)..where((r) => r.status.equals('posted')))
         .watch()
         .map((list) => list.map((r) => r.saleId).toSet());
   }
@@ -1698,5 +2063,25 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         updates: {db.batchConsumptions},
       );
     }
+  }
+
+  /// Exact value restored to FIFO batches by a linked sale return.
+  Future<int> _saleReturnBatchValueCents(
+    int saleReturnItemId,
+    int quantityScale,
+  ) async {
+    final row = await customSelect(
+      'SELECT CAST((COALESCE(SUM(quantity * unit_cost_cents), 0) + ?) / ? '
+      'AS INTEGER) AS value_cents '
+      'FROM batch_consumptions '
+      "WHERE sale_return_item_id = ? AND direction = 'in' "
+      "AND consumption_type = 'sale_return_reverse'",
+      variables: [
+        Variable.withInt(quantityScale ~/ 2),
+        Variable.withInt(quantityScale),
+        Variable.withInt(saleReturnItemId),
+      ],
+    ).getSingle();
+    return row.read<int>('value_cents');
   }
 }

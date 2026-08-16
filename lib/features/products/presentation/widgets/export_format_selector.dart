@@ -53,7 +53,7 @@ class _ExportFormatSelectorState extends State<ExportFormatSelector> {
     required bool isSelected,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return InkWell(
       onTap: () {
         setState(() {
@@ -70,7 +70,9 @@ class _ExportFormatSelectorState extends State<ExportFormatSelector> {
             width: isSelected ? 2 : 1,
           ),
           borderRadius: BorderRadius.circular(8),
-          color: isSelected ? colorScheme.primaryContainer.withValues(alpha: 0.1) : null,
+          color: isSelected
+              ? colorScheme.primaryContainer.withValues(alpha: 0.1)
+              : null,
         ),
         child: Column(
           children: [

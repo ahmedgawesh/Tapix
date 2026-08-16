@@ -16,6 +16,7 @@ import '../../../../core/pricing/pricing_snapshot.dart';
 import '../../../../core/services/journal_entry_service.dart';
 import '../../../../core/services/commissions/commission_service.dart';
 import '../../../../core/services/loyalty/loyalty_points_service.dart';
+import '../../../auth/data/services/session_service.dart';
 import '../../../purchases/presentation/bloc/purchase_adj_return_form_bloc.dart';
 
 // Re-use AdjReturnLineItem from purchase_adj_return_form_bloc.dart
@@ -93,17 +94,19 @@ class SaleAdjReturnFormState extends Equatable {
   late final InvoicePricingResult pricing = _computePricing();
 
   InvoicePricingResult _computePricing() {
-    return InvoicePricingEngine.compute(InvoicePricingInput(
-      lines: items.map((i) => i.toPricingInput()).toList(growable: false),
-      overallDiscount: overallDiscountIsPercent
-          ? Discount.percent(overallDiscountCents)
-          : (overallDiscountCents > 0
-              ? Discount.fixed(Money.fromCents(overallDiscountCents))
-              : Discount.none),
-      enableTaxCalculations: true,
-      defaultTaxRateBps: 0,
-      taxInclusivePricing: false,
-    ));
+    return InvoicePricingEngine.compute(
+      InvoicePricingInput(
+        lines: items.map((i) => i.toPricingInput()).toList(growable: false),
+        overallDiscount: overallDiscountIsPercent
+            ? Discount.percent(overallDiscountCents)
+            : (overallDiscountCents > 0
+                  ? Discount.fixed(Money.fromCents(overallDiscountCents))
+                  : Discount.none),
+        enableTaxCalculations: true,
+        defaultTaxRateBps: 0,
+        taxInclusivePricing: false,
+      ),
+    );
   }
 
   int get totalSubtotalCents => pricing.subtotal.cents;
@@ -180,7 +183,8 @@ class SaleAdjReturnFormState extends Equatable {
       returnDate: returnDate ?? this.returnDate,
       discountPerItem: discountPerItem ?? this.discountPerItem,
       overallDiscountCents: overallDiscountCents ?? this.overallDiscountCents,
-      overallDiscountIsPercent: overallDiscountIsPercent ?? this.overallDiscountIsPercent,
+      overallDiscountIsPercent:
+          overallDiscountIsPercent ?? this.overallDiscountIsPercent,
       paymentMethod: paymentMethod ?? this.paymentMethod,
       dueDate: clearDueDate ? null : (dueDate ?? this.dueDate),
       reasonCode: reasonCode ?? this.reasonCode,
@@ -204,12 +208,31 @@ class SaleAdjReturnFormState extends Equatable {
 
   @override
   List<Object?> get props => [
-        returnNumber, customerId, customerName, employeeId, employeeName, items, notes, currencyId, returnDate,
-        discountPerItem, overallDiscountCents, overallDiscountIsPercent,
-        paymentMethod, dueDate, reasonCode,
-        isLoading, isSubmitting, error, isSuccess, hasUnsavedChanges, createdReturnId,
-        loyaltyEnabled, loyaltyPointsToDeduct, loyaltyPointValueCents,
-      ];
+    returnNumber,
+    customerId,
+    customerName,
+    employeeId,
+    employeeName,
+    items,
+    notes,
+    currencyId,
+    returnDate,
+    discountPerItem,
+    overallDiscountCents,
+    overallDiscountIsPercent,
+    paymentMethod,
+    dueDate,
+    reasonCode,
+    isLoading,
+    isSubmitting,
+    error,
+    isSuccess,
+    hasUnsavedChanges,
+    createdReturnId,
+    loyaltyEnabled,
+    loyaltyPointsToDeduct,
+    loyaltyPointValueCents,
+  ];
 }
 
 // ==================== EVENTS ====================
@@ -261,6 +284,7 @@ class SaleAdjReturnItemPriceChanged extends SaleAdjReturnFormEvent {
 class SaleAdjReturnItemDiscountChanged extends SaleAdjReturnFormEvent {
   final int index;
   final int discountCents;
+
   /// Percent discount in basis points (100 = 1%). When > 0 the discount is
   /// stored as a percent and recomputed live against the line subtotal.
   final int discountPercentBps;
@@ -355,12 +379,14 @@ class SaleAdjReturnFormBloc
   final JournalEntryService _journalEntryService;
   final CommissionService _commissionService;
   final LoyaltyPointsService _loyaltyPointsService;
+  final SessionService _sessionService;
 
   SaleAdjReturnFormBloc(
     this._dao,
     this._journalEntryService,
     this._commissionService,
     this._loyaltyPointsService,
+    this._sessionService,
   ) : super(SaleAdjReturnFormState()) {
     on<_SaleAdjReturnInitialized>(_onInitialized);
     on<_SaleAdjReturnRecomputeLoyalty>(_onRecomputeLoyalty);
@@ -401,23 +427,28 @@ class SaleAdjReturnFormBloc
     final isCredit = state.paymentMethod == AdjReturnPaymentMethod.credit;
     if (!isCredit || state.customerId == null || state.totalCents <= 0) {
       if (state.loyaltyPointsToDeduct != 0 || state.loyaltyEnabled) {
-        emit(state.copyWith(
-          loyaltyEnabled: false,
-          loyaltyPointsToDeduct: 0,
-          loyaltyPointValueCents: 0,
-        ));
+        emit(
+          state.copyWith(
+            loyaltyEnabled: false,
+            loyaltyPointsToDeduct: 0,
+            loyaltyPointValueCents: 0,
+          ),
+        );
       }
       return;
     }
-    final preview = await _loyaltyPointsService.previewAdjustmentReturnDeduction(
-      customerId: state.customerId!,
-      returnTotalCents: state.totalCents,
+    final preview = await _loyaltyPointsService
+        .previewAdjustmentReturnDeduction(
+          customerId: state.customerId!,
+          returnTotalCents: state.totalCents,
+        );
+    emit(
+      state.copyWith(
+        loyaltyEnabled: preview.enabled,
+        loyaltyPointsToDeduct: preview.pointsToDeduct,
+        loyaltyPointValueCents: preview.pointValueCents,
+      ),
     );
-    emit(state.copyWith(
-      loyaltyEnabled: preview.enabled,
-      loyaltyPointsToDeduct: preview.pointsToDeduct,
-      loyaltyPointValueCents: preview.pointValueCents,
-    ));
   }
 
   void _onCustomerSelected(
@@ -427,11 +458,13 @@ class SaleAdjReturnFormBloc
     if (event.customerId == null) {
       emit(state.copyWith(clearCustomer: true, hasUnsavedChanges: true));
     } else {
-      emit(state.copyWith(
-        customerId: event.customerId,
-        customerName: event.customerName,
-        hasUnsavedChanges: true,
-      ));
+      emit(
+        state.copyWith(
+          customerId: event.customerId,
+          customerName: event.customerName,
+          hasUnsavedChanges: true,
+        ),
+      );
     }
     add(const _SaleAdjReturnRecomputeLoyalty());
   }
@@ -440,10 +473,12 @@ class SaleAdjReturnFormBloc
     SaleAdjReturnItemAdded event,
     Emitter<SaleAdjReturnFormState> emit,
   ) {
-    emit(state.copyWith(
-      items: [...state.items, event.item],
-      hasUnsavedChanges: true,
-    ));
+    emit(
+      state.copyWith(
+        items: [...state.items, event.item],
+        hasUnsavedChanges: true,
+      ),
+    );
     add(const _SaleAdjReturnRecomputeLoyalty());
   }
 
@@ -476,8 +511,9 @@ class SaleAdjReturnFormBloc
   ) {
     final updated = List<AdjReturnLineItem>.from(state.items);
     if (event.index < updated.length) {
-      updated[event.index] =
-          updated[event.index].copyWith(unitPriceCents: event.unitPriceCents);
+      updated[event.index] = updated[event.index].copyWith(
+        unitPriceCents: event.unitPriceCents,
+      );
       emit(state.copyWith(items: updated, hasUnsavedChanges: true));
     }
     add(const _SaleAdjReturnRecomputeLoyalty());
@@ -516,11 +552,13 @@ class SaleAdjReturnFormBloc
     SaleAdjReturnOverallDiscountChanged event,
     Emitter<SaleAdjReturnFormState> emit,
   ) {
-    emit(state.copyWith(
-      overallDiscountCents: event.cents,
-      overallDiscountIsPercent: event.isPercent,
-      hasUnsavedChanges: true,
-    ));
+    emit(
+      state.copyWith(
+        overallDiscountCents: event.cents,
+        overallDiscountIsPercent: event.isPercent,
+        hasUnsavedChanges: true,
+      ),
+    );
     add(const _SaleAdjReturnRecomputeLoyalty());
   }
 
@@ -537,15 +575,17 @@ class SaleAdjReturnFormBloc
     final clearedItems = event.perItem
         ? state.items
         : state.items
-            .map((i) => i.copyWith(discountCents: 0, discountPercentBps: 0))
-            .toList();
-    emit(state.copyWith(
-      discountPerItem: event.perItem,
-      items: clearedItems,
-      overallDiscountCents: 0,
-      overallDiscountIsPercent: false,
-      hasUnsavedChanges: true,
-    ));
+              .map((i) => i.copyWith(discountCents: 0, discountPercentBps: 0))
+              .toList();
+    emit(
+      state.copyWith(
+        discountPerItem: event.perItem,
+        items: clearedItems,
+        overallDiscountCents: 0,
+        overallDiscountIsPercent: false,
+        hasUnsavedChanges: true,
+      ),
+    );
     add(const _SaleAdjReturnRecomputeLoyalty());
   }
 
@@ -553,10 +593,7 @@ class SaleAdjReturnFormBloc
     SaleAdjReturnPaymentMethodChanged event,
     Emitter<SaleAdjReturnFormState> emit,
   ) {
-    emit(state.copyWith(
-      paymentMethod: event.method,
-      hasUnsavedChanges: true,
-    ));
+    emit(state.copyWith(paymentMethod: event.method, hasUnsavedChanges: true));
     add(const _SaleAdjReturnRecomputeLoyalty());
   }
 
@@ -585,11 +622,13 @@ class SaleAdjReturnFormBloc
     if (event.employeeId == null) {
       emit(state.copyWith(clearEmployee: true, hasUnsavedChanges: true));
     } else {
-      emit(state.copyWith(
-        employeeId: event.employeeId,
-        employeeName: event.employeeName,
-        hasUnsavedChanges: true,
-      ));
+      emit(
+        state.copyWith(
+          employeeId: event.employeeId,
+          employeeName: event.employeeName,
+          hasUnsavedChanges: true,
+        ),
+      );
     }
   }
 
@@ -600,7 +639,7 @@ class SaleAdjReturnFormBloc
     if (state.isSuccess) return;
     // Customer required for credit/cheque only
     if ((state.paymentMethod == AdjReturnPaymentMethod.credit ||
-         state.paymentMethod == AdjReturnPaymentMethod.cheque) &&
+            state.paymentMethod == AdjReturnPaymentMethod.cheque) &&
         state.customerId == null) {
       emit(state.copyWith(error: 'sales.customer_required_for_credit'.tr()));
       return;
@@ -639,13 +678,19 @@ class SaleAdjReturnFormBloc
         employeeId: Value(state.employeeId),
         currencyId: state.currencyId,
         subtotalCents: Value(Decimal.fromInt(state.totalSubtotalCents)),
-        discountCents: Value(Decimal.fromInt(state.totalItemDiscountCents + state.effectiveOverallDiscountCents)),
+        discountCents: Value(
+          Decimal.fromInt(
+            state.totalItemDiscountCents + state.effectiveOverallDiscountCents,
+          ),
+        ),
         taxCents: Value(Decimal.fromInt(state.totalAdjustedTaxCents)),
         totalCents: Decimal.fromInt(state.totalCents),
-        notes: Value(buildAdjReturnNotes(
-          reasonCode: state.reasonCode!,
-          userNotes: state.notes,
-        )),
+        notes: Value(
+          buildAdjReturnNotes(
+            reasonCode: state.reasonCode!,
+            userNotes: state.notes,
+          ),
+        ),
         returnDate: Value(state.returnDate),
         refundMethod: Value(state.paymentMethod.name),
         dueDate: Value(state.dueDate),
@@ -662,43 +707,53 @@ class SaleAdjReturnFormBloc
       for (int idx = 0; idx < state.items.length; idx++) {
         final item = state.items[idx];
         final line = pricing.lines[idx];
-        itemCompanions.add(SaleReturnAdjustmentItemsCompanion.insert(
-          returnId: 0, // Will be set by DAO
-          productId: item.productId,
-          variantId: Value(item.variantId),
-          quantity: item.quantity,
-          unitPriceCents: Decimal.fromInt(item.unitPriceCents),
-          // Total discount on this item = per-line discount + share of overall
-          discountCents:
-              Value(Decimal.fromInt(line.totalLineDiscount.cents)),
-          taxCents: Value(Decimal.fromInt(line.tax.cents)),
-          totalCents: Decimal.fromInt(line.total.cents),
-          reason: Value(item.reason),
-        ));
+        itemCompanions.add(
+          SaleReturnAdjustmentItemsCompanion.insert(
+            returnId: 0, // Will be set by DAO
+            productId: item.productId,
+            variantId: Value(item.variantId),
+            quantity: item.quantity,
+            quantityScale: Value(item.quantityScale),
+            measurementType: Value(item.measurementType),
+            unitPriceCents: Decimal.fromInt(item.unitPriceCents),
+            // Total discount on this item = per-line discount + share of overall
+            discountCents: Value(Decimal.fromInt(line.totalLineDiscount.cents)),
+            taxCents: Value(Decimal.fromInt(line.tax.cents)),
+            totalCents: Decimal.fromInt(line.total.cents),
+            reason: Value(item.reason),
+          ),
+        );
       }
 
       final createdId = await _dao.createAndPostSaleAdjReturn(
         returnData,
         itemCompanions,
         journalEntryService: _journalEntryService,
+        userId: await _sessionService.getCurrentUserId(),
         commissionService: _commissionService,
         loyaltyPointsService: _loyaltyPointsService,
       );
 
-      emit(state.copyWith(
-        isSubmitting: false,
-        isSuccess: true,
-        hasUnsavedChanges: false,
-        createdReturnId: createdId,
-      ));
+      emit(
+        state.copyWith(
+          isSubmitting: false,
+          isSuccess: true,
+          hasUnsavedChanges: false,
+          createdReturnId: createdId,
+        ),
+      );
     } on StockInsufficientException catch (e) {
-      emit(state.copyWith(
-        isSubmitting: false,
-        error: 'returns.stock_insufficient'.tr(namedArgs: {
-          'stock': '${e.currentStock}',
-          'quantity': '${e.requestedQuantity}',
-        }),
-      ));
+      emit(
+        state.copyWith(
+          isSubmitting: false,
+          error: 'returns.stock_insufficient'.tr(
+            namedArgs: {
+              'stock': '${e.currentStock}',
+              'quantity': '${e.requestedQuantity}',
+            },
+          ),
+        ),
+      );
     } catch (e, st) {
       developer.log(
         'Sale adjustment return submission failed: $e',
@@ -706,7 +761,12 @@ class SaleAdjReturnFormBloc
         error: e,
         stackTrace: st,
       );
-      emit(state.copyWith(isSubmitting: false, error: 'returns.return_failed'.tr()));
+      emit(
+        state.copyWith(
+          isSubmitting: false,
+          error: 'returns.return_failed'.tr(),
+        ),
+      );
     }
   }
 }

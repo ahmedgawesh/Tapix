@@ -31,9 +31,9 @@ class SaleReturnsBloc
   static const int _maxResults = 20;
 
   SaleReturnsBloc(this._repository) : super(const RealtimeLoading()) {
-    _productTermsSub = _repository
-        .watchSaleReturnProductSearchTerms()
-        .listen((terms) {
+    _productTermsSub = _repository.watchSaleReturnProductSearchTerms().listen((
+      terms,
+    ) {
       _productTerms = terms;
       _refilter();
     });
@@ -51,7 +51,8 @@ class SaleReturnsBloc
 
   @override
   RealtimeState<List<SaleReturnEntity>> mapDataToState(
-      List<SaleReturnEntity> data) {
+    List<SaleReturnEntity> data,
+  ) {
     _allReturns = data;
     return RealtimeSuccess<List<SaleReturnEntity>>(data: _applyFilter(data));
   }
@@ -108,8 +109,7 @@ class SaleReturnsBloc
 
       // 5. Product name / barcode / SKU
       final terms = _productTerms[r.unifiedId];
-      if (terms != null &&
-          terms.any((t) => t.toLowerCase().contains(q))) {
+      if (terms != null && terms.any((t) => t.toLowerCase().contains(q))) {
         matched.add(r);
         productMatched.add(r.unifiedId);
         continue;

@@ -16,11 +16,7 @@ class CreateCategory extends RealtimeEvent {
   final String? description;
   final int? parentId;
 
-  const CreateCategory({
-    required this.name,
-    this.description,
-    this.parentId,
-  });
+  const CreateCategory({required this.name, this.description, this.parentId});
 }
 
 class UpdateCategory extends RealtimeEvent {

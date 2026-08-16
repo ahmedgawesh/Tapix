@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../features/auth/auth.dart';
 import '../../features/dashboard/presentation/screens/dashboard_screen.dart';
+import '../../features/cashier_shifts/presentation/screens/cashier_shifts_screen.dart';
 import '../../features/products/presentation/screens/product_list_screen.dart';
 import '../../features/products/presentation/screens/product_form_screen.dart';
 import '../../features/products/presentation/screens/bulk_product_form_screen.dart';
@@ -117,6 +118,8 @@ import '../../features/reports/presentation/screens/stock_movement_report_screen
 import '../../features/financial_management/presentation/screens/financial_management_hub_screen.dart';
 import '../../features/financial_management/presentation/screens/chart_of_accounts_screen.dart';
 import '../../features/financial_management/presentation/screens/accounting_periods_screen.dart';
+import '../../features/financial_management/presentation/screens/owner_finance_screen.dart';
+import '../../features/financial_management/presentation/screens/fixed_assets_screen.dart';
 import '../../features/subscription/presentation/screens/upgrade_required_screen.dart';
 import '../services/feature_gate_service.dart';
 import '../di/injection_container.dart';
@@ -124,29 +127,30 @@ import 'pro_route_policy.dart';
 import 'route_permissions.dart';
 
 class AppRouter {
-  static final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
+  static final GlobalKey<NavigatorState> _rootNavigatorKey =
+      GlobalKey<NavigatorState>();
   static final AuthBloc _authBloc = sl<AuthBloc>();
-  
+
   // Keys for tracking onboarding state
   static const String _hasSeenWelcomeKey = 'has_seen_welcome';
-  
+
   // Session state (resets on app restart)
   static bool _hasCompletedSplash = false;
   static bool? _hasSeenWelcome;
-  
+
   static Future<bool> hasSeenWelcome() async {
     if (_hasSeenWelcome != null) return _hasSeenWelcome!;
     final prefs = sl<SharedPreferences>();
     _hasSeenWelcome = prefs.getBool(_hasSeenWelcomeKey) ?? false;
     return _hasSeenWelcome!;
   }
-  
+
   static Future<void> markWelcomeSeen() async {
     final prefs = sl<SharedPreferences>();
     await prefs.setBool(_hasSeenWelcomeKey, true);
     _hasSeenWelcome = true;
   }
-  
+
   static void markSplashCompleted() {
     _hasCompletedSplash = true;
   }
@@ -164,23 +168,23 @@ class AppRouter {
     redirect: (context, state) async {
       final currentPath = state.uri.path;
       final authState = _authBloc.state;
-      
+
       // Show splash on first app launch (session-based)
       if (!_hasCompletedSplash && currentPath != '/splash') {
         return '/splash';
       }
-      
+
       // Allow splash route
       if (currentPath == '/splash') {
         return null;
       }
-      
+
       // After splash, check if user has seen welcome screen
       final seenWelcome = await hasSeenWelcome();
       if (!seenWelcome && currentPath != '/welcome') {
         return '/welcome';
       }
-      
+
       // Allow welcome route
       if (currentPath == '/welcome') {
         return null;
@@ -205,7 +209,7 @@ class AppRouter {
       // User is authenticated - go to dashboard
       if (authState is AuthAuthenticated) {
         final user = authState.user;
-        final requiredRoles = RoutePermissions.map[currentPath];
+        final requiredRoles = RoutePermissions.rolesForPath(currentPath);
         if (requiredRoles != null) {
           final hasAccess = requiredRoles.contains(user.role);
           if (!hasAccess) {
@@ -231,7 +235,10 @@ class AppRouter {
         }
 
         // Redirect away from auth screens to dashboard
-        if (currentPath == '/login' || currentPath == '/setup' || currentPath == '/' || currentPath == '/forgot-password') {
+        if (currentPath == '/login' ||
+            currentPath == '/setup' ||
+            currentPath == '/' ||
+            currentPath == '/forgot-password') {
           return '/dashboard';
         }
 
@@ -268,21 +275,29 @@ class AppRouter {
           },
         ),
       ),
-      GoRoute(
-        path: '/login',
-        builder: (context, state) => const LoginScreen(),
-      ),
+      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/forgot-password',
         builder: (context, state) => const ForgotPasswordScreen(),
       ),
-      GoRoute(
-        path: '/setup',
-        builder: (context, state) => const SetupScreen(),
-      ),
+      GoRoute(path: '/setup', builder: (context, state) => const SetupScreen()),
       GoRoute(
         path: '/dashboard',
         builder: (context, state) => const DashboardScreen(),
+      ),
+      GoRoute(
+        path: '/cashier-shifts',
+        builder: (context, state) => const CashierShiftsScreen(),
+        routes: [
+          GoRoute(
+            path: ':id',
+            builder: (context, state) {
+              final id = int.tryParse(state.pathParameters['id'] ?? '');
+              if (id == null) return const CashierShiftsScreen();
+              return CashierShiftDetailScreen(shiftId: id);
+            },
+          ),
+        ],
       ),
       GoRoute(
         path: '/products',
@@ -329,7 +344,8 @@ class AppRouter {
             routes: [
               GoRoute(
                 path: 'pick',
-                builder: (context, state) => const CategoriesScreen(isPicker: true),
+                builder: (context, state) =>
+                    const CategoriesScreen(isPicker: true),
               ),
               GoRoute(
                 path: 'new',
@@ -412,7 +428,8 @@ class AppRouter {
                 path: 'new',
                 builder: (context, state) {
                   final saleId = int.tryParse(
-                      state.uri.queryParameters['saleId'] ?? '');
+                    state.uri.queryParameters['saleId'] ?? '',
+                  );
                   if (saleId == null) return const SaleReturnsScreen();
                   return SaleReturnFormScreen(saleId: saleId);
                 },
@@ -429,10 +446,12 @@ class AppRouter {
                     variantId: int.tryParse(params['variantId'] ?? ''),
                     productName: params['productName'],
                     productSku: params['sku'],
-                    variantLabel: (rawVariantLabel == null || rawVariantLabel.isEmpty)
+                    variantLabel:
+                        (rawVariantLabel == null || rawVariantLabel.isEmpty)
                         ? null
                         : rawVariantLabel,
                     productPrice: int.tryParse(params['price'] ?? ''),
+                    measurementType: params['measurementType'] ?? 'piece',
                     taxRateBps: int.tryParse(params['taxRateBps'] ?? ''),
                   );
                 },
@@ -441,7 +460,8 @@ class AppRouter {
                 path: 'adj/:returnId',
                 builder: (context, state) {
                   final returnId = int.tryParse(
-                      state.pathParameters['returnId'] ?? '');
+                    state.pathParameters['returnId'] ?? '',
+                  );
                   if (returnId == null) return const SaleReturnsScreen();
                   return SaleAdjReturnDetailScreen(returnId: returnId);
                 },
@@ -450,7 +470,8 @@ class AppRouter {
                 path: ':returnId',
                 builder: (context, state) {
                   final returnId = int.tryParse(
-                      state.pathParameters['returnId'] ?? '');
+                    state.pathParameters['returnId'] ?? '',
+                  );
                   if (returnId == null) return const SaleReturnsScreen();
                   return SaleReturnDetailScreen(returnId: returnId);
                 },
@@ -469,8 +490,12 @@ class AppRouter {
                 path: 'edit',
                 builder: (context, state) {
                   final id = int.tryParse(state.pathParameters['id'] ?? '');
-                  final isEditingPosted = state.uri.queryParameters['posted'] == 'true';
-                  return SaleFormScreen(saleId: id, isEditingPosted: isEditingPosted);
+                  final isEditingPosted =
+                      state.uri.queryParameters['posted'] == 'true';
+                  return SaleFormScreen(
+                    saleId: id,
+                    isEditingPosted: isEditingPosted,
+                  );
                 },
               ),
             ],
@@ -559,7 +584,8 @@ class AppRouter {
                 path: 'new',
                 builder: (context, state) {
                   final purchaseId = int.tryParse(
-                      state.uri.queryParameters['purchaseId'] ?? '');
+                    state.uri.queryParameters['purchaseId'] ?? '',
+                  );
                   if (purchaseId == null) return const PurchaseReturnsScreen();
                   return PurchaseReturnFormScreen(purchaseId: purchaseId);
                 },
@@ -576,10 +602,12 @@ class AppRouter {
                     variantId: int.tryParse(params['variantId'] ?? ''),
                     productName: params['productName'],
                     productSku: params['sku'],
-                    variantLabel: (rawVariantLabel == null || rawVariantLabel.isEmpty)
+                    variantLabel:
+                        (rawVariantLabel == null || rawVariantLabel.isEmpty)
                         ? null
                         : rawVariantLabel,
                     productPrice: int.tryParse(params['price'] ?? ''),
+                    measurementType: params['measurementType'] ?? 'piece',
                     taxRateBps: int.tryParse(params['taxRateBps'] ?? ''),
                   );
                 },
@@ -588,7 +616,8 @@ class AppRouter {
                 path: 'adj/:returnId',
                 builder: (context, state) {
                   final returnId = int.tryParse(
-                      state.pathParameters['returnId'] ?? '');
+                    state.pathParameters['returnId'] ?? '',
+                  );
                   if (returnId == null) return const PurchaseReturnsScreen();
                   return PurchaseAdjReturnDetailScreen(returnId: returnId);
                 },
@@ -597,7 +626,8 @@ class AppRouter {
                 path: ':returnId',
                 builder: (context, state) {
                   final returnId = int.tryParse(
-                      state.pathParameters['returnId'] ?? '');
+                    state.pathParameters['returnId'] ?? '',
+                  );
                   if (returnId == null) return const PurchaseReturnsScreen();
                   return PurchaseReturnDetailScreen(returnId: returnId);
                 },
@@ -616,8 +646,12 @@ class AppRouter {
                 path: 'edit',
                 builder: (context, state) {
                   final id = int.tryParse(state.pathParameters['id'] ?? '');
-                  final isEditingPosted = state.uri.queryParameters['posted'] == 'true';
-                  return PurchaseFormScreen(purchaseId: id, isEditingPosted: isEditingPosted);
+                  final isEditingPosted =
+                      state.uri.queryParameters['posted'] == 'true';
+                  return PurchaseFormScreen(
+                    purchaseId: id,
+                    isEditingPosted: isEditingPosted,
+                  );
                 },
               ),
             ],
@@ -703,7 +737,8 @@ class AppRouter {
           ),
           GoRoute(
             path: 'customer-returns',
-            builder: (context, state) => const CustomerSalesReturnsReportsScreen(),
+            builder: (context, state) =>
+                const CustomerSalesReturnsReportsScreen(),
           ),
           GoRoute(
             path: 'top-customers',
@@ -743,11 +778,13 @@ class AppRouter {
           ),
           GoRoute(
             path: 'supplier-debit-balance',
-            builder: (context, state) => const SupplierDebitBalanceReportScreen(),
+            builder: (context, state) =>
+                const SupplierDebitBalanceReportScreen(),
           ),
           GoRoute(
             path: 'supplier-credit-balance',
-            builder: (context, state) => const SupplierCreditBalanceReportScreen(),
+            builder: (context, state) =>
+                const SupplierCreditBalanceReportScreen(),
           ),
           GoRoute(
             path: 'supplier-analysis',
@@ -783,7 +820,8 @@ class AppRouter {
           ),
           GoRoute(
             path: 'salespeople-commission',
-            builder: (context, state) => const SalespeopleCommissionReportScreen(),
+            builder: (context, state) =>
+                const SalespeopleCommissionReportScreen(),
           ),
           GoRoute(
             path: 'expense-report',
@@ -803,59 +841,81 @@ class AppRouter {
             routes: [
               GoRoute(
                 path: 'by-period',
-                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.byPeriod),
+                builder: (context, state) => const SalesReportScreen(
+                  reportType: SalesReportType.byPeriod,
+                ),
               ),
               GoRoute(
                 path: 'cash',
-                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.cash),
+                builder: (context, state) =>
+                    const SalesReportScreen(reportType: SalesReportType.cash),
               ),
               GoRoute(
                 path: 'credit',
-                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.credit),
+                builder: (context, state) =>
+                    const SalesReportScreen(reportType: SalesReportType.credit),
               ),
               GoRoute(
                 path: 'card',
-                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.card),
+                builder: (context, state) =>
+                    const SalesReportScreen(reportType: SalesReportType.card),
               ),
               GoRoute(
                 path: 'cheque',
-                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.cheque),
+                builder: (context, state) =>
+                    const SalesReportScreen(reportType: SalesReportType.cheque),
               ),
               GoRoute(
                 path: 'all',
-                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.all),
+                builder: (context, state) =>
+                    const SalesReportScreen(reportType: SalesReportType.all),
               ),
               GoRoute(
                 path: 'by-product',
-                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.byProduct),
+                builder: (context, state) => const SalesReportScreen(
+                  reportType: SalesReportType.byProduct,
+                ),
               ),
               GoRoute(
                 path: 'by-category',
-                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.byCategory),
+                builder: (context, state) => const SalesReportScreen(
+                  reportType: SalesReportType.byCategory,
+                ),
               ),
               GoRoute(
                 path: 'by-customer',
-                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.byCustomer),
+                builder: (context, state) => const SalesReportScreen(
+                  reportType: SalesReportType.byCustomer,
+                ),
               ),
               GoRoute(
                 path: 'cancelled',
-                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.cancelled),
+                builder: (context, state) => const SalesReportScreen(
+                  reportType: SalesReportType.cancelled,
+                ),
               ),
               GoRoute(
                 path: 'tax-by-product',
-                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.taxByProduct),
+                builder: (context, state) => const SalesReportScreen(
+                  reportType: SalesReportType.taxByProduct,
+                ),
               ),
               GoRoute(
                 path: 'tax-by-customer',
-                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.taxByCustomer),
+                builder: (context, state) => const SalesReportScreen(
+                  reportType: SalesReportType.taxByCustomer,
+                ),
               ),
               GoRoute(
                 path: 'excel',
-                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.excel),
+                builder: (context, state) =>
+                    const SalesReportScreen(reportType: SalesReportType.excel),
               ),
               GoRoute(
                 path: 'excel-products',
-                builder: (context, state) => const SalesReportScreen(reportType: SalesReportType.excelProducts),
+                builder: (context, state) => const SalesReportScreen(
+                  reportType: SalesReportType.excelProducts,
+                ),
               ),
             ],
           ),
@@ -865,51 +925,75 @@ class AppRouter {
             routes: [
               GoRoute(
                 path: 'all',
-                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.all),
+                builder: (context, state) => const PurchaseReportScreen(
+                  reportType: PurchaseReportType.all,
+                ),
               ),
               GoRoute(
                 path: 'cash',
-                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.cash),
+                builder: (context, state) => const PurchaseReportScreen(
+                  reportType: PurchaseReportType.cash,
+                ),
               ),
               GoRoute(
                 path: 'credit',
-                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.credit),
+                builder: (context, state) => const PurchaseReportScreen(
+                  reportType: PurchaseReportType.credit,
+                ),
               ),
               GoRoute(
                 path: 'card',
-                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.card),
+                builder: (context, state) => const PurchaseReportScreen(
+                  reportType: PurchaseReportType.card,
+                ),
               ),
               GoRoute(
                 path: 'cheque',
-                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.cheque),
+                builder: (context, state) => const PurchaseReportScreen(
+                  reportType: PurchaseReportType.cheque,
+                ),
               ),
               GoRoute(
                 path: 'by-product',
-                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.byProduct),
+                builder: (context, state) => const PurchaseReportScreen(
+                  reportType: PurchaseReportType.byProduct,
+                ),
               ),
               GoRoute(
                 path: 'by-category',
-                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.byCategory),
+                builder: (context, state) => const PurchaseReportScreen(
+                  reportType: PurchaseReportType.byCategory,
+                ),
               ),
               GoRoute(
                 path: 'by-supplier',
-                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.bySupplier),
+                builder: (context, state) => const PurchaseReportScreen(
+                  reportType: PurchaseReportType.bySupplier,
+                ),
               ),
               GoRoute(
                 path: 'cancelled',
-                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.cancelled),
+                builder: (context, state) => const PurchaseReportScreen(
+                  reportType: PurchaseReportType.cancelled,
+                ),
               ),
               GoRoute(
                 path: 'orders',
-                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.orders),
+                builder: (context, state) => const PurchaseReportScreen(
+                  reportType: PurchaseReportType.orders,
+                ),
               ),
               GoRoute(
                 path: 'excel',
-                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.excel),
+                builder: (context, state) => const PurchaseReportScreen(
+                  reportType: PurchaseReportType.excel,
+                ),
               ),
               GoRoute(
                 path: 'excel-products',
-                builder: (context, state) => const PurchaseReportScreen(reportType: PurchaseReportType.excelProducts),
+                builder: (context, state) => const PurchaseReportScreen(
+                  reportType: PurchaseReportType.excelProducts,
+                ),
               ),
             ],
           ),
@@ -919,19 +1003,27 @@ class AppRouter {
             routes: [
               GoRoute(
                 path: 'by-product',
-                builder: (context, state) => const DiscountReportScreen(reportType: DiscountReportType.byProduct),
+                builder: (context, state) => const DiscountReportScreen(
+                  reportType: DiscountReportType.byProduct,
+                ),
               ),
               GoRoute(
                 path: 'by-category',
-                builder: (context, state) => const DiscountReportScreen(reportType: DiscountReportType.byCategory),
+                builder: (context, state) => const DiscountReportScreen(
+                  reportType: DiscountReportType.byCategory,
+                ),
               ),
               GoRoute(
                 path: 'by-customer',
-                builder: (context, state) => const DiscountReportScreen(reportType: DiscountReportType.byCustomer),
+                builder: (context, state) => const DiscountReportScreen(
+                  reportType: DiscountReportType.byCustomer,
+                ),
               ),
               GoRoute(
                 path: 'by-invoice',
-                builder: (context, state) => const DiscountReportScreen(reportType: DiscountReportType.byInvoice),
+                builder: (context, state) => const DiscountReportScreen(
+                  reportType: DiscountReportType.byInvoice,
+                ),
               ),
             ],
           ),
@@ -941,23 +1033,33 @@ class AppRouter {
             routes: [
               GoRoute(
                 path: 'overall',
-                builder: (context, state) => const ProfitReportScreen(reportType: ProfitReportType.overall),
+                builder: (context, state) => const ProfitReportScreen(
+                  reportType: ProfitReportType.overall,
+                ),
               ),
               GoRoute(
                 path: 'by-product',
-                builder: (context, state) => const ProfitReportScreen(reportType: ProfitReportType.byProduct),
+                builder: (context, state) => const ProfitReportScreen(
+                  reportType: ProfitReportType.byProduct,
+                ),
               ),
               GoRoute(
                 path: 'by-category',
-                builder: (context, state) => const ProfitReportScreen(reportType: ProfitReportType.byCategory),
+                builder: (context, state) => const ProfitReportScreen(
+                  reportType: ProfitReportType.byCategory,
+                ),
               ),
               GoRoute(
                 path: 'by-customer',
-                builder: (context, state) => const ProfitReportScreen(reportType: ProfitReportType.byCustomer),
+                builder: (context, state) => const ProfitReportScreen(
+                  reportType: ProfitReportType.byCustomer,
+                ),
               ),
               GoRoute(
                 path: 'by-invoice',
-                builder: (context, state) => const ProfitReportScreen(reportType: ProfitReportType.byInvoice),
+                builder: (context, state) => const ProfitReportScreen(
+                  reportType: ProfitReportType.byInvoice,
+                ),
               ),
             ],
           ),
@@ -1001,11 +1103,16 @@ class AppRouter {
         builder: (context, state) {
           final extra = state.extra as Map<String, dynamic>?;
           final products = extra?['products'] as List<Product>?;
-          final variantInfoByProductId = extra?['variantInfoByProductId'] as Map<int, String>?;
+          final variantInfoByProductId =
+              extra?['variantInfoByProductId'] as Map<int, String>?;
+          final selectedVariantIds = (extra?['selectedVariantIds'] as Iterable?)
+              ?.cast<int>()
+              .toSet();
           final invoiceData = extra?['invoiceData'] as InvoicePrintData?;
           return BarcodeDesignScreen(
             initialProducts: products,
             variantInfoByProductId: variantInfoByProductId,
+            selectedVariantIds: selectedVariantIds,
             invoiceData: invoiceData,
           );
         },
@@ -1069,7 +1176,8 @@ class AppRouter {
           ),
           GoRoute(
             path: 'settings',
-            builder: (context, state) => const PlaceholderScreen(title: 'Employees Settings'),
+            builder: (context, state) =>
+                const PlaceholderScreen(title: 'Employees Settings'),
           ),
         ],
       ),
@@ -1098,6 +1206,14 @@ class AppRouter {
           GoRoute(
             path: 'periods',
             builder: (context, state) => const AccountingPeriodsScreen(),
+          ),
+          GoRoute(
+            path: 'owner-finance',
+            builder: (context, state) => const OwnerFinanceScreen(),
+          ),
+          GoRoute(
+            path: 'fixed-assets',
+            builder: (context, state) => const FixedAssetsScreen(),
           ),
         ],
       ),
@@ -1138,7 +1254,6 @@ class AppRouter {
       ),
     ],
   );
-
 }
 
 class PlaceholderScreen extends StatelessWidget {
@@ -1199,7 +1314,7 @@ class _AuthLoadingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Scaffold(
       backgroundColor: colorScheme.surface,
       body: Center(
@@ -1213,9 +1328,7 @@ class _AuthLoadingScreen extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             const SizedBox(height: 24),
-            CircularProgressIndicator(
-              color: colorScheme.primary,
-            ),
+            CircularProgressIndicator(color: colorScheme.primary),
           ],
         ),
       ),

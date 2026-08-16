@@ -33,13 +33,19 @@ class InventoryMovementSearchChanged extends InventoryReportsEvent {
 class InventoryMovementCategoryFilterChanged extends InventoryReportsEvent {
   final int? categoryId;
   final String? categoryName;
-  const InventoryMovementCategoryFilterChanged(this.categoryId, this.categoryName);
+  const InventoryMovementCategoryFilterChanged(
+    this.categoryId,
+    this.categoryName,
+  );
 }
 
 class InventoryMovementSupplierFilterChanged extends InventoryReportsEvent {
   final int? supplierId;
   final String? supplierName;
-  const InventoryMovementSupplierFilterChanged(this.supplierId, this.supplierName);
+  const InventoryMovementSupplierFilterChanged(
+    this.supplierId,
+    this.supplierName,
+  );
 }
 
 class InventoryMovementSortChanged extends InventoryReportsEvent {
@@ -49,7 +55,14 @@ class InventoryMovementSortChanged extends InventoryReportsEvent {
 
 // ==================== ENUMS ====================
 
-enum StockValuationSort { nameAsc, nameDesc, valueDesc, valueAsc, stockDesc, stockAsc }
+enum StockValuationSort {
+  nameAsc,
+  nameDesc,
+  valueDesc,
+  valueAsc,
+  stockDesc,
+  stockAsc,
+}
 
 enum PriceDisplayType { cost, sale, wholesale }
 
@@ -98,6 +111,11 @@ class StockValuationItem {
   }
 
   int valuationByType(PriceDisplayType type) {
+    // Cost valuation is not necessarily unit-cost × quantity: FIFO can hold
+    // several remaining layers at different frozen costs. [valuationCents]
+    // carries the exact batch-ledger value; sale/wholesale remain hypothetical
+    // price extensions over the physical quantity.
+    if (type == PriceDisplayType.cost) return valuationCents;
     return totalStock * priceByType(type);
   }
 
@@ -180,7 +198,8 @@ class ProductMovementItem {
     return parts.join(' / ');
   }
 
-  int get totalActivity => purchasedQty + soldQty + saleReturnedQty + purchaseReturnedQty;
+  int get totalActivity =>
+      purchasedQty + soldQty + saleReturnedQty + purchaseReturnedQty;
 }
 
 class InventoryReportsData {
@@ -250,10 +269,18 @@ class InventoryReportsData {
       sort: sort ?? this.sort,
       priceType: priceType ?? this.priceType,
       movementSearchQuery: movementSearchQuery ?? this.movementSearchQuery,
-      movementCategoryId: movementCategoryId != null ? movementCategoryId() : this.movementCategoryId,
-      movementCategoryName: movementCategoryName != null ? movementCategoryName() : this.movementCategoryName,
-      movementSupplierId: movementSupplierId != null ? movementSupplierId() : this.movementSupplierId,
-      movementSupplierName: movementSupplierName != null ? movementSupplierName() : this.movementSupplierName,
+      movementCategoryId: movementCategoryId != null
+          ? movementCategoryId()
+          : this.movementCategoryId,
+      movementCategoryName: movementCategoryName != null
+          ? movementCategoryName()
+          : this.movementCategoryName,
+      movementSupplierId: movementSupplierId != null
+          ? movementSupplierId()
+          : this.movementSupplierId,
+      movementSupplierName: movementSupplierName != null
+          ? movementSupplierName()
+          : this.movementSupplierName,
       movementSort: movementSort ?? this.movementSort,
       availableCategories: availableCategories ?? this.availableCategories,
       availableSuppliers: availableSuppliers ?? this.availableSuppliers,
@@ -284,8 +311,8 @@ class InventoryReportsBloc
   MovementSort _movementSort = MovementSort.mostActive;
 
   InventoryReportsBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -306,7 +333,13 @@ class InventoryReportsBloc
   }
 
   Stream<InventoryReportsData> _buildCombinedStream() {
-    return _db.select(_db.productVariants).watch().asyncMap((_) async {
+    final trigger = _db
+        .customSelect(
+          'SELECT 1 AS _t',
+          readsFrom: {_db.products, _db.productVariants, _db.productBatches},
+        )
+        .watch();
+    return trigger.asyncMap((_) async {
       final stockValuation = await _loadStockValuation();
       final lowStock = await _loadLowStock();
       final movement = await _loadProductMovement();
@@ -385,12 +418,14 @@ class InventoryReportsBloc
     final current = currentData;
     if (current != null) {
       final sorted = _applySortToMovement(current.productMovement, event.sort);
-      emit(RealtimeSuccess<InventoryReportsData>(
-        data: current.copyWith(
-          productMovement: sorted,
-          movementSort: event.sort,
+      emit(
+        RealtimeSuccess<InventoryReportsData>(
+          data: current.copyWith(
+            productMovement: sorted,
+            movementSort: event.sort,
+          ),
         ),
-      ));
+      );
     }
   }
 
@@ -402,12 +437,11 @@ class InventoryReportsBloc
     final current = currentData;
     if (current != null) {
       final sorted = _applySortToValuation(current.stockValuation, event.sort);
-      emit(RealtimeSuccess<InventoryReportsData>(
-        data: current.copyWith(
-          stockValuation: sorted,
-          sort: event.sort,
+      emit(
+        RealtimeSuccess<InventoryReportsData>(
+          data: current.copyWith(stockValuation: sorted, sort: event.sort),
         ),
-      ));
+      );
     }
   }
 
@@ -418,9 +452,11 @@ class InventoryReportsBloc
     _priceType = event.priceType;
     final current = currentData;
     if (current != null) {
-      emit(RealtimeSuccess<InventoryReportsData>(
-        data: current.copyWith(priceType: event.priceType),
-      ));
+      emit(
+        RealtimeSuccess<InventoryReportsData>(
+          data: current.copyWith(priceType: event.priceType),
+        ),
+      );
     }
   }
 
@@ -447,8 +483,9 @@ class InventoryReportsBloc
   }
 
   Future<List<StockValuationItem>> _loadStockValuation() async {
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         p.id AS product_id,
         p.name AS product_name,
@@ -461,17 +498,51 @@ class InventoryReportsBloc
         COALESCE(v.cost_cents, p.cost_cents) AS cost_cents,
         COALESCE(v.price_cents, p.price_cents) AS price_cents,
         COALESCE(v.wholesale_price_cents, p.wholesale_price_cents, 0) AS wholesale_price_cents,
-        COALESCE(v.stock_quantity * v.cost_cents, p.stock_quantity * p.cost_cents) AS valuation_cents
+        CASE
+          WHEN (p.inventory_tracking_type IN ('batch', 'batch_expiry')
+                OR p.costing_method = 'fifo')
+           AND EXISTS (
+             SELECT 1 FROM product_batches bx
+             WHERE bx.product_id = p.id AND bx.is_active = 1
+               AND ((v.id IS NOT NULL AND bx.variant_id = v.id)
+                 OR (v.id IS NULL AND bx.variant_id IS NULL))
+           )
+          THEN (
+            SELECT COALESCE(SUM(
+              CAST(ROUND(
+                1.0 * b.remaining_quantity * b.unit_cost_cents /
+                CASE WHEN p.measurement_type = 'piece' THEN 1 ELSE 1000 END
+              ) AS INTEGER)
+            ), 0)
+            FROM product_batches b
+            WHERE b.product_id = p.id AND b.is_active = 1
+              AND ((v.id IS NOT NULL AND b.variant_id = v.id)
+                OR (v.id IS NULL AND b.variant_id IS NULL))
+          )
+          ELSE CAST(ROUND(
+            1.0 * COALESCE(v.stock_quantity * v.cost_cents,
+                           p.stock_quantity * p.cost_cents) /
+            CASE WHEN p.measurement_type = 'piece' THEN 1 ELSE 1000 END
+          ) AS INTEGER)
+        END AS valuation_cents
       FROM products p
       LEFT JOIN product_variants v ON v.product_id = p.id AND v.is_active = 1
       LEFT JOIN product_categories c ON c.id = p.category_id
       LEFT JOIN product_colors pc ON pc.id = v.color_id
       LEFT JOIN sizes sz ON sz.id = v.size_id
       WHERE p.is_active = 1
+        AND p.track_inventory = 1
       ORDER BY valuation_cents DESC
       ''',
-      readsFrom: {_db.products, _db.productVariants, _db.productCategories, _db.productColors, _db.sizes},
-    ).get();
+          readsFrom: {
+            _db.products,
+            _db.productVariants,
+            _db.productCategories,
+            _db.productColors,
+            _db.sizes,
+          },
+        )
+        .get();
 
     return rows.map((row) {
       return StockValuationItem(
@@ -492,8 +563,9 @@ class InventoryReportsBloc
   }
 
   Future<List<LowStockItem>> _loadLowStock() async {
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         p.id AS product_id,
         p.name AS product_name,
@@ -515,8 +587,15 @@ class InventoryReportsBloc
       HAVING current_stock <= reorder_level
       ORDER BY (reorder_level - current_stock) DESC
       ''',
-      readsFrom: {_db.products, _db.productVariants, _db.productCategories, _db.productColors, _db.sizes},
-    ).get();
+          readsFrom: {
+            _db.products,
+            _db.productVariants,
+            _db.productCategories,
+            _db.productColors,
+            _db.sizes,
+          },
+        )
+        .get();
 
     return rows.map((row) {
       final currentStock = row.read<int>('current_stock');
@@ -572,16 +651,19 @@ class InventoryReportsBloc
       Variable<String>(startIso), Variable<String>(endIso), // purchased
       Variable<String>(startIso), Variable<String>(endIso), // sold
       Variable<String>(startIso), Variable<String>(endIso), // sale_ret linked
-      Variable<String>(startIso), Variable<String>(endIso), // sale_ret adjustment
+      Variable<String>(startIso),
+      Variable<String>(endIso), // sale_ret adjustment
       Variable<String>(startIso), Variable<String>(endIso), // purch_ret linked
-      Variable<String>(startIso), Variable<String>(endIso), // purch_ret adjustment
+      Variable<String>(startIso),
+      Variable<String>(endIso), // purch_ret adjustment
     ];
 
     // The key fix: subqueries group by BOTH product_id AND variant_id
     // to correctly attribute movements to specific variants.
     // For products without variants, variant_id will be NULL.
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         p.id AS product_id,
         pv.id AS variant_id,
@@ -667,27 +749,28 @@ class InventoryReportsBloc
       ORDER BY (COALESCE(purchased.qty, 0) + COALESCE(sold.qty, 0) + 
                 COALESCE(sale_ret.qty, 0) + COALESCE(purch_ret.qty, 0)) DESC
       ''',
-      variables: [...dateVars, ...variables],
-      readsFrom: {
-        _db.products,
-        _db.productVariants,
-        _db.productCategories,
-        _db.productColors,
-        _db.sizes,
-        _db.purchaseItems,
-        _db.purchases,
-        _db.saleItems,
-        _db.sales,
-        _db.saleReturnItems,
-        _db.saleReturns,
-        _db.saleReturnAdjustmentItems,
-        _db.saleReturnAdjustments,
-        _db.purchaseReturnItems,
-        _db.purchaseReturns,
-        _db.purchaseReturnAdjustmentItems,
-        _db.purchaseReturnAdjustments,
-      },
-    ).get();
+          variables: [...dateVars, ...variables],
+          readsFrom: {
+            _db.products,
+            _db.productVariants,
+            _db.productCategories,
+            _db.productColors,
+            _db.sizes,
+            _db.purchaseItems,
+            _db.purchases,
+            _db.saleItems,
+            _db.sales,
+            _db.saleReturnItems,
+            _db.saleReturns,
+            _db.saleReturnAdjustmentItems,
+            _db.saleReturnAdjustments,
+            _db.purchaseReturnItems,
+            _db.purchaseReturns,
+            _db.purchaseReturnAdjustmentItems,
+            _db.purchaseReturnAdjustments,
+          },
+        )
+        .get();
 
     final items = rows.map((row) {
       final purchased = row.read<int>('purchased_qty');
@@ -732,18 +815,32 @@ class InventoryReportsBloc
   }
 
   Future<List<FilterOption>> _loadAvailableCategories() async {
-    final rows = await _db.customSelect(
-      'SELECT id, name FROM product_categories WHERE is_active = 1 ORDER BY name',
-      readsFrom: {_db.productCategories},
-    ).get();
-    return rows.map((r) => FilterOption(id: r.read<int>('id'), name: r.read<String>('name'))).toList();
+    final rows = await _db
+        .customSelect(
+          'SELECT id, name FROM product_categories WHERE is_active = 1 ORDER BY name',
+          readsFrom: {_db.productCategories},
+        )
+        .get();
+    return rows
+        .map(
+          (r) =>
+              FilterOption(id: r.read<int>('id'), name: r.read<String>('name')),
+        )
+        .toList();
   }
 
   Future<List<FilterOption>> _loadAvailableSuppliers() async {
-    final rows = await _db.customSelect(
-      'SELECT id, name FROM suppliers WHERE is_active = 1 ORDER BY name',
-      readsFrom: {_db.suppliers},
-    ).get();
-    return rows.map((r) => FilterOption(id: r.read<int>('id'), name: r.read<String>('name'))).toList();
+    final rows = await _db
+        .customSelect(
+          'SELECT id, name FROM suppliers WHERE is_active = 1 ORDER BY name',
+          readsFrom: {_db.suppliers},
+        )
+        .get();
+    return rows
+        .map(
+          (r) =>
+              FilterOption(id: r.read<int>('id'), name: r.read<String>('name')),
+        )
+        .toList();
   }
 }

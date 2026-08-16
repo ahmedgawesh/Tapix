@@ -16,6 +16,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../database/app_database.dart';
+import '../measurement/measurement.dart';
 import '../database/daos/purchase_dao.dart';
 import '../database/daos/sale_dao.dart';
 import '../database/daos/adjustment_return_dao.dart';
@@ -24,6 +25,8 @@ import 'journal_entry_service.dart';
 import 'commissions/commission_service.dart';
 import 'loyalty/loyalty_points_service.dart';
 import 'return_calculation_service.dart';
+import 'cashier_shift_service.dart';
+import '../../features/auth/data/services/session_service.dart';
 
 // ─── Enums & Data Classes ────────────────────────────────────────────────────
 
@@ -43,10 +46,7 @@ enum ReturnModeReason {
 }
 
 /// The resolved mode for a single line item.
-enum ReturnMode {
-  linked,
-  adjustment,
-}
+enum ReturnMode { linked, adjustment }
 
 /// Whether this is a sale-side or purchase-side return.
 enum ReturnSide { sale, purchase }
@@ -58,6 +58,8 @@ class UnifiedReturnLineItem {
   final String productName;
   final String? variantLabel;
   final int quantity;
+  final int quantityScale;
+  final String measurementType;
   final int unitPriceCents;
   final String? reason;
 
@@ -75,6 +77,8 @@ class UnifiedReturnLineItem {
     required this.productName,
     this.variantLabel,
     required this.quantity,
+    this.quantityScale = 1,
+    this.measurementType = 'piece',
     required this.unitPriceCents,
     this.reason,
     required this.mode,
@@ -96,6 +100,8 @@ class UnifiedReturnLineItem {
       productName: productName,
       variantLabel: variantLabel,
       quantity: quantity ?? this.quantity,
+      quantityScale: quantityScale,
+      measurementType: measurementType,
       unitPriceCents: unitPriceCents ?? this.unitPriceCents,
       reason: reason ?? this.reason,
       mode: mode ?? this.mode,
@@ -104,7 +110,11 @@ class UnifiedReturnLineItem {
     );
   }
 
-  int get totalCents => unitPriceCents * quantity;
+  int get totalCents => MeasuredAmount.cents(
+    unitCents: unitPriceCents,
+    quantity: quantity,
+    quantityScale: quantityScale,
+  );
 
   bool get isAdjustment => mode == ReturnMode.adjustment;
 }
@@ -119,6 +129,8 @@ class InvoiceItemAllocation {
 
   /// How many units are consumed from this invoice item.
   final int quantity;
+  final int quantityScale;
+  final String measurementType;
 
   /// Original unit price on the invoice item (cents).
   final int unitPriceCents;
@@ -128,16 +140,22 @@ class InvoiceItemAllocation {
   final int originalSubtotalCents;
   final int originalDiscountCents;
   final int originalTaxCents;
+  final LinkedReturnHistory previousLinkedHistory;
+  final bool taxInclusivePricing;
 
   const InvoiceItemAllocation({
     required this.invoiceItemId,
     required this.invoiceId,
     required this.quantity,
+    this.quantityScale = 1,
+    this.measurementType = 'piece',
     required this.unitPriceCents,
     required this.originalQuantity,
     required this.originalSubtotalCents,
     required this.originalDiscountCents,
     required this.originalTaxCents,
+    this.previousLinkedHistory = LinkedReturnHistory.zero,
+    this.taxInclusivePricing = false,
   });
 }
 
@@ -179,6 +197,7 @@ class ProductSearchResult {
   /// the search result tile so the user knows how much is available before
   /// creating an unlinked (adjustment) return.
   final int stockQuantity;
+  final String measurementType;
 
   const ProductSearchResult({
     required this.productId,
@@ -190,6 +209,7 @@ class ProductSearchResult {
     required this.lastPriceCents,
     this.taxRateBps = 0,
     this.stockQuantity = 0,
+    this.measurementType = 'piece',
   });
 }
 
@@ -202,11 +222,15 @@ class ReturnableInvoiceItem {
   final int productId;
   final int? variantId;
   final int originalQuantity;
+  final int quantityScale;
+  final String measurementType;
   final int alreadyReturnedQuantity;
   final int unitPriceCents;
   final int originalSubtotalCents;
   final int originalDiscountCents;
   final int originalTaxCents;
+  final LinkedReturnHistory linkedReturnHistory;
+  final bool taxInclusivePricing;
 
   int get remainingQuantity => originalQuantity - alreadyReturnedQuantity;
 
@@ -218,11 +242,15 @@ class ReturnableInvoiceItem {
     required this.productId,
     this.variantId,
     required this.originalQuantity,
+    this.quantityScale = 1,
+    this.measurementType = 'piece',
     required this.alreadyReturnedQuantity,
     required this.unitPriceCents,
     required this.originalSubtotalCents,
     required this.originalDiscountCents,
     required this.originalTaxCents,
+    this.linkedReturnHistory = LinkedReturnHistory.zero,
+    this.taxInclusivePricing = false,
   });
 }
 
@@ -236,6 +264,8 @@ class UnifiedReturnService {
   final JournalEntryService _journalService;
   final CommissionService _commissionService;
   final LoyaltyPointsService _loyaltyPointsService;
+  final SessionService? _sessionService;
+  final CashierShiftService? _cashierShiftService;
 
   UnifiedReturnService(
     this._db,
@@ -244,8 +274,11 @@ class UnifiedReturnService {
     this._adjDao,
     this._journalService,
     this._commissionService,
-    this._loyaltyPointsService,
-  );
+    this._loyaltyPointsService, {
+    SessionService? sessionService,
+    CashierShiftService? cashierShiftService,
+  }) : _sessionService = sessionService,
+       _cashierShiftService = cashierShiftService;
 
   // ════════════════════════════════════════════════════════════════════════════
   // SEARCH
@@ -258,40 +291,46 @@ class UnifiedReturnService {
     int limit = 20,
   }) async {
     final q = '%$query%';
-    final rows = await _db.customSelect(
-      'SELECT DISTINCT s.id, s.invoice_number, s.sale_date, s.total_cents, '
-      '  s.customer_id, c.name AS customer_name '
-      'FROM sales s '
-      'LEFT JOIN customers c ON c.id = s.customer_id '
-      'LEFT JOIN sale_items si ON si.sale_id = s.id '
-      'LEFT JOIN products p ON p.id = si.product_id '
-      'LEFT JOIN product_variants pv ON pv.id = si.variant_id '
-      "WHERE s.status = 'completed' "
-      '  AND (s.invoice_number LIKE ? '
-      '    OR p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ? '
-      '    OR pv.sku LIKE ? OR pv.barcode LIKE ?) '
-      '${customerId != null ? "AND s.customer_id = $customerId " : ""}'
-      'ORDER BY s.sale_date DESC '
-      'LIMIT ?',
-      variables: [
-        Variable.withString(q),
-        Variable.withString(q),
-        Variable.withString(q),
-        Variable.withString(q),
-        Variable.withString(q),
-        Variable.withString(q),
-        Variable.withInt(limit),
-      ],
-    ).get();
+    final rows = await _db
+        .customSelect(
+          'SELECT DISTINCT s.id, s.invoice_number, s.sale_date, s.total_cents, '
+          '  s.customer_id, c.name AS customer_name '
+          'FROM sales s '
+          'LEFT JOIN customers c ON c.id = s.customer_id '
+          'LEFT JOIN sale_items si ON si.sale_id = s.id '
+          'LEFT JOIN products p ON p.id = si.product_id '
+          'LEFT JOIN product_variants pv ON pv.id = si.variant_id '
+          "WHERE s.status = 'completed' "
+          '  AND (s.invoice_number LIKE ? '
+          '    OR p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ? '
+          '    OR pv.sku LIKE ? OR pv.barcode LIKE ?) '
+          '${customerId != null ? "AND s.customer_id = $customerId " : ""}'
+          'ORDER BY s.sale_date DESC '
+          'LIMIT ?',
+          variables: [
+            Variable.withString(q),
+            Variable.withString(q),
+            Variable.withString(q),
+            Variable.withString(q),
+            Variable.withString(q),
+            Variable.withString(q),
+            Variable.withInt(limit),
+          ],
+        )
+        .get();
 
-    return rows.map((r) => InvoiceSearchResult(
-      invoiceId: r.read<int>('id'),
-      invoiceNumber: r.read<String>('invoice_number'),
-      date: DateTime.parse(r.read<String>('sale_date')),
-      totalCents: r.read<int>('total_cents'),
-      partyId: r.readNullable<int>('customer_id'),
-      partyName: r.readNullable<String>('customer_name'),
-    )).toList();
+    return rows
+        .map(
+          (r) => InvoiceSearchResult(
+            invoiceId: r.read<int>('id'),
+            invoiceNumber: r.read<String>('invoice_number'),
+            date: DateTime.parse(r.read<String>('sale_date')),
+            totalCents: r.read<int>('total_cents'),
+            partyId: r.readNullable<int>('customer_id'),
+            partyName: r.readNullable<String>('customer_name'),
+          ),
+        )
+        .toList();
   }
 
   /// Search purchase invoices by number, product name, or SKU for a supplier.
@@ -301,40 +340,46 @@ class UnifiedReturnService {
     int limit = 20,
   }) async {
     final q = '%$query%';
-    final rows = await _db.customSelect(
-      'SELECT DISTINCT pu.id, pu.purchase_number, pu.purchase_date, pu.total_cents, '
-      '  pu.supplier_id, sup.name AS supplier_name '
-      'FROM purchases pu '
-      'LEFT JOIN suppliers sup ON sup.id = pu.supplier_id '
-      'LEFT JOIN purchase_items pi ON pi.purchase_id = pu.id '
-      'LEFT JOIN products p ON p.id = pi.product_id '
-      'LEFT JOIN product_variants pv ON pv.id = pi.variant_id '
-      "WHERE pu.status = 'posted' "
-      '  AND (pu.purchase_number LIKE ? '
-      '    OR p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ? '
-      '    OR pv.sku LIKE ? OR pv.barcode LIKE ?) '
-      '${supplierId != null ? "AND pu.supplier_id = $supplierId " : ""}'
-      'ORDER BY pu.purchase_date DESC '
-      'LIMIT ?',
-      variables: [
-        Variable.withString(q),
-        Variable.withString(q),
-        Variable.withString(q),
-        Variable.withString(q),
-        Variable.withString(q),
-        Variable.withString(q),
-        Variable.withInt(limit),
-      ],
-    ).get();
+    final rows = await _db
+        .customSelect(
+          'SELECT DISTINCT pu.id, pu.purchase_number, pu.purchase_date, pu.total_cents, '
+          '  pu.supplier_id, sup.name AS supplier_name '
+          'FROM purchases pu '
+          'LEFT JOIN suppliers sup ON sup.id = pu.supplier_id '
+          'LEFT JOIN purchase_items pi ON pi.purchase_id = pu.id '
+          'LEFT JOIN products p ON p.id = pi.product_id '
+          'LEFT JOIN product_variants pv ON pv.id = pi.variant_id '
+          "WHERE pu.status = 'posted' "
+          '  AND (pu.purchase_number LIKE ? '
+          '    OR p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ? '
+          '    OR pv.sku LIKE ? OR pv.barcode LIKE ?) '
+          '${supplierId != null ? "AND pu.supplier_id = $supplierId " : ""}'
+          'ORDER BY pu.purchase_date DESC '
+          'LIMIT ?',
+          variables: [
+            Variable.withString(q),
+            Variable.withString(q),
+            Variable.withString(q),
+            Variable.withString(q),
+            Variable.withString(q),
+            Variable.withString(q),
+            Variable.withInt(limit),
+          ],
+        )
+        .get();
 
-    return rows.map((r) => InvoiceSearchResult(
-      invoiceId: r.read<int>('id'),
-      invoiceNumber: r.read<String>('purchase_number'),
-      date: DateTime.parse(r.read<String>('purchase_date')),
-      totalCents: r.read<int>('total_cents'),
-      partyId: r.readNullable<int>('supplier_id'),
-      partyName: r.readNullable<String>('supplier_name'),
-    )).toList();
+    return rows
+        .map(
+          (r) => InvoiceSearchResult(
+            invoiceId: r.read<int>('id'),
+            invoiceNumber: r.read<String>('purchase_number'),
+            date: DateTime.parse(r.read<String>('purchase_date')),
+            totalCents: r.read<int>('total_cents'),
+            partyId: r.readNullable<int>('supplier_id'),
+            partyName: r.readNullable<String>('supplier_name'),
+          ),
+        )
+        .toList();
   }
 
   /// Search products with last known price from party invoice history.
@@ -357,28 +402,30 @@ class UnifiedReturnService {
     // variant product, or when color/size was assigned to the default variant
     // later). We LEFT JOIN the active default variant so the same color/size
     // chip rendered for variant products is also rendered here when present.
-    final baseRows = await _db.customSelect(
-      'SELECT p.id, p.name, p.sku, p.barcode, p.price_cents, p.cost_cents, '
-      '  p.last_purchase_price_cents, '
-      '  p.sales_tax_rate_bps, p.purchase_tax_rate_bps, p.stock_quantity, '
-      '  pc.name AS color_name, sz.name AS size_name '
-      'FROM products p '
-      'LEFT JOIN product_variants pv ON pv.id = ('
-      '  SELECT MIN(pv2.id) FROM product_variants pv2 '
-      '  WHERE pv2.product_id = p.id AND pv2.is_active = 1) '
-      'LEFT JOIN product_colors pc ON pc.id = pv.color_id '
-      'LEFT JOIN sizes sz ON sz.id = pv.size_id '
-      'WHERE p.is_active = 1 AND p.has_variants = 0 '
-      '  AND (p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ?) '
-      'ORDER BY p.name ASC '
-      'LIMIT ?',
-      variables: [
-        Variable.withString(q),
-        Variable.withString(q),
-        Variable.withString(q),
-        Variable.withInt(limit),
-      ],
-    ).get();
+    final baseRows = await _db
+        .customSelect(
+          'SELECT p.id, p.name, p.sku, p.barcode, p.price_cents, p.cost_cents, '
+          '  p.last_purchase_price_cents, '
+          '  p.sales_tax_rate_bps, p.purchase_tax_rate_bps, p.stock_quantity, p.measurement_type, '
+          '  pc.name AS color_name, sz.name AS size_name '
+          'FROM products p '
+          'LEFT JOIN product_variants pv ON pv.id = ('
+          '  SELECT MIN(pv2.id) FROM product_variants pv2 '
+          '  WHERE pv2.product_id = p.id AND pv2.is_active = 1) '
+          'LEFT JOIN product_colors pc ON pc.id = pv.color_id '
+          'LEFT JOIN sizes sz ON sz.id = pv.size_id '
+          'WHERE p.is_active = 1 AND p.has_variants = 0 '
+          '  AND (p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ?) '
+          'ORDER BY p.name ASC '
+          'LIMIT ?',
+          variables: [
+            Variable.withString(q),
+            Variable.withString(q),
+            Variable.withString(q),
+            Variable.withInt(limit),
+          ],
+        )
+        .get();
 
     for (final row in baseRows) {
       final productId = row.read<int>('id');
@@ -391,13 +438,15 @@ class UnifiedReturnService {
       // `unified_return_search_sheet.dart` (Phase 15.2).
       final defaultPrice = side == ReturnSide.sale
           ? row.read<int>('price_cents')
-          : (row.readNullable<int>('last_purchase_price_cents')
-              ?? row.read<int>('cost_cents'));
+          : (row.readNullable<int>('last_purchase_price_cents') ??
+                row.read<int>('cost_cents'));
 
       int lastPrice = defaultPrice;
       if (partyId != null) {
         final hp = await _getLastInvoicePrice(
-          productId: productId, side: side, partyId: partyId,
+          productId: productId,
+          side: side,
+          partyId: partyId,
         );
         if (hp != null) lastPrice = hp;
       }
@@ -409,48 +458,53 @@ class UnifiedReturnService {
       // Build variant label from the default variant's color/size (if any).
       final colorName = row.readNullable<String>('color_name');
       final sizeName = row.readNullable<String>('size_name');
-      final parts = <String>[
-        ?colorName,
-        ?sizeName,
-      ];
+      final parts = <String>[?colorName, ?sizeName];
       final label = parts.isNotEmpty ? parts.join(' / ') : null;
 
-      results.add(ProductSearchResult(
-        productId: productId,
-        productName: row.read<String>('name'),
-        variantLabel: label,
-        sku: row.readNullable<String>('sku'),
-        barcode: row.readNullable<String>('barcode'),
-        lastPriceCents: lastPrice,
-        taxRateBps: taxBps,
-        stockQuantity: row.read<int>('stock_quantity'),
-      ));
+      results.add(
+        ProductSearchResult(
+          productId: productId,
+          productName: row.read<String>('name'),
+          variantLabel: label,
+          sku: row.readNullable<String>('sku'),
+          barcode: row.readNullable<String>('barcode'),
+          lastPriceCents: lastPrice,
+          taxRateBps: taxBps,
+          stockQuantity: row.read<int>('stock_quantity'),
+          measurementType: row.read<String>('measurement_type'),
+        ),
+      );
     }
 
     // ── 2) Products WITH variants ──
-    final variantRows = await _db.customSelect(
-      'SELECT p.id AS product_id, p.name AS product_name, '
-      '  p.sales_tax_rate_bps, p.purchase_tax_rate_bps, '
-      '  pv.id AS variant_id, pv.sku AS variant_sku, pv.barcode AS variant_barcode, '
-      '  pv.price_cents AS variant_price, pv.cost_cents AS variant_cost, '
-      '  pv.last_purchase_price_cents AS variant_last_purchase_price_cents, '
-      '  pv.stock_quantity AS variant_stock, '
-      '  pc.name AS color_name, sz.name AS size_name '
-      'FROM products p '
-      'JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1 '
-      'LEFT JOIN product_colors pc ON pc.id = pv.color_id '
-      'LEFT JOIN sizes sz ON sz.id = pv.size_id '
-      'WHERE p.is_active = 1 AND p.has_variants = 1 '
-      '  AND (p.name LIKE ? OR pv.sku LIKE ? OR pv.barcode LIKE ?) '
-      'ORDER BY p.name ASC, pc.name ASC, sz.name ASC '
-      'LIMIT ?',
-      variables: [
-        Variable.withString(q),
-        Variable.withString(q),
-        Variable.withString(q),
-        Variable.withInt(limit),
-      ],
-    ).get();
+    final variantRows = await _db
+        .customSelect(
+          'SELECT p.id AS product_id, p.name AS product_name, '
+          '  p.sales_tax_rate_bps, p.purchase_tax_rate_bps, p.measurement_type, '
+          '  pv.id AS variant_id, pv.sku AS variant_sku, pv.barcode AS variant_barcode, '
+          '  pv.price_cents AS variant_price, pv.cost_cents AS variant_cost, '
+          '  pv.last_purchase_price_cents AS variant_last_purchase_price_cents, '
+          '  pv.stock_quantity AS variant_stock, '
+          '  pc.name AS color_name, sz.name AS size_name '
+          'FROM products p '
+          'JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1 '
+          'LEFT JOIN product_colors pc ON pc.id = pv.color_id '
+          'LEFT JOIN sizes sz ON sz.id = pv.size_id '
+          'WHERE p.is_active = 1 AND p.has_variants = 1 '
+          '  AND (p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ? '
+          '    OR pv.sku LIKE ? OR pv.barcode LIKE ?) '
+          'ORDER BY p.name ASC, pc.name ASC, sz.name ASC '
+          'LIMIT ?',
+          variables: [
+            Variable.withString(q),
+            Variable.withString(q),
+            Variable.withString(q),
+            Variable.withString(q),
+            Variable.withString(q),
+            Variable.withInt(limit),
+          ],
+        )
+        .get();
 
     for (final row in variantRows) {
       final productId = row.read<int>('product_id');
@@ -458,14 +512,16 @@ class UnifiedReturnService {
       // See base-products comment above — same Phase 15.2 rule for variants.
       final defaultPrice = side == ReturnSide.sale
           ? row.read<int>('variant_price')
-          : (row.readNullable<int>('variant_last_purchase_price_cents')
-              ?? row.read<int>('variant_cost'));
+          : (row.readNullable<int>('variant_last_purchase_price_cents') ??
+                row.read<int>('variant_cost'));
 
       int lastPrice = defaultPrice;
       if (partyId != null) {
         final hp = await _getLastInvoicePrice(
-          productId: productId, variantId: variantId,
-          side: side, partyId: partyId,
+          productId: productId,
+          variantId: variantId,
+          side: side,
+          partyId: partyId,
         );
         if (hp != null) lastPrice = hp;
       }
@@ -473,27 +529,27 @@ class UnifiedReturnService {
       // Build variant label from color + size
       final colorName = row.readNullable<String>('color_name');
       final sizeName = row.readNullable<String>('size_name');
-      final parts = <String>[
-        ?colorName,
-        ?sizeName,
-      ];
+      final parts = <String>[?colorName, ?sizeName];
       final label = parts.isNotEmpty ? parts.join(' / ') : null;
 
       final taxBps = side == ReturnSide.sale
           ? row.read<int>('sales_tax_rate_bps')
           : row.read<int>('purchase_tax_rate_bps');
 
-      results.add(ProductSearchResult(
-        productId: productId,
-        variantId: variantId,
-        productName: row.read<String>('product_name'),
-        variantLabel: label,
-        sku: row.readNullable<String>('variant_sku'),
-        barcode: row.readNullable<String>('variant_barcode'),
-        lastPriceCents: lastPrice,
-        taxRateBps: taxBps,
-        stockQuantity: row.read<int>('variant_stock'),
-      ));
+      results.add(
+        ProductSearchResult(
+          productId: productId,
+          variantId: variantId,
+          productName: row.read<String>('product_name'),
+          variantLabel: label,
+          sku: row.readNullable<String>('variant_sku'),
+          barcode: row.readNullable<String>('variant_barcode'),
+          lastPriceCents: lastPrice,
+          taxRateBps: taxBps,
+          stockQuantity: row.read<int>('variant_stock'),
+          measurementType: row.read<String>('measurement_type'),
+        ),
+      );
     }
 
     return results;
@@ -507,32 +563,30 @@ class UnifiedReturnService {
     required int partyId,
   }) async {
     if (side == ReturnSide.sale) {
-      final row = await _db.customSelect(
-        'SELECT si.unit_price_cents FROM sale_items si '
-        'JOIN sales s ON s.id = si.sale_id '
-        "WHERE s.status = 'completed' AND s.customer_id = ? "
-        'AND si.product_id = ? '
-        '${variantId != null ? "AND si.variant_id = $variantId " : ""}'
-        'ORDER BY s.sale_date DESC LIMIT 1',
-        variables: [
-          Variable.withInt(partyId),
-          Variable.withInt(productId),
-        ],
-      ).getSingleOrNull();
+      final row = await _db
+          .customSelect(
+            'SELECT si.unit_price_cents FROM sale_items si '
+            'JOIN sales s ON s.id = si.sale_id '
+            "WHERE s.status = 'completed' AND s.customer_id = ? "
+            'AND si.product_id = ? '
+            '${variantId != null ? "AND si.variant_id = $variantId " : ""}'
+            'ORDER BY s.sale_date DESC LIMIT 1',
+            variables: [Variable.withInt(partyId), Variable.withInt(productId)],
+          )
+          .getSingleOrNull();
       return row?.read<int>('unit_price_cents');
     } else {
-      final row = await _db.customSelect(
-        'SELECT pi.unit_cost_cents FROM purchase_items pi '
-        'JOIN purchases pu ON pu.id = pi.purchase_id '
-        "WHERE pu.status = 'posted' AND pu.supplier_id = ? "
-        'AND pi.product_id = ? '
-        '${variantId != null ? "AND pi.variant_id = $variantId " : ""}'
-        'ORDER BY pu.purchase_date DESC LIMIT 1',
-        variables: [
-          Variable.withInt(partyId),
-          Variable.withInt(productId),
-        ],
-      ).getSingleOrNull();
+      final row = await _db
+          .customSelect(
+            'SELECT pi.unit_cost_cents FROM purchase_items pi '
+            'JOIN purchases pu ON pu.id = pi.purchase_id '
+            "WHERE pu.status = 'posted' AND pu.supplier_id = ? "
+            'AND pi.product_id = ? '
+            '${variantId != null ? "AND pi.variant_id = $variantId " : ""}'
+            'ORDER BY pu.purchase_date DESC LIMIT 1',
+            variables: [Variable.withInt(partyId), Variable.withInt(productId)],
+          )
+          .getSingleOrNull();
       return row?.read<int>('unit_cost_cents');
     }
   }
@@ -557,7 +611,9 @@ class UnifiedReturnService {
   }
 
   Future<List<ReturnableInvoiceItem>> _getSaleReturnableItems(
-    int productId, int? variantId, int customerId,
+    int productId,
+    int? variantId,
+    int customerId,
   ) async {
     // `already_returned` MUST union linked + adjustment quantity:
     //   • Linked: sum of `sale_return_items.quantity` on non-voided
@@ -569,29 +625,57 @@ class UnifiedReturnService {
     // would happily produce a linked-return chunk for units that were
     // already withdrawn via an adjustment return, driving stock and GL
     // inventory above the original sold quantity.
-    final rows = await _db.customSelect(
-      'SELECT si.id AS item_id, si.sale_id, s.invoice_number, s.sale_date, '
-      '  si.quantity, si.unit_price_cents, '
-      '  si.subtotal_cents, si.discount_cents, si.tax_cents, '
-      '  ('
-      '    COALESCE(('
-      '      SELECT SUM(sri.quantity) FROM sale_return_items sri '
-      '      JOIN sale_returns sr ON sr.id = sri.return_id '
-      "      WHERE sri.sale_item_id = si.id AND sr.status != 'voided'"
-      '    ), 0) '
-      '    + COALESCE(si.qty_returned_adjustment, 0)'
-      '  ) AS already_returned '
-      'FROM sale_items si '
-      'JOIN sales s ON s.id = si.sale_id '
-      "WHERE s.status = 'completed' AND s.customer_id = ? "
-      '  AND si.product_id = ? '
-      '${variantId != null ? "AND si.variant_id = $variantId " : ""}'
-      'ORDER BY s.sale_date ASC',
-      variables: [
-        Variable.withInt(customerId),
-        Variable.withInt(productId),
-      ],
-    ).get();
+    final rows = await _db
+        .customSelect(
+          'SELECT si.id AS item_id, si.sale_id, s.invoice_number, s.sale_date, '
+          '  si.quantity, si.quantity_scale, si.measurement_type, si.unit_price_cents, '
+          '  si.subtotal_cents, si.discount_cents, si.tax_cents, '
+          '  COALESCE(s.tax_inclusive_at_post, 0) AS tax_inclusive, '
+          '  COALESCE(('
+          '    SELECT SUM(sri.quantity) FROM sale_return_items sri '
+          '    JOIN sale_returns sr ON sr.id = sri.return_id '
+          "    WHERE sri.sale_item_id = si.id AND sr.status != 'voided'"
+          '  ), 0) AS linked_quantity, '
+          '  COALESCE(('
+          '    SELECT SUM(sri.subtotal_cents) FROM sale_return_items sri '
+          '    JOIN sale_returns sr ON sr.id = sri.return_id '
+          "    WHERE sri.sale_item_id = si.id AND sr.status != 'voided'"
+          '  ), 0) AS linked_subtotal, '
+          '  COALESCE(('
+          '    SELECT SUM(sri.discount_cents) FROM sale_return_items sri '
+          '    JOIN sale_returns sr ON sr.id = sri.return_id '
+          "    WHERE sri.sale_item_id = si.id AND sr.status != 'voided'"
+          '  ), 0) AS linked_discount, '
+          '  COALESCE(('
+          '    SELECT SUM(sri.tax_cents) FROM sale_return_items sri '
+          '    JOIN sale_returns sr ON sr.id = sri.return_id '
+          "    WHERE sri.sale_item_id = si.id AND sr.status != 'voided'"
+          '  ), 0) AS linked_tax, '
+          '  COALESCE(('
+          '    SELECT SUM(sri.refund_cents) FROM sale_return_items sri '
+          '    JOIN sale_returns sr ON sr.id = sri.return_id '
+          "    WHERE sri.sale_item_id = si.id AND sr.status != 'voided'"
+          '  ), 0) AS linked_refund, '
+          '  ('
+          '    COALESCE(('
+          '      SELECT SUM(sri.quantity) FROM sale_return_items sri '
+          '      JOIN sale_returns sr ON sr.id = sri.return_id '
+          "      WHERE sri.sale_item_id = si.id AND sr.status != 'voided'"
+          '    ), 0) '
+          '    + COALESCE(si.qty_returned_adjustment, 0)'
+          '  ) AS already_returned '
+          'FROM sale_items si '
+          'JOIN sales s ON s.id = si.sale_id '
+          "WHERE s.status = 'completed' AND s.customer_id = ? "
+          '  AND si.product_id = ? '
+          '${variantId != null ? "AND si.variant_id = $variantId " : ""}'
+          'ORDER BY s.sale_date ASC',
+          variables: [
+            Variable.withInt(customerId),
+            Variable.withInt(productId),
+          ],
+        )
+        .get();
 
     return rows
         .map((r) {
@@ -605,11 +689,21 @@ class UnifiedReturnService {
             productId: productId,
             variantId: variantId,
             originalQuantity: orig,
+            quantityScale: r.read<int>('quantity_scale'),
+            measurementType: r.read<String>('measurement_type'),
             alreadyReturnedQuantity: returned,
             unitPriceCents: r.read<int>('unit_price_cents'),
             originalSubtotalCents: r.read<int>('subtotal_cents'),
             originalDiscountCents: r.read<int>('discount_cents'),
             originalTaxCents: r.read<int>('tax_cents'),
+            linkedReturnHistory: LinkedReturnHistory(
+              quantity: r.read<int>('linked_quantity'),
+              subtotalCents: r.read<int>('linked_subtotal'),
+              discountCents: r.read<int>('linked_discount'),
+              taxCents: r.read<int>('linked_tax'),
+              refundCents: r.read<int>('linked_refund'),
+            ),
+            taxInclusivePricing: r.read<int>('tax_inclusive') != 0,
           );
         })
         .where((item) => item.remainingQuantity > 0)
@@ -617,7 +711,9 @@ class UnifiedReturnService {
   }
 
   Future<List<ReturnableInvoiceItem>> _getPurchaseReturnableItems(
-    int productId, int? variantId, int supplierId,
+    int productId,
+    int? variantId,
+    int supplierId,
   ) async {
     // Mirror of `_getSaleReturnableItems`: `already_returned` MUST union
     // linked + adjustment quantity. Without the
@@ -625,29 +721,57 @@ class UnifiedReturnService {
     // return could be raised against units that were already withdrawn
     // by a posted adjustment return, putting stock above what was
     // actually received from the supplier.
-    final rows = await _db.customSelect(
-      'SELECT pi.id AS item_id, pi.purchase_id, pu.purchase_number, pu.purchase_date, '
-      '  pi.quantity, pi.unit_cost_cents, '
-      '  pi.subtotal_cents, pi.discount_cents, pi.tax_cents, '
-      '  ('
-      '    COALESCE(('
-      '      SELECT SUM(pri.quantity) FROM purchase_return_items pri '
-      '      JOIN purchase_returns pr ON pr.id = pri.return_id '
-      "      WHERE pri.purchase_item_id = pi.id AND pr.status != 'voided'"
-      '    ), 0) '
-      '    + COALESCE(pi.qty_returned_adjustment, 0)'
-      '  ) AS already_returned '
-      'FROM purchase_items pi '
-      'JOIN purchases pu ON pu.id = pi.purchase_id '
-      "WHERE pu.status = 'posted' AND pu.supplier_id = ? "
-      '  AND pi.product_id = ? '
-      '${variantId != null ? "AND pi.variant_id = $variantId " : ""}'
-      'ORDER BY pu.purchase_date ASC',
-      variables: [
-        Variable.withInt(supplierId),
-        Variable.withInt(productId),
-      ],
-    ).get();
+    final rows = await _db
+        .customSelect(
+          'SELECT pi.id AS item_id, pi.purchase_id, pu.purchase_number, pu.purchase_date, '
+          '  pi.quantity, pi.quantity_scale, pi.measurement_type, pi.unit_cost_cents, '
+          '  pi.subtotal_cents, pi.discount_cents, pi.tax_cents, '
+          '  COALESCE(pu.tax_inclusive_at_post, 0) AS tax_inclusive, '
+          '  COALESCE(('
+          '    SELECT SUM(pri.quantity) FROM purchase_return_items pri '
+          '    JOIN purchase_returns pr ON pr.id = pri.return_id '
+          "    WHERE pri.purchase_item_id = pi.id AND pr.status != 'voided'"
+          '  ), 0) AS linked_quantity, '
+          '  COALESCE(('
+          '    SELECT SUM(pri.subtotal_cents) FROM purchase_return_items pri '
+          '    JOIN purchase_returns pr ON pr.id = pri.return_id '
+          "    WHERE pri.purchase_item_id = pi.id AND pr.status != 'voided'"
+          '  ), 0) AS linked_subtotal, '
+          '  COALESCE(('
+          '    SELECT SUM(pri.discount_cents) FROM purchase_return_items pri '
+          '    JOIN purchase_returns pr ON pr.id = pri.return_id '
+          "    WHERE pri.purchase_item_id = pi.id AND pr.status != 'voided'"
+          '  ), 0) AS linked_discount, '
+          '  COALESCE(('
+          '    SELECT SUM(pri.tax_cents) FROM purchase_return_items pri '
+          '    JOIN purchase_returns pr ON pr.id = pri.return_id '
+          "    WHERE pri.purchase_item_id = pi.id AND pr.status != 'voided'"
+          '  ), 0) AS linked_tax, '
+          '  COALESCE(('
+          '    SELECT SUM(pri.refund_cents) FROM purchase_return_items pri '
+          '    JOIN purchase_returns pr ON pr.id = pri.return_id '
+          "    WHERE pri.purchase_item_id = pi.id AND pr.status != 'voided'"
+          '  ), 0) AS linked_refund, '
+          '  ('
+          '    COALESCE(('
+          '      SELECT SUM(pri.quantity) FROM purchase_return_items pri '
+          '      JOIN purchase_returns pr ON pr.id = pri.return_id '
+          "      WHERE pri.purchase_item_id = pi.id AND pr.status != 'voided'"
+          '    ), 0) '
+          '    + COALESCE(pi.qty_returned_adjustment, 0)'
+          '  ) AS already_returned '
+          'FROM purchase_items pi '
+          'JOIN purchases pu ON pu.id = pi.purchase_id '
+          "WHERE pu.status = 'posted' AND pu.supplier_id = ? "
+          '  AND pi.product_id = ? '
+          '${variantId != null ? "AND pi.variant_id = $variantId " : ""}'
+          'ORDER BY pu.purchase_date ASC',
+          variables: [
+            Variable.withInt(supplierId),
+            Variable.withInt(productId),
+          ],
+        )
+        .get();
 
     return rows
         .map((r) {
@@ -661,11 +785,21 @@ class UnifiedReturnService {
             productId: productId,
             variantId: variantId,
             originalQuantity: orig,
+            quantityScale: r.read<int>('quantity_scale'),
+            measurementType: r.read<String>('measurement_type'),
             alreadyReturnedQuantity: returned,
             unitPriceCents: r.read<int>('unit_cost_cents'),
             originalSubtotalCents: r.read<int>('subtotal_cents'),
             originalDiscountCents: r.read<int>('discount_cents'),
             originalTaxCents: r.read<int>('tax_cents'),
+            linkedReturnHistory: LinkedReturnHistory(
+              quantity: r.read<int>('linked_quantity'),
+              subtotalCents: r.read<int>('linked_subtotal'),
+              discountCents: r.read<int>('linked_discount'),
+              taxCents: r.read<int>('linked_tax'),
+              refundCents: r.read<int>('linked_refund'),
+            ),
+            taxInclusivePricing: r.read<int>('tax_inclusive') != 0,
           );
         })
         .where((item) => item.remainingQuantity > 0)
@@ -688,6 +822,8 @@ class UnifiedReturnService {
     required String productName,
     String? variantLabel,
     required int quantity,
+    int quantityScale = 1,
+    String measurementType = 'piece',
     required int unitPriceCents,
     String? reason,
     required ReturnSide side,
@@ -709,6 +845,8 @@ class UnifiedReturnService {
           productName: productName,
           variantLabel: variantLabel,
           quantity: quantity,
+          quantityScale: quantityScale,
+          measurementType: measurementType,
           unitPriceCents: unitPriceCents,
           reason: reason,
           mode: ReturnMode.adjustment,
@@ -731,6 +869,8 @@ class UnifiedReturnService {
           productName: productName,
           variantLabel: variantLabel,
           quantity: quantity,
+          quantityScale: quantityScale,
+          measurementType: measurementType,
           unitPriceCents: unitPriceCents,
           reason: reason,
           mode: ReturnMode.adjustment,
@@ -747,16 +887,22 @@ class UnifiedReturnService {
       if (remainingQty <= 0) break;
       final take = remainingQty.clamp(0, item.remainingQuantity);
       if (take > 0) {
-        allocations.add(InvoiceItemAllocation(
-          invoiceItemId: item.invoiceItemId,
-          invoiceId: item.invoiceId,
-          quantity: take,
-          unitPriceCents: item.unitPriceCents,
-          originalQuantity: item.originalQuantity,
-          originalSubtotalCents: item.originalSubtotalCents,
-          originalDiscountCents: item.originalDiscountCents,
-          originalTaxCents: item.originalTaxCents,
-        ));
+        allocations.add(
+          InvoiceItemAllocation(
+            invoiceItemId: item.invoiceItemId,
+            invoiceId: item.invoiceId,
+            quantity: take,
+            quantityScale: item.quantityScale,
+            measurementType: item.measurementType,
+            unitPriceCents: item.unitPriceCents,
+            originalQuantity: item.originalQuantity,
+            originalSubtotalCents: item.originalSubtotalCents,
+            originalDiscountCents: item.originalDiscountCents,
+            originalTaxCents: item.originalTaxCents,
+            previousLinkedHistory: item.linkedReturnHistory,
+            taxInclusivePricing: item.taxInclusivePricing,
+          ),
+        );
         remainingQty -= take;
       }
     }
@@ -766,45 +912,57 @@ class UnifiedReturnService {
 
     // Rule 3: All qty fits in linked
     if (remainingQty == 0) {
-      results.add(UnifiedReturnLineItem(
-        productId: productId,
-        variantId: variantId,
-        productName: productName,
-        variantLabel: variantLabel,
-        quantity: linkedQty,
-        unitPriceCents: unitPriceCents,
-        reason: reason,
-        mode: ReturnMode.linked,
-        modeReason: ReturnModeReason.priceMatch,
-        linkedAllocations: allocations,
-      ));
-    } else {
-      // Rule 4: Overflow — linked portion + adjustment remainder
-      if (linkedQty > 0) {
-        results.add(UnifiedReturnLineItem(
+      results.add(
+        UnifiedReturnLineItem(
           productId: productId,
           variantId: variantId,
           productName: productName,
           variantLabel: variantLabel,
           quantity: linkedQty,
+          quantityScale: allocations.first.quantityScale,
+          measurementType: allocations.first.measurementType,
           unitPriceCents: unitPriceCents,
           reason: reason,
           mode: ReturnMode.linked,
           modeReason: ReturnModeReason.priceMatch,
           linkedAllocations: allocations,
-        ));
+        ),
+      );
+    } else {
+      // Rule 4: Overflow — linked portion + adjustment remainder
+      if (linkedQty > 0) {
+        results.add(
+          UnifiedReturnLineItem(
+            productId: productId,
+            variantId: variantId,
+            productName: productName,
+            variantLabel: variantLabel,
+            quantity: linkedQty,
+            quantityScale: allocations.first.quantityScale,
+            measurementType: allocations.first.measurementType,
+            unitPriceCents: unitPriceCents,
+            reason: reason,
+            mode: ReturnMode.linked,
+            modeReason: ReturnModeReason.priceMatch,
+            linkedAllocations: allocations,
+          ),
+        );
       }
-      results.add(UnifiedReturnLineItem(
-        productId: productId,
-        variantId: variantId,
-        productName: productName,
-        variantLabel: variantLabel,
-        quantity: remainingQty,
-        unitPriceCents: unitPriceCents,
-        reason: reason,
-        mode: ReturnMode.adjustment,
-        modeReason: ReturnModeReason.quantityOverflow,
-      ));
+      results.add(
+        UnifiedReturnLineItem(
+          productId: productId,
+          variantId: variantId,
+          productName: productName,
+          variantLabel: variantLabel,
+          quantity: remainingQty,
+          quantityScale: quantityScale,
+          measurementType: measurementType,
+          unitPriceCents: unitPriceCents,
+          reason: reason,
+          mode: ReturnMode.adjustment,
+          modeReason: ReturnModeReason.quantityOverflow,
+        ),
+      );
     }
 
     return results;
@@ -829,11 +987,20 @@ class UnifiedReturnService {
 
     final batchId = const Uuid().v4();
     final now = DateTime.now();
+    final userId = await _sessionService?.getCurrentUserId();
+    final cashierShiftId = await _cashierShiftService?.resolveOpenShiftId(
+      userId,
+    );
 
-    final linkedItems = items.where((i) => i.mode == ReturnMode.linked).toList();
-    final adjustmentItems = items.where((i) => i.mode == ReturnMode.adjustment).toList();
+    final linkedItems = items
+        .where((i) => i.mode == ReturnMode.linked)
+        .toList();
+    final adjustmentItems = items
+        .where((i) => i.mode == ReturnMode.adjustment)
+        .toList();
 
     return _db.transaction(() async {
+      final linkedHistories = <int, LinkedReturnHistory>{};
       // ── Linked returns (grouped by invoice) ──
       if (linkedItems.isNotEmpty) {
         // Group allocations by invoice
@@ -841,10 +1008,9 @@ class UnifiedReturnService {
         for (final item in linkedItems) {
           for (final alloc in item.linkedAllocations) {
             byInvoice.putIfAbsent(alloc.invoiceId, () => []);
-            byInvoice[alloc.invoiceId]!.add(_LinkedReturnEntry(
-              item: item,
-              allocation: alloc,
-            ));
+            byInvoice[alloc.invoiceId]!.add(
+              _LinkedReturnEntry(item: item, allocation: alloc),
+            );
           }
         }
 
@@ -857,24 +1023,39 @@ class UnifiedReturnService {
           // Build return items with proportional calculations
           final returnItemCompanions = <SaleReturnItemsCompanion>[];
           for (final e in entries) {
+            final history =
+                linkedHistories[e.allocation.invoiceItemId] ??
+                await _saleDao.getLinkedReturnHistory(
+                  e.allocation.invoiceItemId,
+                );
             final calc = ReturnCalculationService.computeProportionalReturn(
               originalQuantity: e.allocation.originalQuantity,
               returnQuantity: e.allocation.quantity,
               originalSubtotalCents: e.allocation.originalSubtotalCents,
               originalDiscountCents: e.allocation.originalDiscountCents,
               originalTaxCents: e.allocation.originalTaxCents,
+              previousLinkedHistory: history,
+              taxInclusivePricing: e.allocation.taxInclusivePricing,
+            );
+            linkedHistories[e.allocation.invoiceItemId] = history.add(
+              calc,
+              e.allocation.quantity,
             );
 
-            returnItemCompanions.add(SaleReturnItemsCompanion.insert(
-              returnId: 0, // Set by DAO
-              saleItemId: e.allocation.invoiceItemId,
-              quantity: e.allocation.quantity,
-              refundCents: Decimal.fromInt(calc.refundCents),
-              subtotalCents: Value(Decimal.fromInt(calc.subtotalCents)),
-              discountCents: Value(Decimal.fromInt(calc.discountCents)),
-              taxCents: Value(Decimal.fromInt(calc.taxCents)),
-              reason: Value(e.item.reason),
-            ));
+            returnItemCompanions.add(
+              SaleReturnItemsCompanion.insert(
+                returnId: 0, // Set by DAO
+                saleItemId: e.allocation.invoiceItemId,
+                quantity: e.allocation.quantity,
+                quantityScale: Value(e.allocation.quantityScale),
+                measurementType: Value(e.allocation.measurementType),
+                refundCents: Decimal.fromInt(calc.refundCents),
+                subtotalCents: Value(Decimal.fromInt(calc.subtotalCents)),
+                discountCents: Value(Decimal.fromInt(calc.discountCents)),
+                taxCents: Value(Decimal.fromInt(calc.taxCents)),
+                reason: Value(e.item.reason),
+              ),
+            );
           }
 
           final totalRefund = returnItemCompanions.fold<int>(
@@ -882,18 +1063,24 @@ class UnifiedReturnService {
             (sum, c) => sum + c.refundCents.value.toBigInt().toInt(),
           );
 
-          final returnData = SaleReturnsCompanion.insert(
-            saleId: saleId,
-            returnNumber: returnNumber,
-            totalCents: Decimal.fromInt(totalRefund),
-            currencyId: currencyId,
-            status: const Value('draft'),
-            dispositionType: const Value('restock'),
-            refundMethod: Value(refundMethod),
-            reason: Value(notes),
-            returnDate: Value(now),
-            createdAt: Value(now),
-          ).withPricingSnapshot(taxInclusive: false);
+          final returnData =
+              SaleReturnsCompanion.insert(
+                saleId: saleId,
+                cashierShiftId: cashierShiftId != null
+                    ? Value(cashierShiftId)
+                    : const Value.absent(),
+                returnNumber: returnNumber,
+                totalCents: Decimal.fromInt(totalRefund),
+                currencyId: currencyId,
+                status: const Value('draft'),
+                dispositionType: const Value('restock'),
+                refundMethod: Value(refundMethod),
+                reason: Value(notes),
+                returnDate: Value(now),
+                createdAt: Value(now),
+              ).withPricingSnapshot(
+                taxInclusive: entries.first.allocation.taxInclusivePricing,
+              );
 
           final returnId = await _saleDao.createSaleReturn(
             returnData,
@@ -923,10 +1110,9 @@ class UnifiedReturnService {
           // the GL gap that mattered for tax/audit compliance.
           final returnTaxCents = returnItemCompanions.fold<int>(
             0,
-            (sum, c) => sum +
-                (c.taxCents.present
-                    ? c.taxCents.value.toBigInt().toInt()
-                    : 0),
+            (sum, c) =>
+                sum +
+                (c.taxCents.present ? c.taxCents.value.toBigInt().toInt() : 0),
           );
           await _journalService.recordSaleReturnJournalEntry(
             returnId: returnId,
@@ -934,14 +1120,17 @@ class UnifiedReturnService {
             taxCents: returnTaxCents,
             currencyId: currencyId,
             refundMethod: refundMethod,
+            userId: userId,
           );
 
-          final returnCostCents =
-              await _saleDao.computeSaleReturnCostCents(returnId);
+          final returnCostCents = await _saleDao.computeSaleReturnCostCents(
+            returnId,
+          );
           await _journalService.recordSaleReturnCOGSReversalJournalEntry(
             returnId: returnId,
             costCents: returnCostCents,
             currencyId: currencyId,
+            userId: userId,
           );
         }
       }
@@ -951,7 +1140,8 @@ class UnifiedReturnService {
         final adjReturnNumber = await _adjDao.generateSaleAdjReturnNumber();
 
         final adjTotal = adjustmentItems.fold<int>(
-          0, (sum, i) => sum + i.totalCents,
+          0,
+          (sum, i) => sum + i.totalCents,
         );
 
         final modeReasons = adjustmentItems
@@ -981,6 +1171,8 @@ class UnifiedReturnService {
             productId: item.productId,
             variantId: Value(item.variantId),
             quantity: item.quantity,
+            quantityScale: Value(item.quantityScale),
+            measurementType: Value(item.measurementType),
             unitPriceCents: Decimal.fromInt(item.unitPriceCents),
             totalCents: Decimal.fromInt(item.totalCents),
             reason: Value(item.reason),
@@ -995,6 +1187,7 @@ class UnifiedReturnService {
         await _adjDao.postSaleAdjReturn(
           adjReturnId,
           journalEntryService: _journalService,
+          userId: userId,
           allowOverHistory: allowOverHistory,
           commissionService: _commissionService,
           loyaltyPointsService: _loyaltyPointsService,
@@ -1021,20 +1214,24 @@ class UnifiedReturnService {
     final batchId = const Uuid().v4();
     final now = DateTime.now();
 
-    final linkedItems = items.where((i) => i.mode == ReturnMode.linked).toList();
-    final adjustmentItems = items.where((i) => i.mode == ReturnMode.adjustment).toList();
+    final linkedItems = items
+        .where((i) => i.mode == ReturnMode.linked)
+        .toList();
+    final adjustmentItems = items
+        .where((i) => i.mode == ReturnMode.adjustment)
+        .toList();
 
     return _db.transaction(() async {
+      final linkedHistories = <int, LinkedReturnHistory>{};
       // ── Linked returns (grouped by invoice) ──
       if (linkedItems.isNotEmpty) {
         final byInvoice = <int, List<_LinkedReturnEntry>>{};
         for (final item in linkedItems) {
           for (final alloc in item.linkedAllocations) {
             byInvoice.putIfAbsent(alloc.invoiceId, () => []);
-            byInvoice[alloc.invoiceId]!.add(_LinkedReturnEntry(
-              item: item,
-              allocation: alloc,
-            ));
+            byInvoice[alloc.invoiceId]!.add(
+              _LinkedReturnEntry(item: item, allocation: alloc),
+            );
           }
         }
 
@@ -1046,24 +1243,39 @@ class UnifiedReturnService {
 
           final returnItemCompanions = <PurchaseReturnItemsCompanion>[];
           for (final e in entries) {
+            final history =
+                linkedHistories[e.allocation.invoiceItemId] ??
+                await _purchaseDao.getLinkedReturnHistory(
+                  e.allocation.invoiceItemId,
+                );
             final calc = ReturnCalculationService.computeProportionalReturn(
               originalQuantity: e.allocation.originalQuantity,
               returnQuantity: e.allocation.quantity,
               originalSubtotalCents: e.allocation.originalSubtotalCents,
               originalDiscountCents: e.allocation.originalDiscountCents,
               originalTaxCents: e.allocation.originalTaxCents,
+              previousLinkedHistory: history,
+              taxInclusivePricing: e.allocation.taxInclusivePricing,
+            );
+            linkedHistories[e.allocation.invoiceItemId] = history.add(
+              calc,
+              e.allocation.quantity,
             );
 
-            returnItemCompanions.add(PurchaseReturnItemsCompanion.insert(
-              returnId: 0, // Set by DAO
-              purchaseItemId: e.allocation.invoiceItemId,
-              quantity: e.allocation.quantity,
-              refundCents: Decimal.fromInt(calc.refundCents),
-              subtotalCents: Value(Decimal.fromInt(calc.subtotalCents)),
-              discountCents: Value(Decimal.fromInt(calc.discountCents)),
-              taxCents: Value(Decimal.fromInt(calc.taxCents)),
-              reason: Value(e.item.reason),
-            ));
+            returnItemCompanions.add(
+              PurchaseReturnItemsCompanion.insert(
+                returnId: 0, // Set by DAO
+                purchaseItemId: e.allocation.invoiceItemId,
+                quantity: e.allocation.quantity,
+                quantityScale: Value(e.allocation.quantityScale),
+                measurementType: Value(e.allocation.measurementType),
+                refundCents: Decimal.fromInt(calc.refundCents),
+                subtotalCents: Value(Decimal.fromInt(calc.subtotalCents)),
+                discountCents: Value(Decimal.fromInt(calc.discountCents)),
+                taxCents: Value(Decimal.fromInt(calc.taxCents)),
+                reason: Value(e.item.reason),
+              ),
+            );
           }
 
           final totalRefund = returnItemCompanions.fold<int>(
@@ -1071,18 +1283,21 @@ class UnifiedReturnService {
             (sum, c) => sum + c.refundCents.value.toBigInt().toInt(),
           );
 
-          final returnData = PurchaseReturnsCompanion.insert(
-            purchaseId: purchaseId,
-            returnNumber: returnNumber,
-            totalCents: Decimal.fromInt(totalRefund),
-            currencyId: currencyId,
-            status: const Value('draft'),
-            dispositionType: const Value('restock'),
-            refundMethod: Value(refundMethod),
-            reason: Value(notes),
-            returnDate: Value(now),
-            createdAt: Value(now),
-          ).withPricingSnapshot(taxInclusive: false);
+          final returnData =
+              PurchaseReturnsCompanion.insert(
+                purchaseId: purchaseId,
+                returnNumber: returnNumber,
+                totalCents: Decimal.fromInt(totalRefund),
+                currencyId: currencyId,
+                status: const Value('draft'),
+                dispositionType: const Value('restock'),
+                refundMethod: Value(refundMethod),
+                reason: Value(notes),
+                returnDate: Value(now),
+                createdAt: Value(now),
+              ).withPricingSnapshot(
+                taxInclusive: entries.first.allocation.taxInclusivePricing,
+              );
 
           final returnId = await _purchaseDao.createPurchaseReturn(
             returnData,
@@ -1103,19 +1318,16 @@ class UnifiedReturnService {
           // AP / Cash never reflected the supplier credit.
           final returnTaxCents = returnItemCompanions.fold<int>(
             0,
-            (sum, c) => sum +
-                (c.taxCents.present
-                    ? c.taxCents.value.toBigInt().toInt()
-                    : 0),
+            (sum, c) =>
+                sum +
+                (c.taxCents.present ? c.taxCents.value.toBigInt().toInt() : 0),
           );
           // Inventory leg = ACTUAL valuation removed by the stock ledger
           // (FIFO batch consumption / WAC current cost), NOT the refund net.
           // Passing it keeps 1200 reconciled with Σ(stock×cost); the refund
           // vs cost difference flows to 4100 as a purchase price variance.
-          final returnInvCost =
-              await _purchaseDao.computePurchaseReturnInventoryCostCents(
-            returnId,
-          );
+          final returnInvCost = await _purchaseDao
+              .computePurchaseReturnInventoryCostCents(returnId);
           await _journalService.recordPurchaseReturnJournalEntry(
             returnId: returnId,
             totalCents: totalRefund,
@@ -1132,7 +1344,8 @@ class UnifiedReturnService {
         final adjReturnNumber = await _adjDao.generatePurchaseAdjReturnNumber();
 
         final adjTotal = adjustmentItems.fold<int>(
-          0, (sum, i) => sum + i.totalCents,
+          0,
+          (sum, i) => sum + i.totalCents,
         );
 
         final modeReasons = adjustmentItems
@@ -1162,6 +1375,8 @@ class UnifiedReturnService {
             productId: item.productId,
             variantId: Value(item.variantId),
             quantity: item.quantity,
+            quantityScale: Value(item.quantityScale),
+            measurementType: Value(item.measurementType),
             unitPriceCents: Decimal.fromInt(item.unitPriceCents),
             totalCents: Decimal.fromInt(item.totalCents),
             reason: Value(item.reason),

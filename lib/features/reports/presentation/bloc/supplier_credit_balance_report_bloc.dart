@@ -1,7 +1,7 @@
-import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../services/supplier_balance_ledger_service.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -116,16 +116,20 @@ class SupplierCreditBalanceReportData {
 
 // ==================== BLOC ====================
 
-class SupplierCreditBalanceReportBloc extends RealtimeBloc<
-    SupplierCreditBalanceReportData, SupplierCreditBalanceReportEvent> {
+class SupplierCreditBalanceReportBloc
+    extends
+        RealtimeBloc<
+          SupplierCreditBalanceReportData,
+          SupplierCreditBalanceReportEvent
+        > {
   final AppDatabase _db;
   ReportDateRange _dateRange;
   SupplierCreditBalanceSortType _sort =
       SupplierCreditBalanceSortType.balanceDesc;
 
   SupplierCreditBalanceReportBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -141,37 +145,43 @@ class SupplierCreditBalanceReportBloc extends RealtimeBloc<
   }
 
   Stream<SupplierCreditBalanceReportData> _buildCombinedStream() {
-    return _db.select(_db.supplierTransactions).watch().asyncMap((_) async {
-      final items = await _loadSupplierCreditBalances();
+    return _db
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {_db.suppliers, _db.supplierTransactions},
+        )
+        .watch()
+        .asyncMap((_) async {
+          final items = await _loadSupplierCreditBalances();
 
-      int totalPurchases = 0;
-      int totalReturns = 0;
-      int totalPayments = 0;
-      int totalDiscounts = 0;
-      int totalCreditBalance = 0;
+          int totalPurchases = 0;
+          int totalReturns = 0;
+          int totalPayments = 0;
+          int totalDiscounts = 0;
+          int totalCreditBalance = 0;
 
-      for (final item in items) {
-        totalPurchases += item.totalPurchasesCents;
-        totalReturns += item.totalReturnsCents;
-        totalPayments += item.totalPaymentsCents;
-        totalDiscounts += item.totalDiscountsCents;
-        totalCreditBalance += item.creditBalanceCents;
-      }
+          for (final item in items) {
+            totalPurchases += item.totalPurchasesCents;
+            totalReturns += item.totalReturnsCents;
+            totalPayments += item.totalPaymentsCents;
+            totalDiscounts += item.totalDiscountsCents;
+            totalCreditBalance += item.creditBalanceCents;
+          }
 
-      final sorted = _applySortToSuppliers(items, _sort);
+          final sorted = _applySortToSuppliers(items, _sort);
 
-      return SupplierCreditBalanceReportData(
-        suppliers: sorted,
-        grandTotalPurchasesCents: totalPurchases,
-        grandTotalReturnsCents: totalReturns,
-        grandTotalPaymentsCents: totalPayments,
-        grandTotalDiscountsCents: totalDiscounts,
-        grandTotalCreditBalanceCents: totalCreditBalance,
-        totalSuppliers: items.length,
-        dateRange: _dateRange,
-        sort: _sort,
-      );
-    });
+          return SupplierCreditBalanceReportData(
+            suppliers: sorted,
+            grandTotalPurchasesCents: totalPurchases,
+            grandTotalReturnsCents: totalReturns,
+            grandTotalPaymentsCents: totalPayments,
+            grandTotalDiscountsCents: totalDiscounts,
+            grandTotalCreditBalanceCents: totalCreditBalance,
+            totalSuppliers: items.length,
+            dateRange: _dateRange,
+            sort: _sort,
+          );
+        });
   }
 
   Future<void> _onDateRangeChanged(
@@ -190,12 +200,11 @@ class SupplierCreditBalanceReportBloc extends RealtimeBloc<
     final current = currentData;
     if (current != null) {
       final sorted = _applySortToSuppliers(current.suppliers, event.sort);
-      emit(RealtimeSuccess<SupplierCreditBalanceReportData>(
-        data: current.copyWith(
-          suppliers: sorted,
-          sort: event.sort,
+      emit(
+        RealtimeSuccess<SupplierCreditBalanceReportData>(
+          data: current.copyWith(suppliers: sorted, sort: event.sort),
         ),
-      ));
+      );
     }
   }
 
@@ -207,95 +216,46 @@ class SupplierCreditBalanceReportBloc extends RealtimeBloc<
     switch (sort) {
       case SupplierCreditBalanceSortType.balanceDesc:
         list.sort(
-            (a, b) => b.creditBalanceCents.compareTo(a.creditBalanceCents));
+          (a, b) => b.creditBalanceCents.compareTo(a.creditBalanceCents),
+        );
       case SupplierCreditBalanceSortType.balanceAsc:
         list.sort(
-            (a, b) => a.creditBalanceCents.compareTo(b.creditBalanceCents));
+          (a, b) => a.creditBalanceCents.compareTo(b.creditBalanceCents),
+        );
       case SupplierCreditBalanceSortType.nameAsc:
         list.sort((a, b) => a.supplierName.compareTo(b.supplierName));
       case SupplierCreditBalanceSortType.nameDesc:
         list.sort((a, b) => b.supplierName.compareTo(a.supplierName));
       case SupplierCreditBalanceSortType.purchasesDesc:
         list.sort(
-            (a, b) => b.totalPurchasesCents.compareTo(a.totalPurchasesCents));
+          (a, b) => b.totalPurchasesCents.compareTo(a.totalPurchasesCents),
+        );
       case SupplierCreditBalanceSortType.paymentsDesc:
         list.sort(
-            (a, b) => b.totalPaymentsCents.compareTo(a.totalPaymentsCents));
+          (a, b) => b.totalPaymentsCents.compareTo(a.totalPaymentsCents),
+        );
     }
     return list;
   }
 
-  /// Loads supplier credit balances from supplier_transactions AND opening_balance_cents
-  /// from the suppliers table within the date range.
-  ///
-  /// Balance logic (credit = what suppliers owe us):
-  /// - Purchases (positive amount_cents) → decrease credit (we owe them)
-  /// - Returns (negative amount_cents, type credit_note) → increase credit (they owe us)
-  /// - Payments (negative amount_cents, type payment) → increase credit (we overpaid)
-  /// - Discounts (negative amount_cents, type discount) → increase credit
-  /// - Opening balance from suppliers.opening_balance_cents is also included
-  ///
-  /// Only suppliers with negative net balance (SUM < 0) are included.
-  /// Credit balance is stored as ABS value for display purposes.
+  /// Supplier receivables are suppliers whose signed balance is negative
+  /// at the report end date. Activity columns remain period-specific.
   Future<List<SupplierCreditBalanceItem>> _loadSupplierCreditBalances() async {
-    final startIso = _dateRange.startDate.toIso8601String();
-    final endIso = _dateRange.endDate.toIso8601String();
-
-    final rows = await _db.customSelect(
-      '''
-      SELECT 
-        s.id AS supplier_id,
-        s.name AS supplier_name,
-        s.phone AS phone,
-        COALESCE(tx.total_purchases_cents, 0) AS total_purchases_cents,
-        COALESCE(tx.total_returns_cents, 0) AS total_returns_cents,
-        COALESCE(tx.total_payments_cents, 0) AS total_payments_cents,
-        COALESCE(tx.total_discounts_cents, 0) AS total_discounts_cents,
-        COALESCE(tx.net_balance_cents, 0) + s.opening_balance_cents AS net_balance_cents,
-        COALESCE(tx.transaction_count, 0) + CASE WHEN s.opening_balance_cents != 0 THEN 1 ELSE 0 END AS transaction_count,
-        tx.last_transaction_at
-      FROM suppliers s
-      LEFT JOIN (
-        SELECT 
-          st.supplier_id,
-          SUM(CASE WHEN st.transaction_type = 'purchase' THEN st.amount_cents ELSE 0 END) AS total_purchases_cents,
-          SUM(CASE WHEN st.transaction_type IN ('credit_note', 'refund') THEN ABS(st.amount_cents) ELSE 0 END) AS total_returns_cents,
-          SUM(CASE WHEN st.transaction_type = 'payment' THEN ABS(st.amount_cents) ELSE 0 END) AS total_payments_cents,
-          SUM(CASE WHEN st.transaction_type = 'discount' THEN ABS(st.amount_cents) ELSE 0 END) AS total_discounts_cents,
-          SUM(st.amount_cents) AS net_balance_cents,
-          COUNT(st.id) AS transaction_count,
-          MAX(st.transaction_date) AS last_transaction_at
-        FROM supplier_transactions st
-        WHERE st.transaction_date >= ? AND st.transaction_date <= ?
-        GROUP BY st.supplier_id
-      ) tx ON tx.supplier_id = s.id
-      WHERE s.is_active = 1
-        AND (COALESCE(tx.net_balance_cents, 0) + s.opening_balance_cents) < 0
-      ORDER BY (COALESCE(tx.net_balance_cents, 0) + s.opening_balance_cents) ASC
-      ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.suppliers, _db.supplierTransactions},
-    ).get();
-
-    return rows.map((row) {
-      final lastTxStr = row.readNullable<String>('last_transaction_at');
-      final netBalanceCents = row.read<int>('net_balance_cents');
-
+    final records = await SupplierBalanceLedgerService(
+      _db,
+    ).load(startDate: _dateRange.startDate, endDate: _dateRange.endDate);
+    return records.where((record) => record.netBalanceCents < 0).map((record) {
       return SupplierCreditBalanceItem(
-        supplierId: row.read<int>('supplier_id'),
-        supplierName: row.read<String>('supplier_name'),
-        phone: row.readNullable<String>('phone'),
-        totalPurchasesCents: row.read<int>('total_purchases_cents'),
-        totalReturnsCents: row.read<int>('total_returns_cents'),
-        totalPaymentsCents: row.read<int>('total_payments_cents'),
-        totalDiscountsCents: row.read<int>('total_discounts_cents'),
-        creditBalanceCents: netBalanceCents.abs(),
-        transactionCount: row.read<int>('transaction_count'),
-        lastTransactionAt:
-            lastTxStr != null ? DateTime.tryParse(lastTxStr) : null,
+        supplierId: record.supplierId,
+        supplierName: record.supplierName,
+        phone: record.phone,
+        totalPurchasesCents: record.totalPurchasesCents,
+        totalReturnsCents: record.totalReturnsCents,
+        totalPaymentsCents: record.totalPaymentsCents,
+        totalDiscountsCents: record.totalDiscountsCents,
+        creditBalanceCents: record.netBalanceCents.abs(),
+        transactionCount: record.transactionCount,
+        lastTransactionAt: record.lastTransactionAt,
       );
     }).toList();
   }

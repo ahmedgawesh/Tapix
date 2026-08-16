@@ -13,8 +13,10 @@ class FileImportService implements ParseImportFile {
   }) async {
     final fileType = _determineFileType(bytes, fileName);
 
-    debugPrint('[FileImportService] Detected file type=$fileType name=$fileName size=${bytes.length}');
-    
+    debugPrint(
+      '[FileImportService] Detected file type=$fileType name=$fileName size=${bytes.length}',
+    );
+
     if (fileType == ImportFileType.csv) {
       return _parseCsv(bytes, fileName);
     } else {
@@ -50,7 +52,10 @@ class FileImportService implements ParseImportFile {
   bool _looksLikeZip(List<int> bytes) {
     if (bytes.length < 4) return false;
     // ZIP magic: PK\x03\x04
-    return bytes[0] == 0x50 && bytes[1] == 0x4B && bytes[2] == 0x03 && bytes[3] == 0x04;
+    return bytes[0] == 0x50 &&
+        bytes[1] == 0x4B &&
+        bytes[2] == 0x03 &&
+        bytes[3] == 0x04;
   }
 
   bool _looksLikeLegacyXls(List<int> bytes) {
@@ -76,7 +81,8 @@ class FileImportService implements ParseImportFile {
       final b = bytes[i];
       if (b == 0x2C) commas++;
       if (b == 0x0A || b == 0x0D) newLines++;
-      final isPrintable = (b >= 0x20 && b <= 0x7E) || b == 0x09 || b == 0x0A || b == 0x0D;
+      final isPrintable =
+          (b >= 0x20 && b <= 0x7E) || b == 0x09 || b == 0x0A || b == 0x0D;
       if (isPrintable) printable++;
     }
     final printableRatio = printable / sampleSize;
@@ -87,7 +93,10 @@ class FileImportService implements ParseImportFile {
     if (bytes.isEmpty) return '';
 
     // UTF-8 BOM: EF BB BF
-    if (bytes.length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF) {
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xEF &&
+        bytes[1] == 0xBB &&
+        bytes[2] == 0xBF) {
       return utf8.decode(bytes.sublist(3), allowMalformed: true);
     }
 
@@ -145,7 +154,7 @@ class FileImportService implements ParseImportFile {
   Future<ImportFileData> _parseExcel(List<int> bytes, String fileName) async {
     try {
       final excel = Excel.decodeBytes(Uint8List.fromList(bytes));
-      
+
       if (excel.tables.isEmpty) {
         throw Exception('Excel file has no sheets');
       }
@@ -192,7 +201,9 @@ class FileImportService implements ParseImportFile {
                 .map((Data? cell) => (cell?.value?.toString() ?? '').trim())
                 .toList(),
           )
-          .where((List<String> row) => row.any((String cell) => cell.isNotEmpty))
+          .where(
+            (List<String> row) => row.any((String cell) => cell.isNotEmpty),
+          )
           .toList();
 
       return ImportFileData(

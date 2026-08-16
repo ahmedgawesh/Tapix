@@ -447,6 +447,11 @@ class SupplierStatementPdfService {
       'ar': 'رصيد افتتاحي',
       'fr': 'Solde d\'Ouverture',
     },
+    'txn_adjustment_return_reversal': {
+      'en': 'Adj. Return Reversal',
+      'ar': 'عكس مرتجع تسوية',
+      'fr': 'Annulation retour d\'ajustement',
+    },
     // Discount types
     'dt_seasonal': {
       'en': 'Seasonal',

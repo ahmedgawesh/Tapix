@@ -19,6 +19,7 @@ class PurchaseEntity extends Equatable {
   final String? notes;
   final DateTime purchaseDate;
   final DateTime? dueDate;
+  final bool taxInclusiveAtPost;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -40,6 +41,7 @@ class PurchaseEntity extends Equatable {
     this.notes,
     required this.purchaseDate,
     this.dueDate,
+    this.taxInclusiveAtPost = false,
     required this.createdAt,
     required this.updatedAt,
   }) : discountCents = discountCents ?? Decimal.zero,
@@ -63,12 +65,27 @@ class PurchaseEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id, purchaseNumber, supplierId, supplierName, supplierPhone,
-        subtotalCents, discountCents, taxCents, totalCents,
-        paidAmountCents, currencyId, status, paymentMethod,
-        supplierInvoiceRef, notes, purchaseDate, dueDate,
-        createdAt, updatedAt,
-      ];
+    id,
+    purchaseNumber,
+    supplierId,
+    supplierName,
+    supplierPhone,
+    subtotalCents,
+    discountCents,
+    taxCents,
+    totalCents,
+    paidAmountCents,
+    currencyId,
+    status,
+    paymentMethod,
+    supplierInvoiceRef,
+    notes,
+    purchaseDate,
+    dueDate,
+    taxInclusiveAtPost,
+    createdAt,
+    updatedAt,
+  ];
 }
 
 class PurchaseItemEntity extends Equatable {
@@ -78,6 +95,7 @@ class PurchaseItemEntity extends Equatable {
   final int? variantId;
   final String? productName;
   final String? variantSku;
+
   /// Per-variant attributes resolved at the DAO level. They MUST come from
   /// joins on `productColors`/`sizes` keyed by the line's own `variantId`
   /// — never from a productId-keyed lookup — so invoices that contain
@@ -85,7 +103,14 @@ class PurchaseItemEntity extends Equatable {
   final String? colorName;
   final String? colorHex;
   final String? sizeName;
+
+  /// Current on-hand stock for this product/variant when loaded with details.
+  /// Purchase-return forms cap the invoice entitlement by this physical limit.
+  final int? currentStockQuantity;
+  final bool tracksInventory;
   final int quantity;
+  final int quantityScale;
+  final String measurementType;
   final Decimal unitCostCents;
   final Decimal discountCents;
   final Decimal subtotalCents;
@@ -109,7 +134,11 @@ class PurchaseItemEntity extends Equatable {
     this.colorName,
     this.colorHex,
     this.sizeName,
+    this.currentStockQuantity,
+    this.tracksInventory = true,
     required this.quantity,
+    this.quantityScale = 1,
+    this.measurementType = 'piece',
     required this.unitCostCents,
     Decimal? discountCents,
     required this.subtotalCents,
@@ -126,12 +155,33 @@ class PurchaseItemEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id, purchaseId, productId, variantId, productName, variantSku,
-        colorName, colorHex, sizeName,
-        quantity, unitCostCents, discountCents, subtotalCents, taxCents,
-        totalCents, originalCostCents, originalPriceCents, originalWholesalePriceCents,
-        newSellPriceCents, newWholesalePriceCents, expiryDate, createdAt,
-      ];
+    id,
+    purchaseId,
+    productId,
+    variantId,
+    productName,
+    variantSku,
+    colorName,
+    colorHex,
+    sizeName,
+    currentStockQuantity,
+    tracksInventory,
+    quantity,
+    quantityScale,
+    measurementType,
+    unitCostCents,
+    discountCents,
+    subtotalCents,
+    taxCents,
+    totalCents,
+    originalCostCents,
+    originalPriceCents,
+    originalWholesalePriceCents,
+    newSellPriceCents,
+    newWholesalePriceCents,
+    expiryDate,
+    createdAt,
+  ];
 }
 
 class PurchaseReturnEntity extends Equatable {
@@ -148,6 +198,7 @@ class PurchaseReturnEntity extends Equatable {
   final int currencyId;
   final String status;
   final String dispositionType;
+
   /// cash, credit, cheque
   final String refundMethod;
   final String? reason;
@@ -192,12 +243,25 @@ class PurchaseReturnEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id, purchaseId, returnNumber, supplierName, supplierId,
-        subtotalCents, discountCents, taxCents, totalCents,
-        currencyId, status, dispositionType,
-        refundMethod, reason, returnDate, createdAt,
-        isAdjustment, unifiedId,
-      ];
+    id,
+    purchaseId,
+    returnNumber,
+    supplierName,
+    supplierId,
+    subtotalCents,
+    discountCents,
+    taxCents,
+    totalCents,
+    currencyId,
+    status,
+    dispositionType,
+    refundMethod,
+    reason,
+    returnDate,
+    createdAt,
+    isAdjustment,
+    unifiedId,
+  ];
 }
 
 class PurchaseReturnItemEntity extends Equatable {
@@ -205,6 +269,8 @@ class PurchaseReturnItemEntity extends Equatable {
   final int returnId;
   final int purchaseItemId;
   final int quantity;
+  final int quantityScale;
+  final String measurementType;
   final Decimal subtotalCents;
   final Decimal discountCents;
   final Decimal taxCents;
@@ -223,6 +289,8 @@ class PurchaseReturnItemEntity extends Equatable {
     required this.returnId,
     required this.purchaseItemId,
     required this.quantity,
+    this.quantityScale = 1,
+    this.measurementType = 'piece',
     Decimal? subtotalCents,
     Decimal? discountCents,
     Decimal? taxCents,
@@ -241,11 +309,25 @@ class PurchaseReturnItemEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id, returnId, purchaseItemId, quantity,
-        subtotalCents, discountCents, taxCents, refundCents,
-        reason, productName, variantSku,
-        variantBarcode, colorName, colorHex, sizeName, createdAt,
-      ];
+    id,
+    returnId,
+    purchaseItemId,
+    quantity,
+    quantityScale,
+    measurementType,
+    subtotalCents,
+    discountCents,
+    taxCents,
+    refundCents,
+    reason,
+    productName,
+    variantSku,
+    variantBarcode,
+    colorName,
+    colorHex,
+    sizeName,
+    createdAt,
+  ];
 }
 
 class PurchasePaymentEntity extends Equatable {
@@ -273,7 +355,14 @@ class PurchasePaymentEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id, purchaseId, amountCents, currencyId,
-        paymentMethod, reference, notes, paymentDate, createdAt,
-      ];
+    id,
+    purchaseId,
+    amountCents,
+    currencyId,
+    paymentMethod,
+    reference,
+    notes,
+    paymentDate,
+    createdAt,
+  ];
 }

@@ -9,7 +9,11 @@ class ProductCategories extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text()();
   TextColumn get description => text().nullable()();
-  IntColumn get parentId => integer().nullable().references(ProductCategories, #id, onDelete: KeyAction.restrict)();
+  IntColumn get parentId => integer().nullable().references(
+    ProductCategories,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
@@ -43,14 +47,26 @@ class Products extends Table {
   TextColumn get nameAr => text().nullable()();
   TextColumn get nameFr => text().nullable()();
   TextColumn get description => text().nullable()();
-  IntColumn get categoryId => integer().nullable().references(ProductCategories, #id, onDelete: KeyAction.restrict)();
-  IntColumn get supplierId => integer().nullable().references(Suppliers, #id, onDelete: KeyAction.restrict)();
+  IntColumn get categoryId => integer().nullable().references(
+    ProductCategories,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
+  IntColumn get supplierId => integer().nullable().references(
+    Suppliers,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
   IntColumn get costCents => integer().map(const MoneyConverter())();
   IntColumn get priceCents => integer().map(const MoneyConverter())();
-  IntColumn get wholesalePriceCents => integer().nullable().map(const MoneyConverter())();
-  IntColumn get previousCostCents => integer().nullable().map(const MoneyConverter())();
-  IntColumn get previousPriceCents => integer().nullable().map(const MoneyConverter())();
-  IntColumn get previousWholesalePriceCents => integer().nullable().map(const MoneyConverter())();
+  IntColumn get wholesalePriceCents =>
+      integer().nullable().map(const MoneyConverter())();
+  IntColumn get previousCostCents =>
+      integer().nullable().map(const MoneyConverter())();
+  IntColumn get previousPriceCents =>
+      integer().nullable().map(const MoneyConverter())();
+  IntColumn get previousWholesalePriceCents =>
+      integer().nullable().map(const MoneyConverter())();
 
   /// Supplier reference price — the **gross** unit cost the user paid on the
   /// most recent purchase line, **before** any per-line trade discount.
@@ -67,18 +83,34 @@ class Products extends Table {
   /// column display [costCents] as a fallback. Populated automatically on
   /// every purchase post (gross unit cost typed by the user) and propagated
   /// to the parent products row via `ProductCostService.syncProductFromVariants`.
-  IntColumn get lastPurchasePriceCents => integer().nullable().map(const MoneyConverter())();
+  IntColumn get lastPurchasePriceCents =>
+      integer().nullable().map(const MoneyConverter())();
 
-  IntColumn get currencyId => integer().nullable().references(Currencies, #id, onDelete: KeyAction.restrict)();
-  BoolColumn get trackInventory => boolean().withDefault(const Constant(true))();
-  IntColumn get stockQuantity => integer().withDefault(const Constant(0))(); // quantity in requirements
-  IntColumn get minQuantity => integer().withDefault(const Constant(0))(); // reorderLevel in requirements
+  IntColumn get currencyId => integer().nullable().references(
+    Currencies,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
+  BoolColumn get trackInventory =>
+      boolean().withDefault(const Constant(true))();
+
+  /// Stock dimension. `piece` keeps legacy whole-unit behaviour; measured
+  /// dimensions store one major unit as 1000 integer stock units.
+  TextColumn get measurementType =>
+      text().withDefault(const Constant('piece'))();
+  IntColumn get stockQuantity =>
+      integer().withDefault(const Constant(0))(); // quantity in requirements
+  IntColumn get minQuantity => integer().withDefault(
+    const Constant(0),
+  )(); // reorderLevel in requirements
   BoolColumn get hasVariants => boolean().withDefault(const Constant(false))();
   BoolColumn get isTaxable => boolean().withDefault(const Constant(false))();
-  IntColumn get purchaseTaxRateBps => integer().withDefault(const Constant(0))();
+  IntColumn get purchaseTaxRateBps =>
+      integer().withDefault(const Constant(0))();
   IntColumn get salesTaxRateBps => integer().withDefault(const Constant(0))();
   TextColumn get imagePath => text().nullable()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+
   /// Costing method for inventory valuation. One of:
   ///   - 'wac'  → Weighted Average Cost (default; uses [costCents])
   ///   - 'fifo' → First-In, First-Out (uses [ProductBatches] + [BatchConsumptions])
@@ -91,8 +123,7 @@ class Products extends Table {
   /// This column is preserved for one release for offline-installed apps and
   /// for the Phase B migration's backfill query. Reads from runtime code are
   /// being removed in Phase D/F.
-  TextColumn get costingMethod =>
-      text().withDefault(const Constant('wac'))();
+  TextColumn get costingMethod => text().withDefault(const Constant('wac'))();
 
   /// Inventory tracking type — the per-product batch/expiry policy.
   ///
@@ -123,26 +154,42 @@ class Products extends Table {
 @DataClassName('ProductVariant')
 class ProductVariants extends Table {
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get productId => integer().references(Products, #id, onDelete: KeyAction.cascade)();
+  IntColumn get productId =>
+      integer().references(Products, #id, onDelete: KeyAction.cascade)();
   TextColumn get sku => text().nullable().unique()();
   TextColumn get barcode => text().nullable().unique()();
-  IntColumn get colorId => integer().nullable().references(ProductColors, #id, onDelete: KeyAction.restrict)();
-  IntColumn get sizeId => integer().nullable().references(Sizes, #id, onDelete: KeyAction.restrict)();
+  IntColumn get colorId => integer().nullable().references(
+    ProductColors,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
+  IntColumn get sizeId => integer().nullable().references(
+    Sizes,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
   IntColumn get costCents => integer().map(const MoneyConverter())();
   IntColumn get priceCents => integer().map(const MoneyConverter())();
-  IntColumn get wholesalePriceCents => integer().nullable().map(const MoneyConverter())();
-  IntColumn get previousCostCents => integer().nullable().map(const MoneyConverter())();
-  IntColumn get previousPriceCents => integer().nullable().map(const MoneyConverter())();
-  IntColumn get previousWholesalePriceCents => integer().nullable().map(const MoneyConverter())();
+  IntColumn get wholesalePriceCents =>
+      integer().nullable().map(const MoneyConverter())();
+  IntColumn get previousCostCents =>
+      integer().nullable().map(const MoneyConverter())();
+  IntColumn get previousPriceCents =>
+      integer().nullable().map(const MoneyConverter())();
+  IntColumn get previousWholesalePriceCents =>
+      integer().nullable().map(const MoneyConverter())();
 
   /// Variant-level supplier reference price (gross of trade discounts) —
   /// mirrors [Products.lastPurchasePriceCents]. See that column's docs for
   /// the full rationale. Each variant carries its own value because every
   /// variant can be purchased on a separate line with its own discount.
-  IntColumn get lastPurchasePriceCents => integer().nullable().map(const MoneyConverter())();
+  IntColumn get lastPurchasePriceCents =>
+      integer().nullable().map(const MoneyConverter())();
 
-  IntColumn get priceAdjustmentCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
-  IntColumn get stockQuantity => integer().withDefault(const Constant(0))(); // quantity in requirements
+  IntColumn get priceAdjustmentCents =>
+      integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get stockQuantity =>
+      integer().withDefault(const Constant(0))(); // quantity in requirements
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
@@ -158,15 +205,26 @@ class ProductVariants extends Table {
 @DataClassName('ProductPriceHistory')
 class ProductPriceHistories extends Table {
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get productId => integer().references(Products, #id, onDelete: KeyAction.cascade)();
-  IntColumn get variantId => integer().nullable().references(ProductVariants, #id, onDelete: KeyAction.cascade)();
+  IntColumn get productId =>
+      integer().references(Products, #id, onDelete: KeyAction.cascade)();
+  IntColumn get variantId => integer().nullable().references(
+    ProductVariants,
+    #id,
+    onDelete: KeyAction.cascade,
+  )();
   IntColumn get oldCostCents => integer().map(const MoneyConverter())();
   IntColumn get newCostCents => integer().map(const MoneyConverter())();
   IntColumn get oldPriceCents => integer().map(const MoneyConverter())();
   IntColumn get newPriceCents => integer().map(const MoneyConverter())();
-  IntColumn get oldWholesalePriceCents => integer().nullable().map(const MoneyConverter())();
-  IntColumn get newWholesalePriceCents => integer().nullable().map(const MoneyConverter())();
-  IntColumn get userId => integer().nullable().references(Users, #id, onDelete: KeyAction.setNull)();
+  IntColumn get oldWholesalePriceCents =>
+      integer().nullable().map(const MoneyConverter())();
+  IntColumn get newWholesalePriceCents =>
+      integer().nullable().map(const MoneyConverter())();
+  IntColumn get userId => integer().nullable().references(
+    Users,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
   TextColumn get changeReason => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
@@ -191,27 +249,32 @@ class ProductBatches extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get productId =>
       integer().references(Products, #id, onDelete: KeyAction.cascade)();
-  IntColumn get variantId => integer()
-      .nullable()
-      .references(ProductVariants, #id, onDelete: KeyAction.cascade)();
+  IntColumn get variantId => integer().nullable().references(
+    ProductVariants,
+    #id,
+    onDelete: KeyAction.cascade,
+  )();
 
   /// Human-readable unique batch identifier, e.g. `BATCH-202604-12-3`.
   TextColumn get batchNumber => text().unique()();
 
   /// Source purchase item that created this batch (null for opening / found /
   /// return-originated batches). Restrict prevents losing audit trail.
-  IntColumn get purchaseItemId => integer()
-      .nullable()
-      .customConstraint('NULL REFERENCES purchase_items(id) ON DELETE RESTRICT')();
+  IntColumn get purchaseItemId => integer().nullable().customConstraint(
+    'NULL REFERENCES purchase_items(id) ON DELETE RESTRICT',
+  )();
 
-  IntColumn get supplierId => integer()
-      .nullable()
-      .references(Suppliers, #id, onDelete: KeyAction.restrict)();
+  IntColumn get supplierId => integer().nullable().references(
+    Suppliers,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
 
   /// One of: 'purchase' | 'opening' | 'found' | 'sale_return'.
   TextColumn get source => text().withDefault(const Constant('purchase'))();
 
-  DateTimeColumn get receivedDate => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get receivedDate =>
+      dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get expiryDate => dateTime().nullable()();
 
   /// Quantity received at creation. Immutable.
@@ -266,29 +329,26 @@ class BatchConsumptions extends Table {
 
   // Optional source FKs — exactly one is expected to be set per row, but we
   // tolerate NULL across all to keep migrations safe.
-  IntColumn get saleItemId => integer()
-      .nullable()
-      .customConstraint('NULL REFERENCES sale_items(id) ON DELETE RESTRICT')();
-  IntColumn get saleReturnItemId => integer()
-      .nullable()
-      .customConstraint(
-          'NULL REFERENCES sale_return_items(id) ON DELETE RESTRICT')();
-  IntColumn get purchaseReturnItemId => integer()
-      .nullable()
-      .customConstraint(
-          'NULL REFERENCES purchase_return_items(id) ON DELETE RESTRICT')();
-  IntColumn get inventoryAdjustmentId => integer()
-      .nullable()
-      .customConstraint(
-          'NULL REFERENCES inventory_adjustments(id) ON DELETE RESTRICT')();
-  IntColumn get purchaseReturnAdjustmentItemId => integer()
-      .nullable()
-      .customConstraint(
-          'NULL REFERENCES purchase_return_adjustment_items(id) ON DELETE RESTRICT')();
-  IntColumn get saleReturnAdjustmentItemId => integer()
-      .nullable()
-      .customConstraint(
-          'NULL REFERENCES sale_return_adjustment_items(id) ON DELETE RESTRICT')();
+  IntColumn get saleItemId => integer().nullable().customConstraint(
+    'NULL REFERENCES sale_items(id) ON DELETE RESTRICT',
+  )();
+  IntColumn get saleReturnItemId => integer().nullable().customConstraint(
+    'NULL REFERENCES sale_return_items(id) ON DELETE RESTRICT',
+  )();
+  IntColumn get purchaseReturnItemId => integer().nullable().customConstraint(
+    'NULL REFERENCES purchase_return_items(id) ON DELETE RESTRICT',
+  )();
+  IntColumn get inventoryAdjustmentId => integer().nullable().customConstraint(
+    'NULL REFERENCES inventory_adjustments(id) ON DELETE RESTRICT',
+  )();
+  IntColumn
+  get purchaseReturnAdjustmentItemId => integer().nullable().customConstraint(
+    'NULL REFERENCES purchase_return_adjustment_items(id) ON DELETE RESTRICT',
+  )();
+  IntColumn get saleReturnAdjustmentItemId =>
+      integer().nullable().customConstraint(
+        'NULL REFERENCES sale_return_adjustment_items(id) ON DELETE RESTRICT',
+      )();
 
   TextColumn get notes => text().nullable()();
 

@@ -30,11 +30,23 @@ class AccountingDao extends DatabaseAccessor<AppDatabase> with _$AccountingDaoMi
     return into(accounts).insert(account);
   }
 
-  Future<bool> updateAccount(Account account) {
+  Future<bool> updateAccount(Account account) async {
+    final existing = await getAccount(account.id);
+    if (existing?.isSystemAccount ?? false) {
+      throw StateError(
+        'System posting accounts cannot be edited through account CRUD.',
+      );
+    }
     return update(accounts).replace(account);
   }
 
-  Future<int> deleteAccount(int id) {
+  Future<int> deleteAccount(int id) async {
+    final existing = await getAccount(id);
+    if (existing?.isSystemAccount ?? false) {
+      throw StateError(
+        'System posting accounts cannot be deleted.',
+      );
+    }
     return (delete(accounts)..where((a) => a.id.equals(id))).go();
   }
 
@@ -134,9 +146,28 @@ class AccountingDao extends DatabaseAccessor<AppDatabase> with _$AccountingDaoMi
   }
 
   Stream<List<JournalEntryLine>> watchJournalLinesByAccount(int accountId) {
-    return (select(journalEntryLines)
-          ..where((l) => l.accountId.equals(accountId))
-          ..orderBy([(l) => OrderingTerm(expression: l.createdAt, mode: OrderingMode.desc)]))
+    final query = select(journalEntryLines).join([
+      innerJoin(
+        journalEntries,
+        journalEntries.id.equalsExp(journalEntryLines.journalEntryId),
+      ),
+    ]);
+    query.where(
+      journalEntryLines.accountId.equals(accountId) &
+          journalEntries.status.equals('posted'),
+    );
+    query.orderBy([
+      OrderingTerm(
+        expression: journalEntries.entryDate,
+        mode: OrderingMode.desc,
+      ),
+      OrderingTerm(
+        expression: journalEntryLines.lineNumber,
+        mode: OrderingMode.asc,
+      ),
+    ]);
+    return query
+        .map((row) => row.readTable(journalEntryLines))
         .watch();
   }
 

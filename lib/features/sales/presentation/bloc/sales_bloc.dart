@@ -54,7 +54,9 @@ class SalesHubData {
       }).toList();
     }
     // Limit results for performance
-    if (list.length > searchResultLimit && searchQuery != null && searchQuery!.isNotEmpty) {
+    if (list.length > searchResultLimit &&
+        searchQuery != null &&
+        searchQuery!.isNotEmpty) {
       list = list.sublist(0, searchResultLimit);
     }
     return list;
@@ -72,7 +74,8 @@ class SalesHubData {
     for (final sale in sales) {
       // Only flag product match if the sale did NOT match by invoice/customer/phone
       final matchesInvoice = sale.invoiceNumber.toLowerCase().contains(q);
-      final matchesCustomer = sale.customerName?.toLowerCase().contains(q) ?? false;
+      final matchesCustomer =
+          sale.customerName?.toLowerCase().contains(q) ?? false;
       final matchesPhone = sale.customerPhone?.contains(q) ?? false;
       if (!matchesInvoice && !matchesCustomer && !matchesPhone) {
         final terms = productTerms[sale.id];
@@ -140,7 +143,9 @@ class SalesBloc extends RealtimeBloc<SalesHubData, SalesEvent> {
       _returnSaleIds = ids;
       _emitCombined();
     });
-    _productTermsSub = _repository.watchSaleProductSearchTerms().listen((terms) {
+    _productTermsSub = _repository.watchSaleProductSearchTerms().listen((
+      terms,
+    ) {
       _productSearchTerms = terms;
       _emitCombined();
     });
@@ -161,17 +166,26 @@ class SalesBloc extends RealtimeBloc<SalesHubData, SalesEvent> {
       final terms = _productSearchTerms ?? const {};
       return SalesHubData(
         sales: sales,
-        stats: _latestStats ?? const SaleDashboardStats(
-          totalCount: 0, completedCount: 0, voidedCount: 0,
-          totalSalesCents: 0, returnsCount: 0, totalReturnsCents: 0,
-          todaySalesCents: 0, todayCount: 0,
-        ),
+        stats:
+            _latestStats ??
+            const SaleDashboardStats(
+              totalCount: 0,
+              completedCount: 0,
+              voidedCount: 0,
+              totalSalesCents: 0,
+              returnsCount: 0,
+              totalReturnsCents: 0,
+              todaySalesCents: 0,
+              todayCount: 0,
+            ),
         searchQuery: _searchQuery,
         statusFilter: _statusFilter,
         saleIdsWithReturns: _returnSaleIds ?? const {},
         productSearchTerms: terms,
         productMatchedSaleIds: SalesHubData.computeProductMatchedIds(
-          sales, _searchQuery, terms,
+          sales,
+          _searchQuery,
+          terms,
         ),
       );
     });
@@ -181,17 +195,23 @@ class SalesBloc extends RealtimeBloc<SalesHubData, SalesEvent> {
     if (_latestSales != null && _latestStats != null) {
       final terms = _productSearchTerms ?? const {};
       // ignore: invalid_use_of_visible_for_testing_member
-      emit(RealtimeSuccess(data: SalesHubData(
-        sales: _latestSales!,
-        stats: _latestStats!,
-        searchQuery: _searchQuery,
-        statusFilter: _statusFilter,
-        saleIdsWithReturns: _returnSaleIds ?? const {},
-        productSearchTerms: terms,
-        productMatchedSaleIds: SalesHubData.computeProductMatchedIds(
-          _latestSales!, _searchQuery, terms,
+      emit(
+        RealtimeSuccess(
+          data: SalesHubData(
+            sales: _latestSales!,
+            stats: _latestStats!,
+            searchQuery: _searchQuery,
+            statusFilter: _statusFilter,
+            saleIdsWithReturns: _returnSaleIds ?? const {},
+            productSearchTerms: terms,
+            productMatchedSaleIds: SalesHubData.computeProductMatchedIds(
+              _latestSales!,
+              _searchQuery,
+              terms,
+            ),
+          ),
         ),
-      )));
+      );
     }
   }
 
@@ -203,17 +223,23 @@ class SalesBloc extends RealtimeBloc<SalesHubData, SalesEvent> {
     final data = currentData;
     if (data != null) {
       final terms = _productSearchTerms ?? const {};
-      emit(RealtimeSuccess(data: SalesHubData(
-        sales: data.sales,
-        stats: data.stats,
-        searchQuery: _searchQuery,
-        statusFilter: _statusFilter,
-        saleIdsWithReturns: data.saleIdsWithReturns,
-        productSearchTerms: terms,
-        productMatchedSaleIds: SalesHubData.computeProductMatchedIds(
-          data.sales, _searchQuery, terms,
+      emit(
+        RealtimeSuccess(
+          data: SalesHubData(
+            sales: data.sales,
+            stats: data.stats,
+            searchQuery: _searchQuery,
+            statusFilter: _statusFilter,
+            saleIdsWithReturns: data.saleIdsWithReturns,
+            productSearchTerms: terms,
+            productMatchedSaleIds: SalesHubData.computeProductMatchedIds(
+              data.sales,
+              _searchQuery,
+              terms,
+            ),
+          ),
         ),
-      )));
+      );
     }
   }
 
@@ -225,17 +251,23 @@ class SalesBloc extends RealtimeBloc<SalesHubData, SalesEvent> {
     final data = currentData;
     if (data != null) {
       final terms = _productSearchTerms ?? const {};
-      emit(RealtimeSuccess(data: SalesHubData(
-        sales: data.sales,
-        stats: data.stats,
-        searchQuery: _searchQuery,
-        statusFilter: _statusFilter,
-        saleIdsWithReturns: data.saleIdsWithReturns,
-        productSearchTerms: terms,
-        productMatchedSaleIds: SalesHubData.computeProductMatchedIds(
-          data.sales, _searchQuery, terms,
+      emit(
+        RealtimeSuccess(
+          data: SalesHubData(
+            sales: data.sales,
+            stats: data.stats,
+            searchQuery: _searchQuery,
+            statusFilter: _statusFilter,
+            saleIdsWithReturns: data.saleIdsWithReturns,
+            productSearchTerms: terms,
+            productMatchedSaleIds: SalesHubData.computeProductMatchedIds(
+              data.sales,
+              _searchQuery,
+              terms,
+            ),
+          ),
         ),
-      )));
+      );
     }
   }
 

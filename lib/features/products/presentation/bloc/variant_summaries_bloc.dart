@@ -1,4 +1,3 @@
-
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../domain/repositories/product_variant_repository.dart';
 
@@ -6,13 +5,11 @@ class VariantSummary {
   final int count;
   final int totalStock;
 
-  const VariantSummary({
-    required this.count,
-    required this.totalStock,
-  });
+  const VariantSummary({required this.count, required this.totalStock});
 }
 
-class VariantSummariesBloc extends RealtimeBloc<Map<int, VariantSummary>, RealtimeEvent> {
+class VariantSummariesBloc
+    extends RealtimeBloc<Map<int, VariantSummary>, RealtimeEvent> {
   final ProductVariantRepository _repository;
 
   VariantSummariesBloc(this._repository) : super(const RealtimeLoading());
@@ -22,7 +19,10 @@ class VariantSummariesBloc extends RealtimeBloc<Map<int, VariantSummary>, Realti
     return _repository.watchVariantSummaries().map((raw) {
       final mapped = <int, VariantSummary>{};
       raw.forEach((productId, summary) {
-        mapped[productId] = VariantSummary(count: summary.count, totalStock: summary.totalStock);
+        mapped[productId] = VariantSummary(
+          count: summary.count,
+          totalStock: summary.totalStock,
+        );
       });
       return mapped;
     });
@@ -36,4 +36,3 @@ class VariantSummariesBloc extends RealtimeBloc<Map<int, VariantSummary>, Realti
   @override
   void refresh() => add(const RealtimeRefreshRequested());
 }
-

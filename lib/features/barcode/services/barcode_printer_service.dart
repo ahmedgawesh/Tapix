@@ -1,5 +1,7 @@
 import 'dart:typed_data';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show MethodChannel, rootBundle;
+import 'package:easy_localization/easy_localization.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -9,6 +11,16 @@ import '../../../core/database/daos/settings_dao.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/services/currency_service.dart';
 import '../../products/domain/entities/product_entity.dart';
+import '../domain/models/barcode_design_state.dart';
+import 'barcode_price_formatter.dart';
+import 'tspl_bitmap_encoder.dart';
+
+class BluetoothPrinterDevice {
+  final String name;
+  final String address;
+
+  const BluetoothPrinterDevice({required this.name, required this.address});
+}
 
 class PrinterConfig {
   final double widthMm;
@@ -27,14 +39,38 @@ class PrinterConfig {
 class BarcodePrinterService {
   final SettingsDao _settingsDao;
 
+  static const MethodChannel _bluetoothChannel = MethodChannel(
+    'com.tapix.pos/bluetooth_label_printer',
+  );
+
   static const String keyLabelWidth = 'barcode_label_width';
   static const String keyLabelHeight = 'barcode_label_height';
   static const String keyIncludeName = 'barcode_include_name';
   static const String keyIncludePrice = 'barcode_include_price';
 
-  BarcodePrinterService({
-    required SettingsDao settingsDao,
-  }) : _settingsDao = settingsDao;
+  BarcodePrinterService({required SettingsDao settingsDao})
+    : _settingsDao = settingsDao;
+
+  bool get isBluetoothPrintingSupported =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  Future<List<BluetoothPrinterDevice>> getBondedBluetoothPrinters() async {
+    if (!isBluetoothPrintingSupported) return const [];
+
+    final rawDevices =
+        await _bluetoothChannel.invokeListMethod<Object?>('getBondedDevices') ??
+        const [];
+    return rawDevices
+        .whereType<Map<Object?, Object?>>()
+        .map((device) {
+          final name = (device['name'] as String?)?.trim();
+          return BluetoothPrinterDevice(
+            name: name == null || name.isEmpty ? 'Bluetooth printer' : name,
+            address: device['address']! as String,
+          );
+        })
+        .toList(growable: false);
+  }
 
   Future<void> saveSettings({
     double? widthMm,
@@ -237,14 +273,20 @@ class BarcodePrinterService {
     final doc = pw.Document();
 
     // Load multilingual font (supports Arabic, English, French)
-    final fontData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-    final fontBoldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+    final fontData = await rootBundle.load(
+      'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+    );
+    final fontBoldData = await rootBundle.load(
+      'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+    );
     final ttf = pw.Font.ttf(fontData);
     final ttfBold = pw.Font.ttf(fontBoldData);
 
     // Get currency service for proper formatting
     final currencyService = sl<CurrencyService>();
-    final formattedPrice = currencyService.format(product.priceCents.toBigInt().toInt());
+    final formattedPrice = currencyService.format(
+      product.priceCents.toBigInt().toInt(),
+    );
 
     // Detect text direction based on content
     final textDirection = _detectTextDirection(product.name);
@@ -257,13 +299,19 @@ class BarcodePrinterService {
     for (int i = 0; i < copies; i++) {
       doc.addPage(
         pw.Page(
-          pageFormat: PdfPageFormat(width, height, marginAll: 2 * PdfPageFormat.mm),
+          pageFormat: PdfPageFormat(
+            width,
+            height,
+            marginAll: 2 * PdfPageFormat.mm,
+          ),
           build: (pw.Context context) {
             return pw.Column(
               mainAxisAlignment: pw.MainAxisAlignment.center,
               crossAxisAlignment: pw.CrossAxisAlignment.center,
               children: [
-                if (includeCompanyName && companyName != null && companyName.isNotEmpty) ...[
+                if (includeCompanyName &&
+                    companyName != null &&
+                    companyName.isNotEmpty) ...[
                   pw.Text(
                     companyName,
                     style: pw.TextStyle(
@@ -389,21 +437,27 @@ class BarcodePrinterService {
     required bool includeVariantInfo,
   }) async {
     final doc = pw.Document();
-    
+
     // Load multilingual fonts
-    final fontData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-    final fontBoldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+    final fontData = await rootBundle.load(
+      'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+    );
+    final fontBoldData = await rootBundle.load(
+      'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+    );
     final ttf = pw.Font.ttf(fontData);
     final ttfBold = pw.Font.ttf(fontBoldData);
 
     // Get currency service
     final currencyService = sl<CurrencyService>();
-    final formattedPrice = currencyService.format(product.priceCents.toBigInt().toInt());
+    final formattedPrice = currencyService.format(
+      product.priceCents.toBigInt().toInt(),
+    );
     final textDirection = _detectTextDirection(product.name);
 
     // A4 dimensions
     const a4HeightMm = 297.0;
-    
+
     // Convert to points
     final labelWidth = widthMm * PdfPageFormat.mm;
     final labelHeight = heightMm * PdfPageFormat.mm;
@@ -415,15 +469,21 @@ class BarcodePrinterService {
     final rightMargin = pageMarginMm * PdfPageFormat.mm;
 
     // Calculate labels per column
-    final availableHeight = a4HeightMm * PdfPageFormat.mm - (topMargin + bottomMargin);
+    final availableHeight =
+        a4HeightMm * PdfPageFormat.mm - (topMargin + bottomMargin);
     final labelWithVGap = labelHeight + vGap;
-    final labelsPerColumn = (availableHeight / labelWithVGap).floor().clamp(1, 20);
+    final labelsPerColumn = (availableHeight / labelWithVGap).floor().clamp(
+      1,
+      20,
+    );
     final labelsPerPage = labelsPerRow * labelsPerColumn;
 
     // Generate pages
     int remainingCopies = copies;
     while (remainingCopies > 0) {
-      final labelsThisPage = remainingCopies < labelsPerPage ? remainingCopies : labelsPerPage;
+      final labelsThisPage = remainingCopies < labelsPerPage
+          ? remainingCopies
+          : labelsPerPage;
       final rows = (labelsThisPage / labelsPerRow).ceil();
       doc.addPage(
         pw.Page(
@@ -439,7 +499,8 @@ class BarcodePrinterService {
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: List.generate(rows, (rowIndex) {
                 final startIndex = rowIndex * labelsPerRow;
-                final labelsInRow = (startIndex + labelsPerRow) <= labelsThisPage
+                final labelsInRow =
+                    (startIndex + labelsPerRow) <= labelsThisPage
                     ? labelsPerRow
                     : labelsThisPage - startIndex;
 
@@ -449,7 +510,9 @@ class BarcodePrinterService {
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: List.generate(labelsInRow, (colIndex) {
                       return pw.Padding(
-                        padding: pw.EdgeInsets.only(right: colIndex < labelsInRow - 1 ? hGap : 0),
+                        padding: pw.EdgeInsets.only(
+                          right: colIndex < labelsInRow - 1 ? hGap : 0,
+                        ),
                         child: _buildLabelContent(
                           product: product,
                           barcode: barcode,
@@ -524,10 +587,16 @@ class BarcodePrinterService {
         mainAxisAlignment: pw.MainAxisAlignment.center,
         crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
-          if (includeCompanyName && companyName != null && companyName.isNotEmpty) ...[
+          if (includeCompanyName &&
+              companyName != null &&
+              companyName.isNotEmpty) ...[
             pw.Text(
               companyName,
-              style: pw.TextStyle(fontSize: 5, fontWeight: pw.FontWeight.bold, font: ttfBold),
+              style: pw.TextStyle(
+                fontSize: 5,
+                fontWeight: pw.FontWeight.bold,
+                font: ttfBold,
+              ),
               textDirection: _detectTextDirection(companyName),
               maxLines: 1,
               overflow: pw.TextOverflow.clip,
@@ -540,7 +609,11 @@ class BarcodePrinterService {
             if (companyAddress != null && companyAddress.isNotEmpty)
               pw.Text(
                 companyAddress,
-                style: pw.TextStyle(fontSize: 4, font: ttf, color: PdfColors.grey700),
+                style: pw.TextStyle(
+                  fontSize: 4,
+                  font: ttf,
+                  color: PdfColors.grey700,
+                ),
                 textDirection: _detectTextDirection(companyAddress),
                 maxLines: 1,
                 overflow: pw.TextOverflow.clip,
@@ -548,7 +621,11 @@ class BarcodePrinterService {
             if (companyPhone != null && companyPhone.isNotEmpty)
               pw.Text(
                 companyPhone,
-                style: pw.TextStyle(fontSize: 4, font: ttf, color: PdfColors.grey700),
+                style: pw.TextStyle(
+                  fontSize: 4,
+                  font: ttf,
+                  color: PdfColors.grey700,
+                ),
                 textDirection: _detectTextDirection(companyPhone),
                 maxLines: 1,
                 overflow: pw.TextOverflow.clip,
@@ -558,17 +635,27 @@ class BarcodePrinterService {
           if (includeName && product.name.isNotEmpty) ...[
             pw.Text(
               product.name,
-              style: pw.TextStyle(fontSize: 6, fontWeight: pw.FontWeight.bold, font: ttfBold),
+              style: pw.TextStyle(
+                fontSize: 6,
+                fontWeight: pw.FontWeight.bold,
+                font: ttfBold,
+              ),
               maxLines: 1,
               overflow: pw.TextOverflow.clip,
               textDirection: textDirection,
             ),
             pw.SizedBox(height: 1),
           ],
-          if (includeVariantInfo && variantInfo != null && variantInfo.isNotEmpty) ...[
+          if (includeVariantInfo &&
+              variantInfo != null &&
+              variantInfo.isNotEmpty) ...[
             pw.Text(
               variantInfo,
-              style: pw.TextStyle(fontSize: 5, font: ttf, color: PdfColors.grey700),
+              style: pw.TextStyle(
+                fontSize: 5,
+                font: ttf,
+                color: PdfColors.grey700,
+              ),
               textDirection: _detectTextDirection(variantInfo),
               maxLines: 1,
               overflow: pw.TextOverflow.clip,
@@ -578,22 +665,28 @@ class BarcodePrinterService {
           pw.Expanded(
             child: includeBarcode
                 ? (product.barcode != null && product.barcode!.isNotEmpty
-                    ? pw.BarcodeWidget(
-                        data: product.barcode!,
-                        barcode: barcode,
-                        width: labelWidth - 4,
-                        height: labelHeight * 0.5,
-                        drawText: true,
-                        textStyle: pw.TextStyle(fontSize: 6, font: ttf),
-                      )
-                    : pw.Container())
+                      ? pw.BarcodeWidget(
+                          data: product.barcode!,
+                          barcode: barcode,
+                          width: labelWidth - 4,
+                          height: labelHeight * 0.5,
+                          drawText: true,
+                          textStyle: pw.TextStyle(fontSize: 6, font: ttf),
+                        )
+                      : pw.Container())
                 : pw.Container(),
           ),
-          if (includeSku && product.sku != null && product.sku!.trim().isNotEmpty) ...[
+          if (includeSku &&
+              product.sku != null &&
+              product.sku!.trim().isNotEmpty) ...[
             pw.SizedBox(height: 0.5),
             pw.Text(
               'SKU: ${product.sku}',
-              style: pw.TextStyle(fontSize: 4.5, font: ttf, color: PdfColors.grey700),
+              style: pw.TextStyle(
+                fontSize: 4.5,
+                font: ttf,
+                color: PdfColors.grey700,
+              ),
               maxLines: 1,
               overflow: pw.TextOverflow.clip,
               textDirection: _detectTextDirection(product.sku!),
@@ -603,7 +696,13 @@ class BarcodePrinterService {
             pw.SizedBox(height: 1),
             pw.Text(
               formattedPrice,
-              style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, font: ttfBold),
+              style: pw.TextStyle(
+                fontSize: 7,
+                fontWeight: pw.FontWeight.bold,
+                font: ttfBold,
+              ),
+              textAlign: pw.TextAlign.center,
+              textDirection: _detectTextDirection(formattedPrice),
             ),
           ],
         ],
@@ -636,16 +735,22 @@ class BarcodePrinterService {
     final safeIncludeCompanyContact = includeCompanyContact ?? false;
     final safeCopies = copies ?? 1;
     final doc = pw.Document();
-    
+
     // Load multilingual font (supports Arabic, English, French)
-    final fontData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-    final fontBoldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+    final fontData = await rootBundle.load(
+      'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+    );
+    final fontBoldData = await rootBundle.load(
+      'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+    );
     final ttf = pw.Font.ttf(fontData);
     final ttfBold = pw.Font.ttf(fontBoldData);
 
     // Get currency service for proper formatting
     final currencyService = sl<CurrencyService>();
-    final formattedPrice = currencyService.format(safeProduct.priceCents.toBigInt().toInt());
+    final formattedPrice = currencyService.format(
+      safeProduct.priceCents.toBigInt().toInt(),
+    );
 
     // Detect text direction based on content
     final textDirection = _detectTextDirection(safeProduct.name);
@@ -658,13 +763,19 @@ class BarcodePrinterService {
     for (int i = 0; i < safeCopies; i++) {
       doc.addPage(
         pw.Page(
-          pageFormat: PdfPageFormat(width, height, marginAll: 2 * PdfPageFormat.mm),
+          pageFormat: PdfPageFormat(
+            width,
+            height,
+            marginAll: 2 * PdfPageFormat.mm,
+          ),
           build: (pw.Context context) {
             return pw.Column(
               mainAxisAlignment: pw.MainAxisAlignment.center,
               crossAxisAlignment: pw.CrossAxisAlignment.center,
               children: [
-                if (safeIncludeCompanyName && companyName != null && companyName.isNotEmpty)
+                if (safeIncludeCompanyName &&
+                    companyName != null &&
+                    companyName.isNotEmpty)
                   pw.Text(
                     companyName,
                     style: pw.TextStyle(
@@ -676,7 +787,9 @@ class BarcodePrinterService {
                     overflow: pw.TextOverflow.clip,
                     textDirection: _detectTextDirection(companyName),
                   ),
-                if (safeIncludeCompanyName && companyName != null && companyName.isNotEmpty)
+                if (safeIncludeCompanyName &&
+                    companyName != null &&
+                    companyName.isNotEmpty)
                   pw.SizedBox(height: 1),
                 if (safeIncludeCompanyContact &&
                     ((companyAddress != null && companyAddress.isNotEmpty) ||
@@ -828,7 +941,10 @@ class BarcodePrinterService {
             companyPhone: companyPhone,
             copies: safeCopies,
           );
-    await Printing.sharePdf(bytes: pdfData, filename: 'Labels-${safeProduct.sku ?? safeProduct.id}.pdf');
+    await Printing.sharePdf(
+      bytes: pdfData,
+      filename: 'Labels-${safeProduct.sku ?? safeProduct.id}.pdf',
+    );
   }
 
   Future<void> shareLabelsPdfBatch({
@@ -838,6 +954,7 @@ class BarcodePrinterService {
     required double heightMm,
     required bool includeName,
     required bool includePrice,
+    required PriceDisplayMode priceDisplayMode,
     required bool includeBarcode,
     required bool includeSku,
     required bool includeCompanyName,
@@ -865,6 +982,7 @@ class BarcodePrinterService {
             heightMm: heightMm,
             includeName: includeName,
             includePrice: includePrice,
+            priceDisplayMode: priceDisplayMode,
             includeBarcode: includeBarcode,
             includeSku: includeSku,
             includeCompanyName: includeCompanyName,
@@ -885,6 +1003,7 @@ class BarcodePrinterService {
             heightMm: heightMm,
             includeName: includeName,
             includePrice: includePrice,
+            priceDisplayMode: priceDisplayMode,
             includeBarcode: includeBarcode,
             includeSku: includeSku,
             includeCompanyName: includeCompanyName,
@@ -905,6 +1024,7 @@ class BarcodePrinterService {
     required double heightMm,
     required bool includeName,
     required bool includePrice,
+    required PriceDisplayMode priceDisplayMode,
     required bool includeBarcode,
     required bool includeSku,
     required bool includeCompanyName,
@@ -931,6 +1051,7 @@ class BarcodePrinterService {
             heightMm: heightMm,
             includeName: includeName,
             includePrice: includePrice,
+            priceDisplayMode: priceDisplayMode,
             includeBarcode: includeBarcode,
             includeSku: includeSku,
             includeCompanyName: includeCompanyName,
@@ -951,6 +1072,7 @@ class BarcodePrinterService {
             heightMm: heightMm,
             includeName: includeName,
             includePrice: includePrice,
+            priceDisplayMode: priceDisplayMode,
             includeBarcode: includeBarcode,
             includeSku: includeSku,
             includeCompanyName: includeCompanyName,
@@ -967,6 +1089,80 @@ class BarcodePrinterService {
     );
   }
 
+  /// Prints labels directly to a paired Android Bluetooth Classic printer.
+  ///
+  /// The generated PDF pages are rasterized at 203 DPI, converted to a
+  /// monochrome TSPL BITMAP command, then sent over the printer's serial
+  /// RFCOMM profile. Rasterizing preserves Arabic text and the exact preview.
+  Future<void> printLabelsBluetoothBatch({
+    required String bluetoothAddress,
+    required List<({Product product, int copies, String? variantInfo})> jobs,
+    required Barcode barcode,
+    required double widthMm,
+    required double heightMm,
+    required bool includeName,
+    required bool includePrice,
+    required PriceDisplayMode priceDisplayMode,
+    required bool includeBarcode,
+    required bool includeSku,
+    required bool includeCompanyName,
+    required String? companyName,
+    required bool includeCompanyContact,
+    required String? companyAddress,
+    required String? companyPhone,
+    required bool includeVariantInfo,
+  }) async {
+    if (!isBluetoothPrintingSupported) {
+      throw UnsupportedError(
+        'Direct Bluetooth printing is available on Android only',
+      );
+    }
+    if (jobs.isEmpty) throw ArgumentError('No labels to print');
+
+    final printingInfo = await Printing.info();
+    if (!printingInfo.canRaster) {
+      throw UnsupportedError('PDF rasterization is unavailable on this device');
+    }
+
+    final pdfData = await _generateThermalPdfBatch(
+      jobs: jobs,
+      barcode: barcode,
+      widthMm: widthMm,
+      heightMm: heightMm,
+      includeName: includeName,
+      includePrice: includePrice,
+      priceDisplayMode: priceDisplayMode,
+      includeBarcode: includeBarcode,
+      includeSku: includeSku,
+      includeCompanyName: includeCompanyName,
+      companyName: companyName,
+      includeCompanyContact: includeCompanyContact,
+      companyAddress: companyAddress,
+      companyPhone: companyPhone,
+      includeVariantInfo: includeVariantInfo,
+    );
+
+    final output = BytesBuilder(copy: false);
+    await for (final page in Printing.raster(pdfData, dpi: 203)) {
+      output.add(
+        buildTsplBitmapCommand(
+          rgbaPixels: page.pixels,
+          pixelWidth: page.width,
+          pixelHeight: page.height,
+          widthMm: widthMm,
+          heightMm: heightMm,
+        ),
+      );
+    }
+
+    final bytes = output.takeBytes();
+    if (bytes.isEmpty) throw StateError('No label pages were generated');
+    await _bluetoothChannel.invokeMethod<void>('printRaw', {
+      'address': bluetoothAddress,
+      'data': bytes,
+    });
+  }
+
   Future<Uint8List> _generateThermalPdfBatch({
     required List<({Product product, int copies, String? variantInfo})> jobs,
     required Barcode barcode,
@@ -974,6 +1170,7 @@ class BarcodePrinterService {
     required double heightMm,
     required bool includeName,
     required bool includePrice,
+    required PriceDisplayMode priceDisplayMode,
     required bool includeBarcode,
     required bool includeSku,
     required bool includeCompanyName,
@@ -985,8 +1182,12 @@ class BarcodePrinterService {
   }) async {
     final doc = pw.Document();
 
-    final fontData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-    final fontBoldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+    final fontData = await rootBundle.load(
+      'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+    );
+    final fontBoldData = await rootBundle.load(
+      'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+    );
     final ttf = pw.Font.ttf(fontData);
     final ttfBold = pw.Font.ttf(fontBoldData);
 
@@ -996,19 +1197,31 @@ class BarcodePrinterService {
     final height = heightMm * PdfPageFormat.mm;
 
     for (final job in jobs) {
-      final formattedPrice = currencyService.format(job.product.priceCents.toBigInt().toInt());
+      final formattedPrice = formatBarcodePrice(
+        product: job.product,
+        mode: priceDisplayMode,
+        formatCurrency: currencyService.format,
+        retailLabel: 'barcode.retail_price_short'.tr(),
+        wholesaleLabel: 'barcode.wholesale_price_short'.tr(),
+      );
       final textDirection = _detectTextDirection(job.product.name);
 
       for (int i = 0; i < job.copies; i++) {
         doc.addPage(
           pw.Page(
-            pageFormat: PdfPageFormat(width, height, marginAll: 2 * PdfPageFormat.mm),
+            pageFormat: PdfPageFormat(
+              width,
+              height,
+              marginAll: 2 * PdfPageFormat.mm,
+            ),
             build: (pw.Context context) {
               return pw.Column(
                 mainAxisAlignment: pw.MainAxisAlignment.center,
                 crossAxisAlignment: pw.CrossAxisAlignment.center,
                 children: [
-                  if (includeCompanyName && companyName != null && companyName.isNotEmpty) ...[
+                  if (includeCompanyName &&
+                      companyName != null &&
+                      companyName.isNotEmpty) ...[
                     pw.Text(
                       companyName,
                       style: pw.TextStyle(
@@ -1024,7 +1237,8 @@ class BarcodePrinterService {
                   ],
                   if (includeCompanyContact &&
                       ((companyAddress != null && companyAddress.isNotEmpty) ||
-                          (companyPhone != null && companyPhone.isNotEmpty))) ...[
+                          (companyPhone != null &&
+                              companyPhone.isNotEmpty))) ...[
                     if (companyAddress != null && companyAddress.isNotEmpty)
                       pw.Text(
                         companyAddress,
@@ -1065,10 +1279,16 @@ class BarcodePrinterService {
                     ),
                     pw.SizedBox(height: 1),
                   ],
-                  if (includeVariantInfo && job.variantInfo != null && job.variantInfo!.isNotEmpty) ...[
+                  if (includeVariantInfo &&
+                      job.variantInfo != null &&
+                      job.variantInfo!.isNotEmpty) ...[
                     pw.Text(
                       job.variantInfo!,
-                      style: pw.TextStyle(fontSize: 6, font: ttf, color: PdfColors.grey700),
+                      style: pw.TextStyle(
+                        fontSize: 6,
+                        font: ttf,
+                        color: PdfColors.grey700,
+                      ),
                       maxLines: 1,
                       overflow: pw.TextOverflow.clip,
                       textDirection: _detectTextDirection(job.variantInfo!),
@@ -1097,6 +1317,8 @@ class BarcodePrinterService {
                         fontWeight: pw.FontWeight.bold,
                         font: ttfBold,
                       ),
+                      textAlign: pw.TextAlign.center,
+                      textDirection: _detectTextDirection(formattedPrice),
                     ),
                 ],
               );
@@ -1116,6 +1338,7 @@ class BarcodePrinterService {
     required double heightMm,
     required bool includeName,
     required bool includePrice,
+    required PriceDisplayMode priceDisplayMode,
     required bool includeBarcode,
     required bool includeSku,
     required bool includeCompanyName,
@@ -1131,8 +1354,12 @@ class BarcodePrinterService {
   }) async {
     final doc = pw.Document();
 
-    final fontData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-    final fontBoldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+    final fontData = await rootBundle.load(
+      'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+    );
+    final fontBoldData = await rootBundle.load(
+      'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+    );
     final ttf = pw.Font.ttf(fontData);
     final ttfBold = pw.Font.ttf(fontBoldData);
 
@@ -1149,18 +1376,28 @@ class BarcodePrinterService {
     final leftMargin = pageMarginMm * PdfPageFormat.mm;
     final rightMargin = pageMarginMm * PdfPageFormat.mm;
 
-    final availableHeight = a4HeightMm * PdfPageFormat.mm - (topMargin + bottomMargin);
+    final availableHeight =
+        a4HeightMm * PdfPageFormat.mm - (topMargin + bottomMargin);
     final labelWithVGap = labelHeight + vGap;
-    final labelsPerColumn = (availableHeight / labelWithVGap).floor().clamp(1, 20);
+    final labelsPerColumn = (availableHeight / labelWithVGap).floor().clamp(
+      1,
+      20,
+    );
     final labelsPerPage = labelsPerRow * labelsPerColumn;
 
-    final ranges = <({int start, int end, Product product, String? variantInfo})>[];
+    final ranges =
+        <({int start, int end, Product product, String? variantInfo})>[];
     int cursor = 0;
     for (final job in jobs) {
       if (job.copies <= 0) continue;
       final start = cursor;
       cursor += job.copies;
-      ranges.add((start: start, end: cursor, product: job.product, variantInfo: job.variantInfo));
+      ranges.add((
+        start: start,
+        end: cursor,
+        product: job.product,
+        variantInfo: job.variantInfo,
+      ));
     }
     final totalLabels = cursor;
     if (totalLabels <= 0) {
@@ -1179,7 +1416,9 @@ class BarcodePrinterService {
     int index = 0;
     while (index < totalLabels) {
       final pageStartIndex = index;
-      final labelsThisPage = (totalLabels - index) < labelsPerPage ? (totalLabels - index) : labelsPerPage;
+      final labelsThisPage = (totalLabels - index) < labelsPerPage
+          ? (totalLabels - index)
+          : labelsPerPage;
       final rows = (labelsThisPage / labelsPerRow).ceil();
 
       doc.addPage(
@@ -1196,7 +1435,8 @@ class BarcodePrinterService {
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: List.generate(rows, (rowIndex) {
                 final startIndex = rowIndex * labelsPerRow;
-                final labelsInRow = (startIndex + labelsPerRow) <= labelsThisPage
+                final labelsInRow =
+                    (startIndex + labelsPerRow) <= labelsThisPage
                     ? labelsPerRow
                     : labelsThisPage - startIndex;
 
@@ -1205,14 +1445,24 @@ class BarcodePrinterService {
                   child: pw.Row(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: List.generate(labelsInRow, (colIndex) {
-                      final globalIndex = pageStartIndex + startIndex + colIndex;
+                      final globalIndex =
+                          pageStartIndex + startIndex + colIndex;
                       final label = labelAt(globalIndex);
-                      final formattedPrice = currencyService
-                          .format(label.product.priceCents.toBigInt().toInt());
-                      final textDirection = _detectTextDirection(label.product.name);
+                      final formattedPrice = formatBarcodePrice(
+                        product: label.product,
+                        mode: priceDisplayMode,
+                        formatCurrency: currencyService.format,
+                        retailLabel: 'barcode.retail_price_short'.tr(),
+                        wholesaleLabel: 'barcode.wholesale_price_short'.tr(),
+                      );
+                      final textDirection = _detectTextDirection(
+                        label.product.name,
+                      );
 
                       return pw.Padding(
-                        padding: pw.EdgeInsets.only(right: colIndex < labelsInRow - 1 ? hGap : 0),
+                        padding: pw.EdgeInsets.only(
+                          right: colIndex < labelsInRow - 1 ? hGap : 0,
+                        ),
                         child: _buildLabelContent(
                           product: label.product,
                           barcode: barcode,
@@ -1274,21 +1524,27 @@ class BarcodePrinterService {
     required bool includeVariantInfo,
   }) async {
     final doc = pw.Document();
-    
+
     // Load multilingual fonts
-    final fontData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-    final fontBoldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+    final fontData = await rootBundle.load(
+      'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+    );
+    final fontBoldData = await rootBundle.load(
+      'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+    );
     final ttf = pw.Font.ttf(fontData);
     final ttfBold = pw.Font.ttf(fontBoldData);
 
     // Get currency service
     final currencyService = sl<CurrencyService>();
-    final formattedPrice = currencyService.format(product.priceCents.toBigInt().toInt());
+    final formattedPrice = currencyService.format(
+      product.priceCents.toBigInt().toInt(),
+    );
     final textDirection = _detectTextDirection(product.name);
 
     // A4 dimensions
     const a4HeightMm = 297.0;
-    
+
     // Convert to points
     final labelWidth = widthMm * PdfPageFormat.mm;
     final labelHeight = heightMm * PdfPageFormat.mm;
@@ -1300,15 +1556,21 @@ class BarcodePrinterService {
     final rightMargin = pageMarginMm * PdfPageFormat.mm;
 
     // Calculate labels per column
-    final availableHeight = a4HeightMm * PdfPageFormat.mm - (topMargin + bottomMargin);
+    final availableHeight =
+        a4HeightMm * PdfPageFormat.mm - (topMargin + bottomMargin);
     final labelWithVGap = labelHeight + vGap;
-    final labelsPerColumn = (availableHeight / labelWithVGap).floor().clamp(1, 20);
+    final labelsPerColumn = (availableHeight / labelWithVGap).floor().clamp(
+      1,
+      20,
+    );
     final labelsPerPage = labelsPerRow * labelsPerColumn;
 
     // Generate pages
     int remainingCopies = copies;
     while (remainingCopies > 0) {
-      final labelsThisPage = remainingCopies < labelsPerPage ? remainingCopies : labelsPerPage;
+      final labelsThisPage = remainingCopies < labelsPerPage
+          ? remainingCopies
+          : labelsPerPage;
       final rows = (labelsThisPage / labelsPerRow).ceil();
       doc.addPage(
         pw.Page(
@@ -1324,7 +1586,8 @@ class BarcodePrinterService {
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: List.generate(rows, (rowIndex) {
                 final startIndex = rowIndex * labelsPerRow;
-                final labelsInRow = (startIndex + labelsPerRow) <= labelsThisPage
+                final labelsInRow =
+                    (startIndex + labelsPerRow) <= labelsThisPage
                     ? labelsPerRow
                     : labelsThisPage - startIndex;
 
@@ -1334,7 +1597,9 @@ class BarcodePrinterService {
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: List.generate(labelsInRow, (colIndex) {
                       return pw.Padding(
-                        padding: pw.EdgeInsets.only(right: colIndex < labelsInRow - 1 ? hGap : 0),
+                        padding: pw.EdgeInsets.only(
+                          right: colIndex < labelsInRow - 1 ? hGap : 0,
+                        ),
                         child: _buildLabelContent(
                           product: product,
                           barcode: barcode,

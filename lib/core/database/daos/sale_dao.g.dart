@@ -10,6 +10,7 @@ mixin _$SaleDaoMixin on DatabaseAccessor<AppDatabase> {
   $UsersTable get users => attachedDatabase.users;
   $RolesTable get roles => attachedDatabase.roles;
   $EmployeesTable get employees => attachedDatabase.employees;
+  $CashierShiftsTable get cashierShifts => attachedDatabase.cashierShifts;
   $SalesTable get sales => attachedDatabase.sales;
   $ProductCategoriesTable get productCategories =>
       attachedDatabase.productCategories;
@@ -45,6 +46,8 @@ class SaleDaoManager {
       $$RolesTableTableManager(_db.attachedDatabase, _db.roles);
   $$EmployeesTableTableManager get employees =>
       $$EmployeesTableTableManager(_db.attachedDatabase, _db.employees);
+  $$CashierShiftsTableTableManager get cashierShifts =>
+      $$CashierShiftsTableTableManager(_db.attachedDatabase, _db.cashierShifts);
   $$SalesTableTableManager get sales =>
       $$SalesTableTableManager(_db.attachedDatabase, _db.sales);
   $$ProductCategoriesTableTableManager get productCategories =>

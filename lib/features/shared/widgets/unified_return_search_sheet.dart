@@ -148,6 +148,7 @@ class _UnifiedReturnSearchSheetState extends State<_UnifiedReturnSearchSheet> {
         '&variantLabel=${Uri.encodeComponent(prod.variantLabel ?? '')}'
         '&sku=${Uri.encodeComponent(prod.sku ?? '')}'
         '&price=${prod.lastPriceCents}'
+        '&measurementType=${prod.measurementType}'
         '&taxRateBps=${prod.taxRateBps}',
       );
     } else {
@@ -161,6 +162,7 @@ class _UnifiedReturnSearchSheetState extends State<_UnifiedReturnSearchSheet> {
         '&variantLabel=${Uri.encodeComponent(prod.variantLabel ?? '')}'
         '&sku=${Uri.encodeComponent(prod.sku ?? '')}'
         '&price=${prod.lastPriceCents}'
+        '&measurementType=${prod.measurementType}'
         '&taxRateBps=${prod.taxRateBps}',
       );
     }
@@ -204,7 +206,11 @@ class _UnifiedReturnSearchSheetState extends State<_UnifiedReturnSearchSheet> {
                     ),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(LucideIcons.undo2, size: 18, color: Colors.white),
+                  child: const Icon(
+                    LucideIcons.undo2,
+                    size: 18,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -215,14 +221,16 @@ class _UnifiedReturnSearchSheetState extends State<_UnifiedReturnSearchSheet> {
                         isSale
                             ? 'returns.create_sale_return'.tr()
                             : 'returns.create_purchase_return'.tr(),
-                        style: theme.textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       if (widget.partyName != null)
                         Text(
                           widget.partyName!,
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(color: cs.onSurfaceVariant),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
                         ),
                     ],
                   ),
@@ -251,21 +259,23 @@ class _UnifiedReturnSearchSheetState extends State<_UnifiedReturnSearchSheet> {
                         ),
                       )
                     : _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(LucideIcons.x, size: 16),
-                            onPressed: () {
-                              _searchController.clear();
-                              _onSearch('');
-                            },
-                          )
-                        : null,
+                    ? IconButton(
+                        icon: const Icon(LucideIcons.x, size: 16),
+                        onPressed: () {
+                          _searchController.clear();
+                          _onSearch('');
+                        },
+                      )
+                    : null,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
                 filled: true,
                 isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
               ),
               onChanged: _onSearch,
             ),
@@ -279,13 +289,18 @@ class _UnifiedReturnSearchSheetState extends State<_UnifiedReturnSearchSheet> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(LucideIcons.searchX,
-                            size: 40,
-                            color: cs.onSurfaceVariant.withValues(alpha: 0.3)),
+                        Icon(
+                          LucideIcons.searchX,
+                          size: 40,
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.3),
+                        ),
                         const SizedBox(height: 12),
-                        Text('common.no_results'.tr(),
-                            style: theme.textTheme.bodyMedium
-                                ?.copyWith(color: cs.onSurfaceVariant)),
+                        Text(
+                          'common.no_results'.tr(),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
                       ],
                     ),
                   )
@@ -299,11 +314,13 @@ class _UnifiedReturnSearchSheetState extends State<_UnifiedReturnSearchSheet> {
                           label: 'returns.invoices'.tr(),
                           color: cs.primary,
                         ),
-                        ..._invoices.map((inv) => _InvoiceTile(
-                              invoice: inv,
-                              currencyService: _currencyService,
-                              onTap: () => _onInvoiceTap(inv),
-                            )),
+                        ..._invoices.map(
+                          (inv) => _InvoiceTile(
+                            invoice: inv,
+                            currencyService: _currencyService,
+                            onTap: () => _onInvoiceTap(inv),
+                          ),
+                        ),
                         const SizedBox(height: 12),
                       ],
 
@@ -313,11 +330,13 @@ class _UnifiedReturnSearchSheetState extends State<_UnifiedReturnSearchSheet> {
                           label: 'returns.products'.tr(),
                           color: cs.secondary,
                         ),
-                        ..._products.map((prod) => _ProductTile(
-                              product: prod,
-                              currencyService: _currencyService,
-                              onTap: () => _onProductTap(prod),
-                            )),
+                        ..._products.map(
+                          (prod) => _ProductTile(
+                            product: prod,
+                            currencyService: _currencyService,
+                            onTap: () => _onProductTap(prod),
+                          ),
+                        ),
                       ],
 
                       const SizedBox(height: 24),
@@ -346,9 +365,9 @@ class _SectionHeader extends StatelessWidget {
       child: Text(
         label,
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
       ),
     );
   }
@@ -387,7 +406,8 @@ class _InvoiceTile extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                  color: cs.outlineVariant.withValues(alpha: 0.4)),
+                color: cs.outlineVariant.withValues(alpha: 0.4),
+              ),
             ),
             child: Row(
               children: [
@@ -397,27 +417,37 @@ class _InvoiceTile extends StatelessWidget {
                     color: cs.primaryContainer.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(LucideIcons.fileText,
-                      size: 18, color: cs.primary),
+                  child: Icon(
+                    LucideIcons.fileText,
+                    size: 18,
+                    color: cs.primary,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(invoice.invoiceNumber,
-                          style: theme.textTheme.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w600)),
+                      Text(
+                        invoice.invoiceNumber,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       Text(
                         '${DateFormat.yMMMd().format(invoice.date)} · ${currencyService.formatCents(invoice.totalCents)}',
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: cs.onSurfaceVariant),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
                 ),
-                Icon(LucideIcons.chevronRight,
-                    size: 16, color: cs.onSurfaceVariant),
+                Icon(
+                  LucideIcons.chevronRight,
+                  size: 16,
+                  color: cs.onSurfaceVariant,
+                ),
               ],
             ),
           ),
@@ -456,12 +486,12 @@ class _ProductTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           onTap: onTap,
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                  color: cs.outlineVariant.withValues(alpha: 0.4)),
+                color: cs.outlineVariant.withValues(alpha: 0.4),
+              ),
             ),
             child: Row(
               children: [
@@ -472,19 +502,24 @@ class _ProductTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
-                      product.variantId != null
-                          ? LucideIcons.layers
-                          : LucideIcons.package,
-                      size: 18, color: cs.secondary),
+                    product.variantId != null
+                        ? LucideIcons.layers
+                        : LucideIcons.package,
+                    size: 18,
+                    color: cs.secondary,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(product.productName,
-                          style: theme.textTheme.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w500)),
+                      Text(
+                        product.productName,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                       if (product.variantLabel != null)
                         Text(
                           product.variantLabel!,
@@ -495,8 +530,9 @@ class _ProductTile extends StatelessWidget {
                         ),
                       Text(
                         '${product.sku ?? ''} · ${currencyService.formatCents(product.lastPriceCents)}',
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: cs.onSurfaceVariant),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
@@ -507,7 +543,9 @@ class _ProductTile extends StatelessWidget {
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
                       decoration: BoxDecoration(
                         color: cs.primaryContainer.withValues(alpha: 0.4),
                         borderRadius: BorderRadius.circular(8),
@@ -522,13 +560,14 @@ class _ProductTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     IconButton(
-                      icon: Icon(LucideIcons.plus,
-                          size: 18, color: cs.primary),
+                      icon: Icon(LucideIcons.plus, size: 18, color: cs.primary),
                       onPressed: onTap,
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(
-                          minWidth: 32, minHeight: 32),
+                        minWidth: 32,
+                        minHeight: 32,
+                      ),
                     ),
                   ],
                 ),

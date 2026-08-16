@@ -88,14 +88,14 @@ class ExportUiData extends Equatable {
 
   @override
   List<Object?> get props => [
-        products,
-        selectedProductIds,
-        format,
-        categoryId,
-        supplierId,
-        activeOnly,
-        operationStatus,
-        progress,
-        lastExport,
-      ];
+    products,
+    selectedProductIds,
+    format,
+    categoryId,
+    supplierId,
+    activeOnly,
+    operationStatus,
+    progress,
+    lastExport,
+  ];
 }

@@ -35,9 +35,9 @@ class ProductRepositoryImpl implements ProductRepository {
     VariantLocalDatasource? variantDatasource,
     InventoryAdjustmentService? adjustmentService,
     FreeQuotaService? freeQuotaService,
-  })  : _variantDatasource = variantDatasource,
-        _adjustmentService = adjustmentService,
-        _freeQuotaService = freeQuotaService;
+  }) : _variantDatasource = variantDatasource,
+       _adjustmentService = adjustmentService,
+       _freeQuotaService = freeQuotaService;
 
   Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
 
@@ -163,6 +163,7 @@ class ProductRepositoryImpl implements ProductRepository {
     int salesTaxRateBps = 0,
     bool isActive = true,
     bool trackInventory = true,
+    String measurementType = 'piece',
     String costingMethod = 'wac',
     String inventoryTrackingType = 'standard',
   }) async {
@@ -191,7 +192,7 @@ class ProductRepositoryImpl implements ProductRepository {
         minQuantity: Value(minQuantity),
         categoryId: Value(categoryId),
         supplierId: Value(supplierId),
-        currencyId: Value(currencyId ?? 1), 
+        currencyId: Value(currencyId ?? 1),
         imagePath: Value(imagePath),
         hasVariants: Value(hasVariants),
         isTaxable: Value(isTaxable),
@@ -199,13 +200,18 @@ class ProductRepositoryImpl implements ProductRepository {
         salesTaxRateBps: Value(salesTaxRateBps),
         isActive: Value(isActive),
         trackInventory: Value(trackInventory),
+        measurementType: Value(measurementType),
         costingMethod: Value(costingMethod),
         inventoryTrackingType: Value(inventoryTrackingType),
       ),
     );
 
     // Audit: log product creation
-    _audit.logProductCreated(productId: productId, productName: name, userId: await _currentUserId());
+    await _audit.logProductCreated(
+      productId: productId,
+      productName: name,
+      userId: await _currentUserId(),
+    );
 
     // Phase B4 — bump the cumulative counter ONLY after a successful insert.
     // Pro users still increment so that, if their subscription lapses, the
@@ -218,7 +224,11 @@ class ProductRepositoryImpl implements ProductRepository {
   @override
   Future<bool> updateProduct(Product product) async {
     // Audit: log product update
-    _audit.logProductUpdated(productId: product.id, productName: product.name, userId: await _currentUserId());
+    _audit.logProductUpdated(
+      productId: product.id,
+      productName: product.name,
+      userId: await _currentUserId(),
+    );
 
     if (product is ProductModel) {
       return _datasource.updateProduct(product);
@@ -248,6 +258,7 @@ class ProductRepositoryImpl implements ProductRepository {
           salesTaxRateBps: product.salesTaxRateBps,
           isActive: product.isActive,
           trackInventory: product.trackInventory,
+          measurementType: product.measurementType,
           costingMethod: product.costingMethod,
         ),
       );
@@ -284,9 +295,35 @@ class ProductRepositoryImpl implements ProductRepository {
   }
 
   @override
+  Future<String?> setMeasurementType({
+    required int productId,
+    required String measurementType,
+  }) {
+    return _datasource.setMeasurementType(
+      productId: productId,
+      measurementType: measurementType,
+    );
+  }
+
+  @override
+  Future<String?> setTrackInventory({
+    required int productId,
+    required bool trackInventory,
+  }) {
+    return _datasource.setTrackInventory(
+      productId: productId,
+      trackInventory: trackInventory,
+    );
+  }
+
+  @override
   Future<int> deleteProduct(int id) async {
     // Audit: log product deletion (CRITICAL)
-    _audit.logProductDeleted(productId: id, productName: 'Product #$id', userId: await _currentUserId());
+    _audit.logProductDeleted(
+      productId: id,
+      productName: 'Product #$id',
+      userId: await _currentUserId(),
+    );
     return _datasource.deleteProduct(id);
   }
 
@@ -308,7 +345,8 @@ class ProductRepositoryImpl implements ProductRepository {
       // Deactivation is audit-relevant but less severe than hard delete.
       _audit.logProductUpdated(
         productId: productId,
-        productName: 'Product #$productId (deactivated, ${result.referenceCount} refs)',
+        productName:
+            'Product #$productId (deactivated, ${result.referenceCount} refs)',
         userId: await _currentUserId(),
       );
     }
@@ -372,7 +410,12 @@ class ProductRepositoryImpl implements ProductRepository {
   @override
   Future<List<int>> findProductIdsReferencedByOpenPurchases(
     List<int> productIds, {
-    Set<String> closedPurchaseStatuses = const {'closed', 'paid', 'completed', 'posted'},
+    Set<String> closedPurchaseStatuses = const {
+      'closed',
+      'paid',
+      'completed',
+      'posted',
+    },
   }) {
     return _datasource.findProductIdsReferencedByOpenPurchases(
       productIds,
@@ -381,30 +424,54 @@ class ProductRepositoryImpl implements ProductRepository {
   }
 
   @override
-  Future<Map<int, int>> bulkCreateProducts(List<BulkProductData> products) {
-    final companions = products.map((p) => db.ProductsCompanion(
-      name: Value(p.name),
-      nameAr: Value(p.nameAr),
-      nameFr: Value(p.nameFr),
-      sku: Value(p.sku),
-      barcode: Value(p.barcode),
-      costCents: Value(p.costCents),
-      priceCents: Value(p.priceCents),
-      wholesalePriceCents: Value(p.wholesalePriceCents),
-      stockQuantity: Value(p.stockQuantity),
-      minQuantity: Value(p.minQuantity),
-      categoryId: Value(p.categoryId),
-      supplierId: Value(p.supplierId),
-      currencyId: const Value(1),
-      hasVariants: Value(p.hasVariants),
-      isTaxable: Value(p.isTaxable),
-      purchaseTaxRateBps: Value(p.purchaseTaxRateBps),
-      salesTaxRateBps: Value(p.salesTaxRateBps),
-      isActive: Value(p.isActive),
-      trackInventory: Value(p.trackInventory),
-    )).toList();
+  Future<Map<int, int>> bulkCreateProducts(
+    List<BulkProductData> products,
+  ) async {
+    _freeQuotaService?.guardProductCreations(products.length);
+    final companions = products
+        .map(
+          (p) => db.ProductsCompanion(
+            name: Value(p.name),
+            nameAr: Value(p.nameAr),
+            nameFr: Value(p.nameFr),
+            sku: Value(p.sku),
+            barcode: Value(p.barcode),
+            costCents: Value(p.costCents),
+            priceCents: Value(p.priceCents),
+            wholesalePriceCents: Value(p.wholesalePriceCents),
+            stockQuantity: Value(p.stockQuantity),
+            minQuantity: Value(p.minQuantity),
+            categoryId: Value(p.categoryId),
+            supplierId: Value(p.supplierId),
+            currencyId: const Value(1),
+            hasVariants: Value(p.hasVariants),
+            isTaxable: Value(p.isTaxable),
+            purchaseTaxRateBps: Value(p.purchaseTaxRateBps),
+            salesTaxRateBps: Value(p.salesTaxRateBps),
+            isActive: Value(p.isActive),
+            trackInventory: Value(p.trackInventory),
+          ),
+        )
+        .toList();
 
-    return _datasource.bulkCreateProducts(companions);
+    final created = await _datasource.bulkCreateProducts(companions);
+
+    final userId = await _currentUserId();
+    final productByRow = {
+      for (final product in products) product.rowIndex: product,
+    };
+    for (final entry in created.entries) {
+      final product = productByRow[entry.key];
+      if (product == null) continue;
+      await _audit.logProductCreated(
+        productId: entry.value,
+        productName: product.name,
+        userId: userId,
+      );
+    }
+
+    await _freeQuotaService?.incrementProductsCreatedBy(created.length);
+    return created;
   }
 
   @override
@@ -414,8 +481,10 @@ class ProductRepositoryImpl implements ProductRepository {
     required List<PriceHistory> historyRecords,
   }) async {
     // Convert Product entities to ProductModel for datasource
-    final productModels = products.map((p) => ProductModel.fromEntity(p)).toList();
-    
+    final productModels = products
+        .map((p) => ProductModel.fromEntity(p))
+        .toList();
+
     await _datasource.bulkUpdatePricesWithHistory(
       products: productModels,
       priceChanges: priceChanges,
@@ -434,13 +503,23 @@ class ProductRepositoryImpl implements ProductRepository {
   }
 
   @override
-  Future<T> runInTransaction<T>(Future<T> Function() action) {
-    return _datasource.runInTransaction(action);
+  Future<T> runInTransaction<T>(Future<T> Function() action) async {
+    final quotaSnapshot = _freeQuotaService?.productsCreatedLifetime;
+    try {
+      return await _datasource.runInTransaction(action);
+    } catch (_) {
+      if (quotaSnapshot != null) {
+        await _freeQuotaService!.restoreProductsCreatedAfterRollback(
+          quotaSnapshot,
+        );
+      }
+      rethrow;
+    }
   }
 
   @override
   Stream<Map<int, ({int expiredQty, DateTime? nextExpiry})>>
-      watchExpirySummaries() {
+  watchExpirySummaries() {
     return _datasource.watchExpirySummaries();
   }
 }

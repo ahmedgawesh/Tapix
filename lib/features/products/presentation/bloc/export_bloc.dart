@@ -68,19 +68,21 @@ class ExportBloc extends RealtimeBloc<ExportUiData, ExportEvent> {
             final visibleIds = _products.map((p) => p.id).toSet();
             _selectedProductIds = _selectedProductIds.intersection(visibleIds);
 
-            add(RealtimeDataUpdated<ExportUiData>(
-              ExportUiData(
-                products: _products,
-                selectedProductIds: _selectedProductIds,
-                format: _format,
-                categoryId: _categoryId,
-                supplierId: _supplierId,
-                activeOnly: _activeOnly,
-                operationStatus: _operationStatus,
-                progress: _progress,
-                lastExport: _lastExport,
+            add(
+              RealtimeDataUpdated<ExportUiData>(
+                ExportUiData(
+                  products: _products,
+                  selectedProductIds: _selectedProductIds,
+                  format: _format,
+                  categoryId: _categoryId,
+                  supplierId: _supplierId,
+                  activeOnly: _activeOnly,
+                  operationStatus: _operationStatus,
+                  progress: _progress,
+                  lastExport: _lastExport,
+                ),
               ),
-            ));
+            );
           },
           onError: (Object e, StackTrace st) {
             add(RealtimeErrorOccurred(e, st));
@@ -149,22 +151,32 @@ class ExportBloc extends RealtimeBloc<ExportUiData, ExportEvent> {
       },
       tag: 'ExportBloc',
     );
-    
+
     try {
       _operationStatus = ExportOperationStatus.inProgress;
       _progress = null;
       _lastExport = null;
-      emit(RealtimeSuccess<ExportUiData>(data: currentData?.copyWith(
-            operationStatus: _operationStatus,
-            progress: _progress,
-            clearLastExport: true,
-          ) ?? ExportUiData.empty()));
+      emit(
+        RealtimeSuccess<ExportUiData>(
+          data:
+              currentData?.copyWith(
+                operationStatus: _operationStatus,
+                progress: _progress,
+                clearLastExport: true,
+              ) ??
+              ExportUiData.empty(),
+        ),
+      );
 
       Uint8List bytes;
       String filename;
-      
+
       if (format == ExportFormat.csv) {
-        LoggingService.serviceOperation('ExportService', 'exportToCSV', tag: 'ExportBloc');
+        LoggingService.serviceOperation(
+          'ExportService',
+          'exportToCSV',
+          tag: 'ExportBloc',
+        );
         final csv = await _exportService.exportToCSV(
           categoryId: categoryId,
           supplierId: supplierId,
@@ -174,7 +186,11 @@ class ExportBloc extends RealtimeBloc<ExportUiData, ExportEvent> {
         bytes = Uint8List.fromList(utf8.encode(csv));
         filename = 'products_export.csv';
       } else {
-        LoggingService.serviceOperation('ExportService', 'exportToExcel', tag: 'ExportBloc');
+        LoggingService.serviceOperation(
+          'ExportService',
+          'exportToExcel',
+          tag: 'ExportBloc',
+        );
         bytes = await _exportService.exportToExcel(
           categoryId: categoryId,
           supplierId: supplierId,
@@ -185,8 +201,13 @@ class ExportBloc extends RealtimeBloc<ExportUiData, ExportEvent> {
       }
 
       _operationStatus = ExportOperationStatus.success;
-      _lastExport = ExportPayload(format: format, action: action, bytes: bytes, filename: filename);
-      
+      _lastExport = ExportPayload(
+        format: format,
+        action: action,
+        bytes: bytes,
+        filename: filename,
+      );
+
       LoggingService.info(
         'Export completed successfully',
         params: {
@@ -196,7 +217,7 @@ class ExportBloc extends RealtimeBloc<ExportUiData, ExportEvent> {
         },
         tag: 'ExportBloc',
       );
-      
+
       emit(
         RealtimeSuccess<ExportUiData>(
           data: (currentData ?? ExportUiData.empty()).copyWith(
@@ -210,7 +231,7 @@ class ExportBloc extends RealtimeBloc<ExportUiData, ExportEvent> {
       _operationStatus = ExportOperationStatus.idle;
       _progress = null;
       _lastExport = null;
-      
+
       LoggingService.error(
         'Export failed',
         error: e,
@@ -223,7 +244,7 @@ class ExportBloc extends RealtimeBloc<ExportUiData, ExportEvent> {
         },
         tag: 'ExportBloc',
       );
-      
+
       add(RealtimeErrorOccurred(e, st));
     } finally {
       LoggingService.methodExit('_runExport', tag: 'ExportBloc');
@@ -235,9 +256,11 @@ class ExportBloc extends RealtimeBloc<ExportUiData, ExportEvent> {
     Emitter<RealtimeState<ExportUiData>> emit,
   ) {
     _format = event.format;
-    emit(RealtimeSuccess<ExportUiData>(
-      data: (currentData ?? ExportUiData.empty()).copyWith(format: _format),
-    ));
+    emit(
+      RealtimeSuccess<ExportUiData>(
+        data: (currentData ?? ExportUiData.empty()).copyWith(format: _format),
+      ),
+    );
   }
 
   void _onUpdateCategoryFilter(
@@ -245,9 +268,13 @@ class ExportBloc extends RealtimeBloc<ExportUiData, ExportEvent> {
     Emitter<RealtimeState<ExportUiData>> emit,
   ) {
     _categoryId = event.categoryId;
-    emit(RealtimeSuccess<ExportUiData>(
-      data: (currentData ?? ExportUiData.empty()).copyWith(categoryId: _categoryId),
-    ));
+    emit(
+      RealtimeSuccess<ExportUiData>(
+        data: (currentData ?? ExportUiData.empty()).copyWith(
+          categoryId: _categoryId,
+        ),
+      ),
+    );
     _subscribeProducts();
   }
 
@@ -256,9 +283,13 @@ class ExportBloc extends RealtimeBloc<ExportUiData, ExportEvent> {
     Emitter<RealtimeState<ExportUiData>> emit,
   ) {
     _supplierId = event.supplierId;
-    emit(RealtimeSuccess<ExportUiData>(
-      data: (currentData ?? ExportUiData.empty()).copyWith(supplierId: _supplierId),
-    ));
+    emit(
+      RealtimeSuccess<ExportUiData>(
+        data: (currentData ?? ExportUiData.empty()).copyWith(
+          supplierId: _supplierId,
+        ),
+      ),
+    );
     _subscribeProducts();
   }
 
@@ -267,9 +298,13 @@ class ExportBloc extends RealtimeBloc<ExportUiData, ExportEvent> {
     Emitter<RealtimeState<ExportUiData>> emit,
   ) {
     _activeOnly = event.activeOnly ?? true;
-    emit(RealtimeSuccess<ExportUiData>(
-      data: (currentData ?? ExportUiData.empty()).copyWith(activeOnly: _activeOnly),
-    ));
+    emit(
+      RealtimeSuccess<ExportUiData>(
+        data: (currentData ?? ExportUiData.empty()).copyWith(
+          activeOnly: _activeOnly,
+        ),
+      ),
+    );
     _subscribeProducts();
   }
 
@@ -280,13 +315,15 @@ class ExportBloc extends RealtimeBloc<ExportUiData, ExportEvent> {
     _operationStatus = ExportOperationStatus.idle;
     _progress = null;
     _lastExport = null;
-    emit(RealtimeSuccess<ExportUiData>(
-      data: (currentData ?? ExportUiData.empty()).copyWith(
-        operationStatus: _operationStatus,
-        progress: _progress,
-        clearLastExport: true,
+    emit(
+      RealtimeSuccess<ExportUiData>(
+        data: (currentData ?? ExportUiData.empty()).copyWith(
+          operationStatus: _operationStatus,
+          progress: _progress,
+          clearLastExport: true,
+        ),
       ),
-    ));
+    );
   }
 
   void _onToggleProductSelection(

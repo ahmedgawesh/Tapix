@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../services/customer_invoices_pdf_service.dart';
@@ -36,8 +37,10 @@ class _CustomerInvoicesReportView extends StatelessWidget {
       appBar: AppBar(
         title: Text('reports.customer_invoices_report'.tr()),
         actions: [
-          BlocBuilder<CustomerInvoicesReportBloc,
-              RealtimeState<CustomerInvoicesData>>(
+          BlocBuilder<
+            CustomerInvoicesReportBloc,
+            RealtimeState<CustomerInvoicesData>
+          >(
             builder: (context, state) {
               if (state is! RealtimeSuccess<CustomerInvoicesData>) {
                 return const SizedBox.shrink();
@@ -65,74 +68,84 @@ class _CustomerInvoicesReportView extends StatelessWidget {
           ),
         ],
       ),
-      body: BlocBuilder<CustomerInvoicesReportBloc,
-          RealtimeState<CustomerInvoicesData>>(
-        builder: (context, state) {
-          if (state is RealtimeLoading<CustomerInvoicesData>) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body:
+          BlocBuilder<
+            CustomerInvoicesReportBloc,
+            RealtimeState<CustomerInvoicesData>
+          >(
+            builder: (context, state) {
+              if (state is RealtimeLoading<CustomerInvoicesData>) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (state is RealtimeError<CustomerInvoicesData>) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline,
-                      size: 48, color: colorScheme.error),
-                  const SizedBox(height: 16),
-                  Text(state.error.toString(),
-                      style: theme.textTheme.bodyLarge),
-                ],
-              ),
-            );
-          }
-
-          if (state is RealtimeSuccess<CustomerInvoicesData>) {
-            final data = state.data;
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: SearchablePartySelector(
-                    labelText: 'reports.select_customer'.tr(),
-                    prefixIcon: LucideIcons.user,
-                    selectedId: data.customerId,
-                    onChanged: (id) => context
-                        .read<CustomerInvoicesReportBloc>()
-                        .add(CustomerInvoicesCustomerChanged(id)),
-                    options: data.customers
-                        .map((c) => SearchablePartyOption(
-                              id: c.id,
-                              name: c.name,
-                              phone: c.phone,
-                              balanceCents: c.balanceCents,
-                            ))
-                        .toList(),
+              if (state is RealtimeError<CustomerInvoicesData>) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        state.error.toString(),
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: DateRangeSelector(
-                    dateRange: data.dateRange,
-                    onChanged: (range) => context
-                        .read<CustomerInvoicesReportBloc>()
-                        .add(CustomerInvoicesDateRangeChanged(range)),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: data.customerId == null
-                      ? _buildPrompt(context)
-                      : _Content(data: data),
-                ),
-              ],
-            );
-          }
+                );
+              }
 
-          return const SizedBox.shrink();
-        },
-      ),
+              if (state is RealtimeSuccess<CustomerInvoicesData>) {
+                final data = state.data;
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: SearchablePartySelector(
+                        labelText: 'reports.select_customer'.tr(),
+                        prefixIcon: LucideIcons.user,
+                        selectedId: data.customerId,
+                        onChanged: (id) => context
+                            .read<CustomerInvoicesReportBloc>()
+                            .add(CustomerInvoicesCustomerChanged(id)),
+                        options: data.customers
+                            .map(
+                              (c) => SearchablePartyOption(
+                                id: c.id,
+                                name: c.name,
+                                phone: c.phone,
+                                balanceCents: c.balanceCents,
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: DateRangeSelector(
+                        dateRange: data.dateRange,
+                        onChanged: (range) => context
+                            .read<CustomerInvoicesReportBloc>()
+                            .add(CustomerInvoicesDateRangeChanged(range)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: data.customerId == null
+                          ? _buildPrompt(context)
+                          : _Content(data: data),
+                    ),
+                  ],
+                );
+              }
+
+              return const SizedBox.shrink();
+            },
+          ),
     );
   }
 
@@ -144,20 +157,26 @@ class _CustomerInvoicesReportView extends StatelessWidget {
         children: [
           Icon(LucideIcons.search, size: 48, color: theme.colorScheme.primary),
           const SizedBox(height: 16),
-          Text('reports.select_customer_prompt'.tr(),
-              style: theme.textTheme.bodyLarge),
+          Text(
+            'reports.select_customer_prompt'.tr(),
+            style: theme.textTheme.bodyLarge,
+          ),
           const SizedBox(height: 8),
-          Text('reports.customer_invoices_prompt_desc'.tr(),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              )),
+          Text(
+            'reports.customer_invoices_prompt_desc'.tr(),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );
   }
 
   Future<void> _printReport(
-      BuildContext context, CustomerInvoicesData data) async {
+    BuildContext context,
+    CustomerInvoicesData data,
+  ) async {
     await CustomerInvoicesPdfService.printReport(context: context, data: data);
     sl<AuditLogService>().log(
       entityType: 'report',
@@ -167,7 +186,9 @@ class _CustomerInvoicesReportView extends StatelessWidget {
   }
 
   Future<void> _shareReport(
-      BuildContext context, CustomerInvoicesData data) async {
+    BuildContext context,
+    CustomerInvoicesData data,
+  ) async {
     await CustomerInvoicesPdfService.shareReport(context: context, data: data);
     sl<AuditLogService>().log(
       entityType: 'report',
@@ -195,11 +216,16 @@ class _Content extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.fileText,
-                size: 48, color: theme.colorScheme.primary),
+            Icon(
+              LucideIcons.fileText,
+              size: 48,
+              color: theme.colorScheme.primary,
+            ),
             const SizedBox(height: 16),
-            Text('reports.no_invoices_in_period'.tr(),
-                style: theme.textTheme.bodyLarge),
+            Text(
+              'reports.no_invoices_in_period'.tr(),
+              style: theme.textTheme.bodyLarge,
+            ),
           ],
         ),
       );
@@ -217,26 +243,34 @@ class _Content extends StatelessWidget {
         const SizedBox(height: 12),
         InvoiceSummaryCardsRow(
           invoiceCount: data.invoiceCount,
-          totalQuantity: data.totalQuantity,
+          totalQuantityText: localizedQuantityTotals(
+            aggregateQuantityTotals(
+              data.invoices.expand((invoice) => invoice.items),
+              quantityOf: (item) => item.quantity,
+              measurementTypeOf: (item) => item.measurementType,
+            ),
+          ),
           totalAmountCents: data.totalAmountCents,
           totalDiscountCents: data.totalDiscountCents,
           totalPaidCents: data.totalPaidCents,
           cs: cs,
         ),
         const SizedBox(height: 16),
-        ...data.invoices.map((inv) => InvoiceCard(
-              invoiceNumber: inv.invoiceNumber,
-              referenceLabel: null,
-              date: inv.date,
-              items: inv.items,
-              subtotalCents: inv.subtotalCents,
-              discountCents: inv.discountCents,
-              taxCents: inv.taxCents,
-              totalCents: inv.totalCents,
-              paidAmountCents: inv.paidAmountCents,
-              paymentMethod: inv.paymentMethod,
-              cs: cs,
-            )),
+        ...data.invoices.map(
+          (inv) => InvoiceCard(
+            invoiceNumber: inv.invoiceNumber,
+            referenceLabel: null,
+            date: inv.date,
+            items: inv.items,
+            subtotalCents: inv.subtotalCents,
+            discountCents: inv.discountCents,
+            taxCents: inv.taxCents,
+            totalCents: inv.totalCents,
+            paidAmountCents: inv.paidAmountCents,
+            paymentMethod: inv.paymentMethod,
+            cs: cs,
+          ),
+        ),
       ],
     );
   }

@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import '../../../../core/database/app_database.dart' as db;
-import '../../../../core/database/daos/purchase_dao.dart' hide PurchaseDashboardStats;
+import '../../../../core/database/daos/purchase_dao.dart'
+    hide PurchaseDashboardStats;
 import '../../../../core/database/daos/adjustment_return_dao.dart';
 import '../../../../core/services/journal_entry_service.dart';
 import '../../domain/entities/purchase_entity.dart';
@@ -18,26 +19,46 @@ abstract class PurchaseLocalDatasource {
   Future<List<PurchaseItemEntity>> getPurchaseItems(int purchaseId);
   Stream<List<PurchaseItemEntity>> watchPurchaseItems(int purchaseId);
   Future<String> generatePurchaseNumber();
-  Future<int> createPurchase(db.PurchasesCompanion purchase, List<db.PurchaseItemsCompanion> items);
-  Future<bool> updatePurchase(int purchaseId, db.PurchasesCompanion purchase, List<db.PurchaseItemsCompanion> items);
+  Future<int> createPurchase(
+    db.PurchasesCompanion purchase,
+    List<db.PurchaseItemsCompanion> items,
+  );
+  Future<bool> updatePurchase(
+    int purchaseId,
+    db.PurchasesCompanion purchase,
+    List<db.PurchaseItemsCompanion> items,
+  );
   Future<void> postPurchase(int purchaseId);
-  Future<void> voidPurchase(int purchaseId,
-      {JournalEntryService? journalEntryService, int? userId});
+  Future<void> voidPurchase(
+    int purchaseId, {
+    JournalEntryService? journalEntryService,
+    int? userId,
+  });
   Future<int> deletePurchase(int purchaseId);
   Future<bool> updatePurchaseStatus(int purchaseId, String status);
   Stream<PurchaseDashboardStats> watchDashboardStats();
 
   // Returns
   Stream<List<PurchaseReturnEntity>> watchAllPurchaseReturns();
-  Stream<List<PurchaseReturnEntity>> watchPurchaseReturnsByPurchase(int purchaseId);
+  Stream<List<PurchaseReturnEntity>> watchPurchaseReturnsByPurchase(
+    int purchaseId,
+  );
   Future<List<PurchaseReturnEntity>> getPurchaseReturns(int purchaseId);
   Future<PurchaseReturnEntity?> getPurchaseReturnById(int id);
   Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItems(int returnId);
-  Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItemsWithDetails(int returnId);
+  Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItemsWithDetails(
+    int returnId,
+  );
   Future<String> generateReturnNumber();
-  Future<int> createPurchaseReturn(db.PurchaseReturnsCompanion returnData, List<db.PurchaseReturnItemsCompanion> items);
+  Future<int> createPurchaseReturn(
+    db.PurchaseReturnsCompanion returnData,
+    List<db.PurchaseReturnItemsCompanion> items,
+  );
   Future<void> updatePurchaseReturnTotals(int returnId);
-  Future<void> postPurchaseReturn(int returnId, {bool allowNegativeStock = false});
+  Future<void> postPurchaseReturn(
+    int returnId, {
+    bool allowNegativeStock = false,
+  });
   Future<void> voidPurchaseReturn(int returnId);
 
   // Payments
@@ -111,7 +132,9 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
   Stream<List<PurchaseItemEntity>> watchPurchaseItems(int purchaseId) {
     return _dao
         .watchPurchaseItemsWithDetails(purchaseId)
-        .map((items) => items.map(PurchaseItemModel.fromDriftWithDetails).toList());
+        .map(
+          (items) => items.map(PurchaseItemModel.fromDriftWithDetails).toList(),
+        );
   }
 
   @override
@@ -120,7 +143,10 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
   }
 
   @override
-  Future<int> createPurchase(db.PurchasesCompanion purchase, List<db.PurchaseItemsCompanion> items) {
+  Future<int> createPurchase(
+    db.PurchasesCompanion purchase,
+    List<db.PurchaseItemsCompanion> items,
+  ) {
     return _dao.createPurchase(purchase, items);
   }
 
@@ -168,15 +194,17 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
 
   @override
   Stream<PurchaseDashboardStats> watchDashboardStats() {
-    return _dao.watchDashboardStats().map((stats) => PurchaseDashboardStats(
-          totalCount: stats.totalCount,
-          draftCount: stats.draftCount,
-          postedCount: stats.postedCount,
-          totalPayableCents: stats.totalPayableCents,
-          totalPaidCents: stats.totalPaidCents,
-          overdueCount: stats.overdueCount,
-          returnsCount: stats.returnsCount,
-        ));
+    return _dao.watchDashboardStats().map(
+      (stats) => PurchaseDashboardStats(
+        totalCount: stats.totalCount,
+        draftCount: stats.draftCount,
+        postedCount: stats.postedCount,
+        totalPayableCents: stats.totalPayableCents,
+        totalPaidCents: stats.totalPaidCents,
+        overdueCount: stats.overdueCount,
+        returnsCount: stats.returnsCount,
+      ),
+    );
   }
 
   // ==================== RETURNS ====================
@@ -194,11 +222,23 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
 
     final controller = StreamController<List<PurchaseReturnEntity>>.broadcast();
     final sub1 = _dao.watchAllPurchaseReturnsWithParty().listen((rows) {
-      lastLinked = rows.map((r) => PurchaseReturnModel.fromDriftWithParty(r) as PurchaseReturnEntity).toList();
+      lastLinked = rows
+          .map(
+            (r) =>
+                PurchaseReturnModel.fromDriftWithParty(r)
+                    as PurchaseReturnEntity,
+          )
+          .toList();
       controller.add(merge());
     });
     final sub2 = _adjDao.watchAllPurchaseAdjReturnsWithParty().listen((rows) {
-      lastAdj = rows.map((a) => PurchaseReturnModel.fromAdjustmentWithParty(a) as PurchaseReturnEntity).toList();
+      lastAdj = rows
+          .map(
+            (a) =>
+                PurchaseReturnModel.fromAdjustmentWithParty(a)
+                    as PurchaseReturnEntity,
+          )
+          .toList();
       controller.add(merge());
     });
     controller.onCancel = () {
@@ -219,7 +259,9 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
       lastLinked = data;
       controller.add({...lastLinked, ...lastAdj});
     });
-    final sub2 = _adjDao.watchPurchaseAdjReturnProductSearchTerms().listen((data) {
+    final sub2 = _adjDao.watchPurchaseAdjReturnProductSearchTerms().listen((
+      data,
+    ) {
       lastAdj = data;
       controller.add({...lastLinked, ...lastAdj});
     });
@@ -232,7 +274,9 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
   }
 
   @override
-  Stream<List<PurchaseReturnEntity>> watchPurchaseReturnsByPurchase(int purchaseId) {
+  Stream<List<PurchaseReturnEntity>> watchPurchaseReturnsByPurchase(
+    int purchaseId,
+  ) {
     // Filter from all returns by purchaseId
     return _dao.watchAllPurchaseReturns().map(
       (rows) => rows
@@ -258,17 +302,24 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
   }
 
   @override
-  Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItems(int returnId) {
+  Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItems(
+    int returnId,
+  ) {
     return _dao
         .watchPurchaseReturnItems(returnId)
         .map((items) => items.map(PurchaseReturnItemModel.fromDrift).toList());
   }
 
   @override
-  Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItemsWithDetails(int returnId) {
+  Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItemsWithDetails(
+    int returnId,
+  ) {
     return _dao
         .watchPurchaseReturnItemsWithDetails(returnId)
-        .map((items) => items.map(PurchaseReturnItemModel.fromDriftWithDetails).toList());
+        .map(
+          (items) =>
+              items.map(PurchaseReturnItemModel.fromDriftWithDetails).toList(),
+        );
   }
 
   @override
@@ -290,8 +341,14 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
   }
 
   @override
-  Future<void> postPurchaseReturn(int returnId, {bool allowNegativeStock = false}) {
-    return _dao.postPurchaseReturn(returnId, allowNegativeStock: allowNegativeStock);
+  Future<void> postPurchaseReturn(
+    int returnId, {
+    bool allowNegativeStock = false,
+  }) {
+    return _dao.postPurchaseReturn(
+      returnId,
+      allowNegativeStock: allowNegativeStock,
+    );
   }
 
   @override
@@ -309,7 +366,9 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
   }
 
   @override
-  Future<List<PurchasePaymentEntity>> getPurchasePayments(int purchaseId) async {
+  Future<List<PurchasePaymentEntity>> getPurchasePayments(
+    int purchaseId,
+  ) async {
     final payments = await _dao.getPurchasePayments(purchaseId);
     return payments.map(PurchasePaymentModel.fromDrift).toList();
   }

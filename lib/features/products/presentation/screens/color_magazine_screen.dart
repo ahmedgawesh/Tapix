@@ -83,9 +83,11 @@ class _ColorMagazineScreenState extends State<ColorMagazineScreen> {
     final q = _query.trim().toLowerCase();
     if (q.isEmpty) return _colors;
     return _colors
-        .where((c) =>
-            (c['name'] ?? '').toLowerCase().contains(q) ||
-            (c['hex'] ?? '').toLowerCase().contains(q))
+        .where(
+          (c) =>
+              (c['name'] ?? '').toLowerCase().contains(q) ||
+              (c['hex'] ?? '').toLowerCase().contains(q),
+        )
         .toList();
   }
 
@@ -98,9 +100,7 @@ class _ColorMagazineScreenState extends State<ColorMagazineScreen> {
     await Clipboard.setData(ClipboardData(text: hex));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('colors.magazine.copied'.tr(args: [hex])),
-      ),
+      SnackBar(content: Text('colors.magazine.copied'.tr(args: [hex]))),
     );
   }
 
@@ -109,15 +109,14 @@ class _ColorMagazineScreenState extends State<ColorMagazineScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final items = _filtered;
     final isDesktop = MediaQuery.of(context).size.width >= 1024;
-    final isTablet = MediaQuery.of(context).size.width >= 600 &&
+    final isTablet =
+        MediaQuery.of(context).size.width >= 600 &&
         MediaQuery.of(context).size.width < 1024;
 
     final crossAxisCount = isDesktop ? 5 : (isTablet ? 4 : 2);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('colors.magazine.title'.tr()),
-      ),
+      appBar: AppBar(title: Text('colors.magazine.title'.tr())),
       body: SafeArea(
         child: Column(
           children: [
@@ -167,7 +166,8 @@ class _ColorMagazineScreenState extends State<ColorMagazineScreen> {
                         final name = item['name'] ?? '';
                         final color = _parseHex(hex);
 
-                        final onColor = ThemeData.estimateBrightnessForColor(color) ==
+                        final onColor =
+                            ThemeData.estimateBrightnessForColor(color) ==
                                 Brightness.dark
                             ? Colors.white
                             : Colors.black;
@@ -180,7 +180,9 @@ class _ColorMagazineScreenState extends State<ColorMagazineScreen> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                               side: BorderSide(
-                                color: colorScheme.outline.withValues(alpha: 0.2),
+                                color: colorScheme.outline.withValues(
+                                  alpha: 0.2,
+                                ),
                               ),
                             ),
                             child: Padding(
@@ -194,7 +196,9 @@ class _ColorMagazineScreenState extends State<ColorMagazineScreen> {
                                         color: color,
                                         borderRadius: BorderRadius.circular(14),
                                         border: Border.all(
-                                          color: colorScheme.outline.withValues(alpha: 0.2),
+                                          color: colorScheme.outline.withValues(
+                                            alpha: 0.2,
+                                          ),
                                         ),
                                       ),
                                       child: Center(

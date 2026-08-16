@@ -17,7 +17,7 @@
 //   - discount  =  Discount.resolve(base = subtotal)      (% base = subtotal)
 //   - net       =  max(0, subtotal − discount)
 //   - tax       =  TaxCalculationService.calculateTax(net, rate, inclusive)
-//   - total     =  net + tax
+//   - total     =  net + tax (exclusive), or net (inclusive)
 //
 //   ⚠ The percent-discount base is **always the subtotal (pre-tax)**, never
 //   subtotal+tax. This is the documented invariant guarded by tests and is
@@ -37,6 +37,11 @@ class LineItemPricingInput {
   /// quantities; negation happens at journal-posting time.
   final int quantity;
 
+  /// Number of stored quantity units that make one priced unit. Count items
+  /// use 1; measured products use 1000 (e.g. 250 g is quantity=250 while
+  /// [unitPrice] remains the price per kilogram).
+  final int quantityScale;
+
   /// Optional per-line discount.
   final Discount discount;
 
@@ -50,6 +55,7 @@ class LineItemPricingInput {
   const LineItemPricingInput({
     required this.unitPrice,
     required this.quantity,
+    this.quantityScale = 1,
     this.discount = Discount.none,
     required this.isTaxable,
     required this.productTaxRateBps,
@@ -70,7 +76,7 @@ class LineItemPricingResult {
   /// Tax computed by [TaxCalculationService.calculateTax] over [net].
   final Money tax;
 
-  /// `net + tax`.
+  /// `net + tax` for exclusive pricing, or `net` for inclusive pricing.
   final Money total;
 
   /// Tax rate in bps actually used (may differ from product rate when
@@ -113,8 +119,16 @@ class LineItemPricingEngine {
         'LineItemPricingEngine: quantity must be >= 0, got ${input.quantity}',
       );
     }
+    if (input.quantityScale <= 0) {
+      throw ArgumentError(
+        'LineItemPricingEngine: quantityScale must be > 0, got '
+        '${input.quantityScale}',
+      );
+    }
 
-    final subtotal = (input.unitPrice * input.quantity).round(discountRounding);
+    final subtotal = input.unitPrice
+        .multiplyRatio(input.quantity, input.quantityScale)
+        .round(discountRounding);
     final discount = input.discount.resolve(subtotal, mode: discountRounding);
     final net = (subtotal - discount).clampNonNegative();
 
@@ -137,7 +151,13 @@ class LineItemPricingEngine {
       }
     }
 
-    final total = net + tax;
+    final total = Money.fromDecimalCents(
+      TaxCalculationService.composeTotal(
+        netCents: net.decimalCents,
+        taxCents: tax.decimalCents,
+        taxInclusivePricing: taxInclusivePricing,
+      ),
+    );
 
     return LineItemPricingResult(
       subtotal: subtotal,
@@ -155,11 +175,16 @@ class LineItemPricingEngine {
   static Money resolveDiscount({
     required Money unitPrice,
     required int quantity,
+    int quantityScale = 1,
     required Discount discount,
     MoneyRoundingMode mode = MoneyRoundingMode.halfUp,
   }) {
-    final subtotal = (unitPrice * quantity).round(mode);
+    if (quantityScale <= 0) {
+      throw ArgumentError.value(quantityScale, 'quantityScale');
+    }
+    final subtotal = unitPrice
+        .multiplyRatio(quantity, quantityScale)
+        .round(mode);
     return discount.resolve(subtotal, mode: mode);
   }
 }
-

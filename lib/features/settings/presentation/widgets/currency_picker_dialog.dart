@@ -119,8 +119,13 @@ class _CurrencyPickerDialogState extends State<CurrencyPickerDialog> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   filled: true,
-                  fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  fillColor: colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.3,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                 ),
                 onChanged: (value) => setState(() => _searchQuery = value),
               ),
@@ -144,7 +149,9 @@ class _CurrencyPickerDialogState extends State<CurrencyPickerDialog> {
                           Icon(
                             LucideIcons.searchX,
                             size: 48,
-                            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                            color: colorScheme.onSurfaceVariant.withValues(
+                              alpha: 0.5,
+                            ),
                           ),
                           const SizedBox(height: 16),
                           Text(
@@ -155,7 +162,8 @@ class _CurrencyPickerDialogState extends State<CurrencyPickerDialog> {
                           ),
                           const SizedBox(height: 12),
                           FilledButton.tonalIcon(
-                            onPressed: () => _showAddCustomCurrencyDialog(context),
+                            onPressed: () =>
+                                _showAddCustomCurrencyDialog(context),
                             icon: const Icon(LucideIcons.plus),
                             label: Text('currency_picker.add_custom'.tr()),
                           ),
@@ -172,7 +180,8 @@ class _CurrencyPickerDialogState extends State<CurrencyPickerDialog> {
                       final isSelected = currency.code == currentCurrency.code;
                       final translatedName = 'currency.${currency.code}'.tr();
                       // If no translation found, use the English name
-                      final displayName = translatedName == 'currency.${currency.code}'
+                      final displayName =
+                          translatedName == 'currency.${currency.code}'
                           ? currency.name
                           : translatedName;
 
@@ -184,7 +193,8 @@ class _CurrencyPickerDialogState extends State<CurrencyPickerDialog> {
                           decoration: BoxDecoration(
                             color: isSelected
                                 ? colorScheme.primaryContainer
-                                : colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                                : colorScheme.surfaceContainerHighest
+                                      .withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -201,7 +211,9 @@ class _CurrencyPickerDialogState extends State<CurrencyPickerDialog> {
                         title: Text(
                           displayName,
                           style: TextStyle(
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                             color: isSelected ? colorScheme.primary : null,
                           ),
                         ),
@@ -211,7 +223,10 @@ class _CurrencyPickerDialogState extends State<CurrencyPickerDialog> {
                             if (currency.isCustom) ...[
                               const SizedBox(width: 8),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 1,
+                                ),
                                 decoration: BoxDecoration(
                                   color: colorScheme.tertiaryContainer,
                                   borderRadius: BorderRadius.circular(4),
@@ -227,11 +242,16 @@ class _CurrencyPickerDialogState extends State<CurrencyPickerDialog> {
                           ],
                         ),
                         trailing: isSelected
-                            ? Icon(LucideIcons.check, color: colorScheme.primary)
+                            ? Icon(
+                                LucideIcons.check,
+                                color: colorScheme.primary,
+                              )
                             : null,
                         selected: isSelected,
                         onTap: () {
-                          context.read<CurrencyBloc>().add(CurrencyChanged(currency.code));
+                          context.read<CurrencyBloc>().add(
+                            CurrencyChanged(currency.code),
+                          );
                           Navigator.of(context).pop();
                         },
                       );
@@ -267,7 +287,8 @@ class _AddCustomCurrencyDialog extends StatefulWidget {
   const _AddCustomCurrencyDialog();
 
   @override
-  State<_AddCustomCurrencyDialog> createState() => _AddCustomCurrencyDialogState();
+  State<_AddCustomCurrencyDialog> createState() =>
+      _AddCustomCurrencyDialogState();
 }
 
 class _AddCustomCurrencyDialogState extends State<_AddCustomCurrencyDialog> {
@@ -362,10 +383,7 @@ class _AddCustomCurrencyDialogState extends State<_AddCustomCurrencyDialog> {
                   border: const OutlineInputBorder(),
                 ),
                 items: [0, 1, 2, 3].map((d) {
-                  return DropdownMenuItem(
-                    value: d,
-                    child: Text('$d'),
-                  );
+                  return DropdownMenuItem(value: d, child: Text('$d'));
                 }).toList(),
                 onChanged: (value) {
                   if (value != null) setState(() => _decimalDigits = value);
@@ -398,7 +416,9 @@ class _AddCustomCurrencyDialogState extends State<_AddCustomCurrencyDialog> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.3,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Column(
@@ -438,7 +458,9 @@ class _AddCustomCurrencyDialogState extends State<_AddCustomCurrencyDialog> {
   }
 
   String _buildPreview() {
-    final symbol = _symbolController.text.isEmpty ? '?' : _symbolController.text;
+    final symbol = _symbolController.text.isEmpty
+        ? '?'
+        : _symbolController.text;
     final amount = _decimalDigits == 0
         ? '1,234'
         : '1,234.${'0' * _decimalDigits}';

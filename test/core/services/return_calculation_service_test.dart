@@ -36,23 +36,26 @@ void main() {
       expect(result.refundCents, 5000 - 500 + 675);
     });
 
-    test('single unit return from multi-unit uses truncating integer division', () {
-      final result = ReturnCalculationService.computeProportionalReturn(
-        originalQuantity: 3,
-        returnQuantity: 1,
-        originalSubtotalCents: 100,
-        originalDiscountCents: 10,
-        originalTaxCents: 15,
-      );
-      // 100 * 1 ~/ 3 = 33
-      expect(result.subtotalCents, 33);
-      // 10 * 1 ~/ 3 = 3
-      expect(result.discountCents, 3);
-      // 15 * 1 ~/ 3 = 5
-      expect(result.taxCents, 5);
-      // refund = 33 - 3 + 5 = 35
-      expect(result.refundCents, 35);
-    });
+    test(
+      'single unit return from multi-unit uses truncating integer division',
+      () {
+        final result = ReturnCalculationService.computeProportionalReturn(
+          originalQuantity: 3,
+          returnQuantity: 1,
+          originalSubtotalCents: 100,
+          originalDiscountCents: 10,
+          originalTaxCents: 15,
+        );
+        // 100 * 1 ~/ 3 = 33
+        expect(result.subtotalCents, 33);
+        // 10 * 1 ~/ 3 = 3
+        expect(result.discountCents, 3);
+        // 15 * 1 ~/ 3 = 5
+        expect(result.taxCents, 5);
+        // refund = 33 - 3 + 5 = 35
+        expect(result.refundCents, 35);
+      },
+    );
 
     test('return qty of 0 yields all zeroes', () {
       final result = ReturnCalculationService.computeProportionalReturn(
@@ -138,6 +141,83 @@ void main() {
         originalTaxCents: 60,
       );
       expect(result.refundCents, 500 - 100 + 60);
+    });
+
+    test('sequential linked returns preserve every original cent', () {
+      var history = LinkedReturnHistory.zero;
+
+      for (var index = 0; index < 3; index++) {
+        final result = ReturnCalculationService.computeProportionalReturn(
+          originalQuantity: 3,
+          returnQuantity: 1,
+          originalSubtotalCents: 100,
+          originalDiscountCents: 10,
+          originalTaxCents: 14,
+          previousLinkedHistory: history,
+        );
+        history = history.add(result, 1);
+      }
+
+      expect(history.quantity, 3);
+      expect(history.subtotalCents, 100);
+      expect(history.discountCents, 10);
+      expect(history.taxCents, 14);
+      expect(history.refundCents, 104);
+    });
+
+    test(
+      'inclusive linked return extracts tax without adding it to refund',
+      () {
+        final result = ReturnCalculationService.computeProportionalReturn(
+          originalQuantity: 1,
+          returnQuantity: 1,
+          originalSubtotalCents: 11500,
+          originalDiscountCents: 0,
+          originalTaxCents: 1500,
+          taxInclusivePricing: true,
+        );
+
+        expect(result.subtotalCents, 11500);
+        expect(result.taxCents, 1500);
+        expect(result.refundCents, 11500);
+      },
+    );
+
+    test('adjustment quantity is not part of linked financial history', () {
+      // One unit was returned as an independent adjustment. The linked path
+      // receives only its own one-third allocation, not two-thirds.
+      final result = ReturnCalculationService.computeProportionalReturn(
+        originalQuantity: 3,
+        returnQuantity: 1,
+        originalSubtotalCents: 100,
+        originalDiscountCents: 10,
+        originalTaxCents: 14,
+      );
+
+      expect(result.subtotalCents, 33);
+      expect(result.discountCents, 3);
+      expect(result.taxCents, 4);
+      expect(result.refundCents, 34);
+    });
+
+    test('rejects linked quantities above the original invoice quantity', () {
+      expect(
+        () => ReturnCalculationService.computeProportionalReturn(
+          originalQuantity: 3,
+          returnQuantity: 2,
+          originalSubtotalCents: 300,
+          originalDiscountCents: 0,
+          originalTaxCents: 0,
+          previousLinkedHistory: const LinkedReturnHistory(
+            quantity: 2,
+            subtotalCents: 200,
+            discountCents: 0,
+            taxCents: 0,
+            refundCents: 200,
+          ),
+        ),
+        throwsArgumentError,
+      );
     });
   });
 }

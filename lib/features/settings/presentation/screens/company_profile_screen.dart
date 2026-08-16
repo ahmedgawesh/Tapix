@@ -89,9 +89,9 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
       await _service.saveProfile(profile);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('settings.company.saved'.tr())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('settings.company.saved'.tr())));
 
       if (context.canPop()) {
         context.pop();
@@ -102,9 +102,9 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
       debugPrint('CompanyProfileScreen: failed to save company profile: $e');
       debugPrintStack(stackTrace: st);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${'common.failed'.tr()}: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('${'common.failed'.tr()}: $e')));
     } finally {
       if (mounted) {
         setState(() {
@@ -135,9 +135,9 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${'common.failed'.tr()}: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('${'common.failed'.tr()}: $e')));
     }
   }
 
@@ -150,7 +150,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Scaffold(
       backgroundColor: colorScheme.surface,
       appBar: AppBar(
@@ -191,18 +191,23 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
                                         height: 80,
                                         decoration: BoxDecoration(
                                           shape: BoxShape.circle,
-                                          color: colorScheme.surfaceContainerHighest,
-                                          gradient: _logoBase64 != null 
+                                          color: colorScheme
+                                              .surfaceContainerHighest,
+                                          gradient: _logoBase64 != null
                                               ? null
                                               : LinearGradient(
                                                   colors: [
-                                                    colorScheme.primary.withValues(alpha: 0.1),
-                                                    colorScheme.primary.withValues(alpha: 0.2),
+                                                    colorScheme.primary
+                                                        .withValues(alpha: 0.1),
+                                                    colorScheme.primary
+                                                        .withValues(alpha: 0.2),
                                                   ],
                                                 ),
                                         ),
                                         child: ClipOval(
-                                          child: (_logoBase64 == null || _logoBase64!.isEmpty)
+                                          child:
+                                              (_logoBase64 == null ||
+                                                  _logoBase64!.isEmpty)
                                               ? Icon(
                                                   LucideIcons.building2,
                                                   size: 40,
@@ -230,7 +235,9 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
                                           ),
                                           child: InkWell(
                                             onTap: _pickLogo,
-                                            borderRadius: BorderRadius.circular(14),
+                                            borderRadius: BorderRadius.circular(
+                                              14,
+                                            ),
                                             child: Icon(
                                               LucideIcons.camera,
                                               size: 16,
@@ -248,9 +255,12 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
                                   children: [
                                     Text(
                                       'settings.company.logo'.tr(),
-                                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                     ),
                                     const SizedBox(height: 8),
                                     Wrap(
@@ -259,19 +269,33 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
                                       children: [
                                         OutlinedButton.icon(
                                           onPressed: _pickLogo,
-                                          icon: const Icon(LucideIcons.upload, size: 16),
-                                          label: Text('settings.company.choose_logo'.tr()),
+                                          icon: const Icon(
+                                            LucideIcons.upload,
+                                            size: 16,
+                                          ),
+                                          label: Text(
+                                            'settings.company.choose_logo'.tr(),
+                                          ),
                                           style: OutlinedButton.styleFrom(
-                                            visualDensity: VisualDensity.compact,
+                                            visualDensity:
+                                                VisualDensity.compact,
                                           ),
                                         ),
-                                        if (!(_logoBase64 == null || _logoBase64!.isEmpty))
+                                        if (!(_logoBase64 == null ||
+                                            _logoBase64!.isEmpty))
                                           TextButton.icon(
                                             onPressed: _removeLogo,
-                                            icon: const Icon(LucideIcons.trash2, size: 16),
-                                            label: Text('settings.company.remove_logo'.tr()),
+                                            icon: const Icon(
+                                              LucideIcons.trash2,
+                                              size: 16,
+                                            ),
+                                            label: Text(
+                                              'settings.company.remove_logo'
+                                                  .tr(),
+                                            ),
                                             style: TextButton.styleFrom(
-                                              visualDensity: VisualDensity.compact,
+                                              visualDensity:
+                                                  VisualDensity.compact,
                                             ),
                                           ),
                                       ],
@@ -281,7 +305,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
                               ],
                             );
                           }
-                          
+
                           // Normal row layout for larger screens
                           return Row(
                             children: [
@@ -292,18 +316,25 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
                                     height: 80,
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
-                                      color: colorScheme.surfaceContainerHighest,
-                                      gradient: _logoBase64 != null 
+                                      color:
+                                          colorScheme.surfaceContainerHighest,
+                                      gradient: _logoBase64 != null
                                           ? null
                                           : LinearGradient(
                                               colors: [
-                                                colorScheme.primary.withValues(alpha: 0.1),
-                                                colorScheme.primary.withValues(alpha: 0.2),
+                                                colorScheme.primary.withValues(
+                                                  alpha: 0.1,
+                                                ),
+                                                colorScheme.primary.withValues(
+                                                  alpha: 0.2,
+                                                ),
                                               ],
                                             ),
                                     ),
                                     child: ClipOval(
-                                      child: (_logoBase64 == null || _logoBase64!.isEmpty)
+                                      child:
+                                          (_logoBase64 == null ||
+                                              _logoBase64!.isEmpty)
                                           ? Icon(
                                               LucideIcons.building2,
                                               size: 40,
@@ -349,9 +380,12 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
                                   children: [
                                     Text(
                                       'settings.company.logo'.tr(),
-                                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                     ),
                                     const SizedBox(height: 8),
                                     Wrap(
@@ -360,19 +394,33 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
                                       children: [
                                         OutlinedButton.icon(
                                           onPressed: _pickLogo,
-                                          icon: const Icon(LucideIcons.upload, size: 16),
-                                          label: Text('settings.company.choose_logo'.tr()),
+                                          icon: const Icon(
+                                            LucideIcons.upload,
+                                            size: 16,
+                                          ),
+                                          label: Text(
+                                            'settings.company.choose_logo'.tr(),
+                                          ),
                                           style: OutlinedButton.styleFrom(
-                                            visualDensity: VisualDensity.compact,
+                                            visualDensity:
+                                                VisualDensity.compact,
                                           ),
                                         ),
-                                        if (!(_logoBase64 == null || _logoBase64!.isEmpty))
+                                        if (!(_logoBase64 == null ||
+                                            _logoBase64!.isEmpty))
                                           TextButton.icon(
                                             onPressed: _removeLogo,
-                                            icon: const Icon(LucideIcons.trash2, size: 16),
-                                            label: Text('settings.company.remove_logo'.tr()),
+                                            icon: const Icon(
+                                              LucideIcons.trash2,
+                                              size: 16,
+                                            ),
+                                            label: Text(
+                                              'settings.company.remove_logo'
+                                                  .tr(),
+                                            ),
                                             style: TextButton.styleFrom(
-                                              visualDensity: VisualDensity.compact,
+                                              visualDensity:
+                                                  VisualDensity.compact,
                                             ),
                                           ),
                                       ],
@@ -387,7 +435,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  
+
                   // Company Information Section
                   _buildSectionHeader(
                     context,
@@ -395,7 +443,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
                     title: 'settings.company.basic_info'.tr(),
                   ),
                   const SizedBox(height: 16),
-                  
+
                   Card(
                     elevation: 1,
                     child: Padding(
@@ -442,9 +490,9 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
                       ),
                     ),
                   ),
-                  
+
                   const SizedBox(height: 24),
-                  
+
                   // Additional Information Section
                   _buildSectionHeader(
                     context,
@@ -452,7 +500,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
                     title: 'settings.company.additional_info'.tr(),
                   ),
                   const SizedBox(height: 16),
-                  
+
                   Card(
                     elevation: 1,
                     child: Padding(
@@ -476,15 +524,15 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
                       ),
                     ),
                   ),
-                  
+
                   const SizedBox(height: 32),
-                  
+
                   // Save Button
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
                       onPressed: _saving ? null : _save,
-                      icon: _saving 
+                      icon: _saving
                           ? SizedBox(
                               width: 16,
                               height: 16,
@@ -506,15 +554,16 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
                       ),
                     ),
                   ),
-                  
+
                   const SizedBox(height: 16),
                 ],
               ),
             ),
     );
   }
-  
-  Widget _buildSectionHeader(BuildContext context, {
+
+  Widget _buildSectionHeader(
+    BuildContext context, {
     required IconData icon,
     required String title,
   }) {
@@ -535,14 +584,14 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
         const SizedBox(width: 12),
         Text(
           title,
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
         ),
       ],
     );
   }
-  
+
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -557,9 +606,7 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, size: 20),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(
@@ -578,7 +625,9 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
           vertical: 12,
         ),
       ),
-      textInputAction: (maxLines ?? 1) > 1 ? TextInputAction.newline : TextInputAction.next,
+      textInputAction: (maxLines ?? 1) > 1
+          ? TextInputAction.newline
+          : TextInputAction.next,
       keyboardType: keyboardType,
       maxLines: maxLines,
       validator: validator,

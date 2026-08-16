@@ -12,10 +12,9 @@ class ProductColorRepositoryImpl implements ProductColorRepository {
   @override
   Stream<List<ProductColor>> watchAllColors() {
     return _database.productColorDao.watchAllColors().map(
-          (colors) => colors
-              .map((color) => ProductColorModel.fromDrift(color))
-              .toList(),
-        );
+      (colors) =>
+          colors.map((color) => ProductColorModel.fromDrift(color)).toList(),
+    );
   }
 
   @override
@@ -23,10 +22,12 @@ class ProductColorRepositoryImpl implements ProductColorRepository {
     if (query.isEmpty) {
       return watchAllColors();
     }
-    
+
     return _database.productColorDao.watchAllColors().map(
       (colors) => colors
-          .where((color) => color.name.toLowerCase().contains(query.toLowerCase()))
+          .where(
+            (color) => color.name.toLowerCase().contains(query.toLowerCase()),
+          )
           .map((color) => ProductColorModel.fromDrift(color))
           .toList(),
     );
@@ -54,13 +55,13 @@ class ProductColorRepositoryImpl implements ProductColorRepository {
   Future<bool> updateColor(ProductColor color) async {
     final driftColor = await _database.productColorDao.getColorById(color.id);
     if (driftColor == null) return false;
-    
+
     final updatedColor = driftColor.copyWith(
       name: color.name,
       hexCode: Value(color.hexCode),
       isActive: color.isActive,
     );
-    
+
     return await _database.productColorDao.updateColor(updatedColor);
   }
 
@@ -71,9 +72,9 @@ class ProductColorRepositoryImpl implements ProductColorRepository {
 
   @override
   Future<int> getProductCountByColor(int colorId) async {
-    final count = await (_database.select(_database.productVariants)
-          ..where((v) => v.colorId.equals(colorId)))
-        .get();
+    final count = await (_database.select(
+      _database.productVariants,
+    )..where((v) => v.colorId.equals(colorId))).get();
     return count.length;
   }
 

@@ -44,11 +44,13 @@ class _EditPricesViewState extends State<_EditPricesView> {
   }
 
   void _onFilterChanged() {
-    context.read<EditPricesBloc>().add(EditPricesFilterChanged(
-      categoryId: _selectedCategoryId,
-      stockStatus: _selectedStockStatus,
-      searchQuery: _searchController.text,
-    ));
+    context.read<EditPricesBloc>().add(
+      EditPricesFilterChanged(
+        categoryId: _selectedCategoryId,
+        stockStatus: _selectedStockStatus,
+        searchQuery: _searchController.text,
+      ),
+    );
   }
 
   @override
@@ -85,10 +87,10 @@ class _EditPricesViewState extends State<_EditPricesView> {
           BlocBuilder<EditPricesBloc, RealtimeState<EditPricesStateData>>(
             builder: (context, state) {
               final bloc = context.read<EditPricesBloc>();
-              final hasUnsaved = state is RealtimeSuccess<EditPricesStateData> 
-                  ? state.data.hasUnsavedChanges 
+              final hasUnsaved = state is RealtimeSuccess<EditPricesStateData>
+                  ? state.data.hasUnsavedChanges
                   : false;
-              
+
               return Row(
                 children: [
                   IconButton(
@@ -105,14 +107,28 @@ class _EditPricesViewState extends State<_EditPricesView> {
                         : null,
                     tooltip: 'edit_prices.redo'.tr(),
                   ),
-                  BlocBuilder<EditPricesBloc, RealtimeState<EditPricesStateData>>(
+                  BlocBuilder<
+                    EditPricesBloc,
+                    RealtimeState<EditPricesStateData>
+                  >(
                     builder: (context, state) {
                       if (state is RealtimeSuccess<EditPricesStateData>) {
-                        final allSelected = state.data.selectedProductIds.length == state.data.products.length && state.data.products.isNotEmpty;
+                        final allSelected =
+                            state.data.selectedProductIds.length ==
+                                state.data.products.length &&
+                            state.data.products.isNotEmpty;
                         return IconButton(
-                          icon: Icon(allSelected ? Icons.check_box : Icons.check_box_outline_blank),
-                          onPressed: () => bloc.add(EditPricesSelectAllToggled(selectAll: !allSelected)),
-                          tooltip: allSelected ? 'edit_prices.deselect_all'.tr() : 'edit_prices.select_all'.tr(),
+                          icon: Icon(
+                            allSelected
+                                ? Icons.check_box
+                                : Icons.check_box_outline_blank,
+                          ),
+                          onPressed: () => bloc.add(
+                            EditPricesSelectAllToggled(selectAll: !allSelected),
+                          ),
+                          tooltip: allSelected
+                              ? 'edit_prices.deselect_all'.tr()
+                              : 'edit_prices.select_all'.tr(),
                         );
                       }
                       return const SizedBox.shrink();
@@ -144,9 +160,7 @@ class _EditPricesViewState extends State<_EditPricesView> {
             decoration: BoxDecoration(
               color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
               border: Border(
-                bottom: BorderSide(
-                  color: colorScheme.outlineVariant,
-                ),
+                bottom: BorderSide(color: colorScheme.outlineVariant),
               ),
             ),
             child: Column(
@@ -181,7 +195,9 @@ class _EditPricesViewState extends State<_EditPricesView> {
                         decoration: InputDecoration(
                           labelText: 'edit_prices.filter_stock'.tr(),
                           border: const OutlineInputBorder(),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                          ),
                         ),
                         items: [
                           DropdownMenuItem(
@@ -214,114 +230,122 @@ class _EditPricesViewState extends State<_EditPricesView> {
           ),
           // Product list
           Expanded(
-            child: BlocBuilder<EditPricesBloc, RealtimeState<EditPricesStateData>>(
-              builder: (context, state) {
-                if (state is RealtimeLoading) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+            child:
+                BlocBuilder<EditPricesBloc, RealtimeState<EditPricesStateData>>(
+                  builder: (context, state) {
+                    if (state is RealtimeLoading) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-                if (state is RealtimeError) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.error_outline, size: 48, color: colorScheme.error),
-                        const SizedBox(height: 16),
-                        Text(
-                          'edit_prices.error_loading'.tr(),
-                          style: TextStyle(color: colorScheme.error),
+                    if (state is RealtimeError) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.error_outline,
+                              size: 48,
+                              color: colorScheme.error,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'edit_prices.error_loading'.tr(),
+                              style: TextStyle(color: colorScheme.error),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              onPressed: () {
+                                context.read<EditPricesBloc>().add(
+                                  const EditPricesLoadProducts(),
+                                );
+                              },
+                              child: Text('common.retry'.tr()),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: () {
-                            context.read<EditPricesBloc>().add(const EditPricesLoadProducts());
-                          },
-                          child: Text('common.retry'.tr()),
-                        ),
-                      ],
-                    ),
-                  );
-                }
+                      );
+                    }
 
-                if (state is RealtimeSuccess<EditPricesStateData>) {
-                  final products = state.data.products;
+                    if (state is RealtimeSuccess<EditPricesStateData>) {
+                      final products = state.data.products;
 
-                  if (products.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.inventory_2_outlined,
-                            size: 64,
-                            color: colorScheme.outline,
+                      if (products.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.inventory_2_outlined,
+                                size: 64,
+                                color: colorScheme.outline,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'edit_prices.no_products'.tr(),
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(color: colorScheme.outline),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'edit_prices.no_products'.tr(),
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: colorScheme.outline,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
+                        );
+                      }
 
-                  return ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: products.length,
-                    itemBuilder: (context, index) {
-                      final product = products[index];
-                      final isSelected = state.data.selectedProductIds.contains(product.id);
-                      return PriceEditRow(
-                        key: ValueKey(product.id),
-                        product: product,
-                        currencyService: currencyService,
-                        isSelected: isSelected,
-                        onSelectionChanged: (selected) {
-                          context.read<EditPricesBloc>().add(
-                            EditPricesProductSelectionToggled(
-                              productId: product.id,
-                              isSelected: selected ?? false,
-                            ),
-                          );
-                        },
-                        onPriceChanged: (newPrice, isWholesale) {
-                          context.read<EditPricesBloc>().add(
-                            EditPricesPriceUpdated(
-                              productId: product.id,
-                              newPrice: newPrice,
-                              isWholesale: isWholesale,
-                            ),
-                          );
-                        },
-                        onVariantsRequested: product.hasVariants
-                            ? (productId) => sl<ProductVariantRepository>().getVariantsByProduct(productId)
-                            : null,
-                        onVariantPriceChanged: (updatedVariant) {
-                          context.read<EditPricesBloc>().add(
-                            EditPricesVariantPriceUpdated(updatedVariant),
-                          );
-                        },
-                        selectedVariantIds: state.data.selectedVariantIds,
-                        variantPriceChanges: state.data.variantPriceChanges,
-                        onVariantSelectionChanged: (variantId, isSelected) {
-                          context.read<EditPricesBloc>().add(
-                            EditPricesVariantSelectionToggled(
-                              variantId: variantId,
-                              isSelected: isSelected,
-                            ),
+                      return ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: products.length,
+                        itemBuilder: (context, index) {
+                          final product = products[index];
+                          final isSelected = state.data.selectedProductIds
+                              .contains(product.id);
+                          return PriceEditRow(
+                            key: ValueKey(product.id),
+                            product: product,
+                            currencyService: currencyService,
+                            isSelected: isSelected,
+                            onSelectionChanged: (selected) {
+                              context.read<EditPricesBloc>().add(
+                                EditPricesProductSelectionToggled(
+                                  productId: product.id,
+                                  isSelected: selected ?? false,
+                                ),
+                              );
+                            },
+                            onPriceChanged: (newPrice, isWholesale) {
+                              context.read<EditPricesBloc>().add(
+                                EditPricesPriceUpdated(
+                                  productId: product.id,
+                                  newPrice: newPrice,
+                                  isWholesale: isWholesale,
+                                ),
+                              );
+                            },
+                            onVariantsRequested: product.hasVariants
+                                ? (productId) => sl<ProductVariantRepository>()
+                                      .getVariantsByProduct(productId)
+                                : null,
+                            onVariantPriceChanged: (updatedVariant) {
+                              context.read<EditPricesBloc>().add(
+                                EditPricesVariantPriceUpdated(updatedVariant),
+                              );
+                            },
+                            selectedVariantIds: state.data.selectedVariantIds,
+                            variantPriceChanges: state.data.variantPriceChanges,
+                            onVariantSelectionChanged: (variantId, isSelected) {
+                              context.read<EditPricesBloc>().add(
+                                EditPricesVariantSelectionToggled(
+                                  variantId: variantId,
+                                  isSelected: isSelected,
+                                ),
+                              );
+                            },
                           );
                         },
                       );
-                    },
-                  );
-                }
+                    }
 
-                return const SizedBox.shrink();
-              },
-            ),
+                    return const SizedBox.shrink();
+                  },
+                ),
           ),
         ],
       ),
@@ -407,7 +431,9 @@ class _EditPricesViewState extends State<_EditPricesView> {
                   labelText: 'edit_prices.value'.tr(),
                   border: const OutlineInputBorder(),
                 ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 onTap: () => selectAllText(valueController),
               ),
             ],
@@ -423,21 +449,25 @@ class _EditPricesViewState extends State<_EditPricesView> {
               final value = Decimal.tryParse(valueController.text);
               if (value != null && value > Decimal.zero) {
                 final currentState = bloc.state;
-                final hasSelection = currentState is RealtimeSuccess<EditPricesStateData> && 
-                    (currentState.data.selectedProductIds.isNotEmpty || currentState.data.selectedVariantIds.isNotEmpty);
-                
-                bloc.add(EditPricesBulkAdjustRequested(
-                  adjustmentType: selectedType,
-                  value: value,
-                  priceType: selectedPriceType,
-                  applyToAll: !hasSelection,
-                  selectedProductIds: hasSelection ? 
-                      currentState.data.selectedProductIds.toList() : 
-                      null,
-                  selectedVariantIds: hasSelection ?
-                      currentState.data.selectedVariantIds.toList() :
-                      null,
-                ));
+                final hasSelection =
+                    currentState is RealtimeSuccess<EditPricesStateData> &&
+                    (currentState.data.selectedProductIds.isNotEmpty ||
+                        currentState.data.selectedVariantIds.isNotEmpty);
+
+                bloc.add(
+                  EditPricesBulkAdjustRequested(
+                    adjustmentType: selectedType,
+                    value: value,
+                    priceType: selectedPriceType,
+                    applyToAll: !hasSelection,
+                    selectedProductIds: hasSelection
+                        ? currentState.data.selectedProductIds.toList()
+                        : null,
+                    selectedVariantIds: hasSelection
+                        ? currentState.data.selectedVariantIds.toList()
+                        : null,
+                  ),
+                );
                 Navigator.of(dialogContext).pop();
               }
             },
@@ -461,7 +491,9 @@ class _EditPricesViewState extends State<_EditPricesView> {
           ),
           FilledButton(
             onPressed: () {
-              context.read<EditPricesBloc>().add(const EditPricesDiscardChanges());
+              context.read<EditPricesBloc>().add(
+                const EditPricesDiscardChanges(),
+              );
               Navigator.of(dialogContext).pop();
             },
             child: Text('edit_prices.discard'.tr()),

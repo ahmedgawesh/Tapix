@@ -1,8 +1,7 @@
-import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
-import '../../../../core/services/ledger/ledger_running_balance.dart';
+import '../../services/party_statement_ledger_service.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -129,15 +128,15 @@ class CustomerOption {
 
 // ==================== BLOC ====================
 
-class CustomerStatementReportBloc extends RealtimeBloc<CustomerStatementData,
-    CustomerStatementReportEvent> {
+class CustomerStatementReportBloc
+    extends RealtimeBloc<CustomerStatementData, CustomerStatementReportEvent> {
   final AppDatabase _db;
   ReportDateRange _dateRange;
   int? _customerId;
 
   CustomerStatementReportBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
   int? get customerId => _customerId;
@@ -155,7 +154,10 @@ class CustomerStatementReportBloc extends RealtimeBloc<CustomerStatementData,
 
   Stream<CustomerStatementData> _buildCombinedStream() {
     return _db
-        .select(_db.customerTransactions)
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {_db.customers, _db.customerTransactions},
+        )
         .watch()
         .asyncMap((_) async => _loadStatementData());
   }
@@ -177,164 +179,51 @@ class CustomerStatementReportBloc extends RealtimeBloc<CustomerStatementData,
   }
 
   Future<CustomerStatementData> _loadStatementData() async {
-    // Load customer list for the selector
-    final customerRows = await _db.customSelect(
-      '''
-      SELECT c.id, c.name, c.phone, c.balance_cents
-      FROM customers c
-      WHERE c.is_active = 1
-      ORDER BY c.name ASC
-      ''',
-      readsFrom: {_db.customers},
-    ).get();
-
-    final customers = customerRows
-        .map((row) => CustomerOption(
-              id: row.read<int>('id'),
-              name: row.read<String>('name'),
-              phone: row.readNullable<String>('phone'),
-              balanceCents: row.read<int>('balance_cents'),
-            ))
+    final snapshot = await PartyStatementLedgerService(_db).loadCustomer(
+      customerId: _customerId,
+      startDate: _dateRange.startDate,
+      endDate: _dateRange.endDate,
+    );
+    final customers = snapshot.options
+        .map(
+          (option) => CustomerOption(
+            id: option.id,
+            name: option.name,
+            phone: option.phone,
+            balanceCents: option.balanceCents,
+          ),
+        )
         .toList();
-
-    if (_customerId == null) {
-      return CustomerStatementData(
-        dateRange: _dateRange,
-        customers: customers,
-      );
+    final customer = snapshot.party;
+    if (customer == null) {
+      return CustomerStatementData(dateRange: _dateRange, customers: customers);
     }
-
-    // Load customer info
-    final customerInfoRows = await _db.customSelect(
-      '''
-      SELECT c.id, c.name, c.phone, c.email, c.address, c.segment
-      FROM customers c
-      WHERE c.id = ?
-      ''',
-      variables: [Variable.withInt(_customerId!)],
-      readsFrom: {_db.customers},
-    ).get();
-
-    if (customerInfoRows.isEmpty) {
-      return CustomerStatementData(
-        dateRange: _dateRange,
-        customers: customers,
-      );
-    }
-
-    final cInfo = customerInfoRows.first;
-
-    // Calculate opening balance:
-    // The customers.balance_cents includes an initial balance set at creation
-    // which is NOT recorded as a customer_transaction. So we must derive it:
-    //   initial_balance = balance_cents - SUM(all transactions)
-    //   opening_balance = initial_balance + SUM(transactions before start date)
-    final startIso = _dateRange.startDate.toIso8601String();
-    final endIso = DateTime(
-      _dateRange.endDate.year,
-      _dateRange.endDate.month,
-      _dateRange.endDate.day,
-      23,
-      59,
-      59,
-    ).toIso8601String();
-
-    final openingRows = await _db.customSelect(
-      '''
-      SELECT
-        c.balance_cents AS current_balance,
-        COALESCE(all_txn.total, 0) AS all_txn_total,
-        COALESCE(before_txn.total, 0) AS before_txn_total
-      FROM customers c
-      LEFT JOIN (
-        SELECT COALESCE(SUM(amount_cents), 0) AS total
-        FROM customer_transactions WHERE customer_id = ?
-      ) all_txn ON 1=1
-      LEFT JOIN (
-        SELECT COALESCE(SUM(amount_cents), 0) AS total
-        FROM customer_transactions WHERE customer_id = ? AND transaction_date < ?
-      ) before_txn ON 1=1
-      WHERE c.id = ?
-      ''',
-      variables: [
-        Variable.withInt(_customerId!),
-        Variable.withInt(_customerId!),
-        Variable.withString(startIso),
-        Variable.withInt(_customerId!),
-      ],
-      readsFrom: {_db.customers, _db.customerTransactions},
-    ).get();
-
-    final int openingBalanceCents;
-    if (openingRows.isNotEmpty) {
-      final row = openingRows.first;
-      final currentBalance = row.read<int>('current_balance');
-      final allTxnTotal = row.read<int>('all_txn_total');
-      final beforeTxnTotal = row.read<int>('before_txn_total');
-      openingBalanceCents = (currentBalance - allTxnTotal) + beforeTxnTotal;
-    } else {
-      openingBalanceCents = 0;
-    }
-
-    // Load transactions within date range
-    final txnRows = await _db.customSelect(
-      '''
-      SELECT id, transaction_type, amount_cents, description,
-             reference_id, reference_type, transaction_date
-      FROM customer_transactions
-      WHERE customer_id = ? AND transaction_date >= ? AND transaction_date <= ?
-      ORDER BY transaction_date ASC, id ASC
-      ''',
-      variables: [
-        Variable.withInt(_customerId!),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.customerTransactions},
-    ).get();
-
-    // Phase 7 — running balance via SoT helper.
-    final running = LedgerRunningBalance(openingBalanceCents);
-    int totalDebits = 0;
-    int totalCredits = 0;
-    final transactions = <StatementTransaction>[];
-
-    for (final row in txnRows) {
-      final amountCents = row.read<int>('amount_cents');
-      final runningBalance = running.apply(amountCents);
-
-      if (amountCents > 0) {
-        totalDebits += amountCents;
-      } else {
-        totalCredits += amountCents.abs();
-      }
-
-      transactions.add(StatementTransaction(
-        id: row.read<int>('id'),
-        date: DateTime.parse(row.read<String>('transaction_date')),
-        type: row.read<String>('transaction_type'),
-        description: row.readNullable<String>('description'),
-        amountCents: amountCents,
-        runningBalanceCents: runningBalance,
-        referenceId: row.readNullable<int>('reference_id'),
-        referenceType: row.readNullable<String>('reference_type'),
-      ));
-    }
-
-    final closingBalanceCents = openingBalanceCents + totalDebits - totalCredits;
 
     return CustomerStatementData(
-      customerId: _customerId,
-      customerName: cInfo.read<String>('name'),
-      customerPhone: cInfo.readNullable<String>('phone'),
-      customerEmail: cInfo.readNullable<String>('email'),
-      customerAddress: cInfo.readNullable<String>('address'),
-      customerSegment: cInfo.readNullable<String>('segment'),
-      openingBalanceCents: openingBalanceCents,
-      closingBalanceCents: closingBalanceCents,
-      totalDebitsCents: totalDebits,
-      totalCreditsCents: totalCredits,
-      transactions: transactions,
+      customerId: customer.id,
+      customerName: customer.name,
+      customerPhone: customer.phone,
+      customerEmail: customer.email,
+      customerAddress: customer.address,
+      customerSegment: customer.segment,
+      openingBalanceCents: snapshot.openingBalanceCents,
+      closingBalanceCents: snapshot.closingBalanceCents,
+      totalDebitsCents: snapshot.totalDebitsCents,
+      totalCreditsCents: snapshot.totalCreditsCents,
+      transactions: snapshot.transactions
+          .map(
+            (transaction) => StatementTransaction(
+              id: transaction.id,
+              date: transaction.date,
+              type: transaction.type,
+              description: transaction.description,
+              amountCents: transaction.amountCents,
+              runningBalanceCents: transaction.runningBalanceCents,
+              referenceId: transaction.referenceId,
+              referenceType: transaction.referenceType,
+            ),
+          )
+          .toList(),
       dateRange: _dateRange,
       customers: customers,
     );

@@ -63,25 +63,25 @@ class BulkProductRowUpdated extends BulkProductEvent {
 
   @override
   List<Object?> get props => [
-        rowIndex,
-        name,
-        nameAr,
-        nameFr,
-        sku,
-        barcode,
-        costCents,
-        priceCents,
-        wholesalePriceCents,
-        stockQuantity,
-        minQuantity,
-        categoryId,
-        colorId,
-        sizeId,
-        hasVariants,
-        isTaxable,
-        purchaseTaxRateBps,
-        salesTaxRateBps,
-      ];
+    rowIndex,
+    name,
+    nameAr,
+    nameFr,
+    sku,
+    barcode,
+    costCents,
+    priceCents,
+    wholesalePriceCents,
+    stockQuantity,
+    minQuantity,
+    categoryId,
+    colorId,
+    sizeId,
+    hasVariants,
+    isTaxable,
+    purchaseTaxRateBps,
+    salesTaxRateBps,
+  ];
 }
 
 class BulkProductValidationRequested extends BulkProductEvent {

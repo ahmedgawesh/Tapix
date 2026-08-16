@@ -64,7 +64,9 @@ ParsedAdjReturnNotes parseAdjReturnNotes(String? raw) {
   }
   final match = RegExp(r'^\s*\[REASON:([a-zA-Z_]+)\]\s*').firstMatch(raw);
   if (match == null) {
-    return ParsedAdjReturnNotes(userNotes: raw.trim().isEmpty ? null : raw.trim());
+    return ParsedAdjReturnNotes(
+      userNotes: raw.trim().isEmpty ? null : raw.trim(),
+    );
   }
   final name = match.group(1);
   AdjReturnReasonCode? code;
@@ -106,23 +108,29 @@ class AdjReturnLineItem extends Equatable {
   final String? variantSku;
   final String? variantLabel;
   final int quantity;
+  final int quantityScale;
+  final String measurementType;
   final int unitPriceCents;
   final int unitCostCents;
+
   /// Reference retail (regular) selling price captured at pick time. Used to
   /// render the "retail" price-tier shortcut in the edit sheet so the user can
   /// snap back to it after switching to wholesale. Never mutated by edits.
   final int? retailPriceCents;
+
   /// Reference wholesale selling price captured at pick time (nullable when the
   /// product/variant has no wholesale price). Used to render the "wholesale"
   /// price-tier shortcut in the edit sheet.
   final int? wholesalePriceCents;
   final int discountCents;
+
   /// When > 0, the line discount is treated as a percentage (basis points,
   /// e.g. 100 = 1%) of the line subtotal, and [discountCents] is ignored
   /// in favour of [effectiveDiscountCents]. This lets a percent discount
   /// entered in the edit sheet stay correct after the quantity is changed
   /// from outside the sheet.
   final int discountPercentBps;
+
   /// Tax rate in basis points (e.g. 1500 = 15%).
   final int taxRateBps;
   final String? reason;
@@ -134,6 +142,8 @@ class AdjReturnLineItem extends Equatable {
     this.variantSku,
     this.variantLabel,
     required this.quantity,
+    this.quantityScale = 1,
+    this.measurementType = 'piece',
     required this.unitPriceCents,
     this.unitCostCents = 0,
     this.retailPriceCents,
@@ -151,23 +161,24 @@ class AdjReturnLineItem extends Equatable {
 
   /// Build the engine input for this line.
   LineItemPricingInput toPricingInput() => LineItemPricingInput(
-        unitPrice: Money.fromCents(unitPriceCents),
-        quantity: quantity,
-        discount: discountPercentBps > 0
-            ? Discount.percent(discountPercentBps)
-            : (discountCents > 0
-                ? Discount.fixed(Money.fromCents(discountCents))
-                : Discount.none),
-        isTaxable: taxRateBps > 0,
-        productTaxRateBps: taxRateBps,
-      );
+    unitPrice: Money.fromCents(unitPriceCents),
+    quantity: quantity,
+    quantityScale: quantityScale,
+    discount: discountPercentBps > 0
+        ? Discount.percent(discountPercentBps)
+        : (discountCents > 0
+              ? Discount.fixed(Money.fromCents(discountCents))
+              : Discount.none),
+    isTaxable: taxRateBps > 0,
+    productTaxRateBps: taxRateBps,
+  );
 
   LineItemPricingResult _compute() => LineItemPricingEngine.compute(
-        input: toPricingInput(),
-        enableTaxCalculations: taxRateBps > 0,
-        defaultTaxRateBps: 0,
-        taxInclusivePricing: false,
-      );
+    input: toPricingInput(),
+    enableTaxCalculations: taxRateBps > 0,
+    defaultTaxRateBps: 0,
+    taxInclusivePricing: false,
+  );
 
   int get subtotalCents => _compute().subtotal.cents;
 
@@ -205,6 +216,8 @@ class AdjReturnLineItem extends Equatable {
       variantSku: variantSku,
       variantLabel: variantLabel,
       quantity: quantity ?? this.quantity,
+      quantityScale: quantityScale,
+      measurementType: measurementType,
       unitPriceCents: unitPriceCents ?? this.unitPriceCents,
       unitCostCents: unitCostCents,
       retailPriceCents: retailPriceCents,
@@ -218,11 +231,23 @@ class AdjReturnLineItem extends Equatable {
 
   @override
   List<Object?> get props => [
-        productId, variantId, productName, variantSku, variantLabel,
-        quantity, unitPriceCents, unitCostCents, retailPriceCents,
-        wholesalePriceCents, discountCents,
-        discountPercentBps, taxRateBps, reason,
-      ];
+    productId,
+    variantId,
+    productName,
+    variantSku,
+    variantLabel,
+    quantity,
+    quantityScale,
+    measurementType,
+    unitPriceCents,
+    unitCostCents,
+    retailPriceCents,
+    wholesalePriceCents,
+    discountCents,
+    discountPercentBps,
+    taxRateBps,
+    reason,
+  ];
 }
 
 // ==================== STATE ====================
@@ -280,19 +305,21 @@ class PurchaseAdjReturnFormState extends Equatable {
   late final InvoicePricingResult pricing = _computePricing();
 
   InvoicePricingResult _computePricing() {
-    return InvoicePricingEngine.compute(InvoicePricingInput(
-      lines: items.map((i) => i.toPricingInput()).toList(growable: false),
-      overallDiscount: overallDiscountIsPercent
-          ? Discount.percent(overallDiscountCents)
-          : (overallDiscountCents > 0
-              ? Discount.fixed(Money.fromCents(overallDiscountCents))
-              : Discount.none),
-      // The state stores per-item taxRateBps directly, so the engine's
-      // global tax toggle is always on; lines with rate 0 produce 0 tax.
-      enableTaxCalculations: true,
-      defaultTaxRateBps: 0,
-      taxInclusivePricing: false,
-    ));
+    return InvoicePricingEngine.compute(
+      InvoicePricingInput(
+        lines: items.map((i) => i.toPricingInput()).toList(growable: false),
+        overallDiscount: overallDiscountIsPercent
+            ? Discount.percent(overallDiscountCents)
+            : (overallDiscountCents > 0
+                  ? Discount.fixed(Money.fromCents(overallDiscountCents))
+                  : Discount.none),
+        // The state stores per-item taxRateBps directly, so the engine's
+        // global tax toggle is always on; lines with rate 0 produce 0 tax.
+        enableTaxCalculations: true,
+        defaultTaxRateBps: 0,
+        taxInclusivePricing: false,
+      ),
+    );
   }
 
   int get totalSubtotalCents => pricing.subtotal.cents;
@@ -301,8 +328,7 @@ class PurchaseAdjReturnFormState extends Equatable {
   /// Sum of per-line tax **before** invoice-level discount allocation.
   /// Kept for back-compat with the legacy UI; reports should prefer
   /// [totalAdjustedTaxCents] which is what is actually posted.
-  int get totalTaxCents =>
-      items.fold(0, (sum, i) => sum + i.taxCents);
+  int get totalTaxCents => items.fold(0, (sum, i) => sum + i.taxCents);
 
   /// Sum of per-line totals **before** the invoice-level discount.
   /// Kept for back-compat with the legacy UI.
@@ -361,7 +387,8 @@ class PurchaseAdjReturnFormState extends Equatable {
       returnDate: returnDate ?? this.returnDate,
       discountPerItem: discountPerItem ?? this.discountPerItem,
       overallDiscountCents: overallDiscountCents ?? this.overallDiscountCents,
-      overallDiscountIsPercent: overallDiscountIsPercent ?? this.overallDiscountIsPercent,
+      overallDiscountIsPercent:
+          overallDiscountIsPercent ?? this.overallDiscountIsPercent,
       paymentMethod: paymentMethod ?? this.paymentMethod,
       dueDate: clearDueDate ? null : (dueDate ?? this.dueDate),
       reasonCode: reasonCode ?? this.reasonCode,
@@ -376,11 +403,26 @@ class PurchaseAdjReturnFormState extends Equatable {
 
   @override
   List<Object?> get props => [
-        returnNumber, supplierId, supplierName, items, notes, currencyId, returnDate,
-        discountPerItem, overallDiscountCents, overallDiscountIsPercent,
-        paymentMethod, dueDate, reasonCode,
-        isLoading, isSubmitting, error, isSuccess, hasUnsavedChanges, createdReturnId,
-      ];
+    returnNumber,
+    supplierId,
+    supplierName,
+    items,
+    notes,
+    currencyId,
+    returnDate,
+    discountPerItem,
+    overallDiscountCents,
+    overallDiscountIsPercent,
+    paymentMethod,
+    dueDate,
+    reasonCode,
+    isLoading,
+    isSubmitting,
+    error,
+    isSuccess,
+    hasUnsavedChanges,
+    createdReturnId,
+  ];
 }
 
 // ==================== EVENTS ====================
@@ -432,6 +474,7 @@ class PurchaseAdjReturnItemPriceChanged extends PurchaseAdjReturnFormEvent {
 class PurchaseAdjReturnItemDiscountChanged extends PurchaseAdjReturnFormEvent {
   final int index;
   final int discountCents;
+
   /// Percent discount in basis points (100 = 1%). When > 0 the discount is
   /// stored as a percent and recomputed live against the line subtotal.
   final int discountPercentBps;
@@ -458,7 +501,8 @@ class PurchaseAdjReturnDateChanged extends PurchaseAdjReturnFormEvent {
   List<Object?> get props => [date];
 }
 
-class PurchaseAdjReturnOverallDiscountChanged extends PurchaseAdjReturnFormEvent {
+class PurchaseAdjReturnOverallDiscountChanged
+    extends PurchaseAdjReturnFormEvent {
   final int cents;
   final bool isPercent;
   const PurchaseAdjReturnOverallDiscountChanged(this.cents, this.isPercent);
@@ -516,7 +560,7 @@ class PurchaseAdjReturnFormBloc
   final JournalEntryService _journalEntryService;
 
   PurchaseAdjReturnFormBloc(this._dao, this._journalEntryService)
-      : super(PurchaseAdjReturnFormState()) {
+    : super(PurchaseAdjReturnFormState()) {
     on<_PurchaseAdjReturnInitialized>(_onInitialized);
     on<PurchaseAdjReturnSupplierSelected>(_onSupplierSelected);
     add(const _PurchaseAdjReturnInitialized());
@@ -549,21 +593,25 @@ class PurchaseAdjReturnFormBloc
     PurchaseAdjReturnSupplierSelected event,
     Emitter<PurchaseAdjReturnFormState> emit,
   ) {
-    emit(state.copyWith(
-      supplierId: event.supplierId,
-      supplierName: event.supplierName,
-      hasUnsavedChanges: true,
-    ));
+    emit(
+      state.copyWith(
+        supplierId: event.supplierId,
+        supplierName: event.supplierName,
+        hasUnsavedChanges: true,
+      ),
+    );
   }
 
   void _onItemAdded(
     PurchaseAdjReturnItemAdded event,
     Emitter<PurchaseAdjReturnFormState> emit,
   ) {
-    emit(state.copyWith(
-      items: [...state.items, event.item],
-      hasUnsavedChanges: true,
-    ));
+    emit(
+      state.copyWith(
+        items: [...state.items, event.item],
+        hasUnsavedChanges: true,
+      ),
+    );
   }
 
   void _onItemRemoved(
@@ -593,8 +641,9 @@ class PurchaseAdjReturnFormBloc
   ) {
     final updated = List<AdjReturnLineItem>.from(state.items);
     if (event.index < updated.length) {
-      updated[event.index] =
-          updated[event.index].copyWith(unitPriceCents: event.unitPriceCents);
+      updated[event.index] = updated[event.index].copyWith(
+        unitPriceCents: event.unitPriceCents,
+      );
       emit(state.copyWith(items: updated, hasUnsavedChanges: true));
     }
   }
@@ -631,11 +680,13 @@ class PurchaseAdjReturnFormBloc
     PurchaseAdjReturnOverallDiscountChanged event,
     Emitter<PurchaseAdjReturnFormState> emit,
   ) {
-    emit(state.copyWith(
-      overallDiscountCents: event.cents,
-      overallDiscountIsPercent: event.isPercent,
-      hasUnsavedChanges: true,
-    ));
+    emit(
+      state.copyWith(
+        overallDiscountCents: event.cents,
+        overallDiscountIsPercent: event.isPercent,
+        hasUnsavedChanges: true,
+      ),
+    );
   }
 
   void _onDiscountModeChanged(
@@ -651,25 +702,24 @@ class PurchaseAdjReturnFormBloc
     final clearedItems = event.perItem
         ? state.items
         : state.items
-            .map((i) => i.copyWith(discountCents: 0, discountPercentBps: 0))
-            .toList();
-    emit(state.copyWith(
-      discountPerItem: event.perItem,
-      items: clearedItems,
-      overallDiscountCents: 0,
-      overallDiscountIsPercent: false,
-      hasUnsavedChanges: true,
-    ));
+              .map((i) => i.copyWith(discountCents: 0, discountPercentBps: 0))
+              .toList();
+    emit(
+      state.copyWith(
+        discountPerItem: event.perItem,
+        items: clearedItems,
+        overallDiscountCents: 0,
+        overallDiscountIsPercent: false,
+        hasUnsavedChanges: true,
+      ),
+    );
   }
 
   void _onPaymentMethodChanged(
     PurchaseAdjReturnPaymentMethodChanged event,
     Emitter<PurchaseAdjReturnFormState> emit,
   ) {
-    emit(state.copyWith(
-      paymentMethod: event.method,
-      hasUnsavedChanges: true,
-    ));
+    emit(state.copyWith(paymentMethod: event.method, hasUnsavedChanges: true));
   }
 
   void _onDueDateChanged(
@@ -733,13 +783,19 @@ class PurchaseAdjReturnFormBloc
         supplierId: state.supplierId!,
         currencyId: state.currencyId,
         subtotalCents: Value(Decimal.fromInt(state.totalSubtotalCents)),
-        discountCents: Value(Decimal.fromInt(state.totalItemDiscountCents + state.effectiveOverallDiscountCents)),
+        discountCents: Value(
+          Decimal.fromInt(
+            state.totalItemDiscountCents + state.effectiveOverallDiscountCents,
+          ),
+        ),
         taxCents: Value(Decimal.fromInt(state.totalAdjustedTaxCents)),
         totalCents: Decimal.fromInt(state.totalCents),
-        notes: Value(buildAdjReturnNotes(
-          reasonCode: state.reasonCode!,
-          userNotes: state.notes,
-        )),
+        notes: Value(
+          buildAdjReturnNotes(
+            reasonCode: state.reasonCode!,
+            userNotes: state.notes,
+          ),
+        ),
         returnDate: Value(state.returnDate),
         refundMethod: Value(state.paymentMethod.name),
         dueDate: Value(state.dueDate),
@@ -756,19 +812,22 @@ class PurchaseAdjReturnFormBloc
       for (int idx = 0; idx < state.items.length; idx++) {
         final item = state.items[idx];
         final line = pricing.lines[idx];
-        itemCompanions.add(PurchaseReturnAdjustmentItemsCompanion.insert(
-          returnId: 0, // Will be set by DAO
-          productId: item.productId,
-          variantId: Value(item.variantId),
-          quantity: item.quantity,
-          unitPriceCents: Decimal.fromInt(item.unitPriceCents),
-          // Total discount on this item = per-line discount + share of overall
-          discountCents:
-              Value(Decimal.fromInt(line.totalLineDiscount.cents)),
-          taxCents: Value(Decimal.fromInt(line.tax.cents)),
-          totalCents: Decimal.fromInt(line.total.cents),
-          reason: Value(item.reason),
-        ));
+        itemCompanions.add(
+          PurchaseReturnAdjustmentItemsCompanion.insert(
+            returnId: 0, // Will be set by DAO
+            productId: item.productId,
+            variantId: Value(item.variantId),
+            quantity: item.quantity,
+            quantityScale: Value(item.quantityScale),
+            measurementType: Value(item.measurementType),
+            unitPriceCents: Decimal.fromInt(item.unitPriceCents),
+            // Total discount on this item = per-line discount + share of overall
+            discountCents: Value(Decimal.fromInt(line.totalLineDiscount.cents)),
+            taxCents: Value(Decimal.fromInt(line.tax.cents)),
+            totalCents: Decimal.fromInt(line.total.cents),
+            reason: Value(item.reason),
+          ),
+        );
       }
 
       final createdId = await _dao.createAndPostPurchaseAdjReturn(
@@ -778,20 +837,26 @@ class PurchaseAdjReturnFormBloc
         allowNegativeStock: event.allowNegativeStock,
       );
 
-      emit(state.copyWith(
-        isSubmitting: false,
-        isSuccess: true,
-        hasUnsavedChanges: false,
-        createdReturnId: createdId,
-      ));
+      emit(
+        state.copyWith(
+          isSubmitting: false,
+          isSuccess: true,
+          hasUnsavedChanges: false,
+          createdReturnId: createdId,
+        ),
+      );
     } on StockInsufficientException catch (e) {
-      emit(state.copyWith(
-        isSubmitting: false,
-        error: 'returns.stock_insufficient'.tr(namedArgs: {
-          'stock': '${e.currentStock}',
-          'quantity': '${e.requestedQuantity}',
-        }),
-      ));
+      emit(
+        state.copyWith(
+          isSubmitting: false,
+          error: 'returns.stock_insufficient'.tr(
+            namedArgs: {
+              'stock': '${e.currentStock}',
+              'quantity': '${e.requestedQuantity}',
+            },
+          ),
+        ),
+      );
     } catch (e, st) {
       developer.log(
         'Purchase adjustment return submission failed: $e',
@@ -799,7 +864,12 @@ class PurchaseAdjReturnFormBloc
         error: e,
         stackTrace: st,
       );
-      emit(state.copyWith(isSubmitting: false, error: 'returns.return_failed'.tr()));
+      emit(
+        state.copyWith(
+          isSubmitting: false,
+          error: 'returns.return_failed'.tr(),
+        ),
+      );
     }
   }
 }

@@ -131,7 +131,11 @@ class DateRangeSelector extends StatelessWidget {
       context: context,
       firstDate: start,
       lastDate: lastDate,
-      initialDate: dateRange.endDate.isBefore(start) ? start : dateRange.endDate,
+      initialDate: dateRange.endDate.isBefore(start)
+          ? start
+          : dateRange.endDate.isAfter(lastDate)
+              ? lastDate
+              : dateRange.endDate,
       helpText: 'sales.date_pick_end'.tr(),
       cancelText: 'common.cancel'.tr(),
       confirmText: 'common.save'.tr(),
@@ -141,7 +145,7 @@ class DateRangeSelector extends StatelessWidget {
 
     onChanged(ReportDateRange(
       startDate: start,
-      endDate: DateTime(end.year, end.month, end.day, 23, 59, 59),
+      endDate: ReportDateRange.endOfDay(end),
       preset: ReportPeriodPreset.custom,
     ));
   }

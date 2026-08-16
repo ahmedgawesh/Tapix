@@ -7,7 +7,9 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/cashier_shift_service.dart';
 import '../../../../core/widgets/pin_verification_dialog.dart';
 import '../../../auth/auth.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
@@ -21,14 +23,14 @@ class SaleReturnDetailScreen extends StatefulWidget {
   const SaleReturnDetailScreen({super.key, required this.returnId});
 
   @override
-  State<SaleReturnDetailScreen> createState() =>
-      _SaleReturnDetailScreenState();
+  State<SaleReturnDetailScreen> createState() => _SaleReturnDetailScreenState();
 }
 
 class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
   SaleReturnEntity? _returnEntity;
   SaleEntity? _sale;
   List<SaleReturnItemEntity> _returnItems = [];
+  CashierShiftView? _cashierShift;
   bool _loading = true;
   StreamSubscription<List<SaleReturnItemEntity>>? _itemsSub;
 
@@ -52,10 +54,14 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
       return;
     }
     final sale = await repo.getSaleById(ret.saleId);
+    final cashierShift = await sl<CashierShiftService>().getSaleReturnShift(
+      widget.returnId,
+    );
 
     _itemsSub?.cancel();
-    _itemsSub =
-        repo.watchSaleReturnItemsWithDetails(widget.returnId).listen((items) {
+    _itemsSub = repo.watchSaleReturnItemsWithDetails(widget.returnId).listen((
+      items,
+    ) {
       if (mounted) {
         setState(() {
           _returnItems = items;
@@ -67,6 +73,7 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
       setState(() {
         _returnEntity = ret;
         _sale = sale;
+        _cashierShift = cashierShift;
         _loading = false;
       });
     }
@@ -92,11 +99,9 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(LucideIcons.alertCircle,
-                  size: 64, color: colorScheme.error),
+              Icon(LucideIcons.alertCircle, size: 64, color: colorScheme.error),
               const SizedBox(height: 16),
-              Text('sales.not_found'.tr(),
-                  style: theme.textTheme.titleLarge),
+              Text('sales.not_found'.tr(), style: theme.textTheme.titleLarge),
             ],
           ),
         ),
@@ -130,17 +135,23 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
               tooltip: 'sales.share_invoice'.tr(),
               onPressed: () => _printOrShare(share: true),
             ),
-            Builder(builder: (context) {
-              final authState = context.read<AuthBloc>().state;
-              final canVoid = authState is AuthAuthenticated &&
-                  sl<PermissionService>().hasPermission(authState.user, Permissions.editTransactions);
-              if (!canVoid) return const SizedBox.shrink();
-              return IconButton(
-                icon: Icon(LucideIcons.ban, color: colorScheme.error),
-                tooltip: 'sales.void_sale'.tr(),
-                onPressed: () => _voidReturn(context),
-              );
-            }),
+            Builder(
+              builder: (context) {
+                final authState = context.read<AuthBloc>().state;
+                final canVoid =
+                    authState is AuthAuthenticated &&
+                    sl<PermissionService>().hasPermission(
+                      authState.user,
+                      Permissions.editTransactions,
+                    );
+                if (!canVoid) return const SizedBox.shrink();
+                return IconButton(
+                  icon: Icon(LucideIcons.ban, color: colorScheme.error),
+                  tooltip: 'sales.void_sale'.tr(),
+                  onPressed: () => _voidReturn(context),
+                );
+              },
+            ),
           ],
         ],
       ),
@@ -184,9 +195,7 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: errorColor,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: errorColor),
             onPressed: () => Navigator.pop(ctx, true),
             child: Text('sales.void_sale'.tr()),
           ),
@@ -256,7 +265,10 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
   // RETURN INFO CARD
   // ═══════════════════════════════════════════════════════
   Widget _buildReturnInfoCard(
-      BuildContext context, SaleReturnEntity ret, CurrencyService cs) {
+    BuildContext context,
+    SaleReturnEntity ret,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -284,49 +296,83 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
                     gradient: LinearGradient(
                       colors: [
                         colorScheme.error,
-                        colorScheme.error.withValues(alpha: 0.7)
+                        colorScheme.error.withValues(alpha: 0.7),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(LucideIcons.undo2,
-                      size: 18, color: Colors.white),
+                  child: const Icon(
+                    LucideIcons.undo2,
+                    size: 18,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('sales.return_number'.tr(),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                              letterSpacing: 0.5)),
-                      Text(ret.returnNumber,
-                          style: theme.textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w600)),
+                      Text(
+                        'sales.return_number'.tr(),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      Text(
+                        ret.returnNumber,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border:
-                        Border.all(color: statusColor.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.3),
+                    ),
                   ),
-                  child: Text(statusLabel,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: statusColor, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    statusLabel,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: statusColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ],
             ),
             Divider(
-                height: 24,
-                color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
-            _infoRow(theme, 'sales.date'.tr(),
-                DateFormat.yMMMd().format(ret.returnDate)),
+              height: 24,
+              color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+            ),
+            _infoRow(
+              theme,
+              'sales.date'.tr(),
+              DateFormat.yMMMd().format(ret.returnDate),
+            ),
+            if (_cashierShift != null) ...[
+              const SizedBox(height: 8),
+              _infoRow(
+                theme,
+                'cashier_shifts.cashier'.tr(),
+                _cashierShift!.cashierName,
+              ),
+              const SizedBox(height: 8),
+              _infoRow(
+                theme,
+                'cashier_shifts.shift_number'.tr(),
+                _cashierShift!.shift.shiftNumber,
+              ),
+            ],
             const SizedBox(height: 8),
             if (ret.reason != null && ret.reason!.isNotEmpty) ...[
               _infoRow(theme, 'sales.return_reason'.tr(), ret.reason!),
@@ -342,11 +388,14 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
   // ORIGINAL SALE CARD
   // ═══════════════════════════════════════════════════════
   Widget _buildOriginalSaleCard(
-      BuildContext context, SaleEntity sale, CurrencyService cs) {
+    BuildContext context,
+    SaleEntity sale,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final customerInitial = sale.customerName != null &&
-            sale.customerName!.isNotEmpty
+    final customerInitial =
+        sale.customerName != null && sale.customerName!.isNotEmpty
         ? sale.customerName![0].toUpperCase()
         : '?';
 
@@ -354,8 +403,7 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side:
-            BorderSide(color: colorScheme.primary.withValues(alpha: 0.25)),
+        side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.25)),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -373,36 +421,49 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
                       gradient: LinearGradient(
                         colors: [
                           colorScheme.primary,
-                          colorScheme.primary.withValues(alpha: 0.7)
+                          colorScheme.primary.withValues(alpha: 0.7),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(LucideIcons.fileText,
-                        size: 18, color: Colors.white),
+                    child: const Icon(
+                      LucideIcons.fileText,
+                      size: 18,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('sales.return_from_sale'.tr(),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                                letterSpacing: 0.5)),
-                        Text(sale.invoiceNumber,
-                            style: theme.textTheme.titleSmall
-                                ?.copyWith(fontWeight: FontWeight.w600)),
+                        Text(
+                          'sales.return_from_sale'.tr(),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        Text(
+                          sale.invoiceNumber,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  Icon(LucideIcons.chevronRight,
-                      size: 18, color: colorScheme.onSurfaceVariant),
+                  Icon(
+                    LucideIcons.chevronRight,
+                    size: 18,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ],
               ),
               Divider(
-                  height: 24,
-                  color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                height: 24,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+              ),
               if (sale.customerName != null) ...[
                 Row(
                   children: [
@@ -414,22 +475,31 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       alignment: Alignment.center,
-                      child: Text(customerInitial,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                              color: colorScheme.onPrimaryContainer,
-                              fontWeight: FontWeight.bold)),
+                      child: Text(
+                        customerInitial,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: colorScheme.onPrimaryContainer,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('sales.customer'.tr(),
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                  color: colorScheme.onSurfaceVariant)),
-                          Text(sale.customerName!,
-                              style: theme.textTheme.bodyMedium
-                                  ?.copyWith(fontWeight: FontWeight.w500)),
+                          Text(
+                            'sales.customer'.tr(),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          Text(
+                            sale.customerName!,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -437,8 +507,11 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
                 ),
                 const SizedBox(height: 8),
               ],
-              _infoRow(theme, 'sales.total'.tr(),
-                  cs.format(sale.totalCents.toBigInt().toInt())),
+              _infoRow(
+                theme,
+                'sales.total'.tr(),
+                cs.format(sale.totalCents.toBigInt().toInt()),
+              ),
             ],
           ),
         ),
@@ -449,8 +522,7 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
   // ═══════════════════════════════════════════════════════
   // REFUND METHOD CARD
   // ═══════════════════════════════════════════════════════
-  Widget _buildRefundMethodCard(
-      BuildContext context, SaleReturnEntity ret) {
+  Widget _buildRefundMethodCard(BuildContext context, SaleReturnEntity ret) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
@@ -503,13 +575,19 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
                     color: cs.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child:
-                      Icon(LucideIcons.creditCard, size: 16, color: cs.primary),
+                  child: Icon(
+                    LucideIcons.creditCard,
+                    size: 16,
+                    color: cs.primary,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('sales.refund_method'.tr(),
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600)),
+                Text(
+                  'sales.refund_method'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -528,14 +606,18 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                            'sales.refund_method_${ret.refundMethod}'.tr(),
-                            style: theme.textTheme.bodyMedium
-                                ?.copyWith(fontWeight: FontWeight.w600)),
+                          'sales.refund_method_${ret.refundMethod}'.tr(),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                         Text(
-                            'sales.refund_method_${ret.refundMethod}_desc'
-                                .tr(),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                                color: cs.onSurfaceVariant, fontSize: 10)),
+                          'sales.refund_method_${ret.refundMethod}_desc'.tr(),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                            fontSize: 10,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -544,8 +626,9 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
               ),
             ),
             Divider(
-                height: 20,
-                color: cs.outlineVariant.withValues(alpha: 0.4)),
+              height: 20,
+              color: cs.outlineVariant.withValues(alpha: 0.4),
+            ),
             Row(
               children: [
                 Container(
@@ -554,17 +637,25 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
                     color: Colors.amber.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(LucideIcons.package,
-                      size: 16, color: Colors.amber.shade700),
+                  child: Icon(
+                    LucideIcons.package,
+                    size: 16,
+                    color: Colors.amber.shade700,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('sales.disposition_type'.tr(),
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600)),
+                Text(
+                  'sales.disposition_type'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(width: 10),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: cs.primaryContainer.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(8),
@@ -575,10 +666,12 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
                       Icon(dispositionIcon, size: 14, color: cs.primary),
                       const SizedBox(width: 6),
                       Text(
-                          'sales.disposition_${ret.dispositionType}'.tr(),
-                          style: theme.textTheme.labelMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: cs.primary)),
+                        'sales.disposition_${ret.dispositionType}'.tr(),
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: cs.primary,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -593,8 +686,11 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
   // ═══════════════════════════════════════════════════════
   // RETURN ITEMS CARD
   // ═══════════════════════════════════════════════════════
-  Widget _buildReturnItemsCard(BuildContext context,
-      List<SaleReturnItemEntity> items, CurrencyService cs) {
+  Widget _buildReturnItemsCard(
+    BuildContext context,
+    List<SaleReturnItemEntity> items,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -603,7 +699,8 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -618,30 +715,41 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
                     gradient: LinearGradient(
                       colors: [
                         colorScheme.error,
-                        colorScheme.error.withValues(alpha: 0.7)
+                        colorScheme.error.withValues(alpha: 0.7),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(LucideIcons.undo2,
-                      size: 16, color: Colors.white),
+                  child: const Icon(
+                    LucideIcons.undo2,
+                    size: 16,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('sales.return_items'.tr(),
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600)),
+                Text(
+                  'sales.return_items'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(width: 8),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: colorScheme.errorContainer,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text('${items.length}',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: colorScheme.onErrorContainer,
-                          fontWeight: FontWeight.bold)),
+                  child: Text(
+                    '${items.length}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onErrorContainer,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -650,9 +758,12 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
               Center(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Text('sales.no_items_to_return'.tr(),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant)),
+                  child: Text(
+                    'sales.no_items_to_return'.tr(),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ),
               )
             else
@@ -661,9 +772,9 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: items.length,
                 separatorBuilder: (_, _) => Divider(
-                    height: 1,
-                    color:
-                        colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  height: 1,
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                ),
                 itemBuilder: (context, index) {
                   final item = items[index];
                   final productName =
@@ -687,79 +798,102 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     child: Row(
                       children: [
-                        if (item.colorHex != null &&
-                            item.colorHex!.isNotEmpty)
+                        if (item.colorHex != null && item.colorHex!.isNotEmpty)
                           Container(
                             width: 32,
                             height: 32,
                             decoration: BoxDecoration(
-                              color: Color(int.parse(
+                              color: Color(
+                                int.parse(
                                   'FF${item.colorHex!.replaceAll('#', '')}',
-                                  radix: 16)),
+                                  radix: 16,
+                                ),
+                              ),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                  color: colorScheme.outlineVariant),
+                                color: colorScheme.outlineVariant,
+                              ),
                             ),
                             alignment: Alignment.center,
-                            child: Text('${index + 1}',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    shadows: [
-                                      const Shadow(
-                                          blurRadius: 2,
-                                          color: Colors.black54)
-                                    ])),
+                            child: Text(
+                              '${index + 1}',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                shadows: [
+                                  const Shadow(
+                                    blurRadius: 2,
+                                    color: Colors.black54,
+                                  ),
+                                ],
+                              ),
+                            ),
                           )
                         else
                           Container(
                             width: 32,
                             height: 32,
                             decoration: BoxDecoration(
-                              color: colorScheme.errorContainer
-                                  .withValues(alpha: 0.3),
+                              color: colorScheme.errorContainer.withValues(
+                                alpha: 0.3,
+                              ),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             alignment: Alignment.center,
-                            child: Text('${index + 1}',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                    color: colorScheme.error,
-                                    fontWeight: FontWeight.bold)),
+                            child: Text(
+                              '${index + 1}',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: colorScheme.error,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(productName,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                      fontWeight: FontWeight.w500)),
-                              if (variantLine != null)
-                                Text(variantLine,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                        color: colorScheme.primary,
-                                        fontSize: 11)),
                               Text(
-                                  '${'sales.return_qty'.tr()}: ${item.quantity}',
+                                productName,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              if (variantLine != null)
+                                Text(
+                                  variantLine,
                                   style: theme.textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.onSurfaceVariant,
-                                      fontSize: 11)),
+                                    color: colorScheme.primary,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              Text(
+                                '${'sales.return_qty'.tr()}: ${localizedQuantity(item.quantity, item.measurementType)}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                  fontSize: 11,
+                                ),
+                              ),
                               if (item.reason != null &&
                                   item.reason!.isNotEmpty)
-                                Text(item.reason!,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                        color: colorScheme.onSurfaceVariant,
-                                        fontStyle: FontStyle.italic,
-                                        fontSize: 10)),
+                                Text(
+                                  item.reason!,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                    fontStyle: FontStyle.italic,
+                                    fontSize: 10,
+                                  ),
+                                ),
                             ],
                           ),
                         ),
                         Text(
-                            cs.format(
-                                item.refundCents.toBigInt().toInt()),
-                            style: theme.textTheme.titleSmall?.copyWith(
-                                color: colorScheme.error,
-                                fontWeight: FontWeight.bold)),
+                          cs.format(item.refundCents.toBigInt().toInt()),
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: colorScheme.error,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ],
                     ),
                   );
@@ -775,7 +909,10 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
   // TOTAL CARD
   // ═══════════════════════════════════════════════════════
   Widget _buildTotalCard(
-      BuildContext context, SaleReturnEntity ret, CurrencyService cs) {
+    BuildContext context,
+    SaleReturnEntity ret,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -784,7 +921,10 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
     final tax = ret.taxCents.toBigInt().toInt();
     final total = ret.totalCents.toBigInt().toInt();
     final totalItems = _returnItems.length;
-    final totalPieces = _returnItems.fold<int>(0, (sum, item) => sum + item.quantity);
+    final totalPieces = _returnItems.fold<int>(
+      0,
+      (sum, item) => sum + item.quantity,
+    );
 
     return Card(
       elevation: 0,
@@ -803,24 +943,40 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
             _totalRow(theme, 'sales.total_items_count'.tr(), '$totalItems'),
             _totalRow(theme, 'sales.total_pieces_count'.tr(), '$totalPieces'),
             if (subtotal != 0 || discount != 0 || tax != 0) ...[
-              Divider(height: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+              Divider(
+                height: 16,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+              ),
               _totalRow(theme, 'sales.subtotal'.tr(), cs.format(subtotal)),
               if (discount != 0)
-                _totalRow(theme, 'sales.discount'.tr(), '- ${cs.format(discount)}',
-                    valueColor: Colors.green),
-              if (tax != 0)
-                _totalRow(theme, 'sales.tax'.tr(), cs.format(tax)),
-              Divider(height: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                _totalRow(
+                  theme,
+                  'sales.discount'.tr(),
+                  '- ${cs.format(discount)}',
+                  valueColor: Colors.green,
+                ),
+              if (tax != 0) _totalRow(theme, 'sales.tax'.tr(), cs.format(tax)),
+              Divider(
+                height: 16,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+              ),
             ],
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('sales.total_refund'.tr(),
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.bold)),
-                Text(cs.format(total),
-                    style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold, color: colorScheme.error)),
+                Text(
+                  'sales.total_refund'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  cs.format(total),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.error,
+                  ),
+                ),
               ],
             ),
           ],
@@ -829,19 +985,30 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
     );
   }
 
-  Widget _totalRow(ThemeData theme, String label, String value, {Color? valueColor}) {
+  Widget _totalRow(
+    ThemeData theme,
+    String label,
+    String value, {
+    Color? valueColor,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          Text(value,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                  color: valueColor)),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+              color: valueColor,
+            ),
+          ),
         ],
       ),
     );
@@ -862,25 +1029,32 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
                 borderRadius: BorderRadius.circular(5),
               ),
               child: Icon(
-                  label.contains('Date') || label.contains('تاريخ')
-                      ? LucideIcons.calendar
-                      : LucideIcons.info,
-                  size: 12,
-                  color: cs.onSurfaceVariant),
+                label.contains('Date') || label.contains('تاريخ')
+                    ? LucideIcons.calendar
+                    : LucideIcons.info,
+                size: 12,
+                color: cs.onSurfaceVariant,
+              ),
             ),
             const SizedBox(width: 8),
-            Text(label,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: cs.onSurfaceVariant)),
+            Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: cs.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
         Flexible(
-          child: Text(value,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(fontWeight: FontWeight.w500),
-              textAlign: TextAlign.end,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis),
+          child: Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.end,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

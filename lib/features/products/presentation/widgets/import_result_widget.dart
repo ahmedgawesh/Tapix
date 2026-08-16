@@ -25,7 +25,9 @@ class ImportResultWidget extends StatelessWidget {
 
     return Center(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: isDesktop ? 700 : double.infinity),
+        constraints: BoxConstraints(
+          maxWidth: isDesktop ? 700 : double.infinity,
+        ),
         child: Card(
           child: Padding(
             padding: const EdgeInsets.all(32),
@@ -34,15 +36,23 @@ class ImportResultWidget extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Icon(
-                  isSuccess ? LucideIcons.checkCircle2 : (isPartial ? LucideIcons.alertTriangle : LucideIcons.xCircle),
+                  isSuccess
+                      ? LucideIcons.checkCircle2
+                      : (isPartial
+                            ? LucideIcons.alertTriangle
+                            : LucideIcons.xCircle),
                   size: 64,
-                  color: isSuccess ? Colors.green : (isPartial ? Colors.orange : colorScheme.error),
+                  color: isSuccess
+                      ? Colors.green
+                      : (isPartial ? Colors.orange : colorScheme.error),
                 ),
                 const SizedBox(height: 24),
                 Text(
                   isSuccess
                       ? 'import_products.import_success'.tr()
-                      : (isPartial ? 'import_products.import_partial'.tr() : 'import_products.import_failed'.tr()),
+                      : (isPartial
+                            ? 'import_products.import_partial'.tr()
+                            : 'import_products.import_failed'.tr()),
                   style: Theme.of(context).textTheme.headlineSmall,
                   textAlign: TextAlign.center,
                 ),
@@ -81,8 +91,8 @@ class ImportResultWidget extends StatelessWidget {
                   Text(
                     'import_products.error_summary'.tr(),
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Container(
@@ -93,8 +103,11 @@ class ImportResultWidget extends StatelessWidget {
                     ),
                     child: ListView.separated(
                       shrinkWrap: true,
-                      itemCount: result.errors.length > 20 ? 20 : result.errors.length,
-                      separatorBuilder: (context, index) => const Divider(height: 1),
+                      itemCount: result.errors.length > 20
+                          ? 20
+                          : result.errors.length,
+                      separatorBuilder: (context, index) =>
+                          const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final error = result.errors[index];
                         return ListTile(
@@ -120,7 +133,9 @@ class ImportResultWidget extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(
-                        'import_products.showing_first_errors'.tr(args: ['20', result.errors.length.toString()]),
+                        'import_products.showing_first_errors'.tr(
+                          args: ['20', result.errors.length.toString()],
+                        ),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
@@ -133,7 +148,9 @@ class ImportResultWidget extends StatelessWidget {
                   children: [
                     OutlinedButton.icon(
                       onPressed: () {
-                        context.read<ImportProductsBloc>().add(const ImportReset());
+                        context.read<ImportProductsBloc>().add(
+                          const ImportReset(),
+                        );
                       },
                       icon: const Icon(LucideIcons.upload),
                       label: Text('import_products.import_another'.tr()),
@@ -167,17 +184,14 @@ class ImportResultWidget extends StatelessWidget {
         Icon(icon, size: 20, color: color),
         const SizedBox(width: 12),
         Expanded(
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
+          child: Text(label, style: Theme.of(context).textTheme.bodyLarge),
         ),
         Text(
           value,
           style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
         ),
       ],
     );

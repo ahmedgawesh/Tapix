@@ -1,4 +1,5 @@
 import 'package:easy_localization/easy_localization.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -9,7 +10,8 @@ import '../../domain/models/barcode_design_state.dart';
 import '../bloc/barcode_design_bloc.dart';
 import '../bloc/barcode_design_event.dart';
 
-export '../bloc/barcode_design_event.dart' show LabelPrintMode, QuantityMode;
+export '../bloc/barcode_design_event.dart'
+    show LabelPrintMode, PriceDisplayMode, PrintDestination, QuantityMode;
 
 class DesignSettingsWidget extends StatelessWidget {
   final BarcodeDesignSettings settings;
@@ -51,9 +53,9 @@ class _CompactSettings extends StatelessWidget {
               IconButton(
                 icon: const Icon(LucideIcons.minus, size: 18),
                 onPressed: settings.copies > 1
-                    ? () => context
-                        .read<BarcodeDesignBloc>()
-                        .add(UpdateCopies(settings.copies - 1))
+                    ? () => context.read<BarcodeDesignBloc>().add(
+                        UpdateCopies(settings.copies - 1),
+                      )
                     : null,
                 visualDensity: VisualDensity.compact,
               ),
@@ -63,13 +65,15 @@ class _CompactSettings extends StatelessWidget {
               ),
               IconButton(
                 icon: const Icon(LucideIcons.plus, size: 18),
-                onPressed: () => context
-                    .read<BarcodeDesignBloc>()
-                    .add(UpdateCopies(settings.copies + 1)),
+                onPressed: () => context.read<BarcodeDesignBloc>().add(
+                  UpdateCopies(settings.copies + 1),
+                ),
                 visualDensity: VisualDensity.compact,
               ),
             ],
           ),
+          const Divider(),
+          _PrintDestinationSelector(settings: settings),
           const Divider(),
           // Quick toggles
           Wrap(
@@ -79,26 +83,35 @@ class _CompactSettings extends StatelessWidget {
               _QuickToggle(
                 label: 'barcode.name'.tr(),
                 value: settings.includeName,
-                onChanged: (v) => context
-                    .read<BarcodeDesignBloc>()
-                    .add(ToggleIncludeName(v)),
+                onChanged: (v) =>
+                    context.read<BarcodeDesignBloc>().add(ToggleIncludeName(v)),
               ),
               _QuickToggle(
                 label: 'barcode.price'.tr(),
                 value: settings.includePrice,
-                onChanged: (v) => context
-                    .read<BarcodeDesignBloc>()
-                    .add(ToggleIncludePrice(v)),
+                onChanged: (v) => context.read<BarcodeDesignBloc>().add(
+                  ToggleIncludePrice(v),
+                ),
               ),
               _QuickToggle(
                 label: 'barcode.sku'.tr(),
                 value: settings.includeSku,
-                onChanged: (v) => context
-                    .read<BarcodeDesignBloc>()
-                    .add(ToggleIncludeSku(v)),
+                onChanged: (v) =>
+                    context.read<BarcodeDesignBloc>().add(ToggleIncludeSku(v)),
+              ),
+              _QuickToggle(
+                label: 'barcode.color_size'.tr(),
+                value: settings.includeVariantInfo,
+                onChanged: (v) => context.read<BarcodeDesignBloc>().add(
+                  ToggleIncludeVariantInfo(v),
+                ),
               ),
             ],
           ),
+          if (settings.includePrice) ...[
+            const SizedBox(height: 10),
+            _PriceModeSelector(settings: settings),
+          ],
         ],
       ),
     );
@@ -141,6 +154,9 @@ class _FullSettings extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _PrintDestinationSelector(settings: settings),
+        const SizedBox(height: 24),
+
         // Label dimensions
         _SectionHeader(title: 'barcode.label_size'.tr()),
         const SizedBox(height: 8),
@@ -150,9 +166,9 @@ class _FullSettings extends StatelessWidget {
               child: _DimensionField(
                 label: 'barcode.width_mm'.tr(),
                 value: settings.labelWidthMm,
-                onChanged: (v) => context
-                    .read<BarcodeDesignBloc>()
-                    .add(UpdateLabelDimensions(widthMm: v)),
+                onChanged: (v) => context.read<BarcodeDesignBloc>().add(
+                  UpdateLabelDimensions(widthMm: v),
+                ),
               ),
             ),
             const SizedBox(width: 16),
@@ -160,9 +176,9 @@ class _FullSettings extends StatelessWidget {
               child: _DimensionField(
                 label: 'barcode.height_mm'.tr(),
                 value: settings.labelHeightMm,
-                onChanged: (v) => context
-                    .read<BarcodeDesignBloc>()
-                    .add(UpdateLabelDimensions(heightMm: v)),
+                onChanged: (v) => context.read<BarcodeDesignBloc>().add(
+                  UpdateLabelDimensions(heightMm: v),
+                ),
               ),
             ),
           ],
@@ -184,12 +200,30 @@ class _FullSettings extends StatelessWidget {
               isExpanded: true,
               isDense: true,
               items: [
-                DropdownMenuItem(value: 'auto', child: Text('barcode.type_auto'.tr())),
-                DropdownMenuItem(value: 'code128', child: Text('barcode.type_code128'.tr())),
-                DropdownMenuItem(value: 'ean13', child: Text('barcode.type_ean13'.tr())),
-                DropdownMenuItem(value: 'ean8', child: Text('barcode.type_ean8'.tr())),
-                DropdownMenuItem(value: 'upca', child: Text('barcode.type_upca'.tr())),
-                DropdownMenuItem(value: 'qr', child: Text('barcode.type_qr'.tr())),
+                DropdownMenuItem(
+                  value: 'auto',
+                  child: Text('barcode.type_auto'.tr()),
+                ),
+                DropdownMenuItem(
+                  value: 'code128',
+                  child: Text('barcode.type_code128'.tr()),
+                ),
+                DropdownMenuItem(
+                  value: 'ean13',
+                  child: Text('barcode.type_ean13'.tr()),
+                ),
+                DropdownMenuItem(
+                  value: 'ean8',
+                  child: Text('barcode.type_ean8'.tr()),
+                ),
+                DropdownMenuItem(
+                  value: 'upca',
+                  child: Text('barcode.type_upca'.tr()),
+                ),
+                DropdownMenuItem(
+                  value: 'qr',
+                  child: Text('barcode.type_qr'.tr()),
+                ),
               ],
               onChanged: (v) {
                 if (v != null) {
@@ -209,9 +243,9 @@ class _FullSettings extends StatelessWidget {
             IconButton.filled(
               icon: const Icon(LucideIcons.minus),
               onPressed: settings.copies > 1
-                  ? () => context
-                      .read<BarcodeDesignBloc>()
-                      .add(UpdateCopies(settings.copies - 1))
+                  ? () => context.read<BarcodeDesignBloc>().add(
+                      UpdateCopies(settings.copies - 1),
+                    )
                   : null,
             ),
             Expanded(
@@ -224,9 +258,9 @@ class _FullSettings extends StatelessWidget {
             ),
             IconButton.filled(
               icon: const Icon(LucideIcons.plus),
-              onPressed: () => context
-                  .read<BarcodeDesignBloc>()
-                  .add(UpdateCopies(settings.copies + 1)),
+              onPressed: () => context.read<BarcodeDesignBloc>().add(
+                UpdateCopies(settings.copies + 1),
+              ),
             ),
           ],
         ),
@@ -234,7 +268,7 @@ class _FullSettings extends StatelessWidget {
 
         // A4 specific settings
         if (settings.isA4Mode) ..._buildA4Settings(context, settings),
-        
+
         // Quantity mode
         _SectionHeader(title: 'barcode.quantity_mode'.tr()),
         const SizedBox(height: 8),
@@ -245,22 +279,38 @@ class _FullSettings extends StatelessWidget {
             ChoiceChip(
               label: Text('barcode.qty_single'.tr()),
               selected: settings.quantityMode == QuantityMode.single,
-              onSelected: (v) => v ? context.read<BarcodeDesignBloc>().add(const UpdateQuantityMode(QuantityMode.single)) : null,
+              onSelected: (v) => v
+                  ? context.read<BarcodeDesignBloc>().add(
+                      const UpdateQuantityMode(QuantityMode.single),
+                    )
+                  : null,
             ),
             ChoiceChip(
               label: Text('barcode.qty_custom'.tr()),
               selected: settings.quantityMode == QuantityMode.custom,
-              onSelected: (v) => v ? context.read<BarcodeDesignBloc>().add(const UpdateQuantityMode(QuantityMode.custom)) : null,
+              onSelected: (v) => v
+                  ? context.read<BarcodeDesignBloc>().add(
+                      const UpdateQuantityMode(QuantityMode.custom),
+                    )
+                  : null,
             ),
             ChoiceChip(
               label: Text('barcode.qty_invoice'.tr()),
               selected: settings.quantityMode == QuantityMode.invoiceQuantity,
-              onSelected: (v) => v ? context.read<BarcodeDesignBloc>().add(const UpdateQuantityMode(QuantityMode.invoiceQuantity)) : null,
+              onSelected: (v) => v
+                  ? context.read<BarcodeDesignBloc>().add(
+                      const UpdateQuantityMode(QuantityMode.invoiceQuantity),
+                    )
+                  : null,
             ),
             ChoiceChip(
               label: Text('barcode.qty_stock'.tr()),
               selected: settings.quantityMode == QuantityMode.stockQuantity,
-              onSelected: (v) => v ? context.read<BarcodeDesignBloc>().add(const UpdateQuantityMode(QuantityMode.stockQuantity)) : null,
+              onSelected: (v) => v
+                  ? context.read<BarcodeDesignBloc>().add(
+                      const UpdateQuantityMode(QuantityMode.stockQuantity),
+                    )
+                  : null,
             ),
           ],
         ),
@@ -272,76 +322,84 @@ class _FullSettings extends StatelessWidget {
         SwitchListTile(
           title: Text('barcode.include_name'.tr()),
           value: settings.includeName,
-          onChanged: (v) => context
-              .read<BarcodeDesignBloc>()
-              .add(ToggleIncludeName(v)),
+          onChanged: (v) =>
+              context.read<BarcodeDesignBloc>().add(ToggleIncludeName(v)),
           dense: true,
         ),
         SwitchListTile(
           title: Text('barcode.include_price'.tr()),
           value: settings.includePrice,
-          onChanged: (v) => context
-              .read<BarcodeDesignBloc>()
-              .add(ToggleIncludePrice(v)),
+          onChanged: (v) =>
+              context.read<BarcodeDesignBloc>().add(ToggleIncludePrice(v)),
           dense: true,
         ),
+        if (settings.includePrice)
+          Padding(
+            padding: const EdgeInsetsDirectional.only(
+              start: 16,
+              end: 16,
+              bottom: 8,
+            ),
+            child: _PriceModeSelector(settings: settings),
+          ),
         SwitchListTile(
           title: Text('barcode.include_barcode'.tr()),
           value: settings.includeBarcode,
-          onChanged: (v) => context
-              .read<BarcodeDesignBloc>()
-              .add(ToggleIncludeBarcode(v)),
+          onChanged: (v) =>
+              context.read<BarcodeDesignBloc>().add(ToggleIncludeBarcode(v)),
           dense: true,
         ),
         SwitchListTile(
           title: Text('barcode.include_sku'.tr()),
           value: settings.includeSku,
-          onChanged: (v) => context
-              .read<BarcodeDesignBloc>()
-              .add(ToggleIncludeSku(v)),
+          onChanged: (v) =>
+              context.read<BarcodeDesignBloc>().add(ToggleIncludeSku(v)),
           dense: true,
         ),
         SwitchListTile(
           title: Text('barcode.include_company'.tr()),
           value: settings.includeCompanyName,
-          onChanged: (v) => context
-              .read<BarcodeDesignBloc>()
-              .add(ToggleIncludeCompanyName(v)),
+          onChanged: (v) => context.read<BarcodeDesignBloc>().add(
+            ToggleIncludeCompanyName(v),
+          ),
           dense: true,
         ),
         SwitchListTile(
           title: Text('barcode.include_company_contact'.tr()),
           value: settings.includeCompanyContact,
-          onChanged: (v) => context
-              .read<BarcodeDesignBloc>()
-              .add(ToggleIncludeCompanyContact(v)),
+          onChanged: (v) => context.read<BarcodeDesignBloc>().add(
+            ToggleIncludeCompanyContact(v),
+          ),
           dense: true,
         ),
         SwitchListTile(
           title: Text('barcode.include_variant'.tr()),
           subtitle: Text('barcode.variant_hint'.tr()),
           value: settings.includeVariantInfo,
-          onChanged: (v) => context
-              .read<BarcodeDesignBloc>()
-              .add(ToggleIncludeVariantInfo(v)),
+          onChanged: (v) => context.read<BarcodeDesignBloc>().add(
+            ToggleIncludeVariantInfo(v),
+          ),
           dense: true,
         ),
       ],
     );
   }
-  
-  List<Widget> _buildA4Settings(BuildContext context, BarcodeDesignSettings settings) {
+
+  List<Widget> _buildA4Settings(
+    BuildContext context,
+    BarcodeDesignSettings settings,
+  ) {
     return [
       // Labels per row
       Row(
         children: [
-          Expanded(
-            child: Text('barcode.labels_per_row'.tr()),
-          ),
+          Expanded(child: Text('barcode.labels_per_row'.tr())),
           IconButton(
             icon: const Icon(LucideIcons.minus, size: 18),
             onPressed: settings.labelsPerRow > 1
-                ? () => context.read<BarcodeDesignBloc>().add(UpdateLabelsPerRow(settings.labelsPerRow - 1))
+                ? () => context.read<BarcodeDesignBloc>().add(
+                    UpdateLabelsPerRow(settings.labelsPerRow - 1),
+                  )
                 : null,
             visualDensity: VisualDensity.compact,
           ),
@@ -352,14 +410,16 @@ class _FullSettings extends StatelessWidget {
           IconButton(
             icon: const Icon(LucideIcons.plus, size: 18),
             onPressed: settings.labelsPerRow < 10
-                ? () => context.read<BarcodeDesignBloc>().add(UpdateLabelsPerRow(settings.labelsPerRow + 1))
+                ? () => context.read<BarcodeDesignBloc>().add(
+                    UpdateLabelsPerRow(settings.labelsPerRow + 1),
+                  )
                 : null,
             visualDensity: VisualDensity.compact,
           ),
         ],
       ),
       const SizedBox(height: 8),
-      
+
       // Gap settings
       Row(
         children: [
@@ -367,7 +427,9 @@ class _FullSettings extends StatelessWidget {
             child: _DimensionField(
               label: 'barcode.h_gap'.tr(),
               value: settings.horizontalGapMm,
-              onChanged: (v) => context.read<BarcodeDesignBloc>().add(UpdateA4LayoutGaps(horizontalGapMm: v)),
+              onChanged: (v) => context.read<BarcodeDesignBloc>().add(
+                UpdateA4LayoutGaps(horizontalGapMm: v),
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -375,21 +437,25 @@ class _FullSettings extends StatelessWidget {
             child: _DimensionField(
               label: 'barcode.v_gap'.tr(),
               value: settings.verticalGapMm,
-              onChanged: (v) => context.read<BarcodeDesignBloc>().add(UpdateA4LayoutGaps(verticalGapMm: v)),
+              onChanged: (v) => context.read<BarcodeDesignBloc>().add(
+                UpdateA4LayoutGaps(verticalGapMm: v),
+              ),
             ),
           ),
         ],
       ),
       const SizedBox(height: 8),
-      
+
       // Page margin
       _DimensionField(
         label: 'barcode.page_margin'.tr(),
         value: settings.pageMarginMm,
-        onChanged: (v) => context.read<BarcodeDesignBloc>().add(UpdateA4LayoutGaps(pageMarginMm: v)),
+        onChanged: (v) => context.read<BarcodeDesignBloc>().add(
+          UpdateA4LayoutGaps(pageMarginMm: v),
+        ),
       ),
       const SizedBox(height: 8),
-      
+
       // Info about calculated layout
       Card(
         child: Padding(
@@ -400,11 +466,13 @@ class _FullSettings extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'barcode.a4_layout_info'.tr(args: [
-                    settings.labelsPerRow.toString(),
-                    settings.calculatedLabelsPerColumn.toString(),
-                    settings.labelsPerPage.toString(),
-                  ]),
+                  'barcode.a4_layout_info'.tr(
+                    args: [
+                      settings.labelsPerRow.toString(),
+                      settings.calculatedLabelsPerColumn.toString(),
+                      settings.labelsPerPage.toString(),
+                    ],
+                  ),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
@@ -417,6 +485,125 @@ class _FullSettings extends StatelessWidget {
   }
 }
 
+class _PrintDestinationSelector extends StatelessWidget {
+  final BarcodeDesignSettings settings;
+
+  const _PrintDestinationSelector({required this.settings});
+
+  @override
+  Widget build(BuildContext context) {
+    final bluetoothSupported =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    final bluetoothSelected =
+        settings.printDestination == PrintDestination.bluetooth;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'barcode.print_destination'.tr(),
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            ChoiceChip(
+              avatar: const Icon(LucideIcons.printer, size: 16),
+              label: Text('barcode.system_printer'.tr()),
+              selected: settings.printDestination == PrintDestination.system,
+              onSelected: (selected) {
+                if (selected) {
+                  context.read<BarcodeDesignBloc>().add(
+                    const UpdatePrintDestination(PrintDestination.system),
+                  );
+                }
+              },
+            ),
+            ChoiceChip(
+              avatar: const Icon(Icons.bluetooth, size: 16),
+              label: Text('barcode.bluetooth_printer'.tr()),
+              selected: bluetoothSelected,
+              onSelected: bluetoothSupported
+                  ? (selected) {
+                      if (selected) {
+                        context.read<BarcodeDesignBloc>().add(
+                          const UpdatePrintDestination(
+                            PrintDestination.bluetooth,
+                          ),
+                        );
+                      }
+                    }
+                  : null,
+            ),
+          ],
+        ),
+        if (bluetoothSelected || !bluetoothSupported) ...[
+          const SizedBox(height: 6),
+          Text(
+            bluetoothSupported
+                ? 'barcode.bluetooth_tspl_hint'.tr()
+                : 'barcode.bluetooth_android_only'.tr(),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _PriceModeSelector extends StatelessWidget {
+  final BarcodeDesignSettings settings;
+
+  const _PriceModeSelector({required this.settings});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'barcode.price_type'.tr(),
+          style: Theme.of(context).textTheme.labelMedium,
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            _choice(
+              context,
+              PriceDisplayMode.retail,
+              'barcode.retail_price'.tr(),
+            ),
+            _choice(
+              context,
+              PriceDisplayMode.wholesale,
+              'barcode.wholesale_price'.tr(),
+            ),
+            _choice(context, PriceDisplayMode.both, 'barcode.both_prices'.tr()),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _choice(BuildContext context, PriceDisplayMode mode, String label) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: settings.priceDisplayMode == mode,
+      onSelected: (selected) {
+        if (!selected) return;
+        context.read<BarcodeDesignBloc>().add(UpdatePriceDisplayMode(mode));
+      },
+      visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
 class _SectionHeader extends StatelessWidget {
   final String title;
 
@@ -426,9 +613,9 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title,
-      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
+      style: Theme.of(
+        context,
+      ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
     );
   }
 }

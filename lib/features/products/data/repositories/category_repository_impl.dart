@@ -12,18 +12,18 @@ class CategoryRepositoryImpl implements CategoryRepository {
   @override
   Stream<List<Category>> watchAllCategories() {
     return _database.categoryDao.watchAllCategories().map(
-          (categories) => categories
-              .map((cat) => CategoryModel.fromDrift(cat))
-              .toList(),
-        );
+      (categories) =>
+          categories.map((cat) => CategoryModel.fromDrift(cat)).toList(),
+    );
   }
 
   @override
   Stream<List<Category>> watchCategoriesBySearch(String query) {
-    return _database.categoryDao.watchCategoriesBySearch(query).map(
-          (categories) => categories
-              .map((cat) => CategoryModel.fromDrift(cat))
-              .toList(),
+    return _database.categoryDao
+        .watchCategoriesBySearch(query)
+        .map(
+          (categories) =>
+              categories.map((cat) => CategoryModel.fromDrift(cat)).toList(),
         );
   }
 
@@ -47,24 +47,29 @@ class CategoryRepositoryImpl implements CategoryRepository {
 
   @override
   Stream<List<Category>> watchSubcategories(int parentId) {
-    return _database.categoryDao.watchSubcategories(parentId).map(
-          (categories) => categories
-              .map((cat) => CategoryModel.fromDrift(cat))
-              .toList(),
+    return _database.categoryDao
+        .watchSubcategories(parentId)
+        .map(
+          (categories) =>
+              categories.map((cat) => CategoryModel.fromDrift(cat)).toList(),
         );
   }
 
   @override
   Future<int> createCategory(Category category) async {
     final model = category as CategoryModel;
-    return await _database.categoryDao.createCategory(model.toInsertCompanion());
+    return await _database.categoryDao.createCategory(
+      model.toInsertCompanion(),
+    );
   }
 
   @override
   Future<bool> updateCategory(Category category) async {
-    final driftCategory = await _database.categoryDao.getCategoryById(category.id);
+    final driftCategory = await _database.categoryDao.getCategoryById(
+      category.id,
+    );
     if (driftCategory == null) return false;
-    
+
     final updatedCategory = driftCategory.copyWith(
       name: category.name,
       description: Value(category.description),
@@ -72,7 +77,7 @@ class CategoryRepositoryImpl implements CategoryRepository {
       isActive: category.isActive,
       updatedAt: DateTime.now(),
     );
-    
+
     return await _database.categoryDao.updateCategory(updatedCategory);
   }
 

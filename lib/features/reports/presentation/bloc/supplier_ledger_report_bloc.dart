@@ -2,7 +2,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
-import '../../../../core/services/ledger/ledger_running_balance.dart';
+import '../../services/party_statement_ledger_service.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -132,8 +132,8 @@ class SupplierLedgerReportBloc
   int? _supplierId;
 
   SupplierLedgerReportBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
   int? get supplierId => _supplierId;
@@ -149,7 +149,10 @@ class SupplierLedgerReportBloc
 
   Stream<SupplierLedgerData> _buildStream() {
     return _db
-        .select(_db.supplierTransactions)
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {_db.suppliers, _db.supplierTransactions},
+        )
         .watch()
         .asyncMap((_) async => _loadLedgerData());
   }
@@ -171,238 +174,159 @@ class SupplierLedgerReportBloc
   }
 
   Future<SupplierLedgerData> _loadLedgerData() async {
-    // ── Supplier list ──
-    final supplierRows = await _db.customSelect(
-      '''
-      SELECT s.id, s.name, s.phone, s.balance_cents
-      FROM suppliers s WHERE s.is_active = 1
-      ORDER BY s.name ASC
-      ''',
-      readsFrom: {_db.suppliers},
-    ).get();
-
-    final suppliers = supplierRows
-        .map((r) => SupplierLedgerOption(
-              id: r.read<int>('id'),
-              name: r.read<String>('name'),
-              phone: r.readNullable<String>('phone'),
-              balanceCents: r.read<int>('balance_cents'),
-            ))
+    final snapshot = await PartyStatementLedgerService(_db).loadSupplier(
+      supplierId: _supplierId,
+      startDate: _dateRange.startDate,
+      endDate: _dateRange.endDate,
+    );
+    final suppliers = snapshot.options
+        .map(
+          (option) => SupplierLedgerOption(
+            id: option.id,
+            name: option.name,
+            phone: option.phone,
+            balanceCents: option.balanceCents,
+          ),
+        )
         .toList();
-
-    if (_supplierId == null) {
+    final supplier = snapshot.party;
+    if (supplier == null) {
       return SupplierLedgerData(dateRange: _dateRange, suppliers: suppliers);
     }
 
-    // ── Supplier info ──
-    final sRows = await _db.customSelect(
-      'SELECT name, phone, address FROM suppliers WHERE id = ?',
-      variables: [Variable.withInt(_supplierId!)],
-      readsFrom: {_db.suppliers},
-    ).get();
-    if (sRows.isEmpty) {
-      return SupplierLedgerData(dateRange: _dateRange, suppliers: suppliers);
-    }
-    final sInfo = sRows.first;
-
-    final startIso = _dateRange.startDate.toIso8601String();
-    final endIso = DateTime(
-      _dateRange.endDate.year,
-      _dateRange.endDate.month,
-      _dateRange.endDate.day,
-      23, 59, 59,
-    ).toIso8601String();
-
-    // ── Opening balance ──
-    final obRows = await _db.customSelect(
-      '''
-      SELECT
-        s.balance_cents AS current_balance,
-        COALESCE(a.total, 0) AS all_total,
-        COALESCE(b.total, 0) AS before_total
-      FROM suppliers s
-      LEFT JOIN (
-        SELECT COALESCE(SUM(amount_cents), 0) AS total
-        FROM supplier_transactions WHERE supplier_id = ?
-      ) a ON 1=1
-      LEFT JOIN (
-        SELECT COALESCE(SUM(amount_cents), 0) AS total
-        FROM supplier_transactions WHERE supplier_id = ? AND transaction_date < ?
-      ) b ON 1=1
-      WHERE s.id = ?
-      ''',
-      variables: [
-        Variable.withInt(_supplierId!),
-        Variable.withInt(_supplierId!),
-        Variable.withString(startIso),
-        Variable.withInt(_supplierId!),
-      ],
-      readsFrom: {_db.suppliers, _db.supplierTransactions},
-    ).get();
-
-    final int openingBalanceCents;
-    if (obRows.isNotEmpty) {
-      final r = obRows.first;
-      openingBalanceCents = (r.read<int>('current_balance') -
-              r.read<int>('all_total')) +
-          r.read<int>('before_total');
-    } else {
-      openingBalanceCents = 0;
-    }
-
-    // ── Transactions in range ──
-    final txnRows = await _db.customSelect(
-      '''
-      SELECT
-        st.id,
-        st.transaction_type,
-        st.transaction_number,
-        st.amount_cents,
-        st.description,
-        st.reference_id,
-        st.reference_type,
-        st.transaction_date
-      FROM supplier_transactions st
-      WHERE st.supplier_id = ?
-        AND st.transaction_date >= ?
-        AND st.transaction_date <= ?
-      ORDER BY st.transaction_date ASC, st.id ASC
-      ''',
-      variables: [
-        Variable.withInt(_supplierId!),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.supplierTransactions},
-    ).get();
-
-    // ── Build ledger rows ──
-    // Phase 7 — running balance via SoT helper.
-    final running = LedgerRunningBalance(openingBalanceCents);
-    int totalPurchases = 0;
-    int totalReturns = 0;
-    int totalPayments = 0;
-    int totalDiscounts = 0;
-    int totalPurchaseItems = 0;
-    int totalReturnItems = 0;
-
+    var totalPurchases = 0;
+    var totalReturns = 0;
+    var totalPayments = 0;
+    var totalDiscounts = 0;
+    var totalPurchaseItems = 0;
+    var totalReturnItems = 0;
     final ledgerRows = <LedgerRow>[];
 
-    for (final row in txnRows) {
-      final type = row.read<String>('transaction_type');
-      final amountCents = row.read<int>('amount_cents');
-      final txNumber = row.readNullable<String>('transaction_number');
-      final refId = row.readNullable<int>('reference_id');
-      final refType = row.readNullable<String>('reference_type');
-      final date = DateTime.parse(row.read<String>('transaction_date'));
+    for (final transaction in snapshot.transactions) {
+      final type = transaction.type;
+      final amountCents = transaction.amountCents;
+      final txNumber = transaction.transactionNumber;
+      final refId = transaction.referenceId;
+      final date = transaction.date;
+      final runningBalance = transaction.runningBalanceCents;
 
-      final runningBalance = running.apply(amountCents);
+      final isPurchaseTx = type == 'purchase' || type == 'purchase_void';
+      final isLinkedReturnTx =
+          type == 'credit_note' ||
+          type == 'purchase_return' ||
+          type == 'credit_note_reversal' ||
+          type == 'purchase_return_reversal';
+      final isAdjustmentReturnTx =
+          type == 'adjustment_return' || type == 'adjustment_return_reversal';
+      final isReturnTx = isLinkedReturnTx || isAdjustmentReturnTx;
 
-      // Determine if this is a purchase return (recorded as credit_note/refund with reference_type='purchase_return')
-      final isReturnTx = (type == 'credit_note' || type == 'refund') &&
-          refType == 'purchase_return';
-
-      // Adjustment returns (unlinked returns)
-      final isAdjReturnTx = type == 'adjustment_return';
-      final isAdjReturnReversalTx = type == 'adjustment_return_reversal';
-
-      // Determine total pieces for purchase/return from the reference
-      int totalPiecesCount = 0;
-      if (refId != null && (type == 'purchase' || isReturnTx)) {
-        totalPiecesCount = await _getTotalPieces(refId, refType);
-      } else if (isAdjReturnTx && refId != null) {
+      var totalPiecesCount = 0;
+      if (refId != null && isPurchaseTx) {
+        totalPiecesCount = await _getTotalPieces(refId, 'purchase');
+      } else if (refId != null && isLinkedReturnTx) {
+        totalPiecesCount = await _getTotalPieces(refId, 'purchase_return');
+      } else if (refId != null && isAdjustmentReturnTx) {
         totalPiecesCount = await _getAdjReturnTotalPieces(refId);
       }
 
-      // For return transactions, fetch the return number from purchase_returns table
       String? resolvedReturnNumber;
-      if (isReturnTx && refId != null) {
+      if (isLinkedReturnTx && refId != null) {
         resolvedReturnNumber = await _getReturnNumber(refId);
-      } else if (isAdjReturnTx && refId != null) {
+      } else if (isAdjustmentReturnTx && refId != null) {
         resolvedReturnNumber = await _getAdjReturnNumber(refId);
       }
 
-      // Build a ledger row based on type
-      if (isReturnTx || isAdjReturnTx) {
-        // Purchase return or adjustment return — show in return columns
-        totalReturns += amountCents.abs();
-        totalReturnItems += totalPiecesCount;
-        final label = resolvedReturnNumber ?? txNumber ?? (refId != null ? 'RET-$refId' : null);
-        ledgerRows.add(LedgerRow(
-          date: date,
-          returnId: refId,
-          returnNumber: isAdjReturnTx ? '${label ?? ''} ⓐ' : label,
-          returnItemCount: totalPiecesCount,
-          returnTotalCents: amountCents.abs(),
-          runningBalanceCents: runningBalance,
-        ));
-      } else if (isAdjReturnReversalTx) {
-        // Voided adjustment return — show as negative return (reversal)
-        totalReturns -= amountCents.abs();
-        ledgerRows.add(LedgerRow(
-          date: date,
-          returnId: refId,
-          returnNumber: '${txNumber ?? 'REV-$refId'} ⓐ',
-          returnItemCount: 0,
-          returnTotalCents: amountCents.abs(),
-          runningBalanceCents: runningBalance,
-        ));
-      } else if (type == 'purchase') {
-        totalPurchases += amountCents.abs();
-        totalPurchaseItems += totalPiecesCount;
-        ledgerRows.add(LedgerRow(
-          date: date,
-          purchaseId: refId,
-          purchaseNumber: txNumber ?? (refId != null ? 'PUR-$refId' : null),
-          purchaseItemCount: totalPiecesCount,
-          purchaseTotalCents: amountCents.abs(),
-          runningBalanceCents: runningBalance,
-        ));
-      } else if (type == 'payment') {
-        totalPayments += amountCents.abs();
-        ledgerRows.add(LedgerRow(
-          date: date,
-          paymentNumber: txNumber,
-          paymentAmountCents: amountCents.abs(),
-          runningBalanceCents: runningBalance,
-        ));
-      } else if (type == 'discount') {
-        totalDiscounts += amountCents.abs();
-        ledgerRows.add(LedgerRow(
-          date: date,
-          discountNumber: txNumber,
-          discountAmountCents: amountCents.abs(),
-          runningBalanceCents: runningBalance,
-        ));
-      } else {
-        // adjustment, etc. — show as payment-like
-        if (amountCents < 0) {
-          totalPayments += amountCents.abs();
-          ledgerRows.add(LedgerRow(
+      if (isReturnTx) {
+        final returnValue = -amountCents;
+        totalReturns += returnValue;
+        totalReturnItems += amountCents < 0
+            ? totalPiecesCount
+            : amountCents > 0
+            ? -totalPiecesCount
+            : 0;
+        final label =
+            resolvedReturnNumber ??
+            txNumber ??
+            (refId != null ? 'RET-$refId' : null);
+        ledgerRows.add(
+          LedgerRow(
+            date: date,
+            returnId: refId,
+            returnNumber: isAdjustmentReturnTx ? '${label ?? ''} ⓐ' : label,
+            returnItemCount: totalPiecesCount,
+            returnTotalCents: returnValue,
+            runningBalanceCents: runningBalance,
+          ),
+        );
+      } else if (isPurchaseTx) {
+        totalPurchases += amountCents;
+        totalPurchaseItems += amountCents > 0
+            ? totalPiecesCount
+            : amountCents < 0
+            ? -totalPiecesCount
+            : 0;
+        ledgerRows.add(
+          LedgerRow(
+            date: date,
+            purchaseId: refId,
+            purchaseNumber: txNumber ?? (refId != null ? 'PUR-$refId' : null),
+            purchaseItemCount: totalPiecesCount,
+            purchaseTotalCents: amountCents,
+            runningBalanceCents: runningBalance,
+          ),
+        );
+      } else if (type == 'payment' || type == 'payment_reversal') {
+        final paymentValue = -amountCents;
+        totalPayments += paymentValue;
+        ledgerRows.add(
+          LedgerRow(
             date: date,
             paymentNumber: txNumber,
-            paymentAmountCents: amountCents.abs(),
+            paymentAmountCents: paymentValue,
             runningBalanceCents: runningBalance,
-          ));
-        } else {
-          totalPurchases += amountCents.abs();
-          ledgerRows.add(LedgerRow(
+          ),
+        );
+      } else if (type == 'discount' || type == 'discount_reversal') {
+        final discountValue = -amountCents;
+        totalDiscounts += discountValue;
+        ledgerRows.add(
+          LedgerRow(
+            date: date,
+            discountNumber: txNumber,
+            discountAmountCents: discountValue,
+            runningBalanceCents: runningBalance,
+          ),
+        );
+      } else if (amountCents < 0) {
+        totalPayments += -amountCents;
+        ledgerRows.add(
+          LedgerRow(
+            date: date,
+            paymentNumber: txNumber,
+            paymentAmountCents: -amountCents,
+            runningBalanceCents: runningBalance,
+          ),
+        );
+      } else {
+        totalPurchases += amountCents;
+        ledgerRows.add(
+          LedgerRow(
             date: date,
             purchaseNumber: txNumber,
-            purchaseTotalCents: amountCents.abs(),
+            purchaseTotalCents: amountCents,
             runningBalanceCents: runningBalance,
-          ));
-        }
+          ),
+        );
       }
     }
 
     return SupplierLedgerData(
-      supplierId: _supplierId,
-      supplierName: sInfo.read<String>('name'),
-      supplierPhone: sInfo.readNullable<String>('phone'),
-      supplierAddress: sInfo.readNullable<String>('address'),
-      openingBalanceCents: openingBalanceCents,
-      closingBalanceCents: running.current,
+      supplierId: supplier.id,
+      supplierName: supplier.name,
+      supplierPhone: supplier.phone,
+      supplierAddress: supplier.address,
+      openingBalanceCents: snapshot.openingBalanceCents,
+      closingBalanceCents: snapshot.closingBalanceCents,
       totalPurchasesCents: totalPurchases,
       totalReturnsCents: totalReturns,
       totalPaymentsCents: totalPayments,
@@ -419,18 +343,22 @@ class SupplierLedgerReportBloc
   Future<int> _getTotalPieces(int refId, String? refType) async {
     try {
       if (refType == 'purchase' || refType == null) {
-        final result = await _db.customSelect(
-          'SELECT COALESCE(SUM(quantity), 0) AS total_qty FROM purchase_items WHERE purchase_id = ?',
-          variables: [Variable.withInt(refId)],
-          readsFrom: {_db.purchaseItems},
-        ).getSingle();
+        final result = await _db
+            .customSelect(
+              'SELECT COALESCE(SUM(quantity), 0) AS total_qty FROM purchase_items WHERE purchase_id = ?',
+              variables: [Variable.withInt(refId)],
+              readsFrom: {_db.purchaseItems},
+            )
+            .getSingle();
         return result.read<int>('total_qty');
       } else if (refType == 'purchase_return') {
-        final result = await _db.customSelect(
-          'SELECT COALESCE(SUM(quantity), 0) AS total_qty FROM purchase_return_items WHERE return_id = ?',
-          variables: [Variable.withInt(refId)],
-          readsFrom: {_db.purchaseReturnItems},
-        ).getSingle();
+        final result = await _db
+            .customSelect(
+              'SELECT COALESCE(SUM(quantity), 0) AS total_qty FROM purchase_return_items WHERE return_id = ?',
+              variables: [Variable.withInt(refId)],
+              readsFrom: {_db.purchaseReturnItems},
+            )
+            .getSingle();
         return result.read<int>('total_qty');
       }
     } catch (_) {
@@ -442,11 +370,13 @@ class SupplierLedgerReportBloc
   /// Get the return number from the purchase_returns table
   Future<String?> _getReturnNumber(int returnId) async {
     try {
-      final result = await _db.customSelect(
-        'SELECT return_number FROM purchase_returns WHERE id = ?',
-        variables: [Variable.withInt(returnId)],
-        readsFrom: {_db.purchaseReturns},
-      ).getSingleOrNull();
+      final result = await _db
+          .customSelect(
+            'SELECT return_number FROM purchase_returns WHERE id = ?',
+            variables: [Variable.withInt(returnId)],
+            readsFrom: {_db.purchaseReturns},
+          )
+          .getSingleOrNull();
       return result?.readNullable<String>('return_number');
     } catch (_) {
       return null;
@@ -456,11 +386,13 @@ class SupplierLedgerReportBloc
   /// Get total pieces for an adjustment return
   Future<int> _getAdjReturnTotalPieces(int returnId) async {
     try {
-      final result = await _db.customSelect(
-        'SELECT COALESCE(SUM(quantity), 0) AS total_qty FROM purchase_return_adjustment_items WHERE return_id = ?',
-        variables: [Variable.withInt(returnId)],
-        readsFrom: {_db.purchaseReturnAdjustmentItems},
-      ).getSingle();
+      final result = await _db
+          .customSelect(
+            'SELECT COALESCE(SUM(quantity), 0) AS total_qty FROM purchase_return_adjustment_items WHERE return_id = ?',
+            variables: [Variable.withInt(returnId)],
+            readsFrom: {_db.purchaseReturnAdjustmentItems},
+          )
+          .getSingle();
       return result.read<int>('total_qty');
     } catch (_) {
       return 0;
@@ -470,11 +402,13 @@ class SupplierLedgerReportBloc
   /// Get the return number from the purchase_return_adjustments table
   Future<String?> _getAdjReturnNumber(int returnId) async {
     try {
-      final result = await _db.customSelect(
-        'SELECT return_number FROM purchase_return_adjustments WHERE id = ?',
-        variables: [Variable.withInt(returnId)],
-        readsFrom: {_db.purchaseReturnAdjustments},
-      ).getSingleOrNull();
+      final result = await _db
+          .customSelect(
+            'SELECT return_number FROM purchase_return_adjustments WHERE id = ?',
+            variables: [Variable.withInt(returnId)],
+            readsFrom: {_db.purchaseReturnAdjustments},
+          )
+          .getSingleOrNull();
       return result?.readNullable<String>('return_number');
     } catch (_) {
       return null;

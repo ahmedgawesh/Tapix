@@ -62,20 +62,22 @@ class _BulkProductRowState extends State<BulkProductRow> {
     super.initState();
     _nameController = TextEditingController(text: widget.rowData.name);
     _skuController = TextEditingController(text: widget.rowData.sku ?? '');
-    _barcodeController = TextEditingController(text: widget.rowData.barcode ?? '');
+    _barcodeController = TextEditingController(
+      text: widget.rowData.barcode ?? '',
+    );
     _costController = TextEditingController(
-      text: widget.rowData.costCents == Decimal.zero 
-          ? '' 
+      text: widget.rowData.costCents == Decimal.zero
+          ? ''
           : _formatDecimal(widget.rowData.costCents),
     );
     _priceController = TextEditingController(
-      text: widget.rowData.priceCents == Decimal.zero 
-          ? '' 
+      text: widget.rowData.priceCents == Decimal.zero
+          ? ''
           : _formatDecimal(widget.rowData.priceCents),
     );
     _wholesalePriceController = TextEditingController(
-      text: widget.rowData.wholesalePriceCents == null 
-          ? '' 
+      text: widget.rowData.wholesalePriceCents == null
+          ? ''
           : _formatDecimal(widget.rowData.wholesalePriceCents!),
     );
     _stockController = TextEditingController(
@@ -153,8 +155,8 @@ class _BulkProductRowState extends State<BulkProductRow> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: hasErrors 
-              ? colorScheme.errorContainer.withValues(alpha: 0.3) 
+          color: hasErrors
+              ? colorScheme.errorContainer.withValues(alpha: 0.3)
               : colorScheme.surfaceContainerLow,
           borderRadius: BorderRadius.vertical(
             top: const Radius.circular(12),
@@ -174,8 +176,8 @@ class _BulkProductRowState extends State<BulkProductRow> {
                 child: Text(
                   '${widget.rowData.rowIndex + 1}',
                   style: TextStyle(
-                    color: hasErrors 
-                        ? colorScheme.onError 
+                    color: hasErrors
+                        ? colorScheme.onError
                         : colorScheme.onPrimary,
                     fontWeight: FontWeight.bold,
                   ),
@@ -192,17 +194,18 @@ class _BulkProductRowState extends State<BulkProductRow> {
                         ? 'bulk_product.new_product'.tr()
                         : widget.rowData.name,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                      fontWeight: FontWeight.w600,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (widget.rowData.sku != null && widget.rowData.sku!.isNotEmpty)
+                  if (widget.rowData.sku != null &&
+                      widget.rowData.sku!.isNotEmpty)
                     Text(
                       widget.rowData.sku!,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                     ),
                 ],
               ),
@@ -455,16 +458,17 @@ class _BulkProductRowState extends State<BulkProductRow> {
     // Generate EAN-13 barcode with valid checksum
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final rowIndex = widget.rowData.rowIndex;
-    
+
     // Create a 12-digit base (EAN-13 without checksum)
     // Format: 200 (internal use prefix) + timestamp last 6 digits + row index padded + random
-    final base = '200${(timestamp % 1000000).toString().padLeft(6, '0')}${(rowIndex % 1000).toString().padLeft(3, '0')}';
-    
+    final base =
+        '200${(timestamp % 1000000).toString().padLeft(6, '0')}${(rowIndex % 1000).toString().padLeft(3, '0')}';
+
     // Calculate EAN-13 checksum
     final barcodeService = BarcodeValidationService();
     final checksum = barcodeService.calculateEan13Checksum(base);
     final barcode = '$base$checksum';
-    
+
     _barcodeController.text = barcode;
     widget.onUpdate({'barcode': barcode});
   }
@@ -542,9 +546,7 @@ class _BulkProductRowState extends State<BulkProductRow> {
         border: const OutlineInputBorder(),
       ),
       keyboardType: TextInputType.number,
-      inputFormatters: [
-        FilteringTextInputFormatter.digitsOnly,
-      ],
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
       onTap: () => selectAllText(_stockController),
       onChanged: (value) {
         widget.onUpdate({'stockQuantity': int.tryParse(value) ?? 0});
@@ -561,9 +563,7 @@ class _BulkProductRowState extends State<BulkProductRow> {
         border: const OutlineInputBorder(),
       ),
       keyboardType: TextInputType.number,
-      inputFormatters: [
-        FilteringTextInputFormatter.digitsOnly,
-      ],
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
       onTap: () => selectAllText(_minStockController),
       onChanged: (value) {
         widget.onUpdate({'minQuantity': int.tryParse(value) ?? 0});
@@ -574,13 +574,15 @@ class _BulkProductRowState extends State<BulkProductRow> {
   Widget _buildCategoryPicker(BuildContext context) {
     return BlocBuilder<CategoriesBloc, RealtimeState<List<Category>>>(
       builder: (context, state) {
-        final categories = state is RealtimeSuccess<List<Category>> ? state.data : <Category>[];
+        final categories = state is RealtimeSuccess<List<Category>>
+            ? state.data
+            : <Category>[];
         final selected = widget.rowData.categoryId == null
             ? null
             : categories.cast<Category?>().firstWhere(
-                  (c) => c?.id == widget.rowData.categoryId,
-                  orElse: () => null,
-                );
+                (c) => c?.id == widget.rowData.categoryId,
+                orElse: () => null,
+              );
 
         return InkWell(
           onTap: () => _showCategoryPickerBottomSheet(context),
@@ -629,35 +631,45 @@ class _BulkProductRowState extends State<BulkProductRow> {
                   Align(
                     alignment: AlignmentDirectional.centerStart,
                     child: TextButton.icon(
-                      onPressed: () => sheetContext.push('/products/categories'),
+                      onPressed: () =>
+                          sheetContext.push('/products/categories'),
                       icon: const Icon(Icons.settings),
                       label: Text('categories.title'.tr()),
                     ),
                   ),
                   Flexible(
-                    child: BlocBuilder<CategoriesBloc, RealtimeState<List<Category>>>(
-                      bloc: categoriesBloc,
-                      builder: (context, state) {
-                        final categories = state is RealtimeSuccess<List<Category>> ? state.data : <Category>[];
-                        return ListView.builder(
-                          shrinkWrap: true,
-                          itemCount: categories.length + 1,
-                          itemBuilder: (context, index) {
-                            if (index == 0) {
-                              return ListTile(
-                                title: Text('common.none'.tr()),
-                                onTap: () => Navigator.of(context).pop(null),
-                              );
-                            }
-                            final cat = categories[index - 1];
-                            return ListTile(
-                              title: Text(cat.name),
-                              onTap: () => Navigator.of(context).pop(cat.id),
+                    child:
+                        BlocBuilder<
+                          CategoriesBloc,
+                          RealtimeState<List<Category>>
+                        >(
+                          bloc: categoriesBloc,
+                          builder: (context, state) {
+                            final categories =
+                                state is RealtimeSuccess<List<Category>>
+                                ? state.data
+                                : <Category>[];
+                            return ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: categories.length + 1,
+                              itemBuilder: (context, index) {
+                                if (index == 0) {
+                                  return ListTile(
+                                    title: Text('common.none'.tr()),
+                                    onTap: () =>
+                                        Navigator.of(context).pop(null),
+                                  );
+                                }
+                                final cat = categories[index - 1];
+                                return ListTile(
+                                  title: Text(cat.name),
+                                  onTap: () =>
+                                      Navigator.of(context).pop(cat.id),
+                                );
+                              },
                             );
                           },
-                        );
-                      },
-                    ),
+                        ),
                   ),
                 ],
               ),
@@ -678,13 +690,15 @@ class _BulkProductRowState extends State<BulkProductRow> {
   Widget _buildColorPicker(BuildContext context) {
     return BlocBuilder<ColorsBloc, RealtimeState<List<ProductColor>>>(
       builder: (context, state) {
-        final colors = state is RealtimeSuccess<List<ProductColor>> ? state.data : <ProductColor>[];
+        final colors = state is RealtimeSuccess<List<ProductColor>>
+            ? state.data
+            : <ProductColor>[];
         final selected = widget.rowData.colorId == null
             ? null
             : colors.cast<ProductColor?>().firstWhere(
-                  (c) => c?.id == widget.rowData.colorId,
-                  orElse: () => null,
-                );
+                (c) => c?.id == widget.rowData.colorId,
+                orElse: () => null,
+              );
 
         return InkWell(
           onTap: () => _showColorPickerBottomSheet(context),
@@ -702,9 +716,13 @@ class _BulkProductRowState extends State<BulkProductRow> {
                         width: 18,
                         height: 18,
                         decoration: BoxDecoration(
-                          color: _tryParseHexColor(selected.hexCode) ?? Colors.grey,
+                          color:
+                              _tryParseHexColor(selected.hexCode) ??
+                              Colors.grey,
                           shape: BoxShape.circle,
-                          border: Border.all(color: Theme.of(context).colorScheme.outline),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -769,38 +787,53 @@ class _BulkProductRowState extends State<BulkProductRow> {
                     ),
                   ),
                   Flexible(
-                    child: BlocBuilder<ColorsBloc, RealtimeState<List<ProductColor>>>(
-                      bloc: colorsBloc,
-                      builder: (context, state) {
-                        final colors = state is RealtimeSuccess<List<ProductColor>> ? state.data : <ProductColor>[];
-                        return ListView.builder(
-                          shrinkWrap: true,
-                          itemCount: colors.length + 1,
-                          itemBuilder: (context, index) {
-                            if (index == 0) {
-                              return ListTile(
-                                title: Text('common.none'.tr()),
-                                onTap: () => Navigator.of(context).pop(null),
-                              );
-                            }
-                            final color = colors[index - 1];
-                            return ListTile(
-                              leading: Container(
-                                width: 18,
-                                height: 18,
-                                decoration: BoxDecoration(
-                                  color: _tryParseHexColor(color.hexCode) ?? Colors.grey,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Theme.of(context).colorScheme.outline),
-                                ),
-                              ),
-                              title: Text(color.name),
-                              onTap: () => Navigator.of(context).pop(color.id),
+                    child:
+                        BlocBuilder<
+                          ColorsBloc,
+                          RealtimeState<List<ProductColor>>
+                        >(
+                          bloc: colorsBloc,
+                          builder: (context, state) {
+                            final colors =
+                                state is RealtimeSuccess<List<ProductColor>>
+                                ? state.data
+                                : <ProductColor>[];
+                            return ListView.builder(
+                              shrinkWrap: true,
+                              itemCount: colors.length + 1,
+                              itemBuilder: (context, index) {
+                                if (index == 0) {
+                                  return ListTile(
+                                    title: Text('common.none'.tr()),
+                                    onTap: () =>
+                                        Navigator.of(context).pop(null),
+                                  );
+                                }
+                                final color = colors[index - 1];
+                                return ListTile(
+                                  leading: Container(
+                                    width: 18,
+                                    height: 18,
+                                    decoration: BoxDecoration(
+                                      color:
+                                          _tryParseHexColor(color.hexCode) ??
+                                          Colors.grey,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.outline,
+                                      ),
+                                    ),
+                                  ),
+                                  title: Text(color.name),
+                                  onTap: () =>
+                                      Navigator.of(context).pop(color.id),
+                                );
+                              },
                             );
                           },
-                        );
-                      },
-                    ),
+                        ),
                   ),
                 ],
               ),
@@ -821,13 +854,15 @@ class _BulkProductRowState extends State<BulkProductRow> {
   Widget _buildSizePicker(BuildContext context) {
     return BlocBuilder<SizesBloc, RealtimeState<List<Size>>>(
       builder: (context, state) {
-        final sizes = state is RealtimeSuccess<List<Size>> ? state.data : <Size>[];
+        final sizes = state is RealtimeSuccess<List<Size>>
+            ? state.data
+            : <Size>[];
         final selected = widget.rowData.sizeId == null
             ? null
             : sizes.cast<Size?>().firstWhere(
-                  (s) => s?.id == widget.rowData.sizeId,
-                  orElse: () => null,
-                );
+                (s) => s?.id == widget.rowData.sizeId,
+                orElse: () => null,
+              );
 
         return InkWell(
           onTap: () => _showSizePickerBottomSheet(context),
@@ -885,7 +920,9 @@ class _BulkProductRowState extends State<BulkProductRow> {
                     child: BlocBuilder<SizesBloc, RealtimeState<List<Size>>>(
                       bloc: sizesBloc,
                       builder: (context, state) {
-                        final sizes = state is RealtimeSuccess<List<Size>> ? state.data : <Size>[];
+                        final sizes = state is RealtimeSuccess<List<Size>>
+                            ? state.data
+                            : <Size>[];
                         return ListView.builder(
                           shrinkWrap: true,
                           itemCount: sizes.length + 1,

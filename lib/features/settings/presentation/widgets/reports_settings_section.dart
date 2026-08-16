@@ -27,23 +27,24 @@ class ReportsSettingsSection extends StatelessWidget {
                 'week': 'app_settings.reports.range_week'.tr(),
                 'month': 'app_settings.reports.range_month'.tr(),
               },
-              onChanged: (v) => _patch(context, (c) => c.copyWith(defaultReportDateRange: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(defaultReportDateRange: v)),
             ),
             SettingsOptionTile<String>(
               title: 'app_settings.reports.export_format'.tr(),
               value: s.defaultExportFormat,
-              options: const {
-                'pdf': 'PDF',
-                'excel': 'Excel',
-                'csv': 'CSV',
-              },
-              onChanged: (v) => _patch(context, (c) => c.copyWith(defaultExportFormat: v)),
+              options: const {'pdf': 'PDF', 'excel': 'Excel', 'csv': 'CSV'},
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(defaultExportFormat: v)),
             ),
             SwitchListTile(
               title: Text('app_settings.reports.include_inactive'.tr()),
               subtitle: Text('app_settings.reports.include_inactive_desc'.tr()),
               value: s.includeInactiveInReports,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(includeInactiveInReports: v)),
+              onChanged: (v) => _patch(
+                context,
+                (c) => c.copyWith(includeInactiveInReports: v),
+              ),
             ),
           ],
         );

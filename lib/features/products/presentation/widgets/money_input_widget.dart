@@ -40,13 +40,13 @@ class _MoneyInputWidgetState extends State<MoneyInputWidget> {
     _focusNode = FocusNode();
     _focusNode.addListener(_onFocusChange);
   }
-  
+
   // Need to initialize controller in didChangeDependencies to access context for CurrencyService if needed
   // But actually formatting happens in _formatValue which we can access context in
   // However, initState cannot access context.
   // We'll initialize controller with current value and symbol in didChangeDependencies or just use what we have.
   // Actually, let's keep it simple. We can access context in build.
-  
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -54,11 +54,11 @@ class _MoneyInputWidgetState extends State<MoneyInputWidget> {
     // We might want to re-format if currency changes, but the input value is just numbers.
     // The prefix is where the symbol is shown.
     if (!hasInitializedController) {
-       _controller = TextEditingController(text: _formatValue(widget.value));
-       hasInitializedController = true;
+      _controller = TextEditingController(text: _formatValue(widget.value));
+      hasInitializedController = true;
     }
   }
-  
+
   bool hasInitializedController = false;
 
   @override
@@ -125,12 +125,12 @@ class _MoneyInputWidgetState extends State<MoneyInputWidget> {
     // Actually, we can just get the symbol from the current context if we are in a callback that has access to it,
     // or we can store the current symbol in the state during build.
     // For simplicity, let's just parse whatever numbers we can find, ignoring non-numeric except decimal point.
-    
+
     // Better approach: Use the formatValue logic which is consistent.
     // But _parseValue removed the symbol.
     // Let's rely on the controller text which we know contains the symbol from the build method if we enforced it.
     // BUT, the user might delete the symbol.
-    
+
     // Simplest robust way: remove all non-numeric characters except the first decimal point.
     final cleaned = text.replaceAll(RegExp(r'[^0-9.]'), '');
     try {
@@ -191,12 +191,14 @@ class MoneyDisplayWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final currencyService = context.watch<CurrencyService>();
-    
+
     return Text(
       currencyService.format(cents.toBigInt().toInt()),
-      style: style ?? theme.textTheme.bodyLarge?.copyWith(
-        fontFeatures: const [FontFeature.tabularFigures()],
-      ),
+      style:
+          style ??
+          theme.textTheme.bodyLarge?.copyWith(
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
     );
   }
 }

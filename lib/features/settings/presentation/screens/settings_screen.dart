@@ -68,7 +68,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: GestureDetector(
           onLongPressStart: (_) {
             _adminPressTimer?.cancel();
-            _adminPressTimer = Timer(const Duration(seconds: 3), _promptAdminPassword);
+            _adminPressTimer = Timer(
+              const Duration(seconds: 3),
+              _promptAdminPassword,
+            );
           },
           onLongPressEnd: (_) {
             _adminPressTimer?.cancel();
@@ -101,7 +104,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       mode: ThemeMode.light,
                       currentMode: currentMode,
                       onTap: () {
-                        context.read<ThemeBloc>().add(const ThemeChanged(ThemeMode.light));
+                        context.read<ThemeBloc>().add(
+                          const ThemeChanged(ThemeMode.light),
+                        );
                       },
                     ),
                     _buildThemeTile(
@@ -111,7 +116,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       mode: ThemeMode.dark,
                       currentMode: currentMode,
                       onTap: () {
-                        context.read<ThemeBloc>().add(const ThemeChanged(ThemeMode.dark));
+                        context.read<ThemeBloc>().add(
+                          const ThemeChanged(ThemeMode.dark),
+                        );
                       },
                     ),
                     _buildThemeTile(
@@ -121,7 +128,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       mode: ThemeMode.system,
                       currentMode: currentMode,
                       onTap: () {
-                        context.read<ThemeBloc>().add(const ThemeChanged(ThemeMode.system));
+                        context.read<ThemeBloc>().add(
+                          const ThemeChanged(ThemeMode.system),
+                        );
                       },
                     ),
                   ],
@@ -146,7 +155,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       locale: const Locale('en'),
                       currentLocale: currentLocale,
                       onTap: () {
-                        context.read<LocalizationBloc>().add(const LocaleChanged(Locale('en')));
+                        context.read<LocalizationBloc>().add(
+                          const LocaleChanged(Locale('en')),
+                        );
                         context.setLocale(const Locale('en'));
                       },
                     ),
@@ -156,7 +167,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       locale: const Locale('ar'),
                       currentLocale: currentLocale,
                       onTap: () {
-                        context.read<LocalizationBloc>().add(const LocaleChanged(Locale('ar')));
+                        context.read<LocalizationBloc>().add(
+                          const LocaleChanged(Locale('ar')),
+                        );
                         context.setLocale(const Locale('ar'));
                       },
                     ),
@@ -166,7 +179,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       locale: const Locale('fr'),
                       currentLocale: currentLocale,
                       onTap: () {
-                        context.read<LocalizationBloc>().add(const LocaleChanged(Locale('fr')));
+                        context.read<LocalizationBloc>().add(
+                          const LocaleChanged(Locale('fr')),
+                        );
                         context.setLocale(const Locale('fr'));
                       },
                     ),
@@ -207,10 +222,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     : Currency.supportedCurrencies.first;
 
                 final previewAmount = 123456;
-                final formattedPreview = context.read<CurrencyService>().format(previewAmount);
+                final formattedPreview = context.read<CurrencyService>().format(
+                  previewAmount,
+                );
 
                 final translatedName = 'currency.${currentCurrency.code}'.tr();
-                final displayName = translatedName == 'currency.${currentCurrency.code}'
+                final displayName =
+                    translatedName == 'currency.${currentCurrency.code}'
                     ? currentCurrency.name
                     : translatedName;
 
@@ -227,7 +245,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: Text(
                           currentCurrency.symbol,
                           style: TextStyle(
-                            color: Theme.of(context).colorScheme.onPrimaryContainer,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onPrimaryContainer,
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
                           ),
@@ -243,7 +263,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     const SizedBox(height: 8),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       child: Row(
                         children: [
                           Icon(
@@ -254,10 +277,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'settings.currency_preview'.tr(args: [formattedPreview]),
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              'settings.currency_preview'.tr(
+                                args: [formattedPreview],
                               ),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
                             ),
                           ),
                         ],
@@ -432,7 +460,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onTap: onTap,
     );
   }
-
 }
 
 class _AdminPasswordDialog extends StatefulWidget {
@@ -465,9 +492,7 @@ class _AdminPasswordDialogState extends State<_AdminPasswordDialog> {
         controller: _controller,
         obscureText: true,
         keyboardType: TextInputType.number,
-        decoration: const InputDecoration(
-          border: OutlineInputBorder(),
-        ),
+        decoration: const InputDecoration(border: OutlineInputBorder()),
       ),
       actions: [
         TextButton(

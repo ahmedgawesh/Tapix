@@ -12,10 +12,7 @@ class ImportFileSelected extends ImportProductsEvent {
   final List<int> fileBytes;
   final String fileName;
 
-  const ImportFileSelected({
-    required this.fileBytes,
-    required this.fileName,
-  });
+  const ImportFileSelected({required this.fileBytes, required this.fileName});
 
   @override
   List<Object?> get props => [fileBytes, fileName];

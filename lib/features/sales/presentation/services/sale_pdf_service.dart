@@ -7,6 +7,8 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
+import '../../../../core/services/cashier_shift_service.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../settings/data/services/company_profile_service.dart';
 import '../../../settings/domain/entities/company_profile.dart';
@@ -211,6 +213,9 @@ class SalePdfService {
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
+    final cashierShift = await sl<CashierShiftService>().getSaleReturnShift(
+      returnEntity.id,
+    );
 
     // Fetch customer balance for the PDF footer
     pw.Widget? customerBalanceWidget;
@@ -218,7 +223,9 @@ class SalePdfService {
       if (originalSale.customerId != null) {
         final customerRepo = sl<CustomerRepository>();
         final customers = await customerRepo.searchCustomers('');
-        final customer = customers.where((c) => c.id == originalSale.customerId).firstOrNull;
+        final customer = customers
+            .where((c) => c.id == originalSale.customerId)
+            .firstOrNull;
         if (customer != null) {
           customerBalanceWidget = _buildCustomerBalance(
             customerName: customer.name,
@@ -257,25 +264,59 @@ class SalePdfService {
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    _pdfInfoRow('sales.return_number'.tr(),
-                        returnEntity.returnNumber, fonts.regular),
-                    _pdfInfoRow('sales.date'.tr(),
-                        DateFormat.yMMMd(locale.toString()).format(returnEntity.returnDate),
-                        fonts.regular),
-                    _pdfInfoRow('sales.return_from_sale'.tr(),
-                        originalSale.invoiceNumber.isNotEmpty ? originalSale.invoiceNumber : '${originalSale.id}',
-                        fonts.regular),
-                    _pdfInfoRow('sales.customer'.tr(),
-                        originalSale.customerName ?? 'sales.walk_in'.tr(), fonts.regular),
-                    _pdfInfoRow('sales.refund_method'.tr(),
-                        'sales.refund_method_${returnEntity.refundMethod}'.tr(),
-                        fonts.regular),
-                    _pdfInfoRow('sales.disposition_type'.tr(),
-                        'sales.disposition_${returnEntity.dispositionType}'.tr(),
-                        fonts.regular),
-                    if (returnEntity.reason != null && returnEntity.reason!.isNotEmpty)
-                      _pdfInfoRow('sales.return_reason'.tr(),
-                          returnEntity.reason!, fonts.regular),
+                    _pdfInfoRow(
+                      'sales.return_number'.tr(),
+                      returnEntity.returnNumber,
+                      fonts.regular,
+                    ),
+                    _pdfInfoRow(
+                      'sales.date'.tr(),
+                      DateFormat.yMMMd(
+                        locale.toString(),
+                      ).format(returnEntity.returnDate),
+                      fonts.regular,
+                    ),
+                    _pdfInfoRow(
+                      'sales.return_from_sale'.tr(),
+                      originalSale.invoiceNumber.isNotEmpty
+                          ? originalSale.invoiceNumber
+                          : '${originalSale.id}',
+                      fonts.regular,
+                    ),
+                    _pdfInfoRow(
+                      'sales.customer'.tr(),
+                      originalSale.customerName ?? 'sales.walk_in'.tr(),
+                      fonts.regular,
+                    ),
+                    if (cashierShift != null) ...[
+                      _pdfInfoRow(
+                        'cashier_shifts.cashier'.tr(),
+                        cashierShift.cashierName,
+                        fonts.regular,
+                      ),
+                      _pdfInfoRow(
+                        'cashier_shifts.shift_number'.tr(),
+                        cashierShift.shift.shiftNumber,
+                        fonts.regular,
+                      ),
+                    ],
+                    _pdfInfoRow(
+                      'sales.refund_method'.tr(),
+                      'sales.refund_method_${returnEntity.refundMethod}'.tr(),
+                      fonts.regular,
+                    ),
+                    _pdfInfoRow(
+                      'sales.disposition_type'.tr(),
+                      'sales.disposition_${returnEntity.dispositionType}'.tr(),
+                      fonts.regular,
+                    ),
+                    if (returnEntity.reason != null &&
+                        returnEntity.reason!.isNotEmpty)
+                      _pdfInfoRow(
+                        'sales.return_reason'.tr(),
+                        returnEntity.reason!,
+                        fonts.regular,
+                      ),
                   ],
                 ),
               ),
@@ -298,23 +339,50 @@ class SalePdfService {
                 ),
                 child: pw.Column(
                   children: [
-                    _pdfMoneyRow('sales.total_items_count'.tr(), '${returnItems.length}', fonts.regular),
-                    _pdfMoneyRow('sales.total_pieces_count'.tr(), '${returnItems.fold<int>(0, (sum, item) => sum + item.quantity)}', fonts.regular),
+                    _pdfMoneyRow(
+                      'sales.total_items_count'.tr(),
+                      '${returnItems.length}',
+                      fonts.regular,
+                    ),
+                    _pdfMoneyRow(
+                      'sales.total_pieces_count'.tr(),
+                      '${returnItems.fold<int>(0, (sum, item) => sum + item.quantity)}',
+                      fonts.regular,
+                    ),
                     pw.SizedBox(height: 4),
-                    _pdfMoneyRow('sales.subtotal'.tr(), cs.format(returnEntity.subtotalCents.toBigInt().toInt()), fonts.regular),
+                    _pdfMoneyRow(
+                      'sales.subtotal'.tr(),
+                      cs.format(returnEntity.subtotalCents.toBigInt().toInt()),
+                      fonts.regular,
+                    ),
                     if (returnEntity.discountCents.toBigInt().toInt() > 0)
-                      _pdfMoneyRow('sales.discount'.tr(), '- ${cs.format(returnEntity.discountCents.toBigInt().toInt())}', fonts.regular, valueColor: PdfColors.orange),
+                      _pdfMoneyRow(
+                        'sales.discount'.tr(),
+                        '- ${cs.format(returnEntity.discountCents.toBigInt().toInt())}',
+                        fonts.regular,
+                        valueColor: PdfColors.orange,
+                      ),
                     if (returnEntity.taxCents.toBigInt().toInt() > 0)
-                      _pdfMoneyRow('sales.tax'.tr(), '+ ${cs.format(returnEntity.taxCents.toBigInt().toInt())}', fonts.regular),
+                      _pdfMoneyRow(
+                        'sales.tax'.tr(),
+                        '+ ${cs.format(returnEntity.taxCents.toBigInt().toInt())}',
+                        fonts.regular,
+                      ),
                     pw.Divider(thickness: 2),
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        _bidiText('sales.total_refund'.tr(), fonts.bold, fontSize: 14),
+                        _bidiText(
+                          'sales.total_refund'.tr(),
+                          fonts.bold,
+                          fontSize: 14,
+                        ),
                         pw.Text(
                           cs.format(returnEntity.totalCents.toBigInt().toInt()),
                           style: pw.TextStyle(
-                            font: fonts.bold, fontSize: 14, color: PdfColors.red,
+                            font: fonts.bold,
+                            fontSize: 14,
+                            color: PdfColors.red,
                           ),
                         ),
                       ],
@@ -362,7 +430,11 @@ class SalePdfService {
             _tableCell('sales.qty_col'.tr(), fonts.bold, isHeader: true),
             _tableCell('sales.discount'.tr(), fonts.bold, isHeader: true),
             _tableCell('sales.tax'.tr(), fonts.bold, isHeader: true),
-            _tableCell('sales.customer_refund'.tr(), fonts.bold, isHeader: true),
+            _tableCell(
+              'sales.customer_refund'.tr(),
+              fonts.bold,
+              isHeader: true,
+            ),
           ],
         ),
         ...items.asMap().entries.map((entry) {
@@ -389,33 +461,54 @@ class SalePdfService {
             children: [
               _tableCell('${idx + 1}', fonts.regular),
               pw.Padding(
-                padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                padding: const pw.EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 4,
+                ),
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     _bidiText(productName, fonts.regular, fontSize: 8),
                     if (variantLine != null)
-                      _bidiText(variantLine, fonts.regular, fontSize: 7, color: PdfColors.grey600),
+                      _bidiText(
+                        variantLine,
+                        fonts.regular,
+                        fontSize: 7,
+                        color: PdfColors.grey600,
+                      ),
                     if (sku != null && sku.isNotEmpty)
                       pw.Container(
                         margin: const pw.EdgeInsets.only(top: 2),
-                        child: _bidiText('SKU: $sku', fonts.regular, fontSize: 7, color: PdfColors.grey600),
+                        child: _bidiText(
+                          'SKU: $sku',
+                          fonts.regular,
+                          fontSize: 7,
+                          color: PdfColors.grey600,
+                        ),
                       ),
                   ],
                 ),
               ),
-              _tableCell('${item.quantity}', fonts.regular),
+              _tableCell(
+                localizedQuantity(item.quantity, item.measurementType),
+                fonts.regular,
+              ),
               _tableCell(
                 item.discountCents.toBigInt().toInt() > 0
                     ? cs.format(item.discountCents.toBigInt().toInt())
                     : '-',
-                fonts.regular),
+                fonts.regular,
+              ),
               _tableCell(
                 item.taxCents.toBigInt().toInt() > 0
                     ? cs.format(item.taxCents.toBigInt().toInt())
                     : '-',
-                fonts.regular),
-              _tableCell(cs.format(item.refundCents.toBigInt().toInt()), fonts.regular),
+                fonts.regular,
+              ),
+              _tableCell(
+                cs.format(item.refundCents.toBigInt().toInt()),
+                fonts.regular,
+              ),
             ],
           );
         }),
@@ -436,6 +529,9 @@ class SalePdfService {
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
+    final cashierShift = state.saleId == null
+        ? null
+        : await sl<CashierShiftService>().getSaleShift(state.saleId!);
 
     // Fetch customer balance for the PDF footer (best-effort)
     pw.Widget? customerBalanceWidget;
@@ -443,7 +539,9 @@ class SalePdfService {
       if (state.customerId != null) {
         final customerRepo = sl<CustomerRepository>();
         final customers = await customerRepo.searchCustomers('');
-        final customer = customers.where((c) => c.id == state.customerId).firstOrNull;
+        final customer = customers
+            .where((c) => c.id == state.customerId)
+            .firstOrNull;
         if (customer != null) {
           customerBalanceWidget = _buildCustomerBalance(
             customerName: customer.name,
@@ -479,23 +577,30 @@ class SalePdfService {
                 date: state.saleDate,
                 customerName: state.customerName ?? 'sales.walk_in'.tr(),
                 salespersonName: state.employeeName,
+                cashierName: cashierShift?.cashierName,
+                cashierShiftNumber: cashierShift?.shift.shiftNumber,
                 paymentMethod: state.paymentMethod.name,
                 locale: locale,
                 fonts: fonts,
               ),
               pw.SizedBox(height: 16),
               _buildItemsTable(
-                items: state.items.map((item) => _PdfLineItem(
-                  name: item.product.name,
-                  variantSku: item.variant?.sku,
-                  productSku: item.product.sku,
-                  colorName: item.colorName,
-                  sizeName: item.sizeName,
-                  employeeName: item.employeeName,
-                  quantity: item.quantity,
-                  unitPriceCents: item.unitPriceCents.toBigInt().toInt(),
-                  totalCents: item.totalCents.toBigInt().toInt(),
-                )).toList(),
+                items: state.items
+                    .map(
+                      (item) => _PdfLineItem(
+                        name: item.product.name,
+                        variantSku: item.variant?.sku,
+                        productSku: item.product.sku,
+                        colorName: item.colorName,
+                        sizeName: item.sizeName,
+                        employeeName: item.employeeName,
+                        quantity: item.quantity,
+                        measurementType: item.product.measurementType,
+                        unitPriceCents: item.unitPriceCents.toBigInt().toInt(),
+                        totalCents: item.totalCents.toBigInt().toInt(),
+                      ),
+                    )
+                    .toList(),
                 cs: cs,
                 fonts: fonts,
                 isRtl: isRtl,
@@ -508,7 +613,15 @@ class SalePdfService {
                 totalCents: state.totalCents.toBigInt().toInt(),
                 paidCents: state.paidAmountCents.toBigInt().toInt(),
                 totalItems: state.items.length,
-                totalPieces: state.items.fold<int>(0, (sum, item) => sum + item.quantity),
+                totalPieces:
+                    state.items.every(
+                      (item) => item.product.measurementType == 'piece',
+                    )
+                    ? state.items.fold<int>(
+                        0,
+                        (sum, item) => sum + item.quantity,
+                      )
+                    : null,
                 cs: cs,
                 fonts: fonts,
                 includeTaxBreakdown: appSettings.includeTaxBreakdown,
@@ -536,7 +649,11 @@ class SalePdfService {
                 customerBalanceWidget,
               ],
               pw.SizedBox(height: 20),
-              _buildFooter(fonts: fonts, locale: locale, receiptFooterText: appSettings.receiptFooterText),
+              _buildFooter(
+                fonts: fonts,
+                locale: locale,
+                receiptFooterText: appSettings.receiptFooterText,
+              ),
             ],
           );
         },
@@ -560,13 +677,16 @@ class SalePdfService {
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
+    final cashierShift = await sl<CashierShiftService>().getSaleShift(sale.id);
 
     pw.Widget? customerBalanceWidget;
     try {
       if (sale.customerId != null) {
         final customerRepo = sl<CustomerRepository>();
         final customers = await customerRepo.searchCustomers('');
-        final customer = customers.where((c) => c.id == sale.customerId).firstOrNull;
+        final customer = customers
+            .where((c) => c.id == sale.customerId)
+            .firstOrNull;
         if (customer != null) {
           customerBalanceWidget = _buildCustomerBalance(
             customerName: customer.name,
@@ -602,23 +722,30 @@ class SalePdfService {
                 date: sale.saleDate,
                 customerName: sale.customerName ?? 'sales.walk_in'.tr(),
                 salespersonName: sale.employeeName,
+                cashierName: cashierShift?.cashierName,
+                cashierShiftNumber: cashierShift?.shift.shiftNumber,
                 paymentMethod: sale.paymentMethod,
                 locale: locale,
                 fonts: fonts,
               ),
               pw.SizedBox(height: 16),
               _buildItemsTable(
-                items: items.map((item) => _PdfLineItem(
-                  name: item.productName ?? '',
-                  variantSku: item.variantSku,
-                  productSku: item.productSku,
-                  colorName: item.colorName,
-                  sizeName: item.sizeName,
-                  employeeName: item.employeeName,
-                  quantity: item.quantity,
-                  unitPriceCents: item.unitPriceCents.toBigInt().toInt(),
-                  totalCents: item.totalCents.toBigInt().toInt(),
-                )).toList(),
+                items: items
+                    .map(
+                      (item) => _PdfLineItem(
+                        name: item.productName ?? '',
+                        variantSku: item.variantSku,
+                        productSku: item.productSku,
+                        colorName: item.colorName,
+                        sizeName: item.sizeName,
+                        employeeName: item.employeeName,
+                        quantity: item.quantity,
+                        measurementType: item.measurementType,
+                        unitPriceCents: item.unitPriceCents.toBigInt().toInt(),
+                        totalCents: item.totalCents.toBigInt().toInt(),
+                      ),
+                    )
+                    .toList(),
                 cs: cs,
                 fonts: fonts,
                 isRtl: isRtl,
@@ -631,7 +758,10 @@ class SalePdfService {
                 totalCents: sale.totalCents.toBigInt().toInt(),
                 paidCents: sale.paidAmountCents.toBigInt().toInt(),
                 totalItems: items.length,
-                totalPieces: items.fold<int>(0, (sum, item) => sum + item.quantity),
+                totalPieces:
+                    items.every((item) => item.measurementType == 'piece')
+                    ? items.fold<int>(0, (sum, item) => sum + item.quantity)
+                    : null,
                 cs: cs,
                 fonts: fonts,
                 includeTaxBreakdown: appSettings.includeTaxBreakdown,
@@ -659,7 +789,11 @@ class SalePdfService {
                 customerBalanceWidget,
               ],
               pw.SizedBox(height: 20),
-              _buildFooter(fonts: fonts, locale: locale, receiptFooterText: appSettings.receiptFooterText),
+              _buildFooter(
+                fonts: fonts,
+                locale: locale,
+                receiptFooterText: appSettings.receiptFooterText,
+              ),
             ],
           );
         },
@@ -680,8 +814,12 @@ class SalePdfService {
   }
 
   static Future<_PdfFonts> _loadFonts() async {
-    final fontData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-    final fontBoldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+    final fontData = await rootBundle.load(
+      'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+    );
+    final fontBoldData = await rootBundle.load(
+      'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+    );
     return _PdfFonts(
       regular: pw.Font.ttf(fontData),
       bold: pw.Font.ttf(fontBoldData),
@@ -712,7 +850,9 @@ class SalePdfService {
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  if (showLogo && company.logoBase64 != null && company.logoBase64!.isNotEmpty)
+                  if (showLogo &&
+                      company.logoBase64 != null &&
+                      company.logoBase64!.isNotEmpty)
                     pw.Container(
                       width: 40,
                       height: 40,
@@ -730,22 +870,49 @@ class SalePdfService {
                   if (company.name.isNotEmpty)
                     _bidiText(company.name, fonts.bold, fontSize: 16),
                   if (company.address != null && company.address!.isNotEmpty)
-                    _bidiText(company.address!, fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                    _bidiText(
+                      company.address!,
+                      fonts.regular,
+                      fontSize: 8,
+                      color: PdfColors.grey600,
+                    ),
                   if (company.phone != null && company.phone!.isNotEmpty)
-                    _bidiText(company.phone!, fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                    _bidiText(
+                      company.phone!,
+                      fonts.regular,
+                      fontSize: 8,
+                      color: PdfColors.grey600,
+                    ),
                   // Use taxRegistrationNumber from AppSettings if available, fallback to company.taxNumber
-                  if ((taxRegistrationNumber != null && taxRegistrationNumber.isNotEmpty) ||
-                      (company.taxNumber != null && company.taxNumber!.isNotEmpty))
-                    _bidiText('Tax: ${taxRegistrationNumber ?? company.taxNumber}', fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                  if ((taxRegistrationNumber != null &&
+                          taxRegistrationNumber.isNotEmpty) ||
+                      (company.taxNumber != null &&
+                          company.taxNumber!.isNotEmpty))
+                    _bidiText(
+                      'Tax: ${taxRegistrationNumber ?? company.taxNumber}',
+                      fonts.regular,
+                      fontSize: 8,
+                      color: PdfColors.grey600,
+                    ),
                 ],
               ),
-              _bidiText(title, fonts.bold, fontSize: 20, color: PdfColors.green800),
+              _bidiText(
+                title,
+                fonts.bold,
+                fontSize: 20,
+                color: PdfColors.green800,
+              ),
             ],
           ),
           // Custom header text from AppSettings
           if (receiptHeaderText != null && receiptHeaderText.isNotEmpty) ...[
             pw.SizedBox(height: 8),
-            _bidiText(receiptHeaderText, fonts.regular, fontSize: 9, color: PdfColors.grey700),
+            _bidiText(
+              receiptHeaderText,
+              fonts.regular,
+              fontSize: 9,
+              color: PdfColors.grey700,
+            ),
           ],
         ],
       ),
@@ -772,6 +939,8 @@ class SalePdfService {
     required DateTime date,
     required String customerName,
     String? salespersonName,
+    String? cashierName,
+    String? cashierShiftNumber,
     String? paymentMethod,
     required Locale locale,
     required _PdfFonts fonts,
@@ -785,14 +954,41 @@ class SalePdfService {
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          _pdfInfoRow('sales.invoice_number'.tr(), invoiceNumber, fonts.regular),
-          _pdfInfoRow('sales.invoice_date'.tr(),
-              DateFormat.yMMMd(locale.toString()).format(date), fonts.regular),
+          _pdfInfoRow(
+            'sales.invoice_number'.tr(),
+            invoiceNumber,
+            fonts.regular,
+          ),
+          _pdfInfoRow(
+            'sales.invoice_date'.tr(),
+            DateFormat.yMMMd(locale.toString()).format(date),
+            fonts.regular,
+          ),
           _pdfInfoRow('sales.customer'.tr(), customerName, fonts.regular),
           if (paymentMethod != null && paymentMethod.isNotEmpty)
-            _pdfInfoRow('sales.payment_method'.tr(), _translatePaymentMethod(paymentMethod), fonts.regular),
+            _pdfInfoRow(
+              'sales.payment_method'.tr(),
+              _translatePaymentMethod(paymentMethod),
+              fonts.regular,
+            ),
           if (salespersonName != null && salespersonName.isNotEmpty)
-            _pdfInfoRow('sales.salesperson'.tr(), salespersonName, fonts.regular),
+            _pdfInfoRow(
+              'sales.salesperson'.tr(),
+              salespersonName,
+              fonts.regular,
+            ),
+          if (cashierName != null && cashierName.isNotEmpty)
+            _pdfInfoRow(
+              'cashier_shifts.cashier'.tr(),
+              cashierName,
+              fonts.regular,
+            ),
+          if (cashierShiftNumber != null && cashierShiftNumber.isNotEmpty)
+            _pdfInfoRow(
+              'cashier_shifts.shift_number'.tr(),
+              cashierShiftNumber,
+              fonts.regular,
+            ),
         ],
       ),
     );
@@ -804,7 +1000,9 @@ class SalePdfService {
     required _PdfFonts fonts,
     required bool isRtl,
   }) {
-    final hasPerItemSalesperson = items.any((i) => i.employeeName != null && i.employeeName!.isNotEmpty);
+    final hasPerItemSalesperson = items.any(
+      (i) => i.employeeName != null && i.employeeName!.isNotEmpty,
+    );
 
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey300),
@@ -848,7 +1046,10 @@ class SalePdfService {
             children: [
               _tableCell('${idx + 1}', fonts.regular),
               pw.Padding(
-                padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                padding: const pw.EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 4,
+                ),
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
@@ -856,14 +1057,22 @@ class SalePdfService {
                     if (sku != null && sku.isNotEmpty)
                       pw.Container(
                         margin: const pw.EdgeInsets.only(top: 2),
-                        child: _bidiText('SKU: $sku', fonts.regular, fontSize: 7, color: PdfColors.grey600),
+                        child: _bidiText(
+                          'SKU: $sku',
+                          fonts.regular,
+                          fontSize: 7,
+                          color: PdfColors.grey600,
+                        ),
                       ),
                   ],
                 ),
               ),
               if (hasPerItemSalesperson)
                 _tableCell(item.employeeName ?? '', fonts.regular),
-              _tableCell('${item.quantity}', fonts.regular),
+              _tableCell(
+                localizedQuantity(item.quantity, item.measurementType),
+                fonts.regular,
+              ),
               _tableCell(cs.format(item.unitPriceCents), fonts.regular),
               _tableCell(cs.format(item.totalCents), fonts.regular),
             ],
@@ -880,7 +1089,7 @@ class SalePdfService {
     required int totalCents,
     required int paidCents,
     required int totalItems,
-    required int totalPieces,
+    required int? totalPieces,
     required CurrencyService cs,
     required _PdfFonts fonts,
     bool includeTaxBreakdown = true,
@@ -895,22 +1104,47 @@ class SalePdfService {
       ),
       child: pw.Column(
         children: [
-          _pdfMoneyRow('sales.total_items_count'.tr(), '$totalItems', fonts.regular),
-          _pdfMoneyRow('sales.total_pieces_count'.tr(), '$totalPieces', fonts.regular),
+          _pdfMoneyRow(
+            'sales.total_items_count'.tr(),
+            '$totalItems',
+            fonts.regular,
+          ),
+          if (totalPieces != null)
+            _pdfMoneyRow(
+              'sales.total_pieces_count'.tr(),
+              '$totalPieces',
+              fonts.regular,
+            ),
           pw.SizedBox(height: 4),
-          _pdfMoneyRow('sales.subtotal'.tr(), cs.format(subtotalCents), fonts.regular),
+          _pdfMoneyRow(
+            'sales.subtotal'.tr(),
+            cs.format(subtotalCents),
+            fonts.regular,
+          ),
           if (discountCents > 0)
-            _pdfMoneyRow('sales.discount'.tr(), '- ${cs.format(discountCents)}',
-                fonts.regular, valueColor: PdfColors.orange),
+            _pdfMoneyRow(
+              'sales.discount'.tr(),
+              '- ${cs.format(discountCents)}',
+              fonts.regular,
+              valueColor: PdfColors.orange,
+            ),
           // Only show tax breakdown if includeTaxBreakdown is true
           if (taxCents > 0 && includeTaxBreakdown)
             _pdfMoneyRow('sales.tax'.tr(), cs.format(taxCents), fonts.regular),
           pw.Divider(thickness: 2),
-          _pdfMoneyRow('sales.total'.tr(), cs.format(totalCents),
-              fonts.bold, fontSize: 14),
+          _pdfMoneyRow(
+            'sales.total'.tr(),
+            cs.format(totalCents),
+            fonts.bold,
+            fontSize: 14,
+          ),
           if (paidCents > 0) ...[
             pw.SizedBox(height: 4),
-            _pdfMoneyRow('sales.paid_amount'.tr(), cs.format(paidCents), fonts.regular),
+            _pdfMoneyRow(
+              'sales.paid_amount'.tr(),
+              cs.format(paidCents),
+              fonts.regular,
+            ),
             if (remainingCents > 0)
               _pdfMoneyRow(
                 'sales.remaining'.tr(),
@@ -960,16 +1194,30 @@ class SalePdfService {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               _bidiText('sales.customer_account'.tr(), fonts.bold, fontSize: 9),
-              _bidiText(customerName, fonts.regular, fontSize: 8, color: PdfColors.grey600),
+              _bidiText(
+                customerName,
+                fonts.regular,
+                fontSize: 8,
+                color: PdfColors.grey600,
+              ),
               if (loyaltyPoints > 0) ...[
                 pw.SizedBox(height: 4),
                 pw.Row(
                   children: [
-                    _bidiText('sales.loyalty_points_balance'.tr(), fonts.regular, fontSize: 8, color: PdfColors.amber800),
+                    _bidiText(
+                      'sales.loyalty_points_balance'.tr(),
+                      fonts.regular,
+                      fontSize: 8,
+                      color: PdfColors.amber800,
+                    ),
                     pw.SizedBox(width: 4),
                     pw.Text(
                       '$loyaltyPoints',
-                      style: pw.TextStyle(font: fonts.bold, fontSize: 9, color: PdfColors.amber800),
+                      style: pw.TextStyle(
+                        font: fonts.bold,
+                        fontSize: 9,
+                        color: PdfColors.amber800,
+                      ),
                     ),
                   ],
                 ),
@@ -1005,23 +1253,40 @@ class SalePdfService {
     required Locale locale,
     String? receiptFooterText,
   }) {
-    final generatedText = '${'sales.generated_on'.tr()}: ${DateFormat('yyyy-MM-dd HH:mm', locale.toString()).format(DateTime.now())}';
+    final generatedText =
+        '${'sales.generated_on'.tr()}: ${DateFormat('yyyy-MM-dd HH:mm', locale.toString()).format(DateTime.now())}';
     return pw.Column(
       children: [
         // Custom footer text from AppSettings
         if (receiptFooterText != null && receiptFooterText.isNotEmpty) ...[
-          _bidiText(receiptFooterText, fonts.regular, fontSize: 9, color: PdfColors.grey700),
+          _bidiText(
+            receiptFooterText,
+            fonts.regular,
+            fontSize: 9,
+            color: PdfColors.grey700,
+          ),
           pw.SizedBox(height: 4),
         ],
         pw.Container(
           alignment: pw.Alignment.center,
-          child: _bidiText(generatedText, fonts.regular, fontSize: 8, color: PdfColors.grey500),
+          child: _bidiText(
+            generatedText,
+            fonts.regular,
+            fontSize: 8,
+            color: PdfColors.grey500,
+          ),
         ),
         pw.SizedBox(height: 4),
         pw.Container(
           alignment: pw.Alignment.center,
-          child: pw.Text('Powered by TapixSolutions',
-              style: pw.TextStyle(font: fonts.regular, fontSize: 7, color: PdfColors.grey400)),
+          child: pw.Text(
+            'Powered by TapixSolutions',
+            style: pw.TextStyle(
+              font: fonts.regular,
+              fontSize: 7,
+              color: PdfColors.grey400,
+            ),
+          ),
         ),
       ],
     );
@@ -1029,17 +1294,32 @@ class SalePdfService {
 
   /// Detect if text contains Arabic/Hebrew characters that need RTL
   static bool _hasArabic(String text) {
-    return RegExp(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0590-\u05FF]').hasMatch(text);
+    return RegExp(
+      r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0590-\u05FF]',
+    ).hasMatch(text);
   }
 
   /// Create a pw.Text that auto-detects Arabic and sets textDirection accordingly
-  static pw.Text _bidiText(String text, pw.Font font, {double fontSize = 8, PdfColor? color}) {
-    return pw.Text(text,
-        textDirection: _hasArabic(text) ? pw.TextDirection.rtl : pw.TextDirection.ltr,
-        style: pw.TextStyle(font: font, fontSize: fontSize, color: color));
+  static pw.Text _bidiText(
+    String text,
+    pw.Font font, {
+    double fontSize = 8,
+    PdfColor? color,
+  }) {
+    return pw.Text(
+      text,
+      textDirection: _hasArabic(text)
+          ? pw.TextDirection.rtl
+          : pw.TextDirection.ltr,
+      style: pw.TextStyle(font: font, fontSize: fontSize, color: color),
+    );
   }
 
-  static pw.Widget _tableCell(String text, pw.Font font, {bool isHeader = false}) {
+  static pw.Widget _tableCell(
+    String text,
+    pw.Font font, {
+    bool isHeader = false,
+  }) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
       child: _bidiText(text, font, fontSize: 7),
@@ -1059,19 +1339,27 @@ class SalePdfService {
     );
   }
 
-  static pw.Widget _pdfMoneyRow(String label, String value, pw.Font font,
-      {PdfColor? valueColor, double fontSize = 10}) {
+  static pw.Widget _pdfMoneyRow(
+    String label,
+    String value,
+    pw.Font font, {
+    PdfColor? valueColor,
+    double fontSize = 10,
+  }) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 2),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
           _bidiText(label, font, fontSize: fontSize),
-          pw.Text(value,
-              style: pw.TextStyle(
-                font: font, fontSize: fontSize,
-                color: valueColor,
-              )),
+          pw.Text(
+            value,
+            style: pw.TextStyle(
+              font: font,
+              fontSize: fontSize,
+              color: valueColor,
+            ),
+          ),
         ],
       ),
     );
@@ -1159,6 +1447,8 @@ class SalePdfService {
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
+    final cashierShift = await sl<CashierShiftService>()
+        .getSaleAdjustmentReturnShift(returnEntity.id);
 
     // Customer balance footer (best-effort).
     pw.Widget? customerBalanceWidget;
@@ -1190,8 +1480,10 @@ class SalePdfService {
     final discountCents = returnEntity.discountCents.toBigInt().toInt();
     final taxCents = returnEntity.taxCents.toBigInt().toInt();
     final totalCents = returnEntity.totalCents.toBigInt().toInt();
-    final totalPieces =
-        returnItems.fold<int>(0, (sum, d) => sum + d.item.quantity);
+    final totalPieces = returnItems.fold<int>(
+      0,
+      (sum, d) => sum + d.item.quantity,
+    );
 
     pdf.addPage(
       pw.Page(
@@ -1219,31 +1511,58 @@ class SalePdfService {
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    _pdfInfoRow('sales.return_number'.tr(),
-                        returnEntity.returnNumber, fonts.regular),
                     _pdfInfoRow(
-                        'sales.date'.tr(),
-                        DateFormat.yMMMd(locale.toString())
-                            .format(returnEntity.returnDate),
-                        fonts.regular),
+                      'sales.return_number'.tr(),
+                      returnEntity.returnNumber,
+                      fonts.regular,
+                    ),
                     _pdfInfoRow(
-                        'sales.customer'.tr(),
-                        customerName ?? 'sales.walk_in'.tr(),
-                        fonts.regular),
+                      'sales.date'.tr(),
+                      DateFormat.yMMMd(
+                        locale.toString(),
+                      ).format(returnEntity.returnDate),
+                      fonts.regular,
+                    ),
+                    _pdfInfoRow(
+                      'sales.customer'.tr(),
+                      customerName ?? 'sales.walk_in'.tr(),
+                      fonts.regular,
+                    ),
                     if (employeeName != null && employeeName.isNotEmpty)
-                      _pdfInfoRow('sales.salesperson'.tr(),
-                          employeeName, fonts.regular),
+                      _pdfInfoRow(
+                        'sales.salesperson'.tr(),
+                        employeeName,
+                        fonts.regular,
+                      ),
+                    if (cashierShift != null) ...[
+                      _pdfInfoRow(
+                        'cashier_shifts.cashier'.tr(),
+                        cashierShift.cashierName,
+                        fonts.regular,
+                      ),
+                      _pdfInfoRow(
+                        'cashier_shifts.shift_number'.tr(),
+                        cashierShift.shift.shiftNumber,
+                        fonts.regular,
+                      ),
+                    ],
                     _pdfInfoRow(
-                        'sales.refund_method'.tr(),
-                        'sales.refund_method_${returnEntity.refundMethod}'
-                            .tr(),
-                        fonts.regular),
+                      'sales.refund_method'.tr(),
+                      'sales.refund_method_${returnEntity.refundMethod}'.tr(),
+                      fonts.regular,
+                    ),
                     if (reasonText != null)
-                      _pdfInfoRow('returns.reason_label'.tr(),
-                          reasonText, fonts.regular),
+                      _pdfInfoRow(
+                        'returns.reason_label'.tr(),
+                        reasonText,
+                        fonts.regular,
+                      ),
                     if (userNotes != null)
-                      _pdfInfoRow('common.notes'.tr(),
-                          userNotes, fonts.regular),
+                      _pdfInfoRow(
+                        'common.notes'.tr(),
+                        userNotes,
+                        fonts.regular,
+                      ),
                   ],
                 ),
               ),
@@ -1264,35 +1583,53 @@ class SalePdfService {
                 ),
                 child: pw.Column(
                   children: [
-                    _pdfMoneyRow('sales.total_items_count'.tr(),
-                        '${returnItems.length}', fonts.regular),
-                    _pdfMoneyRow('sales.total_pieces_count'.tr(),
-                        '$totalPieces', fonts.regular),
+                    _pdfMoneyRow(
+                      'sales.total_items_count'.tr(),
+                      '${returnItems.length}',
+                      fonts.regular,
+                    ),
+                    _pdfMoneyRow(
+                      'sales.total_pieces_count'.tr(),
+                      '$totalPieces',
+                      fonts.regular,
+                    ),
                     pw.SizedBox(height: 4),
                     if (subtotalCents > 0)
-                      _pdfMoneyRow('sales.subtotal'.tr(),
-                          cs.format(subtotalCents), fonts.regular),
+                      _pdfMoneyRow(
+                        'sales.subtotal'.tr(),
+                        cs.format(subtotalCents),
+                        fonts.regular,
+                      ),
                     if (discountCents > 0)
                       _pdfMoneyRow(
-                          'sales.discount'.tr(),
-                          '- ${cs.format(discountCents)}',
-                          fonts.regular,
-                          valueColor: PdfColors.orange),
+                        'sales.discount'.tr(),
+                        '- ${cs.format(discountCents)}',
+                        fonts.regular,
+                        valueColor: PdfColors.orange,
+                      ),
                     if (taxCents > 0)
-                      _pdfMoneyRow('sales.tax'.tr(),
-                          '+ ${cs.format(taxCents)}', fonts.regular),
+                      _pdfMoneyRow(
+                        'sales.tax'.tr(),
+                        '+ ${cs.format(taxCents)}',
+                        fonts.regular,
+                      ),
                     pw.Divider(thickness: 2),
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        _bidiText('sales.total_refund'.tr(), fonts.bold,
-                            fontSize: 14),
-                        pw.Text(cs.format(totalCents),
-                            style: pw.TextStyle(
-                              font: fonts.bold,
-                              fontSize: 14,
-                              color: PdfColors.red,
-                            )),
+                        _bidiText(
+                          'sales.total_refund'.tr(),
+                          fonts.bold,
+                          fontSize: 14,
+                        ),
+                        pw.Text(
+                          cs.format(totalCents),
+                          style: pw.TextStyle(
+                            font: fonts.bold,
+                            fontSize: 14,
+                            color: PdfColors.red,
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -1340,7 +1677,11 @@ class SalePdfService {
             _tableCell('sales.product_col'.tr(), fonts.bold, isHeader: true),
             _tableCell('sales.qty_col'.tr(), fonts.bold, isHeader: true),
             _tableCell('sales.unit_price'.tr(), fonts.bold, isHeader: true),
-            _tableCell('sales.customer_refund'.tr(), fonts.bold, isHeader: true),
+            _tableCell(
+              'sales.customer_refund'.tr(),
+              fonts.bold,
+              isHeader: true,
+            ),
           ],
         ),
         ...items.asMap().entries.map((e) {
@@ -1354,13 +1695,18 @@ class SalePdfService {
             children: [
               _tableCell('${idx + 1}', fonts.regular),
               _tableCell(name, fonts.regular),
-              _tableCell('${d.item.quantity}', fonts.regular),
               _tableCell(
-                  cs.format(d.item.unitPriceCents.toBigInt().toInt()),
-                  fonts.regular),
+                localizedQuantity(d.item.quantity, d.item.measurementType),
+                fonts.regular,
+              ),
               _tableCell(
-                  cs.format(d.item.totalCents.toBigInt().toInt()),
-                  fonts.regular),
+                cs.format(d.item.unitPriceCents.toBigInt().toInt()),
+                fonts.regular,
+              ),
+              _tableCell(
+                cs.format(d.item.totalCents.toBigInt().toInt()),
+                fonts.regular,
+              ),
             ],
           );
         }),
@@ -1384,6 +1730,7 @@ class _PdfLineItem {
   final String? sizeName;
   final String? employeeName;
   final int quantity;
+  final String measurementType;
   final int unitPriceCents;
   final int totalCents;
 
@@ -1395,6 +1742,7 @@ class _PdfLineItem {
     this.sizeName,
     this.employeeName,
     required this.quantity,
+    this.measurementType = 'piece',
     required this.unitPriceCents,
     required this.totalCents,
   });

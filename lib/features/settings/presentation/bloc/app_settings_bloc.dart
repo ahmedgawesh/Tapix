@@ -31,10 +31,7 @@ class AppSettingsState {
   final AppSettings settings;
   final bool isSaving;
 
-  const AppSettingsState({
-    required this.settings,
-    this.isSaving = false,
-  });
+  const AppSettingsState({required this.settings, this.isSaving = false});
 
   AppSettingsState copyWith({AppSettings? settings, bool? isSaving}) {
     return AppSettingsState(
@@ -51,7 +48,7 @@ class AppSettingsBloc extends Bloc<AppSettingsEvent, AppSettingsState> {
   StreamSubscription<AppSettings>? _subscription;
 
   AppSettingsBloc(this._service)
-      : super(AppSettingsState(settings: _service.current)) {
+    : super(AppSettingsState(settings: _service.current)) {
     on<AppSettingsLoaded>(_onLoaded);
     on<AppSettingsUpdated>(_onUpdated);
     on<AppSettingsPatched>(_onPatched);

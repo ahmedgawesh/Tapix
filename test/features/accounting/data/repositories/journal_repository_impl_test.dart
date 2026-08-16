@@ -10,7 +10,8 @@ import 'package:tapix/features/accounting/domain/models/trial_balance.dart';
 import 'package:tapix/features/accounting/domain/repositories/journal_repository.dart';
 
 /// Fake datasource that records calls for verification
-class FakeJournalLocalDatasource extends Fake implements JournalLocalDatasource {
+class FakeJournalLocalDatasource extends Fake
+    implements JournalLocalDatasource {
   int createAccountCallCount = 0;
   int createEntryCallCount = 0;
   int createLineCallCount = 0;
@@ -66,7 +67,8 @@ class FakeJournalLocalDatasource extends Fake implements JournalLocalDatasource 
   Future<Account?> getAccount(int id) async => _accountLookup?.call(id);
 
   @override
-  Future<bool> isDateInClosedPeriod(DateTime date) async => _isDateInClosedPeriod;
+  Future<bool> isDateInClosedPeriod(DateTime date) async =>
+      _isDateInClosedPeriod;
 
   @override
   Future<int> getCustomerBalanceTotal() async => _customerBalanceTotal;
@@ -270,55 +272,61 @@ void main() {
       );
     });
 
-    test('should delegate to AccountingRepository.createJournalEntry when balanced', () async {
-      // Phase 1: JournalRepositoryImpl is a thin adapter. The actual write
-      // is performed by AccountingRepository — verify the delegation
-      // contract, not the table writes.
-      final lines = [
-        JournalLineInput(
-          accountId: 1,
-          debitCents: Decimal.fromInt(1000),
-          creditCents: Decimal.zero,
-          currencyId: 1,
-        ),
-        JournalLineInput(
-          accountId: 2,
-          debitCents: Decimal.zero,
-          creditCents: Decimal.fromInt(1000),
-          currencyId: 1,
-        ),
-      ];
+    test(
+      'should delegate to AccountingRepository.createJournalEntry when balanced',
+      () async {
+        // Phase 1: JournalRepositoryImpl is a thin adapter. The actual write
+        // is performed by AccountingRepository — verify the delegation
+        // contract, not the table writes.
+        final lines = [
+          JournalLineInput(
+            accountId: 1,
+            debitCents: Decimal.fromInt(1000),
+            creditCents: Decimal.zero,
+            currencyId: 1,
+          ),
+          JournalLineInput(
+            accountId: 2,
+            debitCents: Decimal.zero,
+            creditCents: Decimal.fromInt(1000),
+            currencyId: 1,
+          ),
+        ];
 
-      fakeAccountingRepo.createJournalEntryReturnValue = 7;
+        fakeAccountingRepo.createJournalEntryReturnValue = 7;
 
-      final result = await repository.createJournalEntryWithLines(
-        description: 'Test balanced entry',
-        entryDate: DateTime(2026, 1, 15),
-        entryType: 'manual',
-        lines: lines,
-        createdBy: 42,
-      );
+        final result = await repository.createJournalEntryWithLines(
+          description: 'Test balanced entry',
+          entryDate: DateTime(2026, 1, 15),
+          entryType: 'manual',
+          lines: lines,
+          createdBy: 42,
+        );
 
-      expect(result, 7);
-      expect(fakeAccountingRepo.createJournalEntryCallCount, 1);
-      expect(fakeAccountingRepo.lastCreateUserId, 42);
+        expect(result, 7);
+        expect(fakeAccountingRepo.createJournalEntryCallCount, 1);
+        expect(fakeAccountingRepo.lastCreateUserId, 42);
 
-      final captured = fakeAccountingRepo.lastCreateEntryData!;
-      expect(captured.description, 'Test balanced entry');
-      expect(captured.entryType, 'manual');
-      expect(captured.autoPost, isFalse,
-          reason: 'createJournalEntryWithLines must always create drafts');
-      expect(captured.lines.length, 2);
-      expect(captured.lines[0].debitCents, 1000);
-      expect(captured.lines[0].creditCents, 0);
-      expect(captured.lines[1].debitCents, 0);
-      expect(captured.lines[1].creditCents, 1000);
+        final captured = fakeAccountingRepo.lastCreateEntryData!;
+        expect(captured.description, 'Test balanced entry');
+        expect(captured.entryType, 'manual');
+        expect(
+          captured.autoPost,
+          isFalse,
+          reason: 'createJournalEntryWithLines must always create drafts',
+        );
+        expect(captured.lines.length, 2);
+        expect(captured.lines[0].debitCents, 1000);
+        expect(captured.lines[0].creditCents, 0);
+        expect(captured.lines[1].debitCents, 0);
+        expect(captured.lines[1].creditCents, 1000);
 
-      // Datasource must NOT be written through directly — that would mean
-      // we still have a second writer. Phase 1 invariant.
-      expect(fakeDatasource.createEntryCallCount, 0);
-      expect(fakeDatasource.createLineCallCount, 0);
-    });
+        // Datasource must NOT be written through directly — that would mean
+        // we still have a second writer. Phase 1 invariant.
+        expect(fakeDatasource.createEntryCallCount, 0);
+        expect(fakeDatasource.createLineCallCount, 0);
+      },
+    );
   });
 
   group('postJournalEntry', () {
@@ -332,56 +340,60 @@ void main() {
     });
 
     test('should throw StateError when entry is not draft', () async {
-      fakeDatasource.setEntryToReturn(JournalEntry(
-        id: 1,
-        entryNumber: 'JE-000001',
-        description: 'Test',
-        entryDate: DateTime.now(),
-        status: 'posted',
-        entryType: 'manual',
-        totalDebitCents: Decimal.fromInt(1000),
-        totalCreditCents: Decimal.fromInt(1000),
-        isReversed: false,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ));
-
-      expect(
-        () => repository.postJournalEntry(1),
-        throwsA(isA<StateError>()),
+      fakeDatasource.setEntryToReturn(
+        JournalEntry(
+          id: 1,
+          entryNumber: 'JE-000001',
+          description: 'Test',
+          entryDate: DateTime.now(),
+          status: 'posted',
+          entryType: 'manual',
+          totalDebitCents: Decimal.fromInt(1000),
+          totalCreditCents: Decimal.fromInt(1000),
+          isReversed: false,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
       );
+
+      expect(() => repository.postJournalEntry(1), throwsA(isA<StateError>()));
     });
 
-    test('should delegate to AccountingRepository.postJournalEntry for draft entries', () async {
-      // Phase 1: balance updates live in AccountingRepository.
-      // JournalRepositoryImpl must NOT touch accounts.balance_cents itself.
-      final now = DateTime.now();
-      fakeDatasource.setEntryToReturn(JournalEntry(
-        id: 1,
-        entryNumber: 'JE-000001',
-        description: 'Test',
-        entryDate: now,
-        status: 'draft',
-        entryType: 'manual',
-        totalDebitCents: Decimal.fromInt(1000),
-        totalCreditCents: Decimal.fromInt(1000),
-        isReversed: false,
-        createdAt: now,
-        updatedAt: now,
-      ));
+    test(
+      'should delegate to AccountingRepository.postJournalEntry for draft entries',
+      () async {
+        // Phase 1: balance updates live in AccountingRepository.
+        // JournalRepositoryImpl must NOT touch accounts.balance_cents itself.
+        final now = DateTime.now();
+        fakeDatasource.setEntryToReturn(
+          JournalEntry(
+            id: 1,
+            entryNumber: 'JE-000001',
+            description: 'Test',
+            entryDate: now,
+            status: 'draft',
+            entryType: 'manual',
+            totalDebitCents: Decimal.fromInt(1000),
+            totalCreditCents: Decimal.fromInt(1000),
+            isReversed: false,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
 
-      await repository.postJournalEntry(1, postedBy: 99);
+        await repository.postJournalEntry(1, postedBy: 99);
 
-      expect(fakeAccountingRepo.postJournalEntryCallCount, 1);
-      expect(fakeAccountingRepo.lastPostEntryId, 1);
-      expect(fakeAccountingRepo.lastPostUserId, 99);
+        expect(fakeAccountingRepo.postJournalEntryCallCount, 1);
+        expect(fakeAccountingRepo.lastPostEntryId, 1);
+        expect(fakeAccountingRepo.lastPostUserId, 99);
 
-      // Phase 1 invariant: the OLD inline balance writer is gone — the
-      // datasource must not be used to mutate balances or update the entry
-      // status. Both happen inside AccountingRepository now.
-      expect(fakeDatasource.updateEntryCallCount, 0);
-      expect(fakeDatasource.updateAccountCallCount, 0);
-    });
+        // Phase 1 invariant: the OLD inline balance writer is gone — the
+        // datasource must not be used to mutate balances or update the entry
+        // status. Both happen inside AccountingRepository now.
+        expect(fakeDatasource.updateEntryCallCount, 0);
+        expect(fakeDatasource.updateAccountCallCount, 0);
+      },
+    );
   });
 
   group('voidJournalEntry', () {
@@ -395,19 +407,21 @@ void main() {
     });
 
     test('should throw StateError when entry is not posted', () async {
-      fakeDatasource.setEntryToReturn(JournalEntry(
-        id: 1,
-        entryNumber: 'JE-000001',
-        description: 'Test',
-        entryDate: DateTime.now(),
-        status: 'draft',
-        entryType: 'manual',
-        totalDebitCents: Decimal.fromInt(1000),
-        totalCreditCents: Decimal.fromInt(1000),
-        isReversed: false,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ));
+      fakeDatasource.setEntryToReturn(
+        JournalEntry(
+          id: 1,
+          entryNumber: 'JE-000001',
+          description: 'Test',
+          entryDate: DateTime.now(),
+          status: 'draft',
+          entryType: 'manual',
+          totalDebitCents: Decimal.fromInt(1000),
+          totalCreditCents: Decimal.fromInt(1000),
+          isReversed: false,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
 
       expect(
         () => repository.voidJournalEntry(1, reason: 'Test'),
@@ -415,35 +429,40 @@ void main() {
       );
     });
 
-    test('should delegate to AccountingRepository.voidJournalEntry for posted entries', () async {
-      final now = DateTime.now();
-      fakeDatasource.setEntryToReturn(JournalEntry(
-        id: 1,
-        entryNumber: 'JE-000001',
-        description: 'Test',
-        entryDate: now,
-        status: 'posted',
-        entryType: 'manual',
-        totalDebitCents: Decimal.fromInt(1000),
-        totalCreditCents: Decimal.fromInt(1000),
-        isReversed: false,
-        createdAt: now,
-        updatedAt: now,
-      ));
-      fakeAccountingRepo.voidJournalEntryReturnValue = 123;
+    test(
+      'should delegate to AccountingRepository.voidJournalEntry for posted entries',
+      () async {
+        final now = DateTime.now();
+        fakeDatasource.setEntryToReturn(
+          JournalEntry(
+            id: 1,
+            entryNumber: 'JE-000001',
+            description: 'Test',
+            entryDate: now,
+            status: 'posted',
+            entryType: 'manual',
+            totalDebitCents: Decimal.fromInt(1000),
+            totalCreditCents: Decimal.fromInt(1000),
+            isReversed: false,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+        fakeAccountingRepo.voidJournalEntryReturnValue = 123;
 
-      final reversalId = await repository.voidJournalEntry(
-        1,
-        reason: 'User correction',
-        createdBy: 77,
-      );
+        final reversalId = await repository.voidJournalEntry(
+          1,
+          reason: 'User correction',
+          createdBy: 77,
+        );
 
-      expect(reversalId, 123);
-      expect(fakeAccountingRepo.voidJournalEntryCallCount, 1);
-      expect(fakeAccountingRepo.lastVoidEntryId, 1);
-      expect(fakeAccountingRepo.lastVoidReason, 'User correction');
-      expect(fakeAccountingRepo.lastVoidUserId, 77);
-    });
+        expect(reversalId, 123);
+        expect(fakeAccountingRepo.voidJournalEntryCallCount, 1);
+        expect(fakeAccountingRepo.lastVoidEntryId, 1);
+        expect(fakeAccountingRepo.lastVoidReason, 'User correction');
+        expect(fakeAccountingRepo.lastVoidUserId, 77);
+      },
+    );
   });
 
   group('getTrialBalance', () {
@@ -473,40 +492,44 @@ void main() {
 
   group('seedDefaultAccounts', () {
     test('should skip seeding if accounts already exist', () async {
-      fakeDatasource.setFindByCodeResult(Account(
-        id: 1,
-        accountCode: '10000',
-        accountName: 'Assets',
-        accountType: 'asset',
-        balanceCents: Decimal.zero,
-        currencyId: 1,
-        isActive: true,
-        isSystemAccount: true,
-        displayOrder: 1,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      ));
+      fakeDatasource.setFindByCodeResult(
+        Account(
+          id: 1,
+          accountCode: '10000',
+          accountName: 'Assets',
+          accountType: 'asset',
+          balanceCents: Decimal.zero,
+          currencyId: 1,
+          isActive: true,
+          isSystemAccount: true,
+          displayOrder: 1,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
 
       await repository.seedDefaultAccounts(1);
 
       expect(fakeDatasource.createAccountCallCount, 0);
     });
 
-    test('should seed 24 default accounts when none exist', () async {
+    test('should seed 31 default accounts when none exist', () async {
       fakeDatasource.setFindByCodeResult(null);
-      fakeDatasource.setAccountLookup((id) => Account(
-            id: id,
-            accountCode: '10100',
-            accountName: 'Cash',
-            accountType: 'asset',
-            balanceCents: Decimal.zero,
-            currencyId: 1,
-            isActive: true,
-            isSystemAccount: true,
-            displayOrder: 1,
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          ));
+      fakeDatasource.setAccountLookup(
+        (id) => Account(
+          id: id,
+          accountCode: '10100',
+          accountName: 'Cash',
+          accountType: 'asset',
+          balanceCents: Decimal.zero,
+          currencyId: 1,
+          isActive: true,
+          isSystemAccount: true,
+          displayOrder: 1,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
 
       await repository.seedDefaultAccounts(1);
 
@@ -518,7 +541,9 @@ void main() {
       // (and incorrectly) credited Inventory and drove a GL drift below
       // Σ(stock × cost). See supplier_discount_inventory_drift_test.dart.
       // (23 → 24).
-      expect(fakeDatasource.createAccountCallCount, 24);
+      // Phase 10061 added seven owner-finance/fixed-asset accounts:
+      // 1500, 1510, 1520, 1590, 2200, 3200, and 6100 (24 → 31).
+      expect(fakeDatasource.createAccountCallCount, 31);
     });
   });
 }

@@ -8,7 +8,8 @@ const _kAppSettingsKey = 'app_settings_v1';
 
 class AppSettingsService {
   final SharedPreferences _prefs;
-  final StreamController<AppSettings> _controller = StreamController<AppSettings>.broadcast();
+  final StreamController<AppSettings> _controller =
+      StreamController<AppSettings>.broadcast();
 
   late AppSettings _current;
 

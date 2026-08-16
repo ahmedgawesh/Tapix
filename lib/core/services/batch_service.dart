@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../database/app_database.dart';
+import '../measurement/measurement.dart';
 import 'logging_service.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -14,15 +15,21 @@ class BatchConsumptionResult {
   final int consumptionId;
   final int quantity;
   final int unitCostCents;
+  final int quantityScale;
 
   const BatchConsumptionResult({
     required this.batchId,
     required this.consumptionId,
     required this.quantity,
     required this.unitCostCents,
+    required this.quantityScale,
   });
 
-  int get totalCostCents => quantity * unitCostCents;
+  int get totalCostCents => MeasuredAmount.cents(
+    unitCents: unitCostCents,
+    quantity: quantity,
+    quantityScale: quantityScale,
+  );
 }
 
 /// Static service that manages `ProductBatches` + `BatchConsumptions` under
@@ -66,8 +73,11 @@ class BatchService {
     DateTime? expiryDate,
   }) async {
     assert(quantity > 0, 'Batch quantity must be positive');
-    final resolvedVariantId =
-        await _resolveVariantId(dao, productId: productId, variantId: variantId);
+    final resolvedVariantId = await _resolveVariantId(
+      dao,
+      productId: productId,
+      variantId: variantId,
+    );
     final batchNumber = 'BATCH-${_yyyymm()}-PI$purchaseItemId';
     return _insertBatch(
       dao,
@@ -112,8 +122,11 @@ class BatchService {
       source == 'opening' || source == 'found' || source == 'sale_return',
       'Invalid opening batch source: $source',
     );
-    final resolvedVariantId =
-        await _resolveVariantId(dao, productId: productId, variantId: variantId);
+    final resolvedVariantId = await _resolveVariantId(
+      dao,
+      productId: productId,
+      variantId: variantId,
+    );
     final ts = DateTime.now().microsecondsSinceEpoch;
     // Prefer the source document number so the batch reads as e.g.
     // `SAR-202607-0001-V19-…` in the Batch Management report — unambiguously
@@ -126,8 +139,8 @@ class BatchService {
       final prefix = source == 'opening'
           ? 'OPEN'
           : source == 'found'
-              ? 'FOUND'
-              : 'SAR';
+          ? 'FOUND'
+          : 'SAR';
       batchNumber = '$prefix-${_yyyymm()}-V$resolvedVariantId-$ts';
     }
     return _insertBatch(
@@ -178,8 +191,20 @@ class BatchService {
     String? notes,
   }) async {
     assert(quantity > 0, 'Consumption quantity must be positive');
-    final resolvedVariantId =
-        await _resolveVariantId(dao, productId: productId, variantId: variantId);
+    final resolvedVariantId = await _resolveVariantId(
+      dao,
+      productId: productId,
+      variantId: variantId,
+    );
+    final scaleRow = await dao
+        .customSelect(
+          'SELECT measurement_type FROM products WHERE id = ?',
+          variables: [Variable.withInt(productId)],
+        )
+        .getSingleOrNull();
+    final quantityScale = MeasurementType.fromDb(
+      scaleRow?.read<String?>('measurement_type'),
+    ).quantityScale;
 
     LoggingService.debug(
       'consumeFifo: product=$productId variant=$resolvedVariantId qty=$quantity '
@@ -191,19 +216,21 @@ class BatchService {
     final results = <BatchConsumptionResult>[];
     // Re-query each iteration so we always see the freshest remaining_quantity.
     while (remaining > 0) {
-      final batchRow = await dao.customSelect(
-        'SELECT id, remaining_quantity, unit_cost_cents '
-        '  FROM product_batches '
-        ' WHERE product_id = ? AND variant_id = ? '
-        '   AND is_active = 1 AND remaining_quantity > 0 '
-        ' ORDER BY (expiry_date IS NULL) ASC, expiry_date ASC, '
-        '          received_date ASC, id ASC '
-        ' LIMIT 1',
-        variables: [
-          Variable.withInt(productId),
-          Variable.withInt(resolvedVariantId),
-        ],
-      ).getSingleOrNull();
+      final batchRow = await dao
+          .customSelect(
+            'SELECT id, remaining_quantity, unit_cost_cents '
+            '  FROM product_batches '
+            ' WHERE product_id = ? AND variant_id = ? '
+            '   AND is_active = 1 AND remaining_quantity > 0 '
+            ' ORDER BY (expiry_date IS NULL) ASC, expiry_date ASC, '
+            '          received_date ASC, id ASC '
+            ' LIMIT 1',
+            variables: [
+              Variable.withInt(productId),
+              Variable.withInt(resolvedVariantId),
+            ],
+          )
+          .getSingleOrNull();
 
       if (batchRow == null) {
         throw BatchInsufficientStockException(
@@ -255,12 +282,15 @@ class BatchService {
         notes: notes,
       );
 
-      results.add(BatchConsumptionResult(
-        batchId: batchId,
-        consumptionId: consumptionId,
-        quantity: take,
-        unitCostCents: unitCost,
-      ));
+      results.add(
+        BatchConsumptionResult(
+          batchId: batchId,
+          consumptionId: consumptionId,
+          quantity: take,
+          unitCostCents: unitCost,
+          quantityScale: quantityScale,
+        ),
+      );
 
       remaining -= take;
     }
@@ -353,13 +383,15 @@ class BatchService {
     }
 
     // Fetch every 'out' row matching the source so we can mirror them.
-    final rows = await dao.customSelect(
-      'SELECT id, batch_id, quantity, unit_cost_cents '
-      '  FROM batch_consumptions '
-      ' WHERE direction = ? AND ${filters.join(' AND ')} '
-      ' ORDER BY id ASC',
-      variables: [Variable.withString('out'), ...vars],
-    ).get();
+    final rows = await dao
+        .customSelect(
+          'SELECT id, batch_id, quantity, unit_cost_cents '
+          '  FROM batch_consumptions '
+          ' WHERE direction = ? AND ${filters.join(' AND ')} '
+          ' ORDER BY id ASC',
+          variables: [Variable.withString('out'), ...vars],
+        )
+        .get();
 
     int restored = 0;
     int budget = upToQuantity ?? 1 << 30;
@@ -441,10 +473,12 @@ class BatchService {
     required int batchId,
     required DateTime? newExpiry,
   }) async {
-    final batchRow = await dao.customSelect(
-      'SELECT id, is_active, expiry_date FROM product_batches WHERE id = ?',
-      variables: [Variable.withInt(batchId)],
-    ).getSingleOrNull();
+    final batchRow = await dao
+        .customSelect(
+          'SELECT id, is_active, expiry_date FROM product_batches WHERE id = ?',
+          variables: [Variable.withInt(batchId)],
+        )
+        .getSingleOrNull();
     if (batchRow == null) {
       throw StateError(
         'BatchService.updateExpiryDate: batch=$batchId not found.',
@@ -452,17 +486,16 @@ class BatchService {
     }
     final isActive = batchRow.read<int>('is_active') == 1;
     if (!isActive) {
-      throw BatchExpiryLockedException(
-        batchId: batchId,
-        reason: 'inactive',
-      );
+      throw BatchExpiryLockedException(batchId: batchId, reason: 'inactive');
     }
 
-    final outCountRow = await dao.customSelect(
-      'SELECT COUNT(*) AS c FROM batch_consumptions '
-      ' WHERE batch_id = ? AND direction = \'out\'',
-      variables: [Variable.withInt(batchId)],
-    ).getSingle();
+    final outCountRow = await dao
+        .customSelect(
+          'SELECT COUNT(*) AS c FROM batch_consumptions '
+          ' WHERE batch_id = ? AND direction = \'out\'',
+          variables: [Variable.withInt(batchId)],
+        )
+        .getSingle();
     final outCount = outCountRow.read<int>('c');
     if (outCount > 0) {
       throw BatchExpiryLockedException(
@@ -507,24 +540,31 @@ class BatchService {
     required int productId,
     int? variantId,
   }) async {
-    final resolvedVariantId =
-        await _resolveVariantId(dao, productId: productId, variantId: variantId);
+    final resolvedVariantId = await _resolveVariantId(
+      dao,
+      productId: productId,
+      variantId: variantId,
+    );
 
-    final batchSumRow = await dao.customSelect(
-      'SELECT COALESCE(SUM(remaining_quantity), 0) AS total '
-      '  FROM product_batches '
-      ' WHERE product_id = ? AND variant_id = ? AND is_active = 1',
-      variables: [
-        Variable.withInt(productId),
-        Variable.withInt(resolvedVariantId),
-      ],
-    ).getSingle();
+    final batchSumRow = await dao
+        .customSelect(
+          'SELECT COALESCE(SUM(remaining_quantity), 0) AS total '
+          '  FROM product_batches '
+          ' WHERE product_id = ? AND variant_id = ? AND is_active = 1',
+          variables: [
+            Variable.withInt(productId),
+            Variable.withInt(resolvedVariantId),
+          ],
+        )
+        .getSingle();
     final batchTotal = batchSumRow.read<int>('total');
 
-    final variantRow = await dao.customSelect(
-      'SELECT stock_quantity FROM product_variants WHERE id = ?',
-      variables: [Variable.withInt(resolvedVariantId)],
-    ).getSingleOrNull();
+    final variantRow = await dao
+        .customSelect(
+          'SELECT stock_quantity FROM product_variants WHERE id = ?',
+          variables: [Variable.withInt(resolvedVariantId)],
+        )
+        .getSingleOrNull();
     final stockQty = variantRow?.read<int>('stock_quantity') ?? 0;
 
     if (batchTotal != stockQty) {
@@ -541,10 +581,12 @@ class BatchService {
     DatabaseAccessor<AppDatabase> dao, {
     required int productId,
   }) async {
-    final variantRows = await dao.customSelect(
-      'SELECT id FROM product_variants WHERE product_id = ? AND is_active = 1',
-      variables: [Variable.withInt(productId)],
-    ).get();
+    final variantRows = await dao
+        .customSelect(
+          'SELECT id FROM product_variants WHERE product_id = ? AND is_active = 1',
+          variables: [Variable.withInt(productId)],
+        )
+        .get();
     for (final r in variantRows) {
       await assertInvariant(
         dao,
@@ -567,21 +609,25 @@ class BatchService {
     required int? variantId,
   }) async {
     if (variantId != null) return variantId;
-    final row = await dao.customSelect(
-      'SELECT id FROM product_variants '
-      ' WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL '
-      ' ORDER BY id ASC LIMIT 1',
-      variables: [Variable.withInt(productId)],
-    ).getSingleOrNull();
+    final row = await dao
+        .customSelect(
+          'SELECT id FROM product_variants '
+          ' WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL '
+          ' ORDER BY id ASC LIMIT 1',
+          variables: [Variable.withInt(productId)],
+        )
+        .getSingleOrNull();
     if (row == null) {
       // Fall back to ANY variant (the only one for non-variant products that
       // somehow lost their default; we bail out if the product has none at all).
-      final any = await dao.customSelect(
-        'SELECT id FROM product_variants '
-        ' WHERE product_id = ? AND is_active = 1 '
-        ' ORDER BY id ASC LIMIT 1',
-        variables: [Variable.withInt(productId)],
-      ).getSingleOrNull();
+      final any = await dao
+          .customSelect(
+            'SELECT id FROM product_variants '
+            ' WHERE product_id = ? AND is_active = 1 '
+            ' ORDER BY id ASC LIMIT 1',
+            variables: [Variable.withInt(productId)],
+          )
+          .getSingleOrNull();
       if (any == null) {
         throw StateError(
           'BatchService: product=$productId has no active variant — cannot '
@@ -680,7 +726,9 @@ class BatchService {
         _intOrNull(inventoryAdjustmentId),
         _intOrNull(purchaseReturnAdjustmentItemId),
         _intOrNull(saleReturnAdjustmentItemId),
-        notes != null ? Variable.withString(notes) : const Variable<String>(null),
+        notes != null
+            ? Variable.withString(notes)
+            : const Variable<String>(null),
         Variable.withString(DateTime.now().toIso8601String()),
       ],
       updates: {dao.attachedDatabase.batchConsumptions},
@@ -749,7 +797,8 @@ class BatchExpiryLockedException implements Exception {
   });
 
   @override
-  String toString() => 'BatchExpiryLockedException(batch=$batchId '
+  String toString() =>
+      'BatchExpiryLockedException(batch=$batchId '
       'reason=$reason consumptionCount=$consumptionCount): expiry_date is '
       'frozen after first consumption (Invariant I7). Use inventory '
       'adjustment to correct historical lots.';

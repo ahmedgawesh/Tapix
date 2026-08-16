@@ -49,7 +49,9 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
       final now = DateTime.now().millisecondsSinceEpoch;
       final sku = 'HC-$now';
 
-      final productId = await db.into(db.products).insert(
+      final productId = await db
+          .into(db.products)
+          .insert(
             ProductsCompanion.insert(
               sku: Value<String?>(sku),
               name: 'Health Check Product',
@@ -59,7 +61,9 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
             ),
           );
 
-      final variantId = await db.into(db.productVariants).insert(
+      final variantId = await db
+          .into(db.productVariants)
+          .insert(
             ProductVariantsCompanion(
               productId: Value(productId),
               sku: const Value<String?>(null),
@@ -74,12 +78,15 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
             ),
           );
 
-      final variant = await (db.select(db.productVariants)
-            ..where((v) => v.id.equals(variantId))
-            ..limit(1))
-          .getSingle();
+      final variant =
+          await (db.select(db.productVariants)
+                ..where((v) => v.id.equals(variantId))
+                ..limit(1))
+              .getSingle();
 
-      await (db.delete(db.productVariants)..where((v) => v.id.equals(variantId))).go();
+      await (db.delete(
+        db.productVariants,
+      )..where((v) => v.id.equals(variantId))).go();
       await (db.delete(db.products)..where((p) => p.id.equals(productId))).go();
 
       final passed = variant.sku == null;
@@ -125,7 +132,9 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${'common.failed'.tr()}: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('${'common.failed'.tr()}: $e')));
     } finally {
       if (mounted) {
         setState(() {
@@ -167,13 +176,21 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
-                  Text('${'admin_tools.location'.tr()}: ${_dbLocation ?? 'common.loading'.tr()}'),
+                  Text(
+                    '${'admin_tools.location'.tr()}: ${_dbLocation ?? 'common.loading'.tr()}',
+                  ),
                   const SizedBox(height: 8),
-                  Text('${'admin_tools.schema_version'.tr()}: ${sl<AppDatabase>().schemaVersion}'),
+                  Text(
+                    '${'admin_tools.schema_version'.tr()}: ${sl<AppDatabase>().schemaVersion}',
+                  ),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: _deletingDb ? null : _deleteDatabase,
-                    child: Text(_deletingDb ? 'admin_tools.deleting'.tr() : 'admin_tools.delete_reset'.tr()),
+                    child: Text(
+                      _deletingDb
+                          ? 'admin_tools.deleting'.tr()
+                          : 'admin_tools.delete_reset'.tr(),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -198,7 +215,11 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
                   const SizedBox(height: 12),
                   FilledButton(
                     onPressed: _runningHealthCheck ? null : _runHealthCheck,
-                    child: Text(_runningHealthCheck ? 'Running...' : 'Run DB Health Check'),
+                    child: Text(
+                      _runningHealthCheck
+                          ? 'Running...'
+                          : 'Run DB Health Check',
+                    ),
                   ),
                   const SizedBox(height: 12),
                   if (_healthCheckResult != null)

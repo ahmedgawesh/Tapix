@@ -22,7 +22,9 @@
 //      the largest-remainder method, so `Σ line.shareOfOverall == overall`.
 //   4. Tax per line is computed on `line.net − line.shareOfOverall`
 //      (matches QuickBooks / SAP / Xero behavior).
-//   5. `total = subtotal − itemDiscount − overall + tax  ==  Σ line.total`.
+//   5. Exclusive: `total = subtotal − discounts + tax`.
+//      Inclusive: `total = subtotal − discounts` because extracted tax is
+//      already contained in the price. In both modes `total == Σ line.total`.
 //
 // All arithmetic uses [Money] / [Decimal] internally; no `double` ever.
 // ════════════════════════════════════════════════════════════════════════════
@@ -91,7 +93,8 @@ class InvoiceLineResult {
   /// Tax computed on [adjustedNet]. Replaces `local.tax` in the totals.
   final Money tax;
 
-  /// `adjustedNet + tax` — the contribution of this line to the invoice total.
+  /// Exclusive: `adjustedNet + tax`. Inclusive: `adjustedNet` because the
+  /// extracted tax is already contained in that amount.
   final Money total;
 
   const InvoiceLineResult({
@@ -132,7 +135,8 @@ class InvoicePricingResult {
   /// Sum of per-line tax (after overall-discount distribution).
   final Money tax;
 
-  /// `subtotal − totalDiscount + tax`, clamped to `>= 0`.
+  /// Exclusive: `subtotal − totalDiscount + tax`.
+  /// Inclusive: `subtotal − totalDiscount`. Clamped to `>= 0`.
   final Money total;
 
   const InvoicePricingResult({
@@ -147,14 +151,14 @@ class InvoicePricingResult {
 
   /// Empty breakdown (no lines).
   factory InvoicePricingResult.empty() => InvoicePricingResult(
-        lines: const [],
-        subtotal: Money.zero,
-        itemDiscountTotal: Money.zero,
-        overallDiscount: Money.zero,
-        totalDiscount: Money.zero,
-        tax: Money.zero,
-        total: Money.zero,
-      );
+    lines: const [],
+    subtotal: Money.zero,
+    itemDiscountTotal: Money.zero,
+    overallDiscount: Money.zero,
+    totalDiscount: Money.zero,
+    tax: Money.zero,
+    total: Money.zero,
+  );
 
   @override
   String toString() =>
@@ -185,16 +189,18 @@ class InvoicePricingEngine {
 
     // ── Step 1: local breakdown (no tax yet) ──
     final locals = input.lines
-        .map((l) => LineItemPricingEngine.compute(
-              input: l,
-              // Disable tax at this stage; we'll compute tax after the
-              // overall-discount allocation so its base is correct.
-              enableTaxCalculations: false,
-              defaultTaxRateBps: input.defaultTaxRateBps,
-              taxInclusivePricing: input.taxInclusivePricing,
-              discountRounding: input.discountRounding,
-              taxRounding: input.taxRounding,
-            ))
+        .map(
+          (l) => LineItemPricingEngine.compute(
+            input: l,
+            // Disable tax at this stage; we'll compute tax after the
+            // overall-discount allocation so its base is correct.
+            enableTaxCalculations: false,
+            defaultTaxRateBps: input.defaultTaxRateBps,
+            taxInclusivePricing: input.taxInclusivePricing,
+            discountRounding: input.discountRounding,
+            taxRounding: input.taxRounding,
+          ),
+        )
         .toList(growable: false);
 
     // ── Step 2: overall discount base = Σ line.net ──
@@ -206,8 +212,10 @@ class InvoicePricingEngine {
     // Resolve overall discount against this base. Since base is pre-tax,
     // a 1 % overall discount equals 1 % per-line discount when all lines
     // share the same rate — closing the bug.
-    final overallDiscount = input.overallDiscount
-        .resolve(preOverallNet, mode: input.discountRounding);
+    final overallDiscount = input.overallDiscount.resolve(
+      preOverallNet,
+      mode: input.discountRounding,
+    );
 
     // ── Step 3: distribute overall discount proportionally to line nets ──
     List<Money> shares;
@@ -259,13 +267,23 @@ class InvoicePricingEngine {
         effectiveTaxRateBps: rateBps,
       );
 
-      lineResults.add(InvoiceLineResult(
-        local: localWithRate,
-        shareOfOverallDiscount: share,
-        adjustedNet: adjustedNet,
-        tax: tax,
-        total: adjustedNet + tax,
-      ));
+      final lineTotal = Money.fromDecimalCents(
+        TaxCalculationService.composeTotal(
+          netCents: adjustedNet.decimalCents,
+          taxCents: tax.decimalCents,
+          taxInclusivePricing: input.taxInclusivePricing,
+        ),
+      );
+
+      lineResults.add(
+        InvoiceLineResult(
+          local: localWithRate,
+          shareOfOverallDiscount: share,
+          adjustedNet: adjustedNet,
+          tax: tax,
+          total: lineTotal,
+        ),
+      );
 
       totalSubtotal = totalSubtotal + local.subtotal;
       totalItemDiscount = totalItemDiscount + local.discount;
@@ -273,8 +291,13 @@ class InvoicePricingEngine {
     }
 
     final totalDiscount = totalItemDiscount + overallDiscount;
-    final total =
-        (totalSubtotal - totalDiscount + totalTax).clampNonNegative();
+    final total = Money.fromDecimalCents(
+      TaxCalculationService.composeTotal(
+        netCents: (totalSubtotal - totalDiscount).decimalCents,
+        taxCents: totalTax.decimalCents,
+        taxInclusivePricing: input.taxInclusivePricing,
+      ),
+    ).clampNonNegative();
 
     return InvoicePricingResult(
       lines: List.unmodifiable(lineResults),

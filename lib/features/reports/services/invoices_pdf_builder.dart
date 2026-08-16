@@ -6,8 +6,10 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../core/services/currency_service.dart';
+import '../../../core/measurement/measurement_localization.dart';
 import '../../settings/domain/entities/company_profile.dart';
-import '../presentation/bloc/customer_invoices_report_bloc.dart' show InvoiceLineItem;
+import '../presentation/bloc/customer_invoices_report_bloc.dart'
+    show InvoiceLineItem;
 
 /// A locale-agnostic view model for a single invoice rendered in the PDF.
 class InvoicePdfItem {
@@ -81,18 +83,34 @@ class InvoicesPdfBuilder {
               style: pw.TextStyle(font: fonts.regular, fontSize: 10),
             ),
             pw.SizedBox(height: 8),
-            _partyInfo(partyLabel, partyName, partyPhone, partyAddress, fonts, lang),
+            _partyInfo(
+              partyLabel,
+              partyName,
+              partyPhone,
+              partyAddress,
+              fonts,
+              lang,
+            ),
             pw.SizedBox(height: 10),
-            _summary(cs, fonts, lang, invoices.length, totalQuantity,
-                totalAmountCents, totalDiscountCents, totalPaidCents),
+            _summary(
+              cs,
+              fonts,
+              lang,
+              invoices.length,
+              totalQuantity,
+              totalAmountCents,
+              totalDiscountCents,
+              totalPaidCents,
+            ),
             pw.SizedBox(height: 12),
             if (invoices.isEmpty)
               pw.Text(
                 _t('no_invoices', lang),
                 style: pw.TextStyle(
-                    font: fonts.regular,
-                    fontSize: 10,
-                    color: PdfColors.grey600),
+                  font: fonts.regular,
+                  fontSize: 10,
+                  color: PdfColors.grey600,
+                ),
               )
             else
               ...invoices.map((inv) => _invoiceBlock(inv, cs, fonts, lang)),
@@ -101,7 +119,10 @@ class InvoicesPdfBuilder {
             pw.Text(
               '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
               style: pw.TextStyle(
-                  font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                font: fonts.regular,
+                fontSize: 8,
+                color: PdfColors.grey600,
+              ),
             ),
           ];
         },
@@ -120,12 +141,15 @@ class InvoicesPdfBuilder {
     final dueCents = inv.totalCents - inv.paidAmountCents;
     final rows = <List<String>>[];
     for (final item in inv.items) {
-      final name = item.variantLabel == null
-          ? item.productName
-          : '${item.productName} (${item.variantLabel})';
+      final nameParts = <String>[item.productName];
+      if (item.variantLabel != null) nameParts.add('(${item.variantLabel})');
+      if (item.sku != null && item.sku!.isNotEmpty) {
+        nameParts.add('[${item.sku}]');
+      }
+      final name = nameParts.join(' ');
       rows.add([
         name,
-        item.quantity.toString(),
+        localizedQuantity(item.quantity, item.measurementType),
         cs.formatCents(item.unitPriceCents),
         cs.formatCents(item.totalCents),
       ]);
@@ -152,24 +176,33 @@ class InvoicesPdfBuilder {
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text(inv.invoiceNumber,
-                          style: pw.TextStyle(font: fonts.bold, fontSize: 10)),
+                      pw.Text(
+                        inv.invoiceNumber,
+                        style: pw.TextStyle(font: fonts.bold, fontSize: 10),
+                      ),
                       if (inv.referenceLabel != null)
-                        pw.Text(inv.referenceLabel!,
-                            style: pw.TextStyle(
-                                font: fonts.regular,
-                                fontSize: 8,
-                                color: PdfColors.grey700)),
+                        pw.Text(
+                          inv.referenceLabel!,
+                          style: pw.TextStyle(
+                            font: fonts.regular,
+                            fontSize: 8,
+                            color: PdfColors.grey700,
+                          ),
+                        ),
                     ],
                   ),
                 ),
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
-                    pw.Text(DateFormat.yMd().format(inv.date),
-                        style: pw.TextStyle(font: fonts.regular, fontSize: 8)),
-                    pw.Text(_paymentMethod(inv.paymentMethod, lang),
-                        style: pw.TextStyle(font: fonts.bold, fontSize: 8)),
+                    pw.Text(
+                      DateFormat.yMd().format(inv.date),
+                      style: pw.TextStyle(font: fonts.regular, fontSize: 8),
+                    ),
+                    pw.Text(
+                      _paymentMethod(inv.paymentMethod, lang),
+                      style: pw.TextStyle(font: fonts.bold, fontSize: 8),
+                    ),
                   ],
                 ),
               ],
@@ -182,8 +215,9 @@ class InvoicesPdfBuilder {
               child: pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 8),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
-                headerDecoration:
-                    const pw.BoxDecoration(color: PdfColors.grey100),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.centerLeft,
                   1: pw.Alignment.center,
@@ -210,23 +244,41 @@ class InvoicesPdfBuilder {
             padding: const pw.EdgeInsets.fromLTRB(8, 2, 8, 8),
             child: pw.Column(
               children: [
-                _totalRow(_t('subtotal', lang),
-                    cs.formatCents(inv.subtotalCents), fonts),
+                _totalRow(
+                  _t('subtotal', lang),
+                  cs.formatCents(inv.subtotalCents),
+                  fonts,
+                ),
                 if (inv.discountCents > 0)
-                  _totalRow(_t('discount', lang),
-                      '- ${cs.formatCents(inv.discountCents)}', fonts),
+                  _totalRow(
+                    _t('discount', lang),
+                    '- ${cs.formatCents(inv.discountCents)}',
+                    fonts,
+                  ),
                 if (inv.taxCents > 0)
                   _totalRow(
-                      _t('tax', lang), cs.formatCents(inv.taxCents), fonts),
-                _totalRow(_t('total', lang), cs.formatCents(inv.totalCents),
+                    _t('tax', lang),
+                    cs.formatCents(inv.taxCents),
                     fonts,
-                    bold: true),
-                _totalRow(_t('paid', lang),
-                    cs.formatCents(inv.paidAmountCents), fonts),
+                  ),
+                _totalRow(
+                  _t('total', lang),
+                  cs.formatCents(inv.totalCents),
+                  fonts,
+                  bold: true,
+                ),
+                _totalRow(
+                  _t('paid', lang),
+                  cs.formatCents(inv.paidAmountCents),
+                  fonts,
+                ),
                 if (dueCents > 0)
                   _totalRow(
-                      _t('due', lang), cs.formatCents(dueCents), fonts,
-                      bold: true),
+                    _t('due', lang),
+                    cs.formatCents(dueCents),
+                    fonts,
+                    bold: true,
+                  ),
               ],
             ),
           ),
@@ -235,8 +287,12 @@ class InvoicesPdfBuilder {
     );
   }
 
-  static pw.Widget _totalRow(String label, String value, InvoicesPdfFonts fonts,
-      {bool bold = false}) {
+  static pw.Widget _totalRow(
+    String label,
+    String value,
+    InvoicesPdfFonts fonts, {
+    bool bold = false,
+  }) {
     final font = bold ? fonts.bold : fonts.regular;
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 1),
@@ -307,36 +363,54 @@ class InvoicesPdfBuilder {
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text('$partyLabel: $name',
-              style: pw.TextStyle(font: fonts.bold, fontSize: 11)),
+          pw.Text(
+            '$partyLabel: $name',
+            style: pw.TextStyle(font: fonts.bold, fontSize: 11),
+          ),
           if (phone != null && phone.isNotEmpty)
-            pw.Text('${_t('phone', lang)}: $phone',
-                style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+            pw.Text(
+              '${_t('phone', lang)}: $phone',
+              style: pw.TextStyle(font: fonts.regular, fontSize: 9),
+            ),
           if (address != null && address.isNotEmpty)
-            pw.Text('${_t('address', lang)}: $address',
-                style: pw.TextStyle(font: fonts.regular, fontSize: 9)),
+            pw.Text(
+              '${_t('address', lang)}: $address',
+              style: pw.TextStyle(font: fonts.regular, fontSize: 9),
+            ),
         ],
       ),
     );
   }
 
   static pw.Widget _header(
-      CompanyProfile company, String title, InvoicesPdfFonts fonts) {
+    CompanyProfile company,
+    String title,
+    InvoicesPdfFonts fonts,
+  ) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(company.name,
-            style: pw.TextStyle(font: fonts.bold, fontSize: 16)),
+        pw.Text(
+          company.name,
+          style: pw.TextStyle(font: fonts.bold, fontSize: 16),
+        ),
         if (company.address != null && company.address!.isNotEmpty)
-          pw.Text(company.address!,
-              style: pw.TextStyle(
-                  font: fonts.regular, fontSize: 9, color: PdfColors.grey600)),
+          pw.Text(
+            company.address!,
+            style: pw.TextStyle(
+              font: fonts.regular,
+              fontSize: 9,
+              color: PdfColors.grey600,
+            ),
+          ),
         pw.SizedBox(height: 8),
         pw.Divider(),
         pw.SizedBox(height: 4),
         pw.Center(
-          child: pw.Text(title,
-              style: pw.TextStyle(font: fonts.bold, fontSize: 14)),
+          child: pw.Text(
+            title,
+            style: pw.TextStyle(font: fonts.bold, fontSize: 14),
+          ),
         ),
       ],
     );
@@ -350,12 +424,12 @@ class InvoicesPdfBuilder {
     'invoices_count': {
       'en': 'Invoices',
       'ar': 'عدد الفواتير',
-      'fr': 'Factures'
+      'fr': 'Factures',
     },
     'total_quantity': {
       'en': 'Quantity',
       'ar': 'إجمالي الكمية',
-      'fr': 'Quantité'
+      'fr': 'Quantité',
     },
     'total_amount': {'en': 'Total', 'ar': 'الإجمالي', 'fr': 'Total'},
     'total_discount': {'en': 'Discount', 'ar': 'الخصم', 'fr': 'Remise'},
@@ -365,7 +439,7 @@ class InvoicesPdfBuilder {
     'unit_price': {
       'en': 'Unit Price',
       'ar': 'سعر الوحدة',
-      'fr': 'Prix unitaire'
+      'fr': 'Prix unitaire',
     },
     'line_total': {'en': 'Total', 'ar': 'الإجمالي', 'fr': 'Total'},
     'subtotal': {'en': 'Subtotal', 'ar': 'المجموع الفرعي', 'fr': 'Sous-total'},
@@ -377,7 +451,7 @@ class InvoicesPdfBuilder {
     'no_invoices': {
       'en': 'No invoices in this period',
       'ar': 'لا توجد فواتير في هذه الفترة',
-      'fr': 'Aucune facture pour cette période'
+      'fr': 'Aucune facture pour cette période',
     },
     'printed_on': {'en': 'Printed on', 'ar': 'طُبع في', 'fr': 'Imprimé le'},
     'pm_cash': {'en': 'Cash', 'ar': 'نقدي', 'fr': 'Espèces'},
@@ -387,7 +461,7 @@ class InvoicesPdfBuilder {
     'pm_bank_transfer': {
       'en': 'Bank Transfer',
       'ar': 'تحويل بنكي',
-      'fr': 'Virement'
+      'fr': 'Virement',
     },
     'pm_mobile': {'en': 'Mobile', 'ar': 'محفظة', 'fr': 'Mobile'},
   };
@@ -403,10 +477,12 @@ class InvoicesPdfBuilder {
 
   static Future<InvoicesPdfFonts> _loadFonts() async {
     try {
-      final regularData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-      final boldData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+      final regularData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+      );
+      final boldData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+      );
       return InvoicesPdfFonts(
         regular: pw.Font.ttf(regularData),
         bold: pw.Font.ttf(boldData),

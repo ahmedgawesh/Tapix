@@ -25,7 +25,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
-  
+
   Category? _category;
   bool _isLoading = true;
   bool _isSaving = false;
@@ -46,7 +46,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
 
   Future<void> _loadData() async {
     final repository = sl<CategoryRepository>();
-    
+
     try {
       if (widget.categoryId != null) {
         _category = await repository.getCategoryById(widget.categoryId!);
@@ -55,7 +55,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
           _descriptionController.text = _category!.description ?? '';
         }
       }
-      
+
       setState(() {
         _isLoading = false;
       });
@@ -87,29 +87,33 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
 
     try {
       final bloc = context.read<CategoriesBloc>();
-      debugPrint('CategoryFormScreen save tapped. isEdit=${widget.categoryId != null}');
-      
+      debugPrint(
+        'CategoryFormScreen save tapped. isEdit=${widget.categoryId != null}',
+      );
+
       if (widget.categoryId == null) {
-        bloc.add(CreateCategory(
-          name: _nameController.text.trim(),
-          description: _descriptionController.text.trim().isEmpty 
-              ? null 
-              : _descriptionController.text.trim(),
-          parentId: null,
-        ));
+        bloc.add(
+          CreateCategory(
+            name: _nameController.text.trim(),
+            description: _descriptionController.text.trim().isEmpty
+                ? null
+                : _descriptionController.text.trim(),
+            parentId: null,
+          ),
+        );
       } else {
         final updatedCategory = CategoryModel(
           id: widget.categoryId!,
           name: _nameController.text.trim(),
-          description: _descriptionController.text.trim().isEmpty 
-              ? null 
+          description: _descriptionController.text.trim().isEmpty
+              ? null
               : _descriptionController.text.trim(),
           parentId: null,
           isActive: _category?.isActive ?? true,
           createdAt: _category?.createdAt ?? DateTime.now(),
           updatedAt: DateTime.now(),
         );
-        
+
         bloc.add(UpdateCategory(updatedCategory));
       }
     } catch (e) {
@@ -158,7 +162,11 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(isEdit ? 'categories.edit_category'.tr() : 'categories.add_category'.tr()),
+          title: Text(
+            isEdit
+                ? 'categories.edit_category'.tr()
+                : 'categories.add_category'.tr(),
+          ),
           centerTitle: !isDesktop,
         ),
         body: _isLoading
@@ -167,7 +175,7 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final maxWidth = isDesktop ? 600.0 : double.infinity;
-                    
+
                     return Center(
                       child: ConstrainedBox(
                         constraints: BoxConstraints(maxWidth: maxWidth),
@@ -183,17 +191,23 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                     side: BorderSide(
-                                      color: colorScheme.outline.withValues(alpha: 0.2),
+                                      color: colorScheme.outline.withValues(
+                                        alpha: 0.2,
+                                      ),
                                     ),
                                   ),
                                   child: Padding(
                                     padding: const EdgeInsets.all(16),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           'categories.basic_info'.tr(),
-                                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleMedium
+                                              ?.copyWith(
                                                 fontWeight: FontWeight.w600,
                                               ),
                                         ),
@@ -202,15 +216,21 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                                           controller: _nameController,
                                           decoration: InputDecoration(
                                             labelText: 'categories.name'.tr(),
-                                            hintText: 'categories.name_hint'.tr(),
-                                            prefixIcon: const Icon(LucideIcons.tag),
+                                            hintText: 'categories.name_hint'
+                                                .tr(),
+                                            prefixIcon: const Icon(
+                                              LucideIcons.tag,
+                                            ),
                                             border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(12),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
                                             ),
                                           ),
                                           validator: (value) {
-                                            if (value == null || value.trim().isEmpty) {
-                                              return 'categories.name_required'.tr();
+                                            if (value == null ||
+                                                value.trim().isEmpty) {
+                                              return 'categories.name_required'
+                                                  .tr();
                                             }
                                             return null;
                                           },
@@ -220,15 +240,22 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                                         TextFormField(
                                           controller: _descriptionController,
                                           decoration: InputDecoration(
-                                            labelText: 'categories.description'.tr(),
-                                            hintText: 'categories.description_hint'.tr(),
-                                            prefixIcon: const Icon(LucideIcons.alignLeft),
+                                            labelText: 'categories.description'
+                                                .tr(),
+                                            hintText:
+                                                'categories.description_hint'
+                                                    .tr(),
+                                            prefixIcon: const Icon(
+                                              LucideIcons.alignLeft,
+                                            ),
                                             border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(12),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
                                             ),
                                           ),
                                           maxLines: 3,
-                                          textInputAction: TextInputAction.newline,
+                                          textInputAction:
+                                              TextInputAction.newline,
                                         ),
                                       ],
                                     ),
@@ -239,11 +266,17 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                                   children: [
                                     Expanded(
                                       child: OutlinedButton(
-                                        onPressed: _isSaving ? null : () => context.pop(),
+                                        onPressed: _isSaving
+                                            ? null
+                                            : () => context.pop(),
                                         style: OutlinedButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(vertical: 16),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 16,
+                                          ),
                                           shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(12),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
                                           ),
                                         ),
                                         child: Text('common.cancel'.tr()),
@@ -252,20 +285,27 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                                     const SizedBox(width: 16),
                                     Expanded(
                                       child: FilledButton(
-                                        onPressed: _isSaving ? null : _saveCategory,
+                                        onPressed: _isSaving
+                                            ? null
+                                            : _saveCategory,
                                         style: FilledButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(vertical: 16),
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 16,
+                                          ),
                                           shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(12),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
                                           ),
                                         ),
                                         child: _isSaving
                                             ? const SizedBox(
                                                 height: 20,
                                                 width: 20,
-                                                child: CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                ),
+                                                child:
+                                                    CircularProgressIndicator(
+                                                      strokeWidth: 2,
+                                                    ),
                                               )
                                             : Text('common.save'.tr()),
                                       ),

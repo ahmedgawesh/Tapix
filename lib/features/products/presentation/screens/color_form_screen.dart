@@ -11,10 +11,7 @@ import '../bloc/colors_bloc.dart';
 class ColorFormScreen extends StatefulWidget {
   final int? colorId;
 
-  const ColorFormScreen({
-    super.key,
-    this.colorId,
-  });
+  const ColorFormScreen({super.key, this.colorId});
 
   @override
   State<ColorFormScreen> createState() => _ColorFormScreenState();
@@ -62,7 +59,9 @@ class _ColorFormScreenState extends State<ColorFormScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('colors.form.error_loading_color'.tr(args: [e.toString()])),
+            content: Text(
+              'colors.form.error_loading_color'.tr(args: [e.toString()]),
+            ),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -89,7 +88,8 @@ class _ColorFormScreenState extends State<ColorFormScreen> {
 
   void _onColorPicked(Color color) {
     final argb = color.toARGB32();
-    final hexCode = '#${argb.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
+    final hexCode =
+        '#${argb.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}';
     setState(() {
       _hexCodeController.text = hexCode;
     });
@@ -176,7 +176,9 @@ class _ColorFormScreenState extends State<ColorFormScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('colors.form.error_saving_color'.tr(args: [e.toString()])),
+            content: Text(
+              'colors.form.error_saving_color'.tr(args: [e.toString()]),
+            ),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -237,12 +239,16 @@ class _ColorFormScreenState extends State<ColorFormScreen> {
                                   color: previewColor,
                                   borderRadius: BorderRadius.circular(16),
                                   border: Border.all(
-                                    color: colorScheme.outline.withValues(alpha: 0.3),
+                                    color: colorScheme.outline.withValues(
+                                      alpha: 0.3,
+                                    ),
                                     width: 2,
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.1),
+                                      color: Colors.black.withValues(
+                                        alpha: 0.1,
+                                      ),
                                       blurRadius: 8,
                                       offset: const Offset(0, 4),
                                     ),
@@ -264,7 +270,8 @@ class _ColorFormScreenState extends State<ColorFormScreen> {
                             ),
                             validator: (value) {
                               if (value == null || value.trim().isEmpty) {
-                                return 'colors.form.validation_name_required'.tr();
+                                return 'colors.form.validation_name_required'
+                                    .tr();
                               }
                               if (value.trim().length > 50) {
                                 return 'colors.form.validation_name_max'.tr();
@@ -302,8 +309,11 @@ class _ColorFormScreenState extends State<ColorFormScreen> {
                                 _isActive
                                     ? 'colors.form.active_hint'.tr()
                                     : 'colors.form.inactive_hint'.tr(),
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.onSurface.withValues(alpha: 0.6),
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(
+                                      color: colorScheme.onSurface.withValues(
+                                        alpha: 0.6,
+                                      ),
                                     ),
                               ),
                               value: _isActive,
@@ -313,7 +323,9 @@ class _ColorFormScreenState extends State<ColorFormScreen> {
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 side: BorderSide(
-                                  color: colorScheme.outline.withValues(alpha: 0.2),
+                                  color: colorScheme.outline.withValues(
+                                    alpha: 0.2,
+                                  ),
                                 ),
                               ),
                             ),
@@ -324,9 +336,13 @@ class _ColorFormScreenState extends State<ColorFormScreen> {
                             children: [
                               Expanded(
                                 child: OutlinedButton(
-                                  onPressed: _isLoading ? null : () => context.pop(),
+                                  onPressed: _isLoading
+                                      ? null
+                                      : () => context.pop(),
                                   style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
@@ -339,7 +355,9 @@ class _ColorFormScreenState extends State<ColorFormScreen> {
                                 child: FilledButton(
                                   onPressed: _isLoading ? null : _saveColor,
                                   style: FilledButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
@@ -378,7 +396,8 @@ class _SimpleColorPickerDialog extends StatefulWidget {
   });
 
   @override
-  State<_SimpleColorPickerDialog> createState() => _SimpleColorPickerDialogState();
+  State<_SimpleColorPickerDialog> createState() =>
+      _SimpleColorPickerDialogState();
 }
 
 class _SimpleColorPickerDialogState extends State<_SimpleColorPickerDialog> {
@@ -431,7 +450,7 @@ class _SimpleColorPickerDialogState extends State<_SimpleColorPickerDialog> {
           itemBuilder: (context, index) {
             final color = _commonColors[index];
             final isSelected = _selectedColor == color;
-            
+
             return InkWell(
               onTap: () {
                 setState(() {

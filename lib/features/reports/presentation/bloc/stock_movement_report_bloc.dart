@@ -52,6 +52,7 @@ class StockMovementEntry {
   final DateTime date;
   final String reference;
   final int quantity;
+  final String measurementType;
   final int totalCents;
   final String? counterpartyName;
 
@@ -60,6 +61,7 @@ class StockMovementEntry {
     required this.date,
     required this.reference,
     required this.quantity,
+    this.measurementType = 'piece',
     required this.totalCents,
     this.counterpartyName,
   });
@@ -80,6 +82,7 @@ class StockProductSearchResult {
 }
 
 class StockMovementSummary {
+  final String measurementType;
   final int totalPurchased;
   final int totalSold;
   final int totalSaleReturned;
@@ -94,6 +97,7 @@ class StockMovementSummary {
   final int totalPurchaseReturnAdjCents;
 
   const StockMovementSummary({
+    this.measurementType = 'piece',
     this.totalPurchased = 0,
     this.totalSold = 0,
     this.totalSaleReturned = 0,
@@ -153,12 +157,15 @@ class StockMovementReportData {
     return StockMovementReportData(
       dateRange: dateRange ?? this.dateRange,
       searchQuery: searchQuery ?? this.searchQuery,
-      selectedProductId:
-          clearProduct ? null : (selectedProductId ?? this.selectedProductId),
-      selectedProductName:
-          clearProduct ? null : (selectedProductName ?? this.selectedProductName),
-      movementTypeFilter:
-          clearFilter ? null : (movementTypeFilter ?? this.movementTypeFilter),
+      selectedProductId: clearProduct
+          ? null
+          : (selectedProductId ?? this.selectedProductId),
+      selectedProductName: clearProduct
+          ? null
+          : (selectedProductName ?? this.selectedProductName),
+      movementTypeFilter: clearFilter
+          ? null
+          : (movementTypeFilter ?? this.movementTypeFilter),
       searchResults: searchResults ?? this.searchResults,
       movements: movements ?? this.movements,
       summary: summary ?? this.summary,
@@ -168,9 +175,7 @@ class StockMovementReportData {
   /// Returns filtered movements based on the current type filter.
   List<StockMovementEntry> get filteredMovements {
     if (movementTypeFilter == null) return movements;
-    return movements
-        .where((m) => m.type == movementTypeFilter)
-        .toList();
+    return movements.where((m) => m.type == movementTypeFilter).toList();
   }
 }
 
@@ -185,8 +190,8 @@ class StockMovementReportBloc
   StockMovementType? _movementTypeFilter;
 
   StockMovementReportBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   @override
   Stream<StockMovementReportData> get dataStream {
@@ -219,10 +224,11 @@ class StockMovementReportBloc
     if (event.query.trim().isEmpty) {
       final current = currentData;
       if (current != null) {
-        emit(RealtimeSuccess(data: current.copyWith(
-          searchQuery: '',
-          searchResults: [],
-        )));
+        emit(
+          RealtimeSuccess(
+            data: current.copyWith(searchQuery: '', searchResults: []),
+          ),
+        );
       }
       return;
     }
@@ -230,10 +236,14 @@ class StockMovementReportBloc
     final results = await _searchProducts(event.query.trim());
     final current = currentData;
     if (current != null) {
-      emit(RealtimeSuccess(data: current.copyWith(
-        searchQuery: event.query,
-        searchResults: results,
-      )));
+      emit(
+        RealtimeSuccess(
+          data: current.copyWith(
+            searchQuery: event.query,
+            searchResults: results,
+          ),
+        ),
+      );
     }
   }
 
@@ -262,10 +272,14 @@ class StockMovementReportBloc
     _movementTypeFilter = event.filter;
     final current = currentData;
     if (current != null) {
-      emit(RealtimeSuccess(data: current.copyWith(
-        movementTypeFilter: event.filter,
-        clearFilter: event.filter == null,
-      )));
+      emit(
+        RealtimeSuccess(
+          data: current.copyWith(
+            movementTypeFilter: event.filter,
+            clearFilter: event.filter == null,
+          ),
+        ),
+      );
     }
   }
 
@@ -283,16 +297,18 @@ class StockMovementReportBloc
     final endIso = _dateRange.endDate.toIso8601String();
 
     // Get product name
-    final productRow = await (_db.select(_db.products)
-          ..where((p) => p.id.equals(productId)))
-        .getSingleOrNull();
+    final productRow = await (_db.select(
+      _db.products,
+    )..where((p) => p.id.equals(productId))).getSingleOrNull();
     final productName = productRow?.name ?? '';
+    final measurementType = productRow?.measurementType ?? 'piece';
 
     final movements = <StockMovementEntry>[];
 
     // ── Purchases ──
-    final purchaseRows = await _db.customSelect(
-      '''
+    final purchaseRows = await _db
+        .customSelect(
+          '''
       SELECT 
         pu.purchase_date AS dt,
         pu.purchase_number AS ref,
@@ -307,28 +323,33 @@ class StockMovementReportBloc
         AND pu.purchase_date >= ? AND pu.purchase_date <= ?
       ORDER BY pu.purchase_date DESC
       ''',
-      variables: [
-        Variable.withInt(productId),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.purchaseItems, _db.purchases, _db.suppliers},
-    ).get();
+          variables: [
+            Variable.withInt(productId),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {_db.purchaseItems, _db.purchases, _db.suppliers},
+        )
+        .get();
 
     for (final row in purchaseRows) {
-      movements.add(StockMovementEntry(
-        type: StockMovementType.purchase,
-        date: DateTime.parse(row.read<String>('dt')),
-        reference: row.read<String>('ref'),
-        quantity: row.read<int>('qty'),
-        totalCents: row.read<int>('total'),
-        counterpartyName: row.readNullable<String>('counterparty'),
-      ));
+      movements.add(
+        StockMovementEntry(
+          type: StockMovementType.purchase,
+          date: DateTime.parse(row.read<String>('dt')),
+          reference: row.read<String>('ref'),
+          quantity: row.read<int>('qty'),
+          measurementType: measurementType,
+          totalCents: row.read<int>('total'),
+          counterpartyName: row.readNullable<String>('counterparty'),
+        ),
+      );
     }
 
     // ── Sales ──
-    final saleRows = await _db.customSelect(
-      '''
+    final saleRows = await _db
+        .customSelect(
+          '''
       SELECT 
         s.sale_date AS dt,
         s.invoice_number AS ref,
@@ -343,28 +364,33 @@ class StockMovementReportBloc
         AND s.sale_date >= ? AND s.sale_date <= ?
       ORDER BY s.sale_date DESC
       ''',
-      variables: [
-        Variable.withInt(productId),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.saleItems, _db.sales, _db.customers},
-    ).get();
+          variables: [
+            Variable.withInt(productId),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {_db.saleItems, _db.sales, _db.customers},
+        )
+        .get();
 
     for (final row in saleRows) {
-      movements.add(StockMovementEntry(
-        type: StockMovementType.sale,
-        date: DateTime.parse(row.read<String>('dt')),
-        reference: row.read<String>('ref'),
-        quantity: row.read<int>('qty'),
-        totalCents: row.read<int>('total'),
-        counterpartyName: row.readNullable<String>('counterparty'),
-      ));
+      movements.add(
+        StockMovementEntry(
+          type: StockMovementType.sale,
+          date: DateTime.parse(row.read<String>('dt')),
+          reference: row.read<String>('ref'),
+          quantity: row.read<int>('qty'),
+          measurementType: measurementType,
+          totalCents: row.read<int>('total'),
+          counterpartyName: row.readNullable<String>('counterparty'),
+        ),
+      );
     }
 
     // ── Sale Returns (linked) ──
-    final saleReturnRows = await _db.customSelect(
-      '''
+    final saleReturnRows = await _db
+        .customSelect(
+          '''
       SELECT 
         sr.return_date AS dt,
         sr.return_number AS ref,
@@ -381,28 +407,39 @@ class StockMovementReportBloc
         AND sr.return_date >= ? AND sr.return_date <= ?
       ORDER BY sr.return_date DESC
       ''',
-      variables: [
-        Variable.withInt(productId),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.saleReturnItems, _db.saleReturns, _db.saleItems, _db.sales, _db.customers},
-    ).get();
+          variables: [
+            Variable.withInt(productId),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.saleReturnItems,
+            _db.saleReturns,
+            _db.saleItems,
+            _db.sales,
+            _db.customers,
+          },
+        )
+        .get();
 
     for (final row in saleReturnRows) {
-      movements.add(StockMovementEntry(
-        type: StockMovementType.saleReturn,
-        date: DateTime.parse(row.read<String>('dt')),
-        reference: row.read<String>('ref'),
-        quantity: row.read<int>('qty'),
-        totalCents: row.read<int>('total'),
-        counterpartyName: row.readNullable<String>('counterparty'),
-      ));
+      movements.add(
+        StockMovementEntry(
+          type: StockMovementType.saleReturn,
+          date: DateTime.parse(row.read<String>('dt')),
+          reference: row.read<String>('ref'),
+          quantity: row.read<int>('qty'),
+          measurementType: measurementType,
+          totalCents: row.read<int>('total'),
+          counterpartyName: row.readNullable<String>('counterparty'),
+        ),
+      );
     }
 
     // ── Sale Return Adjustments (unlinked) ──
-    final saleAdjReturnRows = await _db.customSelect(
-      '''
+    final saleAdjReturnRows = await _db
+        .customSelect(
+          '''
       SELECT 
         sra.return_date AS dt,
         sra.return_number AS ref,
@@ -417,28 +454,37 @@ class StockMovementReportBloc
         AND sra.return_date >= ? AND sra.return_date <= ?
       ORDER BY sra.return_date DESC
       ''',
-      variables: [
-        Variable.withInt(productId),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.saleReturnAdjustmentItems, _db.saleReturnAdjustments, _db.customers},
-    ).get();
+          variables: [
+            Variable.withInt(productId),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.saleReturnAdjustmentItems,
+            _db.saleReturnAdjustments,
+            _db.customers,
+          },
+        )
+        .get();
 
     for (final row in saleAdjReturnRows) {
-      movements.add(StockMovementEntry(
-        type: StockMovementType.saleReturnAdjustment,
-        date: DateTime.parse(row.read<String>('dt')),
-        reference: row.read<String>('ref'),
-        quantity: row.read<int>('qty'),
-        totalCents: row.read<int>('total'),
-        counterpartyName: row.readNullable<String>('counterparty'),
-      ));
+      movements.add(
+        StockMovementEntry(
+          type: StockMovementType.saleReturnAdjustment,
+          date: DateTime.parse(row.read<String>('dt')),
+          reference: row.read<String>('ref'),
+          quantity: row.read<int>('qty'),
+          measurementType: measurementType,
+          totalCents: row.read<int>('total'),
+          counterpartyName: row.readNullable<String>('counterparty'),
+        ),
+      );
     }
 
     // ── Purchase Returns (linked) ──
-    final purchaseReturnRows = await _db.customSelect(
-      '''
+    final purchaseReturnRows = await _db
+        .customSelect(
+          '''
       SELECT 
         pr.return_date AS dt,
         pr.return_number AS ref,
@@ -455,28 +501,39 @@ class StockMovementReportBloc
         AND pr.return_date >= ? AND pr.return_date <= ?
       ORDER BY pr.return_date DESC
       ''',
-      variables: [
-        Variable.withInt(productId),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.purchaseReturnItems, _db.purchaseReturns, _db.purchaseItems, _db.purchases, _db.suppliers},
-    ).get();
+          variables: [
+            Variable.withInt(productId),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.purchaseReturnItems,
+            _db.purchaseReturns,
+            _db.purchaseItems,
+            _db.purchases,
+            _db.suppliers,
+          },
+        )
+        .get();
 
     for (final row in purchaseReturnRows) {
-      movements.add(StockMovementEntry(
-        type: StockMovementType.purchaseReturn,
-        date: DateTime.parse(row.read<String>('dt')),
-        reference: row.read<String>('ref'),
-        quantity: row.read<int>('qty'),
-        totalCents: row.read<int>('total'),
-        counterpartyName: row.readNullable<String>('counterparty'),
-      ));
+      movements.add(
+        StockMovementEntry(
+          type: StockMovementType.purchaseReturn,
+          date: DateTime.parse(row.read<String>('dt')),
+          reference: row.read<String>('ref'),
+          quantity: row.read<int>('qty'),
+          measurementType: measurementType,
+          totalCents: row.read<int>('total'),
+          counterpartyName: row.readNullable<String>('counterparty'),
+        ),
+      );
     }
 
     // ── Purchase Return Adjustments (unlinked) ──
-    final purchaseAdjReturnRows = await _db.customSelect(
-      '''
+    final purchaseAdjReturnRows = await _db
+        .customSelect(
+          '''
       SELECT 
         pra.return_date AS dt,
         pra.return_number AS ref,
@@ -491,23 +548,31 @@ class StockMovementReportBloc
         AND pra.return_date >= ? AND pra.return_date <= ?
       ORDER BY pra.return_date DESC
       ''',
-      variables: [
-        Variable.withInt(productId),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.purchaseReturnAdjustmentItems, _db.purchaseReturnAdjustments, _db.suppliers},
-    ).get();
+          variables: [
+            Variable.withInt(productId),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.purchaseReturnAdjustmentItems,
+            _db.purchaseReturnAdjustments,
+            _db.suppliers,
+          },
+        )
+        .get();
 
     for (final row in purchaseAdjReturnRows) {
-      movements.add(StockMovementEntry(
-        type: StockMovementType.purchaseReturnAdjustment,
-        date: DateTime.parse(row.read<String>('dt')),
-        reference: row.read<String>('ref'),
-        quantity: row.read<int>('qty'),
-        totalCents: row.read<int>('total'),
-        counterpartyName: row.readNullable<String>('counterparty'),
-      ));
+      movements.add(
+        StockMovementEntry(
+          type: StockMovementType.purchaseReturnAdjustment,
+          date: DateTime.parse(row.read<String>('dt')),
+          reference: row.read<String>('ref'),
+          quantity: row.read<int>('qty'),
+          measurementType: measurementType,
+          totalCents: row.read<int>('total'),
+          counterpartyName: row.readNullable<String>('counterparty'),
+        ),
+      );
     }
 
     // Sort all movements by date descending
@@ -558,6 +623,9 @@ class StockMovementReportBloc
       movementTypeFilter: _movementTypeFilter,
       movements: movements,
       summary: StockMovementSummary(
+        measurementType: movements.isEmpty
+            ? 'piece'
+            : movements.first.measurementType,
         totalPurchased: totalPurchased,
         totalSold: totalSold,
         totalSaleReturned: totalSaleReturned,
@@ -576,8 +644,9 @@ class StockMovementReportBloc
 
   Future<List<StockProductSearchResult>> _searchProducts(String query) async {
     final likeQuery = '%$query%';
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT DISTINCT p.id, p.name, p.sku, p.barcode
       FROM products p
       LEFT JOIN product_variants v ON v.product_id = p.id
@@ -592,21 +661,26 @@ class StockMovementReportBloc
       ORDER BY p.name
       LIMIT 20
       ''',
-      variables: [
-        Variable.withString(likeQuery),
-        Variable.withString(likeQuery),
-        Variable.withString(likeQuery),
-        Variable.withString(likeQuery),
-        Variable.withString(likeQuery),
-      ],
-      readsFrom: {_db.products, _db.productVariants},
-    ).get();
+          variables: [
+            Variable.withString(likeQuery),
+            Variable.withString(likeQuery),
+            Variable.withString(likeQuery),
+            Variable.withString(likeQuery),
+            Variable.withString(likeQuery),
+          ],
+          readsFrom: {_db.products, _db.productVariants},
+        )
+        .get();
 
-    return rows.map((row) => StockProductSearchResult(
-      productId: row.read<int>('id'),
-      name: row.read<String>('name'),
-      sku: row.readNullable<String>('sku'),
-      barcode: row.readNullable<String>('barcode'),
-    )).toList();
+    return rows
+        .map(
+          (row) => StockProductSearchResult(
+            productId: row.read<int>('id'),
+            name: row.read<String>('name'),
+            sku: row.readNullable<String>('sku'),
+            barcode: row.readNullable<String>('barcode'),
+          ),
+        )
+        .toList();
   }
 }

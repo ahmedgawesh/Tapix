@@ -4395,6 +4395,18 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _measurementTypeMeta = const VerificationMeta(
+    'measurementType',
+  );
+  @override
+  late final GeneratedColumn<String> measurementType = GeneratedColumn<String>(
+    'measurement_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('piece'),
+  );
   static const VerificationMeta _stockQuantityMeta = const VerificationMeta(
     'stockQuantity',
   );
@@ -4566,6 +4578,7 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
     lastPurchasePriceCents,
     currencyId,
     trackInventory,
+    measurementType,
     stockQuantity,
     minQuantity,
     hasVariants,
@@ -4659,6 +4672,15 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
         trackInventory.isAcceptableOrUnknown(
           data['track_inventory']!,
           _trackInventoryMeta,
+        ),
+      );
+    }
+    if (data.containsKey('measurement_type')) {
+      context.handle(
+        _measurementTypeMeta,
+        measurementType.isAcceptableOrUnknown(
+          data['measurement_type']!,
+          _measurementTypeMeta,
         ),
       );
     }
@@ -4854,6 +4876,10 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
         DriftSqlType.bool,
         data['${effectivePrefix}track_inventory'],
       )!,
+      measurementType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}measurement_type'],
+      )!,
       stockQuantity: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}stock_quantity'],
@@ -4971,6 +4997,10 @@ class Product extends DataClass implements Insertable<Product> {
   final Decimal? lastPurchasePriceCents;
   final int? currencyId;
   final bool trackInventory;
+
+  /// Stock dimension. `piece` keeps legacy whole-unit behaviour; measured
+  /// dimensions store one major unit as 1000 integer stock units.
+  final String measurementType;
   final int stockQuantity;
   final int minQuantity;
   final bool hasVariants;
@@ -5035,6 +5065,7 @@ class Product extends DataClass implements Insertable<Product> {
     this.lastPurchasePriceCents,
     this.currencyId,
     required this.trackInventory,
+    required this.measurementType,
     required this.stockQuantity,
     required this.minQuantity,
     required this.hasVariants,
@@ -5119,6 +5150,7 @@ class Product extends DataClass implements Insertable<Product> {
       map['currency_id'] = Variable<int>(currencyId);
     }
     map['track_inventory'] = Variable<bool>(trackInventory);
+    map['measurement_type'] = Variable<String>(measurementType);
     map['stock_quantity'] = Variable<int>(stockQuantity);
     map['min_quantity'] = Variable<int>(minQuantity);
     map['has_variants'] = Variable<bool>(hasVariants);
@@ -5181,6 +5213,7 @@ class Product extends DataClass implements Insertable<Product> {
           ? const Value.absent()
           : Value(currencyId),
       trackInventory: Value(trackInventory),
+      measurementType: Value(measurementType),
       stockQuantity: Value(stockQuantity),
       minQuantity: Value(minQuantity),
       hasVariants: Value(hasVariants),
@@ -5232,6 +5265,7 @@ class Product extends DataClass implements Insertable<Product> {
       ),
       currencyId: serializer.fromJson<int?>(json['currencyId']),
       trackInventory: serializer.fromJson<bool>(json['trackInventory']),
+      measurementType: serializer.fromJson<String>(json['measurementType']),
       stockQuantity: serializer.fromJson<int>(json['stockQuantity']),
       minQuantity: serializer.fromJson<int>(json['minQuantity']),
       hasVariants: serializer.fromJson<bool>(json['hasVariants']),
@@ -5274,6 +5308,7 @@ class Product extends DataClass implements Insertable<Product> {
       ),
       'currencyId': serializer.toJson<int?>(currencyId),
       'trackInventory': serializer.toJson<bool>(trackInventory),
+      'measurementType': serializer.toJson<String>(measurementType),
       'stockQuantity': serializer.toJson<int>(stockQuantity),
       'minQuantity': serializer.toJson<int>(minQuantity),
       'hasVariants': serializer.toJson<bool>(hasVariants),
@@ -5308,6 +5343,7 @@ class Product extends DataClass implements Insertable<Product> {
     Value<Decimal?> lastPurchasePriceCents = const Value.absent(),
     Value<int?> currencyId = const Value.absent(),
     bool? trackInventory,
+    String? measurementType,
     int? stockQuantity,
     int? minQuantity,
     bool? hasVariants,
@@ -5349,6 +5385,7 @@ class Product extends DataClass implements Insertable<Product> {
         : this.lastPurchasePriceCents,
     currencyId: currencyId.present ? currencyId.value : this.currencyId,
     trackInventory: trackInventory ?? this.trackInventory,
+    measurementType: measurementType ?? this.measurementType,
     stockQuantity: stockQuantity ?? this.stockQuantity,
     minQuantity: minQuantity ?? this.minQuantity,
     hasVariants: hasVariants ?? this.hasVariants,
@@ -5404,6 +5441,9 @@ class Product extends DataClass implements Insertable<Product> {
       trackInventory: data.trackInventory.present
           ? data.trackInventory.value
           : this.trackInventory,
+      measurementType: data.measurementType.present
+          ? data.measurementType.value
+          : this.measurementType,
       stockQuantity: data.stockQuantity.present
           ? data.stockQuantity.value
           : this.stockQuantity,
@@ -5454,6 +5494,7 @@ class Product extends DataClass implements Insertable<Product> {
           ..write('lastPurchasePriceCents: $lastPurchasePriceCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('trackInventory: $trackInventory, ')
+          ..write('measurementType: $measurementType, ')
           ..write('stockQuantity: $stockQuantity, ')
           ..write('minQuantity: $minQuantity, ')
           ..write('hasVariants: $hasVariants, ')
@@ -5490,6 +5531,7 @@ class Product extends DataClass implements Insertable<Product> {
     lastPurchasePriceCents,
     currencyId,
     trackInventory,
+    measurementType,
     stockQuantity,
     minQuantity,
     hasVariants,
@@ -5526,6 +5568,7 @@ class Product extends DataClass implements Insertable<Product> {
           other.lastPurchasePriceCents == this.lastPurchasePriceCents &&
           other.currencyId == this.currencyId &&
           other.trackInventory == this.trackInventory &&
+          other.measurementType == this.measurementType &&
           other.stockQuantity == this.stockQuantity &&
           other.minQuantity == this.minQuantity &&
           other.hasVariants == this.hasVariants &&
@@ -5559,6 +5602,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
   final Value<Decimal?> lastPurchasePriceCents;
   final Value<int?> currencyId;
   final Value<bool> trackInventory;
+  final Value<String> measurementType;
   final Value<int> stockQuantity;
   final Value<int> minQuantity;
   final Value<bool> hasVariants;
@@ -5590,6 +5634,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.lastPurchasePriceCents = const Value.absent(),
     this.currencyId = const Value.absent(),
     this.trackInventory = const Value.absent(),
+    this.measurementType = const Value.absent(),
     this.stockQuantity = const Value.absent(),
     this.minQuantity = const Value.absent(),
     this.hasVariants = const Value.absent(),
@@ -5622,6 +5667,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.lastPurchasePriceCents = const Value.absent(),
     this.currencyId = const Value.absent(),
     this.trackInventory = const Value.absent(),
+    this.measurementType = const Value.absent(),
     this.stockQuantity = const Value.absent(),
     this.minQuantity = const Value.absent(),
     this.hasVariants = const Value.absent(),
@@ -5656,6 +5702,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     Expression<int>? lastPurchasePriceCents,
     Expression<int>? currencyId,
     Expression<bool>? trackInventory,
+    Expression<String>? measurementType,
     Expression<int>? stockQuantity,
     Expression<int>? minQuantity,
     Expression<bool>? hasVariants,
@@ -5692,6 +5739,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
         'last_purchase_price_cents': lastPurchasePriceCents,
       if (currencyId != null) 'currency_id': currencyId,
       if (trackInventory != null) 'track_inventory': trackInventory,
+      if (measurementType != null) 'measurement_type': measurementType,
       if (stockQuantity != null) 'stock_quantity': stockQuantity,
       if (minQuantity != null) 'min_quantity': minQuantity,
       if (hasVariants != null) 'has_variants': hasVariants,
@@ -5728,6 +5776,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     Value<Decimal?>? lastPurchasePriceCents,
     Value<int?>? currencyId,
     Value<bool>? trackInventory,
+    Value<String>? measurementType,
     Value<int>? stockQuantity,
     Value<int>? minQuantity,
     Value<bool>? hasVariants,
@@ -5762,6 +5811,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
           lastPurchasePriceCents ?? this.lastPurchasePriceCents,
       currencyId: currencyId ?? this.currencyId,
       trackInventory: trackInventory ?? this.trackInventory,
+      measurementType: measurementType ?? this.measurementType,
       stockQuantity: stockQuantity ?? this.stockQuantity,
       minQuantity: minQuantity ?? this.minQuantity,
       hasVariants: hasVariants ?? this.hasVariants,
@@ -5859,6 +5909,9 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     if (trackInventory.present) {
       map['track_inventory'] = Variable<bool>(trackInventory.value);
     }
+    if (measurementType.present) {
+      map['measurement_type'] = Variable<String>(measurementType.value);
+    }
     if (stockQuantity.present) {
       map['stock_quantity'] = Variable<int>(stockQuantity.value);
     }
@@ -5921,6 +5974,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
           ..write('lastPurchasePriceCents: $lastPurchasePriceCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('trackInventory: $trackInventory, ')
+          ..write('measurementType: $measurementType, ')
           ..write('stockQuantity: $stockQuantity, ')
           ..write('minQuantity: $minQuantity, ')
           ..write('hasVariants: $hasVariants, ')
@@ -19477,6 +19531,985 @@ class EmployeesCompanion extends UpdateCompanion<Employee> {
   }
 }
 
+class $CashierShiftsTable extends CashierShifts
+    with TableInfo<$CashierShiftsTable, CashierShift> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CashierShiftsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _shiftNumberMeta = const VerificationMeta(
+    'shiftNumber',
+  );
+  @override
+  late final GeneratedColumn<String> shiftNumber = GeneratedColumn<String>(
+    'shift_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _cashierUserIdMeta = const VerificationMeta(
+    'cashierUserId',
+  );
+  @override
+  late final GeneratedColumn<int> cashierUserId = GeneratedColumn<int>(
+    'cashier_user_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _currencyIdMeta = const VerificationMeta(
+    'currencyId',
+  );
+  @override
+  late final GeneratedColumn<int> currencyId = GeneratedColumn<int>(
+    'currency_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES currencies (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('open'),
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> openingCashCents =
+      GeneratedColumn<int>(
+        'opening_cash_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>($CashierShiftsTable.$converteropeningCashCents);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int>
+  expectedClosingCashCents =
+      GeneratedColumn<int>(
+        'expected_closing_cash_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>(
+        $CashierShiftsTable.$converterexpectedClosingCashCentsn,
+      );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int>
+  countedClosingCashCents =
+      GeneratedColumn<int>(
+        'counted_closing_cash_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>(
+        $CashierShiftsTable.$convertercountedClosingCashCentsn,
+      );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int> cashVarianceCents =
+      GeneratedColumn<int>(
+        'cash_variance_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>(
+        $CashierShiftsTable.$convertercashVarianceCentsn,
+      );
+  static const VerificationMeta _openingNotesMeta = const VerificationMeta(
+    'openingNotes',
+  );
+  @override
+  late final GeneratedColumn<String> openingNotes = GeneratedColumn<String>(
+    'opening_notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _closingNotesMeta = const VerificationMeta(
+    'closingNotes',
+  );
+  @override
+  late final GeneratedColumn<String> closingNotes = GeneratedColumn<String>(
+    'closing_notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _openedAtMeta = const VerificationMeta(
+    'openedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> openedAt = GeneratedColumn<DateTime>(
+    'opened_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _closedAtMeta = const VerificationMeta(
+    'closedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> closedAt = GeneratedColumn<DateTime>(
+    'closed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _closedByMeta = const VerificationMeta(
+    'closedBy',
+  );
+  @override
+  late final GeneratedColumn<int> closedBy = GeneratedColumn<int>(
+    'closed_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    shiftNumber,
+    cashierUserId,
+    currencyId,
+    status,
+    openingCashCents,
+    expectedClosingCashCents,
+    countedClosingCashCents,
+    cashVarianceCents,
+    openingNotes,
+    closingNotes,
+    openedAt,
+    closedAt,
+    closedBy,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cashier_shifts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CashierShift> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('shift_number')) {
+      context.handle(
+        _shiftNumberMeta,
+        shiftNumber.isAcceptableOrUnknown(
+          data['shift_number']!,
+          _shiftNumberMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_shiftNumberMeta);
+    }
+    if (data.containsKey('cashier_user_id')) {
+      context.handle(
+        _cashierUserIdMeta,
+        cashierUserId.isAcceptableOrUnknown(
+          data['cashier_user_id']!,
+          _cashierUserIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_cashierUserIdMeta);
+    }
+    if (data.containsKey('currency_id')) {
+      context.handle(
+        _currencyIdMeta,
+        currencyId.isAcceptableOrUnknown(data['currency_id']!, _currencyIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_currencyIdMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('opening_notes')) {
+      context.handle(
+        _openingNotesMeta,
+        openingNotes.isAcceptableOrUnknown(
+          data['opening_notes']!,
+          _openingNotesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('closing_notes')) {
+      context.handle(
+        _closingNotesMeta,
+        closingNotes.isAcceptableOrUnknown(
+          data['closing_notes']!,
+          _closingNotesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('opened_at')) {
+      context.handle(
+        _openedAtMeta,
+        openedAt.isAcceptableOrUnknown(data['opened_at']!, _openedAtMeta),
+      );
+    }
+    if (data.containsKey('closed_at')) {
+      context.handle(
+        _closedAtMeta,
+        closedAt.isAcceptableOrUnknown(data['closed_at']!, _closedAtMeta),
+      );
+    }
+    if (data.containsKey('closed_by')) {
+      context.handle(
+        _closedByMeta,
+        closedBy.isAcceptableOrUnknown(data['closed_by']!, _closedByMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CashierShift map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CashierShift(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      shiftNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}shift_number'],
+      )!,
+      cashierUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cashier_user_id'],
+      )!,
+      currencyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}currency_id'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      openingCashCents: $CashierShiftsTable.$converteropeningCashCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}opening_cash_cents'],
+        )!,
+      ),
+      expectedClosingCashCents: $CashierShiftsTable
+          .$converterexpectedClosingCashCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}expected_closing_cash_cents'],
+            ),
+          ),
+      countedClosingCashCents: $CashierShiftsTable
+          .$convertercountedClosingCashCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}counted_closing_cash_cents'],
+            ),
+          ),
+      cashVarianceCents: $CashierShiftsTable.$convertercashVarianceCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}cash_variance_cents'],
+            ),
+          ),
+      openingNotes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}opening_notes'],
+      ),
+      closingNotes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}closing_notes'],
+      ),
+      openedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}opened_at'],
+      )!,
+      closedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}closed_at'],
+      ),
+      closedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}closed_by'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CashierShiftsTable createAlias(String alias) {
+    return $CashierShiftsTable(attachedDatabase, alias);
+  }
+
+  static TypeConverter<Decimal, int> $converteropeningCashCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal, int> $converterexpectedClosingCashCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converterexpectedClosingCashCentsn =
+      NullAwareTypeConverter.wrap($converterexpectedClosingCashCents);
+  static TypeConverter<Decimal, int> $convertercountedClosingCashCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $convertercountedClosingCashCentsn =
+      NullAwareTypeConverter.wrap($convertercountedClosingCashCents);
+  static TypeConverter<Decimal, int> $convertercashVarianceCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $convertercashVarianceCentsn =
+      NullAwareTypeConverter.wrap($convertercashVarianceCents);
+}
+
+class CashierShift extends DataClass implements Insertable<CashierShift> {
+  final int id;
+  final String shiftNumber;
+  final int cashierUserId;
+  final int currencyId;
+
+  /// `open` | `closed`.
+  final String status;
+  final Decimal openingCashCents;
+  final Decimal? expectedClosingCashCents;
+  final Decimal? countedClosingCashCents;
+  final Decimal? cashVarianceCents;
+  final String? openingNotes;
+  final String? closingNotes;
+  final DateTime openedAt;
+  final DateTime? closedAt;
+  final int? closedBy;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const CashierShift({
+    required this.id,
+    required this.shiftNumber,
+    required this.cashierUserId,
+    required this.currencyId,
+    required this.status,
+    required this.openingCashCents,
+    this.expectedClosingCashCents,
+    this.countedClosingCashCents,
+    this.cashVarianceCents,
+    this.openingNotes,
+    this.closingNotes,
+    required this.openedAt,
+    this.closedAt,
+    this.closedBy,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['shift_number'] = Variable<String>(shiftNumber);
+    map['cashier_user_id'] = Variable<int>(cashierUserId);
+    map['currency_id'] = Variable<int>(currencyId);
+    map['status'] = Variable<String>(status);
+    {
+      map['opening_cash_cents'] = Variable<int>(
+        $CashierShiftsTable.$converteropeningCashCents.toSql(openingCashCents),
+      );
+    }
+    if (!nullToAbsent || expectedClosingCashCents != null) {
+      map['expected_closing_cash_cents'] = Variable<int>(
+        $CashierShiftsTable.$converterexpectedClosingCashCentsn.toSql(
+          expectedClosingCashCents,
+        ),
+      );
+    }
+    if (!nullToAbsent || countedClosingCashCents != null) {
+      map['counted_closing_cash_cents'] = Variable<int>(
+        $CashierShiftsTable.$convertercountedClosingCashCentsn.toSql(
+          countedClosingCashCents,
+        ),
+      );
+    }
+    if (!nullToAbsent || cashVarianceCents != null) {
+      map['cash_variance_cents'] = Variable<int>(
+        $CashierShiftsTable.$convertercashVarianceCentsn.toSql(
+          cashVarianceCents,
+        ),
+      );
+    }
+    if (!nullToAbsent || openingNotes != null) {
+      map['opening_notes'] = Variable<String>(openingNotes);
+    }
+    if (!nullToAbsent || closingNotes != null) {
+      map['closing_notes'] = Variable<String>(closingNotes);
+    }
+    map['opened_at'] = Variable<DateTime>(openedAt);
+    if (!nullToAbsent || closedAt != null) {
+      map['closed_at'] = Variable<DateTime>(closedAt);
+    }
+    if (!nullToAbsent || closedBy != null) {
+      map['closed_by'] = Variable<int>(closedBy);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  CashierShiftsCompanion toCompanion(bool nullToAbsent) {
+    return CashierShiftsCompanion(
+      id: Value(id),
+      shiftNumber: Value(shiftNumber),
+      cashierUserId: Value(cashierUserId),
+      currencyId: Value(currencyId),
+      status: Value(status),
+      openingCashCents: Value(openingCashCents),
+      expectedClosingCashCents: expectedClosingCashCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(expectedClosingCashCents),
+      countedClosingCashCents: countedClosingCashCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(countedClosingCashCents),
+      cashVarianceCents: cashVarianceCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cashVarianceCents),
+      openingNotes: openingNotes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(openingNotes),
+      closingNotes: closingNotes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closingNotes),
+      openedAt: Value(openedAt),
+      closedAt: closedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closedAt),
+      closedBy: closedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(closedBy),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory CashierShift.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CashierShift(
+      id: serializer.fromJson<int>(json['id']),
+      shiftNumber: serializer.fromJson<String>(json['shiftNumber']),
+      cashierUserId: serializer.fromJson<int>(json['cashierUserId']),
+      currencyId: serializer.fromJson<int>(json['currencyId']),
+      status: serializer.fromJson<String>(json['status']),
+      openingCashCents: serializer.fromJson<Decimal>(json['openingCashCents']),
+      expectedClosingCashCents: serializer.fromJson<Decimal?>(
+        json['expectedClosingCashCents'],
+      ),
+      countedClosingCashCents: serializer.fromJson<Decimal?>(
+        json['countedClosingCashCents'],
+      ),
+      cashVarianceCents: serializer.fromJson<Decimal?>(
+        json['cashVarianceCents'],
+      ),
+      openingNotes: serializer.fromJson<String?>(json['openingNotes']),
+      closingNotes: serializer.fromJson<String?>(json['closingNotes']),
+      openedAt: serializer.fromJson<DateTime>(json['openedAt']),
+      closedAt: serializer.fromJson<DateTime?>(json['closedAt']),
+      closedBy: serializer.fromJson<int?>(json['closedBy']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'shiftNumber': serializer.toJson<String>(shiftNumber),
+      'cashierUserId': serializer.toJson<int>(cashierUserId),
+      'currencyId': serializer.toJson<int>(currencyId),
+      'status': serializer.toJson<String>(status),
+      'openingCashCents': serializer.toJson<Decimal>(openingCashCents),
+      'expectedClosingCashCents': serializer.toJson<Decimal?>(
+        expectedClosingCashCents,
+      ),
+      'countedClosingCashCents': serializer.toJson<Decimal?>(
+        countedClosingCashCents,
+      ),
+      'cashVarianceCents': serializer.toJson<Decimal?>(cashVarianceCents),
+      'openingNotes': serializer.toJson<String?>(openingNotes),
+      'closingNotes': serializer.toJson<String?>(closingNotes),
+      'openedAt': serializer.toJson<DateTime>(openedAt),
+      'closedAt': serializer.toJson<DateTime?>(closedAt),
+      'closedBy': serializer.toJson<int?>(closedBy),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  CashierShift copyWith({
+    int? id,
+    String? shiftNumber,
+    int? cashierUserId,
+    int? currencyId,
+    String? status,
+    Decimal? openingCashCents,
+    Value<Decimal?> expectedClosingCashCents = const Value.absent(),
+    Value<Decimal?> countedClosingCashCents = const Value.absent(),
+    Value<Decimal?> cashVarianceCents = const Value.absent(),
+    Value<String?> openingNotes = const Value.absent(),
+    Value<String?> closingNotes = const Value.absent(),
+    DateTime? openedAt,
+    Value<DateTime?> closedAt = const Value.absent(),
+    Value<int?> closedBy = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => CashierShift(
+    id: id ?? this.id,
+    shiftNumber: shiftNumber ?? this.shiftNumber,
+    cashierUserId: cashierUserId ?? this.cashierUserId,
+    currencyId: currencyId ?? this.currencyId,
+    status: status ?? this.status,
+    openingCashCents: openingCashCents ?? this.openingCashCents,
+    expectedClosingCashCents: expectedClosingCashCents.present
+        ? expectedClosingCashCents.value
+        : this.expectedClosingCashCents,
+    countedClosingCashCents: countedClosingCashCents.present
+        ? countedClosingCashCents.value
+        : this.countedClosingCashCents,
+    cashVarianceCents: cashVarianceCents.present
+        ? cashVarianceCents.value
+        : this.cashVarianceCents,
+    openingNotes: openingNotes.present ? openingNotes.value : this.openingNotes,
+    closingNotes: closingNotes.present ? closingNotes.value : this.closingNotes,
+    openedAt: openedAt ?? this.openedAt,
+    closedAt: closedAt.present ? closedAt.value : this.closedAt,
+    closedBy: closedBy.present ? closedBy.value : this.closedBy,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  CashierShift copyWithCompanion(CashierShiftsCompanion data) {
+    return CashierShift(
+      id: data.id.present ? data.id.value : this.id,
+      shiftNumber: data.shiftNumber.present
+          ? data.shiftNumber.value
+          : this.shiftNumber,
+      cashierUserId: data.cashierUserId.present
+          ? data.cashierUserId.value
+          : this.cashierUserId,
+      currencyId: data.currencyId.present
+          ? data.currencyId.value
+          : this.currencyId,
+      status: data.status.present ? data.status.value : this.status,
+      openingCashCents: data.openingCashCents.present
+          ? data.openingCashCents.value
+          : this.openingCashCents,
+      expectedClosingCashCents: data.expectedClosingCashCents.present
+          ? data.expectedClosingCashCents.value
+          : this.expectedClosingCashCents,
+      countedClosingCashCents: data.countedClosingCashCents.present
+          ? data.countedClosingCashCents.value
+          : this.countedClosingCashCents,
+      cashVarianceCents: data.cashVarianceCents.present
+          ? data.cashVarianceCents.value
+          : this.cashVarianceCents,
+      openingNotes: data.openingNotes.present
+          ? data.openingNotes.value
+          : this.openingNotes,
+      closingNotes: data.closingNotes.present
+          ? data.closingNotes.value
+          : this.closingNotes,
+      openedAt: data.openedAt.present ? data.openedAt.value : this.openedAt,
+      closedAt: data.closedAt.present ? data.closedAt.value : this.closedAt,
+      closedBy: data.closedBy.present ? data.closedBy.value : this.closedBy,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CashierShift(')
+          ..write('id: $id, ')
+          ..write('shiftNumber: $shiftNumber, ')
+          ..write('cashierUserId: $cashierUserId, ')
+          ..write('currencyId: $currencyId, ')
+          ..write('status: $status, ')
+          ..write('openingCashCents: $openingCashCents, ')
+          ..write('expectedClosingCashCents: $expectedClosingCashCents, ')
+          ..write('countedClosingCashCents: $countedClosingCashCents, ')
+          ..write('cashVarianceCents: $cashVarianceCents, ')
+          ..write('openingNotes: $openingNotes, ')
+          ..write('closingNotes: $closingNotes, ')
+          ..write('openedAt: $openedAt, ')
+          ..write('closedAt: $closedAt, ')
+          ..write('closedBy: $closedBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    shiftNumber,
+    cashierUserId,
+    currencyId,
+    status,
+    openingCashCents,
+    expectedClosingCashCents,
+    countedClosingCashCents,
+    cashVarianceCents,
+    openingNotes,
+    closingNotes,
+    openedAt,
+    closedAt,
+    closedBy,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CashierShift &&
+          other.id == this.id &&
+          other.shiftNumber == this.shiftNumber &&
+          other.cashierUserId == this.cashierUserId &&
+          other.currencyId == this.currencyId &&
+          other.status == this.status &&
+          other.openingCashCents == this.openingCashCents &&
+          other.expectedClosingCashCents == this.expectedClosingCashCents &&
+          other.countedClosingCashCents == this.countedClosingCashCents &&
+          other.cashVarianceCents == this.cashVarianceCents &&
+          other.openingNotes == this.openingNotes &&
+          other.closingNotes == this.closingNotes &&
+          other.openedAt == this.openedAt &&
+          other.closedAt == this.closedAt &&
+          other.closedBy == this.closedBy &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class CashierShiftsCompanion extends UpdateCompanion<CashierShift> {
+  final Value<int> id;
+  final Value<String> shiftNumber;
+  final Value<int> cashierUserId;
+  final Value<int> currencyId;
+  final Value<String> status;
+  final Value<Decimal> openingCashCents;
+  final Value<Decimal?> expectedClosingCashCents;
+  final Value<Decimal?> countedClosingCashCents;
+  final Value<Decimal?> cashVarianceCents;
+  final Value<String?> openingNotes;
+  final Value<String?> closingNotes;
+  final Value<DateTime> openedAt;
+  final Value<DateTime?> closedAt;
+  final Value<int?> closedBy;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const CashierShiftsCompanion({
+    this.id = const Value.absent(),
+    this.shiftNumber = const Value.absent(),
+    this.cashierUserId = const Value.absent(),
+    this.currencyId = const Value.absent(),
+    this.status = const Value.absent(),
+    this.openingCashCents = const Value.absent(),
+    this.expectedClosingCashCents = const Value.absent(),
+    this.countedClosingCashCents = const Value.absent(),
+    this.cashVarianceCents = const Value.absent(),
+    this.openingNotes = const Value.absent(),
+    this.closingNotes = const Value.absent(),
+    this.openedAt = const Value.absent(),
+    this.closedAt = const Value.absent(),
+    this.closedBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  CashierShiftsCompanion.insert({
+    this.id = const Value.absent(),
+    required String shiftNumber,
+    required int cashierUserId,
+    required int currencyId,
+    this.status = const Value.absent(),
+    this.openingCashCents = const Value.absent(),
+    this.expectedClosingCashCents = const Value.absent(),
+    this.countedClosingCashCents = const Value.absent(),
+    this.cashVarianceCents = const Value.absent(),
+    this.openingNotes = const Value.absent(),
+    this.closingNotes = const Value.absent(),
+    this.openedAt = const Value.absent(),
+    this.closedAt = const Value.absent(),
+    this.closedBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : shiftNumber = Value(shiftNumber),
+       cashierUserId = Value(cashierUserId),
+       currencyId = Value(currencyId);
+  static Insertable<CashierShift> custom({
+    Expression<int>? id,
+    Expression<String>? shiftNumber,
+    Expression<int>? cashierUserId,
+    Expression<int>? currencyId,
+    Expression<String>? status,
+    Expression<int>? openingCashCents,
+    Expression<int>? expectedClosingCashCents,
+    Expression<int>? countedClosingCashCents,
+    Expression<int>? cashVarianceCents,
+    Expression<String>? openingNotes,
+    Expression<String>? closingNotes,
+    Expression<DateTime>? openedAt,
+    Expression<DateTime>? closedAt,
+    Expression<int>? closedBy,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (shiftNumber != null) 'shift_number': shiftNumber,
+      if (cashierUserId != null) 'cashier_user_id': cashierUserId,
+      if (currencyId != null) 'currency_id': currencyId,
+      if (status != null) 'status': status,
+      if (openingCashCents != null) 'opening_cash_cents': openingCashCents,
+      if (expectedClosingCashCents != null)
+        'expected_closing_cash_cents': expectedClosingCashCents,
+      if (countedClosingCashCents != null)
+        'counted_closing_cash_cents': countedClosingCashCents,
+      if (cashVarianceCents != null) 'cash_variance_cents': cashVarianceCents,
+      if (openingNotes != null) 'opening_notes': openingNotes,
+      if (closingNotes != null) 'closing_notes': closingNotes,
+      if (openedAt != null) 'opened_at': openedAt,
+      if (closedAt != null) 'closed_at': closedAt,
+      if (closedBy != null) 'closed_by': closedBy,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  CashierShiftsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? shiftNumber,
+    Value<int>? cashierUserId,
+    Value<int>? currencyId,
+    Value<String>? status,
+    Value<Decimal>? openingCashCents,
+    Value<Decimal?>? expectedClosingCashCents,
+    Value<Decimal?>? countedClosingCashCents,
+    Value<Decimal?>? cashVarianceCents,
+    Value<String?>? openingNotes,
+    Value<String?>? closingNotes,
+    Value<DateTime>? openedAt,
+    Value<DateTime?>? closedAt,
+    Value<int?>? closedBy,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return CashierShiftsCompanion(
+      id: id ?? this.id,
+      shiftNumber: shiftNumber ?? this.shiftNumber,
+      cashierUserId: cashierUserId ?? this.cashierUserId,
+      currencyId: currencyId ?? this.currencyId,
+      status: status ?? this.status,
+      openingCashCents: openingCashCents ?? this.openingCashCents,
+      expectedClosingCashCents:
+          expectedClosingCashCents ?? this.expectedClosingCashCents,
+      countedClosingCashCents:
+          countedClosingCashCents ?? this.countedClosingCashCents,
+      cashVarianceCents: cashVarianceCents ?? this.cashVarianceCents,
+      openingNotes: openingNotes ?? this.openingNotes,
+      closingNotes: closingNotes ?? this.closingNotes,
+      openedAt: openedAt ?? this.openedAt,
+      closedAt: closedAt ?? this.closedAt,
+      closedBy: closedBy ?? this.closedBy,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (shiftNumber.present) {
+      map['shift_number'] = Variable<String>(shiftNumber.value);
+    }
+    if (cashierUserId.present) {
+      map['cashier_user_id'] = Variable<int>(cashierUserId.value);
+    }
+    if (currencyId.present) {
+      map['currency_id'] = Variable<int>(currencyId.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (openingCashCents.present) {
+      map['opening_cash_cents'] = Variable<int>(
+        $CashierShiftsTable.$converteropeningCashCents.toSql(
+          openingCashCents.value,
+        ),
+      );
+    }
+    if (expectedClosingCashCents.present) {
+      map['expected_closing_cash_cents'] = Variable<int>(
+        $CashierShiftsTable.$converterexpectedClosingCashCentsn.toSql(
+          expectedClosingCashCents.value,
+        ),
+      );
+    }
+    if (countedClosingCashCents.present) {
+      map['counted_closing_cash_cents'] = Variable<int>(
+        $CashierShiftsTable.$convertercountedClosingCashCentsn.toSql(
+          countedClosingCashCents.value,
+        ),
+      );
+    }
+    if (cashVarianceCents.present) {
+      map['cash_variance_cents'] = Variable<int>(
+        $CashierShiftsTable.$convertercashVarianceCentsn.toSql(
+          cashVarianceCents.value,
+        ),
+      );
+    }
+    if (openingNotes.present) {
+      map['opening_notes'] = Variable<String>(openingNotes.value);
+    }
+    if (closingNotes.present) {
+      map['closing_notes'] = Variable<String>(closingNotes.value);
+    }
+    if (openedAt.present) {
+      map['opened_at'] = Variable<DateTime>(openedAt.value);
+    }
+    if (closedAt.present) {
+      map['closed_at'] = Variable<DateTime>(closedAt.value);
+    }
+    if (closedBy.present) {
+      map['closed_by'] = Variable<int>(closedBy.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CashierShiftsCompanion(')
+          ..write('id: $id, ')
+          ..write('shiftNumber: $shiftNumber, ')
+          ..write('cashierUserId: $cashierUserId, ')
+          ..write('currencyId: $currencyId, ')
+          ..write('status: $status, ')
+          ..write('openingCashCents: $openingCashCents, ')
+          ..write('expectedClosingCashCents: $expectedClosingCashCents, ')
+          ..write('countedClosingCashCents: $countedClosingCashCents, ')
+          ..write('cashVarianceCents: $cashVarianceCents, ')
+          ..write('openingNotes: $openingNotes, ')
+          ..write('closingNotes: $closingNotes, ')
+          ..write('openedAt: $openedAt, ')
+          ..write('closedAt: $closedAt, ')
+          ..write('closedBy: $closedBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $SalesTable extends Sales with TableInfo<$SalesTable, Sale> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -19533,6 +20566,20 @@ class $SalesTable extends Sales with TableInfo<$SalesTable, Sale> {
     requiredDuringInsert: false,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
       'REFERENCES employees (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _cashierShiftIdMeta = const VerificationMeta(
+    'cashierShiftId',
+  );
+  @override
+  late final GeneratedColumn<int> cashierShiftId = GeneratedColumn<int>(
+    'cashier_shift_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES cashier_shifts (id) ON DELETE SET NULL',
     ),
   );
   @override
@@ -19714,6 +20761,7 @@ class $SalesTable extends Sales with TableInfo<$SalesTable, Sale> {
     invoiceNumber,
     customerId,
     employeeId,
+    cashierShiftId,
     subtotalCents,
     taxCents,
     discountCents,
@@ -19767,6 +20815,15 @@ class $SalesTable extends Sales with TableInfo<$SalesTable, Sale> {
       context.handle(
         _employeeIdMeta,
         employeeId.isAcceptableOrUnknown(data['employee_id']!, _employeeIdMeta),
+      );
+    }
+    if (data.containsKey('cashier_shift_id')) {
+      context.handle(
+        _cashierShiftIdMeta,
+        cashierShiftId.isAcceptableOrUnknown(
+          data['cashier_shift_id']!,
+          _cashierShiftIdMeta,
+        ),
       );
     }
     if (data.containsKey('currency_id')) {
@@ -19876,6 +20933,10 @@ class $SalesTable extends Sales with TableInfo<$SalesTable, Sale> {
         DriftSqlType.int,
         data['${effectivePrefix}employee_id'],
       ),
+      cashierShiftId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cashier_shift_id'],
+      ),
       subtotalCents: $SalesTable.$convertersubtotalCents.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -19975,6 +21036,7 @@ class Sale extends DataClass implements Insertable<Sale> {
   final String invoiceNumber;
   final int? customerId;
   final int? employeeId;
+  final int? cashierShiftId;
   final Decimal subtotalCents;
   final Decimal taxCents;
   final Decimal discountCents;
@@ -20006,6 +21068,7 @@ class Sale extends DataClass implements Insertable<Sale> {
     required this.invoiceNumber,
     this.customerId,
     this.employeeId,
+    this.cashierShiftId,
     required this.subtotalCents,
     required this.taxCents,
     required this.discountCents,
@@ -20033,6 +21096,9 @@ class Sale extends DataClass implements Insertable<Sale> {
     }
     if (!nullToAbsent || employeeId != null) {
       map['employee_id'] = Variable<int>(employeeId);
+    }
+    if (!nullToAbsent || cashierShiftId != null) {
+      map['cashier_shift_id'] = Variable<int>(cashierShiftId);
     }
     {
       map['subtotal_cents'] = Variable<int>(
@@ -20093,6 +21159,9 @@ class Sale extends DataClass implements Insertable<Sale> {
       employeeId: employeeId == null && nullToAbsent
           ? const Value.absent()
           : Value(employeeId),
+      cashierShiftId: cashierShiftId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cashierShiftId),
       subtotalCents: Value(subtotalCents),
       taxCents: Value(taxCents),
       discountCents: Value(discountCents),
@@ -20132,6 +21201,7 @@ class Sale extends DataClass implements Insertable<Sale> {
       invoiceNumber: serializer.fromJson<String>(json['invoiceNumber']),
       customerId: serializer.fromJson<int?>(json['customerId']),
       employeeId: serializer.fromJson<int?>(json['employeeId']),
+      cashierShiftId: serializer.fromJson<int?>(json['cashierShiftId']),
       subtotalCents: serializer.fromJson<Decimal>(json['subtotalCents']),
       taxCents: serializer.fromJson<Decimal>(json['taxCents']),
       discountCents: serializer.fromJson<Decimal>(json['discountCents']),
@@ -20164,6 +21234,7 @@ class Sale extends DataClass implements Insertable<Sale> {
       'invoiceNumber': serializer.toJson<String>(invoiceNumber),
       'customerId': serializer.toJson<int?>(customerId),
       'employeeId': serializer.toJson<int?>(employeeId),
+      'cashierShiftId': serializer.toJson<int?>(cashierShiftId),
       'subtotalCents': serializer.toJson<Decimal>(subtotalCents),
       'taxCents': serializer.toJson<Decimal>(taxCents),
       'discountCents': serializer.toJson<Decimal>(discountCents),
@@ -20188,6 +21259,7 @@ class Sale extends DataClass implements Insertable<Sale> {
     String? invoiceNumber,
     Value<int?> customerId = const Value.absent(),
     Value<int?> employeeId = const Value.absent(),
+    Value<int?> cashierShiftId = const Value.absent(),
     Decimal? subtotalCents,
     Decimal? taxCents,
     Decimal? discountCents,
@@ -20209,6 +21281,9 @@ class Sale extends DataClass implements Insertable<Sale> {
     invoiceNumber: invoiceNumber ?? this.invoiceNumber,
     customerId: customerId.present ? customerId.value : this.customerId,
     employeeId: employeeId.present ? employeeId.value : this.employeeId,
+    cashierShiftId: cashierShiftId.present
+        ? cashierShiftId.value
+        : this.cashierShiftId,
     subtotalCents: subtotalCents ?? this.subtotalCents,
     taxCents: taxCents ?? this.taxCents,
     discountCents: discountCents ?? this.discountCents,
@@ -20244,6 +21319,9 @@ class Sale extends DataClass implements Insertable<Sale> {
       employeeId: data.employeeId.present
           ? data.employeeId.value
           : this.employeeId,
+      cashierShiftId: data.cashierShiftId.present
+          ? data.cashierShiftId.value
+          : this.cashierShiftId,
       subtotalCents: data.subtotalCents.present
           ? data.subtotalCents.value
           : this.subtotalCents,
@@ -20288,6 +21366,7 @@ class Sale extends DataClass implements Insertable<Sale> {
           ..write('invoiceNumber: $invoiceNumber, ')
           ..write('customerId: $customerId, ')
           ..write('employeeId: $employeeId, ')
+          ..write('cashierShiftId: $cashierShiftId, ')
           ..write('subtotalCents: $subtotalCents, ')
           ..write('taxCents: $taxCents, ')
           ..write('discountCents: $discountCents, ')
@@ -20309,11 +21388,12 @@ class Sale extends DataClass implements Insertable<Sale> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     invoiceNumber,
     customerId,
     employeeId,
+    cashierShiftId,
     subtotalCents,
     taxCents,
     discountCents,
@@ -20330,7 +21410,7 @@ class Sale extends DataClass implements Insertable<Sale> {
     roundingModeAtPost,
     createdAt,
     updatedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -20339,6 +21419,7 @@ class Sale extends DataClass implements Insertable<Sale> {
           other.invoiceNumber == this.invoiceNumber &&
           other.customerId == this.customerId &&
           other.employeeId == this.employeeId &&
+          other.cashierShiftId == this.cashierShiftId &&
           other.subtotalCents == this.subtotalCents &&
           other.taxCents == this.taxCents &&
           other.discountCents == this.discountCents &&
@@ -20362,6 +21443,7 @@ class SalesCompanion extends UpdateCompanion<Sale> {
   final Value<String> invoiceNumber;
   final Value<int?> customerId;
   final Value<int?> employeeId;
+  final Value<int?> cashierShiftId;
   final Value<Decimal> subtotalCents;
   final Value<Decimal> taxCents;
   final Value<Decimal> discountCents;
@@ -20383,6 +21465,7 @@ class SalesCompanion extends UpdateCompanion<Sale> {
     this.invoiceNumber = const Value.absent(),
     this.customerId = const Value.absent(),
     this.employeeId = const Value.absent(),
+    this.cashierShiftId = const Value.absent(),
     this.subtotalCents = const Value.absent(),
     this.taxCents = const Value.absent(),
     this.discountCents = const Value.absent(),
@@ -20405,6 +21488,7 @@ class SalesCompanion extends UpdateCompanion<Sale> {
     required String invoiceNumber,
     this.customerId = const Value.absent(),
     this.employeeId = const Value.absent(),
+    this.cashierShiftId = const Value.absent(),
     required Decimal subtotalCents,
     required Decimal taxCents,
     this.discountCents = const Value.absent(),
@@ -20432,6 +21516,7 @@ class SalesCompanion extends UpdateCompanion<Sale> {
     Expression<String>? invoiceNumber,
     Expression<int>? customerId,
     Expression<int>? employeeId,
+    Expression<int>? cashierShiftId,
     Expression<int>? subtotalCents,
     Expression<int>? taxCents,
     Expression<int>? discountCents,
@@ -20454,6 +21539,7 @@ class SalesCompanion extends UpdateCompanion<Sale> {
       if (invoiceNumber != null) 'invoice_number': invoiceNumber,
       if (customerId != null) 'customer_id': customerId,
       if (employeeId != null) 'employee_id': employeeId,
+      if (cashierShiftId != null) 'cashier_shift_id': cashierShiftId,
       if (subtotalCents != null) 'subtotal_cents': subtotalCents,
       if (taxCents != null) 'tax_cents': taxCents,
       if (discountCents != null) 'discount_cents': discountCents,
@@ -20481,6 +21567,7 @@ class SalesCompanion extends UpdateCompanion<Sale> {
     Value<String>? invoiceNumber,
     Value<int?>? customerId,
     Value<int?>? employeeId,
+    Value<int?>? cashierShiftId,
     Value<Decimal>? subtotalCents,
     Value<Decimal>? taxCents,
     Value<Decimal>? discountCents,
@@ -20503,6 +21590,7 @@ class SalesCompanion extends UpdateCompanion<Sale> {
       invoiceNumber: invoiceNumber ?? this.invoiceNumber,
       customerId: customerId ?? this.customerId,
       employeeId: employeeId ?? this.employeeId,
+      cashierShiftId: cashierShiftId ?? this.cashierShiftId,
       subtotalCents: subtotalCents ?? this.subtotalCents,
       taxCents: taxCents ?? this.taxCents,
       discountCents: discountCents ?? this.discountCents,
@@ -20536,6 +21624,9 @@ class SalesCompanion extends UpdateCompanion<Sale> {
     }
     if (employeeId.present) {
       map['employee_id'] = Variable<int>(employeeId.value);
+    }
+    if (cashierShiftId.present) {
+      map['cashier_shift_id'] = Variable<int>(cashierShiftId.value);
     }
     if (subtotalCents.present) {
       map['subtotal_cents'] = Variable<int>(
@@ -20607,6 +21698,7 @@ class SalesCompanion extends UpdateCompanion<Sale> {
           ..write('invoiceNumber: $invoiceNumber, ')
           ..write('customerId: $customerId, ')
           ..write('employeeId: $employeeId, ')
+          ..write('cashierShiftId: $cashierShiftId, ')
           ..write('subtotalCents: $subtotalCents, ')
           ..write('taxCents: $taxCents, ')
           ..write('discountCents: $discountCents, ')
@@ -27076,6 +28168,30 @@ class $SaleItemsTable extends SaleItems
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _quantityScaleMeta = const VerificationMeta(
+    'quantityScale',
+  );
+  @override
+  late final GeneratedColumn<int> quantityScale = GeneratedColumn<int>(
+    'quantity_scale',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _measurementTypeMeta = const VerificationMeta(
+    'measurementType',
+  );
+  @override
+  late final GeneratedColumn<String> measurementType = GeneratedColumn<String>(
+    'measurement_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('piece'),
+  );
   @override
   late final GeneratedColumnWithTypeConverter<Decimal, int> unitPriceCents =
       GeneratedColumn<int>(
@@ -27132,6 +28248,18 @@ class $SaleItemsTable extends SaleItems
         type: DriftSqlType.int,
         requiredDuringInsert: false,
       ).withConverter<Decimal?>($SaleItemsTable.$convertercostCentsn);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int>
+  inventoryValueAtPostCents =
+      GeneratedColumn<int>(
+        'inventory_value_at_post_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>(
+        $SaleItemsTable.$converterinventoryValueAtPostCentsn,
+      );
   static const VerificationMeta _qtyReturnedLinkedMeta = const VerificationMeta(
     'qtyReturnedLinked',
   );
@@ -27175,12 +28303,15 @@ class $SaleItemsTable extends SaleItems
     variantId,
     employeeId,
     quantity,
+    quantityScale,
+    measurementType,
     unitPriceCents,
     subtotalCents,
     discountCents,
     taxCents,
     totalCents,
     costCents,
+    inventoryValueAtPostCents,
     qtyReturnedLinked,
     qtyReturnedAdjustment,
     createdAt,
@@ -27235,6 +28366,24 @@ class $SaleItemsTable extends SaleItems
       );
     } else if (isInserting) {
       context.missing(_quantityMeta);
+    }
+    if (data.containsKey('quantity_scale')) {
+      context.handle(
+        _quantityScaleMeta,
+        quantityScale.isAcceptableOrUnknown(
+          data['quantity_scale']!,
+          _quantityScaleMeta,
+        ),
+      );
+    }
+    if (data.containsKey('measurement_type')) {
+      context.handle(
+        _measurementTypeMeta,
+        measurementType.isAcceptableOrUnknown(
+          data['measurement_type']!,
+          _measurementTypeMeta,
+        ),
+      );
     }
     if (data.containsKey('qty_returned_linked')) {
       context.handle(
@@ -27293,6 +28442,14 @@ class $SaleItemsTable extends SaleItems
         DriftSqlType.int,
         data['${effectivePrefix}quantity'],
       )!,
+      quantityScale: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity_scale'],
+      )!,
+      measurementType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}measurement_type'],
+      )!,
       unitPriceCents: $SaleItemsTable.$converterunitPriceCents.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -27329,6 +28486,14 @@ class $SaleItemsTable extends SaleItems
           data['${effectivePrefix}cost_cents'],
         ),
       ),
+      inventoryValueAtPostCents: $SaleItemsTable
+          .$converterinventoryValueAtPostCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}inventory_value_at_post_cents'],
+            ),
+          ),
       qtyReturnedLinked: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}qty_returned_linked'],
@@ -27363,6 +28528,10 @@ class $SaleItemsTable extends SaleItems
       const MoneyConverter();
   static TypeConverter<Decimal?, int?> $convertercostCentsn =
       NullAwareTypeConverter.wrap($convertercostCents);
+  static TypeConverter<Decimal, int> $converterinventoryValueAtPostCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converterinventoryValueAtPostCentsn =
+      NullAwareTypeConverter.wrap($converterinventoryValueAtPostCents);
 }
 
 class SaleItem extends DataClass implements Insertable<SaleItem> {
@@ -27372,6 +28541,8 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
   final int? variantId;
   final int? employeeId;
   final int quantity;
+  final int quantityScale;
+  final String measurementType;
   final Decimal unitPriceCents;
   final Decimal subtotalCents;
   final Decimal discountCents;
@@ -27381,6 +28552,9 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
   /// Frozen cost-per-unit at the time the sale was posted.
   /// NULL for legacy rows created before this column existed.
   final Decimal? costCents;
+
+  /// Exact rounded-pool value removed from inventory when this sale posted.
+  final Decimal? inventoryValueAtPostCents;
 
   /// Atomic returned-quantity counter (linked path).
   /// Bumped inside `postSaleReturn`, decremented inside `voidSaleReturn`.
@@ -27402,12 +28576,15 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
     this.variantId,
     this.employeeId,
     required this.quantity,
+    required this.quantityScale,
+    required this.measurementType,
     required this.unitPriceCents,
     required this.subtotalCents,
     required this.discountCents,
     required this.taxCents,
     required this.totalCents,
     this.costCents,
+    this.inventoryValueAtPostCents,
     required this.qtyReturnedLinked,
     required this.qtyReturnedAdjustment,
     required this.createdAt,
@@ -27425,6 +28602,8 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
       map['employee_id'] = Variable<int>(employeeId);
     }
     map['quantity'] = Variable<int>(quantity);
+    map['quantity_scale'] = Variable<int>(quantityScale);
+    map['measurement_type'] = Variable<String>(measurementType);
     {
       map['unit_price_cents'] = Variable<int>(
         $SaleItemsTable.$converterunitPriceCents.toSql(unitPriceCents),
@@ -27455,6 +28634,13 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
         $SaleItemsTable.$convertercostCentsn.toSql(costCents),
       );
     }
+    if (!nullToAbsent || inventoryValueAtPostCents != null) {
+      map['inventory_value_at_post_cents'] = Variable<int>(
+        $SaleItemsTable.$converterinventoryValueAtPostCentsn.toSql(
+          inventoryValueAtPostCents,
+        ),
+      );
+    }
     map['qty_returned_linked'] = Variable<int>(qtyReturnedLinked);
     map['qty_returned_adjustment'] = Variable<int>(qtyReturnedAdjustment);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -27473,6 +28659,8 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
           ? const Value.absent()
           : Value(employeeId),
       quantity: Value(quantity),
+      quantityScale: Value(quantityScale),
+      measurementType: Value(measurementType),
       unitPriceCents: Value(unitPriceCents),
       subtotalCents: Value(subtotalCents),
       discountCents: Value(discountCents),
@@ -27481,6 +28669,10 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
       costCents: costCents == null && nullToAbsent
           ? const Value.absent()
           : Value(costCents),
+      inventoryValueAtPostCents:
+          inventoryValueAtPostCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(inventoryValueAtPostCents),
       qtyReturnedLinked: Value(qtyReturnedLinked),
       qtyReturnedAdjustment: Value(qtyReturnedAdjustment),
       createdAt: Value(createdAt),
@@ -27499,12 +28691,17 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
       variantId: serializer.fromJson<int?>(json['variantId']),
       employeeId: serializer.fromJson<int?>(json['employeeId']),
       quantity: serializer.fromJson<int>(json['quantity']),
+      quantityScale: serializer.fromJson<int>(json['quantityScale']),
+      measurementType: serializer.fromJson<String>(json['measurementType']),
       unitPriceCents: serializer.fromJson<Decimal>(json['unitPriceCents']),
       subtotalCents: serializer.fromJson<Decimal>(json['subtotalCents']),
       discountCents: serializer.fromJson<Decimal>(json['discountCents']),
       taxCents: serializer.fromJson<Decimal>(json['taxCents']),
       totalCents: serializer.fromJson<Decimal>(json['totalCents']),
       costCents: serializer.fromJson<Decimal?>(json['costCents']),
+      inventoryValueAtPostCents: serializer.fromJson<Decimal?>(
+        json['inventoryValueAtPostCents'],
+      ),
       qtyReturnedLinked: serializer.fromJson<int>(json['qtyReturnedLinked']),
       qtyReturnedAdjustment: serializer.fromJson<int>(
         json['qtyReturnedAdjustment'],
@@ -27522,12 +28719,17 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
       'variantId': serializer.toJson<int?>(variantId),
       'employeeId': serializer.toJson<int?>(employeeId),
       'quantity': serializer.toJson<int>(quantity),
+      'quantityScale': serializer.toJson<int>(quantityScale),
+      'measurementType': serializer.toJson<String>(measurementType),
       'unitPriceCents': serializer.toJson<Decimal>(unitPriceCents),
       'subtotalCents': serializer.toJson<Decimal>(subtotalCents),
       'discountCents': serializer.toJson<Decimal>(discountCents),
       'taxCents': serializer.toJson<Decimal>(taxCents),
       'totalCents': serializer.toJson<Decimal>(totalCents),
       'costCents': serializer.toJson<Decimal?>(costCents),
+      'inventoryValueAtPostCents': serializer.toJson<Decimal?>(
+        inventoryValueAtPostCents,
+      ),
       'qtyReturnedLinked': serializer.toJson<int>(qtyReturnedLinked),
       'qtyReturnedAdjustment': serializer.toJson<int>(qtyReturnedAdjustment),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -27541,12 +28743,15 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
     Value<int?> variantId = const Value.absent(),
     Value<int?> employeeId = const Value.absent(),
     int? quantity,
+    int? quantityScale,
+    String? measurementType,
     Decimal? unitPriceCents,
     Decimal? subtotalCents,
     Decimal? discountCents,
     Decimal? taxCents,
     Decimal? totalCents,
     Value<Decimal?> costCents = const Value.absent(),
+    Value<Decimal?> inventoryValueAtPostCents = const Value.absent(),
     int? qtyReturnedLinked,
     int? qtyReturnedAdjustment,
     DateTime? createdAt,
@@ -27557,12 +28762,17 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
     variantId: variantId.present ? variantId.value : this.variantId,
     employeeId: employeeId.present ? employeeId.value : this.employeeId,
     quantity: quantity ?? this.quantity,
+    quantityScale: quantityScale ?? this.quantityScale,
+    measurementType: measurementType ?? this.measurementType,
     unitPriceCents: unitPriceCents ?? this.unitPriceCents,
     subtotalCents: subtotalCents ?? this.subtotalCents,
     discountCents: discountCents ?? this.discountCents,
     taxCents: taxCents ?? this.taxCents,
     totalCents: totalCents ?? this.totalCents,
     costCents: costCents.present ? costCents.value : this.costCents,
+    inventoryValueAtPostCents: inventoryValueAtPostCents.present
+        ? inventoryValueAtPostCents.value
+        : this.inventoryValueAtPostCents,
     qtyReturnedLinked: qtyReturnedLinked ?? this.qtyReturnedLinked,
     qtyReturnedAdjustment: qtyReturnedAdjustment ?? this.qtyReturnedAdjustment,
     createdAt: createdAt ?? this.createdAt,
@@ -27577,6 +28787,12 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
           ? data.employeeId.value
           : this.employeeId,
       quantity: data.quantity.present ? data.quantity.value : this.quantity,
+      quantityScale: data.quantityScale.present
+          ? data.quantityScale.value
+          : this.quantityScale,
+      measurementType: data.measurementType.present
+          ? data.measurementType.value
+          : this.measurementType,
       unitPriceCents: data.unitPriceCents.present
           ? data.unitPriceCents.value
           : this.unitPriceCents,
@@ -27591,6 +28807,9 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
           ? data.totalCents.value
           : this.totalCents,
       costCents: data.costCents.present ? data.costCents.value : this.costCents,
+      inventoryValueAtPostCents: data.inventoryValueAtPostCents.present
+          ? data.inventoryValueAtPostCents.value
+          : this.inventoryValueAtPostCents,
       qtyReturnedLinked: data.qtyReturnedLinked.present
           ? data.qtyReturnedLinked.value
           : this.qtyReturnedLinked,
@@ -27610,12 +28829,15 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
           ..write('variantId: $variantId, ')
           ..write('employeeId: $employeeId, ')
           ..write('quantity: $quantity, ')
+          ..write('quantityScale: $quantityScale, ')
+          ..write('measurementType: $measurementType, ')
           ..write('unitPriceCents: $unitPriceCents, ')
           ..write('subtotalCents: $subtotalCents, ')
           ..write('discountCents: $discountCents, ')
           ..write('taxCents: $taxCents, ')
           ..write('totalCents: $totalCents, ')
           ..write('costCents: $costCents, ')
+          ..write('inventoryValueAtPostCents: $inventoryValueAtPostCents, ')
           ..write('qtyReturnedLinked: $qtyReturnedLinked, ')
           ..write('qtyReturnedAdjustment: $qtyReturnedAdjustment, ')
           ..write('createdAt: $createdAt')
@@ -27631,12 +28853,15 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
     variantId,
     employeeId,
     quantity,
+    quantityScale,
+    measurementType,
     unitPriceCents,
     subtotalCents,
     discountCents,
     taxCents,
     totalCents,
     costCents,
+    inventoryValueAtPostCents,
     qtyReturnedLinked,
     qtyReturnedAdjustment,
     createdAt,
@@ -27651,12 +28876,15 @@ class SaleItem extends DataClass implements Insertable<SaleItem> {
           other.variantId == this.variantId &&
           other.employeeId == this.employeeId &&
           other.quantity == this.quantity &&
+          other.quantityScale == this.quantityScale &&
+          other.measurementType == this.measurementType &&
           other.unitPriceCents == this.unitPriceCents &&
           other.subtotalCents == this.subtotalCents &&
           other.discountCents == this.discountCents &&
           other.taxCents == this.taxCents &&
           other.totalCents == this.totalCents &&
           other.costCents == this.costCents &&
+          other.inventoryValueAtPostCents == this.inventoryValueAtPostCents &&
           other.qtyReturnedLinked == this.qtyReturnedLinked &&
           other.qtyReturnedAdjustment == this.qtyReturnedAdjustment &&
           other.createdAt == this.createdAt);
@@ -27669,12 +28897,15 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItem> {
   final Value<int?> variantId;
   final Value<int?> employeeId;
   final Value<int> quantity;
+  final Value<int> quantityScale;
+  final Value<String> measurementType;
   final Value<Decimal> unitPriceCents;
   final Value<Decimal> subtotalCents;
   final Value<Decimal> discountCents;
   final Value<Decimal> taxCents;
   final Value<Decimal> totalCents;
   final Value<Decimal?> costCents;
+  final Value<Decimal?> inventoryValueAtPostCents;
   final Value<int> qtyReturnedLinked;
   final Value<int> qtyReturnedAdjustment;
   final Value<DateTime> createdAt;
@@ -27685,12 +28916,15 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItem> {
     this.variantId = const Value.absent(),
     this.employeeId = const Value.absent(),
     this.quantity = const Value.absent(),
+    this.quantityScale = const Value.absent(),
+    this.measurementType = const Value.absent(),
     this.unitPriceCents = const Value.absent(),
     this.subtotalCents = const Value.absent(),
     this.discountCents = const Value.absent(),
     this.taxCents = const Value.absent(),
     this.totalCents = const Value.absent(),
     this.costCents = const Value.absent(),
+    this.inventoryValueAtPostCents = const Value.absent(),
     this.qtyReturnedLinked = const Value.absent(),
     this.qtyReturnedAdjustment = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -27702,12 +28936,15 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItem> {
     this.variantId = const Value.absent(),
     this.employeeId = const Value.absent(),
     required int quantity,
+    this.quantityScale = const Value.absent(),
+    this.measurementType = const Value.absent(),
     required Decimal unitPriceCents,
     required Decimal subtotalCents,
     this.discountCents = const Value.absent(),
     this.taxCents = const Value.absent(),
     required Decimal totalCents,
     this.costCents = const Value.absent(),
+    this.inventoryValueAtPostCents = const Value.absent(),
     this.qtyReturnedLinked = const Value.absent(),
     this.qtyReturnedAdjustment = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -27724,12 +28961,15 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItem> {
     Expression<int>? variantId,
     Expression<int>? employeeId,
     Expression<int>? quantity,
+    Expression<int>? quantityScale,
+    Expression<String>? measurementType,
     Expression<int>? unitPriceCents,
     Expression<int>? subtotalCents,
     Expression<int>? discountCents,
     Expression<int>? taxCents,
     Expression<int>? totalCents,
     Expression<int>? costCents,
+    Expression<int>? inventoryValueAtPostCents,
     Expression<int>? qtyReturnedLinked,
     Expression<int>? qtyReturnedAdjustment,
     Expression<DateTime>? createdAt,
@@ -27741,12 +28981,16 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItem> {
       if (variantId != null) 'variant_id': variantId,
       if (employeeId != null) 'employee_id': employeeId,
       if (quantity != null) 'quantity': quantity,
+      if (quantityScale != null) 'quantity_scale': quantityScale,
+      if (measurementType != null) 'measurement_type': measurementType,
       if (unitPriceCents != null) 'unit_price_cents': unitPriceCents,
       if (subtotalCents != null) 'subtotal_cents': subtotalCents,
       if (discountCents != null) 'discount_cents': discountCents,
       if (taxCents != null) 'tax_cents': taxCents,
       if (totalCents != null) 'total_cents': totalCents,
       if (costCents != null) 'cost_cents': costCents,
+      if (inventoryValueAtPostCents != null)
+        'inventory_value_at_post_cents': inventoryValueAtPostCents,
       if (qtyReturnedLinked != null) 'qty_returned_linked': qtyReturnedLinked,
       if (qtyReturnedAdjustment != null)
         'qty_returned_adjustment': qtyReturnedAdjustment,
@@ -27761,12 +29005,15 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItem> {
     Value<int?>? variantId,
     Value<int?>? employeeId,
     Value<int>? quantity,
+    Value<int>? quantityScale,
+    Value<String>? measurementType,
     Value<Decimal>? unitPriceCents,
     Value<Decimal>? subtotalCents,
     Value<Decimal>? discountCents,
     Value<Decimal>? taxCents,
     Value<Decimal>? totalCents,
     Value<Decimal?>? costCents,
+    Value<Decimal?>? inventoryValueAtPostCents,
     Value<int>? qtyReturnedLinked,
     Value<int>? qtyReturnedAdjustment,
     Value<DateTime>? createdAt,
@@ -27778,12 +29025,16 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItem> {
       variantId: variantId ?? this.variantId,
       employeeId: employeeId ?? this.employeeId,
       quantity: quantity ?? this.quantity,
+      quantityScale: quantityScale ?? this.quantityScale,
+      measurementType: measurementType ?? this.measurementType,
       unitPriceCents: unitPriceCents ?? this.unitPriceCents,
       subtotalCents: subtotalCents ?? this.subtotalCents,
       discountCents: discountCents ?? this.discountCents,
       taxCents: taxCents ?? this.taxCents,
       totalCents: totalCents ?? this.totalCents,
       costCents: costCents ?? this.costCents,
+      inventoryValueAtPostCents:
+          inventoryValueAtPostCents ?? this.inventoryValueAtPostCents,
       qtyReturnedLinked: qtyReturnedLinked ?? this.qtyReturnedLinked,
       qtyReturnedAdjustment:
           qtyReturnedAdjustment ?? this.qtyReturnedAdjustment,
@@ -27811,6 +29062,12 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItem> {
     }
     if (quantity.present) {
       map['quantity'] = Variable<int>(quantity.value);
+    }
+    if (quantityScale.present) {
+      map['quantity_scale'] = Variable<int>(quantityScale.value);
+    }
+    if (measurementType.present) {
+      map['measurement_type'] = Variable<String>(measurementType.value);
     }
     if (unitPriceCents.present) {
       map['unit_price_cents'] = Variable<int>(
@@ -27842,6 +29099,13 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItem> {
         $SaleItemsTable.$convertercostCentsn.toSql(costCents.value),
       );
     }
+    if (inventoryValueAtPostCents.present) {
+      map['inventory_value_at_post_cents'] = Variable<int>(
+        $SaleItemsTable.$converterinventoryValueAtPostCentsn.toSql(
+          inventoryValueAtPostCents.value,
+        ),
+      );
+    }
     if (qtyReturnedLinked.present) {
       map['qty_returned_linked'] = Variable<int>(qtyReturnedLinked.value);
     }
@@ -27865,12 +29129,15 @@ class SaleItemsCompanion extends UpdateCompanion<SaleItem> {
           ..write('variantId: $variantId, ')
           ..write('employeeId: $employeeId, ')
           ..write('quantity: $quantity, ')
+          ..write('quantityScale: $quantityScale, ')
+          ..write('measurementType: $measurementType, ')
           ..write('unitPriceCents: $unitPriceCents, ')
           ..write('subtotalCents: $subtotalCents, ')
           ..write('discountCents: $discountCents, ')
           ..write('taxCents: $taxCents, ')
           ..write('totalCents: $totalCents, ')
           ..write('costCents: $costCents, ')
+          ..write('inventoryValueAtPostCents: $inventoryValueAtPostCents, ')
           ..write('qtyReturnedLinked: $qtyReturnedLinked, ')
           ..write('qtyReturnedAdjustment: $qtyReturnedAdjustment, ')
           ..write('createdAt: $createdAt')
@@ -28914,6 +30181,20 @@ class $SaleReturnsTable extends SaleReturns
       'REFERENCES sales (id) ON DELETE RESTRICT',
     ),
   );
+  static const VerificationMeta _cashierShiftIdMeta = const VerificationMeta(
+    'cashierShiftId',
+  );
+  @override
+  late final GeneratedColumn<int> cashierShiftId = GeneratedColumn<int>(
+    'cashier_shift_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES cashier_shifts (id) ON DELETE SET NULL',
+    ),
+  );
   static const VerificationMeta _returnNumberMeta = const VerificationMeta(
     'returnNumber',
   );
@@ -29282,6 +30563,7 @@ class $SaleReturnsTable extends SaleReturns
   List<GeneratedColumn> get $columns => [
     id,
     saleId,
+    cashierShiftId,
     returnNumber,
     subtotalCents,
     discountCents,
@@ -29336,6 +30618,15 @@ class $SaleReturnsTable extends SaleReturns
       );
     } else if (isInserting) {
       context.missing(_saleIdMeta);
+    }
+    if (data.containsKey('cashier_shift_id')) {
+      context.handle(
+        _cashierShiftIdMeta,
+        cashierShiftId.isAcceptableOrUnknown(
+          data['cashier_shift_id']!,
+          _cashierShiftIdMeta,
+        ),
+      );
     }
     if (data.containsKey('return_number')) {
       context.handle(
@@ -29559,6 +30850,10 @@ class $SaleReturnsTable extends SaleReturns
         DriftSqlType.int,
         data['${effectivePrefix}sale_id'],
       )!,
+      cashierShiftId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cashier_shift_id'],
+      ),
       returnNumber: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}return_number'],
@@ -29712,6 +31007,7 @@ class $SaleReturnsTable extends SaleReturns
 class SaleReturn extends DataClass implements Insertable<SaleReturn> {
   final int id;
   final int saleId;
+  final int? cashierShiftId;
   final String returnNumber;
   final Decimal subtotalCents;
   final Decimal discountCents;
@@ -29788,6 +31084,7 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
   const SaleReturn({
     required this.id,
     required this.saleId,
+    this.cashierShiftId,
     required this.returnNumber,
     required this.subtotalCents,
     required this.discountCents,
@@ -29825,6 +31122,9 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['sale_id'] = Variable<int>(saleId);
+    if (!nullToAbsent || cashierShiftId != null) {
+      map['cashier_shift_id'] = Variable<int>(cashierShiftId);
+    }
     map['return_number'] = Variable<String>(returnNumber);
     {
       map['subtotal_cents'] = Variable<int>(
@@ -29915,6 +31215,9 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
     return SaleReturnsCompanion(
       id: Value(id),
       saleId: Value(saleId),
+      cashierShiftId: cashierShiftId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cashierShiftId),
       returnNumber: Value(returnNumber),
       subtotalCents: Value(subtotalCents),
       discountCents: Value(discountCents),
@@ -29993,6 +31296,7 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
     return SaleReturn(
       id: serializer.fromJson<int>(json['id']),
       saleId: serializer.fromJson<int>(json['saleId']),
+      cashierShiftId: serializer.fromJson<int?>(json['cashierShiftId']),
       returnNumber: serializer.fromJson<String>(json['returnNumber']),
       subtotalCents: serializer.fromJson<Decimal>(json['subtotalCents']),
       discountCents: serializer.fromJson<Decimal>(json['discountCents']),
@@ -30038,6 +31342,7 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'saleId': serializer.toJson<int>(saleId),
+      'cashierShiftId': serializer.toJson<int?>(cashierShiftId),
       'returnNumber': serializer.toJson<String>(returnNumber),
       'subtotalCents': serializer.toJson<Decimal>(subtotalCents),
       'discountCents': serializer.toJson<Decimal>(discountCents),
@@ -30075,6 +31380,7 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
   SaleReturn copyWith({
     int? id,
     int? saleId,
+    Value<int?> cashierShiftId = const Value.absent(),
     String? returnNumber,
     Decimal? subtotalCents,
     Decimal? discountCents,
@@ -30109,6 +31415,9 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
   }) => SaleReturn(
     id: id ?? this.id,
     saleId: saleId ?? this.saleId,
+    cashierShiftId: cashierShiftId.present
+        ? cashierShiftId.value
+        : this.cashierShiftId,
     returnNumber: returnNumber ?? this.returnNumber,
     subtotalCents: subtotalCents ?? this.subtotalCents,
     discountCents: discountCents ?? this.discountCents,
@@ -30157,6 +31466,9 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
     return SaleReturn(
       id: data.id.present ? data.id.value : this.id,
       saleId: data.saleId.present ? data.saleId.value : this.saleId,
+      cashierShiftId: data.cashierShiftId.present
+          ? data.cashierShiftId.value
+          : this.cashierShiftId,
       returnNumber: data.returnNumber.present
           ? data.returnNumber.value
           : this.returnNumber,
@@ -30240,6 +31552,7 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
     return (StringBuffer('SaleReturn(')
           ..write('id: $id, ')
           ..write('saleId: $saleId, ')
+          ..write('cashierShiftId: $cashierShiftId, ')
           ..write('returnNumber: $returnNumber, ')
           ..write('subtotalCents: $subtotalCents, ')
           ..write('discountCents: $discountCents, ')
@@ -30279,6 +31592,7 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
   int get hashCode => Object.hashAll([
     id,
     saleId,
+    cashierShiftId,
     returnNumber,
     subtotalCents,
     discountCents,
@@ -30317,6 +31631,7 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
       (other is SaleReturn &&
           other.id == this.id &&
           other.saleId == this.saleId &&
+          other.cashierShiftId == this.cashierShiftId &&
           other.returnNumber == this.returnNumber &&
           other.subtotalCents == this.subtotalCents &&
           other.discountCents == this.discountCents &&
@@ -30353,6 +31668,7 @@ class SaleReturn extends DataClass implements Insertable<SaleReturn> {
 class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
   final Value<int> id;
   final Value<int> saleId;
+  final Value<int?> cashierShiftId;
   final Value<String> returnNumber;
   final Value<Decimal> subtotalCents;
   final Value<Decimal> discountCents;
@@ -30387,6 +31703,7 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
   const SaleReturnsCompanion({
     this.id = const Value.absent(),
     this.saleId = const Value.absent(),
+    this.cashierShiftId = const Value.absent(),
     this.returnNumber = const Value.absent(),
     this.subtotalCents = const Value.absent(),
     this.discountCents = const Value.absent(),
@@ -30422,6 +31739,7 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
   SaleReturnsCompanion.insert({
     this.id = const Value.absent(),
     required int saleId,
+    this.cashierShiftId = const Value.absent(),
     required String returnNumber,
     this.subtotalCents = const Value.absent(),
     this.discountCents = const Value.absent(),
@@ -30460,6 +31778,7 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
   static Insertable<SaleReturn> custom({
     Expression<int>? id,
     Expression<int>? saleId,
+    Expression<int>? cashierShiftId,
     Expression<String>? returnNumber,
     Expression<int>? subtotalCents,
     Expression<int>? discountCents,
@@ -30495,6 +31814,7 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (saleId != null) 'sale_id': saleId,
+      if (cashierShiftId != null) 'cashier_shift_id': cashierShiftId,
       if (returnNumber != null) 'return_number': returnNumber,
       if (subtotalCents != null) 'subtotal_cents': subtotalCents,
       if (discountCents != null) 'discount_cents': discountCents,
@@ -30535,6 +31855,7 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
   SaleReturnsCompanion copyWith({
     Value<int>? id,
     Value<int>? saleId,
+    Value<int?>? cashierShiftId,
     Value<String>? returnNumber,
     Value<Decimal>? subtotalCents,
     Value<Decimal>? discountCents,
@@ -30570,6 +31891,7 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
     return SaleReturnsCompanion(
       id: id ?? this.id,
       saleId: saleId ?? this.saleId,
+      cashierShiftId: cashierShiftId ?? this.cashierShiftId,
       returnNumber: returnNumber ?? this.returnNumber,
       subtotalCents: subtotalCents ?? this.subtotalCents,
       discountCents: discountCents ?? this.discountCents,
@@ -30612,6 +31934,9 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
     }
     if (saleId.present) {
       map['sale_id'] = Variable<int>(saleId.value);
+    }
+    if (cashierShiftId.present) {
+      map['cashier_shift_id'] = Variable<int>(cashierShiftId.value);
     }
     if (returnNumber.present) {
       map['return_number'] = Variable<String>(returnNumber.value);
@@ -30724,6 +32049,7 @@ class SaleReturnsCompanion extends UpdateCompanion<SaleReturn> {
     return (StringBuffer('SaleReturnsCompanion(')
           ..write('id: $id, ')
           ..write('saleId: $saleId, ')
+          ..write('cashierShiftId: $cashierShiftId, ')
           ..write('returnNumber: $returnNumber, ')
           ..write('subtotalCents: $subtotalCents, ')
           ..write('discountCents: $discountCents, ')
@@ -30818,6 +32144,30 @@ class $SaleReturnItemsTable extends SaleReturnItems
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _quantityScaleMeta = const VerificationMeta(
+    'quantityScale',
+  );
+  @override
+  late final GeneratedColumn<int> quantityScale = GeneratedColumn<int>(
+    'quantity_scale',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _measurementTypeMeta = const VerificationMeta(
+    'measurementType',
+  );
+  @override
+  late final GeneratedColumn<String> measurementType = GeneratedColumn<String>(
+    'measurement_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('piece'),
+  );
   @override
   late final GeneratedColumnWithTypeConverter<Decimal, int> subtotalCents =
       GeneratedColumn<int>(
@@ -30889,6 +32239,18 @@ class $SaleReturnItemsTable extends SaleReturnItems
       ).withConverter<Decimal?>(
         $SaleReturnItemsTable.$converterunitCostAtPostCentsn,
       );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int>
+  inventoryValueAtPostCents =
+      GeneratedColumn<int>(
+        'inventory_value_at_post_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>(
+        $SaleReturnItemsTable.$converterinventoryValueAtPostCentsn,
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -30907,6 +32269,8 @@ class $SaleReturnItemsTable extends SaleReturnItems
     returnId,
     saleItemId,
     quantity,
+    quantityScale,
+    measurementType,
     subtotalCents,
     discountCents,
     taxCents,
@@ -30914,6 +32278,7 @@ class $SaleReturnItemsTable extends SaleReturnItems
     reason,
     taxRateBpsAtPost,
     unitCostAtPostCents,
+    inventoryValueAtPostCents,
     createdAt,
   ];
   @override
@@ -30957,6 +32322,24 @@ class $SaleReturnItemsTable extends SaleReturnItems
       );
     } else if (isInserting) {
       context.missing(_quantityMeta);
+    }
+    if (data.containsKey('quantity_scale')) {
+      context.handle(
+        _quantityScaleMeta,
+        quantityScale.isAcceptableOrUnknown(
+          data['quantity_scale']!,
+          _quantityScaleMeta,
+        ),
+      );
+    }
+    if (data.containsKey('measurement_type')) {
+      context.handle(
+        _measurementTypeMeta,
+        measurementType.isAcceptableOrUnknown(
+          data['measurement_type']!,
+          _measurementTypeMeta,
+        ),
+      );
     }
     if (data.containsKey('reason')) {
       context.handle(
@@ -31004,6 +32387,14 @@ class $SaleReturnItemsTable extends SaleReturnItems
         DriftSqlType.int,
         data['${effectivePrefix}quantity'],
       )!,
+      quantityScale: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity_scale'],
+      )!,
+      measurementType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}measurement_type'],
+      )!,
       subtotalCents: $SaleReturnItemsTable.$convertersubtotalCents.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -31043,6 +32434,14 @@ class $SaleReturnItemsTable extends SaleReturnItems
               data['${effectivePrefix}unit_cost_at_post_cents'],
             ),
           ),
+      inventoryValueAtPostCents: $SaleReturnItemsTable
+          .$converterinventoryValueAtPostCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}inventory_value_at_post_cents'],
+            ),
+          ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -31067,6 +32466,10 @@ class $SaleReturnItemsTable extends SaleReturnItems
       const MoneyConverter();
   static TypeConverter<Decimal?, int?> $converterunitCostAtPostCentsn =
       NullAwareTypeConverter.wrap($converterunitCostAtPostCents);
+  static TypeConverter<Decimal, int> $converterinventoryValueAtPostCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converterinventoryValueAtPostCentsn =
+      NullAwareTypeConverter.wrap($converterinventoryValueAtPostCents);
 }
 
 class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
@@ -31074,6 +32477,8 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
   final int returnId;
   final int saleItemId;
   final int quantity;
+  final int quantityScale;
+  final String measurementType;
   final Decimal subtotalCents;
   final Decimal discountCents;
   final Decimal taxCents;
@@ -31091,12 +32496,17 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
   /// COGS reversal value; defends against WAC/FIFO drift between sale
   /// and return.
   final Decimal? unitCostAtPostCents;
+
+  /// Exact rounded-pool value moved by this return line at posting time.
+  final Decimal? inventoryValueAtPostCents;
   final DateTime createdAt;
   const SaleReturnItem({
     required this.id,
     required this.returnId,
     required this.saleItemId,
     required this.quantity,
+    required this.quantityScale,
+    required this.measurementType,
     required this.subtotalCents,
     required this.discountCents,
     required this.taxCents,
@@ -31104,6 +32514,7 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
     this.reason,
     this.taxRateBpsAtPost,
     this.unitCostAtPostCents,
+    this.inventoryValueAtPostCents,
     required this.createdAt,
   });
   @override
@@ -31113,6 +32524,8 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
     map['return_id'] = Variable<int>(returnId);
     map['sale_item_id'] = Variable<int>(saleItemId);
     map['quantity'] = Variable<int>(quantity);
+    map['quantity_scale'] = Variable<int>(quantityScale);
+    map['measurement_type'] = Variable<String>(measurementType);
     {
       map['subtotal_cents'] = Variable<int>(
         $SaleReturnItemsTable.$convertersubtotalCents.toSql(subtotalCents),
@@ -31146,6 +32559,13 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
         ),
       );
     }
+    if (!nullToAbsent || inventoryValueAtPostCents != null) {
+      map['inventory_value_at_post_cents'] = Variable<int>(
+        $SaleReturnItemsTable.$converterinventoryValueAtPostCentsn.toSql(
+          inventoryValueAtPostCents,
+        ),
+      );
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -31156,6 +32576,8 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
       returnId: Value(returnId),
       saleItemId: Value(saleItemId),
       quantity: Value(quantity),
+      quantityScale: Value(quantityScale),
+      measurementType: Value(measurementType),
       subtotalCents: Value(subtotalCents),
       discountCents: Value(discountCents),
       taxCents: Value(taxCents),
@@ -31169,6 +32591,10 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
       unitCostAtPostCents: unitCostAtPostCents == null && nullToAbsent
           ? const Value.absent()
           : Value(unitCostAtPostCents),
+      inventoryValueAtPostCents:
+          inventoryValueAtPostCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(inventoryValueAtPostCents),
       createdAt: Value(createdAt),
     );
   }
@@ -31183,6 +32609,8 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
       returnId: serializer.fromJson<int>(json['returnId']),
       saleItemId: serializer.fromJson<int>(json['saleItemId']),
       quantity: serializer.fromJson<int>(json['quantity']),
+      quantityScale: serializer.fromJson<int>(json['quantityScale']),
+      measurementType: serializer.fromJson<String>(json['measurementType']),
       subtotalCents: serializer.fromJson<Decimal>(json['subtotalCents']),
       discountCents: serializer.fromJson<Decimal>(json['discountCents']),
       taxCents: serializer.fromJson<Decimal>(json['taxCents']),
@@ -31191,6 +32619,9 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
       taxRateBpsAtPost: serializer.fromJson<int?>(json['taxRateBpsAtPost']),
       unitCostAtPostCents: serializer.fromJson<Decimal?>(
         json['unitCostAtPostCents'],
+      ),
+      inventoryValueAtPostCents: serializer.fromJson<Decimal?>(
+        json['inventoryValueAtPostCents'],
       ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
@@ -31203,6 +32634,8 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
       'returnId': serializer.toJson<int>(returnId),
       'saleItemId': serializer.toJson<int>(saleItemId),
       'quantity': serializer.toJson<int>(quantity),
+      'quantityScale': serializer.toJson<int>(quantityScale),
+      'measurementType': serializer.toJson<String>(measurementType),
       'subtotalCents': serializer.toJson<Decimal>(subtotalCents),
       'discountCents': serializer.toJson<Decimal>(discountCents),
       'taxCents': serializer.toJson<Decimal>(taxCents),
@@ -31210,6 +32643,9 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
       'reason': serializer.toJson<String?>(reason),
       'taxRateBpsAtPost': serializer.toJson<int?>(taxRateBpsAtPost),
       'unitCostAtPostCents': serializer.toJson<Decimal?>(unitCostAtPostCents),
+      'inventoryValueAtPostCents': serializer.toJson<Decimal?>(
+        inventoryValueAtPostCents,
+      ),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -31219,6 +32655,8 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
     int? returnId,
     int? saleItemId,
     int? quantity,
+    int? quantityScale,
+    String? measurementType,
     Decimal? subtotalCents,
     Decimal? discountCents,
     Decimal? taxCents,
@@ -31226,12 +32664,15 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
     Value<String?> reason = const Value.absent(),
     Value<int?> taxRateBpsAtPost = const Value.absent(),
     Value<Decimal?> unitCostAtPostCents = const Value.absent(),
+    Value<Decimal?> inventoryValueAtPostCents = const Value.absent(),
     DateTime? createdAt,
   }) => SaleReturnItem(
     id: id ?? this.id,
     returnId: returnId ?? this.returnId,
     saleItemId: saleItemId ?? this.saleItemId,
     quantity: quantity ?? this.quantity,
+    quantityScale: quantityScale ?? this.quantityScale,
+    measurementType: measurementType ?? this.measurementType,
     subtotalCents: subtotalCents ?? this.subtotalCents,
     discountCents: discountCents ?? this.discountCents,
     taxCents: taxCents ?? this.taxCents,
@@ -31243,6 +32684,9 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
     unitCostAtPostCents: unitCostAtPostCents.present
         ? unitCostAtPostCents.value
         : this.unitCostAtPostCents,
+    inventoryValueAtPostCents: inventoryValueAtPostCents.present
+        ? inventoryValueAtPostCents.value
+        : this.inventoryValueAtPostCents,
     createdAt: createdAt ?? this.createdAt,
   );
   SaleReturnItem copyWithCompanion(SaleReturnItemsCompanion data) {
@@ -31253,6 +32697,12 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
           ? data.saleItemId.value
           : this.saleItemId,
       quantity: data.quantity.present ? data.quantity.value : this.quantity,
+      quantityScale: data.quantityScale.present
+          ? data.quantityScale.value
+          : this.quantityScale,
+      measurementType: data.measurementType.present
+          ? data.measurementType.value
+          : this.measurementType,
       subtotalCents: data.subtotalCents.present
           ? data.subtotalCents.value
           : this.subtotalCents,
@@ -31270,6 +32720,9 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
       unitCostAtPostCents: data.unitCostAtPostCents.present
           ? data.unitCostAtPostCents.value
           : this.unitCostAtPostCents,
+      inventoryValueAtPostCents: data.inventoryValueAtPostCents.present
+          ? data.inventoryValueAtPostCents.value
+          : this.inventoryValueAtPostCents,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -31281,6 +32734,8 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
           ..write('returnId: $returnId, ')
           ..write('saleItemId: $saleItemId, ')
           ..write('quantity: $quantity, ')
+          ..write('quantityScale: $quantityScale, ')
+          ..write('measurementType: $measurementType, ')
           ..write('subtotalCents: $subtotalCents, ')
           ..write('discountCents: $discountCents, ')
           ..write('taxCents: $taxCents, ')
@@ -31288,6 +32743,7 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
           ..write('reason: $reason, ')
           ..write('taxRateBpsAtPost: $taxRateBpsAtPost, ')
           ..write('unitCostAtPostCents: $unitCostAtPostCents, ')
+          ..write('inventoryValueAtPostCents: $inventoryValueAtPostCents, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -31299,6 +32755,8 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
     returnId,
     saleItemId,
     quantity,
+    quantityScale,
+    measurementType,
     subtotalCents,
     discountCents,
     taxCents,
@@ -31306,6 +32764,7 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
     reason,
     taxRateBpsAtPost,
     unitCostAtPostCents,
+    inventoryValueAtPostCents,
     createdAt,
   );
   @override
@@ -31316,6 +32775,8 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
           other.returnId == this.returnId &&
           other.saleItemId == this.saleItemId &&
           other.quantity == this.quantity &&
+          other.quantityScale == this.quantityScale &&
+          other.measurementType == this.measurementType &&
           other.subtotalCents == this.subtotalCents &&
           other.discountCents == this.discountCents &&
           other.taxCents == this.taxCents &&
@@ -31323,6 +32784,7 @@ class SaleReturnItem extends DataClass implements Insertable<SaleReturnItem> {
           other.reason == this.reason &&
           other.taxRateBpsAtPost == this.taxRateBpsAtPost &&
           other.unitCostAtPostCents == this.unitCostAtPostCents &&
+          other.inventoryValueAtPostCents == this.inventoryValueAtPostCents &&
           other.createdAt == this.createdAt);
 }
 
@@ -31331,6 +32793,8 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
   final Value<int> returnId;
   final Value<int> saleItemId;
   final Value<int> quantity;
+  final Value<int> quantityScale;
+  final Value<String> measurementType;
   final Value<Decimal> subtotalCents;
   final Value<Decimal> discountCents;
   final Value<Decimal> taxCents;
@@ -31338,12 +32802,15 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
   final Value<String?> reason;
   final Value<int?> taxRateBpsAtPost;
   final Value<Decimal?> unitCostAtPostCents;
+  final Value<Decimal?> inventoryValueAtPostCents;
   final Value<DateTime> createdAt;
   const SaleReturnItemsCompanion({
     this.id = const Value.absent(),
     this.returnId = const Value.absent(),
     this.saleItemId = const Value.absent(),
     this.quantity = const Value.absent(),
+    this.quantityScale = const Value.absent(),
+    this.measurementType = const Value.absent(),
     this.subtotalCents = const Value.absent(),
     this.discountCents = const Value.absent(),
     this.taxCents = const Value.absent(),
@@ -31351,6 +32818,7 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
     this.reason = const Value.absent(),
     this.taxRateBpsAtPost = const Value.absent(),
     this.unitCostAtPostCents = const Value.absent(),
+    this.inventoryValueAtPostCents = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
   SaleReturnItemsCompanion.insert({
@@ -31358,6 +32826,8 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
     required int returnId,
     required int saleItemId,
     required int quantity,
+    this.quantityScale = const Value.absent(),
+    this.measurementType = const Value.absent(),
     this.subtotalCents = const Value.absent(),
     this.discountCents = const Value.absent(),
     this.taxCents = const Value.absent(),
@@ -31365,6 +32835,7 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
     this.reason = const Value.absent(),
     this.taxRateBpsAtPost = const Value.absent(),
     this.unitCostAtPostCents = const Value.absent(),
+    this.inventoryValueAtPostCents = const Value.absent(),
     this.createdAt = const Value.absent(),
   }) : returnId = Value(returnId),
        saleItemId = Value(saleItemId),
@@ -31375,6 +32846,8 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
     Expression<int>? returnId,
     Expression<int>? saleItemId,
     Expression<int>? quantity,
+    Expression<int>? quantityScale,
+    Expression<String>? measurementType,
     Expression<int>? subtotalCents,
     Expression<int>? discountCents,
     Expression<int>? taxCents,
@@ -31382,6 +32855,7 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
     Expression<String>? reason,
     Expression<int>? taxRateBpsAtPost,
     Expression<int>? unitCostAtPostCents,
+    Expression<int>? inventoryValueAtPostCents,
     Expression<DateTime>? createdAt,
   }) {
     return RawValuesInsertable({
@@ -31389,6 +32863,8 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
       if (returnId != null) 'return_id': returnId,
       if (saleItemId != null) 'sale_item_id': saleItemId,
       if (quantity != null) 'quantity': quantity,
+      if (quantityScale != null) 'quantity_scale': quantityScale,
+      if (measurementType != null) 'measurement_type': measurementType,
       if (subtotalCents != null) 'subtotal_cents': subtotalCents,
       if (discountCents != null) 'discount_cents': discountCents,
       if (taxCents != null) 'tax_cents': taxCents,
@@ -31397,6 +32873,8 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
       if (taxRateBpsAtPost != null) 'tax_rate_bps_at_post': taxRateBpsAtPost,
       if (unitCostAtPostCents != null)
         'unit_cost_at_post_cents': unitCostAtPostCents,
+      if (inventoryValueAtPostCents != null)
+        'inventory_value_at_post_cents': inventoryValueAtPostCents,
       if (createdAt != null) 'created_at': createdAt,
     });
   }
@@ -31406,6 +32884,8 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
     Value<int>? returnId,
     Value<int>? saleItemId,
     Value<int>? quantity,
+    Value<int>? quantityScale,
+    Value<String>? measurementType,
     Value<Decimal>? subtotalCents,
     Value<Decimal>? discountCents,
     Value<Decimal>? taxCents,
@@ -31413,6 +32893,7 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
     Value<String?>? reason,
     Value<int?>? taxRateBpsAtPost,
     Value<Decimal?>? unitCostAtPostCents,
+    Value<Decimal?>? inventoryValueAtPostCents,
     Value<DateTime>? createdAt,
   }) {
     return SaleReturnItemsCompanion(
@@ -31420,6 +32901,8 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
       returnId: returnId ?? this.returnId,
       saleItemId: saleItemId ?? this.saleItemId,
       quantity: quantity ?? this.quantity,
+      quantityScale: quantityScale ?? this.quantityScale,
+      measurementType: measurementType ?? this.measurementType,
       subtotalCents: subtotalCents ?? this.subtotalCents,
       discountCents: discountCents ?? this.discountCents,
       taxCents: taxCents ?? this.taxCents,
@@ -31427,6 +32910,8 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
       reason: reason ?? this.reason,
       taxRateBpsAtPost: taxRateBpsAtPost ?? this.taxRateBpsAtPost,
       unitCostAtPostCents: unitCostAtPostCents ?? this.unitCostAtPostCents,
+      inventoryValueAtPostCents:
+          inventoryValueAtPostCents ?? this.inventoryValueAtPostCents,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -31445,6 +32930,12 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
     }
     if (quantity.present) {
       map['quantity'] = Variable<int>(quantity.value);
+    }
+    if (quantityScale.present) {
+      map['quantity_scale'] = Variable<int>(quantityScale.value);
+    }
+    if (measurementType.present) {
+      map['measurement_type'] = Variable<String>(measurementType.value);
     }
     if (subtotalCents.present) {
       map['subtotal_cents'] = Variable<int>(
@@ -31483,6 +32974,13 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
         ),
       );
     }
+    if (inventoryValueAtPostCents.present) {
+      map['inventory_value_at_post_cents'] = Variable<int>(
+        $SaleReturnItemsTable.$converterinventoryValueAtPostCentsn.toSql(
+          inventoryValueAtPostCents.value,
+        ),
+      );
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -31496,6 +32994,8 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
           ..write('returnId: $returnId, ')
           ..write('saleItemId: $saleItemId, ')
           ..write('quantity: $quantity, ')
+          ..write('quantityScale: $quantityScale, ')
+          ..write('measurementType: $measurementType, ')
           ..write('subtotalCents: $subtotalCents, ')
           ..write('discountCents: $discountCents, ')
           ..write('taxCents: $taxCents, ')
@@ -31503,6 +33003,7 @@ class SaleReturnItemsCompanion extends UpdateCompanion<SaleReturnItem> {
           ..write('reason: $reason, ')
           ..write('taxRateBpsAtPost: $taxRateBpsAtPost, ')
           ..write('unitCostAtPostCents: $unitCostAtPostCents, ')
+          ..write('inventoryValueAtPostCents: $inventoryValueAtPostCents, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -31538,6 +33039,20 @@ class $SalePaymentsTable extends SalePayments
     requiredDuringInsert: true,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
       'REFERENCES sales (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _cashierShiftIdMeta = const VerificationMeta(
+    'cashierShiftId',
+  );
+  @override
+  late final GeneratedColumn<int> cashierShiftId = GeneratedColumn<int>(
+    'cashier_shift_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES cashier_shifts (id) ON DELETE SET NULL',
     ),
   );
   @override
@@ -31622,6 +33137,7 @@ class $SalePaymentsTable extends SalePayments
   List<GeneratedColumn> get $columns => [
     id,
     saleId,
+    cashierShiftId,
     amountCents,
     currencyId,
     paymentMethod,
@@ -31652,6 +33168,15 @@ class $SalePaymentsTable extends SalePayments
       );
     } else if (isInserting) {
       context.missing(_saleIdMeta);
+    }
+    if (data.containsKey('cashier_shift_id')) {
+      context.handle(
+        _cashierShiftIdMeta,
+        cashierShiftId.isAcceptableOrUnknown(
+          data['cashier_shift_id']!,
+          _cashierShiftIdMeta,
+        ),
+      );
     }
     if (data.containsKey('currency_id')) {
       context.handle(
@@ -31716,6 +33241,10 @@ class $SalePaymentsTable extends SalePayments
         DriftSqlType.int,
         data['${effectivePrefix}sale_id'],
       )!,
+      cashierShiftId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cashier_shift_id'],
+      ),
       amountCents: $SalePaymentsTable.$converteramountCents.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -31761,6 +33290,7 @@ class $SalePaymentsTable extends SalePayments
 class SalePayment extends DataClass implements Insertable<SalePayment> {
   final int id;
   final int saleId;
+  final int? cashierShiftId;
   final Decimal amountCents;
   final int currencyId;
 
@@ -31773,6 +33303,7 @@ class SalePayment extends DataClass implements Insertable<SalePayment> {
   const SalePayment({
     required this.id,
     required this.saleId,
+    this.cashierShiftId,
     required this.amountCents,
     required this.currencyId,
     required this.paymentMethod,
@@ -31786,6 +33317,9 @@ class SalePayment extends DataClass implements Insertable<SalePayment> {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['sale_id'] = Variable<int>(saleId);
+    if (!nullToAbsent || cashierShiftId != null) {
+      map['cashier_shift_id'] = Variable<int>(cashierShiftId);
+    }
     {
       map['amount_cents'] = Variable<int>(
         $SalePaymentsTable.$converteramountCents.toSql(amountCents),
@@ -31808,6 +33342,9 @@ class SalePayment extends DataClass implements Insertable<SalePayment> {
     return SalePaymentsCompanion(
       id: Value(id),
       saleId: Value(saleId),
+      cashierShiftId: cashierShiftId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cashierShiftId),
       amountCents: Value(amountCents),
       currencyId: Value(currencyId),
       paymentMethod: Value(paymentMethod),
@@ -31830,6 +33367,7 @@ class SalePayment extends DataClass implements Insertable<SalePayment> {
     return SalePayment(
       id: serializer.fromJson<int>(json['id']),
       saleId: serializer.fromJson<int>(json['saleId']),
+      cashierShiftId: serializer.fromJson<int?>(json['cashierShiftId']),
       amountCents: serializer.fromJson<Decimal>(json['amountCents']),
       currencyId: serializer.fromJson<int>(json['currencyId']),
       paymentMethod: serializer.fromJson<String>(json['paymentMethod']),
@@ -31845,6 +33383,7 @@ class SalePayment extends DataClass implements Insertable<SalePayment> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'saleId': serializer.toJson<int>(saleId),
+      'cashierShiftId': serializer.toJson<int?>(cashierShiftId),
       'amountCents': serializer.toJson<Decimal>(amountCents),
       'currencyId': serializer.toJson<int>(currencyId),
       'paymentMethod': serializer.toJson<String>(paymentMethod),
@@ -31858,6 +33397,7 @@ class SalePayment extends DataClass implements Insertable<SalePayment> {
   SalePayment copyWith({
     int? id,
     int? saleId,
+    Value<int?> cashierShiftId = const Value.absent(),
     Decimal? amountCents,
     int? currencyId,
     String? paymentMethod,
@@ -31868,6 +33408,9 @@ class SalePayment extends DataClass implements Insertable<SalePayment> {
   }) => SalePayment(
     id: id ?? this.id,
     saleId: saleId ?? this.saleId,
+    cashierShiftId: cashierShiftId.present
+        ? cashierShiftId.value
+        : this.cashierShiftId,
     amountCents: amountCents ?? this.amountCents,
     currencyId: currencyId ?? this.currencyId,
     paymentMethod: paymentMethod ?? this.paymentMethod,
@@ -31880,6 +33423,9 @@ class SalePayment extends DataClass implements Insertable<SalePayment> {
     return SalePayment(
       id: data.id.present ? data.id.value : this.id,
       saleId: data.saleId.present ? data.saleId.value : this.saleId,
+      cashierShiftId: data.cashierShiftId.present
+          ? data.cashierShiftId.value
+          : this.cashierShiftId,
       amountCents: data.amountCents.present
           ? data.amountCents.value
           : this.amountCents,
@@ -31903,6 +33449,7 @@ class SalePayment extends DataClass implements Insertable<SalePayment> {
     return (StringBuffer('SalePayment(')
           ..write('id: $id, ')
           ..write('saleId: $saleId, ')
+          ..write('cashierShiftId: $cashierShiftId, ')
           ..write('amountCents: $amountCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('paymentMethod: $paymentMethod, ')
@@ -31918,6 +33465,7 @@ class SalePayment extends DataClass implements Insertable<SalePayment> {
   int get hashCode => Object.hash(
     id,
     saleId,
+    cashierShiftId,
     amountCents,
     currencyId,
     paymentMethod,
@@ -31932,6 +33480,7 @@ class SalePayment extends DataClass implements Insertable<SalePayment> {
       (other is SalePayment &&
           other.id == this.id &&
           other.saleId == this.saleId &&
+          other.cashierShiftId == this.cashierShiftId &&
           other.amountCents == this.amountCents &&
           other.currencyId == this.currencyId &&
           other.paymentMethod == this.paymentMethod &&
@@ -31944,6 +33493,7 @@ class SalePayment extends DataClass implements Insertable<SalePayment> {
 class SalePaymentsCompanion extends UpdateCompanion<SalePayment> {
   final Value<int> id;
   final Value<int> saleId;
+  final Value<int?> cashierShiftId;
   final Value<Decimal> amountCents;
   final Value<int> currencyId;
   final Value<String> paymentMethod;
@@ -31954,6 +33504,7 @@ class SalePaymentsCompanion extends UpdateCompanion<SalePayment> {
   const SalePaymentsCompanion({
     this.id = const Value.absent(),
     this.saleId = const Value.absent(),
+    this.cashierShiftId = const Value.absent(),
     this.amountCents = const Value.absent(),
     this.currencyId = const Value.absent(),
     this.paymentMethod = const Value.absent(),
@@ -31965,6 +33516,7 @@ class SalePaymentsCompanion extends UpdateCompanion<SalePayment> {
   SalePaymentsCompanion.insert({
     this.id = const Value.absent(),
     required int saleId,
+    this.cashierShiftId = const Value.absent(),
     required Decimal amountCents,
     required int currencyId,
     required String paymentMethod,
@@ -31979,6 +33531,7 @@ class SalePaymentsCompanion extends UpdateCompanion<SalePayment> {
   static Insertable<SalePayment> custom({
     Expression<int>? id,
     Expression<int>? saleId,
+    Expression<int>? cashierShiftId,
     Expression<int>? amountCents,
     Expression<int>? currencyId,
     Expression<String>? paymentMethod,
@@ -31990,6 +33543,7 @@ class SalePaymentsCompanion extends UpdateCompanion<SalePayment> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (saleId != null) 'sale_id': saleId,
+      if (cashierShiftId != null) 'cashier_shift_id': cashierShiftId,
       if (amountCents != null) 'amount_cents': amountCents,
       if (currencyId != null) 'currency_id': currencyId,
       if (paymentMethod != null) 'payment_method': paymentMethod,
@@ -32003,6 +33557,7 @@ class SalePaymentsCompanion extends UpdateCompanion<SalePayment> {
   SalePaymentsCompanion copyWith({
     Value<int>? id,
     Value<int>? saleId,
+    Value<int?>? cashierShiftId,
     Value<Decimal>? amountCents,
     Value<int>? currencyId,
     Value<String>? paymentMethod,
@@ -32014,6 +33569,7 @@ class SalePaymentsCompanion extends UpdateCompanion<SalePayment> {
     return SalePaymentsCompanion(
       id: id ?? this.id,
       saleId: saleId ?? this.saleId,
+      cashierShiftId: cashierShiftId ?? this.cashierShiftId,
       amountCents: amountCents ?? this.amountCents,
       currencyId: currencyId ?? this.currencyId,
       paymentMethod: paymentMethod ?? this.paymentMethod,
@@ -32032,6 +33588,9 @@ class SalePaymentsCompanion extends UpdateCompanion<SalePayment> {
     }
     if (saleId.present) {
       map['sale_id'] = Variable<int>(saleId.value);
+    }
+    if (cashierShiftId.present) {
+      map['cashier_shift_id'] = Variable<int>(cashierShiftId.value);
     }
     if (amountCents.present) {
       map['amount_cents'] = Variable<int>(
@@ -32064,6 +33623,7 @@ class SalePaymentsCompanion extends UpdateCompanion<SalePayment> {
     return (StringBuffer('SalePaymentsCompanion(')
           ..write('id: $id, ')
           ..write('saleId: $saleId, ')
+          ..write('cashierShiftId: $cashierShiftId, ')
           ..write('amountCents: $amountCents, ')
           ..write('currencyId: $currencyId, ')
           ..write('paymentMethod: $paymentMethod, ')
@@ -33308,6 +34868,30 @@ class $PurchaseItemsTable extends PurchaseItems
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _quantityScaleMeta = const VerificationMeta(
+    'quantityScale',
+  );
+  @override
+  late final GeneratedColumn<int> quantityScale = GeneratedColumn<int>(
+    'quantity_scale',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _measurementTypeMeta = const VerificationMeta(
+    'measurementType',
+  );
+  @override
+  late final GeneratedColumn<String> measurementType = GeneratedColumn<String>(
+    'measurement_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('piece'),
+  );
   @override
   late final GeneratedColumnWithTypeConverter<Decimal, int> unitCostCents =
       GeneratedColumn<int>(
@@ -33317,6 +34901,18 @@ class $PurchaseItemsTable extends PurchaseItems
         type: DriftSqlType.int,
         requiredDuringInsert: true,
       ).withConverter<Decimal>($PurchaseItemsTable.$converterunitCostCents);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int>
+  inventoryValueAtPostCents =
+      GeneratedColumn<int>(
+        'inventory_value_at_post_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>(
+        $PurchaseItemsTable.$converterinventoryValueAtPostCentsn,
+      );
   @override
   late final GeneratedColumnWithTypeConverter<Decimal, int> discountCents =
       GeneratedColumn<int>(
@@ -33463,7 +35059,10 @@ class $PurchaseItemsTable extends PurchaseItems
     productId,
     variantId,
     quantity,
+    quantityScale,
+    measurementType,
     unitCostCents,
+    inventoryValueAtPostCents,
     discountCents,
     subtotalCents,
     taxCents,
@@ -33522,6 +35121,24 @@ class $PurchaseItemsTable extends PurchaseItems
       );
     } else if (isInserting) {
       context.missing(_quantityMeta);
+    }
+    if (data.containsKey('quantity_scale')) {
+      context.handle(
+        _quantityScaleMeta,
+        quantityScale.isAcceptableOrUnknown(
+          data['quantity_scale']!,
+          _quantityScaleMeta,
+        ),
+      );
+    }
+    if (data.containsKey('measurement_type')) {
+      context.handle(
+        _measurementTypeMeta,
+        measurementType.isAcceptableOrUnknown(
+          data['measurement_type']!,
+          _measurementTypeMeta,
+        ),
+      );
     }
     if (data.containsKey('expiry_date')) {
       context.handle(
@@ -33582,12 +35199,28 @@ class $PurchaseItemsTable extends PurchaseItems
         DriftSqlType.int,
         data['${effectivePrefix}quantity'],
       )!,
+      quantityScale: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity_scale'],
+      )!,
+      measurementType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}measurement_type'],
+      )!,
       unitCostCents: $PurchaseItemsTable.$converterunitCostCents.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
           data['${effectivePrefix}unit_cost_cents'],
         )!,
       ),
+      inventoryValueAtPostCents: $PurchaseItemsTable
+          .$converterinventoryValueAtPostCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}inventory_value_at_post_cents'],
+            ),
+          ),
       discountCents: $PurchaseItemsTable.$converterdiscountCents.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -33675,6 +35308,10 @@ class $PurchaseItemsTable extends PurchaseItems
 
   static TypeConverter<Decimal, int> $converterunitCostCents =
       const MoneyConverter();
+  static TypeConverter<Decimal, int> $converterinventoryValueAtPostCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converterinventoryValueAtPostCentsn =
+      NullAwareTypeConverter.wrap($converterinventoryValueAtPostCents);
   static TypeConverter<Decimal, int> $converterdiscountCents =
       const MoneyConverter();
   static TypeConverter<Decimal, int> $convertersubtotalCents =
@@ -33711,7 +35348,12 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
   final int productId;
   final int? variantId;
   final int quantity;
+  final int quantityScale;
+  final String measurementType;
   final Decimal unitCostCents;
+
+  /// Exact rounded-pool value added to inventory when this purchase posted.
+  final Decimal? inventoryValueAtPostCents;
   final Decimal discountCents;
   final Decimal subtotalCents;
   final Decimal taxCents;
@@ -33739,7 +35381,10 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
     required this.productId,
     this.variantId,
     required this.quantity,
+    required this.quantityScale,
+    required this.measurementType,
     required this.unitCostCents,
+    this.inventoryValueAtPostCents,
     required this.discountCents,
     required this.subtotalCents,
     required this.taxCents,
@@ -33764,9 +35409,18 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
       map['variant_id'] = Variable<int>(variantId);
     }
     map['quantity'] = Variable<int>(quantity);
+    map['quantity_scale'] = Variable<int>(quantityScale);
+    map['measurement_type'] = Variable<String>(measurementType);
     {
       map['unit_cost_cents'] = Variable<int>(
         $PurchaseItemsTable.$converterunitCostCents.toSql(unitCostCents),
+      );
+    }
+    if (!nullToAbsent || inventoryValueAtPostCents != null) {
+      map['inventory_value_at_post_cents'] = Variable<int>(
+        $PurchaseItemsTable.$converterinventoryValueAtPostCentsn.toSql(
+          inventoryValueAtPostCents,
+        ),
       );
     }
     {
@@ -33842,7 +35496,13 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
           ? const Value.absent()
           : Value(variantId),
       quantity: Value(quantity),
+      quantityScale: Value(quantityScale),
+      measurementType: Value(measurementType),
       unitCostCents: Value(unitCostCents),
+      inventoryValueAtPostCents:
+          inventoryValueAtPostCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(inventoryValueAtPostCents),
       discountCents: Value(discountCents),
       subtotalCents: Value(subtotalCents),
       taxCents: Value(taxCents),
@@ -33883,7 +35543,12 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
       productId: serializer.fromJson<int>(json['productId']),
       variantId: serializer.fromJson<int?>(json['variantId']),
       quantity: serializer.fromJson<int>(json['quantity']),
+      quantityScale: serializer.fromJson<int>(json['quantityScale']),
+      measurementType: serializer.fromJson<String>(json['measurementType']),
       unitCostCents: serializer.fromJson<Decimal>(json['unitCostCents']),
+      inventoryValueAtPostCents: serializer.fromJson<Decimal?>(
+        json['inventoryValueAtPostCents'],
+      ),
       discountCents: serializer.fromJson<Decimal>(json['discountCents']),
       subtotalCents: serializer.fromJson<Decimal>(json['subtotalCents']),
       taxCents: serializer.fromJson<Decimal>(json['taxCents']),
@@ -33920,7 +35585,12 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
       'productId': serializer.toJson<int>(productId),
       'variantId': serializer.toJson<int?>(variantId),
       'quantity': serializer.toJson<int>(quantity),
+      'quantityScale': serializer.toJson<int>(quantityScale),
+      'measurementType': serializer.toJson<String>(measurementType),
       'unitCostCents': serializer.toJson<Decimal>(unitCostCents),
+      'inventoryValueAtPostCents': serializer.toJson<Decimal?>(
+        inventoryValueAtPostCents,
+      ),
       'discountCents': serializer.toJson<Decimal>(discountCents),
       'subtotalCents': serializer.toJson<Decimal>(subtotalCents),
       'taxCents': serializer.toJson<Decimal>(taxCents),
@@ -33947,7 +35617,10 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
     int? productId,
     Value<int?> variantId = const Value.absent(),
     int? quantity,
+    int? quantityScale,
+    String? measurementType,
     Decimal? unitCostCents,
+    Value<Decimal?> inventoryValueAtPostCents = const Value.absent(),
     Decimal? discountCents,
     Decimal? subtotalCents,
     Decimal? taxCents,
@@ -33967,7 +35640,12 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
     productId: productId ?? this.productId,
     variantId: variantId.present ? variantId.value : this.variantId,
     quantity: quantity ?? this.quantity,
+    quantityScale: quantityScale ?? this.quantityScale,
+    measurementType: measurementType ?? this.measurementType,
     unitCostCents: unitCostCents ?? this.unitCostCents,
+    inventoryValueAtPostCents: inventoryValueAtPostCents.present
+        ? inventoryValueAtPostCents.value
+        : this.inventoryValueAtPostCents,
     discountCents: discountCents ?? this.discountCents,
     subtotalCents: subtotalCents ?? this.subtotalCents,
     taxCents: taxCents ?? this.taxCents,
@@ -34001,9 +35679,18 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
       productId: data.productId.present ? data.productId.value : this.productId,
       variantId: data.variantId.present ? data.variantId.value : this.variantId,
       quantity: data.quantity.present ? data.quantity.value : this.quantity,
+      quantityScale: data.quantityScale.present
+          ? data.quantityScale.value
+          : this.quantityScale,
+      measurementType: data.measurementType.present
+          ? data.measurementType.value
+          : this.measurementType,
       unitCostCents: data.unitCostCents.present
           ? data.unitCostCents.value
           : this.unitCostCents,
+      inventoryValueAtPostCents: data.inventoryValueAtPostCents.present
+          ? data.inventoryValueAtPostCents.value
+          : this.inventoryValueAtPostCents,
       discountCents: data.discountCents.present
           ? data.discountCents.value
           : this.discountCents,
@@ -34050,7 +35737,10 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
           ..write('productId: $productId, ')
           ..write('variantId: $variantId, ')
           ..write('quantity: $quantity, ')
+          ..write('quantityScale: $quantityScale, ')
+          ..write('measurementType: $measurementType, ')
           ..write('unitCostCents: $unitCostCents, ')
+          ..write('inventoryValueAtPostCents: $inventoryValueAtPostCents, ')
           ..write('discountCents: $discountCents, ')
           ..write('subtotalCents: $subtotalCents, ')
           ..write('taxCents: $taxCents, ')
@@ -34069,13 +35759,16 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     purchaseId,
     productId,
     variantId,
     quantity,
+    quantityScale,
+    measurementType,
     unitCostCents,
+    inventoryValueAtPostCents,
     discountCents,
     subtotalCents,
     taxCents,
@@ -34089,7 +35782,7 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
     qtyReturnedLinked,
     qtyReturnedAdjustment,
     createdAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -34099,7 +35792,10 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
           other.productId == this.productId &&
           other.variantId == this.variantId &&
           other.quantity == this.quantity &&
+          other.quantityScale == this.quantityScale &&
+          other.measurementType == this.measurementType &&
           other.unitCostCents == this.unitCostCents &&
+          other.inventoryValueAtPostCents == this.inventoryValueAtPostCents &&
           other.discountCents == this.discountCents &&
           other.subtotalCents == this.subtotalCents &&
           other.taxCents == this.taxCents &&
@@ -34122,7 +35818,10 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
   final Value<int> productId;
   final Value<int?> variantId;
   final Value<int> quantity;
+  final Value<int> quantityScale;
+  final Value<String> measurementType;
   final Value<Decimal> unitCostCents;
+  final Value<Decimal?> inventoryValueAtPostCents;
   final Value<Decimal> discountCents;
   final Value<Decimal> subtotalCents;
   final Value<Decimal> taxCents;
@@ -34142,7 +35841,10 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
     this.productId = const Value.absent(),
     this.variantId = const Value.absent(),
     this.quantity = const Value.absent(),
+    this.quantityScale = const Value.absent(),
+    this.measurementType = const Value.absent(),
     this.unitCostCents = const Value.absent(),
+    this.inventoryValueAtPostCents = const Value.absent(),
     this.discountCents = const Value.absent(),
     this.subtotalCents = const Value.absent(),
     this.taxCents = const Value.absent(),
@@ -34163,7 +35865,10 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
     required int productId,
     this.variantId = const Value.absent(),
     required int quantity,
+    this.quantityScale = const Value.absent(),
+    this.measurementType = const Value.absent(),
     required Decimal unitCostCents,
+    this.inventoryValueAtPostCents = const Value.absent(),
     this.discountCents = const Value.absent(),
     required Decimal subtotalCents,
     this.taxCents = const Value.absent(),
@@ -34189,7 +35894,10 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
     Expression<int>? productId,
     Expression<int>? variantId,
     Expression<int>? quantity,
+    Expression<int>? quantityScale,
+    Expression<String>? measurementType,
     Expression<int>? unitCostCents,
+    Expression<int>? inventoryValueAtPostCents,
     Expression<int>? discountCents,
     Expression<int>? subtotalCents,
     Expression<int>? taxCents,
@@ -34210,7 +35918,11 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
       if (productId != null) 'product_id': productId,
       if (variantId != null) 'variant_id': variantId,
       if (quantity != null) 'quantity': quantity,
+      if (quantityScale != null) 'quantity_scale': quantityScale,
+      if (measurementType != null) 'measurement_type': measurementType,
       if (unitCostCents != null) 'unit_cost_cents': unitCostCents,
+      if (inventoryValueAtPostCents != null)
+        'inventory_value_at_post_cents': inventoryValueAtPostCents,
       if (discountCents != null) 'discount_cents': discountCents,
       if (subtotalCents != null) 'subtotal_cents': subtotalCents,
       if (taxCents != null) 'tax_cents': taxCents,
@@ -34237,7 +35949,10 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
     Value<int>? productId,
     Value<int?>? variantId,
     Value<int>? quantity,
+    Value<int>? quantityScale,
+    Value<String>? measurementType,
     Value<Decimal>? unitCostCents,
+    Value<Decimal?>? inventoryValueAtPostCents,
     Value<Decimal>? discountCents,
     Value<Decimal>? subtotalCents,
     Value<Decimal>? taxCents,
@@ -34258,7 +35973,11 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
       productId: productId ?? this.productId,
       variantId: variantId ?? this.variantId,
       quantity: quantity ?? this.quantity,
+      quantityScale: quantityScale ?? this.quantityScale,
+      measurementType: measurementType ?? this.measurementType,
       unitCostCents: unitCostCents ?? this.unitCostCents,
+      inventoryValueAtPostCents:
+          inventoryValueAtPostCents ?? this.inventoryValueAtPostCents,
       discountCents: discountCents ?? this.discountCents,
       subtotalCents: subtotalCents ?? this.subtotalCents,
       taxCents: taxCents ?? this.taxCents,
@@ -34296,9 +36015,22 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
     if (quantity.present) {
       map['quantity'] = Variable<int>(quantity.value);
     }
+    if (quantityScale.present) {
+      map['quantity_scale'] = Variable<int>(quantityScale.value);
+    }
+    if (measurementType.present) {
+      map['measurement_type'] = Variable<String>(measurementType.value);
+    }
     if (unitCostCents.present) {
       map['unit_cost_cents'] = Variable<int>(
         $PurchaseItemsTable.$converterunitCostCents.toSql(unitCostCents.value),
+      );
+    }
+    if (inventoryValueAtPostCents.present) {
+      map['inventory_value_at_post_cents'] = Variable<int>(
+        $PurchaseItemsTable.$converterinventoryValueAtPostCentsn.toSql(
+          inventoryValueAtPostCents.value,
+        ),
       );
     }
     if (discountCents.present) {
@@ -34381,7 +36113,10 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
           ..write('productId: $productId, ')
           ..write('variantId: $variantId, ')
           ..write('quantity: $quantity, ')
+          ..write('quantityScale: $quantityScale, ')
+          ..write('measurementType: $measurementType, ')
           ..write('unitCostCents: $unitCostCents, ')
+          ..write('inventoryValueAtPostCents: $inventoryValueAtPostCents, ')
           ..write('discountCents: $discountCents, ')
           ..write('subtotalCents: $subtotalCents, ')
           ..write('taxCents: $taxCents, ')
@@ -36322,6 +38057,30 @@ class $PurchaseReturnItemsTable extends PurchaseReturnItems
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _quantityScaleMeta = const VerificationMeta(
+    'quantityScale',
+  );
+  @override
+  late final GeneratedColumn<int> quantityScale = GeneratedColumn<int>(
+    'quantity_scale',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _measurementTypeMeta = const VerificationMeta(
+    'measurementType',
+  );
+  @override
+  late final GeneratedColumn<String> measurementType = GeneratedColumn<String>(
+    'measurement_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('piece'),
+  );
   @override
   late final GeneratedColumnWithTypeConverter<Decimal, int> subtotalCents =
       GeneratedColumn<int>(
@@ -36397,6 +38156,18 @@ class $PurchaseReturnItemsTable extends PurchaseReturnItems
       ).withConverter<Decimal?>(
         $PurchaseReturnItemsTable.$converterunitCostAtPostCentsn,
       );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int>
+  inventoryValueAtPostCents =
+      GeneratedColumn<int>(
+        'inventory_value_at_post_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>(
+        $PurchaseReturnItemsTable.$converterinventoryValueAtPostCentsn,
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -36415,6 +38186,8 @@ class $PurchaseReturnItemsTable extends PurchaseReturnItems
     returnId,
     purchaseItemId,
     quantity,
+    quantityScale,
+    measurementType,
     subtotalCents,
     discountCents,
     taxCents,
@@ -36422,6 +38195,7 @@ class $PurchaseReturnItemsTable extends PurchaseReturnItems
     reason,
     taxRateBpsAtPost,
     unitCostAtPostCents,
+    inventoryValueAtPostCents,
     createdAt,
   ];
   @override
@@ -36465,6 +38239,24 @@ class $PurchaseReturnItemsTable extends PurchaseReturnItems
       );
     } else if (isInserting) {
       context.missing(_quantityMeta);
+    }
+    if (data.containsKey('quantity_scale')) {
+      context.handle(
+        _quantityScaleMeta,
+        quantityScale.isAcceptableOrUnknown(
+          data['quantity_scale']!,
+          _quantityScaleMeta,
+        ),
+      );
+    }
+    if (data.containsKey('measurement_type')) {
+      context.handle(
+        _measurementTypeMeta,
+        measurementType.isAcceptableOrUnknown(
+          data['measurement_type']!,
+          _measurementTypeMeta,
+        ),
+      );
     }
     if (data.containsKey('reason')) {
       context.handle(
@@ -36512,6 +38304,14 @@ class $PurchaseReturnItemsTable extends PurchaseReturnItems
         DriftSqlType.int,
         data['${effectivePrefix}quantity'],
       )!,
+      quantityScale: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity_scale'],
+      )!,
+      measurementType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}measurement_type'],
+      )!,
       subtotalCents: $PurchaseReturnItemsTable.$convertersubtotalCents.fromSql(
         attachedDatabase.typeMapping.read(
           DriftSqlType.int,
@@ -36552,6 +38352,14 @@ class $PurchaseReturnItemsTable extends PurchaseReturnItems
               data['${effectivePrefix}unit_cost_at_post_cents'],
             ),
           ),
+      inventoryValueAtPostCents: $PurchaseReturnItemsTable
+          .$converterinventoryValueAtPostCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}inventory_value_at_post_cents'],
+            ),
+          ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -36576,6 +38384,10 @@ class $PurchaseReturnItemsTable extends PurchaseReturnItems
       const MoneyConverter();
   static TypeConverter<Decimal?, int?> $converterunitCostAtPostCentsn =
       NullAwareTypeConverter.wrap($converterunitCostAtPostCents);
+  static TypeConverter<Decimal, int> $converterinventoryValueAtPostCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converterinventoryValueAtPostCentsn =
+      NullAwareTypeConverter.wrap($converterinventoryValueAtPostCents);
 }
 
 class PurchaseReturnItem extends DataClass
@@ -36584,6 +38396,8 @@ class PurchaseReturnItem extends DataClass
   final int returnId;
   final int purchaseItemId;
   final int quantity;
+  final int quantityScale;
+  final String measurementType;
   final Decimal subtotalCents;
   final Decimal discountCents;
   final Decimal taxCents;
@@ -36598,12 +38412,17 @@ class PurchaseReturnItem extends DataClass
   /// Phase 2.1 — frozen unit cost at post-time. Sourced from the original
   /// purchase_item.unit_cost_cents (or batch cost for FIFO products).
   final Decimal? unitCostAtPostCents;
+
+  /// Exact rounded-pool value moved by this return line at posting time.
+  final Decimal? inventoryValueAtPostCents;
   final DateTime createdAt;
   const PurchaseReturnItem({
     required this.id,
     required this.returnId,
     required this.purchaseItemId,
     required this.quantity,
+    required this.quantityScale,
+    required this.measurementType,
     required this.subtotalCents,
     required this.discountCents,
     required this.taxCents,
@@ -36611,6 +38430,7 @@ class PurchaseReturnItem extends DataClass
     this.reason,
     this.taxRateBpsAtPost,
     this.unitCostAtPostCents,
+    this.inventoryValueAtPostCents,
     required this.createdAt,
   });
   @override
@@ -36620,6 +38440,8 @@ class PurchaseReturnItem extends DataClass
     map['return_id'] = Variable<int>(returnId);
     map['purchase_item_id'] = Variable<int>(purchaseItemId);
     map['quantity'] = Variable<int>(quantity);
+    map['quantity_scale'] = Variable<int>(quantityScale);
+    map['measurement_type'] = Variable<String>(measurementType);
     {
       map['subtotal_cents'] = Variable<int>(
         $PurchaseReturnItemsTable.$convertersubtotalCents.toSql(subtotalCents),
@@ -36653,6 +38475,13 @@ class PurchaseReturnItem extends DataClass
         ),
       );
     }
+    if (!nullToAbsent || inventoryValueAtPostCents != null) {
+      map['inventory_value_at_post_cents'] = Variable<int>(
+        $PurchaseReturnItemsTable.$converterinventoryValueAtPostCentsn.toSql(
+          inventoryValueAtPostCents,
+        ),
+      );
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -36663,6 +38492,8 @@ class PurchaseReturnItem extends DataClass
       returnId: Value(returnId),
       purchaseItemId: Value(purchaseItemId),
       quantity: Value(quantity),
+      quantityScale: Value(quantityScale),
+      measurementType: Value(measurementType),
       subtotalCents: Value(subtotalCents),
       discountCents: Value(discountCents),
       taxCents: Value(taxCents),
@@ -36676,6 +38507,10 @@ class PurchaseReturnItem extends DataClass
       unitCostAtPostCents: unitCostAtPostCents == null && nullToAbsent
           ? const Value.absent()
           : Value(unitCostAtPostCents),
+      inventoryValueAtPostCents:
+          inventoryValueAtPostCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(inventoryValueAtPostCents),
       createdAt: Value(createdAt),
     );
   }
@@ -36690,6 +38525,8 @@ class PurchaseReturnItem extends DataClass
       returnId: serializer.fromJson<int>(json['returnId']),
       purchaseItemId: serializer.fromJson<int>(json['purchaseItemId']),
       quantity: serializer.fromJson<int>(json['quantity']),
+      quantityScale: serializer.fromJson<int>(json['quantityScale']),
+      measurementType: serializer.fromJson<String>(json['measurementType']),
       subtotalCents: serializer.fromJson<Decimal>(json['subtotalCents']),
       discountCents: serializer.fromJson<Decimal>(json['discountCents']),
       taxCents: serializer.fromJson<Decimal>(json['taxCents']),
@@ -36698,6 +38535,9 @@ class PurchaseReturnItem extends DataClass
       taxRateBpsAtPost: serializer.fromJson<int?>(json['taxRateBpsAtPost']),
       unitCostAtPostCents: serializer.fromJson<Decimal?>(
         json['unitCostAtPostCents'],
+      ),
+      inventoryValueAtPostCents: serializer.fromJson<Decimal?>(
+        json['inventoryValueAtPostCents'],
       ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
@@ -36710,6 +38550,8 @@ class PurchaseReturnItem extends DataClass
       'returnId': serializer.toJson<int>(returnId),
       'purchaseItemId': serializer.toJson<int>(purchaseItemId),
       'quantity': serializer.toJson<int>(quantity),
+      'quantityScale': serializer.toJson<int>(quantityScale),
+      'measurementType': serializer.toJson<String>(measurementType),
       'subtotalCents': serializer.toJson<Decimal>(subtotalCents),
       'discountCents': serializer.toJson<Decimal>(discountCents),
       'taxCents': serializer.toJson<Decimal>(taxCents),
@@ -36717,6 +38559,9 @@ class PurchaseReturnItem extends DataClass
       'reason': serializer.toJson<String?>(reason),
       'taxRateBpsAtPost': serializer.toJson<int?>(taxRateBpsAtPost),
       'unitCostAtPostCents': serializer.toJson<Decimal?>(unitCostAtPostCents),
+      'inventoryValueAtPostCents': serializer.toJson<Decimal?>(
+        inventoryValueAtPostCents,
+      ),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -36726,6 +38571,8 @@ class PurchaseReturnItem extends DataClass
     int? returnId,
     int? purchaseItemId,
     int? quantity,
+    int? quantityScale,
+    String? measurementType,
     Decimal? subtotalCents,
     Decimal? discountCents,
     Decimal? taxCents,
@@ -36733,12 +38580,15 @@ class PurchaseReturnItem extends DataClass
     Value<String?> reason = const Value.absent(),
     Value<int?> taxRateBpsAtPost = const Value.absent(),
     Value<Decimal?> unitCostAtPostCents = const Value.absent(),
+    Value<Decimal?> inventoryValueAtPostCents = const Value.absent(),
     DateTime? createdAt,
   }) => PurchaseReturnItem(
     id: id ?? this.id,
     returnId: returnId ?? this.returnId,
     purchaseItemId: purchaseItemId ?? this.purchaseItemId,
     quantity: quantity ?? this.quantity,
+    quantityScale: quantityScale ?? this.quantityScale,
+    measurementType: measurementType ?? this.measurementType,
     subtotalCents: subtotalCents ?? this.subtotalCents,
     discountCents: discountCents ?? this.discountCents,
     taxCents: taxCents ?? this.taxCents,
@@ -36750,6 +38600,9 @@ class PurchaseReturnItem extends DataClass
     unitCostAtPostCents: unitCostAtPostCents.present
         ? unitCostAtPostCents.value
         : this.unitCostAtPostCents,
+    inventoryValueAtPostCents: inventoryValueAtPostCents.present
+        ? inventoryValueAtPostCents.value
+        : this.inventoryValueAtPostCents,
     createdAt: createdAt ?? this.createdAt,
   );
   PurchaseReturnItem copyWithCompanion(PurchaseReturnItemsCompanion data) {
@@ -36760,6 +38613,12 @@ class PurchaseReturnItem extends DataClass
           ? data.purchaseItemId.value
           : this.purchaseItemId,
       quantity: data.quantity.present ? data.quantity.value : this.quantity,
+      quantityScale: data.quantityScale.present
+          ? data.quantityScale.value
+          : this.quantityScale,
+      measurementType: data.measurementType.present
+          ? data.measurementType.value
+          : this.measurementType,
       subtotalCents: data.subtotalCents.present
           ? data.subtotalCents.value
           : this.subtotalCents,
@@ -36777,6 +38636,9 @@ class PurchaseReturnItem extends DataClass
       unitCostAtPostCents: data.unitCostAtPostCents.present
           ? data.unitCostAtPostCents.value
           : this.unitCostAtPostCents,
+      inventoryValueAtPostCents: data.inventoryValueAtPostCents.present
+          ? data.inventoryValueAtPostCents.value
+          : this.inventoryValueAtPostCents,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -36788,6 +38650,8 @@ class PurchaseReturnItem extends DataClass
           ..write('returnId: $returnId, ')
           ..write('purchaseItemId: $purchaseItemId, ')
           ..write('quantity: $quantity, ')
+          ..write('quantityScale: $quantityScale, ')
+          ..write('measurementType: $measurementType, ')
           ..write('subtotalCents: $subtotalCents, ')
           ..write('discountCents: $discountCents, ')
           ..write('taxCents: $taxCents, ')
@@ -36795,6 +38659,7 @@ class PurchaseReturnItem extends DataClass
           ..write('reason: $reason, ')
           ..write('taxRateBpsAtPost: $taxRateBpsAtPost, ')
           ..write('unitCostAtPostCents: $unitCostAtPostCents, ')
+          ..write('inventoryValueAtPostCents: $inventoryValueAtPostCents, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -36806,6 +38671,8 @@ class PurchaseReturnItem extends DataClass
     returnId,
     purchaseItemId,
     quantity,
+    quantityScale,
+    measurementType,
     subtotalCents,
     discountCents,
     taxCents,
@@ -36813,6 +38680,7 @@ class PurchaseReturnItem extends DataClass
     reason,
     taxRateBpsAtPost,
     unitCostAtPostCents,
+    inventoryValueAtPostCents,
     createdAt,
   );
   @override
@@ -36823,6 +38691,8 @@ class PurchaseReturnItem extends DataClass
           other.returnId == this.returnId &&
           other.purchaseItemId == this.purchaseItemId &&
           other.quantity == this.quantity &&
+          other.quantityScale == this.quantityScale &&
+          other.measurementType == this.measurementType &&
           other.subtotalCents == this.subtotalCents &&
           other.discountCents == this.discountCents &&
           other.taxCents == this.taxCents &&
@@ -36830,6 +38700,7 @@ class PurchaseReturnItem extends DataClass
           other.reason == this.reason &&
           other.taxRateBpsAtPost == this.taxRateBpsAtPost &&
           other.unitCostAtPostCents == this.unitCostAtPostCents &&
+          other.inventoryValueAtPostCents == this.inventoryValueAtPostCents &&
           other.createdAt == this.createdAt);
 }
 
@@ -36838,6 +38709,8 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
   final Value<int> returnId;
   final Value<int> purchaseItemId;
   final Value<int> quantity;
+  final Value<int> quantityScale;
+  final Value<String> measurementType;
   final Value<Decimal> subtotalCents;
   final Value<Decimal> discountCents;
   final Value<Decimal> taxCents;
@@ -36845,12 +38718,15 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
   final Value<String?> reason;
   final Value<int?> taxRateBpsAtPost;
   final Value<Decimal?> unitCostAtPostCents;
+  final Value<Decimal?> inventoryValueAtPostCents;
   final Value<DateTime> createdAt;
   const PurchaseReturnItemsCompanion({
     this.id = const Value.absent(),
     this.returnId = const Value.absent(),
     this.purchaseItemId = const Value.absent(),
     this.quantity = const Value.absent(),
+    this.quantityScale = const Value.absent(),
+    this.measurementType = const Value.absent(),
     this.subtotalCents = const Value.absent(),
     this.discountCents = const Value.absent(),
     this.taxCents = const Value.absent(),
@@ -36858,6 +38734,7 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
     this.reason = const Value.absent(),
     this.taxRateBpsAtPost = const Value.absent(),
     this.unitCostAtPostCents = const Value.absent(),
+    this.inventoryValueAtPostCents = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
   PurchaseReturnItemsCompanion.insert({
@@ -36865,6 +38742,8 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
     required int returnId,
     required int purchaseItemId,
     required int quantity,
+    this.quantityScale = const Value.absent(),
+    this.measurementType = const Value.absent(),
     this.subtotalCents = const Value.absent(),
     this.discountCents = const Value.absent(),
     this.taxCents = const Value.absent(),
@@ -36872,6 +38751,7 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
     this.reason = const Value.absent(),
     this.taxRateBpsAtPost = const Value.absent(),
     this.unitCostAtPostCents = const Value.absent(),
+    this.inventoryValueAtPostCents = const Value.absent(),
     this.createdAt = const Value.absent(),
   }) : returnId = Value(returnId),
        purchaseItemId = Value(purchaseItemId),
@@ -36882,6 +38762,8 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
     Expression<int>? returnId,
     Expression<int>? purchaseItemId,
     Expression<int>? quantity,
+    Expression<int>? quantityScale,
+    Expression<String>? measurementType,
     Expression<int>? subtotalCents,
     Expression<int>? discountCents,
     Expression<int>? taxCents,
@@ -36889,6 +38771,7 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
     Expression<String>? reason,
     Expression<int>? taxRateBpsAtPost,
     Expression<int>? unitCostAtPostCents,
+    Expression<int>? inventoryValueAtPostCents,
     Expression<DateTime>? createdAt,
   }) {
     return RawValuesInsertable({
@@ -36896,6 +38779,8 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
       if (returnId != null) 'return_id': returnId,
       if (purchaseItemId != null) 'purchase_item_id': purchaseItemId,
       if (quantity != null) 'quantity': quantity,
+      if (quantityScale != null) 'quantity_scale': quantityScale,
+      if (measurementType != null) 'measurement_type': measurementType,
       if (subtotalCents != null) 'subtotal_cents': subtotalCents,
       if (discountCents != null) 'discount_cents': discountCents,
       if (taxCents != null) 'tax_cents': taxCents,
@@ -36904,6 +38789,8 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
       if (taxRateBpsAtPost != null) 'tax_rate_bps_at_post': taxRateBpsAtPost,
       if (unitCostAtPostCents != null)
         'unit_cost_at_post_cents': unitCostAtPostCents,
+      if (inventoryValueAtPostCents != null)
+        'inventory_value_at_post_cents': inventoryValueAtPostCents,
       if (createdAt != null) 'created_at': createdAt,
     });
   }
@@ -36913,6 +38800,8 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
     Value<int>? returnId,
     Value<int>? purchaseItemId,
     Value<int>? quantity,
+    Value<int>? quantityScale,
+    Value<String>? measurementType,
     Value<Decimal>? subtotalCents,
     Value<Decimal>? discountCents,
     Value<Decimal>? taxCents,
@@ -36920,6 +38809,7 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
     Value<String?>? reason,
     Value<int?>? taxRateBpsAtPost,
     Value<Decimal?>? unitCostAtPostCents,
+    Value<Decimal?>? inventoryValueAtPostCents,
     Value<DateTime>? createdAt,
   }) {
     return PurchaseReturnItemsCompanion(
@@ -36927,6 +38817,8 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
       returnId: returnId ?? this.returnId,
       purchaseItemId: purchaseItemId ?? this.purchaseItemId,
       quantity: quantity ?? this.quantity,
+      quantityScale: quantityScale ?? this.quantityScale,
+      measurementType: measurementType ?? this.measurementType,
       subtotalCents: subtotalCents ?? this.subtotalCents,
       discountCents: discountCents ?? this.discountCents,
       taxCents: taxCents ?? this.taxCents,
@@ -36934,6 +38826,8 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
       reason: reason ?? this.reason,
       taxRateBpsAtPost: taxRateBpsAtPost ?? this.taxRateBpsAtPost,
       unitCostAtPostCents: unitCostAtPostCents ?? this.unitCostAtPostCents,
+      inventoryValueAtPostCents:
+          inventoryValueAtPostCents ?? this.inventoryValueAtPostCents,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -36952,6 +38846,12 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
     }
     if (quantity.present) {
       map['quantity'] = Variable<int>(quantity.value);
+    }
+    if (quantityScale.present) {
+      map['quantity_scale'] = Variable<int>(quantityScale.value);
+    }
+    if (measurementType.present) {
+      map['measurement_type'] = Variable<String>(measurementType.value);
     }
     if (subtotalCents.present) {
       map['subtotal_cents'] = Variable<int>(
@@ -36992,6 +38892,13 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
         ),
       );
     }
+    if (inventoryValueAtPostCents.present) {
+      map['inventory_value_at_post_cents'] = Variable<int>(
+        $PurchaseReturnItemsTable.$converterinventoryValueAtPostCentsn.toSql(
+          inventoryValueAtPostCents.value,
+        ),
+      );
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -37005,6 +38912,8 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
           ..write('returnId: $returnId, ')
           ..write('purchaseItemId: $purchaseItemId, ')
           ..write('quantity: $quantity, ')
+          ..write('quantityScale: $quantityScale, ')
+          ..write('measurementType: $measurementType, ')
           ..write('subtotalCents: $subtotalCents, ')
           ..write('discountCents: $discountCents, ')
           ..write('taxCents: $taxCents, ')
@@ -37012,6 +38921,7 @@ class PurchaseReturnItemsCompanion extends UpdateCompanion<PurchaseReturnItem> {
           ..write('reason: $reason, ')
           ..write('taxRateBpsAtPost: $taxRateBpsAtPost, ')
           ..write('unitCostAtPostCents: $unitCostAtPostCents, ')
+          ..write('inventoryValueAtPostCents: $inventoryValueAtPostCents, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -41158,6 +43068,2987 @@ class ExpensesCompanion extends UpdateCompanion<Expense> {
           ..write('receiptPath: $receiptPath, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $OwnerFinanceTransactionsTable extends OwnerFinanceTransactions
+    with TableInfo<$OwnerFinanceTransactionsTable, OwnerFinanceTransaction> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $OwnerFinanceTransactionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _transactionNumberMeta = const VerificationMeta(
+    'transactionNumber',
+  );
+  @override
+  late final GeneratedColumn<String> transactionNumber =
+      GeneratedColumn<String>(
+        'transaction_number',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+        defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+      );
+  static const VerificationMeta _transactionTypeMeta = const VerificationMeta(
+    'transactionType',
+  );
+  @override
+  late final GeneratedColumn<String> transactionType = GeneratedColumn<String>(
+    'transaction_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> amountCents =
+      GeneratedColumn<int>(
+        'amount_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+      ).withConverter<Decimal>(
+        $OwnerFinanceTransactionsTable.$converteramountCents,
+      );
+  static const VerificationMeta _currencyIdMeta = const VerificationMeta(
+    'currencyId',
+  );
+  @override
+  late final GeneratedColumn<int> currencyId = GeneratedColumn<int>(
+    'currency_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES currencies (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _offsetAccountIdMeta = const VerificationMeta(
+    'offsetAccountId',
+  );
+  @override
+  late final GeneratedColumn<int> offsetAccountId = GeneratedColumn<int>(
+    'offset_account_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES accounts (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _transactionDateMeta = const VerificationMeta(
+    'transactionDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> transactionDate =
+      GeneratedColumn<DateTime>(
+        'transaction_date',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
+  @override
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('posted'),
+  );
+  static const VerificationMeta _journalEntryIdMeta = const VerificationMeta(
+    'journalEntryId',
+  );
+  @override
+  late final GeneratedColumn<int> journalEntryId = GeneratedColumn<int>(
+    'journal_entry_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'UNIQUE REFERENCES journal_entries (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _reversalJournalEntryIdMeta =
+      const VerificationMeta('reversalJournalEntryId');
+  @override
+  late final GeneratedColumn<int> reversalJournalEntryId = GeneratedColumn<int>(
+    'reversal_journal_entry_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'UNIQUE REFERENCES journal_entries (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _createdByMeta = const VerificationMeta(
+    'createdBy',
+  );
+  @override
+  late final GeneratedColumn<int> createdBy = GeneratedColumn<int>(
+    'created_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    transactionNumber,
+    transactionType,
+    amountCents,
+    currencyId,
+    offsetAccountId,
+    transactionDate,
+    description,
+    notes,
+    status,
+    journalEntryId,
+    reversalJournalEntryId,
+    createdBy,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'owner_finance_transactions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<OwnerFinanceTransaction> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('transaction_number')) {
+      context.handle(
+        _transactionNumberMeta,
+        transactionNumber.isAcceptableOrUnknown(
+          data['transaction_number']!,
+          _transactionNumberMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_transactionNumberMeta);
+    }
+    if (data.containsKey('transaction_type')) {
+      context.handle(
+        _transactionTypeMeta,
+        transactionType.isAcceptableOrUnknown(
+          data['transaction_type']!,
+          _transactionTypeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_transactionTypeMeta);
+    }
+    if (data.containsKey('currency_id')) {
+      context.handle(
+        _currencyIdMeta,
+        currencyId.isAcceptableOrUnknown(data['currency_id']!, _currencyIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_currencyIdMeta);
+    }
+    if (data.containsKey('offset_account_id')) {
+      context.handle(
+        _offsetAccountIdMeta,
+        offsetAccountId.isAcceptableOrUnknown(
+          data['offset_account_id']!,
+          _offsetAccountIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_offsetAccountIdMeta);
+    }
+    if (data.containsKey('transaction_date')) {
+      context.handle(
+        _transactionDateMeta,
+        transactionDate.isAcceptableOrUnknown(
+          data['transaction_date']!,
+          _transactionDateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_transactionDateMeta);
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_descriptionMeta);
+    }
+    if (data.containsKey('notes')) {
+      context.handle(
+        _notesMeta,
+        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('journal_entry_id')) {
+      context.handle(
+        _journalEntryIdMeta,
+        journalEntryId.isAcceptableOrUnknown(
+          data['journal_entry_id']!,
+          _journalEntryIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reversal_journal_entry_id')) {
+      context.handle(
+        _reversalJournalEntryIdMeta,
+        reversalJournalEntryId.isAcceptableOrUnknown(
+          data['reversal_journal_entry_id']!,
+          _reversalJournalEntryIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_by')) {
+      context.handle(
+        _createdByMeta,
+        createdBy.isAcceptableOrUnknown(data['created_by']!, _createdByMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  OwnerFinanceTransaction map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return OwnerFinanceTransaction(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      transactionNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}transaction_number'],
+      )!,
+      transactionType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}transaction_type'],
+      )!,
+      amountCents: $OwnerFinanceTransactionsTable.$converteramountCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}amount_cents'],
+        )!,
+      ),
+      currencyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}currency_id'],
+      )!,
+      offsetAccountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}offset_account_id'],
+      )!,
+      transactionDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}transaction_date'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      )!,
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      ),
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      journalEntryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}journal_entry_id'],
+      ),
+      reversalJournalEntryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reversal_journal_entry_id'],
+      ),
+      createdBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_by'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $OwnerFinanceTransactionsTable createAlias(String alias) {
+    return $OwnerFinanceTransactionsTable(attachedDatabase, alias);
+  }
+
+  static TypeConverter<Decimal, int> $converteramountCents =
+      const MoneyConverter();
+}
+
+class OwnerFinanceTransaction extends DataClass
+    implements Insertable<OwnerFinanceTransaction> {
+  final int id;
+  final String transactionNumber;
+  final String transactionType;
+  final Decimal amountCents;
+  final int currencyId;
+  final int offsetAccountId;
+  final DateTime transactionDate;
+  final String description;
+  final String? notes;
+  final String status;
+  final int? journalEntryId;
+  final int? reversalJournalEntryId;
+  final int? createdBy;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const OwnerFinanceTransaction({
+    required this.id,
+    required this.transactionNumber,
+    required this.transactionType,
+    required this.amountCents,
+    required this.currencyId,
+    required this.offsetAccountId,
+    required this.transactionDate,
+    required this.description,
+    this.notes,
+    required this.status,
+    this.journalEntryId,
+    this.reversalJournalEntryId,
+    this.createdBy,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['transaction_number'] = Variable<String>(transactionNumber);
+    map['transaction_type'] = Variable<String>(transactionType);
+    {
+      map['amount_cents'] = Variable<int>(
+        $OwnerFinanceTransactionsTable.$converteramountCents.toSql(amountCents),
+      );
+    }
+    map['currency_id'] = Variable<int>(currencyId);
+    map['offset_account_id'] = Variable<int>(offsetAccountId);
+    map['transaction_date'] = Variable<DateTime>(transactionDate);
+    map['description'] = Variable<String>(description);
+    if (!nullToAbsent || notes != null) {
+      map['notes'] = Variable<String>(notes);
+    }
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || journalEntryId != null) {
+      map['journal_entry_id'] = Variable<int>(journalEntryId);
+    }
+    if (!nullToAbsent || reversalJournalEntryId != null) {
+      map['reversal_journal_entry_id'] = Variable<int>(reversalJournalEntryId);
+    }
+    if (!nullToAbsent || createdBy != null) {
+      map['created_by'] = Variable<int>(createdBy);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  OwnerFinanceTransactionsCompanion toCompanion(bool nullToAbsent) {
+    return OwnerFinanceTransactionsCompanion(
+      id: Value(id),
+      transactionNumber: Value(transactionNumber),
+      transactionType: Value(transactionType),
+      amountCents: Value(amountCents),
+      currencyId: Value(currencyId),
+      offsetAccountId: Value(offsetAccountId),
+      transactionDate: Value(transactionDate),
+      description: Value(description),
+      notes: notes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notes),
+      status: Value(status),
+      journalEntryId: journalEntryId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(journalEntryId),
+      reversalJournalEntryId: reversalJournalEntryId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reversalJournalEntryId),
+      createdBy: createdBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(createdBy),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory OwnerFinanceTransaction.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return OwnerFinanceTransaction(
+      id: serializer.fromJson<int>(json['id']),
+      transactionNumber: serializer.fromJson<String>(json['transactionNumber']),
+      transactionType: serializer.fromJson<String>(json['transactionType']),
+      amountCents: serializer.fromJson<Decimal>(json['amountCents']),
+      currencyId: serializer.fromJson<int>(json['currencyId']),
+      offsetAccountId: serializer.fromJson<int>(json['offsetAccountId']),
+      transactionDate: serializer.fromJson<DateTime>(json['transactionDate']),
+      description: serializer.fromJson<String>(json['description']),
+      notes: serializer.fromJson<String?>(json['notes']),
+      status: serializer.fromJson<String>(json['status']),
+      journalEntryId: serializer.fromJson<int?>(json['journalEntryId']),
+      reversalJournalEntryId: serializer.fromJson<int?>(
+        json['reversalJournalEntryId'],
+      ),
+      createdBy: serializer.fromJson<int?>(json['createdBy']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'transactionNumber': serializer.toJson<String>(transactionNumber),
+      'transactionType': serializer.toJson<String>(transactionType),
+      'amountCents': serializer.toJson<Decimal>(amountCents),
+      'currencyId': serializer.toJson<int>(currencyId),
+      'offsetAccountId': serializer.toJson<int>(offsetAccountId),
+      'transactionDate': serializer.toJson<DateTime>(transactionDate),
+      'description': serializer.toJson<String>(description),
+      'notes': serializer.toJson<String?>(notes),
+      'status': serializer.toJson<String>(status),
+      'journalEntryId': serializer.toJson<int?>(journalEntryId),
+      'reversalJournalEntryId': serializer.toJson<int?>(reversalJournalEntryId),
+      'createdBy': serializer.toJson<int?>(createdBy),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  OwnerFinanceTransaction copyWith({
+    int? id,
+    String? transactionNumber,
+    String? transactionType,
+    Decimal? amountCents,
+    int? currencyId,
+    int? offsetAccountId,
+    DateTime? transactionDate,
+    String? description,
+    Value<String?> notes = const Value.absent(),
+    String? status,
+    Value<int?> journalEntryId = const Value.absent(),
+    Value<int?> reversalJournalEntryId = const Value.absent(),
+    Value<int?> createdBy = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => OwnerFinanceTransaction(
+    id: id ?? this.id,
+    transactionNumber: transactionNumber ?? this.transactionNumber,
+    transactionType: transactionType ?? this.transactionType,
+    amountCents: amountCents ?? this.amountCents,
+    currencyId: currencyId ?? this.currencyId,
+    offsetAccountId: offsetAccountId ?? this.offsetAccountId,
+    transactionDate: transactionDate ?? this.transactionDate,
+    description: description ?? this.description,
+    notes: notes.present ? notes.value : this.notes,
+    status: status ?? this.status,
+    journalEntryId: journalEntryId.present
+        ? journalEntryId.value
+        : this.journalEntryId,
+    reversalJournalEntryId: reversalJournalEntryId.present
+        ? reversalJournalEntryId.value
+        : this.reversalJournalEntryId,
+    createdBy: createdBy.present ? createdBy.value : this.createdBy,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  OwnerFinanceTransaction copyWithCompanion(
+    OwnerFinanceTransactionsCompanion data,
+  ) {
+    return OwnerFinanceTransaction(
+      id: data.id.present ? data.id.value : this.id,
+      transactionNumber: data.transactionNumber.present
+          ? data.transactionNumber.value
+          : this.transactionNumber,
+      transactionType: data.transactionType.present
+          ? data.transactionType.value
+          : this.transactionType,
+      amountCents: data.amountCents.present
+          ? data.amountCents.value
+          : this.amountCents,
+      currencyId: data.currencyId.present
+          ? data.currencyId.value
+          : this.currencyId,
+      offsetAccountId: data.offsetAccountId.present
+          ? data.offsetAccountId.value
+          : this.offsetAccountId,
+      transactionDate: data.transactionDate.present
+          ? data.transactionDate.value
+          : this.transactionDate,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+      notes: data.notes.present ? data.notes.value : this.notes,
+      status: data.status.present ? data.status.value : this.status,
+      journalEntryId: data.journalEntryId.present
+          ? data.journalEntryId.value
+          : this.journalEntryId,
+      reversalJournalEntryId: data.reversalJournalEntryId.present
+          ? data.reversalJournalEntryId.value
+          : this.reversalJournalEntryId,
+      createdBy: data.createdBy.present ? data.createdBy.value : this.createdBy,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('OwnerFinanceTransaction(')
+          ..write('id: $id, ')
+          ..write('transactionNumber: $transactionNumber, ')
+          ..write('transactionType: $transactionType, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('currencyId: $currencyId, ')
+          ..write('offsetAccountId: $offsetAccountId, ')
+          ..write('transactionDate: $transactionDate, ')
+          ..write('description: $description, ')
+          ..write('notes: $notes, ')
+          ..write('status: $status, ')
+          ..write('journalEntryId: $journalEntryId, ')
+          ..write('reversalJournalEntryId: $reversalJournalEntryId, ')
+          ..write('createdBy: $createdBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    transactionNumber,
+    transactionType,
+    amountCents,
+    currencyId,
+    offsetAccountId,
+    transactionDate,
+    description,
+    notes,
+    status,
+    journalEntryId,
+    reversalJournalEntryId,
+    createdBy,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is OwnerFinanceTransaction &&
+          other.id == this.id &&
+          other.transactionNumber == this.transactionNumber &&
+          other.transactionType == this.transactionType &&
+          other.amountCents == this.amountCents &&
+          other.currencyId == this.currencyId &&
+          other.offsetAccountId == this.offsetAccountId &&
+          other.transactionDate == this.transactionDate &&
+          other.description == this.description &&
+          other.notes == this.notes &&
+          other.status == this.status &&
+          other.journalEntryId == this.journalEntryId &&
+          other.reversalJournalEntryId == this.reversalJournalEntryId &&
+          other.createdBy == this.createdBy &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class OwnerFinanceTransactionsCompanion
+    extends UpdateCompanion<OwnerFinanceTransaction> {
+  final Value<int> id;
+  final Value<String> transactionNumber;
+  final Value<String> transactionType;
+  final Value<Decimal> amountCents;
+  final Value<int> currencyId;
+  final Value<int> offsetAccountId;
+  final Value<DateTime> transactionDate;
+  final Value<String> description;
+  final Value<String?> notes;
+  final Value<String> status;
+  final Value<int?> journalEntryId;
+  final Value<int?> reversalJournalEntryId;
+  final Value<int?> createdBy;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const OwnerFinanceTransactionsCompanion({
+    this.id = const Value.absent(),
+    this.transactionNumber = const Value.absent(),
+    this.transactionType = const Value.absent(),
+    this.amountCents = const Value.absent(),
+    this.currencyId = const Value.absent(),
+    this.offsetAccountId = const Value.absent(),
+    this.transactionDate = const Value.absent(),
+    this.description = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.status = const Value.absent(),
+    this.journalEntryId = const Value.absent(),
+    this.reversalJournalEntryId = const Value.absent(),
+    this.createdBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  OwnerFinanceTransactionsCompanion.insert({
+    this.id = const Value.absent(),
+    required String transactionNumber,
+    required String transactionType,
+    required Decimal amountCents,
+    required int currencyId,
+    required int offsetAccountId,
+    required DateTime transactionDate,
+    required String description,
+    this.notes = const Value.absent(),
+    this.status = const Value.absent(),
+    this.journalEntryId = const Value.absent(),
+    this.reversalJournalEntryId = const Value.absent(),
+    this.createdBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : transactionNumber = Value(transactionNumber),
+       transactionType = Value(transactionType),
+       amountCents = Value(amountCents),
+       currencyId = Value(currencyId),
+       offsetAccountId = Value(offsetAccountId),
+       transactionDate = Value(transactionDate),
+       description = Value(description);
+  static Insertable<OwnerFinanceTransaction> custom({
+    Expression<int>? id,
+    Expression<String>? transactionNumber,
+    Expression<String>? transactionType,
+    Expression<int>? amountCents,
+    Expression<int>? currencyId,
+    Expression<int>? offsetAccountId,
+    Expression<DateTime>? transactionDate,
+    Expression<String>? description,
+    Expression<String>? notes,
+    Expression<String>? status,
+    Expression<int>? journalEntryId,
+    Expression<int>? reversalJournalEntryId,
+    Expression<int>? createdBy,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (transactionNumber != null) 'transaction_number': transactionNumber,
+      if (transactionType != null) 'transaction_type': transactionType,
+      if (amountCents != null) 'amount_cents': amountCents,
+      if (currencyId != null) 'currency_id': currencyId,
+      if (offsetAccountId != null) 'offset_account_id': offsetAccountId,
+      if (transactionDate != null) 'transaction_date': transactionDate,
+      if (description != null) 'description': description,
+      if (notes != null) 'notes': notes,
+      if (status != null) 'status': status,
+      if (journalEntryId != null) 'journal_entry_id': journalEntryId,
+      if (reversalJournalEntryId != null)
+        'reversal_journal_entry_id': reversalJournalEntryId,
+      if (createdBy != null) 'created_by': createdBy,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  OwnerFinanceTransactionsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? transactionNumber,
+    Value<String>? transactionType,
+    Value<Decimal>? amountCents,
+    Value<int>? currencyId,
+    Value<int>? offsetAccountId,
+    Value<DateTime>? transactionDate,
+    Value<String>? description,
+    Value<String?>? notes,
+    Value<String>? status,
+    Value<int?>? journalEntryId,
+    Value<int?>? reversalJournalEntryId,
+    Value<int?>? createdBy,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return OwnerFinanceTransactionsCompanion(
+      id: id ?? this.id,
+      transactionNumber: transactionNumber ?? this.transactionNumber,
+      transactionType: transactionType ?? this.transactionType,
+      amountCents: amountCents ?? this.amountCents,
+      currencyId: currencyId ?? this.currencyId,
+      offsetAccountId: offsetAccountId ?? this.offsetAccountId,
+      transactionDate: transactionDate ?? this.transactionDate,
+      description: description ?? this.description,
+      notes: notes ?? this.notes,
+      status: status ?? this.status,
+      journalEntryId: journalEntryId ?? this.journalEntryId,
+      reversalJournalEntryId:
+          reversalJournalEntryId ?? this.reversalJournalEntryId,
+      createdBy: createdBy ?? this.createdBy,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (transactionNumber.present) {
+      map['transaction_number'] = Variable<String>(transactionNumber.value);
+    }
+    if (transactionType.present) {
+      map['transaction_type'] = Variable<String>(transactionType.value);
+    }
+    if (amountCents.present) {
+      map['amount_cents'] = Variable<int>(
+        $OwnerFinanceTransactionsTable.$converteramountCents.toSql(
+          amountCents.value,
+        ),
+      );
+    }
+    if (currencyId.present) {
+      map['currency_id'] = Variable<int>(currencyId.value);
+    }
+    if (offsetAccountId.present) {
+      map['offset_account_id'] = Variable<int>(offsetAccountId.value);
+    }
+    if (transactionDate.present) {
+      map['transaction_date'] = Variable<DateTime>(transactionDate.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (notes.present) {
+      map['notes'] = Variable<String>(notes.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (journalEntryId.present) {
+      map['journal_entry_id'] = Variable<int>(journalEntryId.value);
+    }
+    if (reversalJournalEntryId.present) {
+      map['reversal_journal_entry_id'] = Variable<int>(
+        reversalJournalEntryId.value,
+      );
+    }
+    if (createdBy.present) {
+      map['created_by'] = Variable<int>(createdBy.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('OwnerFinanceTransactionsCompanion(')
+          ..write('id: $id, ')
+          ..write('transactionNumber: $transactionNumber, ')
+          ..write('transactionType: $transactionType, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('currencyId: $currencyId, ')
+          ..write('offsetAccountId: $offsetAccountId, ')
+          ..write('transactionDate: $transactionDate, ')
+          ..write('description: $description, ')
+          ..write('notes: $notes, ')
+          ..write('status: $status, ')
+          ..write('journalEntryId: $journalEntryId, ')
+          ..write('reversalJournalEntryId: $reversalJournalEntryId, ')
+          ..write('createdBy: $createdBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $FixedAssetsTable extends FixedAssets
+    with TableInfo<$FixedAssetsTable, FixedAsset> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FixedAssetsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _assetNumberMeta = const VerificationMeta(
+    'assetNumber',
+  );
+  @override
+  late final GeneratedColumn<String> assetNumber = GeneratedColumn<String>(
+    'asset_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
+  @override
+  late final GeneratedColumn<String> category = GeneratedColumn<String>(
+    'category',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _acquisitionDateMeta = const VerificationMeta(
+    'acquisitionDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> acquisitionDate =
+      GeneratedColumn<DateTime>(
+        'acquisition_date',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _inServiceDateMeta = const VerificationMeta(
+    'inServiceDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> inServiceDate =
+      GeneratedColumn<DateTime>(
+        'in_service_date',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> costCents =
+      GeneratedColumn<int>(
+        'cost_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+      ).withConverter<Decimal>($FixedAssetsTable.$convertercostCents);
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> residualValueCents =
+      GeneratedColumn<int>(
+        'residual_value_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>($FixedAssetsTable.$converterresidualValueCents);
+  static const VerificationMeta _usefulLifeMonthsMeta = const VerificationMeta(
+    'usefulLifeMonths',
+  );
+  @override
+  late final GeneratedColumn<int> usefulLifeMonths = GeneratedColumn<int>(
+    'useful_life_months',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _depreciationMethodMeta =
+      const VerificationMeta('depreciationMethod');
+  @override
+  late final GeneratedColumn<String> depreciationMethod =
+      GeneratedColumn<String>(
+        'depreciation_method',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('straight_line'),
+      );
+  static const VerificationMeta _assetAccountIdMeta = const VerificationMeta(
+    'assetAccountId',
+  );
+  @override
+  late final GeneratedColumn<int> assetAccountId = GeneratedColumn<int>(
+    'asset_account_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES accounts (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _accumulatedDepreciationAccountIdMeta =
+      const VerificationMeta('accumulatedDepreciationAccountId');
+  @override
+  late final GeneratedColumn<int> accumulatedDepreciationAccountId =
+      GeneratedColumn<int>(
+        'accumulated_depreciation_account_id',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES accounts (id) ON DELETE RESTRICT',
+        ),
+      );
+  static const VerificationMeta _depreciationExpenseAccountIdMeta =
+      const VerificationMeta('depreciationExpenseAccountId');
+  @override
+  late final GeneratedColumn<int> depreciationExpenseAccountId =
+      GeneratedColumn<int>(
+        'depreciation_expense_account_id',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES accounts (id) ON DELETE RESTRICT',
+        ),
+      );
+  static const VerificationMeta _fundingAccountIdMeta = const VerificationMeta(
+    'fundingAccountId',
+  );
+  @override
+  late final GeneratedColumn<int> fundingAccountId = GeneratedColumn<int>(
+    'funding_account_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES accounts (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _currencyIdMeta = const VerificationMeta(
+    'currencyId',
+  );
+  @override
+  late final GeneratedColumn<int> currencyId = GeneratedColumn<int>(
+    'currency_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES currencies (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('active'),
+  );
+  static const VerificationMeta _acquisitionJournalEntryIdMeta =
+      const VerificationMeta('acquisitionJournalEntryId');
+  @override
+  late final GeneratedColumn<int> acquisitionJournalEntryId =
+      GeneratedColumn<int>(
+        'acquisition_journal_entry_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'UNIQUE REFERENCES journal_entries (id) ON DELETE RESTRICT',
+        ),
+      );
+  static const VerificationMeta _reversalJournalEntryIdMeta =
+      const VerificationMeta('reversalJournalEntryId');
+  @override
+  late final GeneratedColumn<int> reversalJournalEntryId = GeneratedColumn<int>(
+    'reversal_journal_entry_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'UNIQUE REFERENCES journal_entries (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _createdByMeta = const VerificationMeta(
+    'createdBy',
+  );
+  @override
+  late final GeneratedColumn<int> createdBy = GeneratedColumn<int>(
+    'created_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    assetNumber,
+    name,
+    category,
+    description,
+    acquisitionDate,
+    inServiceDate,
+    costCents,
+    residualValueCents,
+    usefulLifeMonths,
+    depreciationMethod,
+    assetAccountId,
+    accumulatedDepreciationAccountId,
+    depreciationExpenseAccountId,
+    fundingAccountId,
+    currencyId,
+    status,
+    acquisitionJournalEntryId,
+    reversalJournalEntryId,
+    createdBy,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'fixed_assets';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FixedAsset> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('asset_number')) {
+      context.handle(
+        _assetNumberMeta,
+        assetNumber.isAcceptableOrUnknown(
+          data['asset_number']!,
+          _assetNumberMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_assetNumberMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('category')) {
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_categoryMeta);
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('acquisition_date')) {
+      context.handle(
+        _acquisitionDateMeta,
+        acquisitionDate.isAcceptableOrUnknown(
+          data['acquisition_date']!,
+          _acquisitionDateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_acquisitionDateMeta);
+    }
+    if (data.containsKey('in_service_date')) {
+      context.handle(
+        _inServiceDateMeta,
+        inServiceDate.isAcceptableOrUnknown(
+          data['in_service_date']!,
+          _inServiceDateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_inServiceDateMeta);
+    }
+    if (data.containsKey('useful_life_months')) {
+      context.handle(
+        _usefulLifeMonthsMeta,
+        usefulLifeMonths.isAcceptableOrUnknown(
+          data['useful_life_months']!,
+          _usefulLifeMonthsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_usefulLifeMonthsMeta);
+    }
+    if (data.containsKey('depreciation_method')) {
+      context.handle(
+        _depreciationMethodMeta,
+        depreciationMethod.isAcceptableOrUnknown(
+          data['depreciation_method']!,
+          _depreciationMethodMeta,
+        ),
+      );
+    }
+    if (data.containsKey('asset_account_id')) {
+      context.handle(
+        _assetAccountIdMeta,
+        assetAccountId.isAcceptableOrUnknown(
+          data['asset_account_id']!,
+          _assetAccountIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_assetAccountIdMeta);
+    }
+    if (data.containsKey('accumulated_depreciation_account_id')) {
+      context.handle(
+        _accumulatedDepreciationAccountIdMeta,
+        accumulatedDepreciationAccountId.isAcceptableOrUnknown(
+          data['accumulated_depreciation_account_id']!,
+          _accumulatedDepreciationAccountIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_accumulatedDepreciationAccountIdMeta);
+    }
+    if (data.containsKey('depreciation_expense_account_id')) {
+      context.handle(
+        _depreciationExpenseAccountIdMeta,
+        depreciationExpenseAccountId.isAcceptableOrUnknown(
+          data['depreciation_expense_account_id']!,
+          _depreciationExpenseAccountIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_depreciationExpenseAccountIdMeta);
+    }
+    if (data.containsKey('funding_account_id')) {
+      context.handle(
+        _fundingAccountIdMeta,
+        fundingAccountId.isAcceptableOrUnknown(
+          data['funding_account_id']!,
+          _fundingAccountIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_fundingAccountIdMeta);
+    }
+    if (data.containsKey('currency_id')) {
+      context.handle(
+        _currencyIdMeta,
+        currencyId.isAcceptableOrUnknown(data['currency_id']!, _currencyIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_currencyIdMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('acquisition_journal_entry_id')) {
+      context.handle(
+        _acquisitionJournalEntryIdMeta,
+        acquisitionJournalEntryId.isAcceptableOrUnknown(
+          data['acquisition_journal_entry_id']!,
+          _acquisitionJournalEntryIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reversal_journal_entry_id')) {
+      context.handle(
+        _reversalJournalEntryIdMeta,
+        reversalJournalEntryId.isAcceptableOrUnknown(
+          data['reversal_journal_entry_id']!,
+          _reversalJournalEntryIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_by')) {
+      context.handle(
+        _createdByMeta,
+        createdBy.isAcceptableOrUnknown(data['created_by']!, _createdByMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  FixedAsset map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FixedAsset(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      assetNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}asset_number'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      ),
+      acquisitionDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}acquisition_date'],
+      )!,
+      inServiceDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}in_service_date'],
+      )!,
+      costCents: $FixedAssetsTable.$convertercostCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}cost_cents'],
+        )!,
+      ),
+      residualValueCents: $FixedAssetsTable.$converterresidualValueCents
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}residual_value_cents'],
+            )!,
+          ),
+      usefulLifeMonths: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}useful_life_months'],
+      )!,
+      depreciationMethod: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}depreciation_method'],
+      )!,
+      assetAccountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}asset_account_id'],
+      )!,
+      accumulatedDepreciationAccountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}accumulated_depreciation_account_id'],
+      )!,
+      depreciationExpenseAccountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}depreciation_expense_account_id'],
+      )!,
+      fundingAccountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}funding_account_id'],
+      )!,
+      currencyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}currency_id'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      acquisitionJournalEntryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}acquisition_journal_entry_id'],
+      ),
+      reversalJournalEntryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reversal_journal_entry_id'],
+      ),
+      createdBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_by'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $FixedAssetsTable createAlias(String alias) {
+    return $FixedAssetsTable(attachedDatabase, alias);
+  }
+
+  static TypeConverter<Decimal, int> $convertercostCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal, int> $converterresidualValueCents =
+      const MoneyConverter();
+}
+
+class FixedAsset extends DataClass implements Insertable<FixedAsset> {
+  final int id;
+  final String assetNumber;
+  final String name;
+  final String category;
+  final String? description;
+  final DateTime acquisitionDate;
+  final DateTime inServiceDate;
+  final Decimal costCents;
+  final Decimal residualValueCents;
+  final int usefulLifeMonths;
+  final String depreciationMethod;
+  final int assetAccountId;
+  final int accumulatedDepreciationAccountId;
+  final int depreciationExpenseAccountId;
+  final int fundingAccountId;
+  final int currencyId;
+  final String status;
+  final int? acquisitionJournalEntryId;
+  final int? reversalJournalEntryId;
+  final int? createdBy;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const FixedAsset({
+    required this.id,
+    required this.assetNumber,
+    required this.name,
+    required this.category,
+    this.description,
+    required this.acquisitionDate,
+    required this.inServiceDate,
+    required this.costCents,
+    required this.residualValueCents,
+    required this.usefulLifeMonths,
+    required this.depreciationMethod,
+    required this.assetAccountId,
+    required this.accumulatedDepreciationAccountId,
+    required this.depreciationExpenseAccountId,
+    required this.fundingAccountId,
+    required this.currencyId,
+    required this.status,
+    this.acquisitionJournalEntryId,
+    this.reversalJournalEntryId,
+    this.createdBy,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['asset_number'] = Variable<String>(assetNumber);
+    map['name'] = Variable<String>(name);
+    map['category'] = Variable<String>(category);
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
+    }
+    map['acquisition_date'] = Variable<DateTime>(acquisitionDate);
+    map['in_service_date'] = Variable<DateTime>(inServiceDate);
+    {
+      map['cost_cents'] = Variable<int>(
+        $FixedAssetsTable.$convertercostCents.toSql(costCents),
+      );
+    }
+    {
+      map['residual_value_cents'] = Variable<int>(
+        $FixedAssetsTable.$converterresidualValueCents.toSql(
+          residualValueCents,
+        ),
+      );
+    }
+    map['useful_life_months'] = Variable<int>(usefulLifeMonths);
+    map['depreciation_method'] = Variable<String>(depreciationMethod);
+    map['asset_account_id'] = Variable<int>(assetAccountId);
+    map['accumulated_depreciation_account_id'] = Variable<int>(
+      accumulatedDepreciationAccountId,
+    );
+    map['depreciation_expense_account_id'] = Variable<int>(
+      depreciationExpenseAccountId,
+    );
+    map['funding_account_id'] = Variable<int>(fundingAccountId);
+    map['currency_id'] = Variable<int>(currencyId);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || acquisitionJournalEntryId != null) {
+      map['acquisition_journal_entry_id'] = Variable<int>(
+        acquisitionJournalEntryId,
+      );
+    }
+    if (!nullToAbsent || reversalJournalEntryId != null) {
+      map['reversal_journal_entry_id'] = Variable<int>(reversalJournalEntryId);
+    }
+    if (!nullToAbsent || createdBy != null) {
+      map['created_by'] = Variable<int>(createdBy);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  FixedAssetsCompanion toCompanion(bool nullToAbsent) {
+    return FixedAssetsCompanion(
+      id: Value(id),
+      assetNumber: Value(assetNumber),
+      name: Value(name),
+      category: Value(category),
+      description: description == null && nullToAbsent
+          ? const Value.absent()
+          : Value(description),
+      acquisitionDate: Value(acquisitionDate),
+      inServiceDate: Value(inServiceDate),
+      costCents: Value(costCents),
+      residualValueCents: Value(residualValueCents),
+      usefulLifeMonths: Value(usefulLifeMonths),
+      depreciationMethod: Value(depreciationMethod),
+      assetAccountId: Value(assetAccountId),
+      accumulatedDepreciationAccountId: Value(accumulatedDepreciationAccountId),
+      depreciationExpenseAccountId: Value(depreciationExpenseAccountId),
+      fundingAccountId: Value(fundingAccountId),
+      currencyId: Value(currencyId),
+      status: Value(status),
+      acquisitionJournalEntryId:
+          acquisitionJournalEntryId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(acquisitionJournalEntryId),
+      reversalJournalEntryId: reversalJournalEntryId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reversalJournalEntryId),
+      createdBy: createdBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(createdBy),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory FixedAsset.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FixedAsset(
+      id: serializer.fromJson<int>(json['id']),
+      assetNumber: serializer.fromJson<String>(json['assetNumber']),
+      name: serializer.fromJson<String>(json['name']),
+      category: serializer.fromJson<String>(json['category']),
+      description: serializer.fromJson<String?>(json['description']),
+      acquisitionDate: serializer.fromJson<DateTime>(json['acquisitionDate']),
+      inServiceDate: serializer.fromJson<DateTime>(json['inServiceDate']),
+      costCents: serializer.fromJson<Decimal>(json['costCents']),
+      residualValueCents: serializer.fromJson<Decimal>(
+        json['residualValueCents'],
+      ),
+      usefulLifeMonths: serializer.fromJson<int>(json['usefulLifeMonths']),
+      depreciationMethod: serializer.fromJson<String>(
+        json['depreciationMethod'],
+      ),
+      assetAccountId: serializer.fromJson<int>(json['assetAccountId']),
+      accumulatedDepreciationAccountId: serializer.fromJson<int>(
+        json['accumulatedDepreciationAccountId'],
+      ),
+      depreciationExpenseAccountId: serializer.fromJson<int>(
+        json['depreciationExpenseAccountId'],
+      ),
+      fundingAccountId: serializer.fromJson<int>(json['fundingAccountId']),
+      currencyId: serializer.fromJson<int>(json['currencyId']),
+      status: serializer.fromJson<String>(json['status']),
+      acquisitionJournalEntryId: serializer.fromJson<int?>(
+        json['acquisitionJournalEntryId'],
+      ),
+      reversalJournalEntryId: serializer.fromJson<int?>(
+        json['reversalJournalEntryId'],
+      ),
+      createdBy: serializer.fromJson<int?>(json['createdBy']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'assetNumber': serializer.toJson<String>(assetNumber),
+      'name': serializer.toJson<String>(name),
+      'category': serializer.toJson<String>(category),
+      'description': serializer.toJson<String?>(description),
+      'acquisitionDate': serializer.toJson<DateTime>(acquisitionDate),
+      'inServiceDate': serializer.toJson<DateTime>(inServiceDate),
+      'costCents': serializer.toJson<Decimal>(costCents),
+      'residualValueCents': serializer.toJson<Decimal>(residualValueCents),
+      'usefulLifeMonths': serializer.toJson<int>(usefulLifeMonths),
+      'depreciationMethod': serializer.toJson<String>(depreciationMethod),
+      'assetAccountId': serializer.toJson<int>(assetAccountId),
+      'accumulatedDepreciationAccountId': serializer.toJson<int>(
+        accumulatedDepreciationAccountId,
+      ),
+      'depreciationExpenseAccountId': serializer.toJson<int>(
+        depreciationExpenseAccountId,
+      ),
+      'fundingAccountId': serializer.toJson<int>(fundingAccountId),
+      'currencyId': serializer.toJson<int>(currencyId),
+      'status': serializer.toJson<String>(status),
+      'acquisitionJournalEntryId': serializer.toJson<int?>(
+        acquisitionJournalEntryId,
+      ),
+      'reversalJournalEntryId': serializer.toJson<int?>(reversalJournalEntryId),
+      'createdBy': serializer.toJson<int?>(createdBy),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  FixedAsset copyWith({
+    int? id,
+    String? assetNumber,
+    String? name,
+    String? category,
+    Value<String?> description = const Value.absent(),
+    DateTime? acquisitionDate,
+    DateTime? inServiceDate,
+    Decimal? costCents,
+    Decimal? residualValueCents,
+    int? usefulLifeMonths,
+    String? depreciationMethod,
+    int? assetAccountId,
+    int? accumulatedDepreciationAccountId,
+    int? depreciationExpenseAccountId,
+    int? fundingAccountId,
+    int? currencyId,
+    String? status,
+    Value<int?> acquisitionJournalEntryId = const Value.absent(),
+    Value<int?> reversalJournalEntryId = const Value.absent(),
+    Value<int?> createdBy = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => FixedAsset(
+    id: id ?? this.id,
+    assetNumber: assetNumber ?? this.assetNumber,
+    name: name ?? this.name,
+    category: category ?? this.category,
+    description: description.present ? description.value : this.description,
+    acquisitionDate: acquisitionDate ?? this.acquisitionDate,
+    inServiceDate: inServiceDate ?? this.inServiceDate,
+    costCents: costCents ?? this.costCents,
+    residualValueCents: residualValueCents ?? this.residualValueCents,
+    usefulLifeMonths: usefulLifeMonths ?? this.usefulLifeMonths,
+    depreciationMethod: depreciationMethod ?? this.depreciationMethod,
+    assetAccountId: assetAccountId ?? this.assetAccountId,
+    accumulatedDepreciationAccountId:
+        accumulatedDepreciationAccountId ??
+        this.accumulatedDepreciationAccountId,
+    depreciationExpenseAccountId:
+        depreciationExpenseAccountId ?? this.depreciationExpenseAccountId,
+    fundingAccountId: fundingAccountId ?? this.fundingAccountId,
+    currencyId: currencyId ?? this.currencyId,
+    status: status ?? this.status,
+    acquisitionJournalEntryId: acquisitionJournalEntryId.present
+        ? acquisitionJournalEntryId.value
+        : this.acquisitionJournalEntryId,
+    reversalJournalEntryId: reversalJournalEntryId.present
+        ? reversalJournalEntryId.value
+        : this.reversalJournalEntryId,
+    createdBy: createdBy.present ? createdBy.value : this.createdBy,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  FixedAsset copyWithCompanion(FixedAssetsCompanion data) {
+    return FixedAsset(
+      id: data.id.present ? data.id.value : this.id,
+      assetNumber: data.assetNumber.present
+          ? data.assetNumber.value
+          : this.assetNumber,
+      name: data.name.present ? data.name.value : this.name,
+      category: data.category.present ? data.category.value : this.category,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+      acquisitionDate: data.acquisitionDate.present
+          ? data.acquisitionDate.value
+          : this.acquisitionDate,
+      inServiceDate: data.inServiceDate.present
+          ? data.inServiceDate.value
+          : this.inServiceDate,
+      costCents: data.costCents.present ? data.costCents.value : this.costCents,
+      residualValueCents: data.residualValueCents.present
+          ? data.residualValueCents.value
+          : this.residualValueCents,
+      usefulLifeMonths: data.usefulLifeMonths.present
+          ? data.usefulLifeMonths.value
+          : this.usefulLifeMonths,
+      depreciationMethod: data.depreciationMethod.present
+          ? data.depreciationMethod.value
+          : this.depreciationMethod,
+      assetAccountId: data.assetAccountId.present
+          ? data.assetAccountId.value
+          : this.assetAccountId,
+      accumulatedDepreciationAccountId:
+          data.accumulatedDepreciationAccountId.present
+          ? data.accumulatedDepreciationAccountId.value
+          : this.accumulatedDepreciationAccountId,
+      depreciationExpenseAccountId: data.depreciationExpenseAccountId.present
+          ? data.depreciationExpenseAccountId.value
+          : this.depreciationExpenseAccountId,
+      fundingAccountId: data.fundingAccountId.present
+          ? data.fundingAccountId.value
+          : this.fundingAccountId,
+      currencyId: data.currencyId.present
+          ? data.currencyId.value
+          : this.currencyId,
+      status: data.status.present ? data.status.value : this.status,
+      acquisitionJournalEntryId: data.acquisitionJournalEntryId.present
+          ? data.acquisitionJournalEntryId.value
+          : this.acquisitionJournalEntryId,
+      reversalJournalEntryId: data.reversalJournalEntryId.present
+          ? data.reversalJournalEntryId.value
+          : this.reversalJournalEntryId,
+      createdBy: data.createdBy.present ? data.createdBy.value : this.createdBy,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FixedAsset(')
+          ..write('id: $id, ')
+          ..write('assetNumber: $assetNumber, ')
+          ..write('name: $name, ')
+          ..write('category: $category, ')
+          ..write('description: $description, ')
+          ..write('acquisitionDate: $acquisitionDate, ')
+          ..write('inServiceDate: $inServiceDate, ')
+          ..write('costCents: $costCents, ')
+          ..write('residualValueCents: $residualValueCents, ')
+          ..write('usefulLifeMonths: $usefulLifeMonths, ')
+          ..write('depreciationMethod: $depreciationMethod, ')
+          ..write('assetAccountId: $assetAccountId, ')
+          ..write(
+            'accumulatedDepreciationAccountId: $accumulatedDepreciationAccountId, ',
+          )
+          ..write(
+            'depreciationExpenseAccountId: $depreciationExpenseAccountId, ',
+          )
+          ..write('fundingAccountId: $fundingAccountId, ')
+          ..write('currencyId: $currencyId, ')
+          ..write('status: $status, ')
+          ..write('acquisitionJournalEntryId: $acquisitionJournalEntryId, ')
+          ..write('reversalJournalEntryId: $reversalJournalEntryId, ')
+          ..write('createdBy: $createdBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    assetNumber,
+    name,
+    category,
+    description,
+    acquisitionDate,
+    inServiceDate,
+    costCents,
+    residualValueCents,
+    usefulLifeMonths,
+    depreciationMethod,
+    assetAccountId,
+    accumulatedDepreciationAccountId,
+    depreciationExpenseAccountId,
+    fundingAccountId,
+    currencyId,
+    status,
+    acquisitionJournalEntryId,
+    reversalJournalEntryId,
+    createdBy,
+    createdAt,
+    updatedAt,
+  ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FixedAsset &&
+          other.id == this.id &&
+          other.assetNumber == this.assetNumber &&
+          other.name == this.name &&
+          other.category == this.category &&
+          other.description == this.description &&
+          other.acquisitionDate == this.acquisitionDate &&
+          other.inServiceDate == this.inServiceDate &&
+          other.costCents == this.costCents &&
+          other.residualValueCents == this.residualValueCents &&
+          other.usefulLifeMonths == this.usefulLifeMonths &&
+          other.depreciationMethod == this.depreciationMethod &&
+          other.assetAccountId == this.assetAccountId &&
+          other.accumulatedDepreciationAccountId ==
+              this.accumulatedDepreciationAccountId &&
+          other.depreciationExpenseAccountId ==
+              this.depreciationExpenseAccountId &&
+          other.fundingAccountId == this.fundingAccountId &&
+          other.currencyId == this.currencyId &&
+          other.status == this.status &&
+          other.acquisitionJournalEntryId == this.acquisitionJournalEntryId &&
+          other.reversalJournalEntryId == this.reversalJournalEntryId &&
+          other.createdBy == this.createdBy &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class FixedAssetsCompanion extends UpdateCompanion<FixedAsset> {
+  final Value<int> id;
+  final Value<String> assetNumber;
+  final Value<String> name;
+  final Value<String> category;
+  final Value<String?> description;
+  final Value<DateTime> acquisitionDate;
+  final Value<DateTime> inServiceDate;
+  final Value<Decimal> costCents;
+  final Value<Decimal> residualValueCents;
+  final Value<int> usefulLifeMonths;
+  final Value<String> depreciationMethod;
+  final Value<int> assetAccountId;
+  final Value<int> accumulatedDepreciationAccountId;
+  final Value<int> depreciationExpenseAccountId;
+  final Value<int> fundingAccountId;
+  final Value<int> currencyId;
+  final Value<String> status;
+  final Value<int?> acquisitionJournalEntryId;
+  final Value<int?> reversalJournalEntryId;
+  final Value<int?> createdBy;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const FixedAssetsCompanion({
+    this.id = const Value.absent(),
+    this.assetNumber = const Value.absent(),
+    this.name = const Value.absent(),
+    this.category = const Value.absent(),
+    this.description = const Value.absent(),
+    this.acquisitionDate = const Value.absent(),
+    this.inServiceDate = const Value.absent(),
+    this.costCents = const Value.absent(),
+    this.residualValueCents = const Value.absent(),
+    this.usefulLifeMonths = const Value.absent(),
+    this.depreciationMethod = const Value.absent(),
+    this.assetAccountId = const Value.absent(),
+    this.accumulatedDepreciationAccountId = const Value.absent(),
+    this.depreciationExpenseAccountId = const Value.absent(),
+    this.fundingAccountId = const Value.absent(),
+    this.currencyId = const Value.absent(),
+    this.status = const Value.absent(),
+    this.acquisitionJournalEntryId = const Value.absent(),
+    this.reversalJournalEntryId = const Value.absent(),
+    this.createdBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  FixedAssetsCompanion.insert({
+    this.id = const Value.absent(),
+    required String assetNumber,
+    required String name,
+    required String category,
+    this.description = const Value.absent(),
+    required DateTime acquisitionDate,
+    required DateTime inServiceDate,
+    required Decimal costCents,
+    this.residualValueCents = const Value.absent(),
+    required int usefulLifeMonths,
+    this.depreciationMethod = const Value.absent(),
+    required int assetAccountId,
+    required int accumulatedDepreciationAccountId,
+    required int depreciationExpenseAccountId,
+    required int fundingAccountId,
+    required int currencyId,
+    this.status = const Value.absent(),
+    this.acquisitionJournalEntryId = const Value.absent(),
+    this.reversalJournalEntryId = const Value.absent(),
+    this.createdBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : assetNumber = Value(assetNumber),
+       name = Value(name),
+       category = Value(category),
+       acquisitionDate = Value(acquisitionDate),
+       inServiceDate = Value(inServiceDate),
+       costCents = Value(costCents),
+       usefulLifeMonths = Value(usefulLifeMonths),
+       assetAccountId = Value(assetAccountId),
+       accumulatedDepreciationAccountId = Value(
+         accumulatedDepreciationAccountId,
+       ),
+       depreciationExpenseAccountId = Value(depreciationExpenseAccountId),
+       fundingAccountId = Value(fundingAccountId),
+       currencyId = Value(currencyId);
+  static Insertable<FixedAsset> custom({
+    Expression<int>? id,
+    Expression<String>? assetNumber,
+    Expression<String>? name,
+    Expression<String>? category,
+    Expression<String>? description,
+    Expression<DateTime>? acquisitionDate,
+    Expression<DateTime>? inServiceDate,
+    Expression<int>? costCents,
+    Expression<int>? residualValueCents,
+    Expression<int>? usefulLifeMonths,
+    Expression<String>? depreciationMethod,
+    Expression<int>? assetAccountId,
+    Expression<int>? accumulatedDepreciationAccountId,
+    Expression<int>? depreciationExpenseAccountId,
+    Expression<int>? fundingAccountId,
+    Expression<int>? currencyId,
+    Expression<String>? status,
+    Expression<int>? acquisitionJournalEntryId,
+    Expression<int>? reversalJournalEntryId,
+    Expression<int>? createdBy,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (assetNumber != null) 'asset_number': assetNumber,
+      if (name != null) 'name': name,
+      if (category != null) 'category': category,
+      if (description != null) 'description': description,
+      if (acquisitionDate != null) 'acquisition_date': acquisitionDate,
+      if (inServiceDate != null) 'in_service_date': inServiceDate,
+      if (costCents != null) 'cost_cents': costCents,
+      if (residualValueCents != null)
+        'residual_value_cents': residualValueCents,
+      if (usefulLifeMonths != null) 'useful_life_months': usefulLifeMonths,
+      if (depreciationMethod != null) 'depreciation_method': depreciationMethod,
+      if (assetAccountId != null) 'asset_account_id': assetAccountId,
+      if (accumulatedDepreciationAccountId != null)
+        'accumulated_depreciation_account_id': accumulatedDepreciationAccountId,
+      if (depreciationExpenseAccountId != null)
+        'depreciation_expense_account_id': depreciationExpenseAccountId,
+      if (fundingAccountId != null) 'funding_account_id': fundingAccountId,
+      if (currencyId != null) 'currency_id': currencyId,
+      if (status != null) 'status': status,
+      if (acquisitionJournalEntryId != null)
+        'acquisition_journal_entry_id': acquisitionJournalEntryId,
+      if (reversalJournalEntryId != null)
+        'reversal_journal_entry_id': reversalJournalEntryId,
+      if (createdBy != null) 'created_by': createdBy,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  FixedAssetsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? assetNumber,
+    Value<String>? name,
+    Value<String>? category,
+    Value<String?>? description,
+    Value<DateTime>? acquisitionDate,
+    Value<DateTime>? inServiceDate,
+    Value<Decimal>? costCents,
+    Value<Decimal>? residualValueCents,
+    Value<int>? usefulLifeMonths,
+    Value<String>? depreciationMethod,
+    Value<int>? assetAccountId,
+    Value<int>? accumulatedDepreciationAccountId,
+    Value<int>? depreciationExpenseAccountId,
+    Value<int>? fundingAccountId,
+    Value<int>? currencyId,
+    Value<String>? status,
+    Value<int?>? acquisitionJournalEntryId,
+    Value<int?>? reversalJournalEntryId,
+    Value<int?>? createdBy,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return FixedAssetsCompanion(
+      id: id ?? this.id,
+      assetNumber: assetNumber ?? this.assetNumber,
+      name: name ?? this.name,
+      category: category ?? this.category,
+      description: description ?? this.description,
+      acquisitionDate: acquisitionDate ?? this.acquisitionDate,
+      inServiceDate: inServiceDate ?? this.inServiceDate,
+      costCents: costCents ?? this.costCents,
+      residualValueCents: residualValueCents ?? this.residualValueCents,
+      usefulLifeMonths: usefulLifeMonths ?? this.usefulLifeMonths,
+      depreciationMethod: depreciationMethod ?? this.depreciationMethod,
+      assetAccountId: assetAccountId ?? this.assetAccountId,
+      accumulatedDepreciationAccountId:
+          accumulatedDepreciationAccountId ??
+          this.accumulatedDepreciationAccountId,
+      depreciationExpenseAccountId:
+          depreciationExpenseAccountId ?? this.depreciationExpenseAccountId,
+      fundingAccountId: fundingAccountId ?? this.fundingAccountId,
+      currencyId: currencyId ?? this.currencyId,
+      status: status ?? this.status,
+      acquisitionJournalEntryId:
+          acquisitionJournalEntryId ?? this.acquisitionJournalEntryId,
+      reversalJournalEntryId:
+          reversalJournalEntryId ?? this.reversalJournalEntryId,
+      createdBy: createdBy ?? this.createdBy,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (assetNumber.present) {
+      map['asset_number'] = Variable<String>(assetNumber.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (category.present) {
+      map['category'] = Variable<String>(category.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (acquisitionDate.present) {
+      map['acquisition_date'] = Variable<DateTime>(acquisitionDate.value);
+    }
+    if (inServiceDate.present) {
+      map['in_service_date'] = Variable<DateTime>(inServiceDate.value);
+    }
+    if (costCents.present) {
+      map['cost_cents'] = Variable<int>(
+        $FixedAssetsTable.$convertercostCents.toSql(costCents.value),
+      );
+    }
+    if (residualValueCents.present) {
+      map['residual_value_cents'] = Variable<int>(
+        $FixedAssetsTable.$converterresidualValueCents.toSql(
+          residualValueCents.value,
+        ),
+      );
+    }
+    if (usefulLifeMonths.present) {
+      map['useful_life_months'] = Variable<int>(usefulLifeMonths.value);
+    }
+    if (depreciationMethod.present) {
+      map['depreciation_method'] = Variable<String>(depreciationMethod.value);
+    }
+    if (assetAccountId.present) {
+      map['asset_account_id'] = Variable<int>(assetAccountId.value);
+    }
+    if (accumulatedDepreciationAccountId.present) {
+      map['accumulated_depreciation_account_id'] = Variable<int>(
+        accumulatedDepreciationAccountId.value,
+      );
+    }
+    if (depreciationExpenseAccountId.present) {
+      map['depreciation_expense_account_id'] = Variable<int>(
+        depreciationExpenseAccountId.value,
+      );
+    }
+    if (fundingAccountId.present) {
+      map['funding_account_id'] = Variable<int>(fundingAccountId.value);
+    }
+    if (currencyId.present) {
+      map['currency_id'] = Variable<int>(currencyId.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (acquisitionJournalEntryId.present) {
+      map['acquisition_journal_entry_id'] = Variable<int>(
+        acquisitionJournalEntryId.value,
+      );
+    }
+    if (reversalJournalEntryId.present) {
+      map['reversal_journal_entry_id'] = Variable<int>(
+        reversalJournalEntryId.value,
+      );
+    }
+    if (createdBy.present) {
+      map['created_by'] = Variable<int>(createdBy.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FixedAssetsCompanion(')
+          ..write('id: $id, ')
+          ..write('assetNumber: $assetNumber, ')
+          ..write('name: $name, ')
+          ..write('category: $category, ')
+          ..write('description: $description, ')
+          ..write('acquisitionDate: $acquisitionDate, ')
+          ..write('inServiceDate: $inServiceDate, ')
+          ..write('costCents: $costCents, ')
+          ..write('residualValueCents: $residualValueCents, ')
+          ..write('usefulLifeMonths: $usefulLifeMonths, ')
+          ..write('depreciationMethod: $depreciationMethod, ')
+          ..write('assetAccountId: $assetAccountId, ')
+          ..write(
+            'accumulatedDepreciationAccountId: $accumulatedDepreciationAccountId, ',
+          )
+          ..write(
+            'depreciationExpenseAccountId: $depreciationExpenseAccountId, ',
+          )
+          ..write('fundingAccountId: $fundingAccountId, ')
+          ..write('currencyId: $currencyId, ')
+          ..write('status: $status, ')
+          ..write('acquisitionJournalEntryId: $acquisitionJournalEntryId, ')
+          ..write('reversalJournalEntryId: $reversalJournalEntryId, ')
+          ..write('createdBy: $createdBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $FixedAssetDepreciationsTable extends FixedAssetDepreciations
+    with TableInfo<$FixedAssetDepreciationsTable, FixedAssetDepreciation> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FixedAssetDepreciationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _assetIdMeta = const VerificationMeta(
+    'assetId',
+  );
+  @override
+  late final GeneratedColumn<int> assetId = GeneratedColumn<int>(
+    'asset_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES fixed_assets (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _installmentNumberMeta = const VerificationMeta(
+    'installmentNumber',
+  );
+  @override
+  late final GeneratedColumn<int> installmentNumber = GeneratedColumn<int>(
+    'installment_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _periodStartMeta = const VerificationMeta(
+    'periodStart',
+  );
+  @override
+  late final GeneratedColumn<DateTime> periodStart = GeneratedColumn<DateTime>(
+    'period_start',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _periodEndMeta = const VerificationMeta(
+    'periodEnd',
+  );
+  @override
+  late final GeneratedColumn<DateTime> periodEnd = GeneratedColumn<DateTime>(
+    'period_end',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> amountCents =
+      GeneratedColumn<int>(
+        'amount_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+      ).withConverter<Decimal>(
+        $FixedAssetDepreciationsTable.$converteramountCents,
+      );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('posted'),
+  );
+  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
+  @override
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _journalEntryIdMeta = const VerificationMeta(
+    'journalEntryId',
+  );
+  @override
+  late final GeneratedColumn<int> journalEntryId = GeneratedColumn<int>(
+    'journal_entry_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'UNIQUE REFERENCES journal_entries (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _reversalJournalEntryIdMeta =
+      const VerificationMeta('reversalJournalEntryId');
+  @override
+  late final GeneratedColumn<int> reversalJournalEntryId = GeneratedColumn<int>(
+    'reversal_journal_entry_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'UNIQUE REFERENCES journal_entries (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _postedByMeta = const VerificationMeta(
+    'postedBy',
+  );
+  @override
+  late final GeneratedColumn<int> postedBy = GeneratedColumn<int>(
+    'posted_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    assetId,
+    installmentNumber,
+    periodStart,
+    periodEnd,
+    amountCents,
+    status,
+    notes,
+    journalEntryId,
+    reversalJournalEntryId,
+    postedBy,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'fixed_asset_depreciations';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FixedAssetDepreciation> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('asset_id')) {
+      context.handle(
+        _assetIdMeta,
+        assetId.isAcceptableOrUnknown(data['asset_id']!, _assetIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_assetIdMeta);
+    }
+    if (data.containsKey('installment_number')) {
+      context.handle(
+        _installmentNumberMeta,
+        installmentNumber.isAcceptableOrUnknown(
+          data['installment_number']!,
+          _installmentNumberMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_installmentNumberMeta);
+    }
+    if (data.containsKey('period_start')) {
+      context.handle(
+        _periodStartMeta,
+        periodStart.isAcceptableOrUnknown(
+          data['period_start']!,
+          _periodStartMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_periodStartMeta);
+    }
+    if (data.containsKey('period_end')) {
+      context.handle(
+        _periodEndMeta,
+        periodEnd.isAcceptableOrUnknown(data['period_end']!, _periodEndMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_periodEndMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('notes')) {
+      context.handle(
+        _notesMeta,
+        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+      );
+    }
+    if (data.containsKey('journal_entry_id')) {
+      context.handle(
+        _journalEntryIdMeta,
+        journalEntryId.isAcceptableOrUnknown(
+          data['journal_entry_id']!,
+          _journalEntryIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('reversal_journal_entry_id')) {
+      context.handle(
+        _reversalJournalEntryIdMeta,
+        reversalJournalEntryId.isAcceptableOrUnknown(
+          data['reversal_journal_entry_id']!,
+          _reversalJournalEntryIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('posted_by')) {
+      context.handle(
+        _postedByMeta,
+        postedBy.isAcceptableOrUnknown(data['posted_by']!, _postedByMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {assetId, installmentNumber},
+  ];
+  @override
+  FixedAssetDepreciation map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FixedAssetDepreciation(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      assetId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}asset_id'],
+      )!,
+      installmentNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}installment_number'],
+      )!,
+      periodStart: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}period_start'],
+      )!,
+      periodEnd: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}period_end'],
+      )!,
+      amountCents: $FixedAssetDepreciationsTable.$converteramountCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}amount_cents'],
+        )!,
+      ),
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      ),
+      journalEntryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}journal_entry_id'],
+      ),
+      reversalJournalEntryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}reversal_journal_entry_id'],
+      ),
+      postedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}posted_by'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $FixedAssetDepreciationsTable createAlias(String alias) {
+    return $FixedAssetDepreciationsTable(attachedDatabase, alias);
+  }
+
+  static TypeConverter<Decimal, int> $converteramountCents =
+      const MoneyConverter();
+}
+
+class FixedAssetDepreciation extends DataClass
+    implements Insertable<FixedAssetDepreciation> {
+  final int id;
+  final int assetId;
+  final int installmentNumber;
+  final DateTime periodStart;
+  final DateTime periodEnd;
+  final Decimal amountCents;
+  final String status;
+  final String? notes;
+  final int? journalEntryId;
+  final int? reversalJournalEntryId;
+  final int? postedBy;
+  final DateTime createdAt;
+  const FixedAssetDepreciation({
+    required this.id,
+    required this.assetId,
+    required this.installmentNumber,
+    required this.periodStart,
+    required this.periodEnd,
+    required this.amountCents,
+    required this.status,
+    this.notes,
+    this.journalEntryId,
+    this.reversalJournalEntryId,
+    this.postedBy,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['asset_id'] = Variable<int>(assetId);
+    map['installment_number'] = Variable<int>(installmentNumber);
+    map['period_start'] = Variable<DateTime>(periodStart);
+    map['period_end'] = Variable<DateTime>(periodEnd);
+    {
+      map['amount_cents'] = Variable<int>(
+        $FixedAssetDepreciationsTable.$converteramountCents.toSql(amountCents),
+      );
+    }
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || notes != null) {
+      map['notes'] = Variable<String>(notes);
+    }
+    if (!nullToAbsent || journalEntryId != null) {
+      map['journal_entry_id'] = Variable<int>(journalEntryId);
+    }
+    if (!nullToAbsent || reversalJournalEntryId != null) {
+      map['reversal_journal_entry_id'] = Variable<int>(reversalJournalEntryId);
+    }
+    if (!nullToAbsent || postedBy != null) {
+      map['posted_by'] = Variable<int>(postedBy);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  FixedAssetDepreciationsCompanion toCompanion(bool nullToAbsent) {
+    return FixedAssetDepreciationsCompanion(
+      id: Value(id),
+      assetId: Value(assetId),
+      installmentNumber: Value(installmentNumber),
+      periodStart: Value(periodStart),
+      periodEnd: Value(periodEnd),
+      amountCents: Value(amountCents),
+      status: Value(status),
+      notes: notes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notes),
+      journalEntryId: journalEntryId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(journalEntryId),
+      reversalJournalEntryId: reversalJournalEntryId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reversalJournalEntryId),
+      postedBy: postedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(postedBy),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory FixedAssetDepreciation.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FixedAssetDepreciation(
+      id: serializer.fromJson<int>(json['id']),
+      assetId: serializer.fromJson<int>(json['assetId']),
+      installmentNumber: serializer.fromJson<int>(json['installmentNumber']),
+      periodStart: serializer.fromJson<DateTime>(json['periodStart']),
+      periodEnd: serializer.fromJson<DateTime>(json['periodEnd']),
+      amountCents: serializer.fromJson<Decimal>(json['amountCents']),
+      status: serializer.fromJson<String>(json['status']),
+      notes: serializer.fromJson<String?>(json['notes']),
+      journalEntryId: serializer.fromJson<int?>(json['journalEntryId']),
+      reversalJournalEntryId: serializer.fromJson<int?>(
+        json['reversalJournalEntryId'],
+      ),
+      postedBy: serializer.fromJson<int?>(json['postedBy']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'assetId': serializer.toJson<int>(assetId),
+      'installmentNumber': serializer.toJson<int>(installmentNumber),
+      'periodStart': serializer.toJson<DateTime>(periodStart),
+      'periodEnd': serializer.toJson<DateTime>(periodEnd),
+      'amountCents': serializer.toJson<Decimal>(amountCents),
+      'status': serializer.toJson<String>(status),
+      'notes': serializer.toJson<String?>(notes),
+      'journalEntryId': serializer.toJson<int?>(journalEntryId),
+      'reversalJournalEntryId': serializer.toJson<int?>(reversalJournalEntryId),
+      'postedBy': serializer.toJson<int?>(postedBy),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  FixedAssetDepreciation copyWith({
+    int? id,
+    int? assetId,
+    int? installmentNumber,
+    DateTime? periodStart,
+    DateTime? periodEnd,
+    Decimal? amountCents,
+    String? status,
+    Value<String?> notes = const Value.absent(),
+    Value<int?> journalEntryId = const Value.absent(),
+    Value<int?> reversalJournalEntryId = const Value.absent(),
+    Value<int?> postedBy = const Value.absent(),
+    DateTime? createdAt,
+  }) => FixedAssetDepreciation(
+    id: id ?? this.id,
+    assetId: assetId ?? this.assetId,
+    installmentNumber: installmentNumber ?? this.installmentNumber,
+    periodStart: periodStart ?? this.periodStart,
+    periodEnd: periodEnd ?? this.periodEnd,
+    amountCents: amountCents ?? this.amountCents,
+    status: status ?? this.status,
+    notes: notes.present ? notes.value : this.notes,
+    journalEntryId: journalEntryId.present
+        ? journalEntryId.value
+        : this.journalEntryId,
+    reversalJournalEntryId: reversalJournalEntryId.present
+        ? reversalJournalEntryId.value
+        : this.reversalJournalEntryId,
+    postedBy: postedBy.present ? postedBy.value : this.postedBy,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  FixedAssetDepreciation copyWithCompanion(
+    FixedAssetDepreciationsCompanion data,
+  ) {
+    return FixedAssetDepreciation(
+      id: data.id.present ? data.id.value : this.id,
+      assetId: data.assetId.present ? data.assetId.value : this.assetId,
+      installmentNumber: data.installmentNumber.present
+          ? data.installmentNumber.value
+          : this.installmentNumber,
+      periodStart: data.periodStart.present
+          ? data.periodStart.value
+          : this.periodStart,
+      periodEnd: data.periodEnd.present ? data.periodEnd.value : this.periodEnd,
+      amountCents: data.amountCents.present
+          ? data.amountCents.value
+          : this.amountCents,
+      status: data.status.present ? data.status.value : this.status,
+      notes: data.notes.present ? data.notes.value : this.notes,
+      journalEntryId: data.journalEntryId.present
+          ? data.journalEntryId.value
+          : this.journalEntryId,
+      reversalJournalEntryId: data.reversalJournalEntryId.present
+          ? data.reversalJournalEntryId.value
+          : this.reversalJournalEntryId,
+      postedBy: data.postedBy.present ? data.postedBy.value : this.postedBy,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FixedAssetDepreciation(')
+          ..write('id: $id, ')
+          ..write('assetId: $assetId, ')
+          ..write('installmentNumber: $installmentNumber, ')
+          ..write('periodStart: $periodStart, ')
+          ..write('periodEnd: $periodEnd, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('status: $status, ')
+          ..write('notes: $notes, ')
+          ..write('journalEntryId: $journalEntryId, ')
+          ..write('reversalJournalEntryId: $reversalJournalEntryId, ')
+          ..write('postedBy: $postedBy, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    assetId,
+    installmentNumber,
+    periodStart,
+    periodEnd,
+    amountCents,
+    status,
+    notes,
+    journalEntryId,
+    reversalJournalEntryId,
+    postedBy,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FixedAssetDepreciation &&
+          other.id == this.id &&
+          other.assetId == this.assetId &&
+          other.installmentNumber == this.installmentNumber &&
+          other.periodStart == this.periodStart &&
+          other.periodEnd == this.periodEnd &&
+          other.amountCents == this.amountCents &&
+          other.status == this.status &&
+          other.notes == this.notes &&
+          other.journalEntryId == this.journalEntryId &&
+          other.reversalJournalEntryId == this.reversalJournalEntryId &&
+          other.postedBy == this.postedBy &&
+          other.createdAt == this.createdAt);
+}
+
+class FixedAssetDepreciationsCompanion
+    extends UpdateCompanion<FixedAssetDepreciation> {
+  final Value<int> id;
+  final Value<int> assetId;
+  final Value<int> installmentNumber;
+  final Value<DateTime> periodStart;
+  final Value<DateTime> periodEnd;
+  final Value<Decimal> amountCents;
+  final Value<String> status;
+  final Value<String?> notes;
+  final Value<int?> journalEntryId;
+  final Value<int?> reversalJournalEntryId;
+  final Value<int?> postedBy;
+  final Value<DateTime> createdAt;
+  const FixedAssetDepreciationsCompanion({
+    this.id = const Value.absent(),
+    this.assetId = const Value.absent(),
+    this.installmentNumber = const Value.absent(),
+    this.periodStart = const Value.absent(),
+    this.periodEnd = const Value.absent(),
+    this.amountCents = const Value.absent(),
+    this.status = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.journalEntryId = const Value.absent(),
+    this.reversalJournalEntryId = const Value.absent(),
+    this.postedBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  FixedAssetDepreciationsCompanion.insert({
+    this.id = const Value.absent(),
+    required int assetId,
+    required int installmentNumber,
+    required DateTime periodStart,
+    required DateTime periodEnd,
+    required Decimal amountCents,
+    this.status = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.journalEntryId = const Value.absent(),
+    this.reversalJournalEntryId = const Value.absent(),
+    this.postedBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  }) : assetId = Value(assetId),
+       installmentNumber = Value(installmentNumber),
+       periodStart = Value(periodStart),
+       periodEnd = Value(periodEnd),
+       amountCents = Value(amountCents);
+  static Insertable<FixedAssetDepreciation> custom({
+    Expression<int>? id,
+    Expression<int>? assetId,
+    Expression<int>? installmentNumber,
+    Expression<DateTime>? periodStart,
+    Expression<DateTime>? periodEnd,
+    Expression<int>? amountCents,
+    Expression<String>? status,
+    Expression<String>? notes,
+    Expression<int>? journalEntryId,
+    Expression<int>? reversalJournalEntryId,
+    Expression<int>? postedBy,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (assetId != null) 'asset_id': assetId,
+      if (installmentNumber != null) 'installment_number': installmentNumber,
+      if (periodStart != null) 'period_start': periodStart,
+      if (periodEnd != null) 'period_end': periodEnd,
+      if (amountCents != null) 'amount_cents': amountCents,
+      if (status != null) 'status': status,
+      if (notes != null) 'notes': notes,
+      if (journalEntryId != null) 'journal_entry_id': journalEntryId,
+      if (reversalJournalEntryId != null)
+        'reversal_journal_entry_id': reversalJournalEntryId,
+      if (postedBy != null) 'posted_by': postedBy,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  FixedAssetDepreciationsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? assetId,
+    Value<int>? installmentNumber,
+    Value<DateTime>? periodStart,
+    Value<DateTime>? periodEnd,
+    Value<Decimal>? amountCents,
+    Value<String>? status,
+    Value<String?>? notes,
+    Value<int?>? journalEntryId,
+    Value<int?>? reversalJournalEntryId,
+    Value<int?>? postedBy,
+    Value<DateTime>? createdAt,
+  }) {
+    return FixedAssetDepreciationsCompanion(
+      id: id ?? this.id,
+      assetId: assetId ?? this.assetId,
+      installmentNumber: installmentNumber ?? this.installmentNumber,
+      periodStart: periodStart ?? this.periodStart,
+      periodEnd: periodEnd ?? this.periodEnd,
+      amountCents: amountCents ?? this.amountCents,
+      status: status ?? this.status,
+      notes: notes ?? this.notes,
+      journalEntryId: journalEntryId ?? this.journalEntryId,
+      reversalJournalEntryId:
+          reversalJournalEntryId ?? this.reversalJournalEntryId,
+      postedBy: postedBy ?? this.postedBy,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (assetId.present) {
+      map['asset_id'] = Variable<int>(assetId.value);
+    }
+    if (installmentNumber.present) {
+      map['installment_number'] = Variable<int>(installmentNumber.value);
+    }
+    if (periodStart.present) {
+      map['period_start'] = Variable<DateTime>(periodStart.value);
+    }
+    if (periodEnd.present) {
+      map['period_end'] = Variable<DateTime>(periodEnd.value);
+    }
+    if (amountCents.present) {
+      map['amount_cents'] = Variable<int>(
+        $FixedAssetDepreciationsTable.$converteramountCents.toSql(
+          amountCents.value,
+        ),
+      );
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (notes.present) {
+      map['notes'] = Variable<String>(notes.value);
+    }
+    if (journalEntryId.present) {
+      map['journal_entry_id'] = Variable<int>(journalEntryId.value);
+    }
+    if (reversalJournalEntryId.present) {
+      map['reversal_journal_entry_id'] = Variable<int>(
+        reversalJournalEntryId.value,
+      );
+    }
+    if (postedBy.present) {
+      map['posted_by'] = Variable<int>(postedBy.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FixedAssetDepreciationsCompanion(')
+          ..write('id: $id, ')
+          ..write('assetId: $assetId, ')
+          ..write('installmentNumber: $installmentNumber, ')
+          ..write('periodStart: $periodStart, ')
+          ..write('periodEnd: $periodEnd, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('status: $status, ')
+          ..write('notes: $notes, ')
+          ..write('journalEntryId: $journalEntryId, ')
+          ..write('reversalJournalEntryId: $reversalJournalEntryId, ')
+          ..write('postedBy: $postedBy, ')
+          ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
@@ -46189,6 +51080,30 @@ class $PurchaseReturnAdjustmentItemsTable extends PurchaseReturnAdjustmentItems
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _quantityScaleMeta = const VerificationMeta(
+    'quantityScale',
+  );
+  @override
+  late final GeneratedColumn<int> quantityScale = GeneratedColumn<int>(
+    'quantity_scale',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _measurementTypeMeta = const VerificationMeta(
+    'measurementType',
+  );
+  @override
+  late final GeneratedColumn<String> measurementType = GeneratedColumn<String>(
+    'measurement_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('piece'),
+  );
   @override
   late final GeneratedColumnWithTypeConverter<Decimal, int> unitPriceCents =
       GeneratedColumn<int>(
@@ -46279,6 +51194,19 @@ class $PurchaseReturnAdjustmentItemsTable extends PurchaseReturnAdjustmentItems
       ).withConverter<Decimal?>(
         $PurchaseReturnAdjustmentItemsTable.$converterunitCostAtPostCentsn,
       );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int>
+  inventoryValueAtPostCents =
+      GeneratedColumn<int>(
+        'inventory_value_at_post_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>(
+        $PurchaseReturnAdjustmentItemsTable
+            .$converterinventoryValueAtPostCentsn,
+      );
   static const VerificationMeta _originalInvoiceIdMeta = const VerificationMeta(
     'originalInvoiceId',
   );
@@ -46321,6 +51249,8 @@ class $PurchaseReturnAdjustmentItemsTable extends PurchaseReturnAdjustmentItems
     productId,
     variantId,
     quantity,
+    quantityScale,
+    measurementType,
     unitPriceCents,
     unitCostCents,
     discountCents,
@@ -46329,6 +51259,7 @@ class $PurchaseReturnAdjustmentItemsTable extends PurchaseReturnAdjustmentItems
     reason,
     taxRateBpsAtPost,
     unitCostAtPostCents,
+    inventoryValueAtPostCents,
     originalInvoiceId,
     dispositionType,
     createdAt,
@@ -46377,6 +51308,24 @@ class $PurchaseReturnAdjustmentItemsTable extends PurchaseReturnAdjustmentItems
       );
     } else if (isInserting) {
       context.missing(_quantityMeta);
+    }
+    if (data.containsKey('quantity_scale')) {
+      context.handle(
+        _quantityScaleMeta,
+        quantityScale.isAcceptableOrUnknown(
+          data['quantity_scale']!,
+          _quantityScaleMeta,
+        ),
+      );
+    }
+    if (data.containsKey('measurement_type')) {
+      context.handle(
+        _measurementTypeMeta,
+        measurementType.isAcceptableOrUnknown(
+          data['measurement_type']!,
+          _measurementTypeMeta,
+        ),
+      );
     }
     if (data.containsKey('reason')) {
       context.handle(
@@ -46449,6 +51398,14 @@ class $PurchaseReturnAdjustmentItemsTable extends PurchaseReturnAdjustmentItems
         DriftSqlType.int,
         data['${effectivePrefix}quantity'],
       )!,
+      quantityScale: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity_scale'],
+      )!,
+      measurementType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}measurement_type'],
+      )!,
       unitPriceCents: $PurchaseReturnAdjustmentItemsTable
           .$converterunitPriceCents
           .fromSql(
@@ -46500,6 +51457,14 @@ class $PurchaseReturnAdjustmentItemsTable extends PurchaseReturnAdjustmentItems
               data['${effectivePrefix}unit_cost_at_post_cents'],
             ),
           ),
+      inventoryValueAtPostCents: $PurchaseReturnAdjustmentItemsTable
+          .$converterinventoryValueAtPostCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}inventory_value_at_post_cents'],
+            ),
+          ),
       originalInvoiceId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}original_invoice_id'],
@@ -46534,6 +51499,10 @@ class $PurchaseReturnAdjustmentItemsTable extends PurchaseReturnAdjustmentItems
       const MoneyConverter();
   static TypeConverter<Decimal?, int?> $converterunitCostAtPostCentsn =
       NullAwareTypeConverter.wrap($converterunitCostAtPostCents);
+  static TypeConverter<Decimal, int> $converterinventoryValueAtPostCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converterinventoryValueAtPostCentsn =
+      NullAwareTypeConverter.wrap($converterinventoryValueAtPostCents);
 }
 
 class PurchaseReturnAdjustmentItem extends DataClass
@@ -46543,6 +51512,8 @@ class PurchaseReturnAdjustmentItem extends DataClass
   final int productId;
   final int? variantId;
   final int quantity;
+  final int quantityScale;
+  final String measurementType;
   final Decimal unitPriceCents;
 
   /// Frozen average cost at the moment of return creation (from products.cost_cents).
@@ -46561,6 +51532,9 @@ class PurchaseReturnAdjustmentItem extends DataClass
   /// and any later void.
   final Decimal? unitCostAtPostCents;
 
+  /// Exact rounded-pool value moved by this return line at posting time.
+  final Decimal? inventoryValueAtPostCents;
+
   /// Phase 2.1 — optional reference to the original purchase invoice this
   /// adjustment line is implicitly correcting (operator hint, not a hard FK
   /// constraint). Unbound when no specific invoice exists.
@@ -46577,6 +51551,8 @@ class PurchaseReturnAdjustmentItem extends DataClass
     required this.productId,
     this.variantId,
     required this.quantity,
+    required this.quantityScale,
+    required this.measurementType,
     required this.unitPriceCents,
     required this.unitCostCents,
     required this.discountCents,
@@ -46585,6 +51561,7 @@ class PurchaseReturnAdjustmentItem extends DataClass
     this.reason,
     this.taxRateBpsAtPost,
     this.unitCostAtPostCents,
+    this.inventoryValueAtPostCents,
     this.originalInvoiceId,
     required this.dispositionType,
     required this.createdAt,
@@ -46599,6 +51576,8 @@ class PurchaseReturnAdjustmentItem extends DataClass
       map['variant_id'] = Variable<int>(variantId);
     }
     map['quantity'] = Variable<int>(quantity);
+    map['quantity_scale'] = Variable<int>(quantityScale);
+    map['measurement_type'] = Variable<String>(measurementType);
     {
       map['unit_price_cents'] = Variable<int>(
         $PurchaseReturnAdjustmentItemsTable.$converterunitPriceCents.toSql(
@@ -46644,6 +51623,12 @@ class PurchaseReturnAdjustmentItem extends DataClass
             .toSql(unitCostAtPostCents),
       );
     }
+    if (!nullToAbsent || inventoryValueAtPostCents != null) {
+      map['inventory_value_at_post_cents'] = Variable<int>(
+        $PurchaseReturnAdjustmentItemsTable.$converterinventoryValueAtPostCentsn
+            .toSql(inventoryValueAtPostCents),
+      );
+    }
     if (!nullToAbsent || originalInvoiceId != null) {
       map['original_invoice_id'] = Variable<int>(originalInvoiceId);
     }
@@ -46661,6 +51646,8 @@ class PurchaseReturnAdjustmentItem extends DataClass
           ? const Value.absent()
           : Value(variantId),
       quantity: Value(quantity),
+      quantityScale: Value(quantityScale),
+      measurementType: Value(measurementType),
       unitPriceCents: Value(unitPriceCents),
       unitCostCents: Value(unitCostCents),
       discountCents: Value(discountCents),
@@ -46675,6 +51662,10 @@ class PurchaseReturnAdjustmentItem extends DataClass
       unitCostAtPostCents: unitCostAtPostCents == null && nullToAbsent
           ? const Value.absent()
           : Value(unitCostAtPostCents),
+      inventoryValueAtPostCents:
+          inventoryValueAtPostCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(inventoryValueAtPostCents),
       originalInvoiceId: originalInvoiceId == null && nullToAbsent
           ? const Value.absent()
           : Value(originalInvoiceId),
@@ -46694,6 +51685,8 @@ class PurchaseReturnAdjustmentItem extends DataClass
       productId: serializer.fromJson<int>(json['productId']),
       variantId: serializer.fromJson<int?>(json['variantId']),
       quantity: serializer.fromJson<int>(json['quantity']),
+      quantityScale: serializer.fromJson<int>(json['quantityScale']),
+      measurementType: serializer.fromJson<String>(json['measurementType']),
       unitPriceCents: serializer.fromJson<Decimal>(json['unitPriceCents']),
       unitCostCents: serializer.fromJson<Decimal>(json['unitCostCents']),
       discountCents: serializer.fromJson<Decimal>(json['discountCents']),
@@ -46703,6 +51696,9 @@ class PurchaseReturnAdjustmentItem extends DataClass
       taxRateBpsAtPost: serializer.fromJson<int?>(json['taxRateBpsAtPost']),
       unitCostAtPostCents: serializer.fromJson<Decimal?>(
         json['unitCostAtPostCents'],
+      ),
+      inventoryValueAtPostCents: serializer.fromJson<Decimal?>(
+        json['inventoryValueAtPostCents'],
       ),
       originalInvoiceId: serializer.fromJson<int?>(json['originalInvoiceId']),
       dispositionType: serializer.fromJson<String>(json['dispositionType']),
@@ -46718,6 +51714,8 @@ class PurchaseReturnAdjustmentItem extends DataClass
       'productId': serializer.toJson<int>(productId),
       'variantId': serializer.toJson<int?>(variantId),
       'quantity': serializer.toJson<int>(quantity),
+      'quantityScale': serializer.toJson<int>(quantityScale),
+      'measurementType': serializer.toJson<String>(measurementType),
       'unitPriceCents': serializer.toJson<Decimal>(unitPriceCents),
       'unitCostCents': serializer.toJson<Decimal>(unitCostCents),
       'discountCents': serializer.toJson<Decimal>(discountCents),
@@ -46726,6 +51724,9 @@ class PurchaseReturnAdjustmentItem extends DataClass
       'reason': serializer.toJson<String?>(reason),
       'taxRateBpsAtPost': serializer.toJson<int?>(taxRateBpsAtPost),
       'unitCostAtPostCents': serializer.toJson<Decimal?>(unitCostAtPostCents),
+      'inventoryValueAtPostCents': serializer.toJson<Decimal?>(
+        inventoryValueAtPostCents,
+      ),
       'originalInvoiceId': serializer.toJson<int?>(originalInvoiceId),
       'dispositionType': serializer.toJson<String>(dispositionType),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -46738,6 +51739,8 @@ class PurchaseReturnAdjustmentItem extends DataClass
     int? productId,
     Value<int?> variantId = const Value.absent(),
     int? quantity,
+    int? quantityScale,
+    String? measurementType,
     Decimal? unitPriceCents,
     Decimal? unitCostCents,
     Decimal? discountCents,
@@ -46746,6 +51749,7 @@ class PurchaseReturnAdjustmentItem extends DataClass
     Value<String?> reason = const Value.absent(),
     Value<int?> taxRateBpsAtPost = const Value.absent(),
     Value<Decimal?> unitCostAtPostCents = const Value.absent(),
+    Value<Decimal?> inventoryValueAtPostCents = const Value.absent(),
     Value<int?> originalInvoiceId = const Value.absent(),
     String? dispositionType,
     DateTime? createdAt,
@@ -46755,6 +51759,8 @@ class PurchaseReturnAdjustmentItem extends DataClass
     productId: productId ?? this.productId,
     variantId: variantId.present ? variantId.value : this.variantId,
     quantity: quantity ?? this.quantity,
+    quantityScale: quantityScale ?? this.quantityScale,
+    measurementType: measurementType ?? this.measurementType,
     unitPriceCents: unitPriceCents ?? this.unitPriceCents,
     unitCostCents: unitCostCents ?? this.unitCostCents,
     discountCents: discountCents ?? this.discountCents,
@@ -46767,6 +51773,9 @@ class PurchaseReturnAdjustmentItem extends DataClass
     unitCostAtPostCents: unitCostAtPostCents.present
         ? unitCostAtPostCents.value
         : this.unitCostAtPostCents,
+    inventoryValueAtPostCents: inventoryValueAtPostCents.present
+        ? inventoryValueAtPostCents.value
+        : this.inventoryValueAtPostCents,
     originalInvoiceId: originalInvoiceId.present
         ? originalInvoiceId.value
         : this.originalInvoiceId,
@@ -46782,6 +51791,12 @@ class PurchaseReturnAdjustmentItem extends DataClass
       productId: data.productId.present ? data.productId.value : this.productId,
       variantId: data.variantId.present ? data.variantId.value : this.variantId,
       quantity: data.quantity.present ? data.quantity.value : this.quantity,
+      quantityScale: data.quantityScale.present
+          ? data.quantityScale.value
+          : this.quantityScale,
+      measurementType: data.measurementType.present
+          ? data.measurementType.value
+          : this.measurementType,
       unitPriceCents: data.unitPriceCents.present
           ? data.unitPriceCents.value
           : this.unitPriceCents,
@@ -46802,6 +51817,9 @@ class PurchaseReturnAdjustmentItem extends DataClass
       unitCostAtPostCents: data.unitCostAtPostCents.present
           ? data.unitCostAtPostCents.value
           : this.unitCostAtPostCents,
+      inventoryValueAtPostCents: data.inventoryValueAtPostCents.present
+          ? data.inventoryValueAtPostCents.value
+          : this.inventoryValueAtPostCents,
       originalInvoiceId: data.originalInvoiceId.present
           ? data.originalInvoiceId.value
           : this.originalInvoiceId,
@@ -46820,6 +51838,8 @@ class PurchaseReturnAdjustmentItem extends DataClass
           ..write('productId: $productId, ')
           ..write('variantId: $variantId, ')
           ..write('quantity: $quantity, ')
+          ..write('quantityScale: $quantityScale, ')
+          ..write('measurementType: $measurementType, ')
           ..write('unitPriceCents: $unitPriceCents, ')
           ..write('unitCostCents: $unitCostCents, ')
           ..write('discountCents: $discountCents, ')
@@ -46828,6 +51848,7 @@ class PurchaseReturnAdjustmentItem extends DataClass
           ..write('reason: $reason, ')
           ..write('taxRateBpsAtPost: $taxRateBpsAtPost, ')
           ..write('unitCostAtPostCents: $unitCostAtPostCents, ')
+          ..write('inventoryValueAtPostCents: $inventoryValueAtPostCents, ')
           ..write('originalInvoiceId: $originalInvoiceId, ')
           ..write('dispositionType: $dispositionType, ')
           ..write('createdAt: $createdAt')
@@ -46842,6 +51863,8 @@ class PurchaseReturnAdjustmentItem extends DataClass
     productId,
     variantId,
     quantity,
+    quantityScale,
+    measurementType,
     unitPriceCents,
     unitCostCents,
     discountCents,
@@ -46850,6 +51873,7 @@ class PurchaseReturnAdjustmentItem extends DataClass
     reason,
     taxRateBpsAtPost,
     unitCostAtPostCents,
+    inventoryValueAtPostCents,
     originalInvoiceId,
     dispositionType,
     createdAt,
@@ -46863,6 +51887,8 @@ class PurchaseReturnAdjustmentItem extends DataClass
           other.productId == this.productId &&
           other.variantId == this.variantId &&
           other.quantity == this.quantity &&
+          other.quantityScale == this.quantityScale &&
+          other.measurementType == this.measurementType &&
           other.unitPriceCents == this.unitPriceCents &&
           other.unitCostCents == this.unitCostCents &&
           other.discountCents == this.discountCents &&
@@ -46871,6 +51897,7 @@ class PurchaseReturnAdjustmentItem extends DataClass
           other.reason == this.reason &&
           other.taxRateBpsAtPost == this.taxRateBpsAtPost &&
           other.unitCostAtPostCents == this.unitCostAtPostCents &&
+          other.inventoryValueAtPostCents == this.inventoryValueAtPostCents &&
           other.originalInvoiceId == this.originalInvoiceId &&
           other.dispositionType == this.dispositionType &&
           other.createdAt == this.createdAt);
@@ -46883,6 +51910,8 @@ class PurchaseReturnAdjustmentItemsCompanion
   final Value<int> productId;
   final Value<int?> variantId;
   final Value<int> quantity;
+  final Value<int> quantityScale;
+  final Value<String> measurementType;
   final Value<Decimal> unitPriceCents;
   final Value<Decimal> unitCostCents;
   final Value<Decimal> discountCents;
@@ -46891,6 +51920,7 @@ class PurchaseReturnAdjustmentItemsCompanion
   final Value<String?> reason;
   final Value<int?> taxRateBpsAtPost;
   final Value<Decimal?> unitCostAtPostCents;
+  final Value<Decimal?> inventoryValueAtPostCents;
   final Value<int?> originalInvoiceId;
   final Value<String> dispositionType;
   final Value<DateTime> createdAt;
@@ -46900,6 +51930,8 @@ class PurchaseReturnAdjustmentItemsCompanion
     this.productId = const Value.absent(),
     this.variantId = const Value.absent(),
     this.quantity = const Value.absent(),
+    this.quantityScale = const Value.absent(),
+    this.measurementType = const Value.absent(),
     this.unitPriceCents = const Value.absent(),
     this.unitCostCents = const Value.absent(),
     this.discountCents = const Value.absent(),
@@ -46908,6 +51940,7 @@ class PurchaseReturnAdjustmentItemsCompanion
     this.reason = const Value.absent(),
     this.taxRateBpsAtPost = const Value.absent(),
     this.unitCostAtPostCents = const Value.absent(),
+    this.inventoryValueAtPostCents = const Value.absent(),
     this.originalInvoiceId = const Value.absent(),
     this.dispositionType = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -46918,6 +51951,8 @@ class PurchaseReturnAdjustmentItemsCompanion
     required int productId,
     this.variantId = const Value.absent(),
     required int quantity,
+    this.quantityScale = const Value.absent(),
+    this.measurementType = const Value.absent(),
     required Decimal unitPriceCents,
     this.unitCostCents = const Value.absent(),
     this.discountCents = const Value.absent(),
@@ -46926,6 +51961,7 @@ class PurchaseReturnAdjustmentItemsCompanion
     this.reason = const Value.absent(),
     this.taxRateBpsAtPost = const Value.absent(),
     this.unitCostAtPostCents = const Value.absent(),
+    this.inventoryValueAtPostCents = const Value.absent(),
     this.originalInvoiceId = const Value.absent(),
     this.dispositionType = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -46940,6 +51976,8 @@ class PurchaseReturnAdjustmentItemsCompanion
     Expression<int>? productId,
     Expression<int>? variantId,
     Expression<int>? quantity,
+    Expression<int>? quantityScale,
+    Expression<String>? measurementType,
     Expression<int>? unitPriceCents,
     Expression<int>? unitCostCents,
     Expression<int>? discountCents,
@@ -46948,6 +51986,7 @@ class PurchaseReturnAdjustmentItemsCompanion
     Expression<String>? reason,
     Expression<int>? taxRateBpsAtPost,
     Expression<int>? unitCostAtPostCents,
+    Expression<int>? inventoryValueAtPostCents,
     Expression<int>? originalInvoiceId,
     Expression<String>? dispositionType,
     Expression<DateTime>? createdAt,
@@ -46958,6 +51997,8 @@ class PurchaseReturnAdjustmentItemsCompanion
       if (productId != null) 'product_id': productId,
       if (variantId != null) 'variant_id': variantId,
       if (quantity != null) 'quantity': quantity,
+      if (quantityScale != null) 'quantity_scale': quantityScale,
+      if (measurementType != null) 'measurement_type': measurementType,
       if (unitPriceCents != null) 'unit_price_cents': unitPriceCents,
       if (unitCostCents != null) 'unit_cost_cents': unitCostCents,
       if (discountCents != null) 'discount_cents': discountCents,
@@ -46967,6 +52008,8 @@ class PurchaseReturnAdjustmentItemsCompanion
       if (taxRateBpsAtPost != null) 'tax_rate_bps_at_post': taxRateBpsAtPost,
       if (unitCostAtPostCents != null)
         'unit_cost_at_post_cents': unitCostAtPostCents,
+      if (inventoryValueAtPostCents != null)
+        'inventory_value_at_post_cents': inventoryValueAtPostCents,
       if (originalInvoiceId != null) 'original_invoice_id': originalInvoiceId,
       if (dispositionType != null) 'disposition_type': dispositionType,
       if (createdAt != null) 'created_at': createdAt,
@@ -46979,6 +52022,8 @@ class PurchaseReturnAdjustmentItemsCompanion
     Value<int>? productId,
     Value<int?>? variantId,
     Value<int>? quantity,
+    Value<int>? quantityScale,
+    Value<String>? measurementType,
     Value<Decimal>? unitPriceCents,
     Value<Decimal>? unitCostCents,
     Value<Decimal>? discountCents,
@@ -46987,6 +52032,7 @@ class PurchaseReturnAdjustmentItemsCompanion
     Value<String?>? reason,
     Value<int?>? taxRateBpsAtPost,
     Value<Decimal?>? unitCostAtPostCents,
+    Value<Decimal?>? inventoryValueAtPostCents,
     Value<int?>? originalInvoiceId,
     Value<String>? dispositionType,
     Value<DateTime>? createdAt,
@@ -46997,6 +52043,8 @@ class PurchaseReturnAdjustmentItemsCompanion
       productId: productId ?? this.productId,
       variantId: variantId ?? this.variantId,
       quantity: quantity ?? this.quantity,
+      quantityScale: quantityScale ?? this.quantityScale,
+      measurementType: measurementType ?? this.measurementType,
       unitPriceCents: unitPriceCents ?? this.unitPriceCents,
       unitCostCents: unitCostCents ?? this.unitCostCents,
       discountCents: discountCents ?? this.discountCents,
@@ -47005,6 +52053,8 @@ class PurchaseReturnAdjustmentItemsCompanion
       reason: reason ?? this.reason,
       taxRateBpsAtPost: taxRateBpsAtPost ?? this.taxRateBpsAtPost,
       unitCostAtPostCents: unitCostAtPostCents ?? this.unitCostAtPostCents,
+      inventoryValueAtPostCents:
+          inventoryValueAtPostCents ?? this.inventoryValueAtPostCents,
       originalInvoiceId: originalInvoiceId ?? this.originalInvoiceId,
       dispositionType: dispositionType ?? this.dispositionType,
       createdAt: createdAt ?? this.createdAt,
@@ -47028,6 +52078,12 @@ class PurchaseReturnAdjustmentItemsCompanion
     }
     if (quantity.present) {
       map['quantity'] = Variable<int>(quantity.value);
+    }
+    if (quantityScale.present) {
+      map['quantity_scale'] = Variable<int>(quantityScale.value);
+    }
+    if (measurementType.present) {
+      map['measurement_type'] = Variable<String>(measurementType.value);
     }
     if (unitPriceCents.present) {
       map['unit_price_cents'] = Variable<int>(
@@ -47076,6 +52132,12 @@ class PurchaseReturnAdjustmentItemsCompanion
             .toSql(unitCostAtPostCents.value),
       );
     }
+    if (inventoryValueAtPostCents.present) {
+      map['inventory_value_at_post_cents'] = Variable<int>(
+        $PurchaseReturnAdjustmentItemsTable.$converterinventoryValueAtPostCentsn
+            .toSql(inventoryValueAtPostCents.value),
+      );
+    }
     if (originalInvoiceId.present) {
       map['original_invoice_id'] = Variable<int>(originalInvoiceId.value);
     }
@@ -47096,6 +52158,8 @@ class PurchaseReturnAdjustmentItemsCompanion
           ..write('productId: $productId, ')
           ..write('variantId: $variantId, ')
           ..write('quantity: $quantity, ')
+          ..write('quantityScale: $quantityScale, ')
+          ..write('measurementType: $measurementType, ')
           ..write('unitPriceCents: $unitPriceCents, ')
           ..write('unitCostCents: $unitCostCents, ')
           ..write('discountCents: $discountCents, ')
@@ -47104,6 +52168,7 @@ class PurchaseReturnAdjustmentItemsCompanion
           ..write('reason: $reason, ')
           ..write('taxRateBpsAtPost: $taxRateBpsAtPost, ')
           ..write('unitCostAtPostCents: $unitCostAtPostCents, ')
+          ..write('inventoryValueAtPostCents: $inventoryValueAtPostCents, ')
           ..write('originalInvoiceId: $originalInvoiceId, ')
           ..write('dispositionType: $dispositionType, ')
           ..write('createdAt: $createdAt')
@@ -47169,6 +52234,20 @@ class $SaleReturnAdjustmentsTable extends SaleReturnAdjustments
     requiredDuringInsert: false,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
       'REFERENCES employees (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _cashierShiftIdMeta = const VerificationMeta(
+    'cashierShiftId',
+  );
+  @override
+  late final GeneratedColumn<int> cashierShiftId = GeneratedColumn<int>(
+    'cashier_shift_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES cashier_shifts (id) ON DELETE SET NULL',
     ),
   );
   static const VerificationMeta _currencyIdMeta = const VerificationMeta(
@@ -47568,6 +52647,7 @@ class $SaleReturnAdjustmentsTable extends SaleReturnAdjustments
     returnNumber,
     customerId,
     employeeId,
+    cashierShiftId,
     currencyId,
     subtotalCents,
     discountCents,
@@ -47638,6 +52718,15 @@ class $SaleReturnAdjustmentsTable extends SaleReturnAdjustments
       context.handle(
         _employeeIdMeta,
         employeeId.isAcceptableOrUnknown(data['employee_id']!, _employeeIdMeta),
+      );
+    }
+    if (data.containsKey('cashier_shift_id')) {
+      context.handle(
+        _cashierShiftIdMeta,
+        cashierShiftId.isAcceptableOrUnknown(
+          data['cashier_shift_id']!,
+          _cashierShiftIdMeta,
+        ),
       );
     }
     if (data.containsKey('currency_id')) {
@@ -47874,6 +52963,10 @@ class $SaleReturnAdjustmentsTable extends SaleReturnAdjustments
         DriftSqlType.int,
         data['${effectivePrefix}employee_id'],
       ),
+      cashierShiftId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cashier_shift_id'],
+      ),
       currencyId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}currency_id'],
@@ -48040,6 +53133,7 @@ class SaleReturnAdjustment extends DataClass
   final String returnNumber;
   final int? customerId;
   final int? employeeId;
+  final int? cashierShiftId;
   final int currencyId;
   final Decimal subtotalCents;
   final Decimal discountCents;
@@ -48099,6 +53193,7 @@ class SaleReturnAdjustment extends DataClass
     required this.returnNumber,
     this.customerId,
     this.employeeId,
+    this.cashierShiftId,
     required this.currencyId,
     required this.subtotalCents,
     required this.discountCents,
@@ -48143,6 +53238,9 @@ class SaleReturnAdjustment extends DataClass
     }
     if (!nullToAbsent || employeeId != null) {
       map['employee_id'] = Variable<int>(employeeId);
+    }
+    if (!nullToAbsent || cashierShiftId != null) {
+      map['cashier_shift_id'] = Variable<int>(cashierShiftId);
     }
     map['currency_id'] = Variable<int>(currencyId);
     {
@@ -48252,6 +53350,9 @@ class SaleReturnAdjustment extends DataClass
       employeeId: employeeId == null && nullToAbsent
           ? const Value.absent()
           : Value(employeeId),
+      cashierShiftId: cashierShiftId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cashierShiftId),
       currencyId: Value(currencyId),
       subtotalCents: Value(subtotalCents),
       discountCents: Value(discountCents),
@@ -48340,6 +53441,7 @@ class SaleReturnAdjustment extends DataClass
       returnNumber: serializer.fromJson<String>(json['returnNumber']),
       customerId: serializer.fromJson<int?>(json['customerId']),
       employeeId: serializer.fromJson<int?>(json['employeeId']),
+      cashierShiftId: serializer.fromJson<int?>(json['cashierShiftId']),
       currencyId: serializer.fromJson<int>(json['currencyId']),
       subtotalCents: serializer.fromJson<Decimal>(json['subtotalCents']),
       discountCents: serializer.fromJson<Decimal>(json['discountCents']),
@@ -48389,6 +53491,7 @@ class SaleReturnAdjustment extends DataClass
       'returnNumber': serializer.toJson<String>(returnNumber),
       'customerId': serializer.toJson<int?>(customerId),
       'employeeId': serializer.toJson<int?>(employeeId),
+      'cashierShiftId': serializer.toJson<int?>(cashierShiftId),
       'currencyId': serializer.toJson<int>(currencyId),
       'subtotalCents': serializer.toJson<Decimal>(subtotalCents),
       'discountCents': serializer.toJson<Decimal>(discountCents),
@@ -48430,6 +53533,7 @@ class SaleReturnAdjustment extends DataClass
     String? returnNumber,
     Value<int?> customerId = const Value.absent(),
     Value<int?> employeeId = const Value.absent(),
+    Value<int?> cashierShiftId = const Value.absent(),
     int? currencyId,
     Decimal? subtotalCents,
     Decimal? discountCents,
@@ -48468,6 +53572,9 @@ class SaleReturnAdjustment extends DataClass
     returnNumber: returnNumber ?? this.returnNumber,
     customerId: customerId.present ? customerId.value : this.customerId,
     employeeId: employeeId.present ? employeeId.value : this.employeeId,
+    cashierShiftId: cashierShiftId.present
+        ? cashierShiftId.value
+        : this.cashierShiftId,
     currencyId: currencyId ?? this.currencyId,
     subtotalCents: subtotalCents ?? this.subtotalCents,
     discountCents: discountCents ?? this.discountCents,
@@ -48526,6 +53633,9 @@ class SaleReturnAdjustment extends DataClass
       employeeId: data.employeeId.present
           ? data.employeeId.value
           : this.employeeId,
+      cashierShiftId: data.cashierShiftId.present
+          ? data.cashierShiftId.value
+          : this.cashierShiftId,
       currencyId: data.currencyId.present
           ? data.currencyId.value
           : this.currencyId,
@@ -48613,6 +53723,7 @@ class SaleReturnAdjustment extends DataClass
           ..write('returnNumber: $returnNumber, ')
           ..write('customerId: $customerId, ')
           ..write('employeeId: $employeeId, ')
+          ..write('cashierShiftId: $cashierShiftId, ')
           ..write('currencyId: $currencyId, ')
           ..write('subtotalCents: $subtotalCents, ')
           ..write('discountCents: $discountCents, ')
@@ -48656,6 +53767,7 @@ class SaleReturnAdjustment extends DataClass
     returnNumber,
     customerId,
     employeeId,
+    cashierShiftId,
     currencyId,
     subtotalCents,
     discountCents,
@@ -48698,6 +53810,7 @@ class SaleReturnAdjustment extends DataClass
           other.returnNumber == this.returnNumber &&
           other.customerId == this.customerId &&
           other.employeeId == this.employeeId &&
+          other.cashierShiftId == this.cashierShiftId &&
           other.currencyId == this.currencyId &&
           other.subtotalCents == this.subtotalCents &&
           other.discountCents == this.discountCents &&
@@ -48739,6 +53852,7 @@ class SaleReturnAdjustmentsCompanion
   final Value<String> returnNumber;
   final Value<int?> customerId;
   final Value<int?> employeeId;
+  final Value<int?> cashierShiftId;
   final Value<int> currencyId;
   final Value<Decimal> subtotalCents;
   final Value<Decimal> discountCents;
@@ -48777,6 +53891,7 @@ class SaleReturnAdjustmentsCompanion
     this.returnNumber = const Value.absent(),
     this.customerId = const Value.absent(),
     this.employeeId = const Value.absent(),
+    this.cashierShiftId = const Value.absent(),
     this.currencyId = const Value.absent(),
     this.subtotalCents = const Value.absent(),
     this.discountCents = const Value.absent(),
@@ -48816,6 +53931,7 @@ class SaleReturnAdjustmentsCompanion
     required String returnNumber,
     this.customerId = const Value.absent(),
     this.employeeId = const Value.absent(),
+    this.cashierShiftId = const Value.absent(),
     required int currencyId,
     this.subtotalCents = const Value.absent(),
     this.discountCents = const Value.absent(),
@@ -48857,6 +53973,7 @@ class SaleReturnAdjustmentsCompanion
     Expression<String>? returnNumber,
     Expression<int>? customerId,
     Expression<int>? employeeId,
+    Expression<int>? cashierShiftId,
     Expression<int>? currencyId,
     Expression<int>? subtotalCents,
     Expression<int>? discountCents,
@@ -48896,6 +54013,7 @@ class SaleReturnAdjustmentsCompanion
       if (returnNumber != null) 'return_number': returnNumber,
       if (customerId != null) 'customer_id': customerId,
       if (employeeId != null) 'employee_id': employeeId,
+      if (cashierShiftId != null) 'cashier_shift_id': cashierShiftId,
       if (currencyId != null) 'currency_id': currencyId,
       if (subtotalCents != null) 'subtotal_cents': subtotalCents,
       if (discountCents != null) 'discount_cents': discountCents,
@@ -48940,6 +54058,7 @@ class SaleReturnAdjustmentsCompanion
     Value<String>? returnNumber,
     Value<int?>? customerId,
     Value<int?>? employeeId,
+    Value<int?>? cashierShiftId,
     Value<int>? currencyId,
     Value<Decimal>? subtotalCents,
     Value<Decimal>? discountCents,
@@ -48979,6 +54098,7 @@ class SaleReturnAdjustmentsCompanion
       returnNumber: returnNumber ?? this.returnNumber,
       customerId: customerId ?? this.customerId,
       employeeId: employeeId ?? this.employeeId,
+      cashierShiftId: cashierShiftId ?? this.cashierShiftId,
       currencyId: currencyId ?? this.currencyId,
       subtotalCents: subtotalCents ?? this.subtotalCents,
       discountCents: discountCents ?? this.discountCents,
@@ -49029,6 +54149,9 @@ class SaleReturnAdjustmentsCompanion
     }
     if (employeeId.present) {
       map['employee_id'] = Variable<int>(employeeId.value);
+    }
+    if (cashierShiftId.present) {
+      map['cashier_shift_id'] = Variable<int>(cashierShiftId.value);
     }
     if (currencyId.present) {
       map['currency_id'] = Variable<int>(currencyId.value);
@@ -49155,6 +54278,7 @@ class SaleReturnAdjustmentsCompanion
           ..write('returnNumber: $returnNumber, ')
           ..write('customerId: $customerId, ')
           ..write('employeeId: $employeeId, ')
+          ..write('cashierShiftId: $cashierShiftId, ')
           ..write('currencyId: $currencyId, ')
           ..write('subtotalCents: $subtotalCents, ')
           ..write('discountCents: $discountCents, ')
@@ -49265,6 +54389,30 @@ class $SaleReturnAdjustmentItemsTable extends SaleReturnAdjustmentItems
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _quantityScaleMeta = const VerificationMeta(
+    'quantityScale',
+  );
+  @override
+  late final GeneratedColumn<int> quantityScale = GeneratedColumn<int>(
+    'quantity_scale',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _measurementTypeMeta = const VerificationMeta(
+    'measurementType',
+  );
+  @override
+  late final GeneratedColumn<String> measurementType = GeneratedColumn<String>(
+    'measurement_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('piece'),
+  );
   @override
   late final GeneratedColumnWithTypeConverter<Decimal, int> unitPriceCents =
       GeneratedColumn<int>(
@@ -49355,6 +54503,18 @@ class $SaleReturnAdjustmentItemsTable extends SaleReturnAdjustmentItems
       ).withConverter<Decimal?>(
         $SaleReturnAdjustmentItemsTable.$converterunitCostAtPostCentsn,
       );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal?, int>
+  inventoryValueAtPostCents =
+      GeneratedColumn<int>(
+        'inventory_value_at_post_cents',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      ).withConverter<Decimal?>(
+        $SaleReturnAdjustmentItemsTable.$converterinventoryValueAtPostCentsn,
+      );
   static const VerificationMeta _originalInvoiceIdMeta = const VerificationMeta(
     'originalInvoiceId',
   );
@@ -49397,6 +54557,8 @@ class $SaleReturnAdjustmentItemsTable extends SaleReturnAdjustmentItems
     productId,
     variantId,
     quantity,
+    quantityScale,
+    measurementType,
     unitPriceCents,
     unitCostCents,
     discountCents,
@@ -49405,6 +54567,7 @@ class $SaleReturnAdjustmentItemsTable extends SaleReturnAdjustmentItems
     reason,
     taxRateBpsAtPost,
     unitCostAtPostCents,
+    inventoryValueAtPostCents,
     originalInvoiceId,
     dispositionType,
     createdAt,
@@ -49453,6 +54616,24 @@ class $SaleReturnAdjustmentItemsTable extends SaleReturnAdjustmentItems
       );
     } else if (isInserting) {
       context.missing(_quantityMeta);
+    }
+    if (data.containsKey('quantity_scale')) {
+      context.handle(
+        _quantityScaleMeta,
+        quantityScale.isAcceptableOrUnknown(
+          data['quantity_scale']!,
+          _quantityScaleMeta,
+        ),
+      );
+    }
+    if (data.containsKey('measurement_type')) {
+      context.handle(
+        _measurementTypeMeta,
+        measurementType.isAcceptableOrUnknown(
+          data['measurement_type']!,
+          _measurementTypeMeta,
+        ),
+      );
     }
     if (data.containsKey('reason')) {
       context.handle(
@@ -49525,6 +54706,14 @@ class $SaleReturnAdjustmentItemsTable extends SaleReturnAdjustmentItems
         DriftSqlType.int,
         data['${effectivePrefix}quantity'],
       )!,
+      quantityScale: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}quantity_scale'],
+      )!,
+      measurementType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}measurement_type'],
+      )!,
       unitPriceCents: $SaleReturnAdjustmentItemsTable.$converterunitPriceCents
           .fromSql(
             attachedDatabase.typeMapping.read(
@@ -49574,6 +54763,14 @@ class $SaleReturnAdjustmentItemsTable extends SaleReturnAdjustmentItems
               data['${effectivePrefix}unit_cost_at_post_cents'],
             ),
           ),
+      inventoryValueAtPostCents: $SaleReturnAdjustmentItemsTable
+          .$converterinventoryValueAtPostCentsn
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}inventory_value_at_post_cents'],
+            ),
+          ),
       originalInvoiceId: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}original_invoice_id'],
@@ -49608,6 +54805,10 @@ class $SaleReturnAdjustmentItemsTable extends SaleReturnAdjustmentItems
       const MoneyConverter();
   static TypeConverter<Decimal?, int?> $converterunitCostAtPostCentsn =
       NullAwareTypeConverter.wrap($converterunitCostAtPostCents);
+  static TypeConverter<Decimal, int> $converterinventoryValueAtPostCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal?, int?> $converterinventoryValueAtPostCentsn =
+      NullAwareTypeConverter.wrap($converterinventoryValueAtPostCents);
 }
 
 class SaleReturnAdjustmentItem extends DataClass
@@ -49617,6 +54818,8 @@ class SaleReturnAdjustmentItem extends DataClass
   final int productId;
   final int? variantId;
   final int quantity;
+  final int quantityScale;
+  final String measurementType;
   final Decimal unitPriceCents;
 
   /// Frozen average cost at the moment of return creation (from products.cost_cents).
@@ -49633,6 +54836,9 @@ class SaleReturnAdjustmentItem extends DataClass
   /// Phase 2.1 — frozen unit cost at post-time.
   final Decimal? unitCostAtPostCents;
 
+  /// Exact rounded-pool value moved by this return line at posting time.
+  final Decimal? inventoryValueAtPostCents;
+
   /// Phase 2.1 — optional reference to the original sale invoice this
   /// adjustment line is implicitly correcting (operator hint).
   final int? originalInvoiceId;
@@ -49647,6 +54853,8 @@ class SaleReturnAdjustmentItem extends DataClass
     required this.productId,
     this.variantId,
     required this.quantity,
+    required this.quantityScale,
+    required this.measurementType,
     required this.unitPriceCents,
     required this.unitCostCents,
     required this.discountCents,
@@ -49655,6 +54863,7 @@ class SaleReturnAdjustmentItem extends DataClass
     this.reason,
     this.taxRateBpsAtPost,
     this.unitCostAtPostCents,
+    this.inventoryValueAtPostCents,
     this.originalInvoiceId,
     required this.dispositionType,
     required this.createdAt,
@@ -49669,6 +54878,8 @@ class SaleReturnAdjustmentItem extends DataClass
       map['variant_id'] = Variable<int>(variantId);
     }
     map['quantity'] = Variable<int>(quantity);
+    map['quantity_scale'] = Variable<int>(quantityScale);
+    map['measurement_type'] = Variable<String>(measurementType);
     {
       map['unit_price_cents'] = Variable<int>(
         $SaleReturnAdjustmentItemsTable.$converterunitPriceCents.toSql(
@@ -49713,6 +54924,12 @@ class SaleReturnAdjustmentItem extends DataClass
         ),
       );
     }
+    if (!nullToAbsent || inventoryValueAtPostCents != null) {
+      map['inventory_value_at_post_cents'] = Variable<int>(
+        $SaleReturnAdjustmentItemsTable.$converterinventoryValueAtPostCentsn
+            .toSql(inventoryValueAtPostCents),
+      );
+    }
     if (!nullToAbsent || originalInvoiceId != null) {
       map['original_invoice_id'] = Variable<int>(originalInvoiceId);
     }
@@ -49730,6 +54947,8 @@ class SaleReturnAdjustmentItem extends DataClass
           ? const Value.absent()
           : Value(variantId),
       quantity: Value(quantity),
+      quantityScale: Value(quantityScale),
+      measurementType: Value(measurementType),
       unitPriceCents: Value(unitPriceCents),
       unitCostCents: Value(unitCostCents),
       discountCents: Value(discountCents),
@@ -49744,6 +54963,10 @@ class SaleReturnAdjustmentItem extends DataClass
       unitCostAtPostCents: unitCostAtPostCents == null && nullToAbsent
           ? const Value.absent()
           : Value(unitCostAtPostCents),
+      inventoryValueAtPostCents:
+          inventoryValueAtPostCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(inventoryValueAtPostCents),
       originalInvoiceId: originalInvoiceId == null && nullToAbsent
           ? const Value.absent()
           : Value(originalInvoiceId),
@@ -49763,6 +54986,8 @@ class SaleReturnAdjustmentItem extends DataClass
       productId: serializer.fromJson<int>(json['productId']),
       variantId: serializer.fromJson<int?>(json['variantId']),
       quantity: serializer.fromJson<int>(json['quantity']),
+      quantityScale: serializer.fromJson<int>(json['quantityScale']),
+      measurementType: serializer.fromJson<String>(json['measurementType']),
       unitPriceCents: serializer.fromJson<Decimal>(json['unitPriceCents']),
       unitCostCents: serializer.fromJson<Decimal>(json['unitCostCents']),
       discountCents: serializer.fromJson<Decimal>(json['discountCents']),
@@ -49772,6 +54997,9 @@ class SaleReturnAdjustmentItem extends DataClass
       taxRateBpsAtPost: serializer.fromJson<int?>(json['taxRateBpsAtPost']),
       unitCostAtPostCents: serializer.fromJson<Decimal?>(
         json['unitCostAtPostCents'],
+      ),
+      inventoryValueAtPostCents: serializer.fromJson<Decimal?>(
+        json['inventoryValueAtPostCents'],
       ),
       originalInvoiceId: serializer.fromJson<int?>(json['originalInvoiceId']),
       dispositionType: serializer.fromJson<String>(json['dispositionType']),
@@ -49787,6 +55015,8 @@ class SaleReturnAdjustmentItem extends DataClass
       'productId': serializer.toJson<int>(productId),
       'variantId': serializer.toJson<int?>(variantId),
       'quantity': serializer.toJson<int>(quantity),
+      'quantityScale': serializer.toJson<int>(quantityScale),
+      'measurementType': serializer.toJson<String>(measurementType),
       'unitPriceCents': serializer.toJson<Decimal>(unitPriceCents),
       'unitCostCents': serializer.toJson<Decimal>(unitCostCents),
       'discountCents': serializer.toJson<Decimal>(discountCents),
@@ -49795,6 +55025,9 @@ class SaleReturnAdjustmentItem extends DataClass
       'reason': serializer.toJson<String?>(reason),
       'taxRateBpsAtPost': serializer.toJson<int?>(taxRateBpsAtPost),
       'unitCostAtPostCents': serializer.toJson<Decimal?>(unitCostAtPostCents),
+      'inventoryValueAtPostCents': serializer.toJson<Decimal?>(
+        inventoryValueAtPostCents,
+      ),
       'originalInvoiceId': serializer.toJson<int?>(originalInvoiceId),
       'dispositionType': serializer.toJson<String>(dispositionType),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -49807,6 +55040,8 @@ class SaleReturnAdjustmentItem extends DataClass
     int? productId,
     Value<int?> variantId = const Value.absent(),
     int? quantity,
+    int? quantityScale,
+    String? measurementType,
     Decimal? unitPriceCents,
     Decimal? unitCostCents,
     Decimal? discountCents,
@@ -49815,6 +55050,7 @@ class SaleReturnAdjustmentItem extends DataClass
     Value<String?> reason = const Value.absent(),
     Value<int?> taxRateBpsAtPost = const Value.absent(),
     Value<Decimal?> unitCostAtPostCents = const Value.absent(),
+    Value<Decimal?> inventoryValueAtPostCents = const Value.absent(),
     Value<int?> originalInvoiceId = const Value.absent(),
     String? dispositionType,
     DateTime? createdAt,
@@ -49824,6 +55060,8 @@ class SaleReturnAdjustmentItem extends DataClass
     productId: productId ?? this.productId,
     variantId: variantId.present ? variantId.value : this.variantId,
     quantity: quantity ?? this.quantity,
+    quantityScale: quantityScale ?? this.quantityScale,
+    measurementType: measurementType ?? this.measurementType,
     unitPriceCents: unitPriceCents ?? this.unitPriceCents,
     unitCostCents: unitCostCents ?? this.unitCostCents,
     discountCents: discountCents ?? this.discountCents,
@@ -49836,6 +55074,9 @@ class SaleReturnAdjustmentItem extends DataClass
     unitCostAtPostCents: unitCostAtPostCents.present
         ? unitCostAtPostCents.value
         : this.unitCostAtPostCents,
+    inventoryValueAtPostCents: inventoryValueAtPostCents.present
+        ? inventoryValueAtPostCents.value
+        : this.inventoryValueAtPostCents,
     originalInvoiceId: originalInvoiceId.present
         ? originalInvoiceId.value
         : this.originalInvoiceId,
@@ -49851,6 +55092,12 @@ class SaleReturnAdjustmentItem extends DataClass
       productId: data.productId.present ? data.productId.value : this.productId,
       variantId: data.variantId.present ? data.variantId.value : this.variantId,
       quantity: data.quantity.present ? data.quantity.value : this.quantity,
+      quantityScale: data.quantityScale.present
+          ? data.quantityScale.value
+          : this.quantityScale,
+      measurementType: data.measurementType.present
+          ? data.measurementType.value
+          : this.measurementType,
       unitPriceCents: data.unitPriceCents.present
           ? data.unitPriceCents.value
           : this.unitPriceCents,
@@ -49871,6 +55118,9 @@ class SaleReturnAdjustmentItem extends DataClass
       unitCostAtPostCents: data.unitCostAtPostCents.present
           ? data.unitCostAtPostCents.value
           : this.unitCostAtPostCents,
+      inventoryValueAtPostCents: data.inventoryValueAtPostCents.present
+          ? data.inventoryValueAtPostCents.value
+          : this.inventoryValueAtPostCents,
       originalInvoiceId: data.originalInvoiceId.present
           ? data.originalInvoiceId.value
           : this.originalInvoiceId,
@@ -49889,6 +55139,8 @@ class SaleReturnAdjustmentItem extends DataClass
           ..write('productId: $productId, ')
           ..write('variantId: $variantId, ')
           ..write('quantity: $quantity, ')
+          ..write('quantityScale: $quantityScale, ')
+          ..write('measurementType: $measurementType, ')
           ..write('unitPriceCents: $unitPriceCents, ')
           ..write('unitCostCents: $unitCostCents, ')
           ..write('discountCents: $discountCents, ')
@@ -49897,6 +55149,7 @@ class SaleReturnAdjustmentItem extends DataClass
           ..write('reason: $reason, ')
           ..write('taxRateBpsAtPost: $taxRateBpsAtPost, ')
           ..write('unitCostAtPostCents: $unitCostAtPostCents, ')
+          ..write('inventoryValueAtPostCents: $inventoryValueAtPostCents, ')
           ..write('originalInvoiceId: $originalInvoiceId, ')
           ..write('dispositionType: $dispositionType, ')
           ..write('createdAt: $createdAt')
@@ -49911,6 +55164,8 @@ class SaleReturnAdjustmentItem extends DataClass
     productId,
     variantId,
     quantity,
+    quantityScale,
+    measurementType,
     unitPriceCents,
     unitCostCents,
     discountCents,
@@ -49919,6 +55174,7 @@ class SaleReturnAdjustmentItem extends DataClass
     reason,
     taxRateBpsAtPost,
     unitCostAtPostCents,
+    inventoryValueAtPostCents,
     originalInvoiceId,
     dispositionType,
     createdAt,
@@ -49932,6 +55188,8 @@ class SaleReturnAdjustmentItem extends DataClass
           other.productId == this.productId &&
           other.variantId == this.variantId &&
           other.quantity == this.quantity &&
+          other.quantityScale == this.quantityScale &&
+          other.measurementType == this.measurementType &&
           other.unitPriceCents == this.unitPriceCents &&
           other.unitCostCents == this.unitCostCents &&
           other.discountCents == this.discountCents &&
@@ -49940,6 +55198,7 @@ class SaleReturnAdjustmentItem extends DataClass
           other.reason == this.reason &&
           other.taxRateBpsAtPost == this.taxRateBpsAtPost &&
           other.unitCostAtPostCents == this.unitCostAtPostCents &&
+          other.inventoryValueAtPostCents == this.inventoryValueAtPostCents &&
           other.originalInvoiceId == this.originalInvoiceId &&
           other.dispositionType == this.dispositionType &&
           other.createdAt == this.createdAt);
@@ -49952,6 +55211,8 @@ class SaleReturnAdjustmentItemsCompanion
   final Value<int> productId;
   final Value<int?> variantId;
   final Value<int> quantity;
+  final Value<int> quantityScale;
+  final Value<String> measurementType;
   final Value<Decimal> unitPriceCents;
   final Value<Decimal> unitCostCents;
   final Value<Decimal> discountCents;
@@ -49960,6 +55221,7 @@ class SaleReturnAdjustmentItemsCompanion
   final Value<String?> reason;
   final Value<int?> taxRateBpsAtPost;
   final Value<Decimal?> unitCostAtPostCents;
+  final Value<Decimal?> inventoryValueAtPostCents;
   final Value<int?> originalInvoiceId;
   final Value<String> dispositionType;
   final Value<DateTime> createdAt;
@@ -49969,6 +55231,8 @@ class SaleReturnAdjustmentItemsCompanion
     this.productId = const Value.absent(),
     this.variantId = const Value.absent(),
     this.quantity = const Value.absent(),
+    this.quantityScale = const Value.absent(),
+    this.measurementType = const Value.absent(),
     this.unitPriceCents = const Value.absent(),
     this.unitCostCents = const Value.absent(),
     this.discountCents = const Value.absent(),
@@ -49977,6 +55241,7 @@ class SaleReturnAdjustmentItemsCompanion
     this.reason = const Value.absent(),
     this.taxRateBpsAtPost = const Value.absent(),
     this.unitCostAtPostCents = const Value.absent(),
+    this.inventoryValueAtPostCents = const Value.absent(),
     this.originalInvoiceId = const Value.absent(),
     this.dispositionType = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -49987,6 +55252,8 @@ class SaleReturnAdjustmentItemsCompanion
     required int productId,
     this.variantId = const Value.absent(),
     required int quantity,
+    this.quantityScale = const Value.absent(),
+    this.measurementType = const Value.absent(),
     required Decimal unitPriceCents,
     this.unitCostCents = const Value.absent(),
     this.discountCents = const Value.absent(),
@@ -49995,6 +55262,7 @@ class SaleReturnAdjustmentItemsCompanion
     this.reason = const Value.absent(),
     this.taxRateBpsAtPost = const Value.absent(),
     this.unitCostAtPostCents = const Value.absent(),
+    this.inventoryValueAtPostCents = const Value.absent(),
     this.originalInvoiceId = const Value.absent(),
     this.dispositionType = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -50009,6 +55277,8 @@ class SaleReturnAdjustmentItemsCompanion
     Expression<int>? productId,
     Expression<int>? variantId,
     Expression<int>? quantity,
+    Expression<int>? quantityScale,
+    Expression<String>? measurementType,
     Expression<int>? unitPriceCents,
     Expression<int>? unitCostCents,
     Expression<int>? discountCents,
@@ -50017,6 +55287,7 @@ class SaleReturnAdjustmentItemsCompanion
     Expression<String>? reason,
     Expression<int>? taxRateBpsAtPost,
     Expression<int>? unitCostAtPostCents,
+    Expression<int>? inventoryValueAtPostCents,
     Expression<int>? originalInvoiceId,
     Expression<String>? dispositionType,
     Expression<DateTime>? createdAt,
@@ -50027,6 +55298,8 @@ class SaleReturnAdjustmentItemsCompanion
       if (productId != null) 'product_id': productId,
       if (variantId != null) 'variant_id': variantId,
       if (quantity != null) 'quantity': quantity,
+      if (quantityScale != null) 'quantity_scale': quantityScale,
+      if (measurementType != null) 'measurement_type': measurementType,
       if (unitPriceCents != null) 'unit_price_cents': unitPriceCents,
       if (unitCostCents != null) 'unit_cost_cents': unitCostCents,
       if (discountCents != null) 'discount_cents': discountCents,
@@ -50036,6 +55309,8 @@ class SaleReturnAdjustmentItemsCompanion
       if (taxRateBpsAtPost != null) 'tax_rate_bps_at_post': taxRateBpsAtPost,
       if (unitCostAtPostCents != null)
         'unit_cost_at_post_cents': unitCostAtPostCents,
+      if (inventoryValueAtPostCents != null)
+        'inventory_value_at_post_cents': inventoryValueAtPostCents,
       if (originalInvoiceId != null) 'original_invoice_id': originalInvoiceId,
       if (dispositionType != null) 'disposition_type': dispositionType,
       if (createdAt != null) 'created_at': createdAt,
@@ -50048,6 +55323,8 @@ class SaleReturnAdjustmentItemsCompanion
     Value<int>? productId,
     Value<int?>? variantId,
     Value<int>? quantity,
+    Value<int>? quantityScale,
+    Value<String>? measurementType,
     Value<Decimal>? unitPriceCents,
     Value<Decimal>? unitCostCents,
     Value<Decimal>? discountCents,
@@ -50056,6 +55333,7 @@ class SaleReturnAdjustmentItemsCompanion
     Value<String?>? reason,
     Value<int?>? taxRateBpsAtPost,
     Value<Decimal?>? unitCostAtPostCents,
+    Value<Decimal?>? inventoryValueAtPostCents,
     Value<int?>? originalInvoiceId,
     Value<String>? dispositionType,
     Value<DateTime>? createdAt,
@@ -50066,6 +55344,8 @@ class SaleReturnAdjustmentItemsCompanion
       productId: productId ?? this.productId,
       variantId: variantId ?? this.variantId,
       quantity: quantity ?? this.quantity,
+      quantityScale: quantityScale ?? this.quantityScale,
+      measurementType: measurementType ?? this.measurementType,
       unitPriceCents: unitPriceCents ?? this.unitPriceCents,
       unitCostCents: unitCostCents ?? this.unitCostCents,
       discountCents: discountCents ?? this.discountCents,
@@ -50074,6 +55354,8 @@ class SaleReturnAdjustmentItemsCompanion
       reason: reason ?? this.reason,
       taxRateBpsAtPost: taxRateBpsAtPost ?? this.taxRateBpsAtPost,
       unitCostAtPostCents: unitCostAtPostCents ?? this.unitCostAtPostCents,
+      inventoryValueAtPostCents:
+          inventoryValueAtPostCents ?? this.inventoryValueAtPostCents,
       originalInvoiceId: originalInvoiceId ?? this.originalInvoiceId,
       dispositionType: dispositionType ?? this.dispositionType,
       createdAt: createdAt ?? this.createdAt,
@@ -50097,6 +55379,12 @@ class SaleReturnAdjustmentItemsCompanion
     }
     if (quantity.present) {
       map['quantity'] = Variable<int>(quantity.value);
+    }
+    if (quantityScale.present) {
+      map['quantity_scale'] = Variable<int>(quantityScale.value);
+    }
+    if (measurementType.present) {
+      map['measurement_type'] = Variable<String>(measurementType.value);
     }
     if (unitPriceCents.present) {
       map['unit_price_cents'] = Variable<int>(
@@ -50146,6 +55434,12 @@ class SaleReturnAdjustmentItemsCompanion
         ),
       );
     }
+    if (inventoryValueAtPostCents.present) {
+      map['inventory_value_at_post_cents'] = Variable<int>(
+        $SaleReturnAdjustmentItemsTable.$converterinventoryValueAtPostCentsn
+            .toSql(inventoryValueAtPostCents.value),
+      );
+    }
     if (originalInvoiceId.present) {
       map['original_invoice_id'] = Variable<int>(originalInvoiceId.value);
     }
@@ -50166,6 +55460,8 @@ class SaleReturnAdjustmentItemsCompanion
           ..write('productId: $productId, ')
           ..write('variantId: $variantId, ')
           ..write('quantity: $quantity, ')
+          ..write('quantityScale: $quantityScale, ')
+          ..write('measurementType: $measurementType, ')
           ..write('unitPriceCents: $unitPriceCents, ')
           ..write('unitCostCents: $unitCostCents, ')
           ..write('discountCents: $discountCents, ')
@@ -50174,6 +55470,7 @@ class SaleReturnAdjustmentItemsCompanion
           ..write('reason: $reason, ')
           ..write('taxRateBpsAtPost: $taxRateBpsAtPost, ')
           ..write('unitCostAtPostCents: $unitCostAtPostCents, ')
+          ..write('inventoryValueAtPostCents: $inventoryValueAtPostCents, ')
           ..write('originalInvoiceId: $originalInvoiceId, ')
           ..write('dispositionType: $dispositionType, ')
           ..write('createdAt: $createdAt')
@@ -55175,6 +60472,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $SupplierTransactionsTable(this);
   late final $RolesTable roles = $RolesTable(this);
   late final $EmployeesTable employees = $EmployeesTable(this);
+  late final $CashierShiftsTable cashierShifts = $CashierShiftsTable(this);
   late final $SalesTable sales = $SalesTable(this);
   late final $CommissionsTable commissions = $CommissionsTable(this);
   late final $AttendancesTable attendances = $AttendancesTable(this);
@@ -55214,6 +60512,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $JournalEntryLinesTable journalEntryLines =
       $JournalEntryLinesTable(this);
   late final $ExpensesTable expenses = $ExpensesTable(this);
+  late final $OwnerFinanceTransactionsTable ownerFinanceTransactions =
+      $OwnerFinanceTransactionsTable(this);
+  late final $FixedAssetsTable fixedAssets = $FixedAssetsTable(this);
+  late final $FixedAssetDepreciationsTable fixedAssetDepreciations =
+      $FixedAssetDepreciationsTable(this);
   late final $AuditLogsTable auditLogs = $AuditLogsTable(this);
   late final $VoidLogsTable voidLogs = $VoidLogsTable(this);
   late final $NotificationsTable notifications = $NotificationsTable(this);
@@ -55295,6 +60598,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     supplierTransactions,
     roles,
     employees,
+    cashierShifts,
     sales,
     commissions,
     attendances,
@@ -55321,6 +60625,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     journalEntries,
     journalEntryLines,
     expenses,
+    ownerFinanceTransactions,
+    fixedAssets,
+    fixedAssetDepreciations,
     auditLogs,
     voidLogs,
     notifications,
@@ -55401,6 +60708,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('employees', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'users',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('cashier_shifts', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'cashier_shifts',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('sales', kind: UpdateKind.update)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -55516,6 +60837,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
+        'cashier_shifts',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('sale_returns', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
         'users',
         limitUpdateKind: UpdateKind.delete,
       ),
@@ -55562,6 +60890,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('sale_payments', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'cashier_shifts',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('sale_payments', kind: UpdateKind.update)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -55625,6 +60960,31 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('journal_entry_lines', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'users',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [
+        TableUpdate('owner_finance_transactions', kind: UpdateKind.update),
+      ],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'users',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('fixed_assets', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'users',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [
+        TableUpdate('fixed_asset_depreciations', kind: UpdateKind.update),
+      ],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -55707,6 +61067,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     WritePropagation(
       on: TableUpdateQuery.onTableName(
         'employees',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('sale_return_adjustments', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'cashier_shifts',
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('sale_return_adjustments', kind: UpdateKind.update)],
@@ -55846,6 +61213,46 @@ final class $$UsersTableReferences
     ).filter((f) => f.userId.id.sqlEquals($_itemColumn<int>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_employeeUserTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$CashierShiftsTable, List<CashierShift>>
+  _cashierShiftCashierTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.cashierShifts,
+    aliasName: 'users__id__cashier_shifts__cashier_user_id',
+  );
+
+  $$CashierShiftsTableProcessedTableManager get cashierShiftCashier {
+    final manager = $$CashierShiftsTableTableManager(
+      $_db,
+      $_db.cashierShifts,
+    ).filter((f) => f.cashierUserId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _cashierShiftCashierTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$CashierShiftsTable, List<CashierShift>>
+  _cashierShiftClosedByTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.cashierShifts,
+    aliasName: 'users__id__cashier_shifts__closed_by',
+  );
+
+  $$CashierShiftsTableProcessedTableManager get cashierShiftClosedBy {
+    final manager = $$CashierShiftsTableTableManager(
+      $_db,
+      $_db.cashierShifts,
+    ).filter((f) => f.closedBy.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _cashierShiftClosedByTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -56107,6 +61514,74 @@ final class $$UsersTableReferences
 
     final cache = $_typedResult.readTableOrNull(
       _postedJournalEntriesTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $OwnerFinanceTransactionsTable,
+    List<OwnerFinanceTransaction>
+  >
+  _createdOwnerFinanceTransactionsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.ownerFinanceTransactions,
+        aliasName: 'users__id__owner_finance_transactions__created_by',
+      );
+
+  $$OwnerFinanceTransactionsTableProcessedTableManager
+  get createdOwnerFinanceTransactions {
+    final manager = $$OwnerFinanceTransactionsTableTableManager(
+      $_db,
+      $_db.ownerFinanceTransactions,
+    ).filter((f) => f.createdBy.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _createdOwnerFinanceTransactionsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$FixedAssetsTable, List<FixedAsset>>
+  _createdFixedAssetsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.fixedAssets,
+    aliasName: 'users__id__fixed_assets__created_by',
+  );
+
+  $$FixedAssetsTableProcessedTableManager get createdFixedAssets {
+    final manager = $$FixedAssetsTableTableManager(
+      $_db,
+      $_db.fixedAssets,
+    ).filter((f) => f.createdBy.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_createdFixedAssetsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $FixedAssetDepreciationsTable,
+    List<FixedAssetDepreciation>
+  >
+  _postedFixedAssetDepreciationsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.fixedAssetDepreciations,
+        aliasName: 'users__id__fixed_asset_depreciations__posted_by',
+      );
+
+  $$FixedAssetDepreciationsTableProcessedTableManager
+  get postedFixedAssetDepreciations {
+    final manager = $$FixedAssetDepreciationsTableTableManager(
+      $_db,
+      $_db.fixedAssetDepreciations,
+    ).filter((f) => f.postedBy.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _postedFixedAssetDepreciationsTable($_db),
     );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
@@ -56530,6 +62005,56 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
     return f(composer);
   }
 
+  Expression<bool> cashierShiftCashier(
+    Expression<bool> Function($$CashierShiftsTableFilterComposer f) f,
+  ) {
+    final $$CashierShiftsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.cashierShifts,
+      getReferencedColumn: (t) => t.cashierUserId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashierShiftsTableFilterComposer(
+            $db: $db,
+            $table: $db.cashierShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> cashierShiftClosedBy(
+    Expression<bool> Function($$CashierShiftsTableFilterComposer f) f,
+  ) {
+    final $$CashierShiftsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.cashierShifts,
+      getReferencedColumn: (t) => t.closedBy,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashierShiftsTableFilterComposer(
+            $db: $db,
+            $table: $db.cashierShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<bool> uploadedDocuments(
     Expression<bool> Function($$EmployeeDocumentsTableFilterComposer f) f,
   ) {
@@ -56852,6 +62377,84 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
                 $removeJoinBuilderFromRootComposer,
           ),
     );
+    return f(composer);
+  }
+
+  Expression<bool> createdOwnerFinanceTransactions(
+    Expression<bool> Function($$OwnerFinanceTransactionsTableFilterComposer f)
+    f,
+  ) {
+    final $$OwnerFinanceTransactionsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.ownerFinanceTransactions,
+          getReferencedColumn: (t) => t.createdBy,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$OwnerFinanceTransactionsTableFilterComposer(
+                $db: $db,
+                $table: $db.ownerFinanceTransactions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> createdFixedAssets(
+    Expression<bool> Function($$FixedAssetsTableFilterComposer f) f,
+  ) {
+    final $$FixedAssetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.fixedAssets,
+      getReferencedColumn: (t) => t.createdBy,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FixedAssetsTableFilterComposer(
+            $db: $db,
+            $table: $db.fixedAssets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> postedFixedAssetDepreciations(
+    Expression<bool> Function($$FixedAssetDepreciationsTableFilterComposer f) f,
+  ) {
+    final $$FixedAssetDepreciationsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.fixedAssetDepreciations,
+          getReferencedColumn: (t) => t.postedBy,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$FixedAssetDepreciationsTableFilterComposer(
+                $db: $db,
+                $table: $db.fixedAssetDepreciations,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
     return f(composer);
   }
 
@@ -57362,6 +62965,56 @@ class $$UsersTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> cashierShiftCashier<T extends Object>(
+    Expression<T> Function($$CashierShiftsTableAnnotationComposer a) f,
+  ) {
+    final $$CashierShiftsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.cashierShifts,
+      getReferencedColumn: (t) => t.cashierUserId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashierShiftsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.cashierShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> cashierShiftClosedBy<T extends Object>(
+    Expression<T> Function($$CashierShiftsTableAnnotationComposer a) f,
+  ) {
+    final $$CashierShiftsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.cashierShifts,
+      getReferencedColumn: (t) => t.closedBy,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashierShiftsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.cashierShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> uploadedDocuments<T extends Object>(
     Expression<T> Function($$EmployeeDocumentsTableAnnotationComposer a) f,
   ) {
@@ -57687,6 +63340,85 @@ class $$UsersTableAnnotationComposer
                 $removeJoinBuilderFromRootComposer,
           ),
     );
+    return f(composer);
+  }
+
+  Expression<T> createdOwnerFinanceTransactions<T extends Object>(
+    Expression<T> Function($$OwnerFinanceTransactionsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$OwnerFinanceTransactionsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.ownerFinanceTransactions,
+          getReferencedColumn: (t) => t.createdBy,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$OwnerFinanceTransactionsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.ownerFinanceTransactions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> createdFixedAssets<T extends Object>(
+    Expression<T> Function($$FixedAssetsTableAnnotationComposer a) f,
+  ) {
+    final $$FixedAssetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.fixedAssets,
+      getReferencedColumn: (t) => t.createdBy,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FixedAssetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.fixedAssets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> postedFixedAssetDepreciations<T extends Object>(
+    Expression<T> Function($$FixedAssetDepreciationsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$FixedAssetDepreciationsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.fixedAssetDepreciations,
+          getReferencedColumn: (t) => t.postedBy,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$FixedAssetDepreciationsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.fixedAssetDepreciations,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
     return f(composer);
   }
 
@@ -58046,6 +63778,8 @@ class $$UsersTableTableManager
           PrefetchHooks Function({
             bool productPriceHistoriesRefs,
             bool employeeUser,
+            bool cashierShiftCashier,
+            bool cashierShiftClosedBy,
             bool uploadedDocuments,
             bool recordedPerformanceMetrics,
             bool saleReturnApprovedBy,
@@ -58059,6 +63793,9 @@ class $$UsersTableTableManager
             bool closedAccountingPeriods,
             bool createdJournalEntries,
             bool postedJournalEntries,
+            bool createdOwnerFinanceTransactions,
+            bool createdFixedAssets,
+            bool postedFixedAssetDepreciations,
             bool auditLogUser,
             bool voidLogUser,
             bool notificationUser,
@@ -58147,6 +63884,8 @@ class $$UsersTableTableManager
               ({
                 productPriceHistoriesRefs = false,
                 employeeUser = false,
+                cashierShiftCashier = false,
+                cashierShiftClosedBy = false,
                 uploadedDocuments = false,
                 recordedPerformanceMetrics = false,
                 saleReturnApprovedBy = false,
@@ -58160,6 +63899,9 @@ class $$UsersTableTableManager
                 closedAccountingPeriods = false,
                 createdJournalEntries = false,
                 postedJournalEntries = false,
+                createdOwnerFinanceTransactions = false,
+                createdFixedAssets = false,
+                postedFixedAssetDepreciations = false,
                 auditLogUser = false,
                 voidLogUser = false,
                 notificationUser = false,
@@ -58179,6 +63921,8 @@ class $$UsersTableTableManager
                   explicitlyWatchedTables: [
                     if (productPriceHistoriesRefs) db.productPriceHistories,
                     if (employeeUser) db.employees,
+                    if (cashierShiftCashier) db.cashierShifts,
+                    if (cashierShiftClosedBy) db.cashierShifts,
                     if (uploadedDocuments) db.employeeDocuments,
                     if (recordedPerformanceMetrics) db.performanceMetrics,
                     if (saleReturnApprovedBy) db.saleReturns,
@@ -58192,6 +63936,11 @@ class $$UsersTableTableManager
                     if (closedAccountingPeriods) db.accountingPeriods,
                     if (createdJournalEntries) db.journalEntries,
                     if (postedJournalEntries) db.journalEntries,
+                    if (createdOwnerFinanceTransactions)
+                      db.ownerFinanceTransactions,
+                    if (createdFixedAssets) db.fixedAssets,
+                    if (postedFixedAssetDepreciations)
+                      db.fixedAssetDepreciations,
                     if (auditLogUser) db.auditLogs,
                     if (voidLogUser) db.voidLogs,
                     if (notificationUser) db.notifications,
@@ -58246,6 +63995,48 @@ class $$UsersTableTableManager
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.userId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (cashierShiftCashier)
+                        await $_getPrefetchedData<
+                          User,
+                          $UsersTable,
+                          CashierShift
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._cashierShiftCashierTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).cashierShiftCashier,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.cashierUserId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (cashierShiftClosedBy)
+                        await $_getPrefetchedData<
+                          User,
+                          $UsersTable,
+                          CashierShift
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._cashierShiftClosedByTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).cashierShiftClosedBy,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.closedBy == item.id,
                               ),
                           typedResults: items,
                         ),
@@ -58516,6 +64307,69 @@ class $$UsersTableTableManager
                                 table,
                                 p0,
                               ).postedJournalEntries,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.postedBy == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (createdOwnerFinanceTransactions)
+                        await $_getPrefetchedData<
+                          User,
+                          $UsersTable,
+                          OwnerFinanceTransaction
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._createdOwnerFinanceTransactionsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).createdOwnerFinanceTransactions,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.createdBy == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (createdFixedAssets)
+                        await $_getPrefetchedData<
+                          User,
+                          $UsersTable,
+                          FixedAsset
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._createdFixedAssetsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).createdFixedAssets,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.createdBy == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (postedFixedAssetDepreciations)
+                        await $_getPrefetchedData<
+                          User,
+                          $UsersTable,
+                          FixedAssetDepreciation
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._postedFixedAssetDepreciationsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).postedFixedAssetDepreciations,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.postedBy == item.id,
@@ -58806,6 +64660,8 @@ typedef $$UsersTableProcessedTableManager =
       PrefetchHooks Function({
         bool productPriceHistoriesRefs,
         bool employeeUser,
+        bool cashierShiftCashier,
+        bool cashierShiftClosedBy,
         bool uploadedDocuments,
         bool recordedPerformanceMetrics,
         bool saleReturnApprovedBy,
@@ -58819,6 +64675,9 @@ typedef $$UsersTableProcessedTableManager =
         bool closedAccountingPeriods,
         bool createdJournalEntries,
         bool postedJournalEntries,
+        bool createdOwnerFinanceTransactions,
+        bool createdFixedAssets,
+        bool postedFixedAssetDepreciations,
         bool auditLogUser,
         bool voidLogUser,
         bool notificationUser,
@@ -58981,6 +64840,24 @@ final class $$CurrenciesTableReferences
     ).filter((f) => f.currencyId.id.sqlEquals($_itemColumn<int>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_employeesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$CashierShiftsTable, List<CashierShift>>
+  _cashierShiftsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.cashierShifts,
+    aliasName: 'currencies__id__cashier_shifts__currency_id',
+  );
+
+  $$CashierShiftsTableProcessedTableManager get cashierShiftsRefs {
+    final manager = $$CashierShiftsTableTableManager(
+      $_db,
+      $_db.cashierShifts,
+    ).filter((f) => f.currencyId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_cashierShiftsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -59190,6 +65067,49 @@ final class $$CurrenciesTableReferences
     ).filter((f) => f.currencyId.id.sqlEquals($_itemColumn<int>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_expensesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $OwnerFinanceTransactionsTable,
+    List<OwnerFinanceTransaction>
+  >
+  _ownerFinanceTransactionsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.ownerFinanceTransactions,
+        aliasName: 'currencies__id__owner_finance_transactions__currency_id',
+      );
+
+  $$OwnerFinanceTransactionsTableProcessedTableManager
+  get ownerFinanceTransactionsRefs {
+    final manager = $$OwnerFinanceTransactionsTableTableManager(
+      $_db,
+      $_db.ownerFinanceTransactions,
+    ).filter((f) => f.currencyId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _ownerFinanceTransactionsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$FixedAssetsTable, List<FixedAsset>>
+  _fixedAssetsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.fixedAssets,
+    aliasName: 'currencies__id__fixed_assets__currency_id',
+  );
+
+  $$FixedAssetsTableProcessedTableManager get fixedAssetsRefs {
+    final manager = $$FixedAssetsTableTableManager(
+      $_db,
+      $_db.fixedAssets,
+    ).filter((f) => f.currencyId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_fixedAssetsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -59500,6 +65420,31 @@ class $$CurrenciesTableFilterComposer
     return f(composer);
   }
 
+  Expression<bool> cashierShiftsRefs(
+    Expression<bool> Function($$CashierShiftsTableFilterComposer f) f,
+  ) {
+    final $$CashierShiftsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.cashierShifts,
+      getReferencedColumn: (t) => t.currencyId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashierShiftsTableFilterComposer(
+            $db: $db,
+            $table: $db.cashierShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<bool> salesRefs(
     Expression<bool> Function($$SalesTableFilterComposer f) f,
   ) {
@@ -59766,6 +65711,58 @@ class $$CurrenciesTableFilterComposer
           }) => $$ExpensesTableFilterComposer(
             $db: $db,
             $table: $db.expenses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> ownerFinanceTransactionsRefs(
+    Expression<bool> Function($$OwnerFinanceTransactionsTableFilterComposer f)
+    f,
+  ) {
+    final $$OwnerFinanceTransactionsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.ownerFinanceTransactions,
+          getReferencedColumn: (t) => t.currencyId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$OwnerFinanceTransactionsTableFilterComposer(
+                $db: $db,
+                $table: $db.ownerFinanceTransactions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> fixedAssetsRefs(
+    Expression<bool> Function($$FixedAssetsTableFilterComposer f) f,
+  ) {
+    final $$FixedAssetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.fixedAssets,
+      getReferencedColumn: (t) => t.currencyId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FixedAssetsTableFilterComposer(
+            $db: $db,
+            $table: $db.fixedAssets,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -60125,6 +66122,31 @@ class $$CurrenciesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> cashierShiftsRefs<T extends Object>(
+    Expression<T> Function($$CashierShiftsTableAnnotationComposer a) f,
+  ) {
+    final $$CashierShiftsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.cashierShifts,
+      getReferencedColumn: (t) => t.currencyId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashierShiftsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.cashierShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> salesRefs<T extends Object>(
     Expression<T> Function($$SalesTableAnnotationComposer a) f,
   ) {
@@ -60401,6 +66423,58 @@ class $$CurrenciesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> ownerFinanceTransactionsRefs<T extends Object>(
+    Expression<T> Function($$OwnerFinanceTransactionsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$OwnerFinanceTransactionsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.ownerFinanceTransactions,
+          getReferencedColumn: (t) => t.currencyId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$OwnerFinanceTransactionsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.ownerFinanceTransactions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> fixedAssetsRefs<T extends Object>(
+    Expression<T> Function($$FixedAssetsTableAnnotationComposer a) f,
+  ) {
+    final $$FixedAssetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.fixedAssets,
+      getReferencedColumn: (t) => t.currencyId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FixedAssetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.fixedAssets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> purchaseReturnAdjustmentsRefs<T extends Object>(
     Expression<T> Function($$PurchaseReturnAdjustmentsTableAnnotationComposer a)
     f,
@@ -60527,6 +66601,7 @@ class $$CurrenciesTableTableManager
             bool customerTransactionsRefs,
             bool supplierTransactionsRefs,
             bool employeesRefs,
+            bool cashierShiftsRefs,
             bool salesRefs,
             bool commissionsRefs,
             bool payrollsRefs,
@@ -60538,6 +66613,8 @@ class $$CurrenciesTableTableManager
             bool accountsRefs,
             bool journalEntryLinesRefs,
             bool expensesRefs,
+            bool ownerFinanceTransactionsRefs,
+            bool fixedAssetsRefs,
             bool purchaseReturnAdjustmentsRefs,
             bool saleReturnAdjustmentsRefs,
             bool inventoryAdjustmentsRefs,
@@ -60615,6 +66692,7 @@ class $$CurrenciesTableTableManager
                 customerTransactionsRefs = false,
                 supplierTransactionsRefs = false,
                 employeesRefs = false,
+                cashierShiftsRefs = false,
                 salesRefs = false,
                 commissionsRefs = false,
                 payrollsRefs = false,
@@ -60626,6 +66704,8 @@ class $$CurrenciesTableTableManager
                 accountsRefs = false,
                 journalEntryLinesRefs = false,
                 expensesRefs = false,
+                ownerFinanceTransactionsRefs = false,
+                fixedAssetsRefs = false,
                 purchaseReturnAdjustmentsRefs = false,
                 saleReturnAdjustmentsRefs = false,
                 inventoryAdjustmentsRefs = false,
@@ -60640,6 +66720,7 @@ class $$CurrenciesTableTableManager
                     if (customerTransactionsRefs) db.customerTransactions,
                     if (supplierTransactionsRefs) db.supplierTransactions,
                     if (employeesRefs) db.employees,
+                    if (cashierShiftsRefs) db.cashierShifts,
                     if (salesRefs) db.sales,
                     if (commissionsRefs) db.commissions,
                     if (payrollsRefs) db.payrolls,
@@ -60651,6 +66732,9 @@ class $$CurrenciesTableTableManager
                     if (accountsRefs) db.accounts,
                     if (journalEntryLinesRefs) db.journalEntryLines,
                     if (expensesRefs) db.expenses,
+                    if (ownerFinanceTransactionsRefs)
+                      db.ownerFinanceTransactions,
+                    if (fixedAssetsRefs) db.fixedAssets,
                     if (purchaseReturnAdjustmentsRefs)
                       db.purchaseReturnAdjustments,
                     if (saleReturnAdjustmentsRefs) db.saleReturnAdjustments,
@@ -60780,6 +66864,27 @@ class $$CurrenciesTableTableManager
                                 table,
                                 p0,
                               ).employeesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.currencyId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (cashierShiftsRefs)
+                        await $_getPrefetchedData<
+                          Currency,
+                          $CurrenciesTable,
+                          CashierShift
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CurrenciesTableReferences
+                              ._cashierShiftsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CurrenciesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).cashierShiftsRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.currencyId == item.id,
@@ -61017,6 +67122,48 @@ class $$CurrenciesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (ownerFinanceTransactionsRefs)
+                        await $_getPrefetchedData<
+                          Currency,
+                          $CurrenciesTable,
+                          OwnerFinanceTransaction
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CurrenciesTableReferences
+                              ._ownerFinanceTransactionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CurrenciesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).ownerFinanceTransactionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.currencyId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (fixedAssetsRefs)
+                        await $_getPrefetchedData<
+                          Currency,
+                          $CurrenciesTable,
+                          FixedAsset
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CurrenciesTableReferences
+                              ._fixedAssetsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CurrenciesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).fixedAssetsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.currencyId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (purchaseReturnAdjustmentsRefs)
                         await $_getPrefetchedData<
                           Currency,
@@ -61128,6 +67275,7 @@ typedef $$CurrenciesTableProcessedTableManager =
         bool customerTransactionsRefs,
         bool supplierTransactionsRefs,
         bool employeesRefs,
+        bool cashierShiftsRefs,
         bool salesRefs,
         bool commissionsRefs,
         bool payrollsRefs,
@@ -61139,6 +67287,8 @@ typedef $$CurrenciesTableProcessedTableManager =
         bool accountsRefs,
         bool journalEntryLinesRefs,
         bool expensesRefs,
+        bool ownerFinanceTransactionsRefs,
+        bool fixedAssetsRefs,
         bool purchaseReturnAdjustmentsRefs,
         bool saleReturnAdjustmentsRefs,
         bool inventoryAdjustmentsRefs,
@@ -63888,6 +70038,7 @@ typedef $$ProductsTableCreateCompanionBuilder =
       Value<Decimal?> lastPurchasePriceCents,
       Value<int?> currencyId,
       Value<bool> trackInventory,
+      Value<String> measurementType,
       Value<int> stockQuantity,
       Value<int> minQuantity,
       Value<bool> hasVariants,
@@ -63921,6 +70072,7 @@ typedef $$ProductsTableUpdateCompanionBuilder =
       Value<Decimal?> lastPurchasePriceCents,
       Value<int?> currencyId,
       Value<bool> trackInventory,
+      Value<String> measurementType,
       Value<int> stockQuantity,
       Value<int> minQuantity,
       Value<bool> hasVariants,
@@ -64272,6 +70424,11 @@ class $$ProductsTableFilterComposer
 
   ColumnFilters<bool> get trackInventory => $composableBuilder(
     column: $table.trackInventory,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -64721,6 +70878,11 @@ class $$ProductsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get stockQuantity => $composableBuilder(
     column: $table.stockQuantity,
     builder: (column) => ColumnOrderings(column),
@@ -64924,6 +71086,11 @@ class $$ProductsTableAnnotationComposer
 
   GeneratedColumn<bool> get trackInventory => $composableBuilder(
     column: $table.trackInventory,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
     builder: (column) => column,
   );
 
@@ -65341,6 +71508,7 @@ class $$ProductsTableTableManager
                 Value<Decimal?> lastPurchasePriceCents = const Value.absent(),
                 Value<int?> currencyId = const Value.absent(),
                 Value<bool> trackInventory = const Value.absent(),
+                Value<String> measurementType = const Value.absent(),
                 Value<int> stockQuantity = const Value.absent(),
                 Value<int> minQuantity = const Value.absent(),
                 Value<bool> hasVariants = const Value.absent(),
@@ -65372,6 +71540,7 @@ class $$ProductsTableTableManager
                 lastPurchasePriceCents: lastPurchasePriceCents,
                 currencyId: currencyId,
                 trackInventory: trackInventory,
+                measurementType: measurementType,
                 stockQuantity: stockQuantity,
                 minQuantity: minQuantity,
                 hasVariants: hasVariants,
@@ -65406,6 +71575,7 @@ class $$ProductsTableTableManager
                 Value<Decimal?> lastPurchasePriceCents = const Value.absent(),
                 Value<int?> currencyId = const Value.absent(),
                 Value<bool> trackInventory = const Value.absent(),
+                Value<String> measurementType = const Value.absent(),
                 Value<int> stockQuantity = const Value.absent(),
                 Value<int> minQuantity = const Value.absent(),
                 Value<bool> hasVariants = const Value.absent(),
@@ -65437,6 +71607,7 @@ class $$ProductsTableTableManager
                 lastPurchasePriceCents: lastPurchasePriceCents,
                 currencyId: currencyId,
                 trackInventory: trackInventory,
+                measurementType: measurementType,
                 stockQuantity: stockQuantity,
                 minQuantity: minQuantity,
                 hasVariants: hasVariants,
@@ -76488,12 +82659,1135 @@ typedef $$EmployeesTableProcessedTableManager =
         bool saleReturnAdjAsEmployee,
       })
     >;
+typedef $$CashierShiftsTableCreateCompanionBuilder =
+    CashierShiftsCompanion Function({
+      Value<int> id,
+      required String shiftNumber,
+      required int cashierUserId,
+      required int currencyId,
+      Value<String> status,
+      Value<Decimal> openingCashCents,
+      Value<Decimal?> expectedClosingCashCents,
+      Value<Decimal?> countedClosingCashCents,
+      Value<Decimal?> cashVarianceCents,
+      Value<String?> openingNotes,
+      Value<String?> closingNotes,
+      Value<DateTime> openedAt,
+      Value<DateTime?> closedAt,
+      Value<int?> closedBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+typedef $$CashierShiftsTableUpdateCompanionBuilder =
+    CashierShiftsCompanion Function({
+      Value<int> id,
+      Value<String> shiftNumber,
+      Value<int> cashierUserId,
+      Value<int> currencyId,
+      Value<String> status,
+      Value<Decimal> openingCashCents,
+      Value<Decimal?> expectedClosingCashCents,
+      Value<Decimal?> countedClosingCashCents,
+      Value<Decimal?> cashVarianceCents,
+      Value<String?> openingNotes,
+      Value<String?> closingNotes,
+      Value<DateTime> openedAt,
+      Value<DateTime?> closedAt,
+      Value<int?> closedBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$CashierShiftsTableReferences
+    extends BaseReferences<_$AppDatabase, $CashierShiftsTable, CashierShift> {
+  $$CashierShiftsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $UsersTable _cashierUserIdTable(_$AppDatabase db) =>
+      db.users.createAlias('cashier_shifts__cashier_user_id__users__id');
+
+  $$UsersTableProcessedTableManager get cashierUserId {
+    final $_column = $_itemColumn<int>('cashier_user_id')!;
+
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_cashierUserIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
+      db.currencies.createAlias('cashier_shifts__currency_id__currencies__id');
+
+  $$CurrenciesTableProcessedTableManager get currencyId {
+    final $_column = $_itemColumn<int>('currency_id')!;
+
+    final manager = $$CurrenciesTableTableManager(
+      $_db,
+      $_db.currencies,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_currencyIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _closedByTable(_$AppDatabase db) =>
+      db.users.createAlias('cashier_shifts__closed_by__users__id');
+
+  $$UsersTableProcessedTableManager? get closedBy {
+    final $_column = $_itemColumn<int>('closed_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_closedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$SalesTable, List<Sale>> _salesRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.sales,
+    aliasName: 'cashier_shifts__id__sales__cashier_shift_id',
+  );
+
+  $$SalesTableProcessedTableManager get salesRefs {
+    final manager = $$SalesTableTableManager(
+      $_db,
+      $_db.sales,
+    ).filter((f) => f.cashierShiftId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_salesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$SaleReturnsTable, List<SaleReturn>>
+  _saleReturnsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.saleReturns,
+    aliasName: 'cashier_shifts__id__sale_returns__cashier_shift_id',
+  );
+
+  $$SaleReturnsTableProcessedTableManager get saleReturnsRefs {
+    final manager = $$SaleReturnsTableTableManager(
+      $_db,
+      $_db.saleReturns,
+    ).filter((f) => f.cashierShiftId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_saleReturnsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$SalePaymentsTable, List<SalePayment>>
+  _salePaymentsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.salePayments,
+    aliasName: 'cashier_shifts__id__sale_payments__cashier_shift_id',
+  );
+
+  $$SalePaymentsTableProcessedTableManager get salePaymentsRefs {
+    final manager = $$SalePaymentsTableTableManager(
+      $_db,
+      $_db.salePayments,
+    ).filter((f) => f.cashierShiftId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_salePaymentsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $SaleReturnAdjustmentsTable,
+    List<SaleReturnAdjustment>
+  >
+  _saleReturnAdjustmentsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.saleReturnAdjustments,
+        aliasName:
+            'cashier_shifts__id__sale_return_adjustments__cashier_shift_id',
+      );
+
+  $$SaleReturnAdjustmentsTableProcessedTableManager
+  get saleReturnAdjustmentsRefs {
+    final manager = $$SaleReturnAdjustmentsTableTableManager(
+      $_db,
+      $_db.saleReturnAdjustments,
+    ).filter((f) => f.cashierShiftId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _saleReturnAdjustmentsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$CashierShiftsTableFilterComposer
+    extends Composer<_$AppDatabase, $CashierShiftsTable> {
+  $$CashierShiftsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get shiftNumber => $composableBuilder(
+    column: $table.shiftNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get openingCashCents =>
+      $composableBuilder(
+        column: $table.openingCashCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get expectedClosingCashCents => $composableBuilder(
+    column: $table.expectedClosingCashCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get countedClosingCashCents => $composableBuilder(
+    column: $table.countedClosingCashCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get cashVarianceCents => $composableBuilder(
+    column: $table.cashVarianceCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<String> get openingNotes => $composableBuilder(
+    column: $table.openingNotes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get closingNotes => $composableBuilder(
+    column: $table.closingNotes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get openedAt => $composableBuilder(
+    column: $table.openedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get closedAt => $composableBuilder(
+    column: $table.closedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$UsersTableFilterComposer get cashierUserId {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cashierUserId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$CurrenciesTableFilterComposer get currencyId {
+    final $$CurrenciesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.currencyId,
+      referencedTable: $db.currencies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CurrenciesTableFilterComposer(
+            $db: $db,
+            $table: $db.currencies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get closedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.closedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> salesRefs(
+    Expression<bool> Function($$SalesTableFilterComposer f) f,
+  ) {
+    final $$SalesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.sales,
+      getReferencedColumn: (t) => t.cashierShiftId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SalesTableFilterComposer(
+            $db: $db,
+            $table: $db.sales,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> saleReturnsRefs(
+    Expression<bool> Function($$SaleReturnsTableFilterComposer f) f,
+  ) {
+    final $$SaleReturnsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.saleReturns,
+      getReferencedColumn: (t) => t.cashierShiftId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SaleReturnsTableFilterComposer(
+            $db: $db,
+            $table: $db.saleReturns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> salePaymentsRefs(
+    Expression<bool> Function($$SalePaymentsTableFilterComposer f) f,
+  ) {
+    final $$SalePaymentsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.salePayments,
+      getReferencedColumn: (t) => t.cashierShiftId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SalePaymentsTableFilterComposer(
+            $db: $db,
+            $table: $db.salePayments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> saleReturnAdjustmentsRefs(
+    Expression<bool> Function($$SaleReturnAdjustmentsTableFilterComposer f) f,
+  ) {
+    final $$SaleReturnAdjustmentsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.saleReturnAdjustments,
+          getReferencedColumn: (t) => t.cashierShiftId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SaleReturnAdjustmentsTableFilterComposer(
+                $db: $db,
+                $table: $db.saleReturnAdjustments,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$CashierShiftsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CashierShiftsTable> {
+  $$CashierShiftsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get shiftNumber => $composableBuilder(
+    column: $table.shiftNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get openingCashCents => $composableBuilder(
+    column: $table.openingCashCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get expectedClosingCashCents => $composableBuilder(
+    column: $table.expectedClosingCashCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get countedClosingCashCents => $composableBuilder(
+    column: $table.countedClosingCashCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get cashVarianceCents => $composableBuilder(
+    column: $table.cashVarianceCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get openingNotes => $composableBuilder(
+    column: $table.openingNotes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get closingNotes => $composableBuilder(
+    column: $table.closingNotes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get openedAt => $composableBuilder(
+    column: $table.openedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get closedAt => $composableBuilder(
+    column: $table.closedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$UsersTableOrderingComposer get cashierUserId {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cashierUserId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$CurrenciesTableOrderingComposer get currencyId {
+    final $$CurrenciesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.currencyId,
+      referencedTable: $db.currencies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CurrenciesTableOrderingComposer(
+            $db: $db,
+            $table: $db.currencies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get closedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.closedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CashierShiftsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CashierShiftsTable> {
+  $$CashierShiftsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get shiftNumber => $composableBuilder(
+    column: $table.shiftNumber,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get openingCashCents =>
+      $composableBuilder(
+        column: $table.openingCashCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int>
+  get expectedClosingCashCents => $composableBuilder(
+    column: $table.expectedClosingCashCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int> get countedClosingCashCents =>
+      $composableBuilder(
+        column: $table.countedClosingCashCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int> get cashVarianceCents =>
+      $composableBuilder(
+        column: $table.cashVarianceCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<String> get openingNotes => $composableBuilder(
+    column: $table.openingNotes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get closingNotes => $composableBuilder(
+    column: $table.closingNotes,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get openedAt =>
+      $composableBuilder(column: $table.openedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get closedAt =>
+      $composableBuilder(column: $table.closedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$UsersTableAnnotationComposer get cashierUserId {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cashierUserId,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$CurrenciesTableAnnotationComposer get currencyId {
+    final $$CurrenciesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.currencyId,
+      referencedTable: $db.currencies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CurrenciesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.currencies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get closedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.closedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> salesRefs<T extends Object>(
+    Expression<T> Function($$SalesTableAnnotationComposer a) f,
+  ) {
+    final $$SalesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.sales,
+      getReferencedColumn: (t) => t.cashierShiftId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SalesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.sales,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> saleReturnsRefs<T extends Object>(
+    Expression<T> Function($$SaleReturnsTableAnnotationComposer a) f,
+  ) {
+    final $$SaleReturnsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.saleReturns,
+      getReferencedColumn: (t) => t.cashierShiftId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SaleReturnsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.saleReturns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> salePaymentsRefs<T extends Object>(
+    Expression<T> Function($$SalePaymentsTableAnnotationComposer a) f,
+  ) {
+    final $$SalePaymentsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.salePayments,
+      getReferencedColumn: (t) => t.cashierShiftId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SalePaymentsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.salePayments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> saleReturnAdjustmentsRefs<T extends Object>(
+    Expression<T> Function($$SaleReturnAdjustmentsTableAnnotationComposer a) f,
+  ) {
+    final $$SaleReturnAdjustmentsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.saleReturnAdjustments,
+          getReferencedColumn: (t) => t.cashierShiftId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$SaleReturnAdjustmentsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.saleReturnAdjustments,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$CashierShiftsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CashierShiftsTable,
+          CashierShift,
+          $$CashierShiftsTableFilterComposer,
+          $$CashierShiftsTableOrderingComposer,
+          $$CashierShiftsTableAnnotationComposer,
+          $$CashierShiftsTableCreateCompanionBuilder,
+          $$CashierShiftsTableUpdateCompanionBuilder,
+          (CashierShift, $$CashierShiftsTableReferences),
+          CashierShift,
+          PrefetchHooks Function({
+            bool cashierUserId,
+            bool currencyId,
+            bool closedBy,
+            bool salesRefs,
+            bool saleReturnsRefs,
+            bool salePaymentsRefs,
+            bool saleReturnAdjustmentsRefs,
+          })
+        > {
+  $$CashierShiftsTableTableManager(_$AppDatabase db, $CashierShiftsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CashierShiftsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CashierShiftsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CashierShiftsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> shiftNumber = const Value.absent(),
+                Value<int> cashierUserId = const Value.absent(),
+                Value<int> currencyId = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<Decimal> openingCashCents = const Value.absent(),
+                Value<Decimal?> expectedClosingCashCents = const Value.absent(),
+                Value<Decimal?> countedClosingCashCents = const Value.absent(),
+                Value<Decimal?> cashVarianceCents = const Value.absent(),
+                Value<String?> openingNotes = const Value.absent(),
+                Value<String?> closingNotes = const Value.absent(),
+                Value<DateTime> openedAt = const Value.absent(),
+                Value<DateTime?> closedAt = const Value.absent(),
+                Value<int?> closedBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => CashierShiftsCompanion(
+                id: id,
+                shiftNumber: shiftNumber,
+                cashierUserId: cashierUserId,
+                currencyId: currencyId,
+                status: status,
+                openingCashCents: openingCashCents,
+                expectedClosingCashCents: expectedClosingCashCents,
+                countedClosingCashCents: countedClosingCashCents,
+                cashVarianceCents: cashVarianceCents,
+                openingNotes: openingNotes,
+                closingNotes: closingNotes,
+                openedAt: openedAt,
+                closedAt: closedAt,
+                closedBy: closedBy,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String shiftNumber,
+                required int cashierUserId,
+                required int currencyId,
+                Value<String> status = const Value.absent(),
+                Value<Decimal> openingCashCents = const Value.absent(),
+                Value<Decimal?> expectedClosingCashCents = const Value.absent(),
+                Value<Decimal?> countedClosingCashCents = const Value.absent(),
+                Value<Decimal?> cashVarianceCents = const Value.absent(),
+                Value<String?> openingNotes = const Value.absent(),
+                Value<String?> closingNotes = const Value.absent(),
+                Value<DateTime> openedAt = const Value.absent(),
+                Value<DateTime?> closedAt = const Value.absent(),
+                Value<int?> closedBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => CashierShiftsCompanion.insert(
+                id: id,
+                shiftNumber: shiftNumber,
+                cashierUserId: cashierUserId,
+                currencyId: currencyId,
+                status: status,
+                openingCashCents: openingCashCents,
+                expectedClosingCashCents: expectedClosingCashCents,
+                countedClosingCashCents: countedClosingCashCents,
+                cashVarianceCents: cashVarianceCents,
+                openingNotes: openingNotes,
+                closingNotes: closingNotes,
+                openedAt: openedAt,
+                closedAt: closedAt,
+                closedBy: closedBy,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$CashierShiftsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                cashierUserId = false,
+                currencyId = false,
+                closedBy = false,
+                salesRefs = false,
+                saleReturnsRefs = false,
+                salePaymentsRefs = false,
+                saleReturnAdjustmentsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (salesRefs) db.sales,
+                    if (saleReturnsRefs) db.saleReturns,
+                    if (salePaymentsRefs) db.salePayments,
+                    if (saleReturnAdjustmentsRefs) db.saleReturnAdjustments,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (cashierUserId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.cashierUserId,
+                                    referencedTable:
+                                        $$CashierShiftsTableReferences
+                                            ._cashierUserIdTable(db),
+                                    referencedColumn:
+                                        $$CashierShiftsTableReferences
+                                            ._cashierUserIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (currencyId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.currencyId,
+                                    referencedTable:
+                                        $$CashierShiftsTableReferences
+                                            ._currencyIdTable(db),
+                                    referencedColumn:
+                                        $$CashierShiftsTableReferences
+                                            ._currencyIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (closedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.closedBy,
+                                    referencedTable:
+                                        $$CashierShiftsTableReferences
+                                            ._closedByTable(db),
+                                    referencedColumn:
+                                        $$CashierShiftsTableReferences
+                                            ._closedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (salesRefs)
+                        await $_getPrefetchedData<
+                          CashierShift,
+                          $CashierShiftsTable,
+                          Sale
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CashierShiftsTableReferences
+                              ._salesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CashierShiftsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).salesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.cashierShiftId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (saleReturnsRefs)
+                        await $_getPrefetchedData<
+                          CashierShift,
+                          $CashierShiftsTable,
+                          SaleReturn
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CashierShiftsTableReferences
+                              ._saleReturnsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CashierShiftsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).saleReturnsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.cashierShiftId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (salePaymentsRefs)
+                        await $_getPrefetchedData<
+                          CashierShift,
+                          $CashierShiftsTable,
+                          SalePayment
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CashierShiftsTableReferences
+                              ._salePaymentsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CashierShiftsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).salePaymentsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.cashierShiftId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (saleReturnAdjustmentsRefs)
+                        await $_getPrefetchedData<
+                          CashierShift,
+                          $CashierShiftsTable,
+                          SaleReturnAdjustment
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CashierShiftsTableReferences
+                              ._saleReturnAdjustmentsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CashierShiftsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).saleReturnAdjustmentsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.cashierShiftId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$CashierShiftsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CashierShiftsTable,
+      CashierShift,
+      $$CashierShiftsTableFilterComposer,
+      $$CashierShiftsTableOrderingComposer,
+      $$CashierShiftsTableAnnotationComposer,
+      $$CashierShiftsTableCreateCompanionBuilder,
+      $$CashierShiftsTableUpdateCompanionBuilder,
+      (CashierShift, $$CashierShiftsTableReferences),
+      CashierShift,
+      PrefetchHooks Function({
+        bool cashierUserId,
+        bool currencyId,
+        bool closedBy,
+        bool salesRefs,
+        bool saleReturnsRefs,
+        bool salePaymentsRefs,
+        bool saleReturnAdjustmentsRefs,
+      })
+    >;
 typedef $$SalesTableCreateCompanionBuilder =
     SalesCompanion Function({
       Value<int> id,
       required String invoiceNumber,
       Value<int?> customerId,
       Value<int?> employeeId,
+      Value<int?> cashierShiftId,
       required Decimal subtotalCents,
       required Decimal taxCents,
       Value<Decimal> discountCents,
@@ -76517,6 +83811,7 @@ typedef $$SalesTableUpdateCompanionBuilder =
       Value<String> invoiceNumber,
       Value<int?> customerId,
       Value<int?> employeeId,
+      Value<int?> cashierShiftId,
       Value<Decimal> subtotalCents,
       Value<Decimal> taxCents,
       Value<Decimal> discountCents,
@@ -76567,6 +83862,24 @@ final class $$SalesTableReferences
       $_db.employees,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_employeeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $CashierShiftsTable _cashierShiftIdTable(_$AppDatabase db) => db
+      .cashierShifts
+      .createAlias('sales__cashier_shift_id__cashier_shifts__id');
+
+  $$CashierShiftsTableProcessedTableManager? get cashierShiftId {
+    final $_column = $_itemColumn<int>('cashier_shift_id');
+    if ($_column == null) return null;
+    final manager = $$CashierShiftsTableTableManager(
+      $_db,
+      $_db.cashierShifts,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_cashierShiftIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -76816,6 +84129,29 @@ class $$SalesTableFilterComposer extends Composer<_$AppDatabase, $SalesTable> {
           }) => $$EmployeesTableFilterComposer(
             $db: $db,
             $table: $db.employees,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$CashierShiftsTableFilterComposer get cashierShiftId {
+    final $$CashierShiftsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cashierShiftId,
+      referencedTable: $db.cashierShifts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashierShiftsTableFilterComposer(
+            $db: $db,
+            $table: $db.cashierShifts,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -77114,6 +84450,29 @@ class $$SalesTableOrderingComposer
     return composer;
   }
 
+  $$CashierShiftsTableOrderingComposer get cashierShiftId {
+    final $$CashierShiftsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cashierShiftId,
+      referencedTable: $db.cashierShifts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashierShiftsTableOrderingComposer(
+            $db: $db,
+            $table: $db.cashierShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$CurrenciesTableOrderingComposer get currencyId {
     final $$CurrenciesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -77257,6 +84616,29 @@ class $$SalesTableAnnotationComposer
           }) => $$EmployeesTableAnnotationComposer(
             $db: $db,
             $table: $db.employees,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$CashierShiftsTableAnnotationComposer get cashierShiftId {
+    final $$CashierShiftsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cashierShiftId,
+      referencedTable: $db.cashierShifts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashierShiftsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.cashierShifts,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -77431,6 +84813,7 @@ class $$SalesTableTableManager
           PrefetchHooks Function({
             bool customerId,
             bool employeeId,
+            bool cashierShiftId,
             bool currencyId,
             bool commissionsRefs,
             bool saleItemsRefs,
@@ -77456,6 +84839,7 @@ class $$SalesTableTableManager
                 Value<String> invoiceNumber = const Value.absent(),
                 Value<int?> customerId = const Value.absent(),
                 Value<int?> employeeId = const Value.absent(),
+                Value<int?> cashierShiftId = const Value.absent(),
                 Value<Decimal> subtotalCents = const Value.absent(),
                 Value<Decimal> taxCents = const Value.absent(),
                 Value<Decimal> discountCents = const Value.absent(),
@@ -77477,6 +84861,7 @@ class $$SalesTableTableManager
                 invoiceNumber: invoiceNumber,
                 customerId: customerId,
                 employeeId: employeeId,
+                cashierShiftId: cashierShiftId,
                 subtotalCents: subtotalCents,
                 taxCents: taxCents,
                 discountCents: discountCents,
@@ -77500,6 +84885,7 @@ class $$SalesTableTableManager
                 required String invoiceNumber,
                 Value<int?> customerId = const Value.absent(),
                 Value<int?> employeeId = const Value.absent(),
+                Value<int?> cashierShiftId = const Value.absent(),
                 required Decimal subtotalCents,
                 required Decimal taxCents,
                 Value<Decimal> discountCents = const Value.absent(),
@@ -77521,6 +84907,7 @@ class $$SalesTableTableManager
                 invoiceNumber: invoiceNumber,
                 customerId: customerId,
                 employeeId: employeeId,
+                cashierShiftId: cashierShiftId,
                 subtotalCents: subtotalCents,
                 taxCents: taxCents,
                 discountCents: discountCents,
@@ -77548,6 +84935,7 @@ class $$SalesTableTableManager
               ({
                 customerId = false,
                 employeeId = false,
+                cashierShiftId = false,
                 currencyId = false,
                 commissionsRefs = false,
                 saleItemsRefs = false,
@@ -77602,6 +84990,19 @@ class $$SalesTableTableManager
                                         ._employeeIdTable(db),
                                     referencedColumn: $$SalesTableReferences
                                         ._employeeIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+                        if (cashierShiftId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.cashierShiftId,
+                                    referencedTable: $$SalesTableReferences
+                                        ._cashierShiftIdTable(db),
+                                    referencedColumn: $$SalesTableReferences
+                                        ._cashierShiftIdTable(db)
                                         .id,
                                   )
                                   as T;
@@ -77748,6 +85149,7 @@ typedef $$SalesTableProcessedTableManager =
       PrefetchHooks Function({
         bool customerId,
         bool employeeId,
+        bool cashierShiftId,
         bool currencyId,
         bool commissionsRefs,
         bool saleItemsRefs,
@@ -82446,12 +89848,15 @@ typedef $$SaleItemsTableCreateCompanionBuilder =
       Value<int?> variantId,
       Value<int?> employeeId,
       required int quantity,
+      Value<int> quantityScale,
+      Value<String> measurementType,
       required Decimal unitPriceCents,
       required Decimal subtotalCents,
       Value<Decimal> discountCents,
       Value<Decimal> taxCents,
       required Decimal totalCents,
       Value<Decimal?> costCents,
+      Value<Decimal?> inventoryValueAtPostCents,
       Value<int> qtyReturnedLinked,
       Value<int> qtyReturnedAdjustment,
       Value<DateTime> createdAt,
@@ -82464,12 +89869,15 @@ typedef $$SaleItemsTableUpdateCompanionBuilder =
       Value<int?> variantId,
       Value<int?> employeeId,
       Value<int> quantity,
+      Value<int> quantityScale,
+      Value<String> measurementType,
       Value<Decimal> unitPriceCents,
       Value<Decimal> subtotalCents,
       Value<Decimal> discountCents,
       Value<Decimal> taxCents,
       Value<Decimal> totalCents,
       Value<Decimal?> costCents,
+      Value<Decimal?> inventoryValueAtPostCents,
       Value<int> qtyReturnedLinked,
       Value<int> qtyReturnedAdjustment,
       Value<DateTime> createdAt,
@@ -82588,6 +89996,16 @@ class $$SaleItemsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<int> get quantityScale => $composableBuilder(
+    column: $table.quantityScale,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnWithTypeConverterFilters<Decimal, Decimal, int> get unitPriceCents =>
       $composableBuilder(
         column: $table.unitPriceCents,
@@ -82623,6 +90041,12 @@ class $$SaleItemsTableFilterComposer
         column: $table.costCents,
         builder: (column) => ColumnWithTypeConverterFilters(column),
       );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get inventoryValueAtPostCents => $composableBuilder(
+    column: $table.inventoryValueAtPostCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
 
   ColumnFilters<int> get qtyReturnedLinked => $composableBuilder(
     column: $table.qtyReturnedLinked,
@@ -82776,6 +90200,16 @@ class $$SaleItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get quantityScale => $composableBuilder(
+    column: $table.quantityScale,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get unitPriceCents => $composableBuilder(
     column: $table.unitPriceCents,
     builder: (column) => ColumnOrderings(column),
@@ -82803,6 +90237,11 @@ class $$SaleItemsTableOrderingComposer
 
   ColumnOrderings<int> get costCents => $composableBuilder(
     column: $table.costCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get inventoryValueAtPostCents => $composableBuilder(
+    column: $table.inventoryValueAtPostCents,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -82929,6 +90368,16 @@ class $$SaleItemsTableAnnotationComposer
   GeneratedColumn<int> get quantity =>
       $composableBuilder(column: $table.quantity, builder: (column) => column);
 
+  GeneratedColumn<int> get quantityScale => $composableBuilder(
+    column: $table.quantityScale,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
+    builder: (column) => column,
+  );
+
   GeneratedColumnWithTypeConverter<Decimal, int> get unitPriceCents =>
       $composableBuilder(
         column: $table.unitPriceCents,
@@ -82958,6 +90407,12 @@ class $$SaleItemsTableAnnotationComposer
 
   GeneratedColumnWithTypeConverter<Decimal?, int> get costCents =>
       $composableBuilder(column: $table.costCents, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<Decimal?, int>
+  get inventoryValueAtPostCents => $composableBuilder(
+    column: $table.inventoryValueAtPostCents,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get qtyReturnedLinked => $composableBuilder(
     column: $table.qtyReturnedLinked,
@@ -83130,12 +90585,16 @@ class $$SaleItemsTableTableManager
                 Value<int?> variantId = const Value.absent(),
                 Value<int?> employeeId = const Value.absent(),
                 Value<int> quantity = const Value.absent(),
+                Value<int> quantityScale = const Value.absent(),
+                Value<String> measurementType = const Value.absent(),
                 Value<Decimal> unitPriceCents = const Value.absent(),
                 Value<Decimal> subtotalCents = const Value.absent(),
                 Value<Decimal> discountCents = const Value.absent(),
                 Value<Decimal> taxCents = const Value.absent(),
                 Value<Decimal> totalCents = const Value.absent(),
                 Value<Decimal?> costCents = const Value.absent(),
+                Value<Decimal?> inventoryValueAtPostCents =
+                    const Value.absent(),
                 Value<int> qtyReturnedLinked = const Value.absent(),
                 Value<int> qtyReturnedAdjustment = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -83146,12 +90605,15 @@ class $$SaleItemsTableTableManager
                 variantId: variantId,
                 employeeId: employeeId,
                 quantity: quantity,
+                quantityScale: quantityScale,
+                measurementType: measurementType,
                 unitPriceCents: unitPriceCents,
                 subtotalCents: subtotalCents,
                 discountCents: discountCents,
                 taxCents: taxCents,
                 totalCents: totalCents,
                 costCents: costCents,
+                inventoryValueAtPostCents: inventoryValueAtPostCents,
                 qtyReturnedLinked: qtyReturnedLinked,
                 qtyReturnedAdjustment: qtyReturnedAdjustment,
                 createdAt: createdAt,
@@ -83164,12 +90626,16 @@ class $$SaleItemsTableTableManager
                 Value<int?> variantId = const Value.absent(),
                 Value<int?> employeeId = const Value.absent(),
                 required int quantity,
+                Value<int> quantityScale = const Value.absent(),
+                Value<String> measurementType = const Value.absent(),
                 required Decimal unitPriceCents,
                 required Decimal subtotalCents,
                 Value<Decimal> discountCents = const Value.absent(),
                 Value<Decimal> taxCents = const Value.absent(),
                 required Decimal totalCents,
                 Value<Decimal?> costCents = const Value.absent(),
+                Value<Decimal?> inventoryValueAtPostCents =
+                    const Value.absent(),
                 Value<int> qtyReturnedLinked = const Value.absent(),
                 Value<int> qtyReturnedAdjustment = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -83180,12 +90646,15 @@ class $$SaleItemsTableTableManager
                 variantId: variantId,
                 employeeId: employeeId,
                 quantity: quantity,
+                quantityScale: quantityScale,
+                measurementType: measurementType,
                 unitPriceCents: unitPriceCents,
                 subtotalCents: subtotalCents,
                 discountCents: discountCents,
                 taxCents: taxCents,
                 totalCents: totalCents,
                 costCents: costCents,
+                inventoryValueAtPostCents: inventoryValueAtPostCents,
                 qtyReturnedLinked: qtyReturnedLinked,
                 qtyReturnedAdjustment: qtyReturnedAdjustment,
                 createdAt: createdAt,
@@ -84400,6 +91869,7 @@ typedef $$SaleReturnsTableCreateCompanionBuilder =
     SaleReturnsCompanion Function({
       Value<int> id,
       required int saleId,
+      Value<int?> cashierShiftId,
       required String returnNumber,
       Value<Decimal> subtotalCents,
       Value<Decimal> discountCents,
@@ -84436,6 +91906,7 @@ typedef $$SaleReturnsTableUpdateCompanionBuilder =
     SaleReturnsCompanion Function({
       Value<int> id,
       Value<int> saleId,
+      Value<int?> cashierShiftId,
       Value<String> returnNumber,
       Value<Decimal> subtotalCents,
       Value<Decimal> discountCents,
@@ -84484,6 +91955,24 @@ final class $$SaleReturnsTableReferences
       $_db.sales,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_saleIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $CashierShiftsTable _cashierShiftIdTable(_$AppDatabase db) => db
+      .cashierShifts
+      .createAlias('sale_returns__cashier_shift_id__cashier_shifts__id');
+
+  $$CashierShiftsTableProcessedTableManager? get cashierShiftId {
+    final $_column = $_itemColumn<int>('cashier_shift_id');
+    if ($_column == null) return null;
+    final manager = $$CashierShiftsTableTableManager(
+      $_db,
+      $_db.cashierShifts,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_cashierShiftIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -84771,6 +92260,29 @@ class $$SaleReturnsTableFilterComposer
           }) => $$SalesTableFilterComposer(
             $db: $db,
             $table: $db.sales,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$CashierShiftsTableFilterComposer get cashierShiftId {
+    final $$CashierShiftsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cashierShiftId,
+      referencedTable: $db.cashierShifts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashierShiftsTableFilterComposer(
+            $db: $db,
+            $table: $db.cashierShifts,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -85106,6 +92618,29 @@ class $$SaleReturnsTableOrderingComposer
     return composer;
   }
 
+  $$CashierShiftsTableOrderingComposer get cashierShiftId {
+    final $$CashierShiftsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cashierShiftId,
+      referencedTable: $db.cashierShifts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashierShiftsTableOrderingComposer(
+            $db: $db,
+            $table: $db.cashierShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$CurrenciesTableOrderingComposer get currencyId {
     final $$CurrenciesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -85394,6 +92929,29 @@ class $$SaleReturnsTableAnnotationComposer
     return composer;
   }
 
+  $$CashierShiftsTableAnnotationComposer get cashierShiftId {
+    final $$CashierShiftsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cashierShiftId,
+      referencedTable: $db.cashierShifts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashierShiftsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.cashierShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$CurrenciesTableAnnotationComposer get currencyId {
     final $$CurrenciesTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -85574,6 +93132,7 @@ class $$SaleReturnsTableTableManager
           SaleReturn,
           PrefetchHooks Function({
             bool saleId,
+            bool cashierShiftId,
             bool currencyId,
             bool approvedBy,
             bool overrideBy,
@@ -85598,6 +93157,7 @@ class $$SaleReturnsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<int> saleId = const Value.absent(),
+                Value<int?> cashierShiftId = const Value.absent(),
                 Value<String> returnNumber = const Value.absent(),
                 Value<Decimal> subtotalCents = const Value.absent(),
                 Value<Decimal> discountCents = const Value.absent(),
@@ -85632,6 +93192,7 @@ class $$SaleReturnsTableTableManager
               }) => SaleReturnsCompanion(
                 id: id,
                 saleId: saleId,
+                cashierShiftId: cashierShiftId,
                 returnNumber: returnNumber,
                 subtotalCents: subtotalCents,
                 discountCents: discountCents,
@@ -85668,6 +93229,7 @@ class $$SaleReturnsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 required int saleId,
+                Value<int?> cashierShiftId = const Value.absent(),
                 required String returnNumber,
                 Value<Decimal> subtotalCents = const Value.absent(),
                 Value<Decimal> discountCents = const Value.absent(),
@@ -85702,6 +93264,7 @@ class $$SaleReturnsTableTableManager
               }) => SaleReturnsCompanion.insert(
                 id: id,
                 saleId: saleId,
+                cashierShiftId: cashierShiftId,
                 returnNumber: returnNumber,
                 subtotalCents: subtotalCents,
                 discountCents: discountCents,
@@ -85745,6 +93308,7 @@ class $$SaleReturnsTableTableManager
           prefetchHooksCallback:
               ({
                 saleId = false,
+                cashierShiftId = false,
                 currencyId = false,
                 approvedBy = false,
                 overrideBy = false,
@@ -85785,6 +93349,21 @@ class $$SaleReturnsTableTableManager
                                     referencedColumn:
                                         $$SaleReturnsTableReferences
                                             ._saleIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (cashierShiftId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.cashierShiftId,
+                                    referencedTable:
+                                        $$SaleReturnsTableReferences
+                                            ._cashierShiftIdTable(db),
+                                    referencedColumn:
+                                        $$SaleReturnsTableReferences
+                                            ._cashierShiftIdTable(db)
                                             .id,
                                   )
                                   as T;
@@ -85927,6 +93506,7 @@ typedef $$SaleReturnsTableProcessedTableManager =
       SaleReturn,
       PrefetchHooks Function({
         bool saleId,
+        bool cashierShiftId,
         bool currencyId,
         bool approvedBy,
         bool overrideBy,
@@ -85942,6 +93522,8 @@ typedef $$SaleReturnItemsTableCreateCompanionBuilder =
       required int returnId,
       required int saleItemId,
       required int quantity,
+      Value<int> quantityScale,
+      Value<String> measurementType,
       Value<Decimal> subtotalCents,
       Value<Decimal> discountCents,
       Value<Decimal> taxCents,
@@ -85949,6 +93531,7 @@ typedef $$SaleReturnItemsTableCreateCompanionBuilder =
       Value<String?> reason,
       Value<int?> taxRateBpsAtPost,
       Value<Decimal?> unitCostAtPostCents,
+      Value<Decimal?> inventoryValueAtPostCents,
       Value<DateTime> createdAt,
     });
 typedef $$SaleReturnItemsTableUpdateCompanionBuilder =
@@ -85957,6 +93540,8 @@ typedef $$SaleReturnItemsTableUpdateCompanionBuilder =
       Value<int> returnId,
       Value<int> saleItemId,
       Value<int> quantity,
+      Value<int> quantityScale,
+      Value<String> measurementType,
       Value<Decimal> subtotalCents,
       Value<Decimal> discountCents,
       Value<Decimal> taxCents,
@@ -85964,6 +93549,7 @@ typedef $$SaleReturnItemsTableUpdateCompanionBuilder =
       Value<String?> reason,
       Value<int?> taxRateBpsAtPost,
       Value<Decimal?> unitCostAtPostCents,
+      Value<Decimal?> inventoryValueAtPostCents,
       Value<DateTime> createdAt,
     });
 
@@ -86030,6 +93616,16 @@ class $$SaleReturnItemsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<int> get quantityScale => $composableBuilder(
+    column: $table.quantityScale,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnWithTypeConverterFilters<Decimal, Decimal, int> get subtotalCents =>
       $composableBuilder(
         column: $table.subtotalCents,
@@ -86067,6 +93663,12 @@ class $$SaleReturnItemsTableFilterComposer
   ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
   get unitCostAtPostCents => $composableBuilder(
     column: $table.unitCostAtPostCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get inventoryValueAtPostCents => $composableBuilder(
+    column: $table.inventoryValueAtPostCents,
     builder: (column) => ColumnWithTypeConverterFilters(column),
   );
 
@@ -86141,6 +93743,16 @@ class $$SaleReturnItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get quantityScale => $composableBuilder(
+    column: $table.quantityScale,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get subtotalCents => $composableBuilder(
     column: $table.subtotalCents,
     builder: (column) => ColumnOrderings(column),
@@ -86173,6 +93785,11 @@ class $$SaleReturnItemsTableOrderingComposer
 
   ColumnOrderings<int> get unitCostAtPostCents => $composableBuilder(
     column: $table.unitCostAtPostCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get inventoryValueAtPostCents => $composableBuilder(
+    column: $table.inventoryValueAtPostCents,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -86243,6 +93860,16 @@ class $$SaleReturnItemsTableAnnotationComposer
   GeneratedColumn<int> get quantity =>
       $composableBuilder(column: $table.quantity, builder: (column) => column);
 
+  GeneratedColumn<int> get quantityScale => $composableBuilder(
+    column: $table.quantityScale,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
+    builder: (column) => column,
+  );
+
   GeneratedColumnWithTypeConverter<Decimal, int> get subtotalCents =>
       $composableBuilder(
         column: $table.subtotalCents,
@@ -86277,6 +93904,12 @@ class $$SaleReturnItemsTableAnnotationComposer
         column: $table.unitCostAtPostCents,
         builder: (column) => column,
       );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int>
+  get inventoryValueAtPostCents => $composableBuilder(
+    column: $table.inventoryValueAtPostCents,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -86362,6 +93995,8 @@ class $$SaleReturnItemsTableTableManager
                 Value<int> returnId = const Value.absent(),
                 Value<int> saleItemId = const Value.absent(),
                 Value<int> quantity = const Value.absent(),
+                Value<int> quantityScale = const Value.absent(),
+                Value<String> measurementType = const Value.absent(),
                 Value<Decimal> subtotalCents = const Value.absent(),
                 Value<Decimal> discountCents = const Value.absent(),
                 Value<Decimal> taxCents = const Value.absent(),
@@ -86369,12 +94004,16 @@ class $$SaleReturnItemsTableTableManager
                 Value<String?> reason = const Value.absent(),
                 Value<int?> taxRateBpsAtPost = const Value.absent(),
                 Value<Decimal?> unitCostAtPostCents = const Value.absent(),
+                Value<Decimal?> inventoryValueAtPostCents =
+                    const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => SaleReturnItemsCompanion(
                 id: id,
                 returnId: returnId,
                 saleItemId: saleItemId,
                 quantity: quantity,
+                quantityScale: quantityScale,
+                measurementType: measurementType,
                 subtotalCents: subtotalCents,
                 discountCents: discountCents,
                 taxCents: taxCents,
@@ -86382,6 +94021,7 @@ class $$SaleReturnItemsTableTableManager
                 reason: reason,
                 taxRateBpsAtPost: taxRateBpsAtPost,
                 unitCostAtPostCents: unitCostAtPostCents,
+                inventoryValueAtPostCents: inventoryValueAtPostCents,
                 createdAt: createdAt,
               ),
           createCompanionCallback:
@@ -86390,6 +94030,8 @@ class $$SaleReturnItemsTableTableManager
                 required int returnId,
                 required int saleItemId,
                 required int quantity,
+                Value<int> quantityScale = const Value.absent(),
+                Value<String> measurementType = const Value.absent(),
                 Value<Decimal> subtotalCents = const Value.absent(),
                 Value<Decimal> discountCents = const Value.absent(),
                 Value<Decimal> taxCents = const Value.absent(),
@@ -86397,12 +94039,16 @@ class $$SaleReturnItemsTableTableManager
                 Value<String?> reason = const Value.absent(),
                 Value<int?> taxRateBpsAtPost = const Value.absent(),
                 Value<Decimal?> unitCostAtPostCents = const Value.absent(),
+                Value<Decimal?> inventoryValueAtPostCents =
+                    const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => SaleReturnItemsCompanion.insert(
                 id: id,
                 returnId: returnId,
                 saleItemId: saleItemId,
                 quantity: quantity,
+                quantityScale: quantityScale,
+                measurementType: measurementType,
                 subtotalCents: subtotalCents,
                 discountCents: discountCents,
                 taxCents: taxCents,
@@ -86410,6 +94056,7 @@ class $$SaleReturnItemsTableTableManager
                 reason: reason,
                 taxRateBpsAtPost: taxRateBpsAtPost,
                 unitCostAtPostCents: unitCostAtPostCents,
+                inventoryValueAtPostCents: inventoryValueAtPostCents,
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0
@@ -86500,6 +94147,7 @@ typedef $$SalePaymentsTableCreateCompanionBuilder =
     SalePaymentsCompanion Function({
       Value<int> id,
       required int saleId,
+      Value<int?> cashierShiftId,
       required Decimal amountCents,
       required int currencyId,
       required String paymentMethod,
@@ -86512,6 +94160,7 @@ typedef $$SalePaymentsTableUpdateCompanionBuilder =
     SalePaymentsCompanion Function({
       Value<int> id,
       Value<int> saleId,
+      Value<int?> cashierShiftId,
       Value<Decimal> amountCents,
       Value<int> currencyId,
       Value<String> paymentMethod,
@@ -86536,6 +94185,24 @@ final class $$SalePaymentsTableReferences
       $_db.sales,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_saleIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $CashierShiftsTable _cashierShiftIdTable(_$AppDatabase db) => db
+      .cashierShifts
+      .createAlias('sale_payments__cashier_shift_id__cashier_shifts__id');
+
+  $$CashierShiftsTableProcessedTableManager? get cashierShiftId {
+    final $_column = $_itemColumn<int>('cashier_shift_id');
+    if ($_column == null) return null;
+    final manager = $$CashierShiftsTableTableManager(
+      $_db,
+      $_db.cashierShifts,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_cashierShiftIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -86619,6 +94286,29 @@ class $$SalePaymentsTableFilterComposer
           }) => $$SalesTableFilterComposer(
             $db: $db,
             $table: $db.sales,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$CashierShiftsTableFilterComposer get cashierShiftId {
+    final $$CashierShiftsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cashierShiftId,
+      referencedTable: $db.cashierShifts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashierShiftsTableFilterComposer(
+            $db: $db,
+            $table: $db.cashierShifts,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -86719,6 +94409,29 @@ class $$SalePaymentsTableOrderingComposer
     return composer;
   }
 
+  $$CashierShiftsTableOrderingComposer get cashierShiftId {
+    final $$CashierShiftsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cashierShiftId,
+      referencedTable: $db.cashierShifts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashierShiftsTableOrderingComposer(
+            $db: $db,
+            $table: $db.cashierShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$CurrenciesTableOrderingComposer get currencyId {
     final $$CurrenciesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -86803,6 +94516,29 @@ class $$SalePaymentsTableAnnotationComposer
     return composer;
   }
 
+  $$CashierShiftsTableAnnotationComposer get cashierShiftId {
+    final $$CashierShiftsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cashierShiftId,
+      referencedTable: $db.cashierShifts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashierShiftsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.cashierShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$CurrenciesTableAnnotationComposer get currencyId {
     final $$CurrenciesTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -86840,7 +94576,11 @@ class $$SalePaymentsTableTableManager
           $$SalePaymentsTableUpdateCompanionBuilder,
           (SalePayment, $$SalePaymentsTableReferences),
           SalePayment,
-          PrefetchHooks Function({bool saleId, bool currencyId})
+          PrefetchHooks Function({
+            bool saleId,
+            bool cashierShiftId,
+            bool currencyId,
+          })
         > {
   $$SalePaymentsTableTableManager(_$AppDatabase db, $SalePaymentsTable table)
     : super(
@@ -86857,6 +94597,7 @@ class $$SalePaymentsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<int> saleId = const Value.absent(),
+                Value<int?> cashierShiftId = const Value.absent(),
                 Value<Decimal> amountCents = const Value.absent(),
                 Value<int> currencyId = const Value.absent(),
                 Value<String> paymentMethod = const Value.absent(),
@@ -86867,6 +94608,7 @@ class $$SalePaymentsTableTableManager
               }) => SalePaymentsCompanion(
                 id: id,
                 saleId: saleId,
+                cashierShiftId: cashierShiftId,
                 amountCents: amountCents,
                 currencyId: currencyId,
                 paymentMethod: paymentMethod,
@@ -86879,6 +94621,7 @@ class $$SalePaymentsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 required int saleId,
+                Value<int?> cashierShiftId = const Value.absent(),
                 required Decimal amountCents,
                 required int currencyId,
                 required String paymentMethod,
@@ -86889,6 +94632,7 @@ class $$SalePaymentsTableTableManager
               }) => SalePaymentsCompanion.insert(
                 id: id,
                 saleId: saleId,
+                cashierShiftId: cashierShiftId,
                 amountCents: amountCents,
                 currencyId: currencyId,
                 paymentMethod: paymentMethod,
@@ -86905,60 +94649,80 @@ class $$SalePaymentsTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({saleId = false, currencyId = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [],
-              addJoins:
-                  <
-                    T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic
-                    >
-                  >(state) {
-                    if (saleId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.saleId,
-                                referencedTable: $$SalePaymentsTableReferences
-                                    ._saleIdTable(db),
-                                referencedColumn: $$SalePaymentsTableReferences
-                                    ._saleIdTable(db)
-                                    .id,
-                              )
-                              as T;
-                    }
-                    if (currencyId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.currencyId,
-                                referencedTable: $$SalePaymentsTableReferences
-                                    ._currencyIdTable(db),
-                                referencedColumn: $$SalePaymentsTableReferences
-                                    ._currencyIdTable(db)
-                                    .id,
-                              )
-                              as T;
-                    }
+          prefetchHooksCallback:
+              ({saleId = false, cashierShiftId = false, currencyId = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (saleId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.saleId,
+                                    referencedTable:
+                                        $$SalePaymentsTableReferences
+                                            ._saleIdTable(db),
+                                    referencedColumn:
+                                        $$SalePaymentsTableReferences
+                                            ._saleIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (cashierShiftId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.cashierShiftId,
+                                    referencedTable:
+                                        $$SalePaymentsTableReferences
+                                            ._cashierShiftIdTable(db),
+                                    referencedColumn:
+                                        $$SalePaymentsTableReferences
+                                            ._cashierShiftIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (currencyId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.currencyId,
+                                    referencedTable:
+                                        $$SalePaymentsTableReferences
+                                            ._currencyIdTable(db),
+                                    referencedColumn:
+                                        $$SalePaymentsTableReferences
+                                            ._currencyIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
 
-                    return state;
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
                   },
-              getPrefetchedDataCallback: (items) async {
-                return [];
+                );
               },
-            );
-          },
         ),
       );
 }
@@ -86975,7 +94739,11 @@ typedef $$SalePaymentsTableProcessedTableManager =
       $$SalePaymentsTableUpdateCompanionBuilder,
       (SalePayment, $$SalePaymentsTableReferences),
       SalePayment,
-      PrefetchHooks Function({bool saleId, bool currencyId})
+      PrefetchHooks Function({
+        bool saleId,
+        bool cashierShiftId,
+        bool currencyId,
+      })
     >;
 typedef $$PurchasesTableCreateCompanionBuilder =
     PurchasesCompanion Function({
@@ -87992,7 +95760,10 @@ typedef $$PurchaseItemsTableCreateCompanionBuilder =
       required int productId,
       Value<int?> variantId,
       required int quantity,
+      Value<int> quantityScale,
+      Value<String> measurementType,
       required Decimal unitCostCents,
+      Value<Decimal?> inventoryValueAtPostCents,
       Value<Decimal> discountCents,
       required Decimal subtotalCents,
       Value<Decimal> taxCents,
@@ -88014,7 +95785,10 @@ typedef $$PurchaseItemsTableUpdateCompanionBuilder =
       Value<int> productId,
       Value<int?> variantId,
       Value<int> quantity,
+      Value<int> quantityScale,
+      Value<String> measurementType,
       Value<Decimal> unitCostCents,
+      Value<Decimal?> inventoryValueAtPostCents,
       Value<Decimal> discountCents,
       Value<Decimal> subtotalCents,
       Value<Decimal> taxCents,
@@ -88135,11 +95909,27 @@ class $$PurchaseItemsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<int> get quantityScale => $composableBuilder(
+    column: $table.quantityScale,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnWithTypeConverterFilters<Decimal, Decimal, int> get unitCostCents =>
       $composableBuilder(
         column: $table.unitCostCents,
         builder: (column) => ColumnWithTypeConverterFilters(column),
       );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get inventoryValueAtPostCents => $composableBuilder(
+    column: $table.inventoryValueAtPostCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
 
   ColumnWithTypeConverterFilters<Decimal, Decimal, int> get discountCents =>
       $composableBuilder(
@@ -88329,8 +96119,23 @@ class $$PurchaseItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get quantityScale => $composableBuilder(
+    column: $table.quantityScale,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get unitCostCents => $composableBuilder(
     column: $table.unitCostCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get inventoryValueAtPostCents => $composableBuilder(
+    column: $table.inventoryValueAtPostCents,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -88484,11 +96289,27 @@ class $$PurchaseItemsTableAnnotationComposer
   GeneratedColumn<int> get quantity =>
       $composableBuilder(column: $table.quantity, builder: (column) => column);
 
+  GeneratedColumn<int> get quantityScale => $composableBuilder(
+    column: $table.quantityScale,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
+    builder: (column) => column,
+  );
+
   GeneratedColumnWithTypeConverter<Decimal, int> get unitCostCents =>
       $composableBuilder(
         column: $table.unitCostCents,
         builder: (column) => column,
       );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int>
+  get inventoryValueAtPostCents => $composableBuilder(
+    column: $table.inventoryValueAtPostCents,
+    builder: (column) => column,
+  );
 
   GeneratedColumnWithTypeConverter<Decimal, int> get discountCents =>
       $composableBuilder(
@@ -88693,7 +96514,11 @@ class $$PurchaseItemsTableTableManager
                 Value<int> productId = const Value.absent(),
                 Value<int?> variantId = const Value.absent(),
                 Value<int> quantity = const Value.absent(),
+                Value<int> quantityScale = const Value.absent(),
+                Value<String> measurementType = const Value.absent(),
                 Value<Decimal> unitCostCents = const Value.absent(),
+                Value<Decimal?> inventoryValueAtPostCents =
+                    const Value.absent(),
                 Value<Decimal> discountCents = const Value.absent(),
                 Value<Decimal> subtotalCents = const Value.absent(),
                 Value<Decimal> taxCents = const Value.absent(),
@@ -88714,7 +96539,10 @@ class $$PurchaseItemsTableTableManager
                 productId: productId,
                 variantId: variantId,
                 quantity: quantity,
+                quantityScale: quantityScale,
+                measurementType: measurementType,
                 unitCostCents: unitCostCents,
+                inventoryValueAtPostCents: inventoryValueAtPostCents,
                 discountCents: discountCents,
                 subtotalCents: subtotalCents,
                 taxCents: taxCents,
@@ -88736,7 +96564,11 @@ class $$PurchaseItemsTableTableManager
                 required int productId,
                 Value<int?> variantId = const Value.absent(),
                 required int quantity,
+                Value<int> quantityScale = const Value.absent(),
+                Value<String> measurementType = const Value.absent(),
                 required Decimal unitCostCents,
+                Value<Decimal?> inventoryValueAtPostCents =
+                    const Value.absent(),
                 Value<Decimal> discountCents = const Value.absent(),
                 required Decimal subtotalCents,
                 Value<Decimal> taxCents = const Value.absent(),
@@ -88757,7 +96589,10 @@ class $$PurchaseItemsTableTableManager
                 productId: productId,
                 variantId: variantId,
                 quantity: quantity,
+                quantityScale: quantityScale,
+                measurementType: measurementType,
                 unitCostCents: unitCostCents,
+                inventoryValueAtPostCents: inventoryValueAtPostCents,
                 discountCents: discountCents,
                 subtotalCents: subtotalCents,
                 taxCents: taxCents,
@@ -90464,6 +98299,8 @@ typedef $$PurchaseReturnItemsTableCreateCompanionBuilder =
       required int returnId,
       required int purchaseItemId,
       required int quantity,
+      Value<int> quantityScale,
+      Value<String> measurementType,
       Value<Decimal> subtotalCents,
       Value<Decimal> discountCents,
       Value<Decimal> taxCents,
@@ -90471,6 +98308,7 @@ typedef $$PurchaseReturnItemsTableCreateCompanionBuilder =
       Value<String?> reason,
       Value<int?> taxRateBpsAtPost,
       Value<Decimal?> unitCostAtPostCents,
+      Value<Decimal?> inventoryValueAtPostCents,
       Value<DateTime> createdAt,
     });
 typedef $$PurchaseReturnItemsTableUpdateCompanionBuilder =
@@ -90479,6 +98317,8 @@ typedef $$PurchaseReturnItemsTableUpdateCompanionBuilder =
       Value<int> returnId,
       Value<int> purchaseItemId,
       Value<int> quantity,
+      Value<int> quantityScale,
+      Value<String> measurementType,
       Value<Decimal> subtotalCents,
       Value<Decimal> discountCents,
       Value<Decimal> taxCents,
@@ -90486,6 +98326,7 @@ typedef $$PurchaseReturnItemsTableUpdateCompanionBuilder =
       Value<String?> reason,
       Value<int?> taxRateBpsAtPost,
       Value<Decimal?> unitCostAtPostCents,
+      Value<Decimal?> inventoryValueAtPostCents,
       Value<DateTime> createdAt,
     });
 
@@ -90559,6 +98400,16 @@ class $$PurchaseReturnItemsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<int> get quantityScale => $composableBuilder(
+    column: $table.quantityScale,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnWithTypeConverterFilters<Decimal, Decimal, int> get subtotalCents =>
       $composableBuilder(
         column: $table.subtotalCents,
@@ -90596,6 +98447,12 @@ class $$PurchaseReturnItemsTableFilterComposer
   ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
   get unitCostAtPostCents => $composableBuilder(
     column: $table.unitCostAtPostCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get inventoryValueAtPostCents => $composableBuilder(
+    column: $table.inventoryValueAtPostCents,
     builder: (column) => ColumnWithTypeConverterFilters(column),
   );
 
@@ -90670,6 +98527,16 @@ class $$PurchaseReturnItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get quantityScale => $composableBuilder(
+    column: $table.quantityScale,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get subtotalCents => $composableBuilder(
     column: $table.subtotalCents,
     builder: (column) => ColumnOrderings(column),
@@ -90702,6 +98569,11 @@ class $$PurchaseReturnItemsTableOrderingComposer
 
   ColumnOrderings<int> get unitCostAtPostCents => $composableBuilder(
     column: $table.unitCostAtPostCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get inventoryValueAtPostCents => $composableBuilder(
+    column: $table.inventoryValueAtPostCents,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -90772,6 +98644,16 @@ class $$PurchaseReturnItemsTableAnnotationComposer
   GeneratedColumn<int> get quantity =>
       $composableBuilder(column: $table.quantity, builder: (column) => column);
 
+  GeneratedColumn<int> get quantityScale => $composableBuilder(
+    column: $table.quantityScale,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
+    builder: (column) => column,
+  );
+
   GeneratedColumnWithTypeConverter<Decimal, int> get subtotalCents =>
       $composableBuilder(
         column: $table.subtotalCents,
@@ -90806,6 +98688,12 @@ class $$PurchaseReturnItemsTableAnnotationComposer
         column: $table.unitCostAtPostCents,
         builder: (column) => column,
       );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int>
+  get inventoryValueAtPostCents => $composableBuilder(
+    column: $table.inventoryValueAtPostCents,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -90897,6 +98785,8 @@ class $$PurchaseReturnItemsTableTableManager
                 Value<int> returnId = const Value.absent(),
                 Value<int> purchaseItemId = const Value.absent(),
                 Value<int> quantity = const Value.absent(),
+                Value<int> quantityScale = const Value.absent(),
+                Value<String> measurementType = const Value.absent(),
                 Value<Decimal> subtotalCents = const Value.absent(),
                 Value<Decimal> discountCents = const Value.absent(),
                 Value<Decimal> taxCents = const Value.absent(),
@@ -90904,12 +98794,16 @@ class $$PurchaseReturnItemsTableTableManager
                 Value<String?> reason = const Value.absent(),
                 Value<int?> taxRateBpsAtPost = const Value.absent(),
                 Value<Decimal?> unitCostAtPostCents = const Value.absent(),
+                Value<Decimal?> inventoryValueAtPostCents =
+                    const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => PurchaseReturnItemsCompanion(
                 id: id,
                 returnId: returnId,
                 purchaseItemId: purchaseItemId,
                 quantity: quantity,
+                quantityScale: quantityScale,
+                measurementType: measurementType,
                 subtotalCents: subtotalCents,
                 discountCents: discountCents,
                 taxCents: taxCents,
@@ -90917,6 +98811,7 @@ class $$PurchaseReturnItemsTableTableManager
                 reason: reason,
                 taxRateBpsAtPost: taxRateBpsAtPost,
                 unitCostAtPostCents: unitCostAtPostCents,
+                inventoryValueAtPostCents: inventoryValueAtPostCents,
                 createdAt: createdAt,
               ),
           createCompanionCallback:
@@ -90925,6 +98820,8 @@ class $$PurchaseReturnItemsTableTableManager
                 required int returnId,
                 required int purchaseItemId,
                 required int quantity,
+                Value<int> quantityScale = const Value.absent(),
+                Value<String> measurementType = const Value.absent(),
                 Value<Decimal> subtotalCents = const Value.absent(),
                 Value<Decimal> discountCents = const Value.absent(),
                 Value<Decimal> taxCents = const Value.absent(),
@@ -90932,12 +98829,16 @@ class $$PurchaseReturnItemsTableTableManager
                 Value<String?> reason = const Value.absent(),
                 Value<int?> taxRateBpsAtPost = const Value.absent(),
                 Value<Decimal?> unitCostAtPostCents = const Value.absent(),
+                Value<Decimal?> inventoryValueAtPostCents =
+                    const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => PurchaseReturnItemsCompanion.insert(
                 id: id,
                 returnId: returnId,
                 purchaseItemId: purchaseItemId,
                 quantity: quantity,
+                quantityScale: quantityScale,
+                measurementType: measurementType,
                 subtotalCents: subtotalCents,
                 discountCents: discountCents,
                 taxCents: taxCents,
@@ -90945,6 +98846,7 @@ class $$PurchaseReturnItemsTableTableManager
                 reason: reason,
                 taxRateBpsAtPost: taxRateBpsAtPost,
                 unitCostAtPostCents: unitCostAtPostCents,
+                inventoryValueAtPostCents: inventoryValueAtPostCents,
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0
@@ -91633,6 +99535,124 @@ final class $$AccountsTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<
+    $OwnerFinanceTransactionsTable,
+    List<OwnerFinanceTransaction>
+  >
+  _ownerFinanceTransactionsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.ownerFinanceTransactions,
+        aliasName:
+            'accounts__id__owner_finance_transactions__offset_account_id',
+      );
+
+  $$OwnerFinanceTransactionsTableProcessedTableManager
+  get ownerFinanceTransactionsRefs {
+    final manager = $$OwnerFinanceTransactionsTableTableManager(
+      $_db,
+      $_db.ownerFinanceTransactions,
+    ).filter((f) => f.offsetAccountId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _ownerFinanceTransactionsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$FixedAssetsTable, List<FixedAsset>>
+  _fixedAssetsByAssetAccountTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.fixedAssets,
+        aliasName: 'accounts__id__fixed_assets__asset_account_id',
+      );
+
+  $$FixedAssetsTableProcessedTableManager get fixedAssetsByAssetAccount {
+    final manager = $$FixedAssetsTableTableManager(
+      $_db,
+      $_db.fixedAssets,
+    ).filter((f) => f.assetAccountId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _fixedAssetsByAssetAccountTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$FixedAssetsTable, List<FixedAsset>>
+  _fixedAssetsByAccumulatedDepreciationAccountTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.fixedAssets,
+        aliasName:
+            'accounts__id__fixed_assets__accumulated_depreciation_account_id',
+      );
+
+  $$FixedAssetsTableProcessedTableManager
+  get fixedAssetsByAccumulatedDepreciationAccount {
+    final manager = $$FixedAssetsTableTableManager($_db, $_db.fixedAssets)
+        .filter(
+          (f) => f.accumulatedDepreciationAccountId.id.sqlEquals(
+            $_itemColumn<int>('id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _fixedAssetsByAccumulatedDepreciationAccountTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$FixedAssetsTable, List<FixedAsset>>
+  _fixedAssetsByDepreciationExpenseAccountTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.fixedAssets,
+        aliasName:
+            'accounts__id__fixed_assets__depreciation_expense_account_id',
+      );
+
+  $$FixedAssetsTableProcessedTableManager
+  get fixedAssetsByDepreciationExpenseAccount {
+    final manager = $$FixedAssetsTableTableManager($_db, $_db.fixedAssets)
+        .filter(
+          (f) => f.depreciationExpenseAccountId.id.sqlEquals(
+            $_itemColumn<int>('id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _fixedAssetsByDepreciationExpenseAccountTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$FixedAssetsTable, List<FixedAsset>>
+  _fixedAssetsByFundingAccountTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.fixedAssets,
+        aliasName: 'accounts__id__fixed_assets__funding_account_id',
+      );
+
+  $$FixedAssetsTableProcessedTableManager get fixedAssetsByFundingAccount {
+    final manager = $$FixedAssetsTableTableManager(
+      $_db,
+      $_db.fixedAssets,
+    ).filter((f) => f.fundingAccountId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _fixedAssetsByFundingAccountTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$AccountsTableFilterComposer
@@ -91787,6 +99807,133 @@ class $$AccountsTableFilterComposer
           }) => $$ExpensesTableFilterComposer(
             $db: $db,
             $table: $db.expenses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> ownerFinanceTransactionsRefs(
+    Expression<bool> Function($$OwnerFinanceTransactionsTableFilterComposer f)
+    f,
+  ) {
+    final $$OwnerFinanceTransactionsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.ownerFinanceTransactions,
+          getReferencedColumn: (t) => t.offsetAccountId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$OwnerFinanceTransactionsTableFilterComposer(
+                $db: $db,
+                $table: $db.ownerFinanceTransactions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> fixedAssetsByAssetAccount(
+    Expression<bool> Function($$FixedAssetsTableFilterComposer f) f,
+  ) {
+    final $$FixedAssetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.fixedAssets,
+      getReferencedColumn: (t) => t.assetAccountId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FixedAssetsTableFilterComposer(
+            $db: $db,
+            $table: $db.fixedAssets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> fixedAssetsByAccumulatedDepreciationAccount(
+    Expression<bool> Function($$FixedAssetsTableFilterComposer f) f,
+  ) {
+    final $$FixedAssetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.fixedAssets,
+      getReferencedColumn: (t) => t.accumulatedDepreciationAccountId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FixedAssetsTableFilterComposer(
+            $db: $db,
+            $table: $db.fixedAssets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> fixedAssetsByDepreciationExpenseAccount(
+    Expression<bool> Function($$FixedAssetsTableFilterComposer f) f,
+  ) {
+    final $$FixedAssetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.fixedAssets,
+      getReferencedColumn: (t) => t.depreciationExpenseAccountId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FixedAssetsTableFilterComposer(
+            $db: $db,
+            $table: $db.fixedAssets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> fixedAssetsByFundingAccount(
+    Expression<bool> Function($$FixedAssetsTableFilterComposer f) f,
+  ) {
+    final $$FixedAssetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.fixedAssets,
+      getReferencedColumn: (t) => t.fundingAccountId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FixedAssetsTableFilterComposer(
+            $db: $db,
+            $table: $db.fixedAssets,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -92061,6 +100208,133 @@ class $$AccountsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> ownerFinanceTransactionsRefs<T extends Object>(
+    Expression<T> Function($$OwnerFinanceTransactionsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$OwnerFinanceTransactionsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.ownerFinanceTransactions,
+          getReferencedColumn: (t) => t.offsetAccountId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$OwnerFinanceTransactionsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.ownerFinanceTransactions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> fixedAssetsByAssetAccount<T extends Object>(
+    Expression<T> Function($$FixedAssetsTableAnnotationComposer a) f,
+  ) {
+    final $$FixedAssetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.fixedAssets,
+      getReferencedColumn: (t) => t.assetAccountId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FixedAssetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.fixedAssets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> fixedAssetsByAccumulatedDepreciationAccount<T extends Object>(
+    Expression<T> Function($$FixedAssetsTableAnnotationComposer a) f,
+  ) {
+    final $$FixedAssetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.fixedAssets,
+      getReferencedColumn: (t) => t.accumulatedDepreciationAccountId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FixedAssetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.fixedAssets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> fixedAssetsByDepreciationExpenseAccount<T extends Object>(
+    Expression<T> Function($$FixedAssetsTableAnnotationComposer a) f,
+  ) {
+    final $$FixedAssetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.fixedAssets,
+      getReferencedColumn: (t) => t.depreciationExpenseAccountId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FixedAssetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.fixedAssets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> fixedAssetsByFundingAccount<T extends Object>(
+    Expression<T> Function($$FixedAssetsTableAnnotationComposer a) f,
+  ) {
+    final $$FixedAssetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.fixedAssets,
+      getReferencedColumn: (t) => t.fundingAccountId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FixedAssetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.fixedAssets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$AccountsTableTableManager
@@ -92081,6 +100355,11 @@ class $$AccountsTableTableManager
             bool currencyId,
             bool journalEntryLinesRefs,
             bool expensesRefs,
+            bool ownerFinanceTransactionsRefs,
+            bool fixedAssetsByAssetAccount,
+            bool fixedAssetsByAccumulatedDepreciationAccount,
+            bool fixedAssetsByDepreciationExpenseAccount,
+            bool fixedAssetsByFundingAccount,
           })
         > {
   $$AccountsTableTableManager(_$AppDatabase db, $AccountsTable table)
@@ -92168,12 +100447,24 @@ class $$AccountsTableTableManager
                 currencyId = false,
                 journalEntryLinesRefs = false,
                 expensesRefs = false,
+                ownerFinanceTransactionsRefs = false,
+                fixedAssetsByAssetAccount = false,
+                fixedAssetsByAccumulatedDepreciationAccount = false,
+                fixedAssetsByDepreciationExpenseAccount = false,
+                fixedAssetsByFundingAccount = false,
               }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (journalEntryLinesRefs) db.journalEntryLines,
                     if (expensesRefs) db.expenses,
+                    if (ownerFinanceTransactionsRefs)
+                      db.ownerFinanceTransactions,
+                    if (fixedAssetsByAssetAccount) db.fixedAssets,
+                    if (fixedAssetsByAccumulatedDepreciationAccount)
+                      db.fixedAssets,
+                    if (fixedAssetsByDepreciationExpenseAccount) db.fixedAssets,
+                    if (fixedAssetsByFundingAccount) db.fixedAssets,
                   ],
                   addJoins:
                       <
@@ -92264,6 +100555,118 @@ class $$AccountsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (ownerFinanceTransactionsRefs)
+                        await $_getPrefetchedData<
+                          Account,
+                          $AccountsTable,
+                          OwnerFinanceTransaction
+                        >(
+                          currentTable: table,
+                          referencedTable: $$AccountsTableReferences
+                              ._ownerFinanceTransactionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$AccountsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).ownerFinanceTransactionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.offsetAccountId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (fixedAssetsByAssetAccount)
+                        await $_getPrefetchedData<
+                          Account,
+                          $AccountsTable,
+                          FixedAsset
+                        >(
+                          currentTable: table,
+                          referencedTable: $$AccountsTableReferences
+                              ._fixedAssetsByAssetAccountTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$AccountsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).fixedAssetsByAssetAccount,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.assetAccountId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (fixedAssetsByAccumulatedDepreciationAccount)
+                        await $_getPrefetchedData<
+                          Account,
+                          $AccountsTable,
+                          FixedAsset
+                        >(
+                          currentTable: table,
+                          referencedTable: $$AccountsTableReferences
+                              ._fixedAssetsByAccumulatedDepreciationAccountTable(
+                                db,
+                              ),
+                          managerFromTypedResult: (p0) =>
+                              $$AccountsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).fixedAssetsByAccumulatedDepreciationAccount,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) =>
+                                    e.accumulatedDepreciationAccountId ==
+                                    item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (fixedAssetsByDepreciationExpenseAccount)
+                        await $_getPrefetchedData<
+                          Account,
+                          $AccountsTable,
+                          FixedAsset
+                        >(
+                          currentTable: table,
+                          referencedTable: $$AccountsTableReferences
+                              ._fixedAssetsByDepreciationExpenseAccountTable(
+                                db,
+                              ),
+                          managerFromTypedResult: (p0) =>
+                              $$AccountsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).fixedAssetsByDepreciationExpenseAccount,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) =>
+                                    e.depreciationExpenseAccountId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (fixedAssetsByFundingAccount)
+                        await $_getPrefetchedData<
+                          Account,
+                          $AccountsTable,
+                          FixedAsset
+                        >(
+                          currentTable: table,
+                          referencedTable: $$AccountsTableReferences
+                              ._fixedAssetsByFundingAccountTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$AccountsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).fixedAssetsByFundingAccount,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.fundingAccountId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -92289,6 +100692,11 @@ typedef $$AccountsTableProcessedTableManager =
         bool currencyId,
         bool journalEntryLinesRefs,
         bool expensesRefs,
+        bool ownerFinanceTransactionsRefs,
+        bool fixedAssetsByAssetAccount,
+        bool fixedAssetsByAccumulatedDepreciationAccount,
+        bool fixedAssetsByDepreciationExpenseAccount,
+        bool fixedAssetsByFundingAccount,
       })
     >;
 typedef $$AccountingPeriodsTableCreateCompanionBuilder =
@@ -92931,6 +101339,168 @@ final class $$JournalEntriesTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<
+    $OwnerFinanceTransactionsTable,
+    List<OwnerFinanceTransaction>
+  >
+  _ownerFinanceJournalEntriesTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.ownerFinanceTransactions,
+        aliasName:
+            'journal_entries__id__owner_finance_transactions__journal_entry_id',
+      );
+
+  $$OwnerFinanceTransactionsTableProcessedTableManager
+  get ownerFinanceJournalEntries {
+    final manager = $$OwnerFinanceTransactionsTableTableManager(
+      $_db,
+      $_db.ownerFinanceTransactions,
+    ).filter((f) => f.journalEntryId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _ownerFinanceJournalEntriesTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $OwnerFinanceTransactionsTable,
+    List<OwnerFinanceTransaction>
+  >
+  _ownerFinanceReversalJournalEntriesTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.ownerFinanceTransactions,
+    aliasName:
+        'journal_entries__id__owner_finance_transactions__reversal_journal_entry_id',
+  );
+
+  $$OwnerFinanceTransactionsTableProcessedTableManager
+  get ownerFinanceReversalJournalEntries {
+    final manager =
+        $$OwnerFinanceTransactionsTableTableManager(
+          $_db,
+          $_db.ownerFinanceTransactions,
+        ).filter(
+          (f) =>
+              f.reversalJournalEntryId.id.sqlEquals($_itemColumn<int>('id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _ownerFinanceReversalJournalEntriesTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$FixedAssetsTable, List<FixedAsset>>
+  _fixedAssetAcquisitionJournalEntriesTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.fixedAssets,
+        aliasName:
+            'journal_entries__id__fixed_assets__acquisition_journal_entry_id',
+      );
+
+  $$FixedAssetsTableProcessedTableManager
+  get fixedAssetAcquisitionJournalEntries {
+    final manager = $$FixedAssetsTableTableManager($_db, $_db.fixedAssets)
+        .filter(
+          (f) => f.acquisitionJournalEntryId.id.sqlEquals(
+            $_itemColumn<int>('id')!,
+          ),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _fixedAssetAcquisitionJournalEntriesTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$FixedAssetsTable, List<FixedAsset>>
+  _fixedAssetReversalJournalEntriesTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.fixedAssets,
+        aliasName:
+            'journal_entries__id__fixed_assets__reversal_journal_entry_id',
+      );
+
+  $$FixedAssetsTableProcessedTableManager get fixedAssetReversalJournalEntries {
+    final manager = $$FixedAssetsTableTableManager($_db, $_db.fixedAssets)
+        .filter(
+          (f) =>
+              f.reversalJournalEntryId.id.sqlEquals($_itemColumn<int>('id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _fixedAssetReversalJournalEntriesTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $FixedAssetDepreciationsTable,
+    List<FixedAssetDepreciation>
+  >
+  _fixedAssetDepreciationJournalEntriesTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.fixedAssetDepreciations,
+        aliasName:
+            'journal_entries__id__fixed_asset_depreciations__journal_entry_id',
+      );
+
+  $$FixedAssetDepreciationsTableProcessedTableManager
+  get fixedAssetDepreciationJournalEntries {
+    final manager = $$FixedAssetDepreciationsTableTableManager(
+      $_db,
+      $_db.fixedAssetDepreciations,
+    ).filter((f) => f.journalEntryId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _fixedAssetDepreciationJournalEntriesTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $FixedAssetDepreciationsTable,
+    List<FixedAssetDepreciation>
+  >
+  _fixedAssetDepreciationReversalJournalEntriesTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.fixedAssetDepreciations,
+    aliasName:
+        'journal_entries__id__fixed_asset_depreciations__reversal_journal_entry_id',
+  );
+
+  $$FixedAssetDepreciationsTableProcessedTableManager
+  get fixedAssetDepreciationReversalJournalEntries {
+    final manager =
+        $$FixedAssetDepreciationsTableTableManager(
+          $_db,
+          $_db.fixedAssetDepreciations,
+        ).filter(
+          (f) =>
+              f.reversalJournalEntryId.id.sqlEquals($_itemColumn<int>('id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _fixedAssetDepreciationReversalJournalEntriesTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$JournalEntriesTableFilterComposer
@@ -93128,6 +101698,162 @@ class $$JournalEntriesTableFilterComposer
                 $removeJoinBuilderFromRootComposer,
           ),
     );
+    return f(composer);
+  }
+
+  Expression<bool> ownerFinanceJournalEntries(
+    Expression<bool> Function($$OwnerFinanceTransactionsTableFilterComposer f)
+    f,
+  ) {
+    final $$OwnerFinanceTransactionsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.ownerFinanceTransactions,
+          getReferencedColumn: (t) => t.journalEntryId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$OwnerFinanceTransactionsTableFilterComposer(
+                $db: $db,
+                $table: $db.ownerFinanceTransactions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> ownerFinanceReversalJournalEntries(
+    Expression<bool> Function($$OwnerFinanceTransactionsTableFilterComposer f)
+    f,
+  ) {
+    final $$OwnerFinanceTransactionsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.ownerFinanceTransactions,
+          getReferencedColumn: (t) => t.reversalJournalEntryId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$OwnerFinanceTransactionsTableFilterComposer(
+                $db: $db,
+                $table: $db.ownerFinanceTransactions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> fixedAssetAcquisitionJournalEntries(
+    Expression<bool> Function($$FixedAssetsTableFilterComposer f) f,
+  ) {
+    final $$FixedAssetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.fixedAssets,
+      getReferencedColumn: (t) => t.acquisitionJournalEntryId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FixedAssetsTableFilterComposer(
+            $db: $db,
+            $table: $db.fixedAssets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> fixedAssetReversalJournalEntries(
+    Expression<bool> Function($$FixedAssetsTableFilterComposer f) f,
+  ) {
+    final $$FixedAssetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.fixedAssets,
+      getReferencedColumn: (t) => t.reversalJournalEntryId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FixedAssetsTableFilterComposer(
+            $db: $db,
+            $table: $db.fixedAssets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> fixedAssetDepreciationJournalEntries(
+    Expression<bool> Function($$FixedAssetDepreciationsTableFilterComposer f) f,
+  ) {
+    final $$FixedAssetDepreciationsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.fixedAssetDepreciations,
+          getReferencedColumn: (t) => t.journalEntryId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$FixedAssetDepreciationsTableFilterComposer(
+                $db: $db,
+                $table: $db.fixedAssetDepreciations,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> fixedAssetDepreciationReversalJournalEntries(
+    Expression<bool> Function($$FixedAssetDepreciationsTableFilterComposer f) f,
+  ) {
+    final $$FixedAssetDepreciationsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.fixedAssetDepreciations,
+          getReferencedColumn: (t) => t.reversalJournalEntryId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$FixedAssetDepreciationsTableFilterComposer(
+                $db: $db,
+                $table: $db.fixedAssetDepreciations,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
     return f(composer);
   }
 }
@@ -93487,6 +102213,164 @@ class $$JournalEntriesTableAnnotationComposer
         );
     return f(composer);
   }
+
+  Expression<T> ownerFinanceJournalEntries<T extends Object>(
+    Expression<T> Function($$OwnerFinanceTransactionsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$OwnerFinanceTransactionsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.ownerFinanceTransactions,
+          getReferencedColumn: (t) => t.journalEntryId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$OwnerFinanceTransactionsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.ownerFinanceTransactions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> ownerFinanceReversalJournalEntries<T extends Object>(
+    Expression<T> Function($$OwnerFinanceTransactionsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$OwnerFinanceTransactionsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.ownerFinanceTransactions,
+          getReferencedColumn: (t) => t.reversalJournalEntryId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$OwnerFinanceTransactionsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.ownerFinanceTransactions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> fixedAssetAcquisitionJournalEntries<T extends Object>(
+    Expression<T> Function($$FixedAssetsTableAnnotationComposer a) f,
+  ) {
+    final $$FixedAssetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.fixedAssets,
+      getReferencedColumn: (t) => t.acquisitionJournalEntryId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FixedAssetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.fixedAssets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> fixedAssetReversalJournalEntries<T extends Object>(
+    Expression<T> Function($$FixedAssetsTableAnnotationComposer a) f,
+  ) {
+    final $$FixedAssetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.fixedAssets,
+      getReferencedColumn: (t) => t.reversalJournalEntryId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FixedAssetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.fixedAssets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> fixedAssetDepreciationJournalEntries<T extends Object>(
+    Expression<T> Function($$FixedAssetDepreciationsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$FixedAssetDepreciationsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.fixedAssetDepreciations,
+          getReferencedColumn: (t) => t.journalEntryId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$FixedAssetDepreciationsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.fixedAssetDepreciations,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> fixedAssetDepreciationReversalJournalEntries<T extends Object>(
+    Expression<T> Function($$FixedAssetDepreciationsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$FixedAssetDepreciationsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.fixedAssetDepreciations,
+          getReferencedColumn: (t) => t.reversalJournalEntryId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$FixedAssetDepreciationsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.fixedAssetDepreciations,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$JournalEntriesTableTableManager
@@ -93508,6 +102392,12 @@ class $$JournalEntriesTableTableManager
             bool createdBy,
             bool postedBy,
             bool journalEntryLinesRefs,
+            bool ownerFinanceJournalEntries,
+            bool ownerFinanceReversalJournalEntries,
+            bool fixedAssetAcquisitionJournalEntries,
+            bool fixedAssetReversalJournalEntries,
+            bool fixedAssetDepreciationJournalEntries,
+            bool fixedAssetDepreciationReversalJournalEntries,
           })
         > {
   $$JournalEntriesTableTableManager(
@@ -93618,11 +102508,26 @@ class $$JournalEntriesTableTableManager
                 createdBy = false,
                 postedBy = false,
                 journalEntryLinesRefs = false,
+                ownerFinanceJournalEntries = false,
+                ownerFinanceReversalJournalEntries = false,
+                fixedAssetAcquisitionJournalEntries = false,
+                fixedAssetReversalJournalEntries = false,
+                fixedAssetDepreciationJournalEntries = false,
+                fixedAssetDepreciationReversalJournalEntries = false,
               }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (journalEntryLinesRefs) db.journalEntryLines,
+                    if (ownerFinanceJournalEntries) db.ownerFinanceTransactions,
+                    if (ownerFinanceReversalJournalEntries)
+                      db.ownerFinanceTransactions,
+                    if (fixedAssetAcquisitionJournalEntries) db.fixedAssets,
+                    if (fixedAssetReversalJournalEntries) db.fixedAssets,
+                    if (fixedAssetDepreciationJournalEntries)
+                      db.fixedAssetDepreciations,
+                    if (fixedAssetDepreciationReversalJournalEntries)
+                      db.fixedAssetDepreciations,
                   ],
                   addJoins:
                       <
@@ -93726,6 +102631,134 @@ class $$JournalEntriesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (ownerFinanceJournalEntries)
+                        await $_getPrefetchedData<
+                          JournalEntry,
+                          $JournalEntriesTable,
+                          OwnerFinanceTransaction
+                        >(
+                          currentTable: table,
+                          referencedTable: $$JournalEntriesTableReferences
+                              ._ownerFinanceJournalEntriesTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$JournalEntriesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).ownerFinanceJournalEntries,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.journalEntryId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (ownerFinanceReversalJournalEntries)
+                        await $_getPrefetchedData<
+                          JournalEntry,
+                          $JournalEntriesTable,
+                          OwnerFinanceTransaction
+                        >(
+                          currentTable: table,
+                          referencedTable: $$JournalEntriesTableReferences
+                              ._ownerFinanceReversalJournalEntriesTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$JournalEntriesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).ownerFinanceReversalJournalEntries,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.reversalJournalEntryId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (fixedAssetAcquisitionJournalEntries)
+                        await $_getPrefetchedData<
+                          JournalEntry,
+                          $JournalEntriesTable,
+                          FixedAsset
+                        >(
+                          currentTable: table,
+                          referencedTable: $$JournalEntriesTableReferences
+                              ._fixedAssetAcquisitionJournalEntriesTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$JournalEntriesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).fixedAssetAcquisitionJournalEntries,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.acquisitionJournalEntryId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (fixedAssetReversalJournalEntries)
+                        await $_getPrefetchedData<
+                          JournalEntry,
+                          $JournalEntriesTable,
+                          FixedAsset
+                        >(
+                          currentTable: table,
+                          referencedTable: $$JournalEntriesTableReferences
+                              ._fixedAssetReversalJournalEntriesTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$JournalEntriesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).fixedAssetReversalJournalEntries,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.reversalJournalEntryId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (fixedAssetDepreciationJournalEntries)
+                        await $_getPrefetchedData<
+                          JournalEntry,
+                          $JournalEntriesTable,
+                          FixedAssetDepreciation
+                        >(
+                          currentTable: table,
+                          referencedTable: $$JournalEntriesTableReferences
+                              ._fixedAssetDepreciationJournalEntriesTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$JournalEntriesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).fixedAssetDepreciationJournalEntries,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.journalEntryId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (fixedAssetDepreciationReversalJournalEntries)
+                        await $_getPrefetchedData<
+                          JournalEntry,
+                          $JournalEntriesTable,
+                          FixedAssetDepreciation
+                        >(
+                          currentTable: table,
+                          referencedTable: $$JournalEntriesTableReferences
+                              ._fixedAssetDepreciationReversalJournalEntriesTable(
+                                db,
+                              ),
+                          managerFromTypedResult: (p0) =>
+                              $$JournalEntriesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).fixedAssetDepreciationReversalJournalEntries,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.reversalJournalEntryId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -93752,6 +102785,12 @@ typedef $$JournalEntriesTableProcessedTableManager =
         bool createdBy,
         bool postedBy,
         bool journalEntryLinesRefs,
+        bool ownerFinanceJournalEntries,
+        bool ownerFinanceReversalJournalEntries,
+        bool fixedAssetAcquisitionJournalEntries,
+        bool fixedAssetReversalJournalEntries,
+        bool fixedAssetDepreciationJournalEntries,
+        bool fixedAssetDepreciationReversalJournalEntries,
       })
     >;
 typedef $$JournalEntryLinesTableCreateCompanionBuilder =
@@ -94954,6 +103993,3116 @@ typedef $$ExpensesTableProcessedTableManager =
       (Expense, $$ExpensesTableReferences),
       Expense,
       PrefetchHooks Function({bool categoryId, bool currencyId, bool accountId})
+    >;
+typedef $$OwnerFinanceTransactionsTableCreateCompanionBuilder =
+    OwnerFinanceTransactionsCompanion Function({
+      Value<int> id,
+      required String transactionNumber,
+      required String transactionType,
+      required Decimal amountCents,
+      required int currencyId,
+      required int offsetAccountId,
+      required DateTime transactionDate,
+      required String description,
+      Value<String?> notes,
+      Value<String> status,
+      Value<int?> journalEntryId,
+      Value<int?> reversalJournalEntryId,
+      Value<int?> createdBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+typedef $$OwnerFinanceTransactionsTableUpdateCompanionBuilder =
+    OwnerFinanceTransactionsCompanion Function({
+      Value<int> id,
+      Value<String> transactionNumber,
+      Value<String> transactionType,
+      Value<Decimal> amountCents,
+      Value<int> currencyId,
+      Value<int> offsetAccountId,
+      Value<DateTime> transactionDate,
+      Value<String> description,
+      Value<String?> notes,
+      Value<String> status,
+      Value<int?> journalEntryId,
+      Value<int?> reversalJournalEntryId,
+      Value<int?> createdBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$OwnerFinanceTransactionsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $OwnerFinanceTransactionsTable,
+          OwnerFinanceTransaction
+        > {
+  $$OwnerFinanceTransactionsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) => db.currencies
+      .createAlias('owner_finance_transactions__currency_id__currencies__id');
+
+  $$CurrenciesTableProcessedTableManager get currencyId {
+    final $_column = $_itemColumn<int>('currency_id')!;
+
+    final manager = $$CurrenciesTableTableManager(
+      $_db,
+      $_db.currencies,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_currencyIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $AccountsTable _offsetAccountIdTable(_$AppDatabase db) =>
+      db.accounts.createAlias(
+        'owner_finance_transactions__offset_account_id__accounts__id',
+      );
+
+  $$AccountsTableProcessedTableManager get offsetAccountId {
+    final $_column = $_itemColumn<int>('offset_account_id')!;
+
+    final manager = $$AccountsTableTableManager(
+      $_db,
+      $_db.accounts,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_offsetAccountIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $JournalEntriesTable _journalEntryIdTable(_$AppDatabase db) =>
+      db.journalEntries.createAlias(
+        'owner_finance_transactions__journal_entry_id__journal_entries__id',
+      );
+
+  $$JournalEntriesTableProcessedTableManager? get journalEntryId {
+    final $_column = $_itemColumn<int>('journal_entry_id');
+    if ($_column == null) return null;
+    final manager = $$JournalEntriesTableTableManager(
+      $_db,
+      $_db.journalEntries,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_journalEntryIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $JournalEntriesTable _reversalJournalEntryIdTable(
+    _$AppDatabase db,
+  ) => db.journalEntries.createAlias(
+    'owner_finance_transactions__reversal_journal_entry_id__journal_entries__id',
+  );
+
+  $$JournalEntriesTableProcessedTableManager? get reversalJournalEntryId {
+    final $_column = $_itemColumn<int>('reversal_journal_entry_id');
+    if ($_column == null) return null;
+    final manager = $$JournalEntriesTableTableManager(
+      $_db,
+      $_db.journalEntries,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(
+      _reversalJournalEntryIdTable($_db),
+    );
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _createdByTable(_$AppDatabase db) =>
+      db.users.createAlias('owner_finance_transactions__created_by__users__id');
+
+  $$UsersTableProcessedTableManager? get createdBy {
+    final $_column = $_itemColumn<int>('created_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_createdByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$OwnerFinanceTransactionsTableFilterComposer
+    extends Composer<_$AppDatabase, $OwnerFinanceTransactionsTable> {
+  $$OwnerFinanceTransactionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get transactionNumber => $composableBuilder(
+    column: $table.transactionNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get transactionType => $composableBuilder(
+    column: $table.transactionType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get amountCents =>
+      $composableBuilder(
+        column: $table.amountCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnFilters<DateTime> get transactionDate => $composableBuilder(
+    column: $table.transactionDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$CurrenciesTableFilterComposer get currencyId {
+    final $$CurrenciesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.currencyId,
+      referencedTable: $db.currencies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CurrenciesTableFilterComposer(
+            $db: $db,
+            $table: $db.currencies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AccountsTableFilterComposer get offsetAccountId {
+    final $$AccountsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.offsetAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableFilterComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$JournalEntriesTableFilterComposer get journalEntryId {
+    final $$JournalEntriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.journalEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableFilterComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$JournalEntriesTableFilterComposer get reversalJournalEntryId {
+    final $$JournalEntriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.reversalJournalEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableFilterComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get createdBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$OwnerFinanceTransactionsTableOrderingComposer
+    extends Composer<_$AppDatabase, $OwnerFinanceTransactionsTable> {
+  $$OwnerFinanceTransactionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get transactionNumber => $composableBuilder(
+    column: $table.transactionNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get transactionType => $composableBuilder(
+    column: $table.transactionType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get transactionDate => $composableBuilder(
+    column: $table.transactionDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$CurrenciesTableOrderingComposer get currencyId {
+    final $$CurrenciesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.currencyId,
+      referencedTable: $db.currencies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CurrenciesTableOrderingComposer(
+            $db: $db,
+            $table: $db.currencies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AccountsTableOrderingComposer get offsetAccountId {
+    final $$AccountsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.offsetAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableOrderingComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$JournalEntriesTableOrderingComposer get journalEntryId {
+    final $$JournalEntriesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.journalEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableOrderingComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$JournalEntriesTableOrderingComposer get reversalJournalEntryId {
+    final $$JournalEntriesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.reversalJournalEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableOrderingComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get createdBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$OwnerFinanceTransactionsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $OwnerFinanceTransactionsTable> {
+  $$OwnerFinanceTransactionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get transactionNumber => $composableBuilder(
+    column: $table.transactionNumber,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get transactionType => $composableBuilder(
+    column: $table.transactionType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get amountCents =>
+      $composableBuilder(
+        column: $table.amountCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<DateTime> get transactionDate => $composableBuilder(
+    column: $table.transactionDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get notes =>
+      $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$CurrenciesTableAnnotationComposer get currencyId {
+    final $$CurrenciesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.currencyId,
+      referencedTable: $db.currencies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CurrenciesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.currencies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AccountsTableAnnotationComposer get offsetAccountId {
+    final $$AccountsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.offsetAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$JournalEntriesTableAnnotationComposer get journalEntryId {
+    final $$JournalEntriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.journalEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$JournalEntriesTableAnnotationComposer get reversalJournalEntryId {
+    final $$JournalEntriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.reversalJournalEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get createdBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$OwnerFinanceTransactionsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $OwnerFinanceTransactionsTable,
+          OwnerFinanceTransaction,
+          $$OwnerFinanceTransactionsTableFilterComposer,
+          $$OwnerFinanceTransactionsTableOrderingComposer,
+          $$OwnerFinanceTransactionsTableAnnotationComposer,
+          $$OwnerFinanceTransactionsTableCreateCompanionBuilder,
+          $$OwnerFinanceTransactionsTableUpdateCompanionBuilder,
+          (OwnerFinanceTransaction, $$OwnerFinanceTransactionsTableReferences),
+          OwnerFinanceTransaction,
+          PrefetchHooks Function({
+            bool currencyId,
+            bool offsetAccountId,
+            bool journalEntryId,
+            bool reversalJournalEntryId,
+            bool createdBy,
+          })
+        > {
+  $$OwnerFinanceTransactionsTableTableManager(
+    _$AppDatabase db,
+    $OwnerFinanceTransactionsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$OwnerFinanceTransactionsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$OwnerFinanceTransactionsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$OwnerFinanceTransactionsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> transactionNumber = const Value.absent(),
+                Value<String> transactionType = const Value.absent(),
+                Value<Decimal> amountCents = const Value.absent(),
+                Value<int> currencyId = const Value.absent(),
+                Value<int> offsetAccountId = const Value.absent(),
+                Value<DateTime> transactionDate = const Value.absent(),
+                Value<String> description = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<int?> journalEntryId = const Value.absent(),
+                Value<int?> reversalJournalEntryId = const Value.absent(),
+                Value<int?> createdBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => OwnerFinanceTransactionsCompanion(
+                id: id,
+                transactionNumber: transactionNumber,
+                transactionType: transactionType,
+                amountCents: amountCents,
+                currencyId: currencyId,
+                offsetAccountId: offsetAccountId,
+                transactionDate: transactionDate,
+                description: description,
+                notes: notes,
+                status: status,
+                journalEntryId: journalEntryId,
+                reversalJournalEntryId: reversalJournalEntryId,
+                createdBy: createdBy,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String transactionNumber,
+                required String transactionType,
+                required Decimal amountCents,
+                required int currencyId,
+                required int offsetAccountId,
+                required DateTime transactionDate,
+                required String description,
+                Value<String?> notes = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<int?> journalEntryId = const Value.absent(),
+                Value<int?> reversalJournalEntryId = const Value.absent(),
+                Value<int?> createdBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => OwnerFinanceTransactionsCompanion.insert(
+                id: id,
+                transactionNumber: transactionNumber,
+                transactionType: transactionType,
+                amountCents: amountCents,
+                currencyId: currencyId,
+                offsetAccountId: offsetAccountId,
+                transactionDate: transactionDate,
+                description: description,
+                notes: notes,
+                status: status,
+                journalEntryId: journalEntryId,
+                reversalJournalEntryId: reversalJournalEntryId,
+                createdBy: createdBy,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$OwnerFinanceTransactionsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                currencyId = false,
+                offsetAccountId = false,
+                journalEntryId = false,
+                reversalJournalEntryId = false,
+                createdBy = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (currencyId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.currencyId,
+                                    referencedTable:
+                                        $$OwnerFinanceTransactionsTableReferences
+                                            ._currencyIdTable(db),
+                                    referencedColumn:
+                                        $$OwnerFinanceTransactionsTableReferences
+                                            ._currencyIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (offsetAccountId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.offsetAccountId,
+                                    referencedTable:
+                                        $$OwnerFinanceTransactionsTableReferences
+                                            ._offsetAccountIdTable(db),
+                                    referencedColumn:
+                                        $$OwnerFinanceTransactionsTableReferences
+                                            ._offsetAccountIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (journalEntryId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.journalEntryId,
+                                    referencedTable:
+                                        $$OwnerFinanceTransactionsTableReferences
+                                            ._journalEntryIdTable(db),
+                                    referencedColumn:
+                                        $$OwnerFinanceTransactionsTableReferences
+                                            ._journalEntryIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (reversalJournalEntryId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.reversalJournalEntryId,
+                                    referencedTable:
+                                        $$OwnerFinanceTransactionsTableReferences
+                                            ._reversalJournalEntryIdTable(db),
+                                    referencedColumn:
+                                        $$OwnerFinanceTransactionsTableReferences
+                                            ._reversalJournalEntryIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (createdBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.createdBy,
+                                    referencedTable:
+                                        $$OwnerFinanceTransactionsTableReferences
+                                            ._createdByTable(db),
+                                    referencedColumn:
+                                        $$OwnerFinanceTransactionsTableReferences
+                                            ._createdByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$OwnerFinanceTransactionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $OwnerFinanceTransactionsTable,
+      OwnerFinanceTransaction,
+      $$OwnerFinanceTransactionsTableFilterComposer,
+      $$OwnerFinanceTransactionsTableOrderingComposer,
+      $$OwnerFinanceTransactionsTableAnnotationComposer,
+      $$OwnerFinanceTransactionsTableCreateCompanionBuilder,
+      $$OwnerFinanceTransactionsTableUpdateCompanionBuilder,
+      (OwnerFinanceTransaction, $$OwnerFinanceTransactionsTableReferences),
+      OwnerFinanceTransaction,
+      PrefetchHooks Function({
+        bool currencyId,
+        bool offsetAccountId,
+        bool journalEntryId,
+        bool reversalJournalEntryId,
+        bool createdBy,
+      })
+    >;
+typedef $$FixedAssetsTableCreateCompanionBuilder =
+    FixedAssetsCompanion Function({
+      Value<int> id,
+      required String assetNumber,
+      required String name,
+      required String category,
+      Value<String?> description,
+      required DateTime acquisitionDate,
+      required DateTime inServiceDate,
+      required Decimal costCents,
+      Value<Decimal> residualValueCents,
+      required int usefulLifeMonths,
+      Value<String> depreciationMethod,
+      required int assetAccountId,
+      required int accumulatedDepreciationAccountId,
+      required int depreciationExpenseAccountId,
+      required int fundingAccountId,
+      required int currencyId,
+      Value<String> status,
+      Value<int?> acquisitionJournalEntryId,
+      Value<int?> reversalJournalEntryId,
+      Value<int?> createdBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+typedef $$FixedAssetsTableUpdateCompanionBuilder =
+    FixedAssetsCompanion Function({
+      Value<int> id,
+      Value<String> assetNumber,
+      Value<String> name,
+      Value<String> category,
+      Value<String?> description,
+      Value<DateTime> acquisitionDate,
+      Value<DateTime> inServiceDate,
+      Value<Decimal> costCents,
+      Value<Decimal> residualValueCents,
+      Value<int> usefulLifeMonths,
+      Value<String> depreciationMethod,
+      Value<int> assetAccountId,
+      Value<int> accumulatedDepreciationAccountId,
+      Value<int> depreciationExpenseAccountId,
+      Value<int> fundingAccountId,
+      Value<int> currencyId,
+      Value<String> status,
+      Value<int?> acquisitionJournalEntryId,
+      Value<int?> reversalJournalEntryId,
+      Value<int?> createdBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$FixedAssetsTableReferences
+    extends BaseReferences<_$AppDatabase, $FixedAssetsTable, FixedAsset> {
+  $$FixedAssetsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $AccountsTable _assetAccountIdTable(_$AppDatabase db) =>
+      db.accounts.createAlias('fixed_assets__asset_account_id__accounts__id');
+
+  $$AccountsTableProcessedTableManager get assetAccountId {
+    final $_column = $_itemColumn<int>('asset_account_id')!;
+
+    final manager = $$AccountsTableTableManager(
+      $_db,
+      $_db.accounts,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_assetAccountIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $AccountsTable _accumulatedDepreciationAccountIdTable(
+    _$AppDatabase db,
+  ) => db.accounts.createAlias(
+    'fixed_assets__accumulated_depreciation_account_id__accounts__id',
+  );
+
+  $$AccountsTableProcessedTableManager get accumulatedDepreciationAccountId {
+    final $_column = $_itemColumn<int>('accumulated_depreciation_account_id')!;
+
+    final manager = $$AccountsTableTableManager(
+      $_db,
+      $_db.accounts,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(
+      _accumulatedDepreciationAccountIdTable($_db),
+    );
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $AccountsTable _depreciationExpenseAccountIdTable(_$AppDatabase db) =>
+      db.accounts.createAlias(
+        'fixed_assets__depreciation_expense_account_id__accounts__id',
+      );
+
+  $$AccountsTableProcessedTableManager get depreciationExpenseAccountId {
+    final $_column = $_itemColumn<int>('depreciation_expense_account_id')!;
+
+    final manager = $$AccountsTableTableManager(
+      $_db,
+      $_db.accounts,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(
+      _depreciationExpenseAccountIdTable($_db),
+    );
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $AccountsTable _fundingAccountIdTable(_$AppDatabase db) =>
+      db.accounts.createAlias('fixed_assets__funding_account_id__accounts__id');
+
+  $$AccountsTableProcessedTableManager get fundingAccountId {
+    final $_column = $_itemColumn<int>('funding_account_id')!;
+
+    final manager = $$AccountsTableTableManager(
+      $_db,
+      $_db.accounts,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_fundingAccountIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) =>
+      db.currencies.createAlias('fixed_assets__currency_id__currencies__id');
+
+  $$CurrenciesTableProcessedTableManager get currencyId {
+    final $_column = $_itemColumn<int>('currency_id')!;
+
+    final manager = $$CurrenciesTableTableManager(
+      $_db,
+      $_db.currencies,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_currencyIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $JournalEntriesTable _acquisitionJournalEntryIdTable(
+    _$AppDatabase db,
+  ) => db.journalEntries.createAlias(
+    'fixed_assets__acquisition_journal_entry_id__journal_entries__id',
+  );
+
+  $$JournalEntriesTableProcessedTableManager? get acquisitionJournalEntryId {
+    final $_column = $_itemColumn<int>('acquisition_journal_entry_id');
+    if ($_column == null) return null;
+    final manager = $$JournalEntriesTableTableManager(
+      $_db,
+      $_db.journalEntries,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(
+      _acquisitionJournalEntryIdTable($_db),
+    );
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $JournalEntriesTable _reversalJournalEntryIdTable(_$AppDatabase db) =>
+      db.journalEntries.createAlias(
+        'fixed_assets__reversal_journal_entry_id__journal_entries__id',
+      );
+
+  $$JournalEntriesTableProcessedTableManager? get reversalJournalEntryId {
+    final $_column = $_itemColumn<int>('reversal_journal_entry_id');
+    if ($_column == null) return null;
+    final manager = $$JournalEntriesTableTableManager(
+      $_db,
+      $_db.journalEntries,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(
+      _reversalJournalEntryIdTable($_db),
+    );
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _createdByTable(_$AppDatabase db) =>
+      db.users.createAlias('fixed_assets__created_by__users__id');
+
+  $$UsersTableProcessedTableManager? get createdBy {
+    final $_column = $_itemColumn<int>('created_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_createdByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $FixedAssetDepreciationsTable,
+    List<FixedAssetDepreciation>
+  >
+  _fixedAssetDepreciationsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.fixedAssetDepreciations,
+        aliasName: 'fixed_assets__id__fixed_asset_depreciations__asset_id',
+      );
+
+  $$FixedAssetDepreciationsTableProcessedTableManager
+  get fixedAssetDepreciationsRefs {
+    final manager = $$FixedAssetDepreciationsTableTableManager(
+      $_db,
+      $_db.fixedAssetDepreciations,
+    ).filter((f) => f.assetId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _fixedAssetDepreciationsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$FixedAssetsTableFilterComposer
+    extends Composer<_$AppDatabase, $FixedAssetsTable> {
+  $$FixedAssetsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get assetNumber => $composableBuilder(
+    column: $table.assetNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get acquisitionDate => $composableBuilder(
+    column: $table.acquisitionDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get inServiceDate => $composableBuilder(
+    column: $table.inServiceDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get costCents =>
+      $composableBuilder(
+        column: $table.costCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int>
+  get residualValueCents => $composableBuilder(
+    column: $table.residualValueCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnFilters<int> get usefulLifeMonths => $composableBuilder(
+    column: $table.usefulLifeMonths,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get depreciationMethod => $composableBuilder(
+    column: $table.depreciationMethod,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$AccountsTableFilterComposer get assetAccountId {
+    final $$AccountsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.assetAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableFilterComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AccountsTableFilterComposer get accumulatedDepreciationAccountId {
+    final $$AccountsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.accumulatedDepreciationAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableFilterComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AccountsTableFilterComposer get depreciationExpenseAccountId {
+    final $$AccountsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.depreciationExpenseAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableFilterComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AccountsTableFilterComposer get fundingAccountId {
+    final $$AccountsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.fundingAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableFilterComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$CurrenciesTableFilterComposer get currencyId {
+    final $$CurrenciesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.currencyId,
+      referencedTable: $db.currencies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CurrenciesTableFilterComposer(
+            $db: $db,
+            $table: $db.currencies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$JournalEntriesTableFilterComposer get acquisitionJournalEntryId {
+    final $$JournalEntriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.acquisitionJournalEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableFilterComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$JournalEntriesTableFilterComposer get reversalJournalEntryId {
+    final $$JournalEntriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.reversalJournalEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableFilterComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get createdBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> fixedAssetDepreciationsRefs(
+    Expression<bool> Function($$FixedAssetDepreciationsTableFilterComposer f) f,
+  ) {
+    final $$FixedAssetDepreciationsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.fixedAssetDepreciations,
+          getReferencedColumn: (t) => t.assetId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$FixedAssetDepreciationsTableFilterComposer(
+                $db: $db,
+                $table: $db.fixedAssetDepreciations,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$FixedAssetsTableOrderingComposer
+    extends Composer<_$AppDatabase, $FixedAssetsTable> {
+  $$FixedAssetsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get assetNumber => $composableBuilder(
+    column: $table.assetNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get acquisitionDate => $composableBuilder(
+    column: $table.acquisitionDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get inServiceDate => $composableBuilder(
+    column: $table.inServiceDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get costCents => $composableBuilder(
+    column: $table.costCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get residualValueCents => $composableBuilder(
+    column: $table.residualValueCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get usefulLifeMonths => $composableBuilder(
+    column: $table.usefulLifeMonths,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get depreciationMethod => $composableBuilder(
+    column: $table.depreciationMethod,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$AccountsTableOrderingComposer get assetAccountId {
+    final $$AccountsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.assetAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableOrderingComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AccountsTableOrderingComposer get accumulatedDepreciationAccountId {
+    final $$AccountsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.accumulatedDepreciationAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableOrderingComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AccountsTableOrderingComposer get depreciationExpenseAccountId {
+    final $$AccountsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.depreciationExpenseAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableOrderingComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AccountsTableOrderingComposer get fundingAccountId {
+    final $$AccountsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.fundingAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableOrderingComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$CurrenciesTableOrderingComposer get currencyId {
+    final $$CurrenciesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.currencyId,
+      referencedTable: $db.currencies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CurrenciesTableOrderingComposer(
+            $db: $db,
+            $table: $db.currencies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$JournalEntriesTableOrderingComposer get acquisitionJournalEntryId {
+    final $$JournalEntriesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.acquisitionJournalEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableOrderingComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$JournalEntriesTableOrderingComposer get reversalJournalEntryId {
+    final $$JournalEntriesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.reversalJournalEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableOrderingComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get createdBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$FixedAssetsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FixedAssetsTable> {
+  $$FixedAssetsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get assetNumber => $composableBuilder(
+    column: $table.assetNumber,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get category =>
+      $composableBuilder(column: $table.category, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get acquisitionDate => $composableBuilder(
+    column: $table.acquisitionDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get inServiceDate => $composableBuilder(
+    column: $table.inServiceDate,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get costCents =>
+      $composableBuilder(column: $table.costCents, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get residualValueCents =>
+      $composableBuilder(
+        column: $table.residualValueCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<int> get usefulLifeMonths => $composableBuilder(
+    column: $table.usefulLifeMonths,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get depreciationMethod => $composableBuilder(
+    column: $table.depreciationMethod,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$AccountsTableAnnotationComposer get assetAccountId {
+    final $$AccountsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.assetAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AccountsTableAnnotationComposer get accumulatedDepreciationAccountId {
+    final $$AccountsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.accumulatedDepreciationAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AccountsTableAnnotationComposer get depreciationExpenseAccountId {
+    final $$AccountsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.depreciationExpenseAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$AccountsTableAnnotationComposer get fundingAccountId {
+    final $$AccountsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.fundingAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$CurrenciesTableAnnotationComposer get currencyId {
+    final $$CurrenciesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.currencyId,
+      referencedTable: $db.currencies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CurrenciesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.currencies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$JournalEntriesTableAnnotationComposer get acquisitionJournalEntryId {
+    final $$JournalEntriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.acquisitionJournalEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$JournalEntriesTableAnnotationComposer get reversalJournalEntryId {
+    final $$JournalEntriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.reversalJournalEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get createdBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> fixedAssetDepreciationsRefs<T extends Object>(
+    Expression<T> Function($$FixedAssetDepreciationsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$FixedAssetDepreciationsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.fixedAssetDepreciations,
+          getReferencedColumn: (t) => t.assetId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$FixedAssetDepreciationsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.fixedAssetDepreciations,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$FixedAssetsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $FixedAssetsTable,
+          FixedAsset,
+          $$FixedAssetsTableFilterComposer,
+          $$FixedAssetsTableOrderingComposer,
+          $$FixedAssetsTableAnnotationComposer,
+          $$FixedAssetsTableCreateCompanionBuilder,
+          $$FixedAssetsTableUpdateCompanionBuilder,
+          (FixedAsset, $$FixedAssetsTableReferences),
+          FixedAsset,
+          PrefetchHooks Function({
+            bool assetAccountId,
+            bool accumulatedDepreciationAccountId,
+            bool depreciationExpenseAccountId,
+            bool fundingAccountId,
+            bool currencyId,
+            bool acquisitionJournalEntryId,
+            bool reversalJournalEntryId,
+            bool createdBy,
+            bool fixedAssetDepreciationsRefs,
+          })
+        > {
+  $$FixedAssetsTableTableManager(_$AppDatabase db, $FixedAssetsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FixedAssetsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FixedAssetsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FixedAssetsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> assetNumber = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> category = const Value.absent(),
+                Value<String?> description = const Value.absent(),
+                Value<DateTime> acquisitionDate = const Value.absent(),
+                Value<DateTime> inServiceDate = const Value.absent(),
+                Value<Decimal> costCents = const Value.absent(),
+                Value<Decimal> residualValueCents = const Value.absent(),
+                Value<int> usefulLifeMonths = const Value.absent(),
+                Value<String> depreciationMethod = const Value.absent(),
+                Value<int> assetAccountId = const Value.absent(),
+                Value<int> accumulatedDepreciationAccountId =
+                    const Value.absent(),
+                Value<int> depreciationExpenseAccountId = const Value.absent(),
+                Value<int> fundingAccountId = const Value.absent(),
+                Value<int> currencyId = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<int?> acquisitionJournalEntryId = const Value.absent(),
+                Value<int?> reversalJournalEntryId = const Value.absent(),
+                Value<int?> createdBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => FixedAssetsCompanion(
+                id: id,
+                assetNumber: assetNumber,
+                name: name,
+                category: category,
+                description: description,
+                acquisitionDate: acquisitionDate,
+                inServiceDate: inServiceDate,
+                costCents: costCents,
+                residualValueCents: residualValueCents,
+                usefulLifeMonths: usefulLifeMonths,
+                depreciationMethod: depreciationMethod,
+                assetAccountId: assetAccountId,
+                accumulatedDepreciationAccountId:
+                    accumulatedDepreciationAccountId,
+                depreciationExpenseAccountId: depreciationExpenseAccountId,
+                fundingAccountId: fundingAccountId,
+                currencyId: currencyId,
+                status: status,
+                acquisitionJournalEntryId: acquisitionJournalEntryId,
+                reversalJournalEntryId: reversalJournalEntryId,
+                createdBy: createdBy,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String assetNumber,
+                required String name,
+                required String category,
+                Value<String?> description = const Value.absent(),
+                required DateTime acquisitionDate,
+                required DateTime inServiceDate,
+                required Decimal costCents,
+                Value<Decimal> residualValueCents = const Value.absent(),
+                required int usefulLifeMonths,
+                Value<String> depreciationMethod = const Value.absent(),
+                required int assetAccountId,
+                required int accumulatedDepreciationAccountId,
+                required int depreciationExpenseAccountId,
+                required int fundingAccountId,
+                required int currencyId,
+                Value<String> status = const Value.absent(),
+                Value<int?> acquisitionJournalEntryId = const Value.absent(),
+                Value<int?> reversalJournalEntryId = const Value.absent(),
+                Value<int?> createdBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => FixedAssetsCompanion.insert(
+                id: id,
+                assetNumber: assetNumber,
+                name: name,
+                category: category,
+                description: description,
+                acquisitionDate: acquisitionDate,
+                inServiceDate: inServiceDate,
+                costCents: costCents,
+                residualValueCents: residualValueCents,
+                usefulLifeMonths: usefulLifeMonths,
+                depreciationMethod: depreciationMethod,
+                assetAccountId: assetAccountId,
+                accumulatedDepreciationAccountId:
+                    accumulatedDepreciationAccountId,
+                depreciationExpenseAccountId: depreciationExpenseAccountId,
+                fundingAccountId: fundingAccountId,
+                currencyId: currencyId,
+                status: status,
+                acquisitionJournalEntryId: acquisitionJournalEntryId,
+                reversalJournalEntryId: reversalJournalEntryId,
+                createdBy: createdBy,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$FixedAssetsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                assetAccountId = false,
+                accumulatedDepreciationAccountId = false,
+                depreciationExpenseAccountId = false,
+                fundingAccountId = false,
+                currencyId = false,
+                acquisitionJournalEntryId = false,
+                reversalJournalEntryId = false,
+                createdBy = false,
+                fixedAssetDepreciationsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (fixedAssetDepreciationsRefs) db.fixedAssetDepreciations,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (assetAccountId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.assetAccountId,
+                                    referencedTable:
+                                        $$FixedAssetsTableReferences
+                                            ._assetAccountIdTable(db),
+                                    referencedColumn:
+                                        $$FixedAssetsTableReferences
+                                            ._assetAccountIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (accumulatedDepreciationAccountId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn:
+                                        table.accumulatedDepreciationAccountId,
+                                    referencedTable: $$FixedAssetsTableReferences
+                                        ._accumulatedDepreciationAccountIdTable(
+                                          db,
+                                        ),
+                                    referencedColumn: $$FixedAssetsTableReferences
+                                        ._accumulatedDepreciationAccountIdTable(
+                                          db,
+                                        )
+                                        .id,
+                                  )
+                                  as T;
+                        }
+                        if (depreciationExpenseAccountId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn:
+                                        table.depreciationExpenseAccountId,
+                                    referencedTable:
+                                        $$FixedAssetsTableReferences
+                                            ._depreciationExpenseAccountIdTable(
+                                              db,
+                                            ),
+                                    referencedColumn:
+                                        $$FixedAssetsTableReferences
+                                            ._depreciationExpenseAccountIdTable(
+                                              db,
+                                            )
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (fundingAccountId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.fundingAccountId,
+                                    referencedTable:
+                                        $$FixedAssetsTableReferences
+                                            ._fundingAccountIdTable(db),
+                                    referencedColumn:
+                                        $$FixedAssetsTableReferences
+                                            ._fundingAccountIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (currencyId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.currencyId,
+                                    referencedTable:
+                                        $$FixedAssetsTableReferences
+                                            ._currencyIdTable(db),
+                                    referencedColumn:
+                                        $$FixedAssetsTableReferences
+                                            ._currencyIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (acquisitionJournalEntryId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn:
+                                        table.acquisitionJournalEntryId,
+                                    referencedTable:
+                                        $$FixedAssetsTableReferences
+                                            ._acquisitionJournalEntryIdTable(
+                                              db,
+                                            ),
+                                    referencedColumn:
+                                        $$FixedAssetsTableReferences
+                                            ._acquisitionJournalEntryIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (reversalJournalEntryId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.reversalJournalEntryId,
+                                    referencedTable:
+                                        $$FixedAssetsTableReferences
+                                            ._reversalJournalEntryIdTable(db),
+                                    referencedColumn:
+                                        $$FixedAssetsTableReferences
+                                            ._reversalJournalEntryIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (createdBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.createdBy,
+                                    referencedTable:
+                                        $$FixedAssetsTableReferences
+                                            ._createdByTable(db),
+                                    referencedColumn:
+                                        $$FixedAssetsTableReferences
+                                            ._createdByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (fixedAssetDepreciationsRefs)
+                        await $_getPrefetchedData<
+                          FixedAsset,
+                          $FixedAssetsTable,
+                          FixedAssetDepreciation
+                        >(
+                          currentTable: table,
+                          referencedTable: $$FixedAssetsTableReferences
+                              ._fixedAssetDepreciationsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$FixedAssetsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).fixedAssetDepreciationsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.assetId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$FixedAssetsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $FixedAssetsTable,
+      FixedAsset,
+      $$FixedAssetsTableFilterComposer,
+      $$FixedAssetsTableOrderingComposer,
+      $$FixedAssetsTableAnnotationComposer,
+      $$FixedAssetsTableCreateCompanionBuilder,
+      $$FixedAssetsTableUpdateCompanionBuilder,
+      (FixedAsset, $$FixedAssetsTableReferences),
+      FixedAsset,
+      PrefetchHooks Function({
+        bool assetAccountId,
+        bool accumulatedDepreciationAccountId,
+        bool depreciationExpenseAccountId,
+        bool fundingAccountId,
+        bool currencyId,
+        bool acquisitionJournalEntryId,
+        bool reversalJournalEntryId,
+        bool createdBy,
+        bool fixedAssetDepreciationsRefs,
+      })
+    >;
+typedef $$FixedAssetDepreciationsTableCreateCompanionBuilder =
+    FixedAssetDepreciationsCompanion Function({
+      Value<int> id,
+      required int assetId,
+      required int installmentNumber,
+      required DateTime periodStart,
+      required DateTime periodEnd,
+      required Decimal amountCents,
+      Value<String> status,
+      Value<String?> notes,
+      Value<int?> journalEntryId,
+      Value<int?> reversalJournalEntryId,
+      Value<int?> postedBy,
+      Value<DateTime> createdAt,
+    });
+typedef $$FixedAssetDepreciationsTableUpdateCompanionBuilder =
+    FixedAssetDepreciationsCompanion Function({
+      Value<int> id,
+      Value<int> assetId,
+      Value<int> installmentNumber,
+      Value<DateTime> periodStart,
+      Value<DateTime> periodEnd,
+      Value<Decimal> amountCents,
+      Value<String> status,
+      Value<String?> notes,
+      Value<int?> journalEntryId,
+      Value<int?> reversalJournalEntryId,
+      Value<int?> postedBy,
+      Value<DateTime> createdAt,
+    });
+
+final class $$FixedAssetDepreciationsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $FixedAssetDepreciationsTable,
+          FixedAssetDepreciation
+        > {
+  $$FixedAssetDepreciationsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $FixedAssetsTable _assetIdTable(_$AppDatabase db) => db.fixedAssets
+      .createAlias('fixed_asset_depreciations__asset_id__fixed_assets__id');
+
+  $$FixedAssetsTableProcessedTableManager get assetId {
+    final $_column = $_itemColumn<int>('asset_id')!;
+
+    final manager = $$FixedAssetsTableTableManager(
+      $_db,
+      $_db.fixedAssets,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_assetIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $JournalEntriesTable _journalEntryIdTable(_$AppDatabase db) =>
+      db.journalEntries.createAlias(
+        'fixed_asset_depreciations__journal_entry_id__journal_entries__id',
+      );
+
+  $$JournalEntriesTableProcessedTableManager? get journalEntryId {
+    final $_column = $_itemColumn<int>('journal_entry_id');
+    if ($_column == null) return null;
+    final manager = $$JournalEntriesTableTableManager(
+      $_db,
+      $_db.journalEntries,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_journalEntryIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $JournalEntriesTable _reversalJournalEntryIdTable(
+    _$AppDatabase db,
+  ) => db.journalEntries.createAlias(
+    'fixed_asset_depreciations__reversal_journal_entry_id__journal_entries__id',
+  );
+
+  $$JournalEntriesTableProcessedTableManager? get reversalJournalEntryId {
+    final $_column = $_itemColumn<int>('reversal_journal_entry_id');
+    if ($_column == null) return null;
+    final manager = $$JournalEntriesTableTableManager(
+      $_db,
+      $_db.journalEntries,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(
+      _reversalJournalEntryIdTable($_db),
+    );
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _postedByTable(_$AppDatabase db) =>
+      db.users.createAlias('fixed_asset_depreciations__posted_by__users__id');
+
+  $$UsersTableProcessedTableManager? get postedBy {
+    final $_column = $_itemColumn<int>('posted_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_postedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$FixedAssetDepreciationsTableFilterComposer
+    extends Composer<_$AppDatabase, $FixedAssetDepreciationsTable> {
+  $$FixedAssetDepreciationsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get installmentNumber => $composableBuilder(
+    column: $table.installmentNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get periodStart => $composableBuilder(
+    column: $table.periodStart,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get periodEnd => $composableBuilder(
+    column: $table.periodEnd,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get amountCents =>
+      $composableBuilder(
+        column: $table.amountCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$FixedAssetsTableFilterComposer get assetId {
+    final $$FixedAssetsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.assetId,
+      referencedTable: $db.fixedAssets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FixedAssetsTableFilterComposer(
+            $db: $db,
+            $table: $db.fixedAssets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$JournalEntriesTableFilterComposer get journalEntryId {
+    final $$JournalEntriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.journalEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableFilterComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$JournalEntriesTableFilterComposer get reversalJournalEntryId {
+    final $$JournalEntriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.reversalJournalEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableFilterComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get postedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.postedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$FixedAssetDepreciationsTableOrderingComposer
+    extends Composer<_$AppDatabase, $FixedAssetDepreciationsTable> {
+  $$FixedAssetDepreciationsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get installmentNumber => $composableBuilder(
+    column: $table.installmentNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get periodStart => $composableBuilder(
+    column: $table.periodStart,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get periodEnd => $composableBuilder(
+    column: $table.periodEnd,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$FixedAssetsTableOrderingComposer get assetId {
+    final $$FixedAssetsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.assetId,
+      referencedTable: $db.fixedAssets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FixedAssetsTableOrderingComposer(
+            $db: $db,
+            $table: $db.fixedAssets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$JournalEntriesTableOrderingComposer get journalEntryId {
+    final $$JournalEntriesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.journalEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableOrderingComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$JournalEntriesTableOrderingComposer get reversalJournalEntryId {
+    final $$JournalEntriesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.reversalJournalEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableOrderingComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get postedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.postedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$FixedAssetDepreciationsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FixedAssetDepreciationsTable> {
+  $$FixedAssetDepreciationsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get installmentNumber => $composableBuilder(
+    column: $table.installmentNumber,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get periodStart => $composableBuilder(
+    column: $table.periodStart,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get periodEnd =>
+      $composableBuilder(column: $table.periodEnd, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get amountCents =>
+      $composableBuilder(
+        column: $table.amountCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get notes =>
+      $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$FixedAssetsTableAnnotationComposer get assetId {
+    final $$FixedAssetsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.assetId,
+      referencedTable: $db.fixedAssets,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$FixedAssetsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.fixedAssets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$JournalEntriesTableAnnotationComposer get journalEntryId {
+    final $$JournalEntriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.journalEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$JournalEntriesTableAnnotationComposer get reversalJournalEntryId {
+    final $$JournalEntriesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.reversalJournalEntryId,
+      referencedTable: $db.journalEntries,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$JournalEntriesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.journalEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get postedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.postedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$FixedAssetDepreciationsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $FixedAssetDepreciationsTable,
+          FixedAssetDepreciation,
+          $$FixedAssetDepreciationsTableFilterComposer,
+          $$FixedAssetDepreciationsTableOrderingComposer,
+          $$FixedAssetDepreciationsTableAnnotationComposer,
+          $$FixedAssetDepreciationsTableCreateCompanionBuilder,
+          $$FixedAssetDepreciationsTableUpdateCompanionBuilder,
+          (FixedAssetDepreciation, $$FixedAssetDepreciationsTableReferences),
+          FixedAssetDepreciation,
+          PrefetchHooks Function({
+            bool assetId,
+            bool journalEntryId,
+            bool reversalJournalEntryId,
+            bool postedBy,
+          })
+        > {
+  $$FixedAssetDepreciationsTableTableManager(
+    _$AppDatabase db,
+    $FixedAssetDepreciationsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FixedAssetDepreciationsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$FixedAssetDepreciationsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$FixedAssetDepreciationsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> assetId = const Value.absent(),
+                Value<int> installmentNumber = const Value.absent(),
+                Value<DateTime> periodStart = const Value.absent(),
+                Value<DateTime> periodEnd = const Value.absent(),
+                Value<Decimal> amountCents = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<int?> journalEntryId = const Value.absent(),
+                Value<int?> reversalJournalEntryId = const Value.absent(),
+                Value<int?> postedBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => FixedAssetDepreciationsCompanion(
+                id: id,
+                assetId: assetId,
+                installmentNumber: installmentNumber,
+                periodStart: periodStart,
+                periodEnd: periodEnd,
+                amountCents: amountCents,
+                status: status,
+                notes: notes,
+                journalEntryId: journalEntryId,
+                reversalJournalEntryId: reversalJournalEntryId,
+                postedBy: postedBy,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int assetId,
+                required int installmentNumber,
+                required DateTime periodStart,
+                required DateTime periodEnd,
+                required Decimal amountCents,
+                Value<String> status = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<int?> journalEntryId = const Value.absent(),
+                Value<int?> reversalJournalEntryId = const Value.absent(),
+                Value<int?> postedBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => FixedAssetDepreciationsCompanion.insert(
+                id: id,
+                assetId: assetId,
+                installmentNumber: installmentNumber,
+                periodStart: periodStart,
+                periodEnd: periodEnd,
+                amountCents: amountCents,
+                status: status,
+                notes: notes,
+                journalEntryId: journalEntryId,
+                reversalJournalEntryId: reversalJournalEntryId,
+                postedBy: postedBy,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$FixedAssetDepreciationsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                assetId = false,
+                journalEntryId = false,
+                reversalJournalEntryId = false,
+                postedBy = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (assetId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.assetId,
+                                    referencedTable:
+                                        $$FixedAssetDepreciationsTableReferences
+                                            ._assetIdTable(db),
+                                    referencedColumn:
+                                        $$FixedAssetDepreciationsTableReferences
+                                            ._assetIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (journalEntryId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.journalEntryId,
+                                    referencedTable:
+                                        $$FixedAssetDepreciationsTableReferences
+                                            ._journalEntryIdTable(db),
+                                    referencedColumn:
+                                        $$FixedAssetDepreciationsTableReferences
+                                            ._journalEntryIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (reversalJournalEntryId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.reversalJournalEntryId,
+                                    referencedTable:
+                                        $$FixedAssetDepreciationsTableReferences
+                                            ._reversalJournalEntryIdTable(db),
+                                    referencedColumn:
+                                        $$FixedAssetDepreciationsTableReferences
+                                            ._reversalJournalEntryIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (postedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.postedBy,
+                                    referencedTable:
+                                        $$FixedAssetDepreciationsTableReferences
+                                            ._postedByTable(db),
+                                    referencedColumn:
+                                        $$FixedAssetDepreciationsTableReferences
+                                            ._postedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$FixedAssetDepreciationsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $FixedAssetDepreciationsTable,
+      FixedAssetDepreciation,
+      $$FixedAssetDepreciationsTableFilterComposer,
+      $$FixedAssetDepreciationsTableOrderingComposer,
+      $$FixedAssetDepreciationsTableAnnotationComposer,
+      $$FixedAssetDepreciationsTableCreateCompanionBuilder,
+      $$FixedAssetDepreciationsTableUpdateCompanionBuilder,
+      (FixedAssetDepreciation, $$FixedAssetDepreciationsTableReferences),
+      FixedAssetDepreciation,
+      PrefetchHooks Function({
+        bool assetId,
+        bool journalEntryId,
+        bool reversalJournalEntryId,
+        bool postedBy,
+      })
     >;
 typedef $$AuditLogsTableCreateCompanionBuilder =
     AuditLogsCompanion Function({
@@ -98796,6 +110945,8 @@ typedef $$PurchaseReturnAdjustmentItemsTableCreateCompanionBuilder =
       required int productId,
       Value<int?> variantId,
       required int quantity,
+      Value<int> quantityScale,
+      Value<String> measurementType,
       required Decimal unitPriceCents,
       Value<Decimal> unitCostCents,
       Value<Decimal> discountCents,
@@ -98804,6 +110955,7 @@ typedef $$PurchaseReturnAdjustmentItemsTableCreateCompanionBuilder =
       Value<String?> reason,
       Value<int?> taxRateBpsAtPost,
       Value<Decimal?> unitCostAtPostCents,
+      Value<Decimal?> inventoryValueAtPostCents,
       Value<int?> originalInvoiceId,
       Value<String> dispositionType,
       Value<DateTime> createdAt,
@@ -98815,6 +110967,8 @@ typedef $$PurchaseReturnAdjustmentItemsTableUpdateCompanionBuilder =
       Value<int> productId,
       Value<int?> variantId,
       Value<int> quantity,
+      Value<int> quantityScale,
+      Value<String> measurementType,
       Value<Decimal> unitPriceCents,
       Value<Decimal> unitCostCents,
       Value<Decimal> discountCents,
@@ -98823,6 +110977,7 @@ typedef $$PurchaseReturnAdjustmentItemsTableUpdateCompanionBuilder =
       Value<String?> reason,
       Value<int?> taxRateBpsAtPost,
       Value<Decimal?> unitCostAtPostCents,
+      Value<Decimal?> inventoryValueAtPostCents,
       Value<int?> originalInvoiceId,
       Value<String> dispositionType,
       Value<DateTime> createdAt,
@@ -98919,6 +111074,16 @@ class $$PurchaseReturnAdjustmentItemsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<int> get quantityScale => $composableBuilder(
+    column: $table.quantityScale,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnWithTypeConverterFilters<Decimal, Decimal, int> get unitPriceCents =>
       $composableBuilder(
         column: $table.unitPriceCents,
@@ -98962,6 +111127,12 @@ class $$PurchaseReturnAdjustmentItemsTableFilterComposer
   ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
   get unitCostAtPostCents => $composableBuilder(
     column: $table.unitCostAtPostCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get inventoryValueAtPostCents => $composableBuilder(
+    column: $table.inventoryValueAtPostCents,
     builder: (column) => ColumnWithTypeConverterFilters(column),
   );
 
@@ -99070,6 +111241,16 @@ class $$PurchaseReturnAdjustmentItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get quantityScale => $composableBuilder(
+    column: $table.quantityScale,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get unitPriceCents => $composableBuilder(
     column: $table.unitPriceCents,
     builder: (column) => ColumnOrderings(column),
@@ -99107,6 +111288,11 @@ class $$PurchaseReturnAdjustmentItemsTableOrderingComposer
 
   ColumnOrderings<int> get unitCostAtPostCents => $composableBuilder(
     column: $table.unitCostAtPostCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get inventoryValueAtPostCents => $composableBuilder(
+    column: $table.inventoryValueAtPostCents,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -99211,6 +111397,16 @@ class $$PurchaseReturnAdjustmentItemsTableAnnotationComposer
   GeneratedColumn<int> get quantity =>
       $composableBuilder(column: $table.quantity, builder: (column) => column);
 
+  GeneratedColumn<int> get quantityScale => $composableBuilder(
+    column: $table.quantityScale,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
+    builder: (column) => column,
+  );
+
   GeneratedColumnWithTypeConverter<Decimal, int> get unitPriceCents =>
       $composableBuilder(
         column: $table.unitPriceCents,
@@ -99251,6 +111447,12 @@ class $$PurchaseReturnAdjustmentItemsTableAnnotationComposer
         column: $table.unitCostAtPostCents,
         builder: (column) => column,
       );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int>
+  get inventoryValueAtPostCents => $composableBuilder(
+    column: $table.inventoryValueAtPostCents,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get originalInvoiceId => $composableBuilder(
     column: $table.originalInvoiceId,
@@ -99387,6 +111589,8 @@ class $$PurchaseReturnAdjustmentItemsTableTableManager
                 Value<int> productId = const Value.absent(),
                 Value<int?> variantId = const Value.absent(),
                 Value<int> quantity = const Value.absent(),
+                Value<int> quantityScale = const Value.absent(),
+                Value<String> measurementType = const Value.absent(),
                 Value<Decimal> unitPriceCents = const Value.absent(),
                 Value<Decimal> unitCostCents = const Value.absent(),
                 Value<Decimal> discountCents = const Value.absent(),
@@ -99395,6 +111599,8 @@ class $$PurchaseReturnAdjustmentItemsTableTableManager
                 Value<String?> reason = const Value.absent(),
                 Value<int?> taxRateBpsAtPost = const Value.absent(),
                 Value<Decimal?> unitCostAtPostCents = const Value.absent(),
+                Value<Decimal?> inventoryValueAtPostCents =
+                    const Value.absent(),
                 Value<int?> originalInvoiceId = const Value.absent(),
                 Value<String> dispositionType = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -99404,6 +111610,8 @@ class $$PurchaseReturnAdjustmentItemsTableTableManager
                 productId: productId,
                 variantId: variantId,
                 quantity: quantity,
+                quantityScale: quantityScale,
+                measurementType: measurementType,
                 unitPriceCents: unitPriceCents,
                 unitCostCents: unitCostCents,
                 discountCents: discountCents,
@@ -99412,6 +111620,7 @@ class $$PurchaseReturnAdjustmentItemsTableTableManager
                 reason: reason,
                 taxRateBpsAtPost: taxRateBpsAtPost,
                 unitCostAtPostCents: unitCostAtPostCents,
+                inventoryValueAtPostCents: inventoryValueAtPostCents,
                 originalInvoiceId: originalInvoiceId,
                 dispositionType: dispositionType,
                 createdAt: createdAt,
@@ -99423,6 +111632,8 @@ class $$PurchaseReturnAdjustmentItemsTableTableManager
                 required int productId,
                 Value<int?> variantId = const Value.absent(),
                 required int quantity,
+                Value<int> quantityScale = const Value.absent(),
+                Value<String> measurementType = const Value.absent(),
                 required Decimal unitPriceCents,
                 Value<Decimal> unitCostCents = const Value.absent(),
                 Value<Decimal> discountCents = const Value.absent(),
@@ -99431,6 +111642,8 @@ class $$PurchaseReturnAdjustmentItemsTableTableManager
                 Value<String?> reason = const Value.absent(),
                 Value<int?> taxRateBpsAtPost = const Value.absent(),
                 Value<Decimal?> unitCostAtPostCents = const Value.absent(),
+                Value<Decimal?> inventoryValueAtPostCents =
+                    const Value.absent(),
                 Value<int?> originalInvoiceId = const Value.absent(),
                 Value<String> dispositionType = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -99440,6 +111653,8 @@ class $$PurchaseReturnAdjustmentItemsTableTableManager
                 productId: productId,
                 variantId: variantId,
                 quantity: quantity,
+                quantityScale: quantityScale,
+                measurementType: measurementType,
                 unitPriceCents: unitPriceCents,
                 unitCostCents: unitCostCents,
                 discountCents: discountCents,
@@ -99448,6 +111663,7 @@ class $$PurchaseReturnAdjustmentItemsTableTableManager
                 reason: reason,
                 taxRateBpsAtPost: taxRateBpsAtPost,
                 unitCostAtPostCents: unitCostAtPostCents,
+                inventoryValueAtPostCents: inventoryValueAtPostCents,
                 originalInvoiceId: originalInvoiceId,
                 dispositionType: dispositionType,
                 createdAt: createdAt,
@@ -99560,6 +111776,7 @@ typedef $$SaleReturnAdjustmentsTableCreateCompanionBuilder =
       required String returnNumber,
       Value<int?> customerId,
       Value<int?> employeeId,
+      Value<int?> cashierShiftId,
       required int currencyId,
       Value<Decimal> subtotalCents,
       Value<Decimal> discountCents,
@@ -99600,6 +111817,7 @@ typedef $$SaleReturnAdjustmentsTableUpdateCompanionBuilder =
       Value<String> returnNumber,
       Value<int?> customerId,
       Value<int?> employeeId,
+      Value<int?> cashierShiftId,
       Value<int> currencyId,
       Value<Decimal> subtotalCents,
       Value<Decimal> discountCents,
@@ -99676,6 +111894,25 @@ final class $$SaleReturnAdjustmentsTableReferences
       $_db.employees,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_employeeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $CashierShiftsTable _cashierShiftIdTable(_$AppDatabase db) =>
+      db.cashierShifts.createAlias(
+        'sale_return_adjustments__cashier_shift_id__cashier_shifts__id',
+      );
+
+  $$CashierShiftsTableProcessedTableManager? get cashierShiftId {
+    final $_column = $_itemColumn<int>('cashier_shift_id');
+    if ($_column == null) return null;
+    final manager = $$CashierShiftsTableTableManager(
+      $_db,
+      $_db.cashierShifts,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_cashierShiftIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -100009,6 +112246,29 @@ class $$SaleReturnAdjustmentsTableFilterComposer
           }) => $$EmployeesTableFilterComposer(
             $db: $db,
             $table: $db.employees,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$CashierShiftsTableFilterComposer get cashierShiftId {
+    final $$CashierShiftsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cashierShiftId,
+      referencedTable: $db.cashierShifts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashierShiftsTableFilterComposer(
+            $db: $db,
+            $table: $db.cashierShifts,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -100384,6 +112644,29 @@ class $$SaleReturnAdjustmentsTableOrderingComposer
     return composer;
   }
 
+  $$CashierShiftsTableOrderingComposer get cashierShiftId {
+    final $$CashierShiftsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cashierShiftId,
+      referencedTable: $db.cashierShifts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashierShiftsTableOrderingComposer(
+            $db: $db,
+            $table: $db.cashierShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$CurrenciesTableOrderingComposer get currencyId {
     final $$CurrenciesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -100706,6 +112989,29 @@ class $$SaleReturnAdjustmentsTableAnnotationComposer
     return composer;
   }
 
+  $$CashierShiftsTableAnnotationComposer get cashierShiftId {
+    final $$CashierShiftsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.cashierShiftId,
+      referencedTable: $db.cashierShifts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CashierShiftsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.cashierShifts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$CurrenciesTableAnnotationComposer get currencyId {
     final $$CurrenciesTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -100889,6 +113195,7 @@ class $$SaleReturnAdjustmentsTableTableManager
           PrefetchHooks Function({
             bool customerId,
             bool employeeId,
+            bool cashierShiftId,
             bool currencyId,
             bool approvedBy,
             bool overrideBy,
@@ -100926,6 +113233,7 @@ class $$SaleReturnAdjustmentsTableTableManager
                 Value<String> returnNumber = const Value.absent(),
                 Value<int?> customerId = const Value.absent(),
                 Value<int?> employeeId = const Value.absent(),
+                Value<int?> cashierShiftId = const Value.absent(),
                 Value<int> currencyId = const Value.absent(),
                 Value<Decimal> subtotalCents = const Value.absent(),
                 Value<Decimal> discountCents = const Value.absent(),
@@ -100964,6 +113272,7 @@ class $$SaleReturnAdjustmentsTableTableManager
                 returnNumber: returnNumber,
                 customerId: customerId,
                 employeeId: employeeId,
+                cashierShiftId: cashierShiftId,
                 currencyId: currencyId,
                 subtotalCents: subtotalCents,
                 discountCents: discountCents,
@@ -101004,6 +113313,7 @@ class $$SaleReturnAdjustmentsTableTableManager
                 required String returnNumber,
                 Value<int?> customerId = const Value.absent(),
                 Value<int?> employeeId = const Value.absent(),
+                Value<int?> cashierShiftId = const Value.absent(),
                 required int currencyId,
                 Value<Decimal> subtotalCents = const Value.absent(),
                 Value<Decimal> discountCents = const Value.absent(),
@@ -101042,6 +113352,7 @@ class $$SaleReturnAdjustmentsTableTableManager
                 returnNumber: returnNumber,
                 customerId: customerId,
                 employeeId: employeeId,
+                cashierShiftId: cashierShiftId,
                 currencyId: currencyId,
                 subtotalCents: subtotalCents,
                 discountCents: discountCents,
@@ -101088,6 +113399,7 @@ class $$SaleReturnAdjustmentsTableTableManager
               ({
                 customerId = false,
                 employeeId = false,
+                cashierShiftId = false,
                 currencyId = false,
                 approvedBy = false,
                 overrideBy = false,
@@ -101144,6 +113456,21 @@ class $$SaleReturnAdjustmentsTableTableManager
                                     referencedColumn:
                                         $$SaleReturnAdjustmentsTableReferences
                                             ._employeeIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (cashierShiftId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.cashierShiftId,
+                                    referencedTable:
+                                        $$SaleReturnAdjustmentsTableReferences
+                                            ._cashierShiftIdTable(db),
+                                    referencedColumn:
+                                        $$SaleReturnAdjustmentsTableReferences
+                                            ._cashierShiftIdTable(db)
                                             .id,
                                   )
                                   as T;
@@ -101288,6 +113615,7 @@ typedef $$SaleReturnAdjustmentsTableProcessedTableManager =
       PrefetchHooks Function({
         bool customerId,
         bool employeeId,
+        bool cashierShiftId,
         bool currencyId,
         bool approvedBy,
         bool overrideBy,
@@ -101304,6 +113632,8 @@ typedef $$SaleReturnAdjustmentItemsTableCreateCompanionBuilder =
       required int productId,
       Value<int?> variantId,
       required int quantity,
+      Value<int> quantityScale,
+      Value<String> measurementType,
       required Decimal unitPriceCents,
       Value<Decimal> unitCostCents,
       Value<Decimal> discountCents,
@@ -101312,6 +113642,7 @@ typedef $$SaleReturnAdjustmentItemsTableCreateCompanionBuilder =
       Value<String?> reason,
       Value<int?> taxRateBpsAtPost,
       Value<Decimal?> unitCostAtPostCents,
+      Value<Decimal?> inventoryValueAtPostCents,
       Value<int?> originalInvoiceId,
       Value<String> dispositionType,
       Value<DateTime> createdAt,
@@ -101323,6 +113654,8 @@ typedef $$SaleReturnAdjustmentItemsTableUpdateCompanionBuilder =
       Value<int> productId,
       Value<int?> variantId,
       Value<int> quantity,
+      Value<int> quantityScale,
+      Value<String> measurementType,
       Value<Decimal> unitPriceCents,
       Value<Decimal> unitCostCents,
       Value<Decimal> discountCents,
@@ -101331,6 +113664,7 @@ typedef $$SaleReturnAdjustmentItemsTableUpdateCompanionBuilder =
       Value<String?> reason,
       Value<int?> taxRateBpsAtPost,
       Value<Decimal?> unitCostAtPostCents,
+      Value<Decimal?> inventoryValueAtPostCents,
       Value<int?> originalInvoiceId,
       Value<String> dispositionType,
       Value<DateTime> createdAt,
@@ -101424,6 +113758,16 @@ class $$SaleReturnAdjustmentItemsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<int> get quantityScale => $composableBuilder(
+    column: $table.quantityScale,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnWithTypeConverterFilters<Decimal, Decimal, int> get unitPriceCents =>
       $composableBuilder(
         column: $table.unitPriceCents,
@@ -101467,6 +113811,12 @@ class $$SaleReturnAdjustmentItemsTableFilterComposer
   ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
   get unitCostAtPostCents => $composableBuilder(
     column: $table.unitCostAtPostCents,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal?, Decimal, int>
+  get inventoryValueAtPostCents => $composableBuilder(
+    column: $table.inventoryValueAtPostCents,
     builder: (column) => ColumnWithTypeConverterFilters(column),
   );
 
@@ -101575,6 +113925,16 @@ class $$SaleReturnAdjustmentItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get quantityScale => $composableBuilder(
+    column: $table.quantityScale,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get unitPriceCents => $composableBuilder(
     column: $table.unitPriceCents,
     builder: (column) => ColumnOrderings(column),
@@ -101612,6 +113972,11 @@ class $$SaleReturnAdjustmentItemsTableOrderingComposer
 
   ColumnOrderings<int> get unitCostAtPostCents => $composableBuilder(
     column: $table.unitCostAtPostCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get inventoryValueAtPostCents => $composableBuilder(
+    column: $table.inventoryValueAtPostCents,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -101716,6 +114081,16 @@ class $$SaleReturnAdjustmentItemsTableAnnotationComposer
   GeneratedColumn<int> get quantity =>
       $composableBuilder(column: $table.quantity, builder: (column) => column);
 
+  GeneratedColumn<int> get quantityScale => $composableBuilder(
+    column: $table.quantityScale,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get measurementType => $composableBuilder(
+    column: $table.measurementType,
+    builder: (column) => column,
+  );
+
   GeneratedColumnWithTypeConverter<Decimal, int> get unitPriceCents =>
       $composableBuilder(
         column: $table.unitPriceCents,
@@ -101756,6 +114131,12 @@ class $$SaleReturnAdjustmentItemsTableAnnotationComposer
         column: $table.unitCostAtPostCents,
         builder: (column) => column,
       );
+
+  GeneratedColumnWithTypeConverter<Decimal?, int>
+  get inventoryValueAtPostCents => $composableBuilder(
+    column: $table.inventoryValueAtPostCents,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get originalInvoiceId => $composableBuilder(
     column: $table.originalInvoiceId,
@@ -101892,6 +114273,8 @@ class $$SaleReturnAdjustmentItemsTableTableManager
                 Value<int> productId = const Value.absent(),
                 Value<int?> variantId = const Value.absent(),
                 Value<int> quantity = const Value.absent(),
+                Value<int> quantityScale = const Value.absent(),
+                Value<String> measurementType = const Value.absent(),
                 Value<Decimal> unitPriceCents = const Value.absent(),
                 Value<Decimal> unitCostCents = const Value.absent(),
                 Value<Decimal> discountCents = const Value.absent(),
@@ -101900,6 +114283,8 @@ class $$SaleReturnAdjustmentItemsTableTableManager
                 Value<String?> reason = const Value.absent(),
                 Value<int?> taxRateBpsAtPost = const Value.absent(),
                 Value<Decimal?> unitCostAtPostCents = const Value.absent(),
+                Value<Decimal?> inventoryValueAtPostCents =
+                    const Value.absent(),
                 Value<int?> originalInvoiceId = const Value.absent(),
                 Value<String> dispositionType = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -101909,6 +114294,8 @@ class $$SaleReturnAdjustmentItemsTableTableManager
                 productId: productId,
                 variantId: variantId,
                 quantity: quantity,
+                quantityScale: quantityScale,
+                measurementType: measurementType,
                 unitPriceCents: unitPriceCents,
                 unitCostCents: unitCostCents,
                 discountCents: discountCents,
@@ -101917,6 +114304,7 @@ class $$SaleReturnAdjustmentItemsTableTableManager
                 reason: reason,
                 taxRateBpsAtPost: taxRateBpsAtPost,
                 unitCostAtPostCents: unitCostAtPostCents,
+                inventoryValueAtPostCents: inventoryValueAtPostCents,
                 originalInvoiceId: originalInvoiceId,
                 dispositionType: dispositionType,
                 createdAt: createdAt,
@@ -101928,6 +114316,8 @@ class $$SaleReturnAdjustmentItemsTableTableManager
                 required int productId,
                 Value<int?> variantId = const Value.absent(),
                 required int quantity,
+                Value<int> quantityScale = const Value.absent(),
+                Value<String> measurementType = const Value.absent(),
                 required Decimal unitPriceCents,
                 Value<Decimal> unitCostCents = const Value.absent(),
                 Value<Decimal> discountCents = const Value.absent(),
@@ -101936,6 +114326,8 @@ class $$SaleReturnAdjustmentItemsTableTableManager
                 Value<String?> reason = const Value.absent(),
                 Value<int?> taxRateBpsAtPost = const Value.absent(),
                 Value<Decimal?> unitCostAtPostCents = const Value.absent(),
+                Value<Decimal?> inventoryValueAtPostCents =
+                    const Value.absent(),
                 Value<int?> originalInvoiceId = const Value.absent(),
                 Value<String> dispositionType = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -101945,6 +114337,8 @@ class $$SaleReturnAdjustmentItemsTableTableManager
                 productId: productId,
                 variantId: variantId,
                 quantity: quantity,
+                quantityScale: quantityScale,
+                measurementType: measurementType,
                 unitPriceCents: unitPriceCents,
                 unitCostCents: unitCostCents,
                 discountCents: discountCents,
@@ -101953,6 +114347,7 @@ class $$SaleReturnAdjustmentItemsTableTableManager
                 reason: reason,
                 taxRateBpsAtPost: taxRateBpsAtPost,
                 unitCostAtPostCents: unitCostAtPostCents,
+                inventoryValueAtPostCents: inventoryValueAtPostCents,
                 originalInvoiceId: originalInvoiceId,
                 dispositionType: dispositionType,
                 createdAt: createdAt,
@@ -105387,6 +117782,8 @@ class $AppDatabaseManager {
       $$RolesTableTableManager(_db, _db.roles);
   $$EmployeesTableTableManager get employees =>
       $$EmployeesTableTableManager(_db, _db.employees);
+  $$CashierShiftsTableTableManager get cashierShifts =>
+      $$CashierShiftsTableTableManager(_db, _db.cashierShifts);
   $$SalesTableTableManager get sales =>
       $$SalesTableTableManager(_db, _db.sales);
   $$CommissionsTableTableManager get commissions =>
@@ -105439,6 +117836,18 @@ class $AppDatabaseManager {
       $$JournalEntryLinesTableTableManager(_db, _db.journalEntryLines);
   $$ExpensesTableTableManager get expenses =>
       $$ExpensesTableTableManager(_db, _db.expenses);
+  $$OwnerFinanceTransactionsTableTableManager get ownerFinanceTransactions =>
+      $$OwnerFinanceTransactionsTableTableManager(
+        _db,
+        _db.ownerFinanceTransactions,
+      );
+  $$FixedAssetsTableTableManager get fixedAssets =>
+      $$FixedAssetsTableTableManager(_db, _db.fixedAssets);
+  $$FixedAssetDepreciationsTableTableManager get fixedAssetDepreciations =>
+      $$FixedAssetDepreciationsTableTableManager(
+        _db,
+        _db.fixedAssetDepreciations,
+      );
   $$AuditLogsTableTableManager get auditLogs =>
       $$AuditLogsTableTableManager(_db, _db.auditLogs);
   $$VoidLogsTableTableManager get voidLogs =>

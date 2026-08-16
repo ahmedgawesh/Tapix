@@ -99,6 +99,8 @@ class ExpiryAlertItem {
 
   /// Remaining on-hand quantity in this specific batch.
   final int remainingQuantity;
+  final int quantityScale;
+  final String measurementType;
 
   /// Frozen per-unit cost at batch creation time, in cents. Used by the
   /// dashboard to show "potential write-off value" — purely informational,
@@ -119,13 +121,20 @@ class ExpiryAlertItem {
     required this.expiryDate,
     required this.daysUntilExpiry,
     required this.remainingQuantity,
+    this.quantityScale = 1,
+    this.measurementType = 'piece',
     required this.unitCostCents,
     required this.bucket,
   });
 
   /// Total potential write-off cost = `remainingQuantity × unitCostCents`.
   /// Useful for dashboard summaries; not a posted accounting figure.
-  int get totalCostCents => remainingQuantity * unitCostCents;
+  int get totalCostCents {
+    final numerator =
+        BigInt.from(remainingQuantity) * BigInt.from(unitCostCents);
+    final divisor = BigInt.from(quantityScale);
+    return ((numerator + divisor ~/ BigInt.two) ~/ divisor).toInt();
+  }
 
   ExpirySeverity get severity => bucket.severity;
 }
@@ -171,10 +180,7 @@ class ExpiryAlertSnapshot {
   final List<ExpiryAlertItem> items;
   final ExpiryAlertSummary summary;
 
-  const ExpiryAlertSnapshot({
-    required this.items,
-    required this.summary,
-  });
+  const ExpiryAlertSnapshot({required this.items, required this.summary});
 
   static const empty = ExpiryAlertSnapshot(
     items: <ExpiryAlertItem>[],

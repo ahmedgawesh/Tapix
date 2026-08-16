@@ -8,7 +8,8 @@ import '../../domain/repositories/product_variant_repository.dart';
 import 'edit_prices_event.dart';
 import 'edit_prices_state.dart';
 
-class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> {
+class EditPricesBloc
+    extends RealtimeBloc<EditPricesStateData, EditPricesEvent> {
   final ProductRepository _repository;
   final ProductVariantRepository _variantRepository;
 
@@ -16,27 +17,28 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
   int? _supplierId;
   String? _stockStatus;
   String? _searchQuery;
-  
+
   // Track price changes that haven't been saved yet
   final Map<int, Map<String, Decimal>> _priceChanges = {};
   final Map<int, Map<String, Decimal>> _variantPriceChanges = {};
   bool _hasUnsavedChanges = false;
-  
+
   // Track selected products for bulk operations
   final Set<int> _selectedProductIds = {};
   final Set<int> _selectedVariantIds = {};
-  
+
   // Undo/Redo stacks
   final List<Map<String, Map<int, Map<String, Decimal>>>> _undoStack = [];
   final List<Map<String, Map<int, Map<String, Decimal>>>> _redoStack = [];
   final int _maxUndoStackSize = 50;
 
-  EditPricesBloc(this._repository, this._variantRepository) : super(const RealtimeLoading());
+  EditPricesBloc(this._repository, this._variantRepository)
+    : super(const RealtimeLoading());
 
   @override
   Stream<EditPricesStateData> get dataStream {
     Stream<List<Product>> sourceStream;
-    
+
     // Use the appropriate repository method based on filters
     if (_categoryId != null || _stockStatus != null) {
       sourceStream = _repository.watchFilteredProducts(
@@ -50,16 +52,19 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
     return sourceStream.map((products) {
       // Apply memory filters for things not supported by DB stream yet (like search query)
       var filtered = products;
-      
+
       if (_searchQuery != null && _searchQuery!.isNotEmpty) {
         final query = _searchQuery!.toLowerCase();
-        filtered = products.where((p) => 
-          p.name.toLowerCase().contains(query) || 
-          (p.sku != null && p.sku!.toLowerCase().contains(query))
-        ).toList();
+        filtered = products
+            .where(
+              (p) =>
+                  p.name.toLowerCase().contains(query) ||
+                  (p.sku != null && p.sku!.toLowerCase().contains(query)),
+            )
+            .toList();
       }
-      
-      // Note: supplierId filter is not yet supported in repository stream, 
+
+      // Note: supplierId filter is not yet supported in repository stream,
       // so we would filter here if we had supplierId on Product entity.
       // Assuming Product entity has supplierId (it does).
       if (_supplierId != null) {
@@ -72,13 +77,19 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
         if (changes != null) {
           var updatedProduct = product;
           if (changes.containsKey('costCents')) {
-            updatedProduct = updatedProduct.copyWith(costCents: changes['costCents']!);
+            updatedProduct = updatedProduct.copyWith(
+              costCents: changes['costCents']!,
+            );
           }
           if (changes.containsKey('priceCents')) {
-            updatedProduct = updatedProduct.copyWith(priceCents: changes['priceCents']!);
+            updatedProduct = updatedProduct.copyWith(
+              priceCents: changes['priceCents']!,
+            );
           }
           if (changes.containsKey('wholesalePriceCents')) {
-            updatedProduct = updatedProduct.copyWith(wholesalePriceCents: changes['wholesalePriceCents']!);
+            updatedProduct = updatedProduct.copyWith(
+              wholesalePriceCents: changes['wholesalePriceCents']!,
+            );
           }
           return updatedProduct;
         }
@@ -130,7 +141,7 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
     if (event.supplierId != null) _supplierId = event.supplierId;
     if (event.stockStatus != null) _stockStatus = event.stockStatus;
     if (event.searchQuery != null) _searchQuery = event.searchQuery;
-    
+
     // Refresh to update the stream with new filters
     refresh();
   }
@@ -141,44 +152,41 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
   ) {
     // Save current state to undo stack
     _saveToUndoStack();
-    
+
     // Track the price change for optimistic update
     if (!_priceChanges.containsKey(event.productId)) {
       _priceChanges[event.productId] = {};
     }
-    
+
     if (event.isWholesale) {
       _priceChanges[event.productId]!['wholesalePriceCents'] = event.newPrice;
     } else {
       _priceChanges[event.productId]!['priceCents'] = event.newPrice;
     }
-    
+
     _hasUnsavedChanges = true;
-    
+
     // Clear redo stack when new change is made
     _redoStack.clear();
-    
+
     // Trigger refresh to apply optimistic changes
     refresh();
   }
-  
+
   void _saveToUndoStack() {
     // Deep copy current state
     final productSnapshot = <int, Map<String, Decimal>>{};
     for (final entry in _priceChanges.entries) {
       productSnapshot[entry.key] = Map.from(entry.value);
     }
-    
+
     final variantSnapshot = <int, Map<String, Decimal>>{};
     for (final entry in _variantPriceChanges.entries) {
       variantSnapshot[entry.key] = Map.from(entry.value);
     }
-    
-    _undoStack.add({
-      'products': productSnapshot,
-      'variants': variantSnapshot,
-    });
-    
+
+    _undoStack.add({'products': productSnapshot, 'variants': variantSnapshot});
+
     // Limit stack size
     if (_undoStack.length > _maxUndoStackSize) {
       _undoStack.removeAt(0);
@@ -190,25 +198,25 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
     Emitter<RealtimeState<EditPricesStateData>> emit,
   ) async {
     if (_priceChanges.isEmpty && _variantPriceChanges.isEmpty) return;
-    
+
     try {
       // Get current products from state
       final currentState = state;
       if (currentState is! RealtimeSuccess<EditPricesStateData>) return;
-      
+
       final products = currentState.data.products;
-      
+
       // Update each product with price changes
       for (final entry in _priceChanges.entries) {
         final productId = entry.key;
         final changes = entry.value;
-        
+
         // Find the product in current list
         final product = products.firstWhere(
           (p) => p.id == productId,
           orElse: () => throw Exception('Product $productId not found'),
         );
-        
+
         // Calculate deltas before applying changes (needed for variant updates)
         final costDelta = changes.containsKey('costCents')
             ? changes['costCents']! - product.costCents
@@ -216,45 +224,62 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
         final priceDelta = changes.containsKey('priceCents')
             ? changes['priceCents']! - product.priceCents
             : Decimal.zero;
-        final wholesaleDelta = changes.containsKey('wholesalePriceCents') && product.wholesalePriceCents != null
+        final wholesaleDelta =
+            changes.containsKey('wholesalePriceCents') &&
+                product.wholesalePriceCents != null
             ? changes['wholesalePriceCents']! - product.wholesalePriceCents!
             : Decimal.zero;
-        
+
         // Apply changes to product
         var updatedProduct = product;
         if (changes.containsKey('costCents')) {
-          updatedProduct = updatedProduct.copyWith(costCents: changes['costCents']!);
+          updatedProduct = updatedProduct.copyWith(
+            costCents: changes['costCents']!,
+          );
         }
         if (changes.containsKey('priceCents')) {
-          updatedProduct = updatedProduct.copyWith(priceCents: changes['priceCents']!);
+          updatedProduct = updatedProduct.copyWith(
+            priceCents: changes['priceCents']!,
+          );
         }
         if (changes.containsKey('wholesalePriceCents')) {
-          updatedProduct = updatedProduct.copyWith(wholesalePriceCents: changes['wholesalePriceCents']!);
+          updatedProduct = updatedProduct.copyWith(
+            wholesalePriceCents: changes['wholesalePriceCents']!,
+          );
         }
-        
+
         // Save product to database
         await _repository.updateProduct(updatedProduct);
-        
+
         // Now update variants
         if (!product.hasVariants) {
           // Non-variant product: update the default variant with the same prices
-          final defaultVariant = await _variantRepository.getDefaultVariantByProduct(productId);
+          final defaultVariant = await _variantRepository
+              .getDefaultVariantByProduct(productId);
           if (defaultVariant != null) {
             var updatedVariant = defaultVariant;
             if (changes.containsKey('costCents')) {
-              updatedVariant = updatedVariant.copyWith(costCents: changes['costCents']!);
+              updatedVariant = updatedVariant.copyWith(
+                costCents: changes['costCents']!,
+              );
             }
             if (changes.containsKey('priceCents')) {
-              updatedVariant = updatedVariant.copyWith(priceCents: changes['priceCents']!);
+              updatedVariant = updatedVariant.copyWith(
+                priceCents: changes['priceCents']!,
+              );
             }
             if (changes.containsKey('wholesalePriceCents')) {
-              updatedVariant = updatedVariant.copyWith(wholesalePriceCents: changes['wholesalePriceCents']!);
+              updatedVariant = updatedVariant.copyWith(
+                wholesalePriceCents: changes['wholesalePriceCents']!,
+              );
             }
             await _variantRepository.updateVariant(updatedVariant);
           }
         } else {
           // Product with variants: apply the same delta to each variant's prices
-          final variants = await _variantRepository.getVariantsByProduct(productId);
+          final variants = await _variantRepository.getVariantsByProduct(
+            productId,
+          );
           for (final variant in variants) {
             var updatedVariant = variant;
             if (costDelta != Decimal.zero) {
@@ -267,59 +292,68 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
               if (newPrice < Decimal.zero) newPrice = Decimal.zero;
               updatedVariant = updatedVariant.copyWith(priceCents: newPrice);
             }
-            if (wholesaleDelta != Decimal.zero && variant.wholesalePriceCents != null) {
+            if (wholesaleDelta != Decimal.zero &&
+                variant.wholesalePriceCents != null) {
               var newWholesale = variant.wholesalePriceCents! + wholesaleDelta;
               if (newWholesale < Decimal.zero) newWholesale = Decimal.zero;
-              updatedVariant = updatedVariant.copyWith(wholesalePriceCents: newWholesale);
+              updatedVariant = updatedVariant.copyWith(
+                wholesalePriceCents: newWholesale,
+              );
             }
             await _variantRepository.updateVariant(updatedVariant);
           }
         }
       }
-      
+
       // Process individual variant changes
       for (final entry in _variantPriceChanges.entries) {
         final variantId = entry.key;
         final changes = entry.value;
-        
+
         final variant = await _variantRepository.getVariantById(variantId);
         if (variant != null) {
           var updatedVariant = variant;
           if (changes.containsKey('costCents')) {
-            updatedVariant = updatedVariant.copyWith(costCents: changes['costCents']!);
+            updatedVariant = updatedVariant.copyWith(
+              costCents: changes['costCents']!,
+            );
           }
           if (changes.containsKey('priceCents')) {
-            updatedVariant = updatedVariant.copyWith(priceCents: changes['priceCents']!);
+            updatedVariant = updatedVariant.copyWith(
+              priceCents: changes['priceCents']!,
+            );
           }
           if (changes.containsKey('wholesalePriceCents')) {
-            updatedVariant = updatedVariant.copyWith(wholesalePriceCents: changes['wholesalePriceCents']!);
+            updatedVariant = updatedVariant.copyWith(
+              wholesalePriceCents: changes['wholesalePriceCents']!,
+            );
           }
           await _variantRepository.updateVariant(updatedVariant);
         }
       }
-      
+
       // Clear changes after successful save
       _priceChanges.clear();
       _variantPriceChanges.clear();
       _hasUnsavedChanges = false;
-      
+
       // Refresh to get updated data from database
       refresh();
     } catch (e, st) {
       add(RealtimeErrorOccurred(e, st));
     }
   }
-  
+
   Future<void> _onBulkAdjust(
     EditPricesBulkAdjustRequested event,
     Emitter<RealtimeState<EditPricesStateData>> emit,
   ) async {
     final currentState = state;
     if (currentState is! RealtimeSuccess<EditPricesStateData>) return;
-    
+
     final products = currentState.data.products;
     List<Product> targetProducts;
-    
+
     if (event.applyToAll) {
       targetProducts = products;
     } else if (event.selectedProductIds != null) {
@@ -329,10 +363,10 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
     } else {
       return;
     }
-    
+
     // Save current state to undo stack
     _saveToUndoStack();
-    
+
     // Determine which price field to update based on priceType
     String priceField;
     switch (event.priceType) {
@@ -347,13 +381,13 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
         priceField = 'priceCents';
         break;
     }
-    
+
     // Apply adjustment to each product
     for (final product in targetProducts) {
       if (!_priceChanges.containsKey(product.id)) {
         _priceChanges[product.id] = {};
       }
-      
+
       // Get current price based on price type
       Decimal currentPrice;
       if (_priceChanges[product.id]!.containsKey(priceField)) {
@@ -373,18 +407,20 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
             break;
         }
       }
-      
+
       Decimal newPrice;
-      
+
       switch (event.adjustmentType) {
         case 'percentage_increase':
           // Calculate: currentPrice * (1 + percentage/100)
-          final increase = ((currentPrice * event.value) / Decimal.fromInt(100)).toDecimal();
+          final increase = ((currentPrice * event.value) / Decimal.fromInt(100))
+              .toDecimal();
           newPrice = currentPrice + increase;
           break;
         case 'percentage_decrease':
           // Calculate: currentPrice * (1 - percentage/100)
-          final decrease = ((currentPrice * event.value) / Decimal.fromInt(100)).toDecimal();
+          final decrease = ((currentPrice * event.value) / Decimal.fromInt(100))
+              .toDecimal();
           newPrice = currentPrice - decrease;
           break;
         case 'fixed_increase':
@@ -398,25 +434,26 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
         default:
           continue;
       }
-      
+
       // Ensure price doesn't go negative
       if (newPrice < Decimal.zero) {
         newPrice = Decimal.zero;
       }
-      
+
       _priceChanges[product.id]![priceField] = newPrice;
     }
-    
+
     // Apply adjustment to selected variants
-    if (event.selectedVariantIds != null && event.selectedVariantIds!.isNotEmpty) {
+    if (event.selectedVariantIds != null &&
+        event.selectedVariantIds!.isNotEmpty) {
       for (final vid in event.selectedVariantIds!) {
         final variant = await _variantRepository.getVariantById(vid);
         if (variant == null) continue;
-        
+
         if (!_variantPriceChanges.containsKey(vid)) {
           _variantPriceChanges[vid] = {};
         }
-        
+
         Decimal currentPrice;
         if (_variantPriceChanges[vid]!.containsKey(priceField)) {
           currentPrice = _variantPriceChanges[vid]![priceField]!;
@@ -434,15 +471,19 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
               break;
           }
         }
-        
+
         Decimal newPrice;
         switch (event.adjustmentType) {
           case 'percentage_increase':
-            final increase = ((currentPrice * event.value) / Decimal.fromInt(100)).toDecimal();
+            final increase =
+                ((currentPrice * event.value) / Decimal.fromInt(100))
+                    .toDecimal();
             newPrice = currentPrice + increase;
             break;
           case 'percentage_decrease':
-            final decrease = ((currentPrice * event.value) / Decimal.fromInt(100)).toDecimal();
+            final decrease =
+                ((currentPrice * event.value) / Decimal.fromInt(100))
+                    .toDecimal();
             newPrice = currentPrice - decrease;
             break;
           case 'fixed_increase':
@@ -454,26 +495,26 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
           default:
             continue;
         }
-        
+
         if (newPrice < Decimal.zero) {
           newPrice = Decimal.zero;
         }
-        
+
         _variantPriceChanges[vid]![priceField] = newPrice;
       }
     }
-    
+
     _hasUnsavedChanges = true;
     _redoStack.clear();
     refresh();
   }
-  
+
   void _onUndo(
     EditPricesUndoRequested event,
     Emitter<RealtimeState<EditPricesStateData>> emit,
   ) {
     if (_undoStack.isEmpty) return;
-    
+
     // Save current state to redo stack
     final currentProductSnapshot = <int, Map<String, Decimal>>{};
     for (final entry in _priceChanges.entries) {
@@ -487,7 +528,7 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
       'products': currentProductSnapshot,
       'variants': currentVariantSnapshot,
     });
-    
+
     // Restore previous state
     final previousState = _undoStack.removeLast();
     _priceChanges.clear();
@@ -498,20 +539,21 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
     for (final entry in previousState['variants']!.entries) {
       _variantPriceChanges[entry.key] = Map.from(entry.value);
     }
-    
-    _hasUnsavedChanges = _priceChanges.isNotEmpty || _variantPriceChanges.isNotEmpty;
+
+    _hasUnsavedChanges =
+        _priceChanges.isNotEmpty || _variantPriceChanges.isNotEmpty;
     refresh();
   }
-  
+
   void _onRedo(
     EditPricesRedoRequested event,
     Emitter<RealtimeState<EditPricesStateData>> emit,
   ) {
     if (_redoStack.isEmpty) return;
-    
+
     // Save current state to undo stack
     _saveToUndoStack();
-    
+
     // Restore redo state
     final redoState = _redoStack.removeLast();
     _priceChanges.clear();
@@ -522,11 +564,12 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
     for (final entry in redoState['variants']!.entries) {
       _variantPriceChanges[entry.key] = Map.from(entry.value);
     }
-    
-    _hasUnsavedChanges = _priceChanges.isNotEmpty || _variantPriceChanges.isNotEmpty;
+
+    _hasUnsavedChanges =
+        _priceChanges.isNotEmpty || _variantPriceChanges.isNotEmpty;
     refresh();
   }
-  
+
   void _onDiscardChanges(
     EditPricesDiscardChanges event,
     Emitter<RealtimeState<EditPricesStateData>> emit,
@@ -538,7 +581,7 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
     _hasUnsavedChanges = false;
     refresh();
   }
-  
+
   void _onProductSelectionToggled(
     EditPricesProductSelectionToggled event,
     Emitter<RealtimeState<EditPricesStateData>> emit,
@@ -550,40 +593,39 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
     }
     refresh();
   }
-  
+
   void _onVariantPriceUpdated(
     EditPricesVariantPriceUpdated event,
     Emitter<RealtimeState<EditPricesStateData>> emit,
   ) {
     _saveToUndoStack();
-    
+
     final vid = event.updatedVariant.id;
     if (!_variantPriceChanges.containsKey(vid)) {
       _variantPriceChanges[vid] = {};
     }
-    
+
     _variantPriceChanges[vid]!['costCents'] = event.updatedVariant.costCents;
     _variantPriceChanges[vid]!['priceCents'] = event.updatedVariant.priceCents;
     if (event.updatedVariant.wholesalePriceCents != null) {
-      _variantPriceChanges[vid]!['wholesalePriceCents'] = event.updatedVariant.wholesalePriceCents!;
+      _variantPriceChanges[vid]!['wholesalePriceCents'] =
+          event.updatedVariant.wholesalePriceCents!;
     }
-    
+
     _hasUnsavedChanges = true;
     _redoStack.clear();
     refresh();
   }
-  
+
   void _onSelectAllToggled(
     EditPricesSelectAllToggled event,
     Emitter<RealtimeState<EditPricesStateData>> emit,
   ) {
     final currentState = state;
     if (currentState is! RealtimeSuccess<EditPricesStateData>) return;
-    
+
     if (event.selectAll) {
-      _selectedProductIds.addAll(
-        currentState.data.products.map((p) => p.id),
-      );
+      _selectedProductIds.addAll(currentState.data.products.map((p) => p.id));
     } else {
       _selectedProductIds.clear();
       _selectedVariantIds.clear();
@@ -602,7 +644,7 @@ class EditPricesBloc extends RealtimeBloc<EditPricesStateData, EditPricesEvent> 
     }
     refresh();
   }
-  
+
   bool get canUndo => _undoStack.isNotEmpty;
   bool get canRedo => _redoStack.isNotEmpty;
   bool get hasUnsavedChanges => _hasUnsavedChanges;

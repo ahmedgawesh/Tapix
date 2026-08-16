@@ -8,7 +8,9 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:decimal/decimal.dart';
 
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/cashier_shift_service.dart';
 import '../../../../core/services/void_impact_analyzer.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/widgets/pin_verification_dialog.dart';
@@ -33,6 +35,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
   SaleEntity? _sale;
   List<SaleItemEntity> _items = [];
   List<SaleReturnEntity> _returns = [];
+  CashierShiftView? _cashierShift;
   bool _loading = true;
   StreamSubscription<List<SaleReturnEntity>>? _returnsSub;
 
@@ -52,6 +55,9 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
     final repo = sl<SaleRepository>();
     final sale = await repo.getSaleById(widget.saleId);
     final items = await repo.getSaleItems(widget.saleId);
+    final cashierShift = await sl<CashierShiftService>().getSaleShift(
+      widget.saleId,
+    );
 
     _returnsSub?.cancel();
     _returnsSub = repo.watchSaleReturnsBySale(widget.saleId).listen((returns) {
@@ -62,6 +68,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
       setState(() {
         _sale = sale;
         _items = items;
+        _cashierShift = cashierShift;
         _loading = false;
       });
     }
@@ -133,8 +140,12 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
 
     // Check if user has edit permission
     final authState = context.read<AuthBloc>().state;
-    final canEdit = authState is AuthAuthenticated &&
-        sl<PermissionService>().hasPermission(authState.user, Permissions.editTransactions);
+    final canEdit =
+        authState is AuthAuthenticated &&
+        sl<PermissionService>().hasPermission(
+          authState.user,
+          Permissions.editTransactions,
+        );
 
     if (sale.isCompleted) {
       actions.add(
@@ -160,7 +171,8 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                 child: ListTile(
                   leading: const Icon(LucideIcons.pencil),
                   title: Text('sales.edit_sale'.tr()),
-                  dense: true, contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
                 ),
               ),
             PopupMenuItem(
@@ -168,7 +180,8 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
               child: ListTile(
                 leading: const Icon(LucideIcons.printer),
                 title: Text('sales.print_invoice'.tr()),
-                dense: true, contentPadding: EdgeInsets.zero,
+                dense: true,
+                contentPadding: EdgeInsets.zero,
               ),
             ),
             PopupMenuItem(
@@ -176,7 +189,8 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
               child: ListTile(
                 leading: const Icon(LucideIcons.share2),
                 title: Text('sales.share_invoice'.tr()),
-                dense: true, contentPadding: EdgeInsets.zero,
+                dense: true,
+                contentPadding: EdgeInsets.zero,
               ),
             ),
             const PopupMenuDivider(),
@@ -184,9 +198,12 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
               value: 'void',
               child: ListTile(
                 leading: Icon(LucideIcons.ban, color: colorScheme.error),
-                title: Text('sales.void_sale'.tr(),
-                    style: TextStyle(color: colorScheme.error)),
-                dense: true, contentPadding: EdgeInsets.zero,
+                title: Text(
+                  'sales.void_sale'.tr(),
+                  style: TextStyle(color: colorScheme.error),
+                ),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
               ),
             ),
           ],
@@ -246,8 +263,9 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
         // 2026-05-13 — pre-flight integrity check via VoidImpactAnalyzer.
         // Surfaces entangled adjustment returns, projected negative stock,
         // and estimated GL impact (AR/Inventory) BEFORE the void runs.
-        final report = await VoidImpactAnalyzer(sl<AppDatabase>())
-            .analyzeSaleVoid(widget.saleId);
+        final report = await VoidImpactAnalyzer(
+          sl<AppDatabase>(),
+        ).analyzeSaleVoid(widget.saleId);
         if (!context.mounted) return;
         final confirmed = await VoidImpactDialog.show(context, report);
         if (!confirmed) break;
@@ -273,8 +291,11 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
           await showDialog<void>(
             context: context,
             builder: (ctx) => AlertDialog(
-              icon: Icon(LucideIcons.alertTriangle,
-                  color: Theme.of(ctx).colorScheme.error, size: 32),
+              icon: Icon(
+                LucideIcons.alertTriangle,
+                color: Theme.of(ctx).colorScheme.error,
+                size: 32,
+              ),
               title: Text('sales.void_failed_title'.tr()),
               content: Text(errorMsg),
               actions: [
@@ -290,7 +311,11 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
     }
   }
 
-  Widget _buildWideLayout(BuildContext context, SaleEntity sale, CurrencyService cs) {
+  Widget _buildWideLayout(
+    BuildContext context,
+    SaleEntity sale,
+    CurrencyService cs,
+  ) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -304,7 +329,8 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
               _buildInfoCard(context, sale, cs),
               const SizedBox(height: 16),
               _buildTotalsCard(context, sale, cs),
-              if (sale.notes != null && sale.notes!.isNotEmpty) ...[                const SizedBox(height: 16),
+              if (sale.notes != null && sale.notes!.isNotEmpty) ...[
+                const SizedBox(height: 16),
                 _buildNotesCard(context, sale),
               ],
             ],
@@ -329,7 +355,11 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
     );
   }
 
-  Widget _buildNarrowLayout(BuildContext context, SaleEntity sale, CurrencyService cs) {
+  Widget _buildNarrowLayout(
+    BuildContext context,
+    SaleEntity sale,
+    CurrencyService cs,
+  ) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -346,7 +376,8 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
         BatchFlowWidget(saleId: widget.saleId),
         const SizedBox(height: 16),
         _buildTotalsCard(context, sale, cs),
-        if (sale.notes != null && sale.notes!.isNotEmpty) ...[          const SizedBox(height: 16),
+        if (sale.notes != null && sale.notes!.isNotEmpty) ...[
+          const SizedBox(height: 16),
           _buildNotesCard(context, sale),
         ],
       ],
@@ -367,13 +398,15 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
     ];
 
     if (sale.isVoided) {
-      steps.add(_TimelineStep(
-        label: 'sales.status_voided'.tr(),
-        icon: LucideIcons.ban,
-        isActive: true,
-        isCompleted: false,
-        isError: true,
-      ));
+      steps.add(
+        _TimelineStep(
+          label: 'sales.status_voided'.tr(),
+          icon: LucideIcons.ban,
+          isActive: true,
+          isCompleted: false,
+          isError: true,
+        ),
+      );
     }
 
     return Card(
@@ -423,7 +456,8 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 40, height: 40,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
             gradient: (step.isCompleted || step.isActive)
                 ? LinearGradient(
@@ -432,30 +466,52 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                     end: Alignment.bottomRight,
                   )
                 : null,
-            color: (step.isCompleted || step.isActive) ? null : cs.surfaceContainerHighest,
+            color: (step.isCompleted || step.isActive)
+                ? null
+                : cs.surfaceContainerHighest,
             shape: BoxShape.circle,
             boxShadow: (step.isCompleted || step.isActive)
-                ? [BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 2))]
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
                 : null,
           ),
-          child: Icon(step.icon, size: 18,
-              color: (step.isCompleted || step.isActive) ? Colors.white : cs.onSurfaceVariant),
+          child: Icon(
+            step.icon,
+            size: 18,
+            color: (step.isCompleted || step.isActive)
+                ? Colors.white
+                : cs.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 6),
-        Text(step.label,
-            style: theme.textTheme.labelSmall?.copyWith(
-                color: (step.isCompleted || step.isActive) ? color : cs.onSurfaceVariant,
-                fontWeight: FontWeight.w600),
-            textAlign: TextAlign.center),
+        Text(
+          step.label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: (step.isCompleted || step.isActive)
+                ? color
+                : cs.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+          textAlign: TextAlign.center,
+        ),
       ],
     );
   }
 
-  Widget _buildInfoCard(BuildContext context, SaleEntity sale, CurrencyService cs) {
+  Widget _buildInfoCard(
+    BuildContext context,
+    SaleEntity sale,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final customerInitial = sale.customerName != null &&
-            sale.customerName!.isNotEmpty
+    final customerInitial =
+        sale.customerName != null && sale.customerName!.isNotEmpty
         ? sale.customerName![0].toUpperCase()
         : '?';
 
@@ -463,7 +519,9 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -473,74 +531,146 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
             Row(
               children: [
                 Container(
-                  width: 44, height: 44,
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [colorScheme.primary, colorScheme.primary.withValues(alpha: 0.7)],
+                      colors: [
+                        colorScheme.primary,
+                        colorScheme.primary.withValues(alpha: 0.7),
+                      ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   alignment: Alignment.center,
-                  child: Text(customerInitial,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                          color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    customerInitial,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('sales.customer'.tr(),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                              letterSpacing: 0.5)),
-                      Text(sale.customerName ?? 'sales.walk_in'.tr(),
-                          style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600)),
+                      Text(
+                        'sales.customer'.tr(),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      Text(
+                        sale.customerName ?? 'sales.walk_in'.tr(),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ],
             ),
-            Divider(height: 24, color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
-            _detailRow(theme, LucideIcons.hash, 'sales.invoice_number'.tr(),
-                sale.invoiceNumber),
+            Divider(
+              height: 24,
+              color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+            ),
+            _detailRow(
+              theme,
+              LucideIcons.hash,
+              'sales.invoice_number'.tr(),
+              sale.invoiceNumber,
+            ),
             const SizedBox(height: 10),
-            _detailRow(theme, LucideIcons.calendar, 'sales.date'.tr(),
-                DateFormat.yMMMd().format(sale.saleDate)),
-            if (sale.dueDate != null) ...[              const SizedBox(height: 10),
-              _detailRow(theme, LucideIcons.calendarClock, 'sales.due_date'.tr(),
-                  DateFormat.yMMMd().format(sale.dueDate!),
-                  valueColor: sale.isOverdue ? colorScheme.error : null),
+            _detailRow(
+              theme,
+              LucideIcons.calendar,
+              'sales.date'.tr(),
+              DateFormat.yMMMd().format(sale.saleDate),
+            ),
+            if (sale.dueDate != null) ...[
+              const SizedBox(height: 10),
+              _detailRow(
+                theme,
+                LucideIcons.calendarClock,
+                'sales.due_date'.tr(),
+                DateFormat.yMMMd().format(sale.dueDate!),
+                valueColor: sale.isOverdue ? colorScheme.error : null,
+              ),
             ],
             const SizedBox(height: 10),
-            _detailRow(theme, LucideIcons.creditCard, 'sales.payment_method'.tr(),
-                sale.paymentMethod),
+            _detailRow(
+              theme,
+              LucideIcons.creditCard,
+              'sales.payment_method'.tr(),
+              sale.paymentMethod,
+            ),
             if (sale.employeeName != null && sale.employeeName!.isNotEmpty) ...[
               const SizedBox(height: 10),
-              _detailRow(theme, LucideIcons.userCheck, 'sales.salesperson'.tr(),
-                  sale.employeeName!),
+              _detailRow(
+                theme,
+                LucideIcons.userCheck,
+                'sales.salesperson'.tr(),
+                sale.employeeName!,
+              ),
+            ],
+            if (_cashierShift != null) ...[
+              const SizedBox(height: 10),
+              _detailRow(
+                theme,
+                LucideIcons.userCheck,
+                'cashier_shifts.cashier'.tr(),
+                _cashierShift!.cashierName,
+              ),
+              const SizedBox(height: 10),
+              _detailRow(
+                theme,
+                LucideIcons.hash,
+                'cashier_shifts.shift_number'.tr(),
+                _cashierShift!.shift.shiftNumber,
+              ),
             ],
             const SizedBox(height: 10),
-            _detailRow(theme, LucideIcons.clock, 'sales.created_at'.tr(),
-                DateFormat.yMMMd().add_jm().format(sale.createdAt)),
-            if (sale.isOverdue) ...[              const SizedBox(height: 12),
+            _detailRow(
+              theme,
+              LucideIcons.clock,
+              'sales.created_at'.tr(),
+              DateFormat.yMMMd().add_jm().format(sale.createdAt),
+            ),
+            if (sale.isOverdue) ...[
+              const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: colorScheme.error.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: colorScheme.error.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: colorScheme.error.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    Icon(LucideIcons.alertTriangle, size: 16, color: colorScheme.error),
+                    Icon(
+                      LucideIcons.alertTriangle,
+                      size: 16,
+                      color: colorScheme.error,
+                    ),
                     const SizedBox(width: 8),
-                    Text('sales.overdue'.tr(),
-                        style: theme.textTheme.labelMedium?.copyWith(
-                            color: colorScheme.error, fontWeight: FontWeight.w600)),
+                    Text(
+                      'sales.overdue'.tr(),
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: colorScheme.error,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -551,8 +681,13 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
     );
   }
 
-  Widget _detailRow(ThemeData theme, IconData icon, String label, String value,
-      {Color? valueColor}) {
+  Widget _detailRow(
+    ThemeData theme,
+    IconData icon,
+    String label,
+    String value, {
+    Color? valueColor,
+  }) {
     final cs = theme.colorScheme;
     return Row(
       children: [
@@ -565,14 +700,23 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
           child: Icon(icon, size: 14, color: cs.onSurfaceVariant),
         ),
         const SizedBox(width: 10),
-        Text(label, style: theme.textTheme.bodySmall?.copyWith(
-            color: cs.onSurfaceVariant)),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: cs.onSurfaceVariant,
+          ),
+        ),
         const Spacer(),
         Flexible(
-          child: Text(value,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w500, color: valueColor),
-              textAlign: TextAlign.end, overflow: TextOverflow.ellipsis),
+          child: Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+              color: valueColor,
+            ),
+            textAlign: TextAlign.end,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );
@@ -586,7 +730,9 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -599,28 +745,44 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [colorScheme.primary, colorScheme.primary.withValues(alpha: 0.7)],
+                      colors: [
+                        colorScheme.primary,
+                        colorScheme.primary.withValues(alpha: 0.7),
+                      ],
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(LucideIcons.shoppingCart, size: 16, color: Colors.white),
+                  child: const Icon(
+                    LucideIcons.shoppingCart,
+                    size: 16,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('sales.items'.tr(),
-                    style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600)),
+                Text(
+                  'sales.items'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 if (_items.isNotEmpty) ...[
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: colorScheme.primaryContainer,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Text('${_items.length}',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                            color: colorScheme.onPrimaryContainer,
-                            fontWeight: FontWeight.bold)),
+                    child: Text(
+                      '${_items.length}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
               ],
@@ -633,12 +795,18 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                 padding: const EdgeInsets.all(32),
                 child: Column(
                   children: [
-                    Icon(LucideIcons.packageOpen, size: 40,
-                        color: colorScheme.onSurface.withValues(alpha: 0.15)),
+                    Icon(
+                      LucideIcons.packageOpen,
+                      size: 40,
+                      color: colorScheme.onSurface.withValues(alpha: 0.15),
+                    ),
                     const SizedBox(height: 8),
-                    Text('sales.no_items'.tr(),
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant)),
+                    Text(
+                      'sales.no_items'.tr(),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -647,10 +815,16 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                color: colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.5,
+                ),
                 border: Border(
-                  top: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
-                  bottom: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                  top: BorderSide(
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+                  ),
+                  bottom: BorderSide(
+                    color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+                  ),
                 ),
               ),
               child: Row(
@@ -658,29 +832,38 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                   const SizedBox(width: 32),
                   Expanded(
                     flex: 3,
-                    child: Text('sales.product_col'.tr(),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5)),
+                    child: Text(
+                      'sales.product_col'.tr(),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
                   ),
                   SizedBox(
                     width: 50,
-                    child: Text('sales.qty_col'.tr(),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5),
-                        textAlign: TextAlign.center),
+                    child: Text(
+                      'sales.qty_col'.tr(),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                   Expanded(
                     flex: 2,
-                    child: Text('sales.total'.tr(),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5),
-                        textAlign: TextAlign.end),
+                    child: Text(
+                      'sales.total'.tr(),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                      textAlign: TextAlign.end,
+                    ),
                   ),
                 ],
               ),
@@ -694,18 +877,26 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                 final isEven = index % 2 == 0;
 
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
                   color: isEven
                       ? Colors.transparent
-                      : colorScheme.surfaceContainerHighest.withValues(alpha: 0.2),
+                      : colorScheme.surfaceContainerHighest.withValues(
+                          alpha: 0.2,
+                        ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        width: 26, height: 26,
+                        width: 26,
+                        height: 26,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer.withValues(alpha: 0.6),
+                          color: colorScheme.primaryContainer.withValues(
+                            alpha: 0.6,
+                          ),
                           borderRadius: BorderRadius.circular(7),
                         ),
                         child: Text(
@@ -725,14 +916,20 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                           children: [
                             Text(
                               item.productName ?? 'Product #${item.productId}',
-                              style: theme.textTheme.bodyMedium
-                                  ?.copyWith(fontWeight: FontWeight.w500),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w500,
+                              ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            if ((item.variantSku ?? item.productSku) != null && (item.variantSku ?? item.productSku)!.isNotEmpty)
+                            if ((item.variantSku ?? item.productSku) != null &&
+                                (item.variantSku ?? item.productSku)!
+                                    .isNotEmpty)
                               Padding(
-                                padding: const EdgeInsets.only(top: 2, bottom: 2),
+                                padding: const EdgeInsets.only(
+                                  top: 2,
+                                  bottom: 2,
+                                ),
                                 child: Text(
                                   'SKU: ${item.variantSku ?? item.productSku}',
                                   style: theme.textTheme.labelSmall?.copyWith(
@@ -750,32 +947,48 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                                   children: [
                                     if (item.colorName != null)
                                       Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 1,
+                                        ),
                                         decoration: BoxDecoration(
-                                          color: colorScheme.tertiaryContainer.withValues(alpha: 0.4),
-                                          borderRadius: BorderRadius.circular(4),
+                                          color: colorScheme.tertiaryContainer
+                                              .withValues(alpha: 0.4),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
                                         ),
                                         child: Text(
                                           item.colorName!,
-                                          style: theme.textTheme.labelSmall?.copyWith(
-                                            color: colorScheme.onTertiaryContainer,
-                                            fontSize: 10,
-                                          ),
+                                          style: theme.textTheme.labelSmall
+                                              ?.copyWith(
+                                                color: colorScheme
+                                                    .onTertiaryContainer,
+                                                fontSize: 10,
+                                              ),
                                         ),
                                       ),
                                     if (item.sizeName != null)
                                       Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 1,
+                                        ),
                                         decoration: BoxDecoration(
-                                          color: colorScheme.secondaryContainer.withValues(alpha: 0.4),
-                                          borderRadius: BorderRadius.circular(4),
+                                          color: colorScheme.secondaryContainer
+                                              .withValues(alpha: 0.4),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
                                         ),
                                         child: Text(
                                           item.sizeName!,
-                                          style: theme.textTheme.labelSmall?.copyWith(
-                                            color: colorScheme.onSecondaryContainer,
-                                            fontSize: 10,
-                                          ),
+                                          style: theme.textTheme.labelSmall
+                                              ?.copyWith(
+                                                color: colorScheme
+                                                    .onSecondaryContainer,
+                                                fontSize: 10,
+                                              ),
                                         ),
                                       ),
                                   ],
@@ -810,9 +1023,13 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                       SizedBox(
                         width: 50,
                         child: Text(
-                          '${item.quantity}',
-                          style: theme.textTheme.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w600),
+                          localizedQuantity(
+                            item.quantity,
+                            item.measurementType,
+                          ),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -838,17 +1055,26 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
     );
   }
 
-  Widget _buildTotalsCard(BuildContext context, SaleEntity sale, CurrencyService cs) {
+  Widget _buildTotalsCard(
+    BuildContext context,
+    SaleEntity sale,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final totalItems = _items.length;
+    final allPieceItems = _items.every(
+      (item) => item.measurementType == 'piece',
+    );
     final totalPieces = _items.fold<int>(0, (sum, item) => sum + item.quantity);
 
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Column(
         children: [
@@ -856,24 +1082,37 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
             child: Column(
               children: [
-                _totalRow(theme, 'sales.total_items_count'.tr(),
-                    '$totalItems'),
+                _totalRow(theme, 'sales.total_items_count'.tr(), '$totalItems'),
+                if (allPieceItems) ...[
+                  const SizedBox(height: 8),
+                  _totalRow(
+                    theme,
+                    'sales.total_pieces_count'.tr(),
+                    '$totalPieces',
+                  ),
+                ],
                 const SizedBox(height: 8),
-                _totalRow(theme, 'sales.total_pieces_count'.tr(),
-                    '$totalPieces'),
-                const SizedBox(height: 8),
-                _totalRow(theme, 'sales.subtotal'.tr(),
-                    cs.format(sale.subtotalCents.toBigInt().toInt())),
+                _totalRow(
+                  theme,
+                  'sales.subtotal'.tr(),
+                  cs.format(sale.subtotalCents.toBigInt().toInt()),
+                ),
                 if (sale.discountCents > Decimal.zero) ...[
                   const SizedBox(height: 8),
-                  _totalRow(theme, 'sales.discount'.tr(),
-                      '-${cs.format(sale.discountCents.toBigInt().toInt())}',
-                      valueColor: colorScheme.tertiary),
+                  _totalRow(
+                    theme,
+                    'sales.discount'.tr(),
+                    '-${cs.format(sale.discountCents.toBigInt().toInt())}',
+                    valueColor: colorScheme.tertiary,
+                  ),
                 ],
                 if (sale.taxCents > Decimal.zero) ...[
                   const SizedBox(height: 8),
-                  _totalRow(theme, 'sales.tax'.tr(),
-                      cs.format(sale.taxCents.toBigInt().toInt())),
+                  _totalRow(
+                    theme,
+                    'sales.tax'.tr(),
+                    cs.format(sale.taxCents.toBigInt().toInt()),
+                  ),
                 ],
               ],
             ),
@@ -884,15 +1123,20 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
             decoration: BoxDecoration(
               color: colorScheme.primary.withValues(alpha: 0.06),
               border: Border(
-                top: BorderSide(color: colorScheme.primary.withValues(alpha: 0.2)),
+                top: BorderSide(
+                  color: colorScheme.primary.withValues(alpha: 0.2),
+                ),
               ),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('sales.total'.tr(),
-                    style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold)),
+                Text(
+                  'sales.total'.tr(),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 Text(
                   cs.format(sale.totalCents.toBigInt().toInt()),
                   style: theme.textTheme.titleLarge?.copyWith(
@@ -911,8 +1155,10 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                 color: sale.isFullyPaid
                     ? Colors.green.withValues(alpha: 0.06)
                     : sale.isOverdue
-                        ? colorScheme.error.withValues(alpha: 0.06)
-                        : colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                    ? colorScheme.error.withValues(alpha: 0.06)
+                    : colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.3,
+                      ),
                 borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(14),
                   bottomRight: Radius.circular(14),
@@ -927,44 +1173,66 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            sale.isFullyPaid ? LucideIcons.checkCircle : LucideIcons.wallet,
+                            sale.isFullyPaid
+                                ? LucideIcons.checkCircle
+                                : LucideIcons.wallet,
                             size: 14,
-                            color: sale.isFullyPaid ? Colors.green : colorScheme.onSurfaceVariant,
+                            color: sale.isFullyPaid
+                                ? Colors.green
+                                : colorScheme.onSurfaceVariant,
                           ),
                           const SizedBox(width: 6),
-                          Text('sales.paid'.tr(),
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: sale.isFullyPaid ? Colors.green : colorScheme.onSurfaceVariant)),
+                          Text(
+                            'sales.paid'.tr(),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: sale.isFullyPaid
+                                  ? Colors.green
+                                  : colorScheme.onSurfaceVariant,
+                            ),
+                          ),
                         ],
                       ),
                       Text(
                         cs.format(sale.paidAmountCents.toBigInt().toInt()),
                         style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: sale.isFullyPaid ? Colors.green : null),
+                          fontWeight: FontWeight.w600,
+                          color: sale.isFullyPaid ? Colors.green : null,
+                        ),
                       ),
                     ],
                   ),
-                  if (!sale.isFullyPaid) ...[                    const SizedBox(height: 6),
+                  if (!sale.isFullyPaid) ...[
+                    const SizedBox(height: 6),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(LucideIcons.arrowRight, size: 14,
-                                color: sale.isOverdue ? colorScheme.error : colorScheme.onSurfaceVariant),
+                            Icon(
+                              LucideIcons.arrowRight,
+                              size: 14,
+                              color: sale.isOverdue
+                                  ? colorScheme.error
+                                  : colorScheme.onSurfaceVariant,
+                            ),
                             const SizedBox(width: 6),
-                            Text('sales.remaining'.tr(),
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: sale.isOverdue ? colorScheme.error : colorScheme.onSurfaceVariant)),
+                            Text(
+                              'sales.remaining'.tr(),
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: sale.isOverdue
+                                    ? colorScheme.error
+                                    : colorScheme.onSurfaceVariant,
+                              ),
+                            ),
                           ],
                         ),
                         Text(
                           cs.format(sale.remainingCents.toBigInt().toInt()),
                           style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: sale.isOverdue ? colorScheme.error : null),
+                            fontWeight: FontWeight.w600,
+                            color: sale.isOverdue ? colorScheme.error : null,
+                          ),
                         ),
                       ],
                     ),
@@ -1000,12 +1268,19 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                     color: Colors.amber.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(LucideIcons.stickyNote, size: 16, color: Colors.amber.shade700),
+                  child: Icon(
+                    LucideIcons.stickyNote,
+                    size: 16,
+                    color: Colors.amber.shade700,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('sales.notes'.tr(),
-                    style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600)),
+                Text(
+                  'sales.notes'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -1016,9 +1291,13 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                 color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(sale.notes!,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                      color: cs.onSurface, height: 1.4)),
+              child: Text(
+                sale.notes!,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurface,
+                  height: 1.4,
+                ),
+              ),
             ),
           ],
         ),
@@ -1047,25 +1326,43 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [colorScheme.error, colorScheme.error.withValues(alpha: 0.7)],
+                      colors: [
+                        colorScheme.error,
+                        colorScheme.error.withValues(alpha: 0.7),
+                      ],
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(LucideIcons.undo2, size: 16, color: Colors.white),
+                  child: const Icon(
+                    LucideIcons.undo2,
+                    size: 16,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('sales.returns'.tr(),
-                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                Text(
+                  'sales.returns'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: colorScheme.errorContainer,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text('${_returns.length}',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: colorScheme.onErrorContainer, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    '${_returns.length}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onErrorContainer,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -1075,10 +1372,14 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _returns.length,
               separatorBuilder: (_, _) => Divider(
-                  height: 1, color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                height: 1,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+              ),
               itemBuilder: (context, index) {
                 final ret = _returns[index];
-                final statusColor = ret.isVoided ? colorScheme.error : Colors.green;
+                final statusColor = ret.isVoided
+                    ? colorScheme.error
+                    : Colors.green;
                 final statusLabel = ret.isVoided
                     ? 'sales.status_voided'.tr()
                     : 'sales.status_posted'.tr();
@@ -1087,38 +1388,61 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                   contentPadding: EdgeInsets.zero,
                   onTap: () => context.push('/sales/returns/${ret.id}'),
                   leading: Container(
-                    width: 36, height: 36,
+                    width: 36,
+                    height: 36,
                     decoration: BoxDecoration(
                       color: colorScheme.errorContainer.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     alignment: Alignment.center,
-                    child: Icon(LucideIcons.undo2, size: 16, color: colorScheme.error),
+                    child: Icon(
+                      LucideIcons.undo2,
+                      size: 16,
+                      color: colorScheme.error,
+                    ),
                   ),
-                  title: Text(ret.returnNumber,
-                      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                  title: Text(
+                    ret.returnNumber,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   subtitle: Row(
                     children: [
-                      Text(DateFormat.yMMMd().format(ret.returnDate),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant, fontSize: 11)),
+                      Text(
+                        DateFormat.yMMMd().format(ret.returnDate),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 11,
+                        ),
+                      ),
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 1,
+                        ),
                         decoration: BoxDecoration(
                           color: statusColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: Text(statusLabel,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                                color: statusColor, fontSize: 9, fontWeight: FontWeight.w600)),
+                        child: Text(
+                          statusLabel,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: statusColor,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                   trailing: Text(
                     cs.format(ret.totalCents.toBigInt().toInt()),
                     style: theme.textTheme.titleSmall?.copyWith(
-                        color: colorScheme.error, fontWeight: FontWeight.bold),
+                      color: colorScheme.error,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 );
               },
@@ -1129,14 +1453,28 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
     );
   }
 
-  Widget _totalRow(ThemeData theme, String label, String value, {Color? valueColor}) {
+  Widget _totalRow(
+    ThemeData theme,
+    String label,
+    String value, {
+    Color? valueColor,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant)),
-        Text(value, style: theme.textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w600, color: valueColor)),
+        Text(
+          label,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        Text(
+          value,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: valueColor,
+          ),
+        ),
       ],
     );
   }

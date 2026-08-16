@@ -1,5 +1,6 @@
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
+import '../../measurement/measurement.dart';
 import '../app_database.dart';
 import '../tables/transactions.dart';
 import '../tables/parties.dart';
@@ -9,7 +10,11 @@ import '../../services/balance_service.dart';
 import '../../services/batch_service.dart';
 import '../../services/price_history_service.dart';
 import '../../services/inventory/product_cost_service.dart';
+import '../../services/inventory/wac_movement_service.dart';
+import '../../services/inventory/inventory_valuation_delta_service.dart';
+import '../../services/document_number_service.dart';
 import '../../services/journal_entry_service.dart';
+import '../../services/return_calculation_service.dart';
 
 part 'purchase_dao.g.dart';
 
@@ -99,8 +104,22 @@ class PurchaseDashboardStats {
   });
 }
 
-@DriftAccessor(tables: [Purchases, PurchaseItems, PurchaseReturns, PurchaseReturnItems, PurchasePayments, Suppliers, SupplierTransactions, Products, ProductVariants, ProductBatches])
-class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin {
+@DriftAccessor(
+  tables: [
+    Purchases,
+    PurchaseItems,
+    PurchaseReturns,
+    PurchaseReturnItems,
+    PurchasePayments,
+    Suppliers,
+    SupplierTransactions,
+    Products,
+    ProductVariants,
+    ProductBatches,
+  ],
+)
+class PurchaseDao extends DatabaseAccessor<AppDatabase>
+    with _$PurchaseDaoMixin {
   PurchaseDao(super.db);
 
   /// Returns `true` when the product needs **batch-level books** (a
@@ -128,28 +147,37 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
     return (row.read<String?>('costing_method') ?? 'wac') == 'fifo';
   }
 
+  Future<bool> _tracksInventory(int productId) async {
+    final row = await customSelect(
+      'SELECT track_inventory FROM products WHERE id = ?',
+      variables: [Variable.withInt(productId)],
+    ).getSingleOrNull();
+    return (row?.read<int?>('track_inventory') ?? 1) != 0;
+  }
+
   // ==================== PURCHASES ====================
 
   /// Watch all purchases ordered by date descending
   Stream<List<Purchase>> watchAllPurchases() {
-    return (select(purchases)
-          ..orderBy([(p) => OrderingTerm.desc(p.purchaseDate)]))
-        .watch();
+    return (select(
+      purchases,
+    )..orderBy([(p) => OrderingTerm.desc(p.purchaseDate)])).watch();
   }
 
   /// Watch all purchases with supplier info
   Stream<List<PurchaseWithSupplier>> watchAllPurchasesWithSupplier() {
     final query = select(purchases).join([
       innerJoin(suppliers, suppliers.id.equalsExp(purchases.supplierId)),
-    ])
-      ..orderBy([OrderingTerm.desc(purchases.purchaseDate)]);
+    ])..orderBy([OrderingTerm.desc(purchases.purchaseDate)]);
 
-    return query.watch().map((rows) => rows.map((row) {
-          return PurchaseWithSupplier(
-            purchase: row.readTable(purchases),
-            supplier: row.readTable(suppliers),
-          );
-        }).toList());
+    return query.watch().map(
+      (rows) => rows.map((row) {
+        return PurchaseWithSupplier(
+          purchase: row.readTable(purchases),
+          supplier: row.readTable(suppliers),
+        );
+      }).toList(),
+    );
   }
 
   /// Get purchase by ID
@@ -161,8 +189,7 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
   Future<PurchaseWithSupplier?> getPurchaseWithSupplierById(int id) async {
     final query = select(purchases).join([
       innerJoin(suppliers, suppliers.id.equalsExp(purchases.supplierId)),
-    ])
-      ..where(purchases.id.equals(id));
+    ])..where(purchases.id.equals(id));
 
     final row = await query.getSingleOrNull();
     if (row == null) return null;
@@ -175,12 +202,51 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
   /// Watch purchase items for a purchase
   Stream<List<PurchaseItem>> watchPurchaseItems(int purchaseId) {
-    return (select(purchaseItems)..where((i) => i.purchaseId.equals(purchaseId))).watch();
+    return (select(
+      purchaseItems,
+    )..where((i) => i.purchaseId.equals(purchaseId))).watch();
   }
 
   /// Get purchase items for a purchase
   Future<List<PurchaseItem>> getPurchaseItems(int purchaseId) {
-    return (select(purchaseItems)..where((i) => i.purchaseId.equals(purchaseId))).get();
+    return (select(
+      purchaseItems,
+    )..where((i) => i.purchaseId.equals(purchaseId))).get();
+  }
+
+  /// Net purchase value that belongs in Inventory (1200).
+  ///
+  /// Service/non-stock lines are intentionally excluded; their net value is
+  /// posted to Expenses (5100) by JournalEntryService. Using line total less
+  /// line tax preserves allocated discounts and cent rounding exactly.
+  Future<int> computePurchaseInventoryNetCents(int purchaseId) async {
+    final row = await customSelect(
+      'SELECT COALESCE(SUM(CASE WHEN p.track_inventory = 1 '
+      'THEN MAX(pi.total_cents - pi.tax_cents, 0) ELSE 0 END), 0) AS c '
+      'FROM purchase_items pi '
+      'JOIN products p ON p.id = pi.product_id '
+      'WHERE pi.purchase_id = ?',
+      variables: [Variable.withInt(purchaseId)],
+    ).getSingle();
+    return row.read<int>('c');
+  }
+
+  /// Exact carrying-value increase produced by a posted purchase.
+  ///
+  /// This can differ by one cent from the independently rounded invoice
+  /// lines when a measured SKU crosses a rounded-pool boundary. The
+  /// difference is an inventory-rounding revaluation, not a supplier amount.
+  Future<int> computePurchaseInventoryValueAtPostCents(int purchaseId) async {
+    final row = await customSelect(
+      'SELECT COALESCE(SUM(CASE WHEN p.track_inventory = 1 THEN '
+      'COALESCE(pi.inventory_value_at_post_cents, '
+      'MAX(pi.total_cents - pi.tax_cents, 0)) ELSE 0 END), 0) AS c '
+      'FROM purchase_items pi '
+      'JOIN products p ON p.id = pi.product_id '
+      'WHERE pi.purchase_id = ?',
+      variables: [Variable.withInt(purchaseId)],
+    ).getSingle();
+    return row.read<int>('c');
   }
 
   /// Get purchase items with product and variant details.
@@ -189,14 +255,21 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
   /// variant attributes — required for invoices that contain multiple
   /// variants of the same product (otherwise a productId-keyed lookup
   /// on the UI side would collapse every line to the first variant).
-  Future<List<PurchaseItemWithDetails>> getPurchaseItemsWithDetails(int purchaseId) async {
+  Future<List<PurchaseItemWithDetails>> getPurchaseItemsWithDetails(
+    int purchaseId,
+  ) async {
     final query = select(purchaseItems).join([
       innerJoin(products, products.id.equalsExp(purchaseItems.productId)),
-      leftOuterJoin(productVariants, productVariants.id.equalsExp(purchaseItems.variantId)),
-      leftOuterJoin(productColors, productColors.id.equalsExp(productVariants.colorId)),
+      leftOuterJoin(
+        productVariants,
+        productVariants.id.equalsExp(purchaseItems.variantId),
+      ),
+      leftOuterJoin(
+        productColors,
+        productColors.id.equalsExp(productVariants.colorId),
+      ),
       leftOuterJoin(sizes, sizes.id.equalsExp(productVariants.sizeId)),
-    ])
-      ..where(purchaseItems.purchaseId.equals(purchaseId));
+    ])..where(purchaseItems.purchaseId.equals(purchaseId));
 
     final rows = await query.get();
     return rows.map((row) {
@@ -213,49 +286,45 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
   /// Watch purchase items with product and variant details. See
   /// [getPurchaseItemsWithDetails] for the per-variant join rationale.
-  Stream<List<PurchaseItemWithDetails>> watchPurchaseItemsWithDetails(int purchaseId) {
+  Stream<List<PurchaseItemWithDetails>> watchPurchaseItemsWithDetails(
+    int purchaseId,
+  ) {
     final query = select(purchaseItems).join([
       innerJoin(products, products.id.equalsExp(purchaseItems.productId)),
-      leftOuterJoin(productVariants, productVariants.id.equalsExp(purchaseItems.variantId)),
-      leftOuterJoin(productColors, productColors.id.equalsExp(productVariants.colorId)),
+      leftOuterJoin(
+        productVariants,
+        productVariants.id.equalsExp(purchaseItems.variantId),
+      ),
+      leftOuterJoin(
+        productColors,
+        productColors.id.equalsExp(productVariants.colorId),
+      ),
       leftOuterJoin(sizes, sizes.id.equalsExp(productVariants.sizeId)),
-    ])
-      ..where(purchaseItems.purchaseId.equals(purchaseId));
+    ])..where(purchaseItems.purchaseId.equals(purchaseId));
 
-    return query.watch().map((rows) => rows.map((row) {
-          return PurchaseItemWithDetails(
-            item: row.readTable(purchaseItems),
-            product: row.readTable(products),
-            variant: row.readTableOrNull(productVariants),
-            colorName: row.readTableOrNull(productColors)?.name,
-            colorHex: row.readTableOrNull(productColors)?.hexCode,
-            sizeName: row.readTableOrNull(sizes)?.name,
-          );
-        }).toList());
+    return query.watch().map(
+      (rows) => rows.map((row) {
+        return PurchaseItemWithDetails(
+          item: row.readTable(purchaseItems),
+          product: row.readTable(products),
+          variant: row.readTableOrNull(productVariants),
+          colorName: row.readTableOrNull(productColors)?.name,
+          colorHex: row.readTableOrNull(productColors)?.hexCode,
+          sizeName: row.readTableOrNull(sizes)?.name,
+        );
+      }).toList(),
+    );
   }
 
   /// Generate next purchase number
-  Future<String> generatePurchaseNumber() async {
-    final now = DateTime.now();
-    final prefix = 'PO-${now.year}${now.month.toString().padLeft(2, '0')}';
-
-    final lastPurchase = await (select(purchases)
-          ..where((p) => p.purchaseNumber.like('$prefix%'))
-          ..orderBy([(p) => OrderingTerm.desc(p.purchaseNumber)])
-          ..limit(1))
-        .getSingleOrNull();
-
-    int nextNum = 1;
-    if (lastPurchase != null) {
-      final lastNum = int.tryParse(lastPurchase.purchaseNumber.split('-').last) ?? 0;
-      nextNum = lastNum + 1;
-    }
-
-    return '$prefix-${nextNum.toString().padLeft(4, '0')}';
-  }
+  Future<String> generatePurchaseNumber() =>
+      DocumentNumberService(attachedDatabase).nextPurchaseInvoice();
 
   /// Create purchase with items
-  Future<int> createPurchase(PurchasesCompanion purchase, List<PurchaseItemsCompanion> items) {
+  Future<int> createPurchase(
+    PurchasesCompanion purchase,
+    List<PurchaseItemsCompanion> items,
+  ) {
     return transaction(() async {
       final purchaseId = await into(purchases).insert(purchase);
 
@@ -282,9 +351,9 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
     List<PurchaseItemsCompanion> items,
   ) {
     return transaction(() async {
-      final existing = await (select(purchases)
-            ..where((p) => p.id.equals(purchaseId)))
-          .getSingleOrNull();
+      final existing = await (select(
+        purchases,
+      )..where((p) => p.id.equals(purchaseId))).getSingleOrNull();
       if (existing == null) return false;
       if (existing.status != 'draft' && existing.status != 'pending') {
         throw StateError(
@@ -296,7 +365,9 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       final updated = await updatePurchase(purchaseId, purchase);
       if (!updated) return false;
 
-      await (delete(purchaseItems)..where((i) => i.purchaseId.equals(purchaseId))).go();
+      await (delete(
+        purchaseItems,
+      )..where((i) => i.purchaseId.equals(purchaseId))).go();
 
       for (final item in items) {
         final itemWithPurchaseId = item.copyWith(purchaseId: Value(purchaseId));
@@ -315,7 +386,11 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
   }
 
   /// Update purchase status
-  Future<bool> updatePurchaseStatus(int purchaseId, String status, {int? userId}) {
+  Future<bool> updatePurchaseStatus(
+    int purchaseId,
+    String status, {
+    int? userId,
+  }) {
     final companion = PurchasesCompanion(
       status: Value(status),
       updatedAt: Value(DateTime.now()),
@@ -341,7 +416,11 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
   /// The post-loop parent aggregation now uses a TRUE weighted average
   /// across active variants — replacing the buggy `MAX(cost_cents)` that
   /// surfaced as the "55.63 instead of 65" report.
-  Future<void> postPurchase(int purchaseId, {int? userId, String costStrategy = 'weighted_average'}) {
+  Future<void> postPurchase(
+    int purchaseId, {
+    int? userId,
+    String costStrategy = 'weighted_average',
+  }) {
     return transaction(() async {
       final purchase = await getPurchaseById(purchaseId);
       if (purchase == null) {
@@ -383,12 +462,18 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         final grossUnitCost = item.unitCostCents.toBigInt().toInt();
         final lineDiscount = item.discountCents.toBigInt().toInt();
         final lineQty = item.quantity;
+        final discountPerMajorUnit = MeasuredAmount.unitCentsFromTotal(
+          totalCents: lineDiscount,
+          quantity: lineQty,
+          quantityScale: item.quantityScale,
+        );
         final newCostCents = (lineQty > 0 && lineDiscount > 0)
-            ? (grossUnitCost - (lineDiscount / lineQty).round())
-                .clamp(0, 1 << 62)
+            ? (grossUnitCost - discountPerMajorUnit).clamp(0, 1 << 62)
             : grossUnitCost;
         final newSellPrice = item.newSellPriceCents?.toBigInt().toInt();
-        final newWholesalePrice = item.newWholesalePriceCents?.toBigInt().toInt();
+        final newWholesalePrice = item.newWholesalePriceCents
+            ?.toBigInt()
+            .toInt();
         final now = DateTime.now().toIso8601String();
 
         // Per-product `track_inventory` flag — gates every physical-stock and
@@ -402,6 +487,13 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         ).getSingleOrNull();
         final tracks =
             (trackInventoryRow?.read<int>('track_inventory') ?? 1) != 0;
+        final valuationSnapshot = tracks
+            ? await InventoryValuationDeltaService.capture(
+                this,
+                productId: productId,
+                variantId: variantId,
+              )
+            : null;
 
         // Snapshot old cost/price/wholesale BEFORE any mutation so price
         // history records the correct deltas. Routed through
@@ -435,7 +527,7 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           oldCostBefore = r?.read<int>('cost_cents') ?? 0;
           oldGrossCostBefore =
               r?.readNullable<int>('last_purchase_price_cents') ??
-                  oldCostBefore;
+              oldCostBefore;
           oldPriceBefore = r?.read<int>('price_cents') ?? 0;
           oldWholesaleBefore = r?.readNullable<int>('wholesale_price_cents');
         } else {
@@ -448,7 +540,7 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           oldCostBefore = r?.read<int>('cost_cents') ?? 0;
           oldGrossCostBefore =
               r?.readNullable<int>('last_purchase_price_cents') ??
-                  oldCostBefore;
+              oldCostBefore;
           oldPriceBefore = r?.read<int>('price_cents') ?? 0;
           oldWholesaleBefore = r?.readNullable<int>('wholesale_price_cents');
         }
@@ -468,7 +560,8 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
           // Increase variant stock — only when the product is inventory-tracked.
           if (tracks) {
-            await StockService.adjustStock(this,
+            await StockService.adjustStock(
+              this,
               productId: productId,
               variantId: variantId,
               quantity: item.quantity,
@@ -495,8 +588,7 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
               'SELECT costing_method FROM products WHERE id = ?',
               variables: [Variable.withInt(productId)],
             ).getSingleOrNull();
-            final method =
-                methodRow?.read<String>('costing_method') ?? 'wac';
+            final method = methodRow?.read<String>('costing_method') ?? 'wac';
 
             await ProductCostService.applyPurchaseCostToVariant(
               this,
@@ -530,7 +622,11 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           if (newSellPrice != null) {
             await customUpdate(
               'UPDATE product_variants SET price_cents = ?, updated_at = ? WHERE id = ?',
-              variables: [Variable.withInt(newSellPrice), Variable.withString(now), Variable.withInt(variantId)],
+              variables: [
+                Variable.withInt(newSellPrice),
+                Variable.withString(now),
+                Variable.withInt(variantId),
+              ],
               updates: {productVariants},
               updateKind: UpdateKind.update,
             );
@@ -540,7 +636,11 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           if (newWholesalePrice != null) {
             await customUpdate(
               'UPDATE product_variants SET wholesale_price_cents = ?, updated_at = ? WHERE id = ?',
-              variables: [Variable.withInt(newWholesalePrice), Variable.withString(now), Variable.withInt(variantId)],
+              variables: [
+                Variable.withInt(newWholesalePrice),
+                Variable.withString(now),
+                Variable.withInt(variantId),
+              ],
               updates: {productVariants},
               updateKind: UpdateKind.update,
             );
@@ -563,7 +663,10 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             'previous_cost_cents = cost_cents, '
             'previous_price_cents = price_cents, '
             'previous_wholesale_price_cents = wholesale_price_cents '
-            'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
+            'WHERE id = (SELECT v.id FROM product_variants v '
+            'JOIN products p ON p.id = v.product_id '
+            'WHERE v.product_id = ? AND v.is_active = 1 '
+            'AND p.has_variants = 0 ORDER BY v.id LIMIT 1)',
             variables: [Variable.withInt(productId)],
             updates: {productVariants},
             updateKind: UpdateKind.update,
@@ -581,7 +684,8 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             final beforeQty = preRow?.read<int>('stock_quantity') ?? 0;
 
             // Increase stock via StockService (handles products + default variant)
-            await StockService.adjustStock(this,
+            await StockService.adjustStock(
+              this,
               productId: productId,
               variantId: null,
               quantity: item.quantity,
@@ -592,8 +696,7 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
               'SELECT costing_method FROM products WHERE id = ?',
               variables: [Variable.withInt(productId)],
             ).getSingleOrNull();
-            final method =
-                methodRow?.read<String>('costing_method') ?? 'wac';
+            final method = methodRow?.read<String>('costing_method') ?? 'wac';
 
             await ProductCostService.applyPurchaseCostToProduct(
               this,
@@ -624,7 +727,11 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           if (newSellPrice != null) {
             await customUpdate(
               'UPDATE products SET price_cents = ?, updated_at = ? WHERE id = ?',
-              variables: [Variable.withInt(newSellPrice), Variable.withString(now), Variable.withInt(productId)],
+              variables: [
+                Variable.withInt(newSellPrice),
+                Variable.withString(now),
+                Variable.withInt(productId),
+              ],
               updates: {products},
               updateKind: UpdateKind.update,
             );
@@ -634,7 +741,11 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           if (newWholesalePrice != null) {
             await customUpdate(
               'UPDATE products SET wholesale_price_cents = ?, updated_at = ? WHERE id = ?',
-              variables: [Variable.withInt(newWholesalePrice), Variable.withString(now), Variable.withInt(productId)],
+              variables: [
+                Variable.withInt(newWholesalePrice),
+                Variable.withString(now),
+                Variable.withInt(productId),
+              ],
               updates: {products},
               updateKind: UpdateKind.update,
             );
@@ -652,7 +763,10 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
                 parentRow?.read<int>('cost_cents') ?? newCostCents;
             await customUpdate(
               'UPDATE product_variants SET cost_cents = ?, updated_at = ? '
-              'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
+              'WHERE id = (SELECT v.id FROM product_variants v '
+              'JOIN products p ON p.id = v.product_id '
+              'WHERE v.product_id = ? AND v.is_active = 1 '
+              'AND p.has_variants = 0 ORDER BY v.id LIMIT 1)',
               variables: [
                 Variable.withInt(mirroredCost),
                 Variable.withString(now),
@@ -668,7 +782,10 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             await customUpdate(
               'UPDATE product_variants SET last_purchase_price_cents = ?, '
               'updated_at = ? '
-              'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
+              'WHERE id = (SELECT v.id FROM product_variants v '
+              'JOIN products p ON p.id = v.product_id '
+              'WHERE v.product_id = ? AND v.is_active = 1 '
+              'AND p.has_variants = 0 ORDER BY v.id LIMIT 1)',
               variables: [
                 Variable.withInt(grossUnitCost),
                 Variable.withString(now),
@@ -683,8 +800,15 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           if (newSellPrice != null) {
             await customUpdate(
               'UPDATE product_variants SET price_cents = ?, updated_at = ? '
-              'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
-              variables: [Variable.withInt(newSellPrice), Variable.withString(now), Variable.withInt(productId)],
+              'WHERE id = (SELECT v.id FROM product_variants v '
+              'JOIN products p ON p.id = v.product_id '
+              'WHERE v.product_id = ? AND v.is_active = 1 '
+              'AND p.has_variants = 0 ORDER BY v.id LIMIT 1)',
+              variables: [
+                Variable.withInt(newSellPrice),
+                Variable.withString(now),
+                Variable.withInt(productId),
+              ],
               updates: {productVariants},
               updateKind: UpdateKind.update,
             );
@@ -692,8 +816,15 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           if (newWholesalePrice != null) {
             await customUpdate(
               'UPDATE product_variants SET wholesale_price_cents = ?, updated_at = ? '
-              'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL',
-              variables: [Variable.withInt(newWholesalePrice), Variable.withString(now), Variable.withInt(productId)],
+              'WHERE id = (SELECT v.id FROM product_variants v '
+              'JOIN products p ON p.id = v.product_id '
+              'WHERE v.product_id = ? AND v.is_active = 1 '
+              'AND p.has_variants = 0 ORDER BY v.id LIMIT 1)',
+              variables: [
+                Variable.withInt(newWholesalePrice),
+                Variable.withString(now),
+                Variable.withInt(productId),
+              ],
               updates: {productVariants},
               updateKind: UpdateKind.update,
             );
@@ -721,6 +852,24 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           }
         }
 
+        final inventoryValue = !tracks
+            ? 0
+            : valuationSnapshot != null
+            ? await InventoryValuationDeltaService.signedDeltaAfter(
+                this,
+                valuationSnapshot,
+              )
+            : MeasuredAmount.cents(
+                unitCents: newCostCents,
+                quantity: item.quantity,
+                quantityScale: item.quantityScale,
+              );
+        await (update(purchaseItems)..where((i) => i.id.equals(item.id))).write(
+          PurchaseItemsCompanion(
+            inventoryValueAtPostCents: Value(Decimal.fromInt(inventoryValue)),
+          ),
+        );
+
         // ── Centralized price-history audit ──
         // The price-history widget is a USER-FACING audit log answering "what
         // did I pay / charge over time". For COST we therefore record the
@@ -743,8 +892,7 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         // either (a) the user's per-line override (newSellPrice /
         // newWholesalePrice) when supplied or (b) the unchanged prior value
         // — both are correct, since these prices are user-set, not computed.
-        final int recordedNewCost =
-            tracks ? grossUnitCost : oldGrossCostBefore;
+        final int recordedNewCost = tracks ? grossUnitCost : oldGrossCostBefore;
         int newPriceAfter;
         int? newWholesaleAfter;
         if (variantId != null) {
@@ -797,7 +945,10 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         for (final productId in affectedProductIds) {
           await customUpdate(
             'UPDATE products SET is_taxable = 1, updated_at = ? WHERE id = ? AND is_taxable = 0',
-            variables: [Variable.withString(DateTime.now().toIso8601String()), Variable.withInt(productId)],
+            variables: [
+              Variable.withString(DateTime.now().toIso8601String()),
+              Variable.withInt(productId),
+            ],
             updates: {products},
             updateKind: UpdateKind.update,
           );
@@ -808,8 +959,10 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       // for every FIFO product whose batch ledger was touched. Catches any
       // silent desync BEFORE the transaction commits.
       for (final productId in batchedProductIds) {
-        await BatchService.assertInvariantForProduct(this,
-            productId: productId);
+        await BatchService.assertInvariantForProduct(
+          this,
+          productId: productId,
+        );
       }
 
       // Update purchase status to posted
@@ -824,15 +977,20 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
       // Ensure paidAmountCents is backed by purchase_payments rows so it doesn't
       // get lost when later payments are recorded.
-      var totalPaidCents = (await getPurchasePayments(purchaseId))
-          .fold<int>(0, (sum, p) => sum + p.amountCents.toBigInt().toInt());
+      var totalPaidCents = (await getPurchasePayments(
+        purchaseId,
+      )).fold<int>(0, (sum, p) => sum + p.amountCents.toBigInt().toInt());
       final headerPaidCents = purchase.paidAmountCents.toBigInt().toInt();
       int? backfilledInitialPaymentId;
       int? excessPaymentId;
       if (totalPaidCents == 0 && headerPaidCents > 0) {
         // If overpaying, split into invoice payment + excess credit payment
-        final invoicePayment = headerPaidCents > totalCents ? totalCents : headerPaidCents;
-        final excessPayment = headerPaidCents > totalCents ? headerPaidCents - totalCents : 0;
+        final invoicePayment = headerPaidCents > totalCents
+            ? totalCents
+            : headerPaidCents;
+        final excessPayment = headerPaidCents > totalCents
+            ? headerPaidCents - totalCents
+            : 0;
 
         backfilledInitialPaymentId = await into(purchasePayments).insert(
           PurchasePaymentsCompanion.insert(
@@ -864,17 +1022,19 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       }
 
       // Keep purchases.paid_amount_cents consistent with payment rows.
-      await (update(purchases)..where((p) => p.id.equals(purchaseId)))
-          .write(PurchasesCompanion(
-            paidAmountCents: Value(Decimal.fromInt(totalPaidCents)),
-            updatedAt: Value(DateTime.now()),
-          ));
+      await (update(purchases)..where((p) => p.id.equals(purchaseId))).write(
+        PurchasesCompanion(
+          paidAmountCents: Value(Decimal.fromInt(totalPaidCents)),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
 
       // Record supplier transactions for audit.
       await into(supplierTransactions).insert(
         SupplierTransactionsCompanion.insert(
           supplierId: purchase.supplierId,
           transactionType: 'purchase',
+          transactionNumber: Value(purchase.purchaseNumber),
           amountCents: Decimal.fromInt(totalCents),
           currencyId: purchase.currencyId,
           description: Value('Purchase ${purchase.purchaseNumber}'),
@@ -886,12 +1046,18 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       // Record payment transaction(s) only when we backfilled payment rows.
       // Later payments are logged via recordPayment().
       if (backfilledInitialPaymentId != null) {
-        final invoicePayment = headerPaidCents > totalCents ? totalCents : headerPaidCents;
+        final invoicePayment = headerPaidCents > totalCents
+            ? totalCents
+            : headerPaidCents;
         if (invoicePayment > 0) {
+          final paymentNumber = await DocumentNumberService(
+            attachedDatabase,
+          ).nextSupplierTransaction('CPS');
           await into(supplierTransactions).insert(
             SupplierTransactionsCompanion.insert(
               supplierId: purchase.supplierId,
               transactionType: 'payment',
+              transactionNumber: Value(paymentNumber),
               amountCents: Decimal.fromInt(-invoicePayment),
               currencyId: purchase.currencyId,
               description: Value('Payment for ${purchase.purchaseNumber}'),
@@ -905,13 +1071,19 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       // Record excess cash as a separate payment transaction
       if (excessPaymentId != null) {
         final excessPayment = headerPaidCents - totalCents;
+        final paymentNumber = await DocumentNumberService(
+          attachedDatabase,
+        ).nextSupplierTransaction('CPS');
         await into(supplierTransactions).insert(
           SupplierTransactionsCompanion.insert(
             supplierId: purchase.supplierId,
             transactionType: 'payment',
+            transactionNumber: Value(paymentNumber),
             amountCents: Decimal.fromInt(-excessPayment),
             currencyId: purchase.currencyId,
-            description: Value('Excess cash added to balance — ${purchase.purchaseNumber}'),
+            description: Value(
+              'Excess cash added to balance — ${purchase.purchaseNumber}',
+            ),
             referenceId: Value(excessPaymentId),
             referenceType: const Value('purchase_payment'),
           ),
@@ -920,7 +1092,8 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
       // Apply net balance delta once.
       final deltaCents = totalCents - totalPaidCents;
-      await BalanceService.adjustSupplierBalance(this,
+      await BalanceService.adjustSupplierBalance(
+        this,
         supplierId: purchase.supplierId,
         deltaCents: deltaCents,
       );
@@ -943,20 +1116,26 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
       var deltaBalanceCents = 0;
 
-      final existingPurchaseTx = await (select(supplierTransactions)
-            ..where((t) => t.referenceType.equals('purchase') &
-                t.referenceId.equals(purchaseId) &
-                t.transactionType.equals('purchase')))
-          .getSingleOrNull();
+      final existingPurchaseTx =
+          await (select(supplierTransactions)..where(
+                (t) =>
+                    t.referenceType.equals('purchase') &
+                    t.referenceId.equals(purchaseId) &
+                    t.transactionType.equals('purchase'),
+              ))
+              .getSingleOrNull();
 
       if (existingPurchaseTx == null) {
         await into(supplierTransactions).insert(
           SupplierTransactionsCompanion.insert(
             supplierId: supplierId,
             transactionType: 'purchase',
+            transactionNumber: Value(purchase.purchaseNumber),
             amountCents: Decimal.fromInt(totalCents),
             currencyId: currencyId,
-            description: Value('Purchase ${purchase.purchaseNumber} (backfilled)'),
+            description: Value(
+              'Purchase ${purchase.purchaseNumber} (backfilled)',
+            ),
             referenceId: Value(purchaseId),
             referenceType: const Value('purchase'),
           ),
@@ -984,20 +1163,29 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           payments = await getPurchasePayments(purchaseId);
 
           // If we created a payment row, ensure its supplier transaction exists too.
-          final existingPaymentTx = await (select(supplierTransactions)
-                ..where((t) => t.referenceType.equals('purchase_payment') &
-                    t.referenceId.equals(backfilledPaymentId) &
-                    t.transactionType.equals('payment')))
-              .getSingleOrNull();
+          final existingPaymentTx =
+              await (select(supplierTransactions)..where(
+                    (t) =>
+                        t.referenceType.equals('purchase_payment') &
+                        t.referenceId.equals(backfilledPaymentId) &
+                        t.transactionType.equals('payment'),
+                  ))
+                  .getSingleOrNull();
 
           if (existingPaymentTx == null) {
+            final paymentNumber = await DocumentNumberService(
+              attachedDatabase,
+            ).nextSupplierTransaction('CPS');
             await into(supplierTransactions).insert(
               SupplierTransactionsCompanion.insert(
                 supplierId: supplierId,
                 transactionType: 'payment',
+                transactionNumber: Value(paymentNumber),
                 amountCents: Decimal.fromInt(-headerPaidCents),
                 currencyId: currencyId,
-                description: Value('Payment for ${purchase.purchaseNumber} (backfilled)'),
+                description: Value(
+                  'Payment for ${purchase.purchaseNumber} (backfilled)',
+                ),
                 referenceId: Value(backfilledPaymentId),
                 referenceType: const Value('purchase_payment'),
               ),
@@ -1012,20 +1200,29 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         final payId = p.id;
         final payCents = p.amountCents.toBigInt().toInt();
 
-        final existingPaymentTx = await (select(supplierTransactions)
-              ..where((t) => t.referenceType.equals('purchase_payment') &
-                  t.referenceId.equals(payId) &
-                  t.transactionType.equals('payment')))
-            .getSingleOrNull();
+        final existingPaymentTx =
+            await (select(supplierTransactions)..where(
+                  (t) =>
+                      t.referenceType.equals('purchase_payment') &
+                      t.referenceId.equals(payId) &
+                      t.transactionType.equals('payment'),
+                ))
+                .getSingleOrNull();
 
         if (existingPaymentTx == null) {
+          final paymentNumber = await DocumentNumberService(
+            attachedDatabase,
+          ).nextSupplierTransaction('CPS');
           await into(supplierTransactions).insert(
             SupplierTransactionsCompanion.insert(
               supplierId: supplierId,
               transactionType: 'payment',
+              transactionNumber: Value(paymentNumber),
               amountCents: Decimal.fromInt(-payCents),
               currencyId: currencyId,
-              description: Value('Payment for ${purchase.purchaseNumber} (backfilled)'),
+              description: Value(
+                'Payment for ${purchase.purchaseNumber} (backfilled)',
+              ),
               referenceId: Value(payId),
               referenceType: const Value('purchase_payment'),
             ),
@@ -1035,7 +1232,8 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       }
 
       if (deltaBalanceCents != 0) {
-        await BalanceService.adjustSupplierBalance(this,
+        await BalanceService.adjustSupplierBalance(
+          this,
           supplierId: supplierId,
           deltaCents: deltaBalanceCents,
         );
@@ -1065,9 +1263,9 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       }
 
       // Cascade-void all associated returns first (reverses their stock/accounting)
-      final associatedReturns = await (select(purchaseReturns)
-            ..where((r) => r.purchaseId.equals(purchaseId)))
-          .get();
+      final associatedReturns = await (select(
+        purchaseReturns,
+      )..where((r) => r.purchaseId.equals(purchaseId))).get();
       for (final ret in associatedReturns) {
         if (ret.status != 'voided') {
           // 2026-05-13 — emit the JE reversal BEFORE flipping the row's
@@ -1094,7 +1292,23 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         for (final item in items) {
           final variantId = item.variantId;
           final productId = item.productId;
+          if (!await _tracksInventory(productId)) continue;
           voidAffectedProductIds.add(productId);
+          final wacSnapshot = await WacMovementService.capture(
+            this,
+            productId: productId,
+            variantId: variantId,
+          );
+          final grossUnitCost = item.unitCostCents.toBigInt().toInt();
+          final lineDiscount = item.discountCents.toBigInt().toInt();
+          final discountPerMajorUnit = MeasuredAmount.unitCentsFromTotal(
+            totalCents: lineDiscount,
+            quantity: item.quantity,
+            quantityScale: item.quantityScale,
+          );
+          final purchasedUnitCost = (item.quantity > 0 && lineDiscount > 0)
+              ? (grossUnitCost - discountPerMajorUnit).clamp(0, 1 << 62)
+              : grossUnitCost;
 
           // FIFO safety: if any batch sourced from this purchase line has
           // been (even partially) consumed, voiding the purchase would
@@ -1137,7 +1351,8 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
                 );
               }
             }
-            await StockService.adjustStock(this,
+            await StockService.adjustStock(
+              this,
               productId: productId,
               variantId: variantId,
               quantity: item.quantity,
@@ -1159,11 +1374,21 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
                 );
               }
             }
-            await StockService.adjustStock(this,
+            await StockService.adjustStock(
+              this,
               productId: productId,
               variantId: null,
               quantity: item.quantity,
               direction: StockDirection.decrease,
+            );
+          }
+
+          if (wacSnapshot != null) {
+            await WacMovementService.reverseInbound(
+              this,
+              snapshot: wacSnapshot,
+              removedQty: item.quantity,
+              removedUnitCostCents: purchasedUnitCost,
             );
           }
 
@@ -1219,8 +1444,10 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
         // I4 (Invariant I1): cross-table invariant for FIFO products.
         for (final productId in voidBatchedProductIds) {
-          await BatchService.assertInvariantForProduct(this,
-              productId: productId);
+          await BatchService.assertInvariantForProduct(
+            this,
+            productId: productId,
+          );
         }
 
         // Reverse supplier balance: undo the net delta that was applied on posting.
@@ -1230,7 +1457,8 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         final totalCents = purchase.totalCents.toBigInt().toInt();
         final payments = await getPurchasePayments(purchaseId);
         final totalPaidCents = payments.fold<int>(
-          0, (sum, p) => sum + p.amountCents.toBigInt().toInt(),
+          0,
+          (sum, p) => sum + p.amountCents.toBigInt().toInt(),
         );
 
         // Record reversal transaction for the purchase
@@ -1254,7 +1482,9 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
               transactionType: 'payment_reversal',
               amountCents: Decimal.fromInt(totalPaidCents),
               currencyId: purchase.currencyId,
-              description: Value('Reversed payments for voided purchase ${purchase.purchaseNumber}'),
+              description: Value(
+                'Reversed payments for voided purchase ${purchase.purchaseNumber}',
+              ),
               referenceId: Value(purchaseId),
               referenceType: const Value('purchase'),
             ),
@@ -1263,7 +1493,8 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
         // Net balance change: -(totalCents - totalPaidCents)
         final netReversalCents = totalCents - totalPaidCents;
-        await BalanceService.adjustSupplierBalance(this,
+        await BalanceService.adjustSupplierBalance(
+          this,
           supplierId: purchase.supplierId,
           deltaCents: -netReversalCents,
         );
@@ -1305,43 +1536,55 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
   /// Watch upcoming due purchases for a supplier (posted, not fully paid, with due date)
   Stream<List<Purchase>> watchUpcomingDuePurchases(int supplierId) {
     return (select(purchases)
-          ..where((p) =>
-              p.supplierId.equals(supplierId) &
-              p.status.equals('posted') &
-              p.dueDate.isNotNull())
+          ..where(
+            (p) =>
+                p.supplierId.equals(supplierId) &
+                p.status.equals('posted') &
+                p.dueDate.isNotNull(),
+          )
           ..orderBy([(p) => OrderingTerm.asc(p.dueDate)]))
         .watch()
-        .map((list) => list.where((p) {
-              final total = p.totalCents.toBigInt().toInt();
-              final paid = p.paidAmountCents.toBigInt().toInt();
-              return paid < total;
-            }).toList());
+        .map(
+          (list) => list.where((p) {
+            final total = p.totalCents.toBigInt().toInt();
+            final paid = p.paidAmountCents.toBigInt().toInt();
+            return paid < total;
+          }).toList(),
+        );
   }
 
   /// Search purchases by number, supplier name, or supplier phone
   Stream<List<PurchaseWithSupplier>> searchPurchases(String query) {
     final searchQuery = '%$query%';
-    final joinQuery = select(purchases).join([
-      innerJoin(suppliers, suppliers.id.equalsExp(purchases.supplierId)),
-    ])
-      ..where(purchases.purchaseNumber.like(searchQuery) |
-          suppliers.name.like(searchQuery) |
-          suppliers.phone.like(searchQuery))
-      ..orderBy([OrderingTerm.desc(purchases.purchaseDate)]);
+    final joinQuery =
+        select(purchases).join([
+            innerJoin(suppliers, suppliers.id.equalsExp(purchases.supplierId)),
+          ])
+          ..where(
+            purchases.purchaseNumber.like(searchQuery) |
+                suppliers.name.like(searchQuery) |
+                suppliers.phone.like(searchQuery),
+          )
+          ..orderBy([OrderingTerm.desc(purchases.purchaseDate)]);
 
-    return joinQuery.watch().map((rows) => rows.map((row) {
-          return PurchaseWithSupplier(
-            purchase: row.readTable(purchases),
-            supplier: row.readTable(suppliers),
-          );
-        }).toList());
+    return joinQuery.watch().map(
+      (rows) => rows.map((row) {
+        return PurchaseWithSupplier(
+          purchase: row.readTable(purchases),
+          supplier: row.readTable(suppliers),
+        );
+      }).toList(),
+    );
   }
 
   /// Watch product search terms for all purchases (product name, barcode, SKU).
   Stream<Map<int, List<String>>> watchPurchaseProductSearchTerms() {
     final query = select(purchaseItems).join([
       innerJoin(products, products.id.equalsExp(purchaseItems.productId)),
-      leftOuterJoin(productVariants, productVariants.id.equalsExp(purchaseItems.variantId)),
+      leftOuterJoin(
+        productVariants,
+        productVariants.id.equalsExp(purchaseItems.variantId),
+      ),
     ]);
 
     return query.watch().map((rows) {
@@ -1472,30 +1715,41 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
   /// Get items with expiry dates approaching (within days)
   Stream<List<PurchaseItemWithDetails>> watchExpiringItems(int withinDays) {
     final cutoff = DateTime.now().add(Duration(days: withinDays));
-    final query = select(purchaseItems).join([
-      innerJoin(products, products.id.equalsExp(purchaseItems.productId)),
-      leftOuterJoin(productVariants, productVariants.id.equalsExp(purchaseItems.variantId)),
-    ])
-      ..where(purchaseItems.expiryDate.isNotNull() &
-          purchaseItems.expiryDate.isSmallerOrEqualValue(cutoff));
+    final query =
+        select(purchaseItems).join([
+          innerJoin(products, products.id.equalsExp(purchaseItems.productId)),
+          leftOuterJoin(
+            productVariants,
+            productVariants.id.equalsExp(purchaseItems.variantId),
+          ),
+        ])..where(
+          purchaseItems.expiryDate.isNotNull() &
+              purchaseItems.expiryDate.isSmallerOrEqualValue(cutoff),
+        );
 
-    return query.watch().map((rows) => rows.map((row) {
-          return PurchaseItemWithDetails(
-            item: row.readTable(purchaseItems),
-            product: row.readTable(products),
-            variant: row.readTableOrNull(productVariants),
-          );
-        }).toList());
+    return query.watch().map(
+      (rows) => rows.map((row) {
+        return PurchaseItemWithDetails(
+          item: row.readTable(purchaseItems),
+          product: row.readTable(products),
+          variant: row.readTableOrNull(productVariants),
+        );
+      }).toList(),
+    );
   }
 
   /// Get expiry info for a specific product (all purchase items with expiry dates)
-  Future<List<({int quantity, DateTime expiryDate})>> getProductExpiryInfo(int productId) async {
+  Future<List<({int quantity, DateTime expiryDate})>> getProductExpiryInfo(
+    int productId,
+  ) async {
     final query = select(purchaseItems)
       ..where((i) => i.productId.equals(productId) & i.expiryDate.isNotNull())
       ..orderBy([(i) => OrderingTerm.asc(i.expiryDate)]);
 
     final rows = await query.get();
-    return rows.map((r) => (quantity: r.quantity, expiryDate: r.expiryDate!)).toList();
+    return rows
+        .map((r) => (quantity: r.quantity, expiryDate: r.expiryDate!))
+        .toList();
   }
 
   // ==================== PURCHASE RETURNS ====================
@@ -1538,33 +1792,38 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
     final query = select(purchaseReturns).join([
       innerJoin(purchases, purchases.id.equalsExp(purchaseReturns.purchaseId)),
       innerJoin(suppliers, suppliers.id.equalsExp(purchases.supplierId)),
-    ])
-      ..orderBy([OrderingTerm.desc(purchaseReturns.returnDate)]);
+    ])..orderBy([OrderingTerm.desc(purchaseReturns.returnDate)]);
 
-    return query.watch().map((rows) => rows.map((row) {
-          return PurchaseReturnWithParty(
-            purchaseReturn: row.readTable(purchaseReturns),
-            supplierName: row.readTable(suppliers).name,
-            supplierPhone: row.readTable(suppliers).phone,
-          );
-        }).toList());
+    return query.watch().map(
+      (rows) => rows.map((row) {
+        return PurchaseReturnWithParty(
+          purchaseReturn: row.readTable(purchaseReturns),
+          supplierName: row.readTable(suppliers).name,
+          supplierPhone: row.readTable(suppliers).phone,
+        );
+      }).toList(),
+    );
   }
 
   /// Watch all purchase returns (raw, without party info)
   Stream<List<PurchaseReturn>> watchAllPurchaseReturns() {
-    return (select(purchaseReturns)
-          ..orderBy([(r) => OrderingTerm.desc(r.returnDate)]))
-        .watch();
+    return (select(
+      purchaseReturns,
+    )..orderBy([(r) => OrderingTerm.desc(r.returnDate)])).watch();
   }
 
   /// Watch product search terms for purchase return items.
   Stream<Map<String, List<String>>> watchPurchaseReturnProductSearchTerms() {
     final linkedQuery = select(purchaseReturnItems).join([
-      innerJoin(purchaseItems,
-          purchaseItems.id.equalsExp(purchaseReturnItems.purchaseItemId)),
+      innerJoin(
+        purchaseItems,
+        purchaseItems.id.equalsExp(purchaseReturnItems.purchaseItemId),
+      ),
       innerJoin(products, products.id.equalsExp(purchaseItems.productId)),
-      leftOuterJoin(productVariants,
-          productVariants.id.equalsExp(purchaseItems.variantId)),
+      leftOuterJoin(
+        productVariants,
+        productVariants.id.equalsExp(purchaseItems.variantId),
+      ),
     ]);
 
     return linkedQuery.watch().map((rows) {
@@ -1590,28 +1849,14 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
   /// Get purchase return by ID
   Future<PurchaseReturn?> getPurchaseReturnById(int id) {
-    return (select(purchaseReturns)..where((r) => r.id.equals(id))).getSingleOrNull();
+    return (select(
+      purchaseReturns,
+    )..where((r) => r.id.equals(id))).getSingleOrNull();
   }
 
   /// Generate next return number
-  Future<String> generateReturnNumber() async {
-    final now = DateTime.now();
-    final prefix = 'PR-${now.year}${now.month.toString().padLeft(2, '0')}';
-
-    final lastReturn = await (select(purchaseReturns)
-          ..where((r) => r.returnNumber.like('$prefix%'))
-          ..orderBy([(r) => OrderingTerm.desc(r.returnNumber)])
-          ..limit(1))
-        .getSingleOrNull();
-
-    int nextNum = 1;
-    if (lastReturn != null) {
-      final lastNum = int.tryParse(lastReturn.returnNumber.split('-').last) ?? 0;
-      nextNum = lastNum + 1;
-    }
-
-    return '$prefix-${nextNum.toString().padLeft(4, '0')}';
-  }
+  Future<String> generateReturnNumber() =>
+      DocumentNumberService(attachedDatabase).nextPurchaseReturn();
 
   /// Create purchase return with items
   Future<int> createPurchaseReturn(
@@ -1653,9 +1898,11 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
       // Validate return quantities don't exceed available
       final returnItemsQuery = select(purchaseReturnItems).join([
-        innerJoin(purchaseItems, purchaseItems.id.equalsExp(purchaseReturnItems.purchaseItemId)),
-      ])
-        ..where(purchaseReturnItems.returnId.equals(returnId));
+        innerJoin(
+          purchaseItems,
+          purchaseItems.id.equalsExp(purchaseReturnItems.purchaseItemId),
+        ),
+      ])..where(purchaseReturnItems.returnId.equals(returnId));
 
       final returnItemRows = await returnItemsQuery.get();
       for (final row in returnItemRows) {
@@ -1689,7 +1936,45 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           final purchaseItem = row.readTable(purchaseItems);
           final variantId = purchaseItem.variantId;
           final productId = purchaseItem.productId;
+          if (!await _tracksInventory(productId)) {
+            await (update(
+              purchaseReturnItems,
+            )..where((i) => i.id.equals(returnItem.id))).write(
+              PurchaseReturnItemsCompanion(
+                unitCostAtPostCents: Value(Decimal.zero),
+              ),
+            );
+            continue;
+          }
           returnAffectedProductIds.add(productId);
+
+          final valuationSnapshot =
+              await InventoryValuationDeltaService.capture(
+                this,
+                productId: productId,
+                variantId: variantId,
+              );
+
+          // A WAC outflow removes inventory at the average immediately
+          // before posting. Freeze it on the return line so GL rebuilds and
+          // a later void never depend on a changed live product cost.
+          final wacSnapshot = await WacMovementService.capture(
+            this,
+            productId: productId,
+            variantId: variantId,
+          );
+          final frozenUnitCost =
+              returnItem.unitCostAtPostCents?.toBigInt().toInt() ??
+              wacSnapshot?.unitCostCents ??
+              purchaseItem.unitCostCents.toBigInt().toInt();
+          await (update(
+            purchaseReturnItems,
+          )..where((i) => i.id.equals(returnItem.id))).write(
+            PurchaseReturnItemsCompanion(
+              unitCostAtPostCents: Value(Decimal.fromInt(frozenUnitCost)),
+            ),
+          );
+
           if (variantId != null) {
             // Guard against negative stock unless explicitly allowed by policy.
             if (!allowNegativeStock) {
@@ -1708,7 +1993,8 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
               }
             }
 
-            await StockService.adjustStock(this,
+            await StockService.adjustStock(
+              this,
               productId: productId,
               variantId: variantId,
               quantity: returnItem.quantity,
@@ -1719,7 +2005,8 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             // the consumption to this return item so a later void can mirror
             // it back precisely to the same batches at the FROZEN unit cost.
             if (await _isFifoProduct(productId)) {
-              await BatchService.consumeFifo(this,
+              await BatchService.consumeFifo(
+                this,
                 productId: productId,
                 variantId: variantId,
                 quantity: returnItem.quantity,
@@ -1745,7 +2032,8 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
                 }
               }
             }
-            await StockService.adjustStock(this,
+            await StockService.adjustStock(
+              this,
               productId: productId,
               variantId: null,
               quantity: returnItem.quantity,
@@ -1756,7 +2044,8 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             // branch above — BatchService resolves null variantId to the
             // product's default variant internally.
             if (await _isFifoProduct(productId)) {
-              await BatchService.consumeFifo(this,
+              await BatchService.consumeFifo(
+                this,
                 productId: productId,
                 variantId: null,
                 quantity: returnItem.quantity,
@@ -1766,17 +2055,39 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
               returnBatchedProductIds.add(productId);
             }
           }
+
+          final inventoryValue = valuationSnapshot != null
+              ? -await InventoryValuationDeltaService.signedDeltaAfter(
+                  this,
+                  valuationSnapshot,
+                )
+              : await _purchaseReturnBatchValueCents(
+                  returnItem.id,
+                  returnItem.quantityScale,
+                );
+          await (update(
+            purchaseReturnItems,
+          )..where((i) => i.id.equals(returnItem.id))).write(
+            PurchaseReturnItemsCompanion(
+              inventoryValueAtPostCents: Value(Decimal.fromInt(inventoryValue)),
+            ),
+          );
         }
 
         // Sync products.stock_quantity from variants
         for (final productId in returnAffectedProductIds) {
-          await StockService.syncProductStockFromVariants(this, productId: productId);
+          await StockService.syncProductStockFromVariants(
+            this,
+            productId: productId,
+          );
         }
 
         // I4 (Invariant I1): cross-table invariant for FIFO products.
         for (final productId in returnBatchedProductIds) {
-          await BatchService.assertInvariantForProduct(this,
-              productId: productId);
+          await BatchService.assertInvariantForProduct(
+            this,
+            productId: productId,
+          );
         }
       }
 
@@ -1814,9 +2125,12 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           SupplierTransactionsCompanion.insert(
             supplierId: purchase.supplierId,
             transactionType: txType,
+            transactionNumber: Value(returnData.returnNumber),
             amountCents: Decimal.fromInt(-refundCents),
             currencyId: purchase.currencyId,
-            description: Value('Purchase return ${returnData.returnNumber} ($refundMethod)'),
+            description: Value(
+              'Purchase return ${returnData.returnNumber} ($refundMethod)',
+            ),
             referenceId: Value(returnId),
             referenceType: const Value('purchase_return'),
           ),
@@ -1826,7 +2140,8 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         // Cash/cheque means the supplier already gave us the money back,
         // so the balance (what we owe them) doesn't change.
         if (isCreditRefund) {
-          await BalanceService.adjustSupplierBalance(this,
+          await BalanceService.adjustSupplierBalance(
+            this,
             supplierId: purchase.supplierId,
             deltaCents: -refundCents,
           );
@@ -1837,42 +2152,65 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
   /// Watch purchase return items (raw)
   Stream<List<PurchaseReturnItem>> watchPurchaseReturnItems(int returnId) {
-    return (select(purchaseReturnItems)..where((i) => i.returnId.equals(returnId))).watch();
+    return (select(
+      purchaseReturnItems,
+    )..where((i) => i.returnId.equals(returnId))).watch();
   }
 
   /// Watch purchase return items with full product details (name, color, size, SKU)
-  Stream<List<PurchaseReturnItemWithDetails>> watchPurchaseReturnItemsWithDetails(int returnId) {
+  Stream<List<PurchaseReturnItemWithDetails>>
+  watchPurchaseReturnItemsWithDetails(int returnId) {
     final query = select(purchaseReturnItems).join([
-      innerJoin(purchaseItems, purchaseItems.id.equalsExp(purchaseReturnItems.purchaseItemId)),
+      innerJoin(
+        purchaseItems,
+        purchaseItems.id.equalsExp(purchaseReturnItems.purchaseItemId),
+      ),
       innerJoin(products, products.id.equalsExp(purchaseItems.productId)),
-      leftOuterJoin(productVariants, productVariants.id.equalsExp(purchaseItems.variantId)),
-      leftOuterJoin(productColors, productColors.id.equalsExp(productVariants.colorId)),
+      leftOuterJoin(
+        productVariants,
+        productVariants.id.equalsExp(purchaseItems.variantId),
+      ),
+      leftOuterJoin(
+        productColors,
+        productColors.id.equalsExp(productVariants.colorId),
+      ),
       leftOuterJoin(sizes, sizes.id.equalsExp(productVariants.sizeId)),
-    ])
-      ..where(purchaseReturnItems.returnId.equals(returnId));
+    ])..where(purchaseReturnItems.returnId.equals(returnId));
 
-    return query.watch().map((rows) => rows.map((row) {
-      return PurchaseReturnItemWithDetails(
-        returnItem: row.readTable(purchaseReturnItems),
-        product: row.readTable(products),
-        variant: row.readTableOrNull(productVariants),
-        colorName: row.readTableOrNull(productColors)?.name,
-        colorHex: row.readTableOrNull(productColors)?.hexCode,
-        sizeName: row.readTableOrNull(sizes)?.name,
-      );
-    }).toList());
+    return query.watch().map(
+      (rows) => rows.map((row) {
+        return PurchaseReturnItemWithDetails(
+          returnItem: row.readTable(purchaseReturnItems),
+          product: row.readTable(products),
+          variant: row.readTableOrNull(productVariants),
+          colorName: row.readTableOrNull(productColors)?.name,
+          colorHex: row.readTableOrNull(productColors)?.hexCode,
+          sizeName: row.readTableOrNull(sizes)?.name,
+        );
+      }).toList(),
+    );
   }
 
   /// Get purchase return items with full product details
-  Future<List<PurchaseReturnItemWithDetails>> getPurchaseReturnItemsWithDetails(int returnId) async {
+  Future<List<PurchaseReturnItemWithDetails>> getPurchaseReturnItemsWithDetails(
+    int returnId,
+  ) async {
     final query = select(purchaseReturnItems).join([
-      innerJoin(purchaseItems, purchaseItems.id.equalsExp(purchaseReturnItems.purchaseItemId)),
+      innerJoin(
+        purchaseItems,
+        purchaseItems.id.equalsExp(purchaseReturnItems.purchaseItemId),
+      ),
       innerJoin(products, products.id.equalsExp(purchaseItems.productId)),
-      leftOuterJoin(productVariants, productVariants.id.equalsExp(purchaseItems.variantId)),
-      leftOuterJoin(productColors, productColors.id.equalsExp(productVariants.colorId)),
+      leftOuterJoin(
+        productVariants,
+        productVariants.id.equalsExp(purchaseItems.variantId),
+      ),
+      leftOuterJoin(
+        productColors,
+        productColors.id.equalsExp(productVariants.colorId),
+      ),
       leftOuterJoin(sizes, sizes.id.equalsExp(productVariants.sizeId)),
-    ])
-      ..where(purchaseReturnItems.returnId.equals(returnId));
+    ])..where(purchaseReturnItems.returnId.equals(returnId));
 
     final rows = await query.get();
     return rows.map((row) {
@@ -1892,14 +2230,18 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
     return transaction(() async {
       final returnData = await getPurchaseReturnById(returnId);
       if (returnData == null) throw Exception('Return not found');
-      if (returnData.status == 'voided') throw Exception('Return already voided');
+      if (returnData.status == 'voided') {
+        throw Exception('Return already voided');
+      }
 
       // If posted, always reverse stock changes (mirrors postPurchaseReturn).
       if (returnData.status == 'posted') {
         final query = select(purchaseReturnItems).join([
-          innerJoin(purchaseItems, purchaseItems.id.equalsExp(purchaseReturnItems.purchaseItemId)),
-        ])
-          ..where(purchaseReturnItems.returnId.equals(returnId));
+          innerJoin(
+            purchaseItems,
+            purchaseItems.id.equalsExp(purchaseReturnItems.purchaseItemId),
+          ),
+        ])..where(purchaseReturnItems.returnId.equals(returnId));
 
         final items = await query.get();
         final voidReturnAffectedProductIds = <int>{};
@@ -1908,18 +2250,41 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
         for (final row in items) {
           final returnItem = row.readTable(purchaseReturnItems);
           final purchaseItem = row.readTable(purchaseItems);
+          if (!await _tracksInventory(purchaseItem.productId)) continue;
           voidReturnAffectedProductIds.add(purchaseItem.productId);
-          await StockService.adjustStock(this,
+
+          final wacSnapshot = await WacMovementService.capture(
+            this,
+            productId: purchaseItem.productId,
+            variantId: purchaseItem.variantId,
+          );
+          final frozenUnitCost =
+              returnItem.unitCostAtPostCents?.toBigInt().toInt() ??
+              wacSnapshot?.unitCostCents ??
+              purchaseItem.unitCostCents.toBigInt().toInt();
+
+          await StockService.adjustStock(
+            this,
             productId: purchaseItem.productId,
             variantId: purchaseItem.variantId,
             quantity: returnItem.quantity,
             direction: StockDirection.increase,
           );
 
+          if (wacSnapshot != null) {
+            await WacMovementService.applyInbound(
+              this,
+              snapshot: wacSnapshot,
+              addedQty: returnItem.quantity,
+              inboundUnitCostCents: frozenUnitCost,
+            );
+          }
+
           // FIFO restoration: mirror every 'out' consumption row this
           // return item produced back into its source batch at the FROZEN
           // unit_cost. No-op for WAC products (no consumption rows exist).
-          await BatchService.restoreConsumptions(this,
+          await BatchService.restoreConsumptions(
+            this,
             reverseConsumptionType: 'purchase_return_void',
             purchaseReturnItemId: returnItem.id,
           );
@@ -1930,13 +2295,18 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
 
         // Sync products.stock_quantity from variants
         for (final productId in voidReturnAffectedProductIds) {
-          await StockService.syncProductStockFromVariants(this, productId: productId);
+          await StockService.syncProductStockFromVariants(
+            this,
+            productId: productId,
+          );
         }
 
         // I4 (Invariant I1): cross-table invariant for FIFO products.
         for (final productId in voidReturnBatchedProductIds) {
-          await BatchService.assertInvariantForProduct(this,
-              productId: productId);
+          await BatchService.assertInvariantForProduct(
+            this,
+            productId: productId,
+          );
         }
 
         // ── Atomic counters: reverse qty_returned_linked on each
@@ -1947,7 +2317,11 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             'UPDATE purchase_items '
             'SET qty_returned_linked = qty_returned_linked - ? '
             'WHERE id = ? AND qty_returned_linked >= ?',
-            [returnItem.quantity, returnItem.purchaseItemId, returnItem.quantity],
+            [
+              returnItem.quantity,
+              returnItem.purchaseItemId,
+              returnItem.quantity,
+            ],
           );
         }
       }
@@ -1960,14 +2334,18 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           final isCreditRefund = returnData.refundMethod == 'credit';
 
           // Record reversal transaction for audit trail (always)
-          final reversalType = isCreditRefund ? 'credit_note_reversal' : 'refund_reversal';
+          final reversalType = isCreditRefund
+              ? 'credit_note_reversal'
+              : 'refund_reversal';
           await into(supplierTransactions).insert(
             SupplierTransactionsCompanion.insert(
               supplierId: purchase.supplierId,
               transactionType: reversalType,
               amountCents: Decimal.fromInt(refundCents),
               currencyId: purchase.currencyId,
-              description: Value('Voided purchase return ${returnData.returnNumber}'),
+              description: Value(
+                'Voided purchase return ${returnData.returnNumber}',
+              ),
               referenceId: Value(returnId),
               referenceType: const Value('purchase_return'),
             ),
@@ -1977,7 +2355,8 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           // Cash/cheque refunds did not change the balance on posting,
           // so voiding them should not change it either.
           if (isCreditRefund) {
-            await BalanceService.adjustSupplierBalance(this,
+            await BalanceService.adjustSupplierBalance(
+              this,
               supplierId: purchase.supplierId,
               deltaCents: refundCents,
             );
@@ -2021,23 +2400,31 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
       // Recalculate total paid
       final payments = await getPurchasePayments(payment.purchaseId.value);
       final totalPaid = payments.fold<int>(
-        0, (sum, p) => sum + p.amountCents.toBigInt().toInt(),
+        0,
+        (sum, p) => sum + p.amountCents.toBigInt().toInt(),
       );
 
-      await (update(purchases)..where((p) => p.id.equals(payment.purchaseId.value)))
-          .write(PurchasesCompanion(
-            paidAmountCents: Value(Decimal.fromInt(totalPaid)),
-            updatedAt: Value(DateTime.now()),
-          ));
+      await (update(
+        purchases,
+      )..where((p) => p.id.equals(payment.purchaseId.value))).write(
+        PurchasesCompanion(
+          paidAmountCents: Value(Decimal.fromInt(totalPaid)),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
 
       // Supplier accounting: only posted purchases affect supplier balance.
       if (purchase.status == 'posted') {
         final amountCents = payment.amountCents.value.toBigInt().toInt();
+        final paymentNumber = await DocumentNumberService(
+          attachedDatabase,
+        ).nextSupplierTransaction('CPS');
 
         await into(supplierTransactions).insert(
           SupplierTransactionsCompanion.insert(
             supplierId: purchase.supplierId,
             transactionType: 'payment',
+            transactionNumber: Value(paymentNumber),
             amountCents: Decimal.fromInt(-amountCents),
             currencyId: purchase.currencyId,
             description: Value('Payment for ${purchase.purchaseNumber}'),
@@ -2046,7 +2433,8 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           ),
         );
 
-        await BalanceService.adjustSupplierBalance(this,
+        await BalanceService.adjustSupplierBalance(
+          this,
           supplierId: purchase.supplierId,
           deltaCents: -amountCents,
         );
@@ -2059,24 +2447,32 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
   /// Delete a payment and recalculate paid_amount_cents
   Future<void> deletePayment(int paymentId) {
     return transaction(() async {
-      final payment = await (select(purchasePayments)..where((p) => p.id.equals(paymentId))).getSingleOrNull();
+      final payment = await (select(
+        purchasePayments,
+      )..where((p) => p.id.equals(paymentId))).getSingleOrNull();
       if (payment == null) return;
 
       final purchase = await getPurchaseById(payment.purchaseId);
 
-      await (delete(purchasePayments)..where((p) => p.id.equals(paymentId))).go();
+      await (delete(
+        purchasePayments,
+      )..where((p) => p.id.equals(paymentId))).go();
 
       // Recalculate total paid
       final remaining = await getPurchasePayments(payment.purchaseId);
       final totalPaid = remaining.fold<int>(
-        0, (sum, p) => sum + p.amountCents.toBigInt().toInt(),
+        0,
+        (sum, p) => sum + p.amountCents.toBigInt().toInt(),
       );
 
-      await (update(purchases)..where((p) => p.id.equals(payment.purchaseId)))
-          .write(PurchasesCompanion(
-            paidAmountCents: Value(Decimal.fromInt(totalPaid)),
-            updatedAt: Value(DateTime.now()),
-          ));
+      await (update(
+        purchases,
+      )..where((p) => p.id.equals(payment.purchaseId))).write(
+        PurchasesCompanion(
+          paidAmountCents: Value(Decimal.fromInt(totalPaid)),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
 
       // Reverse supplier balance effect if purchase is posted.
       if (purchase != null && purchase.status == 'posted') {
@@ -2088,13 +2484,16 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
             transactionType: 'payment_reversal',
             amountCents: Decimal.fromInt(amountCents),
             currencyId: purchase.currencyId,
-            description: Value('Deleted payment for ${purchase.purchaseNumber}'),
+            description: Value(
+              'Deleted payment for ${purchase.purchaseNumber}',
+            ),
             referenceId: Value(paymentId),
             referenceType: const Value('purchase_payment'),
           ),
         );
 
-        await BalanceService.adjustSupplierBalance(this,
+        await BalanceService.adjustSupplierBalance(
+          this,
           supplierId: purchase.supplierId,
           deltaCents: amountCents,
         );
@@ -2140,6 +2539,32 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
     return rows.isEmpty ? 0 : rows.first.read<int>('total');
   }
 
+  /// Amounts already reversed by non-voided returns linked to this purchase
+  /// line. Adjustment-return amounts are excluded from the financial history
+  /// but remain part of [getReturnedQuantity] for the quantity cap.
+  Future<LinkedReturnHistory> getLinkedReturnHistory(int purchaseItemId) async {
+    final row = await customSelect(
+      'SELECT '
+      '  COALESCE(SUM(pri.quantity), 0) AS quantity, '
+      '  COALESCE(SUM(pri.subtotal_cents), 0) AS subtotal_cents, '
+      '  COALESCE(SUM(pri.discount_cents), 0) AS discount_cents, '
+      '  COALESCE(SUM(pri.tax_cents), 0) AS tax_cents, '
+      '  COALESCE(SUM(pri.refund_cents), 0) AS refund_cents '
+      'FROM purchase_return_items pri '
+      'JOIN purchase_returns pr ON pr.id = pri.return_id '
+      "WHERE pri.purchase_item_id = ? AND pr.status != 'voided'",
+      variables: [Variable.withInt(purchaseItemId)],
+    ).getSingle();
+
+    return LinkedReturnHistory(
+      quantity: row.read<int>('quantity'),
+      subtotalCents: row.read<int>('subtotal_cents'),
+      discountCents: row.read<int>('discount_cents'),
+      taxCents: row.read<int>('tax_cents'),
+      refundCents: row.read<int>('refund_cents'),
+    );
+  }
+
   /// Actual inventory valuation removed by a posted (linked) purchase return.
   ///
   /// SINGLE SOURCE OF TRUTH for the 1200 Inventory GL leg. It MUST mirror the
@@ -2156,26 +2581,42 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
   /// variance that the journal policy routes to 4100 (contra-COGS).
   Future<int> computePurchaseReturnInventoryCostCents(int returnId) async {
     final rows = await (select(purchaseReturnItems).join([
-      innerJoin(purchaseItems,
-          purchaseItems.id.equalsExp(purchaseReturnItems.purchaseItemId)),
-    ])
-          ..where(purchaseReturnItems.returnId.equals(returnId)))
-        .get();
+      innerJoin(
+        purchaseItems,
+        purchaseItems.id.equalsExp(purchaseReturnItems.purchaseItemId),
+      ),
+    ])..where(purchaseReturnItems.returnId.equals(returnId))).get();
 
     int total = 0;
     for (final row in rows) {
       final ri = row.readTable(purchaseReturnItems);
       final pi = row.readTable(purchaseItems);
+      if (!await _tracksInventory(pi.productId)) continue;
+
+      if (ri.inventoryValueAtPostCents != null) {
+        total += ri.inventoryValueAtPostCents!.toBigInt().toInt();
+        continue;
+      }
 
       if (await _isFifoProduct(pi.productId)) {
         final costRow = await customSelect(
-          'SELECT COALESCE(SUM(quantity * unit_cost_cents), 0) AS c '
+          'SELECT CAST((COALESCE(SUM(quantity * unit_cost_cents), 0) + '
+          '${ri.quantityScale ~/ 2}) / ${ri.quantityScale} AS INTEGER) AS c '
           'FROM batch_consumptions '
           "WHERE purchase_return_item_id = ? AND direction = 'out'",
           variables: [Variable.withInt(ri.id)],
         ).getSingle();
         total += costRow.read<int>('c');
+      } else if (ri.unitCostAtPostCents != null) {
+        total += MeasuredAmount.cents(
+          unitCents: ri.unitCostAtPostCents!.toBigInt().toInt(),
+          quantity: ri.quantity,
+          quantityScale: ri.quantityScale,
+        );
       } else {
+        // Legacy rows posted before the snapshot column was populated.
+        // This fallback is intentionally last-resort only; all new posts
+        // freeze the WAC above.
         int unitCost = 0;
         if (pi.variantId != null) {
           final r = await customSelect(
@@ -2190,16 +2631,39 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase> with _$PurchaseDaoMixin 
           ).getSingleOrNull();
           unitCost = r?.read<int>('cost_cents') ?? 0;
         }
-        total += unitCost * ri.quantity;
+        total += MeasuredAmount.cents(
+          unitCents: unitCost,
+          quantity: ri.quantity,
+          quantityScale: ri.quantityScale,
+        );
       }
     }
     return total;
   }
 
+  /// Exact FIFO value removed by one linked purchase-return line.
+  Future<int> _purchaseReturnBatchValueCents(
+    int purchaseReturnItemId,
+    int quantityScale,
+  ) async {
+    final row = await customSelect(
+      'SELECT CAST((COALESCE(SUM(quantity * unit_cost_cents), 0) + ?) / ? '
+      'AS INTEGER) AS value_cents '
+      'FROM batch_consumptions '
+      "WHERE purchase_return_item_id = ? AND direction = 'out' "
+      "AND consumption_type = 'purchase_return'",
+      variables: [
+        Variable.withInt(quantityScale ~/ 2),
+        Variable.withInt(quantityScale),
+        Variable.withInt(purchaseReturnItemId),
+      ],
+    ).getSingle();
+    return row.read<int>('value_cents');
+  }
+
   /// Watch set of purchase IDs that have at least one non-voided return
   Stream<Set<int>> watchPurchaseIdsWithReturns() {
-    return (select(purchaseReturns)
-          ..where((r) => r.status.equals('posted')))
+    return (select(purchaseReturns)..where((r) => r.status.equals('posted')))
         .watch()
         .map((list) => list.map((r) => r.purchaseId).toSet());
   }

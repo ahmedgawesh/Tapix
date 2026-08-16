@@ -7,6 +7,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/widgets/pin_verification_dialog.dart';
 import '../../../auth/auth.dart';
@@ -56,13 +57,15 @@ class _PurchaseReturnDetailScreenState
 
     // Subscribe to realtime updates for return items
     _itemsSub?.cancel();
-    _itemsSub = repo.watchPurchaseReturnItemsWithDetails(widget.returnId).listen((items) {
-      if (mounted) {
-        setState(() {
-          _returnItems = items;
+    _itemsSub = repo
+        .watchPurchaseReturnItemsWithDetails(widget.returnId)
+        .listen((items) {
+          if (mounted) {
+            setState(() {
+              _returnItems = items;
+            });
+          }
         });
-      }
-    });
 
     if (mounted) {
       setState(() {
@@ -93,11 +96,12 @@ class _PurchaseReturnDetailScreenState
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(LucideIcons.alertCircle,
-                  size: 64, color: colorScheme.error),
+              Icon(LucideIcons.alertCircle, size: 64, color: colorScheme.error),
               const SizedBox(height: 16),
-              Text('purchases.not_found'.tr(),
-                  style: theme.textTheme.titleLarge),
+              Text(
+                'purchases.not_found'.tr(),
+                style: theme.textTheme.titleLarge,
+              ),
             ],
           ),
         ),
@@ -131,17 +135,23 @@ class _PurchaseReturnDetailScreenState
               tooltip: 'purchases.share_pdf'.tr(),
               onPressed: () => _printOrShare(share: true),
             ),
-            Builder(builder: (context) {
-              final authState = context.read<AuthBloc>().state;
-              final canVoid = authState is AuthAuthenticated &&
-                  sl<PermissionService>().hasPermission(authState.user, Permissions.editTransactions);
-              if (!canVoid) return const SizedBox.shrink();
-              return IconButton(
-                icon: Icon(LucideIcons.ban, color: colorScheme.error),
-                tooltip: 'purchases.void_purchase'.tr(),
-                onPressed: () => _voidReturn(context),
-              );
-            }),
+            Builder(
+              builder: (context) {
+                final authState = context.read<AuthBloc>().state;
+                final canVoid =
+                    authState is AuthAuthenticated &&
+                    sl<PermissionService>().hasPermission(
+                      authState.user,
+                      Permissions.editTransactions,
+                    );
+                if (!canVoid) return const SizedBox.shrink();
+                return IconButton(
+                  icon: Icon(LucideIcons.ban, color: colorScheme.error),
+                  tooltip: 'purchases.void_purchase'.tr(),
+                  onPressed: () => _voidReturn(context),
+                );
+              },
+            ),
           ],
         ],
       ),
@@ -185,9 +195,7 @@ class _PurchaseReturnDetailScreenState
             child: Text('common.cancel'.tr()),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: errorColor,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: errorColor),
             onPressed: () => Navigator.pop(ctx, true),
             child: Text('purchases.void_purchase'.tr()),
           ),
@@ -254,7 +262,10 @@ class _PurchaseReturnDetailScreenState
   // RETURN INFO CARD
   // ═══════════════════════════════════════════════════════
   Widget _buildReturnInfoCard(
-      BuildContext context, PurchaseReturnEntity ret, CurrencyService cs) {
+    BuildContext context,
+    PurchaseReturnEntity ret,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -282,49 +293,69 @@ class _PurchaseReturnDetailScreenState
                     gradient: LinearGradient(
                       colors: [
                         colorScheme.error,
-                        colorScheme.error.withValues(alpha: 0.7)
+                        colorScheme.error.withValues(alpha: 0.7),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(LucideIcons.undo2,
-                      size: 18, color: Colors.white),
+                  child: const Icon(
+                    LucideIcons.undo2,
+                    size: 18,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('purchases.return_number'.tr(),
-                          style: theme.textTheme.labelSmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                              letterSpacing: 0.5)),
-                      Text(ret.returnNumber,
-                          style: theme.textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w600)),
+                      Text(
+                        'purchases.return_number'.tr(),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      Text(
+                        ret.returnNumber,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border:
-                        Border.all(color: statusColor.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.3),
+                    ),
                   ),
-                  child: Text(statusLabel,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: statusColor, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    statusLabel,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: statusColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ],
             ),
             Divider(
-                height: 24,
-                color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
-            _infoRow(theme, 'purchases.return_date'.tr(),
-                DateFormat.yMMMd().format(ret.returnDate)),
+              height: 24,
+              color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+            ),
+            _infoRow(
+              theme,
+              'purchases.return_date'.tr(),
+              DateFormat.yMMMd().format(ret.returnDate),
+            ),
             const SizedBox(height: 8),
             if (ret.reason != null && ret.reason!.isNotEmpty) ...[
               _infoRow(theme, 'purchases.return_reason'.tr(), ret.reason!),
@@ -340,11 +371,14 @@ class _PurchaseReturnDetailScreenState
   // ORIGINAL PURCHASE CARD
   // ═══════════════════════════════════════════════════════
   Widget _buildOriginalPurchaseCard(
-      BuildContext context, PurchaseEntity purchase, CurrencyService cs) {
+    BuildContext context,
+    PurchaseEntity purchase,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final supplierInitial = purchase.supplierName != null &&
-            purchase.supplierName!.isNotEmpty
+    final supplierInitial =
+        purchase.supplierName != null && purchase.supplierName!.isNotEmpty
         ? purchase.supplierName![0].toUpperCase()
         : '?';
 
@@ -352,8 +386,7 @@ class _PurchaseReturnDetailScreenState
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side:
-            BorderSide(color: colorScheme.primary.withValues(alpha: 0.25)),
+        side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.25)),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -371,36 +404,49 @@ class _PurchaseReturnDetailScreenState
                       gradient: LinearGradient(
                         colors: [
                           colorScheme.primary,
-                          colorScheme.primary.withValues(alpha: 0.7)
+                          colorScheme.primary.withValues(alpha: 0.7),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(LucideIcons.fileText,
-                        size: 18, color: Colors.white),
+                    child: const Icon(
+                      LucideIcons.fileText,
+                      size: 18,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('purchases.return_from_purchase'.tr(),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                                color: colorScheme.onSurfaceVariant,
-                                letterSpacing: 0.5)),
-                        Text(purchase.purchaseNumber,
-                            style: theme.textTheme.titleSmall
-                                ?.copyWith(fontWeight: FontWeight.w600)),
+                        Text(
+                          'purchases.return_from_purchase'.tr(),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        Text(
+                          purchase.purchaseNumber,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  Icon(LucideIcons.chevronRight,
-                      size: 18, color: colorScheme.onSurfaceVariant),
+                  Icon(
+                    LucideIcons.chevronRight,
+                    size: 18,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ],
               ),
               Divider(
-                  height: 24,
-                  color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+                height: 24,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+              ),
               if (purchase.supplierName != null) ...[
                 Row(
                   children: [
@@ -412,22 +458,31 @@ class _PurchaseReturnDetailScreenState
                         borderRadius: BorderRadius.circular(8),
                       ),
                       alignment: Alignment.center,
-                      child: Text(supplierInitial,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                              color: colorScheme.onPrimaryContainer,
-                              fontWeight: FontWeight.bold)),
+                      child: Text(
+                        supplierInitial,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: colorScheme.onPrimaryContainer,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('purchases.supplier'.tr(),
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                  color: colorScheme.onSurfaceVariant)),
-                          Text(purchase.supplierName!,
-                              style: theme.textTheme.bodyMedium
-                                  ?.copyWith(fontWeight: FontWeight.w500)),
+                          Text(
+                            'purchases.supplier'.tr(),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          Text(
+                            purchase.supplierName!,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -435,8 +490,11 @@ class _PurchaseReturnDetailScreenState
                 ),
                 const SizedBox(height: 8),
               ],
-              _infoRow(theme, 'purchases.total'.tr(),
-                  cs.format(purchase.totalCents.toBigInt().toInt())),
+              _infoRow(
+                theme,
+                'purchases.total'.tr(),
+                cs.format(purchase.totalCents.toBigInt().toInt()),
+              ),
             ],
           ),
         ),
@@ -448,7 +506,9 @@ class _PurchaseReturnDetailScreenState
   // REFUND METHOD CARD
   // ═══════════════════════════════════════════════════════
   Widget _buildRefundMethodCard(
-      BuildContext context, PurchaseReturnEntity ret) {
+    BuildContext context,
+    PurchaseReturnEntity ret,
+  ) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
@@ -492,13 +552,19 @@ class _PurchaseReturnDetailScreenState
                     color: cs.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child:
-                      Icon(LucideIcons.creditCard, size: 16, color: cs.primary),
+                  child: Icon(
+                    LucideIcons.creditCard,
+                    size: 16,
+                    color: cs.primary,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('purchases.refund_method'.tr(),
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600)),
+                Text(
+                  'purchases.refund_method'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 10),
@@ -517,14 +583,19 @@ class _PurchaseReturnDetailScreenState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                            'purchases.refund_method_${ret.refundMethod}'.tr(),
-                            style: theme.textTheme.bodyMedium
-                                ?.copyWith(fontWeight: FontWeight.w600)),
+                          'purchases.refund_method_${ret.refundMethod}'.tr(),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                         Text(
-                            'purchases.refund_method_${ret.refundMethod}_desc'
-                                .tr(),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                                color: cs.onSurfaceVariant, fontSize: 10)),
+                          'purchases.refund_method_${ret.refundMethod}_desc'
+                              .tr(),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                            fontSize: 10,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -533,8 +604,9 @@ class _PurchaseReturnDetailScreenState
               ),
             ),
             Divider(
-                height: 20,
-                color: cs.outlineVariant.withValues(alpha: 0.4)),
+              height: 20,
+              color: cs.outlineVariant.withValues(alpha: 0.4),
+            ),
             Row(
               children: [
                 Container(
@@ -543,17 +615,25 @@ class _PurchaseReturnDetailScreenState
                     color: Colors.amber.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(LucideIcons.package,
-                      size: 16, color: Colors.amber.shade700),
+                  child: Icon(
+                    LucideIcons.package,
+                    size: 16,
+                    color: Colors.amber.shade700,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('purchases.disposition_type'.tr(),
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600)),
+                Text(
+                  'purchases.disposition_type'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(width: 10),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: cs.primaryContainer.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(8),
@@ -564,10 +644,12 @@ class _PurchaseReturnDetailScreenState
                       Icon(dispositionIcon, size: 14, color: cs.primary),
                       const SizedBox(width: 6),
                       Text(
-                          'purchases.disposition_${ret.dispositionType}'.tr(),
-                          style: theme.textTheme.labelMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: cs.primary)),
+                        'purchases.disposition_${ret.dispositionType}'.tr(),
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: cs.primary,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -582,8 +664,11 @@ class _PurchaseReturnDetailScreenState
   // ═══════════════════════════════════════════════════════
   // RETURN ITEMS CARD
   // ═══════════════════════════════════════════════════════
-  Widget _buildReturnItemsCard(BuildContext context,
-      List<PurchaseReturnItemEntity> items, CurrencyService cs) {
+  Widget _buildReturnItemsCard(
+    BuildContext context,
+    List<PurchaseReturnItemEntity> items,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -592,7 +677,8 @@ class _PurchaseReturnDetailScreenState
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -607,30 +693,41 @@ class _PurchaseReturnDetailScreenState
                     gradient: LinearGradient(
                       colors: [
                         colorScheme.error,
-                        colorScheme.error.withValues(alpha: 0.7)
+                        colorScheme.error.withValues(alpha: 0.7),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(LucideIcons.undo2,
-                      size: 16, color: Colors.white),
+                  child: const Icon(
+                    LucideIcons.undo2,
+                    size: 16,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 10),
-                Text('purchases.return_items'.tr(),
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600)),
+                Text(
+                  'purchases.return_items'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(width: 8),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: colorScheme.errorContainer,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text('${items.length}',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: colorScheme.onErrorContainer,
-                          fontWeight: FontWeight.bold)),
+                  child: Text(
+                    '${items.length}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onErrorContainer,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -639,9 +736,12 @@ class _PurchaseReturnDetailScreenState
               Center(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Text('purchases.no_items_to_return'.tr(),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant)),
+                  child: Text(
+                    'purchases.no_items_to_return'.tr(),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ),
               )
             else
@@ -650,12 +750,13 @@ class _PurchaseReturnDetailScreenState
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: items.length,
                 separatorBuilder: (context2, idx2) => Divider(
-                    height: 1,
-                    color:
-                        colorScheme.outlineVariant.withValues(alpha: 0.5)),
+                  height: 1,
+                  color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                ),
                 itemBuilder: (context, index) {
                   final item = items[index];
-                  final productName = item.productName ?? 'Item #${item.purchaseItemId}';
+                  final productName =
+                      item.productName ?? 'Item #${item.purchaseItemId}';
 
                   // Build variant details line (color · size · SKU)
                   final variantParts = <String>[];
@@ -682,66 +783,97 @@ class _PurchaseReturnDetailScreenState
                             width: 32,
                             height: 32,
                             decoration: BoxDecoration(
-                              color: Color(int.parse('FF${item.colorHex!.replaceAll('#', '')}', radix: 16)),
+                              color: Color(
+                                int.parse(
+                                  'FF${item.colorHex!.replaceAll('#', '')}',
+                                  radix: 16,
+                                ),
+                              ),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: colorScheme.outlineVariant),
+                              border: Border.all(
+                                color: colorScheme.outlineVariant,
+                              ),
                             ),
                             alignment: Alignment.center,
-                            child: Text('${index + 1}',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    shadows: [const Shadow(blurRadius: 2, color: Colors.black54)])),
+                            child: Text(
+                              '${index + 1}',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                shadows: [
+                                  const Shadow(
+                                    blurRadius: 2,
+                                    color: Colors.black54,
+                                  ),
+                                ],
+                              ),
+                            ),
                           )
                         else
                           Container(
                             width: 32,
                             height: 32,
                             decoration: BoxDecoration(
-                              color: colorScheme.errorContainer
-                                  .withValues(alpha: 0.3),
+                              color: colorScheme.errorContainer.withValues(
+                                alpha: 0.3,
+                              ),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             alignment: Alignment.center,
-                            child: Text('${index + 1}',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                    color: colorScheme.error,
-                                    fontWeight: FontWeight.bold)),
+                            child: Text(
+                              '${index + 1}',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: colorScheme.error,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(productName,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                      fontWeight: FontWeight.w500)),
-                              if (variantLine != null)
-                                Text(variantLine,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                        color: colorScheme.primary,
-                                        fontSize: 11)),
                               Text(
-                                  '${'purchases.qty'.tr()}: ${item.quantity}',
+                                productName,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              if (variantLine != null)
+                                Text(
+                                  variantLine,
                                   style: theme.textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.onSurfaceVariant,
-                                      fontSize: 11)),
+                                    color: colorScheme.primary,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              Text(
+                                '${'purchases.qty'.tr()}: ${localizedQuantity(item.quantity, item.measurementType)}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                  fontSize: 11,
+                                ),
+                              ),
                               if (item.reason != null &&
                                   item.reason!.isNotEmpty)
-                                Text(item.reason!,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                        color: colorScheme.onSurfaceVariant,
-                                        fontStyle: FontStyle.italic,
-                                        fontSize: 10)),
+                                Text(
+                                  item.reason!,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                    fontStyle: FontStyle.italic,
+                                    fontSize: 10,
+                                  ),
+                                ),
                             ],
                           ),
                         ),
                         Text(
-                            cs.format(
-                                item.refundCents.toBigInt().toInt()),
-                            style: theme.textTheme.titleSmall?.copyWith(
-                                color: colorScheme.error,
-                                fontWeight: FontWeight.bold)),
+                          cs.format(item.refundCents.toBigInt().toInt()),
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: colorScheme.error,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ],
                     ),
                   );
@@ -757,7 +889,10 @@ class _PurchaseReturnDetailScreenState
   // TOTAL CARD
   // ═══════════════════════════════════════════════════════
   Widget _buildTotalCard(
-      BuildContext context, PurchaseReturnEntity ret, CurrencyService cs) {
+    BuildContext context,
+    PurchaseReturnEntity ret,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -766,7 +901,10 @@ class _PurchaseReturnDetailScreenState
     final tax = ret.taxCents.toBigInt().toInt();
     final total = ret.totalCents.toBigInt().toInt();
     final totalItems = _returnItems.length;
-    final totalPieces = _returnItems.fold<int>(0, (sum, item) => sum + item.quantity);
+    final totalPieces = _returnItems.fold<int>(
+      0,
+      (sum, item) => sum + item.quantity,
+    );
 
     return Card(
       elevation: 0,
@@ -783,26 +921,47 @@ class _PurchaseReturnDetailScreenState
         child: Column(
           children: [
             _totalRow(theme, 'purchases.total_items_count'.tr(), '$totalItems'),
-            _totalRow(theme, 'purchases.total_pieces_count'.tr(), '$totalPieces'),
+            _totalRow(
+              theme,
+              'purchases.total_pieces_count'.tr(),
+              '$totalPieces',
+            ),
             if (subtotal != 0 || discount != 0 || tax != 0) ...[
-              Divider(height: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+              Divider(
+                height: 16,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+              ),
               _totalRow(theme, 'purchases.subtotal'.tr(), cs.format(subtotal)),
               if (discount != 0)
-                _totalRow(theme, 'purchases.discount'.tr(), '- ${cs.format(discount)}',
-                    valueColor: Colors.green),
+                _totalRow(
+                  theme,
+                  'purchases.discount'.tr(),
+                  '- ${cs.format(discount)}',
+                  valueColor: Colors.green,
+                ),
               if (tax != 0)
                 _totalRow(theme, 'purchases.tax'.tr(), cs.format(tax)),
-              Divider(height: 16, color: colorScheme.outlineVariant.withValues(alpha: 0.4)),
+              Divider(
+                height: 16,
+                color: colorScheme.outlineVariant.withValues(alpha: 0.4),
+              ),
             ],
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('purchases.return_total'.tr(),
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.bold)),
-                Text(cs.format(total),
-                    style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold, color: colorScheme.error)),
+                Text(
+                  'purchases.return_total'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  cs.format(total),
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.error,
+                  ),
+                ),
               ],
             ),
           ],
@@ -811,19 +970,30 @@ class _PurchaseReturnDetailScreenState
     );
   }
 
-  Widget _totalRow(ThemeData theme, String label, String value, {Color? valueColor}) {
+  Widget _totalRow(
+    ThemeData theme,
+    String label,
+    String value, {
+    Color? valueColor,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          Text(value,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                  color: valueColor)),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+              color: valueColor,
+            ),
+          ),
         ],
       ),
     );
@@ -844,25 +1014,32 @@ class _PurchaseReturnDetailScreenState
                 borderRadius: BorderRadius.circular(5),
               ),
               child: Icon(
-                  label.contains('Date') || label.contains('تاريخ')
-                      ? LucideIcons.calendar
-                      : LucideIcons.info,
-                  size: 12,
-                  color: cs.onSurfaceVariant),
+                label.contains('Date') || label.contains('تاريخ')
+                    ? LucideIcons.calendar
+                    : LucideIcons.info,
+                size: 12,
+                color: cs.onSurfaceVariant,
+              ),
             ),
             const SizedBox(width: 8),
-            Text(label,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: cs.onSurfaceVariant)),
+            Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: cs.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
         Flexible(
-          child: Text(value,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(fontWeight: FontWeight.w500),
-              textAlign: TextAlign.end,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis),
+          child: Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.end,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

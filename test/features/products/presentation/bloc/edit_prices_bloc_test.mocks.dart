@@ -229,6 +229,7 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
     int? salesTaxRateBps = 0,
     bool? isActive = true,
     bool? trackInventory = true,
+    String? measurementType = 'piece',
     String? costingMethod = 'wac',
     String? inventoryTrackingType = 'standard',
   }) =>
@@ -255,6 +256,7 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
               #salesTaxRateBps: salesTaxRateBps,
               #isActive: isActive,
               #trackInventory: trackInventory,
+              #measurementType: measurementType,
               #costingMethod: costingMethod,
               #inventoryTrackingType: inventoryTrackingType,
             }),

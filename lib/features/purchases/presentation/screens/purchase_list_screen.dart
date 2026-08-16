@@ -73,9 +73,9 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                     const SizedBox(height: 2),
                     Text(
                       'purchases.returns'.tr(),
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            fontSize: 10,
-                          ),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelSmall?.copyWith(fontSize: 10),
                     ),
                   ],
                 ),
@@ -129,16 +129,23 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
   }
 
   Widget _buildErrorState(
-      BuildContext context, RealtimeError<PurchasesHubData> state) {
+    BuildContext context,
+    RealtimeError<PurchasesHubData> state,
+  ) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(LucideIcons.alertCircle,
-              size: 64, color: Theme.of(context).colorScheme.error),
+          Icon(
+            LucideIcons.alertCircle,
+            size: 64,
+            color: Theme.of(context).colorScheme.error,
+          ),
           const SizedBox(height: 16),
-          Text('common.error'.tr(),
-              style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            'common.error'.tr(),
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: 8),
           TextButton.icon(
             onPressed: () => context.read<PurchasesBloc>().refresh(),
@@ -170,7 +177,10 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                     _StatCard(
                       icon: LucideIcons.shoppingCart,
                       iconColor: colorScheme.primary,
-                      gradientColors: [colorScheme.primary, colorScheme.primary.withValues(alpha: 0.7)],
+                      gradientColors: [
+                        colorScheme.primary,
+                        colorScheme.primary.withValues(alpha: 0.7),
+                      ],
                       label: 'purchases.total_purchases'.tr(),
                       value: '${data.stats.totalCount}',
                     ),
@@ -191,10 +201,14 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                     _StatCard(
                       icon: LucideIcons.wallet,
                       iconColor: colorScheme.secondary,
-                      gradientColors: [colorScheme.secondary, colorScheme.secondary.withValues(alpha: 0.7)],
+                      gradientColors: [
+                        colorScheme.secondary,
+                        colorScheme.secondary.withValues(alpha: 0.7),
+                      ],
                       label: 'purchases.total_payables'.tr(),
-                      value: currencyService
-                          .format(data.stats.totalPayableCents),
+                      value: currencyService.format(
+                        data.stats.totalPayableCents,
+                      ),
                     ),
                   ];
 
@@ -213,17 +227,21 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                   }
                   return Column(
                     children: [
-                      Row(children: [
-                        Expanded(child: cards[0]),
-                        const SizedBox(width: 10),
-                        Expanded(child: cards[1]),
-                      ]),
+                      Row(
+                        children: [
+                          Expanded(child: cards[0]),
+                          const SizedBox(width: 10),
+                          Expanded(child: cards[1]),
+                        ],
+                      ),
                       const SizedBox(height: 10),
-                      Row(children: [
-                        Expanded(child: cards[2]),
-                        const SizedBox(width: 10),
-                        Expanded(child: cards[3]),
-                      ]),
+                      Row(
+                        children: [
+                          Expanded(child: cards[2]),
+                          const SizedBox(width: 10),
+                          Expanded(child: cards[3]),
+                        ],
+                      ),
                     ],
                   );
                 },
@@ -249,9 +267,9 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                                 onPressed: () {
                                   _searchController.clear();
                                   setState(() {});
-                                  context
-                                      .read<PurchasesBloc>()
-                                      .add(const PurchasesSearchRequested(''));
+                                  context.read<PurchasesBloc>().add(
+                                    const PurchasesSearchRequested(''),
+                                  );
                                 },
                               )
                             : null,
@@ -260,13 +278,15 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                         ),
                         filled: true,
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                        ),
                       ),
                       onChanged: (value) {
                         setState(() {});
-                        context
-                            .read<PurchasesBloc>()
-                            .add(PurchasesSearchRequested(value));
+                        context.read<PurchasesBloc>().add(
+                          PurchasesSearchRequested(value),
+                        );
                       },
                     ),
                   ),
@@ -285,11 +305,17 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                 child: Align(
                   alignment: AlignmentDirectional.centerStart,
                   child: Chip(
-                    avatar: Icon(LucideIcons.calendar, size: 14, color: colorScheme.primary),
+                    avatar: Icon(
+                      LucideIcons.calendar,
+                      size: 14,
+                      color: colorScheme.primary,
+                    ),
                     label: Text(
                       _datePresetLabel ??
                           '${DateFormat.MMMd().format(_dateRange!.start)} – ${DateFormat.MMMd().format(_dateRange!.end)}',
-                      style: theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     deleteIcon: const Icon(LucideIcons.x, size: 14),
                     onDeleted: () => setState(() {
@@ -297,8 +323,12 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                       _datePresetLabel = null;
                     }),
                     visualDensity: VisualDensity.compact,
-                    side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.3)),
-                    backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.3),
+                    side: BorderSide(
+                      color: colorScheme.primary.withValues(alpha: 0.3),
+                    ),
+                    backgroundColor: colorScheme.primaryContainer.withValues(
+                      alpha: 0.3,
+                    ),
                   ),
                 ),
               ),
@@ -312,8 +342,9 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                 children: [
                   Text(
                     'purchases.all_purchases'.tr(),
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const Spacer(),
                   _FilterChip(
@@ -321,9 +352,9 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                     isSelected: _selectedStatus == null,
                     onSelected: () {
                       setState(() => _selectedStatus = null);
-                      context
-                          .read<PurchasesBloc>()
-                          .add(const PurchasesStatusFilterChanged(null));
+                      context.read<PurchasesBloc>().add(
+                        const PurchasesStatusFilterChanged(null),
+                      );
                     },
                   ),
                   const SizedBox(width: 4),
@@ -333,9 +364,9 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                     color: Colors.orange,
                     onSelected: () {
                       setState(() => _selectedStatus = 'draft');
-                      context
-                          .read<PurchasesBloc>()
-                          .add(const PurchasesStatusFilterChanged('draft'));
+                      context.read<PurchasesBloc>().add(
+                        const PurchasesStatusFilterChanged('draft'),
+                      );
                     },
                   ),
                   const SizedBox(width: 4),
@@ -345,9 +376,9 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                     color: Colors.green,
                     onSelected: () {
                       setState(() => _selectedStatus = 'posted');
-                      context
-                          .read<PurchasesBloc>()
-                          .add(const PurchasesStatusFilterChanged('posted'));
+                      context.read<PurchasesBloc>().add(
+                        const PurchasesStatusFilterChanged('posted'),
+                      );
                     },
                   ),
                 ],
@@ -362,27 +393,24 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
             SliverFillRemaining(child: _buildEmptyState(context))
           else
             SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final purchase = data.filteredPurchases[index];
-                  // Apply date filter client-side
-                  if (_dateRange != null) {
-                    if (purchase.purchaseDate.isBefore(_dateRange!.start) ||
-                        purchase.purchaseDate.isAfter(
-                            _dateRange!.end.add(const Duration(days: 1)))) {
-                      return const SizedBox.shrink();
-                    }
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final purchase = data.filteredPurchases[index];
+                // Apply date filter client-side
+                if (_dateRange != null) {
+                  if (purchase.purchaseDate.isBefore(_dateRange!.start) ||
+                      purchase.purchaseDate.isAfter(
+                        _dateRange!.end.add(const Duration(days: 1)),
+                      )) {
+                    return const SizedBox.shrink();
                   }
-                  return _PurchaseTile(
-                    purchase: purchase,
-                    currencyService: currencyService,
-                    hasReturn: data.purchaseIdsWithReturns.contains(purchase.id),
-                    onTap: () =>
-                        context.push('/purchases/${purchase.id}'),
-                  );
-                },
-                childCount: data.filteredPurchases.length,
-              ),
+                }
+                return _PurchaseTile(
+                  purchase: purchase,
+                  currencyService: currencyService,
+                  hasReturn: data.purchaseIdsWithReturns.contains(purchase.id),
+                  onTap: () => context.push('/purchases/${purchase.id}'),
+                );
+              }, childCount: data.filteredPurchases.length),
             ),
 
           const SliverToBoxAdapter(child: SizedBox(height: 80)),
@@ -414,8 +442,11 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
         },
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: Icon(LucideIcons.calendarRange, size: 20,
-              color: hasFilter ? cs.onPrimaryContainer : cs.onSurfaceVariant),
+          child: Icon(
+            LucideIcons.calendarRange,
+            size: 20,
+            color: hasFilter ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+          ),
         ),
       ),
     );
@@ -436,19 +467,26 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
                 color: cs.primaryContainer.withValues(alpha: 0.3),
                 shape: BoxShape.circle,
               ),
-              child: Icon(LucideIcons.shoppingCart,
-                  size: 56, color: cs.primary.withValues(alpha: 0.5)),
+              child: Icon(
+                LucideIcons.shoppingCart,
+                size: 56,
+                color: cs.primary.withValues(alpha: 0.5),
+              ),
             ),
             const SizedBox(height: 20),
-            Text('purchases.empty'.tr(),
-                style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w600),
-                textAlign: TextAlign.center),
+            Text(
+              'purchases.empty'.tr(),
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 8),
             Text(
               'purchases.empty_hint'.tr(),
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: cs.onSurfaceVariant),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: cs.onSurfaceVariant,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 28),
@@ -457,7 +495,10 @@ class _PurchaseHubViewState extends State<_PurchaseHubView> {
               icon: const Icon(LucideIcons.plus, size: 18),
               label: Text('purchases.add_first'.tr()),
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 14,
+                ),
               ),
             ),
           ],
@@ -492,9 +533,7 @@ class _StatCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: cs.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.4),
-        ),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
         boxShadow: [
           BoxShadow(
             color: iconColor.withValues(alpha: 0.06),
@@ -521,16 +560,18 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             value,
-            style: theme.textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.bold),
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 2),
           Text(
             label,
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: cs.onSurfaceVariant),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: cs.onSurfaceVariant,
+            ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -569,8 +610,7 @@ class _FilterChip extends StatelessWidget {
           onTap: onSelected,
           borderRadius: BorderRadius.circular(20),
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
               border: isSelected
@@ -582,9 +622,7 @@ class _FilterChip extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                color: isSelected
-                    ? activeColor
-                    : colorScheme.onSurfaceVariant,
+                color: isSelected ? activeColor : colorScheme.onSurfaceVariant,
               ),
             ),
           ),
@@ -655,8 +693,8 @@ class _PurchaseTile extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final statusClr = _statusColor(context);
-    final supplierInitial = purchase.supplierName != null &&
-            purchase.supplierName!.isNotEmpty
+    final supplierInitial =
+        purchase.supplierName != null && purchase.supplierName!.isNotEmpty
         ? purchase.supplierName![0].toUpperCase()
         : '?';
 
@@ -707,7 +745,9 @@ class _PurchaseTile extends StatelessWidget {
                                   gradient: LinearGradient(
                                     colors: [
                                       cs.primaryContainer,
-                                      cs.primaryContainer.withValues(alpha: 0.6),
+                                      cs.primaryContainer.withValues(
+                                        alpha: 0.6,
+                                      ),
                                     ],
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
@@ -731,13 +771,17 @@ class _PurchaseTile extends StatelessWidget {
                                     Text(
                                       purchase.purchaseNumber,
                                       style: theme.textTheme.titleSmall
-                                          ?.copyWith(fontWeight: FontWeight.w600),
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                     ),
                                     if (purchase.supplierName != null)
                                       Text(
                                         purchase.supplierName!,
-                                        style: theme.textTheme.bodySmall?.copyWith(
-                                            color: cs.onSurfaceVariant),
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color: cs.onSurfaceVariant,
+                                            ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
@@ -747,7 +791,9 @@ class _PurchaseTile extends StatelessWidget {
                               // Status badge
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
                                 decoration: BoxDecoration(
                                   color: statusClr.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(8),
@@ -758,14 +804,19 @@ class _PurchaseTile extends StatelessWidget {
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(_statusIcon(), size: 12, color: statusClr),
+                                    Icon(
+                                      _statusIcon(),
+                                      size: 12,
+                                      color: statusClr,
+                                    ),
                                     const SizedBox(width: 4),
                                     Text(
                                       _statusLabel(),
-                                      style: theme.textTheme.labelSmall?.copyWith(
-                                        color: statusClr,
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(
+                                            color: statusClr,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                     ),
                                   ],
                                 ),
@@ -775,44 +826,27 @@ class _PurchaseTile extends StatelessWidget {
                           const SizedBox(height: 10),
                           Row(
                             children: [
-                              Icon(LucideIcons.calendar,
-                                  size: 13, color: cs.onSurfaceVariant),
+                              Icon(
+                                LucideIcons.calendar,
+                                size: 13,
+                                color: cs.onSurfaceVariant,
+                              ),
                               const SizedBox(width: 4),
                               Text(
-                                DateFormat.yMMMd().format(purchase.purchaseDate),
-                                style: theme.textTheme.bodySmall
-                                    ?.copyWith(color: cs.onSurfaceVariant),
+                                DateFormat.yMMMd().format(
+                                  purchase.purchaseDate,
+                                ),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
                               ),
                               if (purchase.isOverdue) ...[
                                 const SizedBox(width: 8),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: cs.error.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: cs.error.withValues(alpha: 0.3)),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(LucideIcons.alertTriangle, size: 10, color: cs.error),
-                                      const SizedBox(width: 3),
-                                      Text('purchases.overdue'.tr(),
-                                          style: theme.textTheme.labelSmall?.copyWith(
-                                              color: cs.error, fontWeight: FontWeight.w600, fontSize: 9)),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                              if (purchase.isPosted && purchase.isFullyPaid) ...[
-                                const SizedBox(width: 8),
-                                const Icon(LucideIcons.checkCircle, size: 13, color: Colors.green),
-                              ],
-                              if (hasReturn) ...[
-                                const SizedBox(width: 8),
-                                Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: cs.error.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(6),
@@ -823,17 +857,65 @@ class _PurchaseTile extends StatelessWidget {
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(LucideIcons.undo2,
-                                          size: 10, color: cs.error),
+                                      Icon(
+                                        LucideIcons.alertTriangle,
+                                        size: 10,
+                                        color: cs.error,
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        'purchases.overdue'.tr(),
+                                        style: theme.textTheme.labelSmall
+                                            ?.copyWith(
+                                              color: cs.error,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 9,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              if (purchase.isPosted &&
+                                  purchase.isFullyPaid) ...[
+                                const SizedBox(width: 8),
+                                const Icon(
+                                  LucideIcons.checkCircle,
+                                  size: 13,
+                                  color: Colors.green,
+                                ),
+                              ],
+                              if (hasReturn) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: cs.error.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: cs.error.withValues(alpha: 0.3),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        LucideIcons.undo2,
+                                        size: 10,
+                                        color: cs.error,
+                                      ),
                                       const SizedBox(width: 3),
                                       Text(
                                         'purchases.has_returns'.tr(),
                                         style: theme.textTheme.labelSmall
                                             ?.copyWith(
-                                          color: cs.error,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 9,
-                                        ),
+                                              color: cs.error,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 9,
+                                            ),
                                       ),
                                     ],
                                   ),
@@ -841,8 +923,9 @@ class _PurchaseTile extends StatelessWidget {
                               ],
                               const Spacer(),
                               Text(
-                                currencyService
-                                    .format(purchase.totalCents.toBigInt().toInt()),
+                                currencyService.format(
+                                  purchase.totalCents.toBigInt().toInt(),
+                                ),
                                 style: theme.textTheme.titleMedium?.copyWith(
                                   color: cs.primary,
                                   fontWeight: FontWeight.bold,

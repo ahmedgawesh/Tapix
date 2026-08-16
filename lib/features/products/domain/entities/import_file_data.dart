@@ -19,10 +19,7 @@ class ImportFileData extends Equatable {
   List<Object?> get props => [fileName, fileType, headers, rows, totalRows];
 }
 
-enum ImportFileType {
-  csv,
-  excel,
-}
+enum ImportFileType { csv, excel }
 
 class ColumnMapping extends Equatable {
   final Map<String, int> fieldToColumnIndex;
@@ -53,13 +50,13 @@ class ImportFieldDefinition extends Equatable {
   });
 
   @override
-  List<Object?> get props => [fieldName, displayName, isRequired, fieldType, hint];
+  List<Object?> get props => [
+    fieldName,
+    displayName,
+    isRequired,
+    fieldType,
+    hint,
+  ];
 }
 
-enum ImportFieldType {
-  text,
-  number,
-  money,
-  boolean,
-  integer,
-}
+enum ImportFieldType { text, number, money, boolean, integer }

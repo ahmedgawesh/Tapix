@@ -55,15 +55,15 @@ class EditPricesStateData extends Equatable {
 
   @override
   List<Object?> get props => [
-        products,
-        categoryId,
-        supplierId,
-        stockStatus,
-        searchQuery,
-        hasUnsavedChanges,
-        displayLimit,
-        selectedProductIds,
-        selectedVariantIds,
-        variantPriceChanges,
-      ];
+    products,
+    categoryId,
+    supplierId,
+    stockStatus,
+    searchQuery,
+    hasUnsavedChanges,
+    displayLimit,
+    selectedProductIds,
+    selectedVariantIds,
+    variantPriceChanges,
+  ];
 }

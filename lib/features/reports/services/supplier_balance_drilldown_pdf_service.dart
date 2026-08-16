@@ -573,6 +573,11 @@ class SupplierBalanceDrilldownPdfService {
       'ar': 'رصيد افتتاحي',
       'fr': 'Solde d\'Ouverture',
     },
+    'txn_adjustment_return_reversal': {
+      'en': 'Adj. Return Reversal',
+      'ar': 'عكس مرتجع تسوية',
+      'fr': 'Annulation retour d\'ajustement',
+    },
   };
 
   static String _t(String key, String lang) {

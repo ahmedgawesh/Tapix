@@ -16,7 +16,8 @@ class SecuritySettingsSection extends StatefulWidget {
   const SecuritySettingsSection({super.key});
 
   @override
-  State<SecuritySettingsSection> createState() => _SecuritySettingsSectionState();
+  State<SecuritySettingsSection> createState() =>
+      _SecuritySettingsSectionState();
 }
 
 class _SecuritySettingsSectionState extends State<SecuritySettingsSection> {
@@ -49,9 +50,12 @@ class _SecuritySettingsSectionState extends State<SecuritySettingsSection> {
           children: [
             SwitchListTile(
               title: Text('app_settings.security.enable_session_timeout'.tr()),
-              subtitle: Text('app_settings.security.enable_session_timeout_desc'.tr()),
+              subtitle: Text(
+                'app_settings.security.enable_session_timeout_desc'.tr(),
+              ),
               value: s.enableSessionTimeout,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(enableSessionTimeout: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(enableSessionTimeout: v)),
             ),
             if (s.enableSessionTimeout)
               SettingsSliderTile(
@@ -61,7 +65,10 @@ class _SecuritySettingsSectionState extends State<SecuritySettingsSection> {
                 max: 120,
                 divisions: 23,
                 labelSuffix: ' min',
-                onChanged: (v) => _patch(context, (c) => c.copyWith(sessionTimeoutMinutes: v.round())),
+                onChanged: (v) => _patch(
+                  context,
+                  (c) => c.copyWith(sessionTimeoutMinutes: v.round()),
+                ),
               ),
             ListTile(
               title: Text('app_settings.security.remember_me_duration'.tr()),
@@ -79,34 +86,48 @@ class _SecuritySettingsSectionState extends State<SecuritySettingsSection> {
                     max: 168,
                     divisions: 167,
                     label: _formatDuration(s.rememberMeDurationHours),
-                    onChanged: (v) => _patch(context, (c) => c.copyWith(rememberMeDurationHours: v.round())),
+                    onChanged: (v) => _patch(
+                      context,
+                      (c) => c.copyWith(rememberMeDurationHours: v.round()),
+                    ),
                   ),
                 ],
               ),
               trailing: Text(
                 _formatDuration(s.rememberMeDurationHours),
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
             ),
             SwitchListTile(
               title: Text('app_settings.security.pin_void_refund'.tr()),
               subtitle: Text('app_settings.security.pin_void_refund_desc'.tr()),
               value: s.requirePinForVoidRefund,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(requirePinForVoidRefund: v)),
+              onChanged: (v) => _patch(
+                context,
+                (c) => c.copyWith(requirePinForVoidRefund: v),
+              ),
             ),
             // PIN setup/change - owner only
             if (s.requirePinForVoidRefund && _isOwner)
               ListTile(
                 leading: Icon(
                   _isPinSet ? LucideIcons.keyRound : LucideIcons.keyRound,
-                  color: _isPinSet ? Colors.green : Theme.of(context).colorScheme.error,
+                  color: _isPinSet
+                      ? Colors.green
+                      : Theme.of(context).colorScheme.error,
                 ),
-                title: Text(_isPinSet
-                    ? 'app_settings.security.change_pin'.tr()
-                    : 'app_settings.security.set_pin'.tr()),
-                subtitle: Text(_isPinSet
-                    ? 'app_settings.security.pin_is_set'.tr()
-                    : 'app_settings.security.pin_not_set'.tr()),
+                title: Text(
+                  _isPinSet
+                      ? 'app_settings.security.change_pin'.tr()
+                      : 'app_settings.security.set_pin'.tr(),
+                ),
+                subtitle: Text(
+                  _isPinSet
+                      ? 'app_settings.security.pin_is_set'.tr()
+                      : 'app_settings.security.pin_not_set'.tr(),
+                ),
                 trailing: const Icon(LucideIcons.chevronRight),
                 onTap: () => _showSetPinDialog(context),
               ),
@@ -114,13 +135,16 @@ class _SecuritySettingsSectionState extends State<SecuritySettingsSection> {
               title: Text('app_settings.security.biometric'.tr()),
               subtitle: Text('app_settings.security.biometric_desc'.tr()),
               value: s.enableBiometricLogin,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(enableBiometricLogin: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(enableBiometricLogin: v)),
             ),
             SwitchListTile(
               title: Text('app_settings.security.encryption'.tr()),
-              subtitle: Text(s.enableDatabaseEncryption
-                  ? 'app_settings.security.encryption_enabled_note'.tr()
-                  : 'app_settings.security.encryption_desc'.tr()),
+              subtitle: Text(
+                s.enableDatabaseEncryption
+                    ? 'app_settings.security.encryption_enabled_note'.tr()
+                    : 'app_settings.security.encryption_desc'.tr(),
+              ),
               value: s.enableDatabaseEncryption,
               onChanged: (v) => _toggleEncryption(context, v),
             ),
@@ -139,10 +163,16 @@ class _SecuritySettingsSectionState extends State<SecuritySettingsSection> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        icon: Icon(LucideIcons.keyRound, color: Theme.of(ctx).colorScheme.primary, size: 32),
-        title: Text(_isPinSet
-            ? 'app_settings.security.change_pin'.tr()
-            : 'app_settings.security.set_pin'.tr()),
+        icon: Icon(
+          LucideIcons.keyRound,
+          color: Theme.of(ctx).colorScheme.primary,
+          size: 32,
+        ),
+        title: Text(
+          _isPinSet
+              ? 'app_settings.security.change_pin'.tr()
+              : 'app_settings.security.set_pin'.tr(),
+        ),
         content: Form(
           key: formKey,
           child: Column(
@@ -163,8 +193,12 @@ class _SecuritySettingsSectionState extends State<SecuritySettingsSection> {
                   counterText: '',
                 ),
                 validator: (v) {
-                  if (v == null || v.isEmpty) return 'security.pin_required'.tr();
-                  if (v.length < 4) return 'app_settings.security.pin_min_length'.tr();
+                  if (v == null || v.isEmpty) {
+                    return 'security.pin_required'.tr();
+                  }
+                  if (v.length < 4) {
+                    return 'app_settings.security.pin_min_length'.tr();
+                  }
                   return null;
                 },
               ),
@@ -232,7 +266,11 @@ class _SecuritySettingsSectionState extends State<SecuritySettingsSection> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          icon: Icon(LucideIcons.shieldCheck, color: Theme.of(ctx).colorScheme.primary, size: 32),
+          icon: Icon(
+            LucideIcons.shieldCheck,
+            color: Theme.of(ctx).colorScheme.primary,
+            size: 32,
+          ),
           title: Text('app_settings.security.encryption'.tr()),
           content: Text('app_settings.security.encryption_enable_warning'.tr()),
           actions: [
@@ -254,9 +292,15 @@ class _SecuritySettingsSectionState extends State<SecuritySettingsSection> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          icon: Icon(LucideIcons.shieldOff, color: Theme.of(ctx).colorScheme.error, size: 32),
+          icon: Icon(
+            LucideIcons.shieldOff,
+            color: Theme.of(ctx).colorScheme.error,
+            size: 32,
+          ),
           title: Text('app_settings.security.encryption'.tr()),
-          content: Text('app_settings.security.encryption_disable_warning'.tr()),
+          content: Text(
+            'app_settings.security.encryption_disable_warning'.tr(),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),

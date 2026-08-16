@@ -75,8 +75,8 @@ class ProductFilterWidget extends StatelessWidget {
       final selectedId = await context.push<int?>('/products/categories/pick');
       if (!context.mounted) return;
       context.read<ProductsBloc>().add(
-            ProductFilterRequested(categoryId: selectedId),
-          );
+        ProductFilterRequested(categoryId: selectedId),
+      );
     }();
   }
 
@@ -97,9 +97,7 @@ class ProductFilterWidget extends StatelessWidget {
       context: context,
       builder: (sheetContext) => BlocProvider.value(
         value: context.read<ProductsBloc>(),
-        child: _StatusFilterSheet(
-          selectedIsActive: selectedIsActive,
-        ),
+        child: _StatusFilterSheet(selectedIsActive: selectedIsActive),
       ),
     );
   }
@@ -156,7 +154,7 @@ class _CustomRadio<T> extends StatelessWidget {
     final isSelected = value == groupValue;
     final color = Theme.of(context).primaryColor;
     final unselectedColor = Theme.of(context).unselectedWidgetColor;
-    
+
     return GestureDetector(
       onTap: () => onChanged?.call(value),
       child: Container(
@@ -209,8 +207,8 @@ class _StatusFilterSheet extends StatelessWidget {
             groupValue: selectedIsActive,
             onChanged: (value) {
               context.read<ProductsBloc>().add(
-                    const ProductFilterRequested(isActive: null),
-                  );
+                const ProductFilterRequested(isActive: null),
+              );
               Navigator.pop(context);
             },
           ),
@@ -220,8 +218,8 @@ class _StatusFilterSheet extends StatelessWidget {
             groupValue: selectedIsActive,
             onChanged: (value) {
               context.read<ProductsBloc>().add(
-                    const ProductFilterRequested(isActive: true),
-                  );
+                const ProductFilterRequested(isActive: true),
+              );
               Navigator.pop(context);
             },
           ),
@@ -231,8 +229,8 @@ class _StatusFilterSheet extends StatelessWidget {
             groupValue: selectedIsActive,
             onChanged: (value) {
               context.read<ProductsBloc>().add(
-                    const ProductFilterRequested(isActive: false),
-                  );
+                const ProductFilterRequested(isActive: false),
+              );
               Navigator.pop(context);
             },
           ),
@@ -266,8 +264,8 @@ class _StockStatusFilterSheet extends StatelessWidget {
             groupValue: selectedStockStatus,
             onChanged: (value) {
               context.read<ProductsBloc>().add(
-                    const ProductFilterRequested(stockStatus: null),
-                  );
+                const ProductFilterRequested(stockStatus: null),
+              );
               Navigator.pop(context);
             },
           ),
@@ -277,8 +275,8 @@ class _StockStatusFilterSheet extends StatelessWidget {
             groupValue: selectedStockStatus,
             onChanged: (value) {
               context.read<ProductsBloc>().add(
-                    const ProductFilterRequested(stockStatus: 'out_of_stock'),
-                  );
+                const ProductFilterRequested(stockStatus: 'out_of_stock'),
+              );
               Navigator.pop(context);
             },
           ),
@@ -288,8 +286,8 @@ class _StockStatusFilterSheet extends StatelessWidget {
             groupValue: selectedStockStatus,
             onChanged: (value) {
               context.read<ProductsBloc>().add(
-                    const ProductFilterRequested(stockStatus: 'low_stock'),
-                  );
+                const ProductFilterRequested(stockStatus: 'low_stock'),
+              );
               Navigator.pop(context);
             },
           ),

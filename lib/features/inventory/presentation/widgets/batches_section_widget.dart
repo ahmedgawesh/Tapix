@@ -4,6 +4,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../../core/database/daos/batch_audit_dao.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
 import 'batch_consumption_list.dart';
 
@@ -112,7 +113,8 @@ class _BatchesCard extends StatelessWidget {
             physics: const NeverScrollableScrollPhysics(),
             padding: EdgeInsets.zero,
             itemCount: batches.length,
-            separatorBuilder: (_, _) => const Divider(height: 1, indent: 12, endIndent: 12),
+            separatorBuilder: (_, _) =>
+                const Divider(height: 1, indent: 12, endIndent: 12),
             itemBuilder: (context, i) => _BatchTile(batch: batches[i]),
           ),
         ],
@@ -172,8 +174,9 @@ class _BatchTileState extends State<_BatchTile> {
       widget.batch.remainingQuantity,
     );
     if (_consumptionsFuture == null || _cachedForBatchSnapshot != snapshotKey) {
-      _consumptionsFuture =
-          sl<BatchAuditDao>().getConsumptionsForBatch(widget.batch.batchId);
+      _consumptionsFuture = sl<BatchAuditDao>().getConsumptionsForBatch(
+        widget.batch.batchId,
+      );
       _cachedForBatchSnapshot = snapshotKey;
     }
   }
@@ -215,8 +218,18 @@ class _BatchTileState extends State<_BatchTile> {
               ),
             ),
             Text(
-              'product_form.batches_remaining'
-                  .tr(args: ['${batch.remainingQuantity}', '${batch.receivedQuantity}']),
+              'product_form.batches_remaining'.tr(
+                args: [
+                  localizedQuantity(
+                    batch.remainingQuantity,
+                    batch.measurementType,
+                  ),
+                  localizedQuantity(
+                    batch.receivedQuantity,
+                    batch.measurementType,
+                  ),
+                ],
+              ),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: cs.onSurfaceVariant,
                 fontWeight: FontWeight.w600,
@@ -232,23 +245,30 @@ class _BatchTileState extends State<_BatchTile> {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               if (batch.variantLabel != null)
-                _Chip(label: batch.variantLabel!, icon: LucideIcons.tag, color: cs.primary),
+                _Chip(
+                  label: batch.variantLabel!,
+                  icon: LucideIcons.tag,
+                  color: cs.primary,
+                ),
               _Chip(
-                label: 'product_form.batches_unit_cost'
-                    .tr(args: [currency.format(batch.unitCostCents)]),
+                label: 'product_form.batches_unit_cost'.tr(
+                  args: [currency.format(batch.unitCostCents)],
+                ),
                 icon: LucideIcons.dollarSign,
                 color: cs.tertiary,
               ),
               _Chip(
-                label: 'product_form.batches_received_on'
-                    .tr(args: [DateFormat.yMMMd().format(batch.receivedDate)]),
+                label: 'product_form.batches_received_on'.tr(
+                  args: [DateFormat.yMMMd().format(batch.receivedDate)],
+                ),
                 icon: LucideIcons.truck,
                 color: cs.onSurfaceVariant,
               ),
               if (batch.expiryDate != null)
                 _Chip(
-                  label: 'product_form.batches_expiry_on'
-                      .tr(args: [DateFormat.yMMMd().format(batch.expiryDate!)]),
+                  label: 'product_form.batches_expiry_on'.tr(
+                    args: [DateFormat.yMMMd().format(batch.expiryDate!)],
+                  ),
                   icon: LucideIcons.calendarClock,
                   color: expiryStatus.color ?? cs.onSurfaceVariant,
                 ),
@@ -271,9 +291,7 @@ class _BatchTileState extends State<_BatchTile> {
           size: 18,
           color: cs.onSurfaceVariant,
         ),
-        children: [
-          BatchConsumptionList(future: _consumptionsFuture),
-        ],
+        children: [BatchConsumptionList(future: _consumptionsFuture)],
       ),
     );
   }

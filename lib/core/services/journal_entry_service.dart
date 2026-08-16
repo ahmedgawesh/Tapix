@@ -112,8 +112,12 @@ class JournalEntryService {
 
     // Cap the effective paid amount to totalCents for the invoice portion.
     // Any overpayment is handled separately as a prepayment (Dr Cash, Cr AR).
-    final effectivePaid = paidAmountCents > totalCents ? totalCents : paidAmountCents;
-    final overpayment = paidAmountCents > totalCents ? paidAmountCents - totalCents : 0;
+    final effectivePaid = paidAmountCents > totalCents
+        ? totalCents
+        : paidAmountCents;
+    final overpayment = paidAmountCents > totalCents
+        ? paidAmountCents - totalCents
+        : 0;
 
     // Revenue — cash portion (capped at totalCents): Dr Cash, Cr Sales Revenue (+ Cr VAT Payable)
     if (effectivePaid > 0) {
@@ -252,7 +256,10 @@ class JournalEntryService {
       );
     }
 
-    developer.log('Journal entries created for Sale #$saleId', name: 'JournalEntryService');
+    developer.log(
+      'Journal entries created for Sale #$saleId',
+      name: 'JournalEntryService',
+    );
   }
 
   // ── Sale COGS ─────────────────────────────────────────────────
@@ -291,7 +298,10 @@ class JournalEntryService {
       userId: userId,
     );
 
-    developer.log('COGS journal entry created for Sale #$saleId ($costCents cents)', name: 'JournalEntryService');
+    developer.log(
+      'COGS journal entry created for Sale #$saleId ($costCents cents)',
+      name: 'JournalEntryService',
+    );
   }
 
   /// Reverse COGS when a sale return is posted.
@@ -316,28 +326,30 @@ class JournalEntryService {
 
     final svc = _returnPostingService;
     if (svc != null) {
-      await svc.post(PostedReturn(
-        side: ReturnSide.sale,
-        link: ReturnLink.linked(
-          sourceInvoiceId: returnId,
-          sourceTable: 'sale_returns',
-        ),
-        partyId: null,
-        returnId: returnId,
-        // refund channel is irrelevant for a COGS-only JE (totalCents=0);
-        // use cash as a safe default so the policy does not attempt to
-        // resolve 2400 / 1100 for a zero-amount settlement leg.
-        refund: RefundChannel.cash,
-        currencyId: currencyId,
-        lines: [
-          PostedReturnLine(
-            totalCents: 0,
-            taxCents: 0,
-            inventoryCostCents: costCents,
+      await svc.post(
+        PostedReturn(
+          side: ReturnSide.sale,
+          link: ReturnLink.linked(
+            sourceInvoiceId: returnId,
+            sourceTable: 'sale_returns',
           ),
-        ],
-        userId: userId,
-      ));
+          partyId: null,
+          returnId: returnId,
+          // refund channel is irrelevant for a COGS-only JE (totalCents=0);
+          // use cash as a safe default so the policy does not attempt to
+          // resolve 2400 / 1100 for a zero-amount settlement leg.
+          refund: RefundChannel.cash,
+          currencyId: currencyId,
+          lines: [
+            PostedReturnLine(
+              totalCents: 0,
+              taxCents: 0,
+              inventoryCostCents: costCents,
+            ),
+          ],
+          userId: userId,
+        ),
+      );
       return;
     }
 
@@ -382,51 +394,92 @@ class JournalEntryService {
     required int paidAmountCents,
     required int currencyId,
     int taxCents = 0,
+    int? inventoryNetCents,
     String? paymentMethod,
     int? userId,
   }) async {
     final cashOrBankId = await _cashOrBankAccountId(paymentMethod);
     final payablesId = await _requireAccountId('2000');
     final inventoryId = await _requireAccountId('1200');
+    final netTotal = (totalCents - taxCents).clamp(0, totalCents).toInt();
+    final inventoryNet = (inventoryNetCents ?? netTotal)
+        .clamp(0, netTotal)
+        .toInt();
+    final expenseNet = netTotal - inventoryNet;
+    final expenseId = expenseNet > 0 ? await _requireAccountId('5100') : null;
 
     // Cap the effective paid amount to totalCents for the invoice portion.
     // Any overpayment is handled separately as a prepayment (Dr AP, Cr Cash).
-    final effectivePaid = paidAmountCents > totalCents ? totalCents : paidAmountCents;
-    final overpayment = paidAmountCents > totalCents ? paidAmountCents - totalCents : 0;
+    final effectivePaid = paidAmountCents > totalCents
+        ? totalCents
+        : paidAmountCents;
+    final overpayment = paidAmountCents > totalCents
+        ? paidAmountCents - totalCents
+        : 0;
+    var paidInventoryAllocated = 0;
+    var paidExpenseAllocated = 0;
 
     // Paid portion (capped at totalCents)
     if (effectivePaid > 0) {
-      if (taxCents > 0) {
-        // Split paid amount into inventory + VAT proportionally
+      if (taxCents > 0 || expenseNet > 0) {
+        // Split the paid invoice portion into Inventory / Expense / VAT.
+        // The cumulative remainder stays in the unpaid portion so both
+        // asset classes reconcile exactly to their invoice totals.
         final paidTax = (effectivePaid == totalCents)
             ? taxCents
             : (taxCents * effectivePaid / totalCents).round();
-        final paidInventory = effectivePaid - paidTax;
-        final vatReceivableId = await _requireAccountId('1300');
+        final paidNet = effectivePaid - paidTax;
+        paidInventoryAllocated = netTotal <= 0
+            ? 0
+            : (inventoryNet * paidNet / netTotal)
+                  .round()
+                  .clamp(0, inventoryNet)
+                  .clamp(0, paidNet)
+                  .toInt();
+        paidExpenseAllocated = paidNet - paidInventoryAllocated;
+        final vatReceivableId = paidTax > 0
+            ? await _requireAccountId('1300')
+            : null;
 
         final lines = <JournalEntryLineData>[];
-        if (paidInventory > 0) {
-          lines.add(JournalEntryLineData(
-            accountId: inventoryId,
-            debitCents: paidInventory,
-            creditCents: 0,
-            currencyId: currencyId,
-          ));
+        if (paidInventoryAllocated > 0) {
+          lines.add(
+            JournalEntryLineData(
+              accountId: inventoryId,
+              debitCents: paidInventoryAllocated,
+              creditCents: 0,
+              currencyId: currencyId,
+            ),
+          );
+        }
+        if (paidExpenseAllocated > 0) {
+          lines.add(
+            JournalEntryLineData(
+              accountId: expenseId!,
+              debitCents: paidExpenseAllocated,
+              creditCents: 0,
+              currencyId: currencyId,
+            ),
+          );
         }
         if (paidTax > 0) {
-          lines.add(JournalEntryLineData(
-            accountId: vatReceivableId,
-            debitCents: paidTax,
-            creditCents: 0,
-            currencyId: currencyId,
-          ));
+          lines.add(
+            JournalEntryLineData(
+              accountId: vatReceivableId!,
+              debitCents: paidTax,
+              creditCents: 0,
+              currencyId: currencyId,
+            ),
+          );
         }
-        lines.add(JournalEntryLineData(
-          accountId: cashOrBankId,
-          debitCents: 0,
-          creditCents: effectivePaid,
-          currencyId: currencyId,
-        ));
+        lines.add(
+          JournalEntryLineData(
+            accountId: cashOrBankId,
+            debitCents: 0,
+            creditCents: effectivePaid,
+            currencyId: currencyId,
+          ),
+        );
 
         await _accountingRepo.createJournalEntry(
           entryData: JournalEntryData(
@@ -461,37 +514,56 @@ class JournalEntryService {
     // Unpaid portion — Dr Inventory (+ Dr VAT Receivable), Cr Accounts Payable
     final unpaid = totalCents - effectivePaid;
     if (unpaid > 0) {
-      if (taxCents > 0) {
+      if (taxCents > 0 || expenseNet > 0) {
         final paidTax = (effectivePaid > 0 && effectivePaid < totalCents)
             ? (taxCents * effectivePaid / totalCents).round()
             : 0;
         final creditTax = taxCents - paidTax;
-        final creditInventory = unpaid - creditTax;
-        final vatReceivableId = await _requireAccountId('1300');
+        final creditInventory = inventoryNet - paidInventoryAllocated;
+        final creditExpense = expenseNet - paidExpenseAllocated;
+        final vatReceivableId = creditTax > 0
+            ? await _requireAccountId('1300')
+            : null;
 
         final lines = <JournalEntryLineData>[];
         if (creditInventory > 0) {
-          lines.add(JournalEntryLineData(
-            accountId: inventoryId,
-            debitCents: creditInventory,
-            creditCents: 0,
-            currencyId: currencyId,
-          ));
+          lines.add(
+            JournalEntryLineData(
+              accountId: inventoryId,
+              debitCents: creditInventory,
+              creditCents: 0,
+              currencyId: currencyId,
+            ),
+          );
+        }
+        if (creditExpense > 0) {
+          lines.add(
+            JournalEntryLineData(
+              accountId: expenseId!,
+              debitCents: creditExpense,
+              creditCents: 0,
+              currencyId: currencyId,
+            ),
+          );
         }
         if (creditTax > 0) {
-          lines.add(JournalEntryLineData(
-            accountId: vatReceivableId,
-            debitCents: creditTax,
-            creditCents: 0,
-            currencyId: currencyId,
-          ));
+          lines.add(
+            JournalEntryLineData(
+              accountId: vatReceivableId!,
+              debitCents: creditTax,
+              creditCents: 0,
+              currencyId: currencyId,
+            ),
+          );
         }
-        lines.add(JournalEntryLineData(
-          accountId: payablesId,
-          debitCents: 0,
-          creditCents: unpaid,
-          currencyId: currencyId,
-        ));
+        lines.add(
+          JournalEntryLineData(
+            accountId: payablesId,
+            debitCents: 0,
+            creditCents: unpaid,
+            currencyId: currencyId,
+          ),
+        );
 
         await _accountingRepo.createJournalEntry(
           entryData: JournalEntryData(
@@ -528,7 +600,8 @@ class JournalEntryService {
     if (overpayment > 0) {
       await _accountingRepo.createJournalEntry(
         entryData: JournalEntryData.simple(
-          description: 'Purchase #$purchaseId — Overpayment (supplier prepayment)',
+          description:
+              'Purchase #$purchaseId — Overpayment (supplier prepayment)',
           debitAccountId: payablesId,
           creditAccountId: cashOrBankId,
           amountCents: overpayment,
@@ -542,7 +615,10 @@ class JournalEntryService {
       );
     }
 
-    developer.log('Journal entries created for Purchase #$purchaseId', name: 'JournalEntryService');
+    developer.log(
+      'Journal entries created for Purchase #$purchaseId',
+      name: 'JournalEntryService',
+    );
   }
 
   // ── Sale Return ─────────────────────────────────────────────
@@ -581,26 +657,31 @@ class JournalEntryService {
     // Delegate to unified pipeline when available.
     final svc = _returnPostingService;
     if (svc != null) {
-      await svc.post(PostedReturn(
-        side: ReturnSide.sale,
-        link: ReturnLink.linked(
-          sourceInvoiceId: returnId,
-          sourceTable: 'sale_returns',
-        ),
-        partyId: partyId,
-        returnId: returnId,
-        refund: RefundChannelX.fromWire(refundMethod),
-        currencyId: currencyId,
-        lines: explicitLines ?? [
-          PostedReturnLine(
-            totalCents: totalCents,
-            taxCents: taxCents,
-            inventoryCostCents: 0, // COGS handled separately (legacy path)
+      await svc.post(
+        PostedReturn(
+          side: ReturnSide.sale,
+          link: ReturnLink.linked(
+            sourceInvoiceId: returnId,
+            sourceTable: 'sale_returns',
           ),
-        ],
-        userId: userId,
-        postingDate: postingDate,
-      ));
+          partyId: partyId,
+          returnId: returnId,
+          refund: RefundChannelX.fromWire(refundMethod),
+          currencyId: currencyId,
+          lines:
+              explicitLines ??
+              [
+                PostedReturnLine(
+                  totalCents: totalCents,
+                  taxCents: taxCents,
+                  inventoryCostCents:
+                      0, // COGS handled separately (legacy path)
+                ),
+              ],
+          userId: userId,
+          postingDate: postingDate,
+        ),
+      );
       return;
     }
 
@@ -617,28 +698,34 @@ class JournalEntryService {
     final netRevenue = totalCents - taxCents;
     final lines = <JournalEntryLineData>[];
     if (netRevenue > 0) {
-      lines.add(JournalEntryLineData(
-        accountId: salesRAId,
-        debitCents: netRevenue,
-        creditCents: 0,
-        currencyId: currencyId,
-      ));
+      lines.add(
+        JournalEntryLineData(
+          accountId: salesRAId,
+          debitCents: netRevenue,
+          creditCents: 0,
+          currencyId: currencyId,
+        ),
+      );
     }
     if (taxCents > 0) {
       final vatPayableId = await _requireAccountId('2100');
-      lines.add(JournalEntryLineData(
-        accountId: vatPayableId,
-        debitCents: taxCents,
-        creditCents: 0,
-        currencyId: currencyId,
-      ));
+      lines.add(
+        JournalEntryLineData(
+          accountId: vatPayableId,
+          debitCents: taxCents,
+          creditCents: 0,
+          currencyId: currencyId,
+        ),
+      );
     }
-    lines.add(JournalEntryLineData(
-      accountId: creditAccountId,
-      debitCents: 0,
-      creditCents: totalCents,
-      currencyId: currencyId,
-    ));
+    lines.add(
+      JournalEntryLineData(
+        accountId: creditAccountId,
+        debitCents: 0,
+        creditCents: totalCents,
+        currencyId: currencyId,
+      ),
+    );
 
     await _accountingRepo.createJournalEntry(
       entryData: JournalEntryData(
@@ -709,26 +796,30 @@ class JournalEntryService {
 
     final svc = _returnPostingService;
     if (svc != null) {
-      await svc.post(PostedReturn(
-        side: ReturnSide.purchase,
-        link: ReturnLink.linked(
-          sourceInvoiceId: returnId,
-          sourceTable: 'purchase_returns',
-        ),
-        partyId: null,
-        returnId: returnId,
-        refund: RefundChannelX.fromWire(refundMethod),
-        currencyId: currencyId,
-        lines: explicitLines ?? [
-          PostedReturnLine(
-            totalCents: totalCents,
-            taxCents: clampedTax,
-            inventoryCostCents: invCost,
+      await svc.post(
+        PostedReturn(
+          side: ReturnSide.purchase,
+          link: ReturnLink.linked(
+            sourceInvoiceId: returnId,
+            sourceTable: 'purchase_returns',
           ),
-        ],
-        userId: userId,
-        postingDate: postingDate,
-      ));
+          partyId: null,
+          returnId: returnId,
+          refund: RefundChannelX.fromWire(refundMethod),
+          currencyId: currencyId,
+          lines:
+              explicitLines ??
+              [
+                PostedReturnLine(
+                  totalCents: totalCents,
+                  taxCents: clampedTax,
+                  inventoryCostCents: invCost,
+                ),
+              ],
+          userId: userId,
+          postingDate: postingDate,
+        ),
+      );
       return;
     }
 
@@ -739,6 +830,74 @@ class JournalEntryService {
     final isCreditRefund = refundMethod == 'credit';
     final debitAccountId = isCreditRefund ? payablesId : cashOrBankId;
     final methodLabel = isCreditRefund ? 'Credit Note' : 'Cash Refund';
+
+    // A return can contain service/non-stock lines, or inventory whose
+    // historical cost differs from its invoice net. In that case the old
+    // fallback (Cr Inventory for the whole net) corrupts both Inventory and
+    // purchase-return variance. Mirror the production posting policy here.
+    if (invCost != net) {
+      final vatReceivableId = clampedTax > 0
+          ? await _requireAccountId('1300')
+          : null;
+      final purchaseReturnAdjustmentId = await _requireAccountId('4100');
+      final lines = <JournalEntryLineData>[
+        JournalEntryLineData(
+          accountId: debitAccountId,
+          debitCents: totalCents,
+          creditCents: 0,
+          currencyId: currencyId,
+        ),
+      ];
+      if (clampedTax > 0) {
+        lines.add(
+          JournalEntryLineData(
+            accountId: vatReceivableId!,
+            debitCents: 0,
+            creditCents: clampedTax,
+            currencyId: currencyId,
+          ),
+        );
+      }
+      if (net > 0) {
+        lines.add(
+          JournalEntryLineData(
+            accountId: purchaseReturnAdjustmentId,
+            debitCents: 0,
+            creditCents: net,
+            currencyId: currencyId,
+          ),
+        );
+      }
+      if (invCost > 0) {
+        lines.addAll([
+          JournalEntryLineData(
+            accountId: purchaseReturnAdjustmentId,
+            debitCents: invCost,
+            creditCents: 0,
+            currencyId: currencyId,
+          ),
+          JournalEntryLineData(
+            accountId: inventoryId,
+            debitCents: 0,
+            creditCents: invCost,
+            currencyId: currencyId,
+          ),
+        ]);
+      }
+      await _accountingRepo.createJournalEntry(
+        entryData: JournalEntryData(
+          description:
+              'Purchase Return #$returnId — $methodLabel + Cost Adjustment',
+          entryType: 'purchase_return',
+          sourceTable: 'purchase_returns',
+          sourceId: returnId,
+          autoPost: true,
+          lines: lines,
+        ),
+        userId: userId,
+      );
+      return;
+    }
 
     if (clampedTax > 0) {
       final vatReceivableId = await _requireAccountId('1300');
@@ -757,12 +916,14 @@ class JournalEntryService {
         ),
       ];
       if (net > 0) {
-        lines.add(JournalEntryLineData(
-          accountId: inventoryId,
-          debitCents: 0,
-          creditCents: net,
-          currencyId: currencyId,
-        ));
+        lines.add(
+          JournalEntryLineData(
+            accountId: inventoryId,
+            debitCents: 0,
+            creditCents: net,
+            currencyId: currencyId,
+          ),
+        );
       }
       await _accountingRepo.createJournalEntry(
         entryData: JournalEntryData(
@@ -832,7 +993,10 @@ class JournalEntryService {
       );
     }
 
-    developer.log('Journal entry created for Expense #$expenseId', name: 'JournalEntryService');
+    developer.log(
+      'Journal entry created for Expense #$expenseId',
+      name: 'JournalEntryService',
+    );
   }
 
   // ── Customer Payment ────────────────────────────────────────
@@ -866,7 +1030,10 @@ class JournalEntryService {
       );
     }
 
-    developer.log('Journal entry created for Customer Payment #$paymentId', name: 'JournalEntryService');
+    developer.log(
+      'Journal entry created for Customer Payment #$paymentId',
+      name: 'JournalEntryService',
+    );
   }
 
   // ── Supplier Payment ────────────────────────────────────────
@@ -900,7 +1067,10 @@ class JournalEntryService {
       );
     }
 
-    developer.log('Journal entry created for Supplier Payment #$paymentId', name: 'JournalEntryService');
+    developer.log(
+      'Journal entry created for Supplier Payment #$paymentId',
+      name: 'JournalEntryService',
+    );
   }
 
   // ── Direct Customer Payment (from profile) ───────────────────
@@ -935,7 +1105,10 @@ class JournalEntryService {
       );
     }
 
-    developer.log('Journal entry created for Direct Customer Payment #$transactionId', name: 'JournalEntryService');
+    developer.log(
+      'Journal entry created for Direct Customer Payment #$transactionId',
+      name: 'JournalEntryService',
+    );
   }
 
   // ── Direct Customer Discount (from profile) ───────────────────
@@ -970,7 +1143,10 @@ class JournalEntryService {
       );
     }
 
-    developer.log('Journal entry created for Customer Discount #$transactionId', name: 'JournalEntryService');
+    developer.log(
+      'Journal entry created for Customer Discount #$transactionId',
+      name: 'JournalEntryService',
+    );
   }
 
   // ── Direct Supplier Payment (from profile) ────────────────────
@@ -1005,7 +1181,10 @@ class JournalEntryService {
       );
     }
 
-    developer.log('Journal entry created for Direct Supplier Payment #$transactionId', name: 'JournalEntryService');
+    developer.log(
+      'Journal entry created for Direct Supplier Payment #$transactionId',
+      name: 'JournalEntryService',
+    );
   }
 
   // ── Direct Supplier Discount (from profile) ───────────────────
@@ -1066,7 +1245,10 @@ class JournalEntryService {
       );
     }
 
-    developer.log('Journal entry created for Purchase Discount #$transactionId', name: 'JournalEntryService');
+    developer.log(
+      'Journal entry created for Purchase Discount #$transactionId',
+      name: 'JournalEntryService',
+    );
   }
 
   // ── Payroll (Salary Payment) ────────────────────────────────
@@ -1103,7 +1285,10 @@ class JournalEntryService {
       );
     }
 
-    developer.log('Journal entry created for Payroll #$payrollId', name: 'JournalEntryService');
+    developer.log(
+      'Journal entry created for Payroll #$payrollId',
+      name: 'JournalEntryService',
+    );
   }
 
   // ── Purchase Adjustment Return (Perpetual Inventory) ──────────
@@ -1150,25 +1335,29 @@ class JournalEntryService {
     // identical at the JE level.
     final svc = _returnPostingService;
     if (svc != null) {
-      await svc.post(PostedReturn(
-        side: ReturnSide.purchase,
-        link: ReturnLink.adjustment,
-        partyId: supplierId,
-        returnId: returnId,
-        refund: RefundChannelX.fromWire(refundMethod),
-        currencyId: currencyId,
-        lines: explicitLines ?? [
-          PostedReturnLine(
-            totalCents: totalCents,
-            taxCents: taxCents,
-            inventoryCostCents: inventoryCostCents,
-          ),
-        ],
-        userId: userId,
-        postingDate: postingDate,
-        approvalStatus: approvalStatus,
-        approvalReason: approvalReason,
-      ));
+      await svc.post(
+        PostedReturn(
+          side: ReturnSide.purchase,
+          link: ReturnLink.adjustment,
+          partyId: supplierId,
+          returnId: returnId,
+          refund: RefundChannelX.fromWire(refundMethod),
+          currencyId: currencyId,
+          lines:
+              explicitLines ??
+              [
+                PostedReturnLine(
+                  totalCents: totalCents,
+                  taxCents: taxCents,
+                  inventoryCostCents: inventoryCostCents,
+                ),
+              ],
+          userId: userId,
+          postingDate: postingDate,
+          approvalStatus: approvalStatus,
+          approvalReason: approvalReason,
+        ),
+      );
       return;
     }
 
@@ -1192,51 +1381,62 @@ class JournalEntryService {
     final lines = <JournalEntryLineData>[];
 
     if (totalCents > 0) {
-      lines.add(JournalEntryLineData(
-        accountId: debitAccountId,
-        debitCents: totalCents,
-        creditCents: 0,
-        currencyId: currencyId,
-        description: refundMethod == 'credit'
-            ? 'AP reduced — Purchase Adj Return #$returnId'
-            : 'Refund received ($refundMethod) — Purchase Adj Return #$returnId',
-      ));
-      if (netCents > 0) {
-        lines.add(JournalEntryLineData(
-          accountId: adjAccountId,
-          debitCents: 0,
-          creditCents: netCents,
+      lines.add(
+        JournalEntryLineData(
+          accountId: debitAccountId,
+          debitCents: totalCents,
+          creditCents: 0,
           currencyId: currencyId,
-          description: 'Purchase Return Adjustment income — #$returnId',
-        ));
+          description: refundMethod == 'credit'
+              ? 'AP reduced — Purchase Adj Return #$returnId'
+              : 'Refund received ($refundMethod) — Purchase Adj Return #$returnId',
+        ),
+      );
+      if (netCents > 0) {
+        lines.add(
+          JournalEntryLineData(
+            accountId: adjAccountId,
+            debitCents: 0,
+            creditCents: netCents,
+            currencyId: currencyId,
+            description: 'Purchase Return Adjustment income — #$returnId',
+          ),
+        );
       }
       if (taxCents > 0) {
         final vatReceivableId = await _requireAccountId('1300');
-        lines.add(JournalEntryLineData(
-          accountId: vatReceivableId,
-          debitCents: 0,
-          creditCents: taxCents,
-          currencyId: currencyId,
-          description: 'Input VAT reversed — Purchase Adj Return #$returnId',
-        ));
+        lines.add(
+          JournalEntryLineData(
+            accountId: vatReceivableId,
+            debitCents: 0,
+            creditCents: taxCents,
+            currencyId: currencyId,
+            description: 'Input VAT reversed — Purchase Adj Return #$returnId',
+          ),
+        );
       }
     }
 
     if (inventoryCostCents > 0) {
-      lines.add(JournalEntryLineData(
-        accountId: cogsId,
-        debitCents: inventoryCostCents,
-        creditCents: 0,
-        currencyId: currencyId,
-        description: 'Inventory cost removed — Purchase Adj Return #$returnId',
-      ));
-      lines.add(JournalEntryLineData(
-        accountId: inventoryId,
-        debitCents: 0,
-        creditCents: inventoryCostCents,
-        currencyId: currencyId,
-        description: 'Inventory decreased — Purchase Adj Return #$returnId',
-      ));
+      lines.add(
+        JournalEntryLineData(
+          accountId: cogsId,
+          debitCents: inventoryCostCents,
+          creditCents: 0,
+          currencyId: currencyId,
+          description:
+              'Inventory cost removed — Purchase Adj Return #$returnId',
+        ),
+      );
+      lines.add(
+        JournalEntryLineData(
+          accountId: inventoryId,
+          debitCents: 0,
+          creditCents: inventoryCostCents,
+          currencyId: currencyId,
+          description: 'Inventory decreased — Purchase Adj Return #$returnId',
+        ),
+      );
     }
 
     if (lines.isNotEmpty) {
@@ -1304,26 +1504,30 @@ class JournalEntryService {
     // Delegate to unified pipeline when available.
     final svc = _returnPostingService;
     if (svc != null) {
-      await svc.post(PostedReturn(
-        side: ReturnSide.sale,
-        link: ReturnLink.adjustment,
-        partyId: partyId,
-        returnId: returnId,
-        refund: RefundChannelX.fromWire(refundMethod),
-        currencyId: currencyId,
-        lines: explicitLines ?? [
-          PostedReturnLine(
-            totalCents: totalCents,
-            taxCents: taxCents,
-            inventoryCostCents: inventoryCostCents,
-          ),
-        ],
-        userId: userId,
-        postingDate: postingDate,
-        approvalStatus: approvalStatus,
-        approvalReason: approvalReason,
-        creditToReceivable: creditToReceivable,
-      ));
+      await svc.post(
+        PostedReturn(
+          side: ReturnSide.sale,
+          link: ReturnLink.adjustment,
+          partyId: partyId,
+          returnId: returnId,
+          refund: RefundChannelX.fromWire(refundMethod),
+          currencyId: currencyId,
+          lines:
+              explicitLines ??
+              [
+                PostedReturnLine(
+                  totalCents: totalCents,
+                  taxCents: taxCents,
+                  inventoryCostCents: inventoryCostCents,
+                ),
+              ],
+          userId: userId,
+          postingDate: postingDate,
+          approvalStatus: approvalStatus,
+          approvalReason: approvalReason,
+          creditToReceivable: creditToReceivable,
+        ),
+      );
       return;
     }
 
@@ -1348,50 +1552,60 @@ class JournalEntryService {
 
     if (totalCents > 0) {
       if (netCents > 0) {
-        lines.add(JournalEntryLineData(
-          accountId: adjAccountId,
-          debitCents: netCents,
-          creditCents: 0,
-          currencyId: currencyId,
-          description: 'Sales return adjustment expense — #$returnId',
-        ));
+        lines.add(
+          JournalEntryLineData(
+            accountId: adjAccountId,
+            debitCents: netCents,
+            creditCents: 0,
+            currencyId: currencyId,
+            description: 'Sales return adjustment expense — #$returnId',
+          ),
+        );
       }
       if (taxCents > 0) {
         final vatPayableId = await _requireAccountId('2100');
-        lines.add(JournalEntryLineData(
-          accountId: vatPayableId,
-          debitCents: taxCents,
-          creditCents: 0,
-          currencyId: currencyId,
-          description: 'Output VAT reversed — Sale Adj Return #$returnId',
-        ));
+        lines.add(
+          JournalEntryLineData(
+            accountId: vatPayableId,
+            debitCents: taxCents,
+            creditCents: 0,
+            currencyId: currencyId,
+            description: 'Output VAT reversed — Sale Adj Return #$returnId',
+          ),
+        );
       }
-      lines.add(JournalEntryLineData(
-        accountId: creditAccountId,
-        debitCents: 0,
-        creditCents: totalCents,
-        currencyId: currencyId,
-        description: refundMethod == 'credit'
-            ? 'AR reduced — Sale Adj Return #$returnId'
-            : 'Refund issued ($refundMethod) — Sale Adj Return #$returnId',
-      ));
+      lines.add(
+        JournalEntryLineData(
+          accountId: creditAccountId,
+          debitCents: 0,
+          creditCents: totalCents,
+          currencyId: currencyId,
+          description: refundMethod == 'credit'
+              ? 'AR reduced — Sale Adj Return #$returnId'
+              : 'Refund issued ($refundMethod) — Sale Adj Return #$returnId',
+        ),
+      );
     }
 
     if (inventoryCostCents > 0) {
-      lines.add(JournalEntryLineData(
-        accountId: inventoryId,
-        debitCents: inventoryCostCents,
-        creditCents: 0,
-        currencyId: currencyId,
-        description: 'Inventory restored — Sale Adj Return #$returnId',
-      ));
-      lines.add(JournalEntryLineData(
-        accountId: cogsId,
-        debitCents: 0,
-        creditCents: inventoryCostCents,
-        currencyId: currencyId,
-        description: 'COGS reversed — Sale Adj Return #$returnId',
-      ));
+      lines.add(
+        JournalEntryLineData(
+          accountId: inventoryId,
+          debitCents: inventoryCostCents,
+          creditCents: 0,
+          currencyId: currencyId,
+          description: 'Inventory restored — Sale Adj Return #$returnId',
+        ),
+      );
+      lines.add(
+        JournalEntryLineData(
+          accountId: cogsId,
+          debitCents: 0,
+          creditCents: inventoryCostCents,
+          currencyId: currencyId,
+          description: 'COGS reversed — Sale Adj Return #$returnId',
+        ),
+      );
     }
 
     if (lines.isNotEmpty) {
@@ -1537,9 +1751,7 @@ class JournalEntryService {
     int? userId,
   }) async {
     if (deltaValueCents == 0) {
-      throw AccountingException(
-        'Inventory revaluation delta must be non-zero',
-      );
+      throw AccountingException('Inventory revaluation delta must be non-zero');
     }
     final inventoryId = await _requireAccountId('1200');
     final revaluationId = await _requireAccountId('5900');
@@ -1549,7 +1761,8 @@ class JournalEntryService {
 
     final entryId = await _accountingRepo.createJournalEntry(
       entryData: JournalEntryData.simple(
-        description: 'Inventory Revaluation #$adjustmentId '
+        description:
+            'Inventory Revaluation #$adjustmentId '
             '(${isWriteUp ? "up" : "down"}) — $reason',
         debitAccountId: isWriteUp ? inventoryId : revaluationId,
         creditAccountId: isWriteUp ? revaluationId : inventoryId,
@@ -1569,6 +1782,44 @@ class JournalEntryService {
       name: 'JournalEntryService',
     );
     return entryId;
+  }
+
+  /// Posts the cent-level carrying-value difference caused by measuring a
+  /// fractional purchase against an already-rounded SKU pool.
+  ///
+  /// The source remains the purchase so normal invoice cancellation reverses
+  /// both the commercial entry and this rounding revaluation atomically.
+  Future<int> recordInventoryRoundingJournalEntry({
+    required String sourceTable,
+    required int sourceId,
+    required int deltaValueCents,
+    required int currencyId,
+    required String reason,
+    int? userId,
+  }) async {
+    if (deltaValueCents == 0) {
+      throw AccountingException('Inventory rounding delta must be non-zero');
+    }
+    final inventoryId = await _requireAccountId('1200');
+    final revaluationId = await _requireAccountId('5900');
+    final amount = deltaValueCents.abs();
+    final isWriteUp = deltaValueCents > 0;
+
+    return _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description:
+            'Inventory rounding ${isWriteUp ? "up" : "down"} — $reason',
+        debitAccountId: isWriteUp ? inventoryId : revaluationId,
+        creditAccountId: isWriteUp ? revaluationId : inventoryId,
+        amountCents: amount,
+        currencyId: currencyId,
+        entryType: 'inventory_rounding',
+        sourceTable: sourceTable,
+        sourceId: sourceId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
   }
 
   /// Create journal entry for an **inventory opening balance**.
@@ -1655,7 +1906,10 @@ class JournalEntryService {
       );
     }
 
-    developer.log('Journal entry created for Commission Payment #$referenceId', name: 'JournalEntryService');
+    developer.log(
+      'Journal entry created for Commission Payment #$referenceId',
+      name: 'JournalEntryService',
+    );
   }
 
   // ── Loyalty Points ───────────────────────────────────────────
@@ -1691,7 +1945,10 @@ class JournalEntryService {
       );
     }
 
-    developer.log('Journal entry created for Loyalty Earn — Sale #$saleId', name: 'JournalEntryService');
+    developer.log(
+      'Journal entry created for Loyalty Earn — Sale #$saleId',
+      name: 'JournalEntryService',
+    );
   }
 
   /// Create journal entry when loyalty points are REDEEMED.
@@ -1725,7 +1982,10 @@ class JournalEntryService {
       );
     }
 
-    developer.log('Journal entry created for Loyalty Redemption #$redemptionId', name: 'JournalEntryService');
+    developer.log(
+      'Journal entry created for Loyalty Redemption #$redemptionId',
+      name: 'JournalEntryService',
+    );
   }
 
   // ── Opening Balance (Customer / Supplier) ──────────────────────
@@ -1882,9 +2142,15 @@ class JournalEntryService {
 
     // ── Fix 2: Re-create journal entries for posted purchases with overpayment ──
     final overpaidPurchases = await _accountingRepo.rawSelect(
-      'SELECT id, total_cents, paid_amount_cents, currency_id, payment_method '
-      'FROM purchases WHERE status = \'posted\' '
-      'AND CAST(paid_amount_cents AS INTEGER) > CAST(total_cents AS INTEGER)',
+      'SELECT pu.id, pu.total_cents, pu.paid_amount_cents, pu.currency_id, '
+      'pu.tax_cents, pu.payment_method, '
+      'COALESCE((SELECT SUM(CASE WHEN pr.track_inventory = 1 '
+      'THEN MAX(pi.total_cents - pi.tax_cents, 0) ELSE 0 END) '
+      'FROM purchase_items pi JOIN products pr ON pr.id = pi.product_id '
+      'WHERE pi.purchase_id = pu.id), 0) AS inventory_net_cents '
+      'FROM purchases pu WHERE pu.status = \'posted\' '
+      'AND CAST(pu.paid_amount_cents AS INTEGER) > '
+      'CAST(pu.total_cents AS INTEGER)',
     );
 
     for (final row in overpaidPurchases) {
@@ -1892,6 +2158,8 @@ class JournalEntryService {
       final totalCents = row.read<int>('total_cents');
       final paidAmountCents = row.read<int>('paid_amount_cents');
       final currencyId = row.read<int>('currency_id');
+      final taxCents = row.read<int>('tax_cents');
+      final inventoryNetCents = row.read<int>('inventory_net_cents');
       final paymentMethod = row.readNullable<String>('payment_method');
 
       developer.log(
@@ -1910,6 +2178,8 @@ class JournalEntryService {
         totalCents: totalCents,
         paidAmountCents: paidAmountCents,
         currencyId: currencyId,
+        taxCents: taxCents,
+        inventoryNetCents: inventoryNetCents,
         paymentMethod: paymentMethod,
       );
 
@@ -1936,9 +2206,14 @@ class JournalEntryService {
       );
 
       // Void old entries (only sale revenue entries, not COGS)
-      final entries = await _accountingRepo.getJournalEntriesForSource('sales', saleId);
+      final entries = await _accountingRepo.getJournalEntriesForSource(
+        'sales',
+        saleId,
+      );
       for (final entry in entries) {
-        if (entry.status == 'posted' && !entry.isReversed && entry.entryType == 'sale') {
+        if (entry.status == 'posted' &&
+            !entry.isReversed &&
+            entry.entryType == 'sale') {
           await _accountingRepo.voidJournalEntry(
             entryId: entry.id,
             reason: 'Repair: overpayment journal entry fix',
@@ -1983,7 +2258,8 @@ class JournalEntryService {
     int? userId,
   }) async {
     final entries = await _accountingRepo.getJournalEntriesForSource(
-      sourceTable, sourceId,
+      sourceTable,
+      sourceId,
     );
 
     // Filter to only entries that CAN be voided

@@ -25,45 +25,89 @@ class InventorySettingsSection extends StatelessWidget {
               min: 1,
               max: 50,
               divisions: 49,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(lowStockThreshold: v.round())),
+              onChanged: (v) => _patch(
+                context,
+                (c) => c.copyWith(lowStockThreshold: v.round()),
+              ),
             ),
             SwitchListTile(
               title: Text('app_settings.inventory.stock_alerts'.tr()),
               subtitle: Text('app_settings.inventory.stock_alerts_desc'.tr()),
               value: s.enableStockAlerts,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(enableStockAlerts: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(enableStockAlerts: v)),
             ),
             SwitchListTile(
               title: Text('app_settings.inventory.negative_stock'.tr()),
               subtitle: Text('app_settings.inventory.negative_stock_desc'.tr()),
               value: s.allowNegativeStock,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(allowNegativeStock: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(allowNegativeStock: v)),
             ),
             SwitchListTile(
               title: Text('app_settings.inventory.auto_sku'.tr()),
               subtitle: Text('app_settings.inventory.auto_sku_desc'.tr()),
               value: s.autoGenerateSku,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(autoGenerateSku: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(autoGenerateSku: v)),
             ),
             if (s.autoGenerateSku)
               SettingsTextField(
                 label: 'app_settings.inventory.sku_format'.tr(),
                 value: s.skuFormat,
                 hint: 'PRD-{0000}',
-                onChanged: (v) => _patch(context, (c) => c.copyWith(skuFormat: v)),
+                onChanged: (v) =>
+                    _patch(context, (c) => c.copyWith(skuFormat: v)),
               ),
             SwitchListTile(
               title: Text('app_settings.inventory.auto_barcode'.tr()),
               subtitle: Text('app_settings.inventory.auto_barcode_desc'.tr()),
               value: s.autoGenerateBarcode,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(autoGenerateBarcode: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(autoGenerateBarcode: v)),
             ),
             SwitchListTile(
               title: Text('app_settings.inventory.track_inventory'.tr()),
-              subtitle: Text('app_settings.inventory.track_inventory_desc'.tr()),
+              subtitle: Text(
+                'app_settings.inventory.track_inventory_desc'.tr(),
+              ),
               value: s.defaultTrackInventory,
-              onChanged: (v) => _patch(context, (c) => c.copyWith(defaultTrackInventory: v)),
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(defaultTrackInventory: v)),
             ),
+            const Divider(),
+            SwitchListTile(
+              title: Text('app_settings.inventory.measured_products'.tr()),
+              subtitle: Text(
+                'app_settings.inventory.measured_products_desc'.tr(),
+              ),
+              value: s.enableMeasuredProducts,
+              onChanged: (v) =>
+                  _patch(context, (c) => c.copyWith(enableMeasuredProducts: v)),
+            ),
+            if (s.enableMeasuredProducts) ...[
+              SwitchListTile(
+                title: Text('app_settings.inventory.length_units'.tr()),
+                subtitle: Text('app_settings.inventory.length_units_desc'.tr()),
+                value: s.enableLengthUnits,
+                onChanged: (v) =>
+                    _patch(context, (c) => c.copyWith(enableLengthUnits: v)),
+              ),
+              SwitchListTile(
+                title: Text('app_settings.inventory.weight_units'.tr()),
+                subtitle: Text('app_settings.inventory.weight_units_desc'.tr()),
+                value: s.enableWeightUnits,
+                onChanged: (v) =>
+                    _patch(context, (c) => c.copyWith(enableWeightUnits: v)),
+              ),
+              SwitchListTile(
+                title: Text('app_settings.inventory.volume_units'.tr()),
+                subtitle: Text('app_settings.inventory.volume_units_desc'.tr()),
+                value: s.enableVolumeUnits,
+                onChanged: (v) =>
+                    _patch(context, (c) => c.copyWith(enableVolumeUnits: v)),
+              ),
+            ],
           ],
         );
       },

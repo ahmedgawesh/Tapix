@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../services/product_variant_movement_pdf_service.dart';
@@ -49,8 +50,10 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
       appBar: AppBar(
         title: Text('reports.variant_movement_report'.tr()),
         actions: [
-          BlocBuilder<ProductVariantMovementBloc,
-              RealtimeState<ProductVariantMovementData>>(
+          BlocBuilder<
+            ProductVariantMovementBloc,
+            RealtimeState<ProductVariantMovementData>
+          >(
             builder: (context, state) {
               if (state is! RealtimeSuccess<ProductVariantMovementData>) {
                 return const SizedBox.shrink();
@@ -77,62 +80,70 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
           ),
         ],
       ),
-      body: BlocBuilder<ProductVariantMovementBloc,
-          RealtimeState<ProductVariantMovementData>>(
-        builder: (context, state) {
-          if (state is RealtimeLoading<ProductVariantMovementData>) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body:
+          BlocBuilder<
+            ProductVariantMovementBloc,
+            RealtimeState<ProductVariantMovementData>
+          >(
+            builder: (context, state) {
+              if (state is RealtimeLoading<ProductVariantMovementData>) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (state is RealtimeError<ProductVariantMovementData>) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline,
-                      size: 48, color: colorScheme.error),
-                  const SizedBox(height: 16),
-                  Text(state.error.toString(),
-                      style: theme.textTheme.bodyLarge),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    onPressed: () => context
-                        .read<ProductVariantMovementBloc>()
-                        .refresh(),
-                    icon: const Icon(LucideIcons.refreshCw),
-                    label: Text('reports.retry'.tr()),
+              if (state is RealtimeError<ProductVariantMovementData>) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        state.error.toString(),
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: () => context
+                            .read<ProductVariantMovementBloc>()
+                            .refresh(),
+                        icon: const Icon(LucideIcons.refreshCw),
+                        label: Text('reports.retry'.tr()),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            );
-          }
+                );
+              }
 
-          if (state is RealtimeSuccess<ProductVariantMovementData>) {
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: DateRangeSelector(
-                    dateRange: state.data.dateRange,
-                    onChanged: (range) => context
-                        .read<ProductVariantMovementBloc>()
-                        .add(VariantMovementDateRangeChanged(range)),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _buildSearchBar(context, state.data),
-                Expanded(
-                  child: state.data.selectedProductId == null
-                      ? _buildEmptyState(context)
-                      : _buildContent(context, state.data),
-                ),
-              ],
-            );
-          }
+              if (state is RealtimeSuccess<ProductVariantMovementData>) {
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: DateRangeSelector(
+                        dateRange: state.data.dateRange,
+                        onChanged: (range) => context
+                            .read<ProductVariantMovementBloc>()
+                            .add(VariantMovementDateRangeChanged(range)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildSearchBar(context, state.data),
+                    Expanded(
+                      child: state.data.selectedProductId == null
+                          ? _buildEmptyState(context)
+                          : _buildContent(context, state.data),
+                    ),
+                  ],
+                );
+              }
 
-          return const SizedBox.shrink();
-        },
-      ),
+              return const SizedBox.shrink();
+            },
+          ),
     );
   }
 
@@ -141,7 +152,9 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
   // ═══════════════════════════════════════════════════════
 
   Widget _buildSearchBar(
-      BuildContext context, ProductVariantMovementData data) {
+    BuildContext context,
+    ProductVariantMovementData data,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -164,9 +177,9 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
                         icon: const Icon(LucideIcons.x, size: 18),
                         onPressed: () {
                           _searchController.clear();
-                          context
-                              .read<ProductVariantMovementBloc>()
-                              .add(const VariantMovementSearchChanged(''));
+                          context.read<ProductVariantMovementBloc>().add(
+                            const VariantMovementSearchChanged(''),
+                          );
                         },
                       )
                     : null,
@@ -177,7 +190,9 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
                   borderSide: BorderSide.none,
                 ),
                 contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 12),
+                  horizontal: 16,
+                  vertical: 12,
+                ),
               ),
               onChanged: (value) => context
                   .read<ProductVariantMovementBloc>()
@@ -219,20 +234,24 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
                           ? colorScheme.tertiary
                           : colorScheme.primary,
                     ),
-                    title: Text(result.name,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w500)),
+                    title: Text(
+                      result.name,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                     subtitle: Row(
                       children: [
                         if (result.sku != null) ...[
-                          Text(result.sku!,
-                              style: theme.textTheme.bodySmall),
+                          Text(result.sku!, style: theme.textTheme.bodySmall),
                           const SizedBox(width: 8),
                         ],
                         if (result.categoryName != null)
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 1),
+                              horizontal: 6,
+                              vertical: 1,
+                            ),
                             decoration: BoxDecoration(
                               color: colorScheme.secondaryContainer,
                               borderRadius: BorderRadius.circular(4),
@@ -246,8 +265,11 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
                           ),
                         if (result.hasVariants) ...[
                           const SizedBox(width: 6),
-                          Icon(LucideIcons.layers,
-                              size: 12, color: colorScheme.tertiary),
+                          Icon(
+                            LucideIcons.layers,
+                            size: 12,
+                            color: colorScheme.tertiary,
+                          ),
                           const SizedBox(width: 2),
                           Text(
                             'reports.has_variants_label'.tr(),
@@ -262,7 +284,8 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
                       _searchController.clear();
                       _searchFocusNode.unfocus();
                       context.read<ProductVariantMovementBloc>().add(
-                          VariantMovementProductSelected(result.productId));
+                        VariantMovementProductSelected(result.productId),
+                      );
                     },
                   );
                 },
@@ -311,16 +334,20 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
                   Row(
                     children: [
                       if (data.selectedProductCategory != null) ...[
-                        Icon(LucideIcons.tag,
-                            size: 12,
-                            color: colorScheme.onPrimaryContainer
-                                .withValues(alpha: 0.7)),
+                        Icon(
+                          LucideIcons.tag,
+                          size: 12,
+                          color: colorScheme.onPrimaryContainer.withValues(
+                            alpha: 0.7,
+                          ),
+                        ),
                         const SizedBox(width: 3),
                         Text(
                           data.selectedProductCategory!,
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onPrimaryContainer
-                                .withValues(alpha: 0.7),
+                            color: colorScheme.onPrimaryContainer.withValues(
+                              alpha: 0.7,
+                            ),
                           ),
                         ),
                       ],
@@ -328,17 +355,22 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
                           data.selectedProductHasVariants)
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 6),
-                          child: Text('•',
-                              style: TextStyle(
-                                  color: colorScheme.onPrimaryContainer
-                                      .withValues(alpha: 0.5))),
+                          child: Text(
+                            '•',
+                            style: TextStyle(
+                              color: colorScheme.onPrimaryContainer.withValues(
+                                alpha: 0.5,
+                              ),
+                            ),
+                          ),
                         ),
                       if (data.selectedProductHasVariants)
                         Text(
                           'reports.has_variants_label'.tr(),
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onPrimaryContainer
-                                .withValues(alpha: 0.7),
+                            color: colorScheme.onPrimaryContainer.withValues(
+                              alpha: 0.7,
+                            ),
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -348,13 +380,16 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
             ),
           ),
           IconButton(
-            icon: Icon(LucideIcons.x,
-                size: 18, color: colorScheme.onPrimaryContainer),
+            icon: Icon(
+              LucideIcons.x,
+              size: 18,
+              color: colorScheme.onPrimaryContainer,
+            ),
             onPressed: () {
               _searchController.clear();
-              context
-                  .read<ProductVariantMovementBloc>()
-                  .add(const VariantMovementProductCleared());
+              context.read<ProductVariantMovementBloc>().add(
+                const VariantMovementProductCleared(),
+              );
             },
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
@@ -379,9 +414,11 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.layers,
-                size: 64,
-                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4)),
+            Icon(
+              LucideIcons.layers,
+              size: 64,
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+            ),
             const SizedBox(height: 16),
             Text(
               'reports.search_product_prompt'.tr(),
@@ -408,8 +445,7 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
   // MAIN CONTENT
   // ═══════════════════════════════════════════════════════
 
-  Widget _buildContent(
-      BuildContext context, ProductVariantMovementData data) {
+  Widget _buildContent(BuildContext context, ProductVariantMovementData data) {
     final theme = Theme.of(context);
     final cs = sl<CurrencyService>();
 
@@ -420,10 +456,13 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(LucideIcons.packageOpen,
-                  size: 64,
-                  color: theme.colorScheme.onSurfaceVariant
-                      .withValues(alpha: 0.4)),
+              Icon(
+                LucideIcons.packageOpen,
+                size: 64,
+                color: theme.colorScheme.onSurfaceVariant.withValues(
+                  alpha: 0.4,
+                ),
+              ),
               const SizedBox(height: 16),
               Text(
                 'reports.no_movements'.tr(),
@@ -458,8 +497,9 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
             ),
           ),
           const SizedBox(height: 8),
-          ...data.variantSummaries.map((s) =>
-              _VariantBreakdownCard(summary: s, cs: cs)),
+          ...data.variantSummaries.map(
+            (s) => _VariantBreakdownCard(summary: s, cs: cs),
+          ),
           const SizedBox(height: 16),
         ],
 
@@ -471,12 +511,13 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
           ),
         ),
         const SizedBox(height: 8),
-        ...data.movements.map((entry) =>
-            _VariantMovementCard(
-              entry: entry,
-              cs: cs,
-              showVariant: data.selectedProductHasVariants,
-            )),
+        ...data.movements.map(
+          (entry) => _VariantMovementCard(
+            entry: entry,
+            cs: cs,
+            showVariant: data.selectedProductHasVariants,
+          ),
+        ),
       ],
     );
   }
@@ -486,7 +527,10 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
   // ═══════════════════════════════════════════════════════
 
   Widget _buildTotalsSection(
-      BuildContext context, VariantMovementTotals totals, CurrencyService cs) {
+    BuildContext context,
+    VariantMovementTotals totals,
+    CurrencyService cs,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -498,7 +542,10 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
               child: _TotalCard(
                 icon: LucideIcons.shoppingCart,
                 label: 'reports.total_purchased'.tr(),
-                value: '${totals.totalPurchased}',
+                value: localizedQuantity(
+                  totals.totalPurchased,
+                  totals.measurementType,
+                ),
                 subValue: cs.formatCents(totals.totalPurchaseCents),
                 color: Colors.blue,
               ),
@@ -508,7 +555,10 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
               child: _TotalCard(
                 icon: LucideIcons.receipt,
                 label: 'reports.total_sold'.tr(),
-                value: '${totals.totalSold}',
+                value: localizedQuantity(
+                  totals.totalSold,
+                  totals.measurementType,
+                ),
                 subValue: cs.formatCents(totals.totalSalesCents),
                 color: Colors.green,
               ),
@@ -522,7 +572,10 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
               child: _TotalCard(
                 icon: LucideIcons.undo2,
                 label: 'reports.sale_returns_qty'.tr(),
-                value: '${totals.totalSaleReturned}',
+                value: localizedQuantity(
+                  totals.totalSaleReturned,
+                  totals.measurementType,
+                ),
                 subValue: cs.formatCents(totals.totalSaleReturnCents),
                 color: Colors.orange,
               ),
@@ -532,7 +585,10 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
               child: _TotalCard(
                 icon: LucideIcons.redo2,
                 label: 'reports.purchase_returns_qty'.tr(),
-                value: '${totals.totalPurchaseReturned}',
+                value: localizedQuantity(
+                  totals.totalPurchaseReturned,
+                  totals.measurementType,
+                ),
                 subValue: cs.formatCents(totals.totalPurchaseReturnCents),
                 color: Colors.red,
               ),
@@ -550,8 +606,11 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(LucideIcons.arrowLeftRight,
-                  size: 18, color: colorScheme.onPrimaryContainer),
+              Icon(
+                LucideIcons.arrowLeftRight,
+                size: 18,
+                color: colorScheme.onPrimaryContainer,
+              ),
               const SizedBox(width: 8),
               Text(
                 '${'reports.net_movement'.tr()}: ',
@@ -560,18 +619,14 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
                 ),
               ),
               Text(
-                totals.netQuantity >= 0
-                    ? '+${totals.netQuantity}'
-                    : '${totals.netQuantity}',
+                localizedSignedQuantity(
+                  totals.netQuantity,
+                  totals.measurementType,
+                  showPositiveSign: true,
+                ),
                 style: theme.textTheme.titleMedium?.copyWith(
                   color: colorScheme.onPrimaryContainer,
                   fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                ' ${'reports.units'.tr()}',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: colorScheme.onPrimaryContainer,
                 ),
               ),
             ],
@@ -607,30 +662,27 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
                 label: 'reports.group_variant'.tr(),
                 icon: LucideIcons.layers,
                 isSelected: current == VariantGroupBy.variant,
-                onTap: () => context
-                    .read<ProductVariantMovementBloc>()
-                    .add(const VariantMovementGroupByChanged(
-                        VariantGroupBy.variant)),
+                onTap: () => context.read<ProductVariantMovementBloc>().add(
+                  const VariantMovementGroupByChanged(VariantGroupBy.variant),
+                ),
               ),
               const SizedBox(width: 6),
               _GroupChip(
                 label: 'reports.group_color'.tr(),
                 icon: LucideIcons.palette,
                 isSelected: current == VariantGroupBy.color,
-                onTap: () => context
-                    .read<ProductVariantMovementBloc>()
-                    .add(const VariantMovementGroupByChanged(
-                        VariantGroupBy.color)),
+                onTap: () => context.read<ProductVariantMovementBloc>().add(
+                  const VariantMovementGroupByChanged(VariantGroupBy.color),
+                ),
               ),
               const SizedBox(width: 6),
               _GroupChip(
                 label: 'reports.group_size'.tr(),
                 icon: LucideIcons.ruler,
                 isSelected: current == VariantGroupBy.size,
-                onTap: () => context
-                    .read<ProductVariantMovementBloc>()
-                    .add(const VariantMovementGroupByChanged(
-                        VariantGroupBy.size)),
+                onTap: () => context.read<ProductVariantMovementBloc>().add(
+                  const VariantMovementGroupByChanged(VariantGroupBy.size),
+                ),
               ),
             ],
           ),
@@ -644,7 +696,9 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
   // ═══════════════════════════════════════════════════════
 
   Future<void> _printReport(
-      BuildContext context, ProductVariantMovementData data) async {
+    BuildContext context,
+    ProductVariantMovementData data,
+  ) async {
     await ProductVariantMovementPdfService.printReport(
       context: context,
       data: data,
@@ -657,7 +711,9 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
   }
 
   Future<void> _shareReport(
-      BuildContext context, ProductVariantMovementData data) async {
+    BuildContext context,
+    ProductVariantMovementData data,
+  ) async {
     await ProductVariantMovementPdfService.shareReport(
       context: context,
       data: data,
@@ -695,11 +751,13 @@ class _GroupChip extends StatelessWidget {
       label: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon,
-              size: 14,
-              color: isSelected
-                  ? colorScheme.onPrimaryContainer
-                  : colorScheme.onSurfaceVariant),
+          Icon(
+            icon,
+            size: 14,
+            color: isSelected
+                ? colorScheme.onPrimaryContainer
+                : colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(width: 4),
           Text(label),
         ],
@@ -846,7 +904,9 @@ class _VariantBreakdownCard extends StatelessWidget {
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: summary.netQty >= 0
                         ? Colors.green.withValues(alpha: 0.1)
@@ -854,7 +914,8 @@ class _VariantBreakdownCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    '${'reports.net_movement'.tr()}: ${summary.netQty >= 0 ? '+' : ''}${summary.netQty}',
+                    '${'reports.net_movement'.tr()}: '
+                    '${localizedSignedQuantity(summary.netQty, summary.measurementType, showPositiveSign: true)}',
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: summary.netQty >= 0 ? Colors.green : Colors.red,
                       fontWeight: FontWeight.bold,
@@ -871,28 +932,42 @@ class _VariantBreakdownCard extends StatelessWidget {
                 _MiniStat(
                   icon: LucideIcons.shoppingCart,
                   color: Colors.blue,
-                  label: '+${summary.purchasedQty}',
+                  label: localizedSignedQuantity(
+                    summary.purchasedQty,
+                    summary.measurementType,
+                    showPositiveSign: true,
+                  ),
                   amount: cs.formatCents(summary.purchaseCents),
                 ),
                 const SizedBox(width: 12),
                 _MiniStat(
                   icon: LucideIcons.receipt,
                   color: Colors.green,
-                  label: '-${summary.soldQty}',
+                  label: localizedSignedQuantity(
+                    -summary.soldQty,
+                    summary.measurementType,
+                  ),
                   amount: cs.formatCents(summary.salesCents),
                 ),
                 const SizedBox(width: 12),
                 _MiniStat(
                   icon: LucideIcons.undo2,
                   color: Colors.orange,
-                  label: '+${summary.saleReturnedQty}',
+                  label: localizedSignedQuantity(
+                    summary.saleReturnedQty,
+                    summary.measurementType,
+                    showPositiveSign: true,
+                  ),
                   amount: cs.formatCents(summary.saleReturnCents),
                 ),
                 const SizedBox(width: 12),
                 _MiniStat(
                   icon: LucideIcons.redo2,
                   color: Colors.red,
-                  label: '-${summary.purchaseReturnedQty}',
+                  label: localizedSignedQuantity(
+                    -summary.purchaseReturnedQty,
+                    summary.measurementType,
+                  ),
                   amount: cs.formatCents(summary.purchaseReturnCents),
                 ),
               ],
@@ -1015,7 +1090,9 @@ class _VariantMovementCard extends StatelessWidget {
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: color.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(6),
@@ -1042,8 +1119,11 @@ class _VariantMovementCard extends StatelessWidget {
                   // Reference
                   Row(
                     children: [
-                      Icon(LucideIcons.fileText,
-                          size: 14, color: colorScheme.onSurfaceVariant),
+                      Icon(
+                        LucideIcons.fileText,
+                        size: 14,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
@@ -1105,8 +1185,11 @@ class _VariantMovementCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 4),
                         ],
-                        Icon(LucideIcons.layers,
-                            size: 13, color: colorScheme.tertiary),
+                        Icon(
+                          LucideIcons.layers,
+                          size: 13,
+                          color: colorScheme.tertiary,
+                        ),
                         const SizedBox(width: 3),
                         Expanded(
                           child: Text(
@@ -1129,13 +1212,15 @@ class _VariantMovementCard extends StatelessWidget {
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          '$sign${entry.quantity} ${'reports.units'.tr()}',
+                          '$sign${localizedQuantity(entry.quantity, entry.measurementType)}',
                           style: theme.textTheme.labelMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -1167,28 +1252,28 @@ class _VariantMovementCard extends StatelessWidget {
           LucideIcons.shoppingCart,
           Colors.blue,
           'reports.movement_purchase',
-          '+'
+          '+',
         );
       case VariantMovementType.sale:
         return (
           LucideIcons.receipt,
           Colors.green,
           'reports.movement_sale',
-          '-'
+          '-',
         );
       case VariantMovementType.saleReturn:
         return (
           LucideIcons.undo2,
           Colors.orange,
           'reports.movement_sale_return',
-          '+'
+          '+',
         );
       case VariantMovementType.purchaseReturn:
         return (
           LucideIcons.redo2,
           Colors.red,
           'reports.movement_purchase_return',
-          '-'
+          '-',
         );
     }
   }

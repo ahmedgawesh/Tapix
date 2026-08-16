@@ -22,14 +22,14 @@ class ImportProductsScreen extends StatelessWidget {
     // Check permissions - only Manager/Owner can import
     final authBloc = sl<AuthBloc>();
     final authState = authBloc.state;
-    
+
     if (authState is! AuthAuthenticated) {
       return Scaffold(
         appBar: AppBar(title: Text('import_products.title'.tr())),
         body: Center(child: Text('common.unauthorized'.tr())),
       );
     }
-    
+
     final user = authState.user;
     if (user.role != UserRole.owner && user.role != UserRole.manager) {
       return Scaffold(
@@ -38,7 +38,11 @@ class ImportProductsScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(LucideIcons.lock, size: 64, color: Theme.of(context).colorScheme.error),
+              Icon(
+                LucideIcons.lock,
+                size: 64,
+                color: Theme.of(context).colorScheme.error,
+              ),
               const SizedBox(height: 16),
               Text(
                 'import_products.permission_denied'.tr(),
@@ -61,7 +65,7 @@ class ImportProductsScreen extends StatelessWidget {
         ),
       );
     }
-    
+
     return BlocProvider(
       create: (context) => sl<ImportProductsBloc>(),
       child: const _ImportProductsView(),
@@ -82,7 +86,8 @@ class _ImportProductsView extends StatelessWidget {
         actions: [
           BlocBuilder<ImportProductsBloc, ImportProductsState>(
             builder: (context, state) {
-              if (state is! ImportProductsInitial && state is! ImportCompleted) {
+              if (state is! ImportProductsInitial &&
+                  state is! ImportCompleted) {
                 return IconButton(
                   icon: const Icon(LucideIcons.x),
                   onPressed: () {
@@ -112,7 +117,8 @@ class _ImportProductsView extends StatelessWidget {
           return LayoutBuilder(
             builder: (context, constraints) {
               final isDesktop = constraints.maxWidth > 1024;
-              final isTablet = constraints.maxWidth > 600 && constraints.maxWidth <= 1024;
+              final isTablet =
+                  constraints.maxWidth > 600 && constraints.maxWidth <= 1024;
 
               return SafeArea(
                 child: SingleChildScrollView(
@@ -169,15 +175,9 @@ class _ImportProductsView extends StatelessWidget {
         isTablet: isTablet,
       );
     } else if (state is ImportInProgress) {
-      return ImportProgressWidget(
-        state: state,
-        isDesktop: isDesktop,
-      );
+      return ImportProgressWidget(state: state, isDesktop: isDesktop);
     } else if (state is ImportCompleted) {
-      return ImportResultWidget(
-        result: state.result,
-        isDesktop: isDesktop,
-      );
+      return ImportResultWidget(result: state.result, isDesktop: isDesktop);
     } else if (state is ImportFailed) {
       return _buildErrorView(context, state);
     }
@@ -190,7 +190,9 @@ class _ImportProductsView extends StatelessWidget {
 
     return Center(
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: isDesktop ? 600 : double.infinity),
+        constraints: BoxConstraints(
+          maxWidth: isDesktop ? 600 : double.infinity,
+        ),
         child: Card(
           elevation: 4,
           child: Padding(
@@ -247,11 +249,7 @@ class _ImportProductsView extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                LucideIcons.alertCircle,
-                size: 64,
-                color: colorScheme.error,
-              ),
+              Icon(LucideIcons.alertCircle, size: 64, color: colorScheme.error),
               const SizedBox(height: 24),
               Text(
                 'import_products.error_title'.tr(),
@@ -306,7 +304,8 @@ class _ImportProductsView extends StatelessWidget {
           '[ImportProductsScreen] Selected: name=${file.name}, size=${file.size}, bytes=${file.bytes?.length}, path=${file.path}, readStream=${file.readStream != null}',
         );
 
-        final bytes = file.bytes ??
+        final bytes =
+            file.bytes ??
             (file.readStream == null
                 ? null
                 : await file.readStream!.fold<List<int>>(
@@ -317,14 +316,13 @@ class _ImportProductsView extends StatelessWidget {
         if (bytes != null) {
           if (!context.mounted) return;
           context.read<ImportProductsBloc>().add(
-                ImportFileSelected(
-                  fileBytes: bytes,
-                  fileName: file.name,
-                ),
-              );
+            ImportFileSelected(fileBytes: bytes, fileName: file.name),
+          );
         } else {
           if (!context.mounted) return;
-          debugPrint('[ImportProductsScreen] File bytes are null (cannot read file)');
+          debugPrint(
+            '[ImportProductsScreen] File bytes are null (cannot read file)',
+          );
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('import_products.file_pick_error'.tr()),
@@ -334,7 +332,9 @@ class _ImportProductsView extends StatelessWidget {
         }
       } else {
         if (!context.mounted) return;
-        debugPrint('[ImportProductsScreen] No file selected (cancelled or empty result)');
+        debugPrint(
+          '[ImportProductsScreen] No file selected (cancelled or empty result)',
+        );
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('import_products.file_pick_error'.tr()),

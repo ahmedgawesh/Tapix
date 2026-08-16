@@ -20,7 +20,9 @@ class CompanyProfileService {
   }
 
   Stream<CompanyProfile> watchProfile() {
-    return _settingsDao.watchSetting(keyCompanyProfile).map(
+    return _settingsDao
+        .watchSetting(keyCompanyProfile)
+        .map(
           (raw) => CompanyProfile.tryFromJson(raw) ?? CompanyProfile.empty(),
         );
   }
