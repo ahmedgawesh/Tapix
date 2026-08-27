@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import '../../../../core/measurement/measurement_localization.dart';
@@ -44,6 +45,8 @@ class ProductTileWidget extends StatelessWidget {
   /// the database itself — Phase E will reuse the same primitive for the
   /// dashboard alert widget.
   final ExpirySummary? expirySummary;
+  final bool enableVariantDetails;
+  final Future<Uint8List?>? remoteImage;
 
   const ProductTileWidget({
     super.key,
@@ -57,6 +60,8 @@ class ProductTileWidget extends StatelessWidget {
     this.previewSizeName,
     this.previewColorHex,
     this.expirySummary,
+    this.enableVariantDetails = true,
+    this.remoteImage,
   });
 
   Color? _tryParseHexColor(String? hex) {
@@ -327,7 +332,7 @@ class ProductTileWidget extends StatelessWidget {
     final inSelectionMode = isSelected != null;
     final selected = isSelected ?? false;
     final previewShade = _tryParseHexColor(previewColorHex);
-    final showVariantsButton = product.hasVariants;
+    final showVariantsButton = product.hasVariants && enableVariantDetails;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -523,6 +528,35 @@ class ProductTileWidget extends StatelessWidget {
   }
 
   Widget _buildProductImage(ColorScheme colorScheme) {
+    if (remoteImage != null) {
+      return Container(
+        width: 64,
+        height: 64,
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: FutureBuilder<Uint8List?>(
+          future: remoteImage,
+          builder: (context, snapshot) {
+            final bytes = snapshot.data;
+            if (bytes != null && bytes.isNotEmpty) {
+              return Image.memory(
+                bytes,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+              );
+            }
+            return Icon(
+              LucideIcons.package,
+              size: 32,
+              color: colorScheme.onSurfaceVariant,
+            );
+          },
+        ),
+      );
+    }
     final hasImage = product.imagePath != null && product.imagePath!.isNotEmpty;
 
     return Container(

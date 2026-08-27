@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:decimal/decimal.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../domain/repositories/sale_repository.dart';
 
@@ -21,6 +23,11 @@ class SaleReturnsSearchRequested extends SaleReturnsEvent {
 class SaleReturnsBloc
     extends RealtimeBloc<List<SaleReturnEntity>, SaleReturnsEvent> {
   final SaleRepository _repository;
+  final LanNetworkService? _lan;
+
+  bool get _isRemoteClient =>
+      _lan?.snapshot.mode == LanMode.client &&
+      _lan?.hasRemoteUserSession == true;
 
   String _searchQuery = '';
   List<SaleReturnEntity> _allReturns = [];
@@ -30,13 +37,17 @@ class SaleReturnsBloc
 
   static const int _maxResults = 20;
 
-  SaleReturnsBloc(this._repository) : super(const RealtimeLoading()) {
-    _productTermsSub = _repository.watchSaleReturnProductSearchTerms().listen((
-      terms,
-    ) {
-      _productTerms = terms;
-      _refilter();
-    });
+  SaleReturnsBloc(this._repository, {LanNetworkService? lan})
+    : _lan = lan,
+      super(const RealtimeLoading()) {
+    if (!_isRemoteClient) {
+      _productTermsSub = _repository.watchSaleReturnProductSearchTerms().listen(
+        (terms) {
+          _productTerms = terms;
+          _refilter();
+        },
+      );
+    }
   }
 
   @override
@@ -46,7 +57,45 @@ class SaleReturnsBloc
 
   @override
   Stream<List<SaleReturnEntity>> get dataStream {
-    return _repository.watchAllSaleReturns();
+    if (!_isRemoteClient) return _repository.watchAllSaleReturns();
+    return _watchRemoteReturns();
+  }
+
+  Stream<List<SaleReturnEntity>> _watchRemoteReturns() async* {
+    while (true) {
+      yield await _loadRemoteReturns();
+      await Future<void>.delayed(const Duration(seconds: 3));
+    }
+  }
+
+  Future<List<SaleReturnEntity>> _loadRemoteReturns() async {
+    final page = await _lan!.fetchRemoteSaleReturns(limit: 200);
+    return page.returns
+        .map(
+          (value) => SaleReturnEntity(
+            id: value.id,
+            saleId: value.saleId,
+            saleInvoiceNumber: value.saleInvoiceNumber,
+            customerName: value.customerName,
+            customerPhone: value.customerPhone,
+            customerId: value.customerId,
+            returnNumber: value.returnNumber,
+            subtotalCents: Decimal.fromInt(value.subtotalCents),
+            discountCents: Decimal.fromInt(value.discountCents),
+            taxCents: Decimal.fromInt(value.taxCents),
+            totalCents: Decimal.fromInt(value.totalCents),
+            currencyId: value.currencyId,
+            status: value.status,
+            dispositionType: value.dispositionType,
+            refundMethod: value.refundMethod,
+            reason: value.reason,
+            returnDate: value.returnDate,
+            createdAt: value.createdAt,
+            isAdjustment: value.isAdjustment,
+            unifiedId: value.unifiedId,
+          ),
+        )
+        .toList(growable: false);
   }
 
   @override

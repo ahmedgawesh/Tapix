@@ -35,8 +35,10 @@ class _CustomerLedgerReportView extends StatelessWidget {
       appBar: AppBar(
         title: Text('reports.customer_ledger_report'.tr()),
         actions: [
-          BlocBuilder<CustomerLedgerReportBloc,
-              RealtimeState<CustomerLedgerData>>(
+          BlocBuilder<
+            CustomerLedgerReportBloc,
+            RealtimeState<CustomerLedgerData>
+          >(
             builder: (context, state) {
               if (state is! RealtimeSuccess<CustomerLedgerData>) {
                 return const SizedBox.shrink();
@@ -63,69 +65,77 @@ class _CustomerLedgerReportView extends StatelessWidget {
           ),
         ],
       ),
-      body: BlocBuilder<CustomerLedgerReportBloc,
-          RealtimeState<CustomerLedgerData>>(
-        builder: (context, state) {
-          if (state is RealtimeLoading<CustomerLedgerData>) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body:
+          BlocBuilder<
+            CustomerLedgerReportBloc,
+            RealtimeState<CustomerLedgerData>
+          >(
+            builder: (context, state) {
+              if (state is RealtimeLoading<CustomerLedgerData>) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (state is RealtimeError<CustomerLedgerData>) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline,
-                      size: 48, color: colorScheme.error),
-                  const SizedBox(height: 16),
-                  Text(state.error.toString(),
-                      style: theme.textTheme.bodyLarge),
-                ],
-              ),
-            );
-          }
-
-          if (state is RealtimeSuccess<CustomerLedgerData>) {
-            return Column(
-              children: [
-                // Customer selector
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: _CustomerSelector(
-                    customers: state.data.customers,
-                    selectedId: state.data.customerId,
-                    onChanged: (id) => context
-                        .read<CustomerLedgerReportBloc>()
-                        .add(CustomerLedgerCustomerChanged(id)),
+              if (state is RealtimeError<CustomerLedgerData>) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        state.error.toString(),
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
+                );
+              }
 
-                // Date range selector
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: DateRangeSelector(
-                    dateRange: state.data.dateRange,
-                    onChanged: (range) => context
-                        .read<CustomerLedgerReportBloc>()
-                        .add(CustomerLedgerDateRangeChanged(range)),
-                  ),
-                ),
-                const SizedBox(height: 8),
+              if (state is RealtimeSuccess<CustomerLedgerData>) {
+                return Column(
+                  children: [
+                    // Customer selector
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: _CustomerSelector(
+                        customers: state.data.customers,
+                        selectedId: state.data.customerId,
+                        onChanged: (id) => context
+                            .read<CustomerLedgerReportBloc>()
+                            .add(CustomerLedgerCustomerChanged(id)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
 
-                // Content
-                Expanded(
-                  child: state.data.customerId == null
-                      ? _buildSelectCustomerPrompt(context)
-                      : _LedgerContent(data: state.data),
-                ),
-              ],
-            );
-          }
+                    // Date range selector
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: DateRangeSelector(
+                        dateRange: state.data.dateRange,
+                        onChanged: (range) => context
+                            .read<CustomerLedgerReportBloc>()
+                            .add(CustomerLedgerDateRangeChanged(range)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
 
-          return const SizedBox.shrink();
-        },
-      ),
+                    // Content
+                    Expanded(
+                      child: state.data.customerId == null
+                          ? _buildSelectCustomerPrompt(context)
+                          : _LedgerContent(data: state.data),
+                    ),
+                  ],
+                );
+              }
+
+              return const SizedBox.shrink();
+            },
+          ),
     );
   }
 
@@ -135,27 +145,29 @@ class _CustomerLedgerReportView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(LucideIcons.search,
-              size: 48, color: theme.colorScheme.primary),
+          Icon(LucideIcons.search, size: 48, color: theme.colorScheme.primary),
           const SizedBox(height: 16),
-          Text('reports.select_customer_prompt'.tr(),
-              style: theme.textTheme.bodyLarge),
+          Text(
+            'reports.select_customer_prompt'.tr(),
+            style: theme.textTheme.bodyLarge,
+          ),
           const SizedBox(height: 8),
-          Text('reports.select_customer_prompt_desc'.tr(),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              )),
+          Text(
+            'reports.select_customer_prompt_desc'.tr(),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );
   }
 
   Future<void> _printReport(
-      BuildContext context, CustomerLedgerData data) async {
-    await CustomerLedgerPdfService.printLedger(
-      context: context,
-      data: data,
-    );
+    BuildContext context,
+    CustomerLedgerData data,
+  ) async {
+    await CustomerLedgerPdfService.printLedger(context: context, data: data);
     sl<AuditLogService>().log(
       entityType: 'report',
       entityId: 0,
@@ -164,11 +176,10 @@ class _CustomerLedgerReportView extends StatelessWidget {
   }
 
   Future<void> _shareReport(
-      BuildContext context, CustomerLedgerData data) async {
-    await CustomerLedgerPdfService.shareLedger(
-      context: context,
-      data: data,
-    );
+    BuildContext context,
+    CustomerLedgerData data,
+  ) async {
+    await CustomerLedgerPdfService.shareLedger(context: context, data: data);
     sl<AuditLogService>().log(
       entityType: 'report',
       entityId: 0,
@@ -200,12 +211,14 @@ class _CustomerSelector extends StatelessWidget {
       selectedId: selectedId,
       onChanged: onChanged,
       options: customers
-          .map((c) => SearchablePartyOption(
-                id: c.id,
-                name: c.name,
-                phone: c.phone,
-                balanceCents: c.balanceCents,
-              ))
+          .map(
+            (c) => SearchablePartyOption(
+              id: c.id,
+              name: c.name,
+              phone: c.phone,
+              balanceCents: c.balanceCents,
+            ),
+          )
           .toList(),
     );
   }
@@ -300,9 +313,7 @@ class _LedgerContent extends StatelessWidget {
       ),
       columns: [
         // Date
-        DataColumn(
-          label: Text('reports.ledger_date'.tr(), style: headerStyle),
-        ),
+        DataColumn(label: Text('reports.ledger_date'.tr(), style: headerStyle)),
         // Sale Invoices group
         DataColumn(
           label: colLabel(
@@ -382,185 +393,226 @@ class _LedgerContent extends StatelessWidget {
       rows: [
         // ── Opening Balance Row ──
         DataRow(
-          color: WidgetStateProperty.all(
-              colorScheme.surfaceContainerHighest),
+          color: WidgetStateProperty.all(colorScheme.surfaceContainerHighest),
           cells: [
-            DataCell(Text(
-              DateFormat.yMd().format(data.dateRange.startDate),
-              style: boldCellStyle,
-            )),
-            DataCell(Text('reports.opening_balance'.tr(),
-                style: boldCellStyle)),
-            const DataCell(Text('-')),
-            const DataCell(Text('-')),
-            const DataCell(Text('-')),
-            const DataCell(Text('-')),
-            const DataCell(Text('-')),
-            const DataCell(Text('-')),
-            const DataCell(Text('-')),
-            const DataCell(Text('-')),
-            const DataCell(Text('-')),
-            DataCell(Text(
-              cs.formatCents(data.openingBalanceCents),
-              style: boldCellStyle?.copyWith(
-                color: data.openingBalanceCents > 0
-                    ? colorScheme.error
-                    : colorScheme.primary,
+            DataCell(
+              Text(
+                DateFormat.yMd().format(data.dateRange.startDate),
+                style: boldCellStyle,
               ),
-            )),
+            ),
+            DataCell(
+              Text('reports.opening_balance'.tr(), style: boldCellStyle),
+            ),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            DataCell(
+              Text(
+                cs.formatCents(data.openingBalanceCents),
+                style: boldCellStyle?.copyWith(
+                  color: data.openingBalanceCents > 0
+                      ? colorScheme.error
+                      : colorScheme.primary,
+                ),
+              ),
+            ),
           ],
         ),
 
         // ── Transaction Rows ──
         ...data.rows.map((row) {
-          return DataRow(cells: [
-            // Date
-            DataCell(Text(
-              DateFormat.yMd().format(row.date),
-              style: cellStyle,
-            )),
-            // Sale columns
-            DataCell(Text(
-              row.saleNumber ?? '-',
-              style: cellStyle?.copyWith(
-                color: row.saleNumber != null
-                    ? colorScheme.primary
-                    : null,
+          final cashRefundLabel = row.isCashRefundReversal
+              ? 'reports.txn_type_refund_reversal'.tr()
+              : 'reports.txn_type_refund'.tr();
+          final returnLabel = row.isCashRefund
+              ? '${row.returnNumber ?? '-'}\n$cashRefundLabel'
+              : row.returnNumber ?? '-';
+          return DataRow(
+            cells: [
+              // Date
+              DataCell(
+                Text(DateFormat.yMd().format(row.date), style: cellStyle),
               ),
-            )),
-            DataCell(Text(
-              row.saleItemCount > 0
-                  ? row.saleItemCount.toString()
-                  : '-',
-              style: cellStyle,
-            )),
-            DataCell(Text(
-              row.saleTotalCents != 0
-                  ? cs.formatCents(row.saleTotalCents)
-                  : '-',
-              style: cellStyle?.copyWith(
-                color: row.saleTotalCents != 0
-                    ? colorScheme.error
-                    : null,
+              // Sale columns
+              DataCell(
+                Text(
+                  row.saleNumber ?? '-',
+                  style: cellStyle?.copyWith(
+                    color: row.saleNumber != null ? colorScheme.primary : null,
+                  ),
+                ),
               ),
-            )),
-            // Return columns
-            DataCell(Text(
-              row.returnNumber ?? '-',
-              style: cellStyle?.copyWith(
-                color: row.returnNumber != null
-                    ? Colors.green.shade700
-                    : null,
+              DataCell(
+                Text(
+                  row.saleItemCount > 0 ? row.saleItemCount.toString() : '-',
+                  style: cellStyle,
+                ),
               ),
-            )),
-            DataCell(Text(
-              row.returnItemCount > 0
-                  ? row.returnItemCount.toString()
-                  : '-',
-              style: cellStyle,
-            )),
-            DataCell(Text(
-              row.returnTotalCents != 0
-                  ? cs.formatCents(row.returnTotalCents)
-                  : '-',
-              style: cellStyle?.copyWith(
-                color: row.returnTotalCents != 0
-                    ? Colors.green.shade700
-                    : null,
+              DataCell(
+                Text(
+                  row.saleTotalCents != 0
+                      ? cs.formatCents(row.saleTotalCents)
+                      : '-',
+                  style: cellStyle?.copyWith(
+                    color: row.saleTotalCents != 0 ? colorScheme.error : null,
+                  ),
+                ),
               ),
-            )),
-            // Payment columns
-            DataCell(Text(
-              row.paymentAmountCents != 0
-                  ? cs.formatCents(row.paymentAmountCents)
-                  : '-',
-              style: cellStyle?.copyWith(
-                color: row.paymentAmountCents != 0
-                    ? Colors.blue.shade700
-                    : null,
+              // Return columns
+              DataCell(
+                Text(
+                  returnLabel,
+                  style: cellStyle?.copyWith(
+                    color: row.returnNumber != null
+                        ? row.isCashRefund
+                              ? Colors.orange.shade800
+                              : Colors.green.shade700
+                        : null,
+                    fontWeight: row.isCashRefund ? FontWeight.w700 : null,
+                  ),
+                ),
               ),
-            )),
-            DataCell(Text(
-              row.paymentNumber ?? '-',
-              style: cellStyle?.copyWith(
-                color: row.paymentNumber != null
-                    ? Colors.blue.shade700
-                    : null,
+              DataCell(
+                Text(
+                  row.returnItemCount > 0
+                      ? row.returnItemCount.toString()
+                      : '-',
+                  style: cellStyle,
+                ),
               ),
-            )),
-            // Discount columns
-            DataCell(Text(
-              row.discountAmountCents != 0
-                  ? cs.formatCents(row.discountAmountCents)
-                  : '-',
-              style: cellStyle?.copyWith(
-                color: row.discountAmountCents != 0
-                    ? Colors.purple.shade700
-                    : null,
+              DataCell(
+                Text(
+                  row.returnTotalCents != 0
+                      ? cs.formatCents(row.returnTotalCents)
+                      : '-',
+                  style: cellStyle?.copyWith(
+                    color: row.returnTotalCents != 0
+                        ? row.isCashRefund
+                              ? Colors.orange.shade800
+                              : Colors.green.shade700
+                        : null,
+                  ),
+                ),
               ),
-            )),
-            DataCell(Text(
-              row.discountNumber ?? '-',
-              style: cellStyle?.copyWith(
-                color: row.discountNumber != null
-                    ? Colors.purple.shade700
-                    : null,
+              // Payment columns
+              DataCell(
+                Text(
+                  row.paymentAmountCents != 0
+                      ? cs.formatCents(row.paymentAmountCents)
+                      : '-',
+                  style: cellStyle?.copyWith(
+                    color: row.paymentAmountCents != 0
+                        ? Colors.blue.shade700
+                        : null,
+                  ),
+                ),
               ),
-            )),
-            // Balance
-            DataCell(Text(
-              cs.formatCents(row.runningBalanceCents),
-              style: cellStyle?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: row.runningBalanceCents > 0
-                    ? colorScheme.error
-                    : colorScheme.primary,
+              DataCell(
+                Text(
+                  row.paymentNumber ?? '-',
+                  style: cellStyle?.copyWith(
+                    color: row.paymentNumber != null
+                        ? Colors.blue.shade700
+                        : null,
+                  ),
+                ),
               ),
-            )),
-          ]);
+              // Discount columns
+              DataCell(
+                Text(
+                  row.discountAmountCents != 0
+                      ? cs.formatCents(row.discountAmountCents)
+                      : '-',
+                  style: cellStyle?.copyWith(
+                    color: row.discountAmountCents != 0
+                        ? Colors.purple.shade700
+                        : null,
+                  ),
+                ),
+              ),
+              DataCell(
+                Text(
+                  row.discountNumber ?? '-',
+                  style: cellStyle?.copyWith(
+                    color: row.discountNumber != null
+                        ? Colors.purple.shade700
+                        : null,
+                  ),
+                ),
+              ),
+              // Balance
+              DataCell(
+                Text(
+                  cs.formatCents(row.runningBalanceCents),
+                  style: cellStyle?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: row.runningBalanceCents > 0
+                        ? colorScheme.error
+                        : colorScheme.primary,
+                  ),
+                ),
+              ),
+            ],
+          );
         }),
 
         // ── Subtotals Row ──
         DataRow(
           color: WidgetStateProperty.all(
-              colorScheme.secondaryContainer.withValues(alpha: 0.4)),
+            colorScheme.secondaryContainer.withValues(alpha: 0.4),
+          ),
           cells: [
-            DataCell(Text('reports.ledger_subtotals'.tr(),
-                style: boldCellStyle)),
+            DataCell(
+              Text('reports.ledger_subtotals'.tr(), style: boldCellStyle),
+            ),
             const DataCell(Text('-')),
-            DataCell(Text(
-              data.totalSaleItems != 0
-                  ? data.totalSaleItems.toString()
-                  : '-',
-              style: boldCellStyle,
-            )),
-            DataCell(Text(
-              cs.formatCents(data.totalSalesCents),
-              style: boldCellStyle?.copyWith(color: colorScheme.error),
-            )),
+            DataCell(
+              Text(
+                data.totalSaleItems != 0 ? data.totalSaleItems.toString() : '-',
+                style: boldCellStyle,
+              ),
+            ),
+            DataCell(
+              Text(
+                cs.formatCents(data.totalSalesCents),
+                style: boldCellStyle?.copyWith(color: colorScheme.error),
+              ),
+            ),
             const DataCell(Text('-')),
-            DataCell(Text(
-              data.totalReturnItems != 0
-                  ? data.totalReturnItems.toString()
-                  : '-',
-              style: boldCellStyle,
-            )),
-            DataCell(Text(
-              cs.formatCents(data.totalReturnsCents),
-              style: boldCellStyle?.copyWith(
-                  color: Colors.green.shade700),
-            )),
-            DataCell(Text(
-              cs.formatCents(data.totalPaymentsCents),
-              style: boldCellStyle?.copyWith(
-                  color: Colors.blue.shade700),
-            )),
+            DataCell(
+              Text(
+                data.totalReturnItems != 0
+                    ? data.totalReturnItems.toString()
+                    : '-',
+                style: boldCellStyle,
+              ),
+            ),
+            DataCell(
+              Text(
+                cs.formatCents(data.totalReturnsCents),
+                style: boldCellStyle?.copyWith(color: Colors.green.shade700),
+              ),
+            ),
+            DataCell(
+              Text(
+                cs.formatCents(data.totalPaymentsCents),
+                style: boldCellStyle?.copyWith(color: Colors.blue.shade700),
+              ),
+            ),
             const DataCell(Text('-')),
-            DataCell(Text(
-              cs.formatCents(data.totalDiscountsCents),
-              style: boldCellStyle?.copyWith(
-                  color: Colors.purple.shade700),
-            )),
+            DataCell(
+              Text(
+                cs.formatCents(data.totalDiscountsCents),
+                style: boldCellStyle?.copyWith(color: Colors.purple.shade700),
+              ),
+            ),
             const DataCell(Text('-')),
             const DataCell(Text('-')),
           ],
@@ -568,32 +620,36 @@ class _LedgerContent extends StatelessWidget {
 
         // ── Closing Balance Row ──
         DataRow(
-          color: WidgetStateProperty.all(
-              colorScheme.surfaceContainerHighest),
+          color: WidgetStateProperty.all(colorScheme.surfaceContainerHighest),
           cells: [
-            DataCell(Text(
-              DateFormat.yMd().format(data.dateRange.endDate),
-              style: boldCellStyle,
-            )),
-            DataCell(Text('reports.closing_balance'.tr(),
-                style: boldCellStyle)),
-            const DataCell(Text('-')),
-            const DataCell(Text('-')),
-            const DataCell(Text('-')),
-            const DataCell(Text('-')),
-            const DataCell(Text('-')),
-            const DataCell(Text('-')),
-            const DataCell(Text('-')),
-            const DataCell(Text('-')),
-            const DataCell(Text('-')),
-            DataCell(Text(
-              cs.formatCents(data.closingBalanceCents),
-              style: boldCellStyle?.copyWith(
-                color: data.closingBalanceCents > 0
-                    ? colorScheme.error
-                    : colorScheme.primary,
+            DataCell(
+              Text(
+                DateFormat.yMd().format(data.dateRange.endDate),
+                style: boldCellStyle,
               ),
-            )),
+            ),
+            DataCell(
+              Text('reports.closing_balance'.tr(), style: boldCellStyle),
+            ),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            const DataCell(Text('-')),
+            DataCell(
+              Text(
+                cs.formatCents(data.closingBalanceCents),
+                style: boldCellStyle?.copyWith(
+                  color: data.closingBalanceCents > 0
+                      ? colorScheme.error
+                      : colorScheme.primary,
+                ),
+              ),
+            ),
           ],
         ),
       ],
@@ -623,8 +679,10 @@ class _CustomerInfoCard extends StatelessWidget {
             CircleAvatar(
               radius: 24,
               backgroundColor: colorScheme.primaryContainer,
-              child: Icon(LucideIcons.user,
-                  color: colorScheme.onPrimaryContainer),
+              child: Icon(
+                LucideIcons.user,
+                color: colorScheme.onPrimaryContainer,
+              ),
             ),
             const SizedBox(width: 16),
             Expanded(

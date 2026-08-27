@@ -55,6 +55,9 @@ import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/settings/presentation/screens/admin_tools_screen.dart';
 import '../../features/settings/presentation/screens/company_profile_screen.dart';
 import '../../features/settings/presentation/screens/backup_restore_screen.dart';
+import '../../features/settings/presentation/screens/lan_network_settings_screen.dart';
+import '../../features/settings/presentation/screens/lan_client_session_screen.dart';
+import '../../features/settings/presentation/screens/lan_remote_sale_screen.dart';
 import '../../features/employees/presentation/screens/employees_screen.dart';
 import '../../features/employees/presentation/screens/attendance_screen.dart';
 import '../../features/employees/presentation/screens/leave_requests_screen.dart';
@@ -122,6 +125,7 @@ import '../../features/financial_management/presentation/screens/owner_finance_s
 import '../../features/financial_management/presentation/screens/fixed_assets_screen.dart';
 import '../../features/subscription/presentation/screens/upgrade_required_screen.dart';
 import '../services/feature_gate_service.dart';
+import '../services/lan/lan_network_service.dart';
 import '../di/injection_container.dart';
 import 'pro_route_policy.dart';
 import 'route_permissions.dart';
@@ -200,7 +204,7 @@ class AppRouter {
 
       // No users exist - go to setup screen to create first owner
       if (authState is AuthNeedsSetup) {
-        if (currentPath == '/setup') {
+        if (currentPath == '/setup' || currentPath == '/device-connect') {
           return null;
         }
         return '/setup';
@@ -209,11 +213,55 @@ class AppRouter {
       // User is authenticated - go to dashboard
       if (authState is AuthAuthenticated) {
         final user = authState.user;
+
         final requiredRoles = RoutePermissions.rolesForPath(currentPath);
         if (requiredRoles != null) {
           final hasAccess = requiredRoles.contains(user.role);
           if (!hasAccess) {
             return '/access-denied';
+          }
+        }
+
+        // A client may use an original screen only after that screen's data
+        // path has been migrated to the authenticated master API. This allow
+        // list prevents an unfinished module from reading or writing the
+        // client's unrelated local SQLite database.
+        if (sl<LanNetworkService>().snapshot.mode == LanMode.client) {
+          final isAuthEntry =
+              currentPath == '/login' ||
+              currentPath == '/setup' ||
+              currentPath == '/' ||
+              currentPath == '/forgot-password' ||
+              currentPath == '/device-connect';
+          if (isAuthEntry) return '/dashboard';
+
+          final isRemoteSaleForm = currentPath == '/sales/new';
+          final isRemoteReturnForm = currentPath == '/sales/returns/new';
+          final isRemoteReady =
+              currentPath == '/dashboard' ||
+              currentPath == '/client-session' ||
+              currentPath == '/sales/returns' ||
+              currentPath == '/products' ||
+              isRemoteSaleForm ||
+              isRemoteReturnForm ||
+              currentPath == '/access-denied';
+          if (!isRemoteReady) {
+            if (currentPath == '/sales') return '/sales/new';
+            return '/dashboard';
+          }
+          if (isRemoteSaleForm && user.role == UserRole.cashier) {
+            try {
+              final shift = await sl<LanNetworkService>().fetchOwnRemoteShift();
+              if (shift?.isOpen != true) {
+                return '/client-session?continue=sale';
+              }
+            } catch (_) {
+              return '/client-session?continue=sale';
+            }
+          }
+          if (currentPath == '/client-session' &&
+              user.role != UserRole.cashier) {
+            return '/dashboard';
           }
         }
 
@@ -238,7 +286,8 @@ class AppRouter {
         if (currentPath == '/login' ||
             currentPath == '/setup' ||
             currentPath == '/' ||
-            currentPath == '/forgot-password') {
+            currentPath == '/forgot-password' ||
+            currentPath == '/device-connect') {
           return '/dashboard';
         }
 
@@ -246,7 +295,9 @@ class AppRouter {
       }
 
       // AuthUnauthenticated or AuthError - go to login
-      if (currentPath == '/login' || currentPath == '/forgot-password') {
+      if (currentPath == '/login' ||
+          currentPath == '/forgot-password' ||
+          currentPath == '/device-connect') {
         return null;
       }
 
@@ -276,6 +327,19 @@ class AppRouter {
         ),
       ),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      GoRoute(
+        path: '/device-connect',
+        builder: (context, state) =>
+            const LanNetworkSettingsScreen(clientOnly: true),
+      ),
+      GoRoute(
+        path: '/client-session',
+        builder: (context, state) => const LanClientSessionScreen(),
+      ),
+      GoRoute(
+        path: '/client-sale',
+        builder: (context, state) => const LanRemoteSaleScreen(),
+      ),
       GoRoute(
         path: '/forgot-password',
         builder: (context, state) => const ForgotPasswordScreen(),
@@ -1064,6 +1128,10 @@ class AppRouter {
             ],
           ),
         ],
+      ),
+      GoRoute(
+        path: '/devices',
+        builder: (context, state) => const LanNetworkSettingsScreen(),
       ),
       GoRoute(
         path: '/settings',

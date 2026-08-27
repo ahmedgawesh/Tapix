@@ -15,6 +15,7 @@ import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
+import '../../../../core/widgets/pin_verification_dialog.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../bloc/purchase_adj_return_form_bloc.dart';
 
@@ -832,14 +833,17 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     }
   }
 
-  void _onConfirm(BuildContext context) {
-    final allowNegativeStock = context
-        .read<AppSettingsBloc>()
-        .state
-        .settings
-        .allowNegativeStock;
+  Future<void> _onConfirm(BuildContext context) async {
+    final settings = context.read<AppSettingsBloc>().state.settings;
+    if (settings.requirePinForVoidRefund) {
+      final pinOk = await showPinVerificationDialog(context);
+      if (!pinOk || !context.mounted) return;
+    }
+    if (!context.mounted) return;
     context.read<PurchaseAdjReturnFormBloc>().add(
-      PurchaseAdjReturnSubmitted(allowNegativeStock: allowNegativeStock),
+      PurchaseAdjReturnSubmitted(
+        allowNegativeStock: settings.allowNegativeStock,
+      ),
     );
   }
 

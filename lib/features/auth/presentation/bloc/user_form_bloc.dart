@@ -93,16 +93,16 @@ class UserFormSubmitRequested extends UserFormEvent {
 
   @override
   List<Object?> get props => [
-        userId,
-        username,
-        password,
-        confirmPassword,
-        role,
-        employeeId,
-        clearEmployeeLink,
-        securityQuestion,
-        securityAnswer,
-      ];
+    userId,
+    username,
+    password,
+    confirmPassword,
+    role,
+    employeeId,
+    clearEmployeeLink,
+    securityQuestion,
+    securityAnswer,
+  ];
 }
 
 class UserFormUsernameCheckRequested extends UserFormEvent {
@@ -155,6 +155,11 @@ class UserFormBloc extends Bloc<UserFormEvent, UserFormState> {
       }
       if (event.username.trim().length < 3) {
         emit(const UserFormError('username_min_length'));
+        return;
+      }
+
+      if (event.role == UserRole.cashier && event.employeeId == null) {
+        emit(const UserFormError('employee_required_cashier'));
         return;
       }
 

@@ -33,6 +33,7 @@ class DrilldownTransaction {
   final int runningBalanceCents;
   final int? referenceId;
   final String? referenceType;
+  final bool isDisplayOnly;
 
   const DrilldownTransaction({
     required this.id,
@@ -43,6 +44,7 @@ class DrilldownTransaction {
     required this.runningBalanceCents,
     this.referenceId,
     this.referenceType,
+    this.isDisplayOnly = false,
   });
 }
 
@@ -224,17 +226,21 @@ class SupplierBalanceDrilldownBloc
 
     final typeMap = <String, _TypeAccumulator>{};
     for (final transaction in snapshot.transactions) {
-      final accumulator = typeMap.putIfAbsent(
-        transaction.type,
-        _TypeAccumulator.new,
-      );
-      accumulator.count++;
-      if (transaction.amountCents > 0) {
-        accumulator.totalDebitCents += transaction.amountCents;
-      } else if (transaction.amountCents < 0) {
-        accumulator.totalCreditCents += -transaction.amountCents;
+      // Display-only transactions appear in the list but are excluded
+      // from the type breakdown summary (they don't affect balances).
+      if (!transaction.isDisplayOnly) {
+        final accumulator = typeMap.putIfAbsent(
+          transaction.type,
+          _TypeAccumulator.new,
+        );
+        accumulator.count++;
+        if (transaction.amountCents > 0) {
+          accumulator.totalDebitCents += transaction.amountCents;
+        } else if (transaction.amountCents < 0) {
+          accumulator.totalCreditCents += -transaction.amountCents;
+        }
+        accumulator.netCents += transaction.amountCents;
       }
-      accumulator.netCents += transaction.amountCents;
     }
     final typeSummaries =
         typeMap.entries
@@ -271,6 +277,7 @@ class SupplierBalanceDrilldownBloc
               runningBalanceCents: transaction.runningBalanceCents,
               referenceId: transaction.referenceId,
               referenceType: transaction.referenceType,
+              isDisplayOnly: transaction.isDisplayOnly,
             ),
           )
           .toList(),

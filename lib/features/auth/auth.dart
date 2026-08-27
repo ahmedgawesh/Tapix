@@ -3,6 +3,7 @@ export 'data/repositories/user_repository.dart';
 export 'data/services/password_service.dart';
 export 'data/services/permission_service.dart';
 export 'data/services/session_service.dart';
+export 'data/services/lan_master_auth_gateway.dart';
 export 'domain/entities/permission_constants.dart';
 export 'domain/entities/user_entity.dart';
 export 'domain/repositories/auth_repository_interface.dart';

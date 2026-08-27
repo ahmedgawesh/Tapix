@@ -1,6 +1,7 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
@@ -26,13 +27,13 @@ class _SetupScreenState extends State<SetupScreen> {
   String? _selectedSecurityQuestion;
 
   List<String> get _securityQuestions => [
-        'auth.security_questions.q1'.tr(),
-        'auth.security_questions.q2'.tr(),
-        'auth.security_questions.q3'.tr(),
-        'auth.security_questions.q4'.tr(),
-        'auth.security_questions.q5'.tr(),
-        'auth.security_questions.q6'.tr(),
-      ];
+    'auth.security_questions.q1'.tr(),
+    'auth.security_questions.q2'.tr(),
+    'auth.security_questions.q3'.tr(),
+    'auth.security_questions.q4'.tr(),
+    'auth.security_questions.q5'.tr(),
+    'auth.security_questions.q6'.tr(),
+  ];
 
   @override
   void dispose() {
@@ -45,12 +46,14 @@ class _SetupScreenState extends State<SetupScreen> {
 
   void _onCreateAccount() {
     if (_formKey.currentState?.validate() ?? false) {
-      context.read<AuthBloc>().add(AuthFirstOwnerCreated(
-            username: _usernameController.text.trim(),
-            password: _passwordController.text,
-            securityQuestion: _selectedSecurityQuestion,
-            securityAnswer: _securityAnswerController.text.trim(),
-          ));
+      context.read<AuthBloc>().add(
+        AuthFirstOwnerCreated(
+          username: _usernameController.text.trim(),
+          password: _passwordController.text,
+          securityQuestion: _selectedSecurityQuestion,
+          securityAnswer: _securityAnswerController.text.trim(),
+        ),
+      );
     }
   }
 
@@ -59,11 +62,11 @@ class _SetupScreenState extends State<SetupScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final screenWidth = MediaQuery.of(context).size.width;
-    
+
     // Responsive breakpoints
     final isDesktop = screenWidth >= 1024;
     final isTablet = screenWidth >= 600 && screenWidth < 1024;
-    
+
     // Responsive sizing
     final logoSize = isDesktop ? 120.0 : (isTablet ? 100.0 : 80.0);
     final maxWidth = isDesktop ? 450.0 : (isTablet ? 420.0 : 400.0);
@@ -202,7 +205,8 @@ class _SetupScreenState extends State<SetupScreen> {
                           ),
                           onPressed: () {
                             setState(() {
-                              _obscureConfirmPassword = !_obscureConfirmPassword;
+                              _obscureConfirmPassword =
+                                  !_obscureConfirmPassword;
                             });
                           },
                         ),
@@ -251,7 +255,12 @@ class _SetupScreenState extends State<SetupScreen> {
                         ),
                         isExpanded: true,
                         items: _securityQuestions
-                            .map((q) => DropdownMenuItem(value: q, child: Text(q, overflow: TextOverflow.ellipsis)))
+                            .map(
+                              (q) => DropdownMenuItem(
+                                value: q,
+                                child: Text(q, overflow: TextOverflow.ellipsis),
+                              ),
+                            )
                             .toList(),
                         onChanged: (value) {
                           setState(() {
@@ -284,6 +293,15 @@ class _SetupScreenState extends State<SetupScreen> {
                         },
                       ),
                       const SizedBox(height: 32),
+                      OutlinedButton.icon(
+                        onPressed: () => context.push('/device-connect'),
+                        icon: const Icon(LucideIcons.network),
+                        label: Text('auth.connect_instead_of_owner'.tr()),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       BlocBuilder<AuthBloc, RealtimeState<UserEntity?>>(
                         builder: (context, state) {
                           final isLoading = state is AuthLoading;

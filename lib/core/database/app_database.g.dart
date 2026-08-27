@@ -20673,6 +20673,18 @@ class $SalesTable extends Sales with TableInfo<$SalesTable, Sale> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _idempotencyKeyMeta = const VerificationMeta(
+    'idempotencyKey',
+  );
+  @override
+  late final GeneratedColumn<String> idempotencyKey = GeneratedColumn<String>(
+    'idempotency_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
   static const VerificationMeta _saleDateMeta = const VerificationMeta(
     'saleDate',
   );
@@ -20771,6 +20783,7 @@ class $SalesTable extends Sales with TableInfo<$SalesTable, Sale> {
     paymentMethod,
     status,
     notes,
+    idempotencyKey,
     saleDate,
     dueDate,
     pricingEngineVersion,
@@ -20855,6 +20868,15 @@ class $SalesTable extends Sales with TableInfo<$SalesTable, Sale> {
       context.handle(
         _notesMeta,
         notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+      );
+    }
+    if (data.containsKey('idempotency_key')) {
+      context.handle(
+        _idempotencyKeyMeta,
+        idempotencyKey.isAcceptableOrUnknown(
+          data['idempotency_key']!,
+          _idempotencyKeyMeta,
+        ),
       );
     }
     if (data.containsKey('sale_date')) {
@@ -20983,6 +21005,10 @@ class $SalesTable extends Sales with TableInfo<$SalesTable, Sale> {
         DriftSqlType.string,
         data['${effectivePrefix}notes'],
       ),
+      idempotencyKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}idempotency_key'],
+      ),
       saleDate: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}sale_date'],
@@ -21046,6 +21072,10 @@ class Sale extends DataClass implements Insertable<Sale> {
   final String paymentMethod;
   final String status;
   final String? notes;
+
+  /// Client-generated token used by LAN/offline retries. A repeated request
+  /// returns the original sale instead of posting stock and journals twice.
+  final String? idempotencyKey;
   final DateTime saleDate;
   final DateTime? dueDate;
 
@@ -21078,6 +21108,7 @@ class Sale extends DataClass implements Insertable<Sale> {
     required this.paymentMethod,
     required this.status,
     this.notes,
+    this.idempotencyKey,
     required this.saleDate,
     this.dueDate,
     this.pricingEngineVersion,
@@ -21131,6 +21162,9 @@ class Sale extends DataClass implements Insertable<Sale> {
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
     }
+    if (!nullToAbsent || idempotencyKey != null) {
+      map['idempotency_key'] = Variable<String>(idempotencyKey);
+    }
     map['sale_date'] = Variable<DateTime>(saleDate);
     if (!nullToAbsent || dueDate != null) {
       map['due_date'] = Variable<DateTime>(dueDate);
@@ -21173,6 +21207,9 @@ class Sale extends DataClass implements Insertable<Sale> {
       notes: notes == null && nullToAbsent
           ? const Value.absent()
           : Value(notes),
+      idempotencyKey: idempotencyKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(idempotencyKey),
       saleDate: Value(saleDate),
       dueDate: dueDate == null && nullToAbsent
           ? const Value.absent()
@@ -21211,6 +21248,7 @@ class Sale extends DataClass implements Insertable<Sale> {
       paymentMethod: serializer.fromJson<String>(json['paymentMethod']),
       status: serializer.fromJson<String>(json['status']),
       notes: serializer.fromJson<String?>(json['notes']),
+      idempotencyKey: serializer.fromJson<String?>(json['idempotencyKey']),
       saleDate: serializer.fromJson<DateTime>(json['saleDate']),
       dueDate: serializer.fromJson<DateTime?>(json['dueDate']),
       pricingEngineVersion: serializer.fromJson<String?>(
@@ -21244,6 +21282,7 @@ class Sale extends DataClass implements Insertable<Sale> {
       'paymentMethod': serializer.toJson<String>(paymentMethod),
       'status': serializer.toJson<String>(status),
       'notes': serializer.toJson<String?>(notes),
+      'idempotencyKey': serializer.toJson<String?>(idempotencyKey),
       'saleDate': serializer.toJson<DateTime>(saleDate),
       'dueDate': serializer.toJson<DateTime?>(dueDate),
       'pricingEngineVersion': serializer.toJson<String?>(pricingEngineVersion),
@@ -21269,6 +21308,7 @@ class Sale extends DataClass implements Insertable<Sale> {
     String? paymentMethod,
     String? status,
     Value<String?> notes = const Value.absent(),
+    Value<String?> idempotencyKey = const Value.absent(),
     DateTime? saleDate,
     Value<DateTime?> dueDate = const Value.absent(),
     Value<String?> pricingEngineVersion = const Value.absent(),
@@ -21293,6 +21333,9 @@ class Sale extends DataClass implements Insertable<Sale> {
     paymentMethod: paymentMethod ?? this.paymentMethod,
     status: status ?? this.status,
     notes: notes.present ? notes.value : this.notes,
+    idempotencyKey: idempotencyKey.present
+        ? idempotencyKey.value
+        : this.idempotencyKey,
     saleDate: saleDate ?? this.saleDate,
     dueDate: dueDate.present ? dueDate.value : this.dueDate,
     pricingEngineVersion: pricingEngineVersion.present
@@ -21343,6 +21386,9 @@ class Sale extends DataClass implements Insertable<Sale> {
           : this.paymentMethod,
       status: data.status.present ? data.status.value : this.status,
       notes: data.notes.present ? data.notes.value : this.notes,
+      idempotencyKey: data.idempotencyKey.present
+          ? data.idempotencyKey.value
+          : this.idempotencyKey,
       saleDate: data.saleDate.present ? data.saleDate.value : this.saleDate,
       dueDate: data.dueDate.present ? data.dueDate.value : this.dueDate,
       pricingEngineVersion: data.pricingEngineVersion.present
@@ -21376,6 +21422,7 @@ class Sale extends DataClass implements Insertable<Sale> {
           ..write('paymentMethod: $paymentMethod, ')
           ..write('status: $status, ')
           ..write('notes: $notes, ')
+          ..write('idempotencyKey: $idempotencyKey, ')
           ..write('saleDate: $saleDate, ')
           ..write('dueDate: $dueDate, ')
           ..write('pricingEngineVersion: $pricingEngineVersion, ')
@@ -21403,6 +21450,7 @@ class Sale extends DataClass implements Insertable<Sale> {
     paymentMethod,
     status,
     notes,
+    idempotencyKey,
     saleDate,
     dueDate,
     pricingEngineVersion,
@@ -21429,6 +21477,7 @@ class Sale extends DataClass implements Insertable<Sale> {
           other.paymentMethod == this.paymentMethod &&
           other.status == this.status &&
           other.notes == this.notes &&
+          other.idempotencyKey == this.idempotencyKey &&
           other.saleDate == this.saleDate &&
           other.dueDate == this.dueDate &&
           other.pricingEngineVersion == this.pricingEngineVersion &&
@@ -21453,6 +21502,7 @@ class SalesCompanion extends UpdateCompanion<Sale> {
   final Value<String> paymentMethod;
   final Value<String> status;
   final Value<String?> notes;
+  final Value<String?> idempotencyKey;
   final Value<DateTime> saleDate;
   final Value<DateTime?> dueDate;
   final Value<String?> pricingEngineVersion;
@@ -21475,6 +21525,7 @@ class SalesCompanion extends UpdateCompanion<Sale> {
     this.paymentMethod = const Value.absent(),
     this.status = const Value.absent(),
     this.notes = const Value.absent(),
+    this.idempotencyKey = const Value.absent(),
     this.saleDate = const Value.absent(),
     this.dueDate = const Value.absent(),
     this.pricingEngineVersion = const Value.absent(),
@@ -21498,6 +21549,7 @@ class SalesCompanion extends UpdateCompanion<Sale> {
     required String paymentMethod,
     this.status = const Value.absent(),
     this.notes = const Value.absent(),
+    this.idempotencyKey = const Value.absent(),
     this.saleDate = const Value.absent(),
     this.dueDate = const Value.absent(),
     this.pricingEngineVersion = const Value.absent(),
@@ -21526,6 +21578,7 @@ class SalesCompanion extends UpdateCompanion<Sale> {
     Expression<String>? paymentMethod,
     Expression<String>? status,
     Expression<String>? notes,
+    Expression<String>? idempotencyKey,
     Expression<DateTime>? saleDate,
     Expression<DateTime>? dueDate,
     Expression<String>? pricingEngineVersion,
@@ -21549,6 +21602,7 @@ class SalesCompanion extends UpdateCompanion<Sale> {
       if (paymentMethod != null) 'payment_method': paymentMethod,
       if (status != null) 'status': status,
       if (notes != null) 'notes': notes,
+      if (idempotencyKey != null) 'idempotency_key': idempotencyKey,
       if (saleDate != null) 'sale_date': saleDate,
       if (dueDate != null) 'due_date': dueDate,
       if (pricingEngineVersion != null)
@@ -21577,6 +21631,7 @@ class SalesCompanion extends UpdateCompanion<Sale> {
     Value<String>? paymentMethod,
     Value<String>? status,
     Value<String?>? notes,
+    Value<String?>? idempotencyKey,
     Value<DateTime>? saleDate,
     Value<DateTime?>? dueDate,
     Value<String?>? pricingEngineVersion,
@@ -21600,6 +21655,7 @@ class SalesCompanion extends UpdateCompanion<Sale> {
       paymentMethod: paymentMethod ?? this.paymentMethod,
       status: status ?? this.status,
       notes: notes ?? this.notes,
+      idempotencyKey: idempotencyKey ?? this.idempotencyKey,
       saleDate: saleDate ?? this.saleDate,
       dueDate: dueDate ?? this.dueDate,
       pricingEngineVersion: pricingEngineVersion ?? this.pricingEngineVersion,
@@ -21665,6 +21721,9 @@ class SalesCompanion extends UpdateCompanion<Sale> {
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
+    if (idempotencyKey.present) {
+      map['idempotency_key'] = Variable<String>(idempotencyKey.value);
+    }
     if (saleDate.present) {
       map['sale_date'] = Variable<DateTime>(saleDate.value);
     }
@@ -21708,6 +21767,7 @@ class SalesCompanion extends UpdateCompanion<Sale> {
           ..write('paymentMethod: $paymentMethod, ')
           ..write('status: $status, ')
           ..write('notes: $notes, ')
+          ..write('idempotencyKey: $idempotencyKey, ')
           ..write('saleDate: $saleDate, ')
           ..write('dueDate: $dueDate, ')
           ..write('pricingEngineVersion: $pricingEngineVersion, ')
@@ -83797,6 +83857,7 @@ typedef $$SalesTableCreateCompanionBuilder =
       required String paymentMethod,
       Value<String> status,
       Value<String?> notes,
+      Value<String?> idempotencyKey,
       Value<DateTime> saleDate,
       Value<DateTime?> dueDate,
       Value<String?> pricingEngineVersion,
@@ -83821,6 +83882,7 @@ typedef $$SalesTableUpdateCompanionBuilder =
       Value<String> paymentMethod,
       Value<String> status,
       Value<String?> notes,
+      Value<String?> idempotencyKey,
       Value<DateTime> saleDate,
       Value<DateTime?> dueDate,
       Value<String?> pricingEngineVersion,
@@ -84054,6 +84116,11 @@ class $$SalesTableFilterComposer extends Composer<_$AppDatabase, $SalesTable> {
 
   ColumnFilters<String> get notes => $composableBuilder(
     column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get idempotencyKey => $composableBuilder(
+    column: $table.idempotencyKey,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -84369,6 +84436,11 @@ class $$SalesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get idempotencyKey => $composableBuilder(
+    column: $table.idempotencyKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get saleDate => $composableBuilder(
     column: $table.saleDate,
     builder: (column) => ColumnOrderings(column),
@@ -84551,6 +84623,11 @@ class $$SalesTableAnnotationComposer
 
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<String> get idempotencyKey => $composableBuilder(
+    column: $table.idempotencyKey,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get saleDate =>
       $composableBuilder(column: $table.saleDate, builder: (column) => column);
@@ -84849,6 +84926,7 @@ class $$SalesTableTableManager
                 Value<String> paymentMethod = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
+                Value<String?> idempotencyKey = const Value.absent(),
                 Value<DateTime> saleDate = const Value.absent(),
                 Value<DateTime?> dueDate = const Value.absent(),
                 Value<String?> pricingEngineVersion = const Value.absent(),
@@ -84871,6 +84949,7 @@ class $$SalesTableTableManager
                 paymentMethod: paymentMethod,
                 status: status,
                 notes: notes,
+                idempotencyKey: idempotencyKey,
                 saleDate: saleDate,
                 dueDate: dueDate,
                 pricingEngineVersion: pricingEngineVersion,
@@ -84895,6 +84974,7 @@ class $$SalesTableTableManager
                 required String paymentMethod,
                 Value<String> status = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
+                Value<String?> idempotencyKey = const Value.absent(),
                 Value<DateTime> saleDate = const Value.absent(),
                 Value<DateTime?> dueDate = const Value.absent(),
                 Value<String?> pricingEngineVersion = const Value.absent(),
@@ -84917,6 +84997,7 @@ class $$SalesTableTableManager
                 paymentMethod: paymentMethod,
                 status: status,
                 notes: notes,
+                idempotencyKey: idempotencyKey,
                 saleDate: saleDate,
                 dueDate: dueDate,
                 pricingEngineVersion: pricingEngineVersion,

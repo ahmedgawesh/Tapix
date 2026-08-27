@@ -1697,7 +1697,7 @@ CREATE TABLE IF NOT EXISTS sale_payments (
   }
 
   @override
-  int get schemaVersion => 10068;
+  int get schemaVersion => 10069;
 
   @override
   MigrationStrategy get migration {
@@ -3608,6 +3608,18 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
 
         if (from < 10068) {
           await _reconcileSimpleProductRows10068();
+        }
+
+        if (from < 10069) {
+          await _safeAddColumn('sales', 'idempotency_key', 'TEXT');
+          await customStatement(
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_idempotency '
+            'ON sales(idempotency_key) WHERE idempotency_key IS NOT NULL',
+          );
+          developer.log(
+            'Migration 10069: added idempotent LAN sale requests.',
+            name: 'DB_MIGRATION',
+          );
         }
 
         await _createIndexes();

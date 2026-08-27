@@ -84,7 +84,15 @@ class SupplierLedgerPdfService {
     rows.add([
       DateFormat.yMd().format(data.dateRange.startDate),
       _t('opening_balance', lang),
-      '-', '-', '-', '-', '-', '-', '-', '-', '-',
+      '-',
+      '-',
+      '-',
+      '-',
+      '-',
+      '-',
+      '-',
+      '-',
+      '-',
       cs.formatCents(data.openingBalanceCents),
     ]);
 
@@ -99,11 +107,11 @@ class SupplierLedgerPdfService {
             ? cs.formatCents(row.purchaseTotalCents)
             : '-',
         // Return columns
-        row.returnNumber ?? '-',
+        row.isCashRefund
+            ? '${row.returnNumber ?? '-'} — ${_t(row.isCashRefundReversal ? 'cash_refund_reversal' : 'cash_refund', lang)}'
+            : row.returnNumber ?? '-',
         row.returnItemCount > 0 ? row.returnItemCount.toString() : '-',
-        row.returnTotalCents != 0
-            ? cs.formatCents(row.returnTotalCents)
-            : '-',
+        row.returnTotalCents != 0 ? cs.formatCents(row.returnTotalCents) : '-',
         // Payment columns
         row.paymentAmountCents != 0
             ? cs.formatCents(row.paymentAmountCents)
@@ -123,9 +131,7 @@ class SupplierLedgerPdfService {
     rows.add([
       _t('subtotals', lang),
       '-',
-      data.totalPurchaseItems != 0
-          ? data.totalPurchaseItems.toString()
-          : '-',
+      data.totalPurchaseItems != 0 ? data.totalPurchaseItems.toString() : '-',
       cs.formatCents(data.totalPurchasesCents),
       '-',
       data.totalReturnItems != 0 ? data.totalReturnItems.toString() : '-',
@@ -141,7 +147,15 @@ class SupplierLedgerPdfService {
     rows.add([
       DateFormat.yMd().format(data.dateRange.endDate),
       _t('closing_balance', lang),
-      '-', '-', '-', '-', '-', '-', '-', '-', '-',
+      '-',
+      '-',
+      '-',
+      '-',
+      '-',
+      '-',
+      '-',
+      '-',
+      '-',
       cs.formatCents(data.closingBalanceCents),
     ]);
 
@@ -218,7 +232,10 @@ class SupplierLedgerPdfService {
                 decoration: const pw.BoxDecoration(color: PdfColors.blue50),
                 children: groupLabels.map((g) {
                   return pw.Container(
-                    padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+                    padding: const pw.EdgeInsets.symmetric(
+                      horizontal: 2,
+                      vertical: 3,
+                    ),
                     alignment: pw.Alignment.center,
                     child: pw.Text(
                       g,
@@ -235,8 +252,7 @@ class SupplierLedgerPdfService {
               ),
               // Sub-headers row
               pw.TableRow(
-                decoration:
-                    const pw.BoxDecoration(color: PdfColors.grey200),
+                decoration: const pw.BoxDecoration(color: PdfColors.grey200),
                 children: headers.map((h) {
                   return pw.Container(
                     padding: const pw.EdgeInsets.all(3),
@@ -267,9 +283,7 @@ class SupplierLedgerPdfService {
                   decoration: pw.BoxDecoration(
                     color: isSpecial
                         ? PdfColors.grey100
-                        : (idx.isEven
-                            ? PdfColors.white
-                            : PdfColors.grey50),
+                        : (idx.isEven ? PdfColors.white : PdfColors.grey50),
                   ),
                   children: cells.asMap().entries.map((cellEntry) {
                     final cellIdx = cellEntry.key;
@@ -295,7 +309,9 @@ class SupplierLedgerPdfService {
 
                     return pw.Container(
                       padding: const pw.EdgeInsets.symmetric(
-                          horizontal: 3, vertical: 2),
+                        horizontal: 3,
+                        vertical: 2,
+                      ),
                       alignment: pw.Alignment.center,
                       child: pw.Text(
                         cellText,
@@ -412,30 +428,46 @@ class SupplierLedgerPdfService {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
       children: [
-        _summaryBox(_t('total_purchases', lang),
-            cs.formatCents(data.totalPurchasesCents), PdfColors.red800, fonts),
-        _summaryBox(_t('total_returns', lang),
-            cs.formatCents(data.totalReturnsCents), PdfColors.green800, fonts),
-        _summaryBox(_t('total_payments', lang),
-            cs.formatCents(data.totalPaymentsCents), PdfColors.blue800, fonts),
         _summaryBox(
-            _t('total_discounts', lang),
-            cs.formatCents(data.totalDiscountsCents),
-            PdfColors.purple800,
-            fonts),
+          _t('total_purchases', lang),
+          cs.formatCents(data.totalPurchasesCents),
+          PdfColors.red800,
+          fonts,
+        ),
         _summaryBox(
-            _t('closing_balance', lang),
-            cs.formatCents(data.closingBalanceCents),
-            data.closingBalanceCents > 0
-                ? PdfColors.red800
-                : PdfColors.green800,
-            fonts),
+          _t('total_returns', lang),
+          cs.formatCents(data.totalReturnsCents),
+          PdfColors.green800,
+          fonts,
+        ),
+        _summaryBox(
+          _t('total_payments', lang),
+          cs.formatCents(data.totalPaymentsCents),
+          PdfColors.blue800,
+          fonts,
+        ),
+        _summaryBox(
+          _t('total_discounts', lang),
+          cs.formatCents(data.totalDiscountsCents),
+          PdfColors.purple800,
+          fonts,
+        ),
+        _summaryBox(
+          _t('closing_balance', lang),
+          cs.formatCents(data.closingBalanceCents),
+          data.closingBalanceCents > 0 ? PdfColors.red800 : PdfColors.green800,
+          fonts,
+        ),
       ],
     );
   }
 
   static pw.Widget _summaryBox(
-      String label, String value, PdfColor color, _PdfFonts fonts) {
+    String label,
+    String value,
+    PdfColor color,
+    _PdfFonts fonts,
+  ) {
     return pw.Container(
       padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: pw.BoxDecoration(
@@ -444,15 +476,19 @@ class SupplierLedgerPdfService {
       ),
       child: pw.Column(
         children: [
-          pw.Text(label,
-              style: pw.TextStyle(
-                  font: fonts.regular,
-                  fontSize: 7,
-                  color: PdfColors.grey700)),
+          pw.Text(
+            label,
+            style: pw.TextStyle(
+              font: fonts.regular,
+              fontSize: 7,
+              color: PdfColors.grey700,
+            ),
+          ),
           pw.SizedBox(height: 2),
-          pw.Text(value,
-              style:
-                  pw.TextStyle(font: fonts.bold, fontSize: 8, color: color)),
+          pw.Text(
+            value,
+            style: pw.TextStyle(font: fonts.bold, fontSize: 8, color: color),
+          ),
         ],
       ),
     );
@@ -463,21 +499,32 @@ class SupplierLedgerPdfService {
   // ═══════════════════════════════════════════════════════
 
   static pw.Widget _buildFooter(
-      _PdfFonts fonts, Locale locale, pw.Context ctx) {
-    final footerText =
-        DateFormat('yyyy-MM-dd HH:mm', locale.toString()).format(DateTime.now());
+    _PdfFonts fonts,
+    Locale locale,
+    pw.Context ctx,
+  ) {
+    final footerText = DateFormat(
+      'yyyy-MM-dd HH:mm',
+      locale.toString(),
+    ).format(DateTime.now());
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       children: [
         pw.Text(
           footerText,
           style: pw.TextStyle(
-              font: fonts.regular, fontSize: 7, color: PdfColors.grey500),
+            font: fonts.regular,
+            fontSize: 7,
+            color: PdfColors.grey500,
+          ),
         ),
         pw.Text(
           '${ctx.pageNumber} / ${ctx.pagesCount}',
           style: pw.TextStyle(
-              font: fonts.regular, fontSize: 7, color: PdfColors.grey500),
+            font: fonts.regular,
+            fontSize: 7,
+            color: PdfColors.grey500,
+          ),
         ),
       ],
     );
@@ -493,21 +540,9 @@ class SupplierLedgerPdfService {
       'ar': 'كشف حساب مورد دفتري',
       'fr': 'Relevé de Compte Fournisseur',
     },
-    'supplier': {
-      'en': 'Supplier',
-      'ar': 'المورد',
-      'fr': 'Fournisseur',
-    },
-    'period': {
-      'en': 'Period',
-      'ar': 'الفترة',
-      'fr': 'Période',
-    },
-    'date': {
-      'en': 'Date',
-      'ar': 'التاريخ',
-      'fr': 'Date',
-    },
+    'supplier': {'en': 'Supplier', 'ar': 'المورد', 'fr': 'Fournisseur'},
+    'period': {'en': 'Period', 'ar': 'الفترة', 'fr': 'Période'},
+    'date': {'en': 'Date', 'ar': 'التاريخ', 'fr': 'Date'},
     'purchase_invoices': {
       'en': 'Purchase Invoices',
       'ar': 'فواتير المشتريات',
@@ -523,75 +558,49 @@ class SupplierLedgerPdfService {
       'ar': 'الدفعات - الخصم',
       'fr': 'Paiements - Remises',
     },
-    'payments_group': {
-      'en': 'Payments',
-      'ar': 'الدفعات',
-      'fr': 'Paiements',
-    },
-    'discounts_group': {
-      'en': 'Discounts',
-      'ar': 'الخصومات',
-      'fr': 'Remises',
-    },
+    'payments_group': {'en': 'Payments', 'ar': 'الدفعات', 'fr': 'Paiements'},
+    'discounts_group': {'en': 'Discounts', 'ar': 'الخصومات', 'fr': 'Remises'},
     'purchase_number': {
       'en': 'Invoice #',
       'ar': 'رقم الفاتورة',
       'fr': 'N° Facture',
     },
-    'purchase_qty': {
-      'en': 'Qty',
-      'ar': 'عدد القطع',
-      'fr': 'Qté',
-    },
-    'purchase_total': {
-      'en': 'Total',
-      'ar': 'اجمالي الفاتورة',
-      'fr': 'Total',
-    },
+    'purchase_qty': {'en': 'Qty', 'ar': 'عدد القطع', 'fr': 'Qté'},
+    'purchase_total': {'en': 'Total', 'ar': 'اجمالي الفاتورة', 'fr': 'Total'},
     'return_number': {
       'en': 'Invoice #',
       'ar': 'رقم الفاتورة',
       'fr': 'N° Facture',
     },
-    'return_qty': {
-      'en': 'Qty',
-      'ar': 'عدد القطع',
-      'fr': 'Qté',
-    },
-    'return_total': {
-      'en': 'Total',
-      'ar': 'اجمالي الفاتورة',
-      'fr': 'Total',
-    },
+    'return_qty': {'en': 'Qty', 'ar': 'عدد القطع', 'fr': 'Qté'},
+    'return_total': {'en': 'Total', 'ar': 'اجمالي الفاتورة', 'fr': 'Total'},
     'payment_amount': {
       'en': 'Payment Amount',
       'ar': 'قيمة الدفعة',
       'fr': 'Montant Paiement',
     },
-    'payment_number': {
-      'en': 'Payment #',
-      'ar': 'رقمها',
-      'fr': 'N° Paiement',
-    },
+    'payment_number': {'en': 'Payment #', 'ar': 'رقمها', 'fr': 'N° Paiement'},
     'discount_amount': {
       'en': 'Discount Amount',
       'ar': 'قيمة الخصم',
       'fr': 'Montant Remise',
     },
-    'discount_number': {
-      'en': 'Discount #',
-      'ar': 'رقمه',
-      'fr': 'N° Remise',
-    },
-    'balance': {
-      'en': 'Balance',
-      'ar': 'الرصيد',
-      'fr': 'Solde',
-    },
+    'discount_number': {'en': 'Discount #', 'ar': 'رقمه', 'fr': 'N° Remise'},
+    'balance': {'en': 'Balance', 'ar': 'الرصيد', 'fr': 'Solde'},
     'opening_balance': {
       'en': 'Opening Balance',
       'ar': 'رصيد افتتاحي',
       'fr': 'Solde d\'Ouverture',
+    },
+    'cash_refund': {
+      'en': 'Return (cash refund)',
+      'ar': 'مرتجع (استرداد نقدي)',
+      'fr': 'Retour (remboursement en espèces)',
+    },
+    'cash_refund_reversal': {
+      'en': 'Reversed return (cash refund)',
+      'ar': 'عكس مرتجع (استرداد نقدي)',
+      'fr': 'Retour annulé (remboursement en espèces)',
     },
     'closing_balance': {
       'en': 'Closing Balance',
@@ -635,10 +644,12 @@ class SupplierLedgerPdfService {
 
   static Future<_PdfFonts> _loadFonts() async {
     try {
-      final regularData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-      final boldData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+      final regularData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+      );
+      final boldData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+      );
       return _PdfFonts(
         regular: pw.Font.ttf(regularData),
         bold: pw.Font.ttf(boldData),

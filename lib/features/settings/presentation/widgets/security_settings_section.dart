@@ -6,6 +6,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 
 import '../../../../core/database/database_encryption.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/biometric_service.dart';
 import '../../../../core/services/pin_service.dart';
 import '../../../auth/auth.dart';
 import '../../domain/entities/app_settings.dart';
@@ -104,10 +105,7 @@ class _SecuritySettingsSectionState extends State<SecuritySettingsSection> {
               title: Text('app_settings.security.pin_void_refund'.tr()),
               subtitle: Text('app_settings.security.pin_void_refund_desc'.tr()),
               value: s.requirePinForVoidRefund,
-              onChanged: (v) => _patch(
-                context,
-                (c) => c.copyWith(requirePinForVoidRefund: v),
-              ),
+              onChanged: (v) => _togglePinRequirement(context, v),
             ),
             // PIN setup/change - owner only
             if (s.requirePinForVoidRefund && _isOwner)
@@ -135,8 +133,7 @@ class _SecuritySettingsSectionState extends State<SecuritySettingsSection> {
               title: Text('app_settings.security.biometric'.tr()),
               subtitle: Text('app_settings.security.biometric_desc'.tr()),
               value: s.enableBiometricLogin,
-              onChanged: (v) =>
-                  _patch(context, (c) => c.copyWith(enableBiometricLogin: v)),
+              onChanged: (v) => _toggleBiometricLogin(context, v),
             ),
             SwitchListTile(
               title: Text('app_settings.security.encryption'.tr()),
@@ -154,7 +151,71 @@ class _SecuritySettingsSectionState extends State<SecuritySettingsSection> {
     );
   }
 
-  Future<void> _showSetPinDialog(BuildContext context) async {
+  Future<void> _togglePinRequirement(BuildContext context, bool enable) async {
+    if (!enable) {
+      _patch(context, (c) => c.copyWith(requirePinForVoidRefund: false));
+      return;
+    }
+
+    var pinReady = _isPinSet;
+    if (!pinReady && _isOwner) {
+      pinReady = await _showSetPinDialog(context);
+    }
+    if (!context.mounted) return;
+
+    if (!pinReady) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('security.pin_not_set_message'.tr()),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    _patch(context, (c) => c.copyWith(requirePinForVoidRefund: true));
+  }
+
+  Future<void> _toggleBiometricLogin(BuildContext context, bool enable) async {
+    if (!enable) {
+      _patch(context, (c) => c.copyWith(enableBiometricLogin: false));
+      return;
+    }
+
+    final biometricService = sl<BiometricService>();
+    final available = await biometricService.isBiometricAvailable();
+    if (!context.mounted) return;
+    if (!available) {
+      _showSecurityMessage(
+        context,
+        'app_settings.security.biometric_unavailable',
+      );
+      return;
+    }
+
+    final authenticated = await biometricService.authenticate(
+      localizedReason: 'app_settings.security.biometric_enable_reason'.tr(),
+    );
+    if (!context.mounted) return;
+    if (!authenticated) {
+      _showSecurityMessage(
+        context,
+        'app_settings.security.biometric_verification_failed',
+      );
+      return;
+    }
+
+    _patch(context, (c) => c.copyWith(enableBiometricLogin: true));
+    _showSecurityMessage(context, 'app_settings.security.biometric_enabled');
+  }
+
+  void _showSecurityMessage(BuildContext context, String key) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(key.tr()), behavior: SnackBarBehavior.floating),
+    );
+  }
+
+  Future<bool> _showSetPinDialog(BuildContext context) async {
     final pinController = TextEditingController();
     final confirmController = TextEditingController();
     final formKey = GlobalKey<FormState>();
@@ -242,20 +303,24 @@ class _SecuritySettingsSectionState extends State<SecuritySettingsSection> {
       ),
     );
 
+    var saved = false;
     if (result == true) {
       await sl<PinService>().setPin(pinController.text);
       await _checkPinStatus();
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('app_settings.security.pin_saved'.tr()),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      saved = true;
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('app_settings.security.pin_saved'.tr()),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
 
     pinController.dispose();
     confirmController.dispose();
+    return saved;
   }
 
   Future<void> _toggleEncryption(BuildContext context, bool enable) async {

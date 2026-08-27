@@ -10,7 +10,7 @@ import '../../features/auth/data/services/session_service.dart';
 enum AuditSeverity { normal, critical }
 
 /// AuditLogService - Records all changes to financial data
-/// 
+///
 /// This service is CRITICAL for accounting integrity.
 /// ALL changes to financial data MUST be logged.
 class AuditLogService {
@@ -38,7 +38,9 @@ class AuditLogService {
         return (id: explicit, name: _cachedUsername);
       }
       try {
-        final u = await (_db.select(_db.users)..where((t) => t.id.equals(explicit))).getSingleOrNull();
+        final u = await (_db.select(
+          _db.users,
+        )..where((t) => t.id.equals(explicit))).getSingleOrNull();
         if (u != null) {
           _cachedUserId = u.id;
           _cachedUsername = u.username;
@@ -55,7 +57,9 @@ class AuditLogService {
         return (id: fromSession, name: _cachedUsername);
       }
       try {
-        final u = await (_db.select(_db.users)..where((t) => t.id.equals(fromSession))).getSingleOrNull();
+        final u = await (_db.select(
+          _db.users,
+        )..where((t) => t.id.equals(fromSession))).getSingleOrNull();
         if (u != null) {
           _cachedUserId = u.id;
           _cachedUsername = u.username;
@@ -75,7 +79,10 @@ class AuditLogService {
       final query = _db.select(_db.users)
         ..where((u) => u.isActive.equals(1))
         ..where((u) => u.lastLoginAt.isNotNull())
-        ..orderBy([(u) => OrderingTerm(expression: u.lastLoginAt, mode: OrderingMode.desc)])
+        ..orderBy([
+          (u) =>
+              OrderingTerm(expression: u.lastLoginAt, mode: OrderingMode.desc),
+        ])
         ..limit(1);
       final user = await query.getSingleOrNull();
       if (user != null) {
@@ -88,10 +95,16 @@ class AuditLogService {
         return (id: user.id, name: user.username);
       }
     } catch (e) {
-      developer.log('AuditLogService: DB fallback failed: $e', name: 'AuditLogService');
+      developer.log(
+        'AuditLogService: DB fallback failed: $e',
+        name: 'AuditLogService',
+      );
     }
 
-    developer.log('AuditLogService: ALL tiers returned null', name: 'AuditLogService');
+    developer.log(
+      'AuditLogService: ALL tiers returned null',
+      name: 'AuditLogService',
+    );
     return (id: null, name: null);
   }
 
@@ -108,23 +121,27 @@ class AuditLogService {
   }) async {
     final user = await _resolveUser(userId);
     // ignore: avoid_print
-    print('[AuditLog] action=$action entity=$entityType userId=${user.id} userName=${user.name}');
-    return await _db.into(_db.auditLogs).insert(
-      AuditLogsCompanion.insert(
-        targetTable: entityType,
-        recordId: entityId,
-        action: action,
-        changes: {
-          'role': ?userRole,
-          'severity': severity.name,
-          'old': oldValue,
-          'new': newValue,
-          'timestamp': DateTime.now().toIso8601String(),
-          if (user.name != null) 'performedBy': user.name,
-        },
-        userId: user.id == null ? const Value.absent() : Value(user.id!),
-      ),
+    print(
+      '[AuditLog] action=$action entity=$entityType userId=${user.id} userName=${user.name}',
     );
+    return await _db
+        .into(_db.auditLogs)
+        .insert(
+          AuditLogsCompanion.insert(
+            targetTable: entityType,
+            recordId: entityId,
+            action: action,
+            changes: {
+              'role': ?userRole,
+              'severity': severity.name,
+              'old': oldValue,
+              'new': newValue,
+              'timestamp': DateTime.now().toIso8601String(),
+              if (user.name != null) 'performedBy': user.name,
+            },
+            userId: user.id == null ? const Value.absent() : Value(user.id!),
+          ),
+        );
   }
 
   /// Log a void action (CRITICAL severity)
@@ -138,14 +155,16 @@ class AuditLogService {
     final user = await _resolveUser(userId);
 
     // Log to void_logs table
-    await _db.into(_db.voidLogs).insert(
-      VoidLogsCompanion.insert(
-        targetTable: entityType,
-        recordId: entityId,
-        reason: reason,
-        voidedBy: user.id == null ? const Value.absent() : Value(user.id!),
-      ),
-    );
+    await _db
+        .into(_db.voidLogs)
+        .insert(
+          VoidLogsCompanion.insert(
+            targetTable: entityType,
+            recordId: entityId,
+            reason: reason,
+            voidedBy: user.id == null ? const Value.absent() : Value(user.id!),
+          ),
+        );
 
     // Also log to audit_logs for complete trail
     return await log(
@@ -284,10 +303,7 @@ class AuditLogService {
       entityType: 'sale_return',
       entityId: returnId,
       action: 'create',
-      newValue: {
-        'saleId': saleId,
-        'totalCents': totalCents,
-      },
+      newValue: {'saleId': saleId, 'totalCents': totalCents},
       userId: userId,
       userRole: userRole,
     );
@@ -305,10 +321,7 @@ class AuditLogService {
       entityType: 'purchase',
       entityId: purchaseId,
       action: 'create',
-      newValue: {
-        'totalCents': totalCents,
-        'supplierId': ?supplierId,
-      },
+      newValue: {'totalCents': totalCents, 'supplierId': ?supplierId},
       userId: userId,
       userRole: userRole,
     );
@@ -342,10 +355,7 @@ class AuditLogService {
       entityType: 'purchase_return',
       entityId: returnId,
       action: 'create',
-      newValue: {
-        'purchaseId': purchaseId,
-        'totalCents': totalCents,
-      },
+      newValue: {'purchaseId': purchaseId, 'totalCents': totalCents},
       userId: userId,
       userRole: userRole,
     );
@@ -440,14 +450,8 @@ class AuditLogService {
       entityType: 'user',
       entityId: targetUserId,
       action: 'update',
-      oldValue: {
-        'username': username,
-        'role': ?oldRole,
-      },
-      newValue: {
-        'role': ?newRole,
-        if (changedFields != null) ...changedFields,
-      },
+      oldValue: {'username': username, 'role': ?oldRole},
+      newValue: {'role': ?newRole, if (changedFields != null) ...changedFields},
       userId: userId,
       userRole: userRole,
       severity: AuditSeverity.critical,
@@ -639,10 +643,7 @@ class AuditLogService {
       entityType: 'expense',
       entityId: expenseId,
       action: 'create',
-      newValue: {
-        'amountCents': amountCents,
-        'category': category,
-      },
+      newValue: {'amountCents': amountCents, 'category': category},
       userId: userId,
       userRole: userRole,
     );
@@ -680,6 +681,54 @@ class AuditLogService {
     );
   }
 
+  /// Records LAN device/session security events on the master database.
+  ///
+  /// Failed login attempts deliberately have no actor user id: the supplied
+  /// username is only an attempted identity and must not be attributed to that
+  /// account. Successful login/logout events are bound to the authenticated
+  /// master user.
+  Future<int> logLanSecurityEvent({
+    required String action,
+    int? targetUserId,
+    String? username,
+    String? role,
+    required String deviceId,
+    required String deviceName,
+    String? remoteAddress,
+    bool authenticatedActor = false,
+    int? actorUserId,
+    String? actorUsername,
+    String? reason,
+  }) {
+    return _db
+        .into(_db.auditLogs)
+        .insert(
+          AuditLogsCompanion.insert(
+            targetTable: 'lan_session',
+            recordId: targetUserId ?? 0,
+            action: action,
+            changes: {
+              'severity': action == 'login_failed'
+                  ? AuditSeverity.critical.name
+                  : AuditSeverity.normal.name,
+              'username': username,
+              'role': role,
+              'deviceId': deviceId,
+              'deviceName': deviceName,
+              'remoteAddress': remoteAddress,
+              'performedBy': actorUsername,
+              'reason': reason,
+              'timestamp': DateTime.now().toUtc().toIso8601String(),
+            },
+            userId: actorUserId != null
+                ? Value(actorUserId)
+                : authenticatedActor && targetUserId != null
+                ? Value(targetUserId)
+                : const Value.absent(),
+          ),
+        );
+  }
+
   /// Get audit logs for an entity
   Future<List<AuditLog>> getLogsForEntity({
     required String entityType,
@@ -688,7 +737,10 @@ class AuditLogService {
     return await (_db.select(_db.auditLogs)
           ..where((l) => l.targetTable.equals(entityType))
           ..where((l) => l.recordId.equals(entityId))
-          ..orderBy([(l) => OrderingTerm(expression: l.createdAt, mode: OrderingMode.desc)]))
+          ..orderBy([
+            (l) =>
+                OrderingTerm(expression: l.createdAt, mode: OrderingMode.desc),
+          ]))
         .get();
   }
 
@@ -700,7 +752,10 @@ class AuditLogService {
     return await (_db.select(_db.voidLogs)
           ..where((l) => l.targetTable.equals(entityType))
           ..where((l) => l.recordId.equals(entityId))
-          ..orderBy([(l) => OrderingTerm(expression: l.voidedAt, mode: OrderingMode.desc)]))
+          ..orderBy([
+            (l) =>
+                OrderingTerm(expression: l.voidedAt, mode: OrderingMode.desc),
+          ]))
         .get();
   }
 
@@ -726,7 +781,9 @@ class AuditLogService {
       query = query..where((l) => l.action.equals(action));
     }
 
-    return (query..orderBy([(l) => OrderingTerm(expression: l.createdAt, mode: OrderingMode.desc)]))
+    return (query..orderBy([
+          (l) => OrderingTerm(expression: l.createdAt, mode: OrderingMode.desc),
+        ]))
         .watch();
   }
 
@@ -748,7 +805,9 @@ class AuditLogService {
       query = query..where((l) => l.targetTable.equals(entityType));
     }
 
-    return (query..orderBy([(l) => OrderingTerm(expression: l.voidedAt, mode: OrderingMode.desc)]))
+    return (query..orderBy([
+          (l) => OrderingTerm(expression: l.voidedAt, mode: OrderingMode.desc),
+        ]))
         .watch();
   }
 }

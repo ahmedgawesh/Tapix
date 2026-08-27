@@ -10,6 +10,7 @@ import '../../../core/services/currency_service.dart';
 import '../../settings/data/services/company_profile_service.dart';
 import '../../settings/domain/entities/company_profile.dart';
 import '../presentation/bloc/supplier_statement_report_bloc.dart';
+import 'party_transaction_localizer.dart';
 
 class SupplierStatementPdfService {
   static Future<void> printSupplierStatement({
@@ -80,8 +81,7 @@ class SupplierStatementPdfService {
         build: (pw.Context context) {
           return [
             // Header
-            _buildHeader(
-                company, _t('supplier_statement', lang), fonts, dir),
+            _buildHeader(company, _t('supplier_statement', lang), fonts, dir),
             pw.SizedBox(height: 8),
 
             // Period
@@ -134,9 +134,10 @@ class SupplierStatementPdfService {
               pw.Text(
                 _t('no_transactions', lang),
                 style: pw.TextStyle(
-                    font: fonts.regular,
-                    fontSize: 10,
-                    color: PdfColors.grey600),
+                  font: fonts.regular,
+                  fontSize: 10,
+                  color: PdfColors.grey600,
+                ),
               ),
 
             pw.SizedBox(height: 16),
@@ -144,9 +145,10 @@ class SupplierStatementPdfService {
             pw.Text(
               '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
               style: pw.TextStyle(
-                  font: fonts.regular,
-                  fontSize: 8,
-                  color: PdfColors.grey600),
+                font: fonts.regular,
+                fontSize: 8,
+                color: PdfColors.grey600,
+              ),
             ),
           ];
         },
@@ -248,21 +250,32 @@ class SupplierStatementPdfService {
     // Transaction rows
     for (final txn in data.transactions) {
       final isDebit = txn.amountCents > 0;
+      final isDisplayOnly = txn.isDisplayOnly;
       final descParts = <String>[];
       if (txn.transactionNumber != null) descParts.add(txn.transactionNumber!);
       if (txn.type == 'discount' && txn.discountType != null) {
         descParts.add(_tDiscountType(txn.discountType!, lang));
       }
       if (txn.description != null && txn.description!.isNotEmpty) {
-        descParts.add(txn.description!);
+        descParts.add(localizedPartyTransactionDescription(txn.description));
+      }
+      if (isDisplayOnly) {
+        descParts.add(
+          _t(
+            'display_only_transaction_amount',
+            lang,
+          ).replaceFirst('{amount}', cs.formatCents(txn.amountCents.abs())),
+        );
       }
       final descText = descParts.isNotEmpty ? descParts.join(' · ') : '-';
       rows.add([
         DateFormat.yMd().format(txn.date),
-        _tTxnType(txn.type, lang),
+        localizedPartyTransactionType(txn.type),
         descText,
-        isDebit ? cs.formatCents(txn.amountCents) : '-',
-        !isDebit ? cs.formatCents(txn.amountCents.abs()) : '-',
+        isDisplayOnly ? '-' : (isDebit ? cs.formatCents(txn.amountCents) : '-'),
+        isDisplayOnly
+            ? '-'
+            : (!isDebit ? cs.formatCents(txn.amountCents.abs()) : '-'),
         cs.formatCents(txn.runningBalanceCents),
       ]);
     }
@@ -311,31 +324,11 @@ class SupplierStatementPdfService {
       'ar': 'كشف حساب المورد',
       'fr': 'Relevé de Compte Fournisseur',
     },
-    'period': {
-      'en': 'Period',
-      'ar': 'الفترة',
-      'fr': 'Période',
-    },
-    'supplier': {
-      'en': 'Supplier',
-      'ar': 'المورد',
-      'fr': 'Fournisseur',
-    },
-    'phone': {
-      'en': 'Phone',
-      'ar': 'الهاتف',
-      'fr': 'Téléphone',
-    },
-    'email': {
-      'en': 'Email',
-      'ar': 'البريد الإلكتروني',
-      'fr': 'E-mail',
-    },
-    'address': {
-      'en': 'Address',
-      'ar': 'العنوان',
-      'fr': 'Adresse',
-    },
+    'period': {'en': 'Period', 'ar': 'الفترة', 'fr': 'Période'},
+    'supplier': {'en': 'Supplier', 'ar': 'المورد', 'fr': 'Fournisseur'},
+    'phone': {'en': 'Phone', 'ar': 'الهاتف', 'fr': 'Téléphone'},
+    'email': {'en': 'Email', 'ar': 'البريد الإلكتروني', 'fr': 'E-mail'},
+    'address': {'en': 'Address', 'ar': 'العنوان', 'fr': 'Adresse'},
     'opening_balance': {
       'en': 'Opening Balance',
       'ar': 'الرصيد الافتتاحي',
@@ -361,86 +354,54 @@ class SupplierStatementPdfService {
       'ar': 'المعاملات',
       'fr': 'Transactions',
     },
-    'date': {
-      'en': 'Date',
-      'ar': 'التاريخ',
-      'fr': 'Date',
-    },
-    'type': {
-      'en': 'Type',
-      'ar': 'النوع',
-      'fr': 'Type',
-    },
-    'description': {
-      'en': 'Description',
-      'ar': 'الوصف',
-      'fr': 'Description',
-    },
-    'debit': {
-      'en': 'Debit',
-      'ar': 'مدين',
-      'fr': 'Débit',
-    },
-    'credit': {
-      'en': 'Credit',
-      'ar': 'دائن',
-      'fr': 'Crédit',
-    },
-    'balance': {
-      'en': 'Balance',
-      'ar': 'الرصيد',
-      'fr': 'Solde',
-    },
+    'date': {'en': 'Date', 'ar': 'التاريخ', 'fr': 'Date'},
+    'type': {'en': 'Type', 'ar': 'النوع', 'fr': 'Type'},
+    'description': {'en': 'Description', 'ar': 'الوصف', 'fr': 'Description'},
+    'debit': {'en': 'Debit', 'ar': 'مدين', 'fr': 'Débit'},
+    'credit': {'en': 'Credit', 'ar': 'دائن', 'fr': 'Crédit'},
+    'balance': {'en': 'Balance', 'ar': 'الرصيد', 'fr': 'Solde'},
     'no_transactions': {
       'en': 'No transactions in this period',
       'ar': 'لا توجد معاملات في هذه الفترة',
       'fr': 'Aucune transaction pour cette période',
     },
-    'printed_on': {
-      'en': 'Printed on',
-      'ar': 'طُبع في',
-      'fr': 'Imprimé le',
-    },
+    'printed_on': {'en': 'Printed on', 'ar': 'طُبع في', 'fr': 'Imprimé le'},
     // Transaction types
-    'txn_purchase': {
-      'en': 'Purchase',
-      'ar': 'شراء',
-      'fr': 'Achat',
-    },
-    'txn_payment': {
-      'en': 'Payment',
-      'ar': 'دفعة',
-      'fr': 'Paiement',
-    },
-    'txn_return': {
-      'en': 'Return',
-      'ar': 'مرتجع',
-      'fr': 'Retour',
-    },
+    'txn_purchase': {'en': 'Purchase', 'ar': 'شراء', 'fr': 'Achat'},
+    'txn_payment': {'en': 'Payment', 'ar': 'دفعة', 'fr': 'Paiement'},
+    'txn_return': {'en': 'Return', 'ar': 'مرتجع', 'fr': 'Retour'},
     'txn_refund': {
-      'en': 'Refund',
-      'ar': 'استرداد',
-      'fr': 'Remboursement',
+      'en': 'Return (Cash Refund)',
+      'ar': 'مرتجع (استرداد نقدي)',
+      'fr': 'Retour (Remb. Espèces)',
     },
-    'txn_adjustment': {
-      'en': 'Adjustment',
-      'ar': 'تسوية',
-      'fr': 'Ajustement',
+    'txn_refund_reversal': {
+      'en': 'Voided Return (Cash Refund Reversal)',
+      'ar': 'إلغاء مرتجع (عكس استرداد نقدي)',
+      'fr': 'Retour annulé (Annulation remb. espèces)',
     },
-    'txn_discount': {
-      'en': 'Discount',
-      'ar': 'خصم',
-      'fr': 'Remise',
-    },
+    'txn_adjustment': {'en': 'Adjustment', 'ar': 'تسوية', 'fr': 'Ajustement'},
+    'txn_discount': {'en': 'Discount', 'ar': 'خصم', 'fr': 'Remise'},
     'txn_adjustment_return': {
       'en': 'Unlinked Return',
       'ar': 'مرتجع غير مرتبط',
       'fr': 'Retour Non Lié',
     },
     'txn_credit_note': {
-      'en': 'Credit Note',
-      'ar': 'إشعار دائن',
-      'fr': 'Note de Crédit',
+      'en': 'Return (Credit Note)',
+      'ar': 'مرتجع (إشعار دائن)',
+      'fr': 'Retour (Note de Crédit)',
+    },
+    'txn_credit_note_reversal': {
+      'en': 'Voided Return (Credit Note Reversal)',
+      'ar': 'إلغاء مرتجع (عكس إشعار دائن)',
+      'fr': 'Retour annulé (Annulation note de crédit)',
+    },
+    'display_only_transaction_amount': {
+      'en': 'Movement amount: {amount} — audit only; no balance impact',
+      'ar': 'قيمة الحركة: {amount} — للتتبع فقط ولا تؤثر على الرصيد',
+      'fr':
+          'Montant du mouvement : {amount} — audit uniquement, sans effet sur le solde',
     },
     'txn_opening_balance': {
       'en': 'Opening Balance',
@@ -453,21 +414,9 @@ class SupplierStatementPdfService {
       'fr': 'Annulation retour d\'ajustement',
     },
     // Discount types
-    'dt_seasonal': {
-      'en': 'Seasonal',
-      'ar': 'موسمي',
-      'fr': 'Saisonnière',
-    },
-    'dt_volume': {
-      'en': 'Volume',
-      'ar': 'كمية',
-      'fr': 'Volume',
-    },
-    'dt_loyalty': {
-      'en': 'Loyalty',
-      'ar': 'ولاء',
-      'fr': 'Fidélité',
-    },
+    'dt_seasonal': {'en': 'Seasonal', 'ar': 'موسمي', 'fr': 'Saisonnière'},
+    'dt_volume': {'en': 'Volume', 'ar': 'كمية', 'fr': 'Volume'},
+    'dt_loyalty': {'en': 'Loyalty', 'ar': 'ولاء', 'fr': 'Fidélité'},
     'dt_promotional': {
       'en': 'Promotional',
       'ar': 'ترويجي',
@@ -478,20 +427,11 @@ class SupplierStatementPdfService {
       'ar': 'دفع مبكر',
       'fr': 'Paiement anticipé',
     },
-    'dt_other': {
-      'en': 'Other',
-      'ar': 'أخرى',
-      'fr': 'Autre',
-    },
+    'dt_other': {'en': 'Other', 'ar': 'أخرى', 'fr': 'Autre'},
   };
 
   static String _t(String key, String lang) {
     return _translations[key]?[lang] ?? _translations[key]?['en'] ?? key;
-  }
-
-  static String _tTxnType(String type, String lang) {
-    final key = 'txn_$type';
-    return _translations[key]?[lang] ?? _translations[key]?['en'] ?? type;
   }
 
   static String _tDiscountType(String type, String lang) {
@@ -520,9 +460,10 @@ class SupplierStatementPdfService {
           pw.Text(
             company.address!,
             style: pw.TextStyle(
-                font: fonts.regular,
-                fontSize: 9,
-                color: PdfColors.grey600),
+              font: fonts.regular,
+              fontSize: 9,
+              color: PdfColors.grey600,
+            ),
           ),
         pw.SizedBox(height: 8),
         pw.Divider(),
@@ -539,10 +480,12 @@ class SupplierStatementPdfService {
 
   static Future<_PdfFonts> _loadFonts() async {
     try {
-      final regularData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-      final boldData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+      final regularData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+      );
+      final boldData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+      );
       return _PdfFonts(
         regular: pw.Font.ttf(regularData),
         bold: pw.Font.ttf(boldData),

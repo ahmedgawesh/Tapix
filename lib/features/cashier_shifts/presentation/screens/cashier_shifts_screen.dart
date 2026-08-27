@@ -25,8 +25,12 @@ class _CashierShiftsScreenState extends State<CashierShiftsScreen> {
   Object? _error;
   CashierShiftView? _current;
   CashierShiftSummary? _summary;
+  List<CashierShiftView> _openShifts = const [];
+  Map<int, CashierShiftSummary> _openSummaries = const {};
   List<CashierShiftView> _history = const [];
   StreamSubscription<void>? _subscription;
+  Timer? _liveRefreshTimer;
+  bool _liveRefreshing = false;
 
   UserEntity? get _user {
     final state = context.read<AuthBloc>().state;
@@ -46,12 +50,17 @@ class _CashierShiftsScreenState extends State<CashierShiftsScreen> {
   void initState() {
     super.initState();
     _subscription = _service.watchChanges().listen((_) => _load());
+    _liveRefreshTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => _refreshLiveShifts(),
+    );
     _load();
   }
 
   @override
   void dispose() {
     _subscription?.cancel();
+    _liveRefreshTimer?.cancel();
     super.dispose();
   }
 
@@ -64,13 +73,22 @@ class _CashierShiftsScreenState extends State<CashierShiftsScreen> {
       final history = await _service.getShiftHistory(
         userId: _canViewAll ? null : user.id,
       );
+      final openShifts = _canViewAll
+          ? await _service.getOpenShifts()
+          : current == null
+          ? <CashierShiftView>[]
+          : <CashierShiftView>[current];
+      final openSummaries = await _loadSummaries(openShifts);
       final summary = current == null
           ? null
-          : await _service.getSummary(current.shift.id);
+          : openSummaries[current.shift.id] ??
+                await _service.getSummary(current.shift.id);
       if (!mounted) return;
       setState(() {
         _current = current;
         _summary = summary;
+        _openShifts = openShifts;
+        _openSummaries = openSummaries;
         _history = history;
         _error = null;
         _loading = false;
@@ -81,6 +99,45 @@ class _CashierShiftsScreenState extends State<CashierShiftsScreen> {
         _error = error;
         _loading = false;
       });
+    }
+  }
+
+  Future<Map<int, CashierShiftSummary>> _loadSummaries(
+    List<CashierShiftView> shifts,
+  ) async {
+    final entries = await Future.wait(
+      shifts.map((view) async {
+        final summary = await _service.getSummary(view.shift.id);
+        return MapEntry(view.shift.id, summary);
+      }),
+    );
+    return Map<int, CashierShiftSummary>.fromEntries(entries);
+  }
+
+  Future<void> _refreshLiveShifts() async {
+    if (!mounted || _liveRefreshing) return;
+    final user = _user;
+    if (user == null) return;
+    _liveRefreshing = true;
+    try {
+      final current = await _service.getOpenShiftForUser(user.id);
+      final openShifts = _canViewAll
+          ? await _service.getOpenShifts()
+          : current == null
+          ? <CashierShiftView>[]
+          : <CashierShiftView>[current];
+      final summaries = await _loadSummaries(openShifts);
+      if (!mounted) return;
+      setState(() {
+        _current = current;
+        _summary = current == null ? null : summaries[current.shift.id];
+        _openShifts = openShifts;
+        _openSummaries = summaries;
+      });
+    } catch (_) {
+      // Keep the last good snapshot; manual refresh still surfaces errors.
+    } finally {
+      _liveRefreshing = false;
     }
   }
 
@@ -195,6 +252,40 @@ class _CashierShiftsScreenState extends State<CashierShiftsScreen> {
                           context.push('/cashier-shifts/${_current!.shift.id}'),
                       onClose: _closeCurrent,
                     ),
+                  if (_canViewAll) ...[
+                    const SizedBox(height: 28),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'cashier_shifts.open_now'.tr(),
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        Badge(label: Text(_openShifts.length.toString())),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (_openShifts.isEmpty)
+                      _EmptyHistoryCard()
+                    else
+                      ..._openShifts.map(
+                        (view) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _CurrentShiftCard(
+                            view: view,
+                            summary: _openSummaries[view.shift.id],
+                            canClose: false,
+                            onDetails: () => context.push(
+                              '/cashier-shifts/${view.shift.id}',
+                            ),
+                            onClose: () {},
+                          ),
+                        ),
+                      ),
+                  ],
                   const SizedBox(height: 28),
                   Row(
                     children: [

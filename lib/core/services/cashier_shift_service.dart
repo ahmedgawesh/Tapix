@@ -125,6 +125,10 @@ class CashierShiftService {
     return rows.isEmpty ? null : rows.first;
   }
 
+  Future<List<CashierShiftView>> getOpenShifts({int limit = 100}) {
+    return _shiftViews(openOnly: true, limit: limit);
+  }
+
   Future<CashierShiftView?> getShift(int shiftId) async {
     final rows = await _shiftViews(shiftId: shiftId, limit: 1);
     return rows.isEmpty ? null : rows.first;
@@ -190,6 +194,10 @@ class CashierShiftService {
         db.currencies,
         db.currencies.id.equalsExp(db.cashierShifts.currencyId),
       ),
+      leftOuterJoin(
+        db.employees,
+        db.employees.id.equalsExp(db.users.employeeId),
+      ),
     ]);
     if (shiftId != null) {
       query.where(db.cashierShifts.id.equals(shiftId));
@@ -206,7 +214,9 @@ class CashierShiftService {
         .map(
           (row) => CashierShiftView(
             shift: row.readTable(db.cashierShifts),
-            cashierName: row.readTable(db.users).username,
+            cashierName:
+                row.readTableOrNull(db.employees)?.name ??
+                row.readTable(db.users).username,
             currencyCode: row.readTable(db.currencies).code,
             currencySymbol: row.readTable(db.currencies).symbol,
           ),

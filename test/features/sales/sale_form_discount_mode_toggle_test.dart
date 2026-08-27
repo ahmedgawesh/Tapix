@@ -65,8 +65,9 @@ void main() {
       product: taxableProduct,
       quantity: qty,
       unitPriceCents: Decimal.fromInt(unitPriceCents),
-      discountCents:
-          discountCents != null ? Decimal.fromInt(discountCents) : null,
+      discountCents: discountCents != null
+          ? Decimal.fromInt(discountCents)
+          : null,
     );
   }
 
@@ -86,8 +87,18 @@ void main() {
         saleDate: DateTime(2026, 5, 18),
         discountMode: SaleDiscountMode.perItem,
         items: [
-          buildLine(tempId: 'L1', qty: 1, unitPriceCents: 10000, discountCents: 500),
-          buildLine(tempId: 'L2', qty: 2, unitPriceCents: 7500, discountCents: 1200),
+          buildLine(
+            tempId: 'L1',
+            qty: 1,
+            unitPriceCents: 10000,
+            discountCents: 500,
+          ),
+          buildLine(
+            tempId: 'L2',
+            qty: 2,
+            unitPriceCents: 7500,
+            discountCents: 1200,
+          ),
         ],
       ),
       act: (bloc) =>
@@ -96,8 +107,11 @@ void main() {
         final s = bloc.state;
         expect(s.discountMode, SaleDiscountMode.invoice);
         for (final item in s.items) {
-          expect(item.discountCents, Decimal.zero,
-              reason: 'line ${item.tempId} retained stale discount');
+          expect(
+            item.discountCents,
+            Decimal.zero,
+            reason: 'line ${item.tempId} retained stale discount',
+          );
         }
         expect(s.itemDiscountCents, Decimal.zero);
         expect(s.invoiceDiscountCents, Decimal.zero);
@@ -112,9 +126,7 @@ void main() {
         saleDate: DateTime(2026, 5, 18),
         discountMode: SaleDiscountMode.invoice,
         invoiceDiscountCents: Decimal.fromInt(2000),
-        items: [
-          buildLine(tempId: 'L1', qty: 1, unitPriceCents: 10000),
-        ],
+        items: [buildLine(tempId: 'L1', qty: 1, unitPriceCents: 10000)],
       ),
       act: (bloc) =>
           bloc.add(const SaleDiscountModeChanged(SaleDiscountMode.perItem)),
@@ -136,7 +148,12 @@ void main() {
         saleDate: DateTime(2026, 5, 18),
         discountMode: SaleDiscountMode.perItem,
         items: [
-          buildLine(tempId: 'L1', qty: 1, unitPriceCents: 10000, discountCents: 500),
+          buildLine(
+            tempId: 'L1',
+            qty: 1,
+            unitPriceCents: 10000,
+            discountCents: 500,
+          ),
         ],
       ),
       act: (bloc) async {
@@ -148,15 +165,60 @@ void main() {
       verify: (bloc) {
         final s = bloc.state;
         expect(s.discountMode, SaleDiscountMode.perItem);
-        expect(s.items.single.discountCents, Decimal.zero,
-            reason: 'switching invoice→perItem resurrected the wiped 500');
+        expect(
+          s.items.single.discountCents,
+          Decimal.zero,
+          reason: 'switching invoice→perItem resurrected the wiped 500',
+        );
         expect(s.itemDiscountCents, Decimal.zero);
         expect(s.totalDiscountCents, Decimal.zero);
       },
     );
 
-    test(
-        'sanity: pricing engine masks per-line discount in invoice mode '
+    blocTest<SaleFormBloc, SaleFormState>(
+      'line discount is checked against cost after the discount',
+      build: () => SaleFormBloc(repo, variantRepo, productRepo, audit),
+      seed: () => SaleFormState(
+        currencyId: 1,
+        saleDate: DateTime(2026, 8, 24),
+        enableTaxCalculations: false,
+        items: [buildLine(tempId: 'L1', qty: 1, unitPriceCents: 10000)],
+      ),
+      act: (bloc) => bloc.add(
+        SaleLineItemUpdated(tempId: 'L1', discountCents: Decimal.fromInt(6000)),
+      ),
+      verify: (bloc) {
+        expect(bloc.state.belowCostWarning?.isBelowCost, isTrue);
+        expect(
+          bloc.state.belowCostWarning?.sellingPriceCents,
+          Decimal.fromInt(4000),
+        );
+      },
+    );
+
+    blocTest<SaleFormBloc, SaleFormState>(
+      'invoice discount cannot bypass the below-cost final gate',
+      build: () => SaleFormBloc(repo, variantRepo, productRepo, audit),
+      seed: () => SaleFormState(
+        currencyId: 1,
+        saleDate: DateTime(2026, 8, 24),
+        enableTaxCalculations: false,
+        discountMode: SaleDiscountMode.invoice,
+        invoiceDiscountCents: Decimal.fromInt(6000),
+        items: [buildLine(tempId: 'L1', qty: 1, unitPriceCents: 10000)],
+      ),
+      act: (bloc) => bloc.add(const SaleFormSubmitted()),
+      verify: (bloc) {
+        expect(bloc.state.belowCostWarning?.isBelowCost, isTrue);
+        expect(
+          bloc.state.belowCostWarning?.sellingPriceCents,
+          Decimal.fromInt(4000),
+        );
+        verifyZeroInteractions(repo);
+      },
+    );
+
+    test('sanity: pricing engine masks per-line discount in invoice mode '
         '(defence-in-depth — books were always correct, but state leaked '
         'into the UI before Phase-14)', () {
       final state = SaleFormState(
@@ -176,9 +238,13 @@ void main() {
       );
       // Engine takes only the invoice discount (1000), per-line (500) is masked.
       expect(state.effectiveInvoiceDiscountCents, Decimal.fromInt(1000));
-      expect(state.itemDiscountCents, Decimal.fromInt(500),
-          reason: 'getter still surfaces raw items field — '
-              'this proves why state-level wiping (Phase-14) matters');
+      expect(
+        state.itemDiscountCents,
+        Decimal.fromInt(500),
+        reason:
+            'getter still surfaces raw items field — '
+            'this proves why state-level wiping (Phase-14) matters',
+      );
     });
   });
 }

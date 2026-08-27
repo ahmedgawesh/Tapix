@@ -48,6 +48,11 @@ class PartyStatementTransactionRecord {
   final int? referenceId;
   final String? referenceType;
 
+  /// When true, this transaction is shown for audit trail visibility only.
+  /// It does not affect the running balance, opening/closing balance, or
+  /// debit/credit totals (e.g. cash refunds that were settled outside AP).
+  final bool isDisplayOnly;
+
   const PartyStatementTransactionRecord({
     required this.id,
     required this.date,
@@ -59,6 +64,7 @@ class PartyStatementTransactionRecord {
     required this.runningBalanceCents,
     this.referenceId,
     this.referenceType,
+    this.isDisplayOnly = false,
   });
 }
 
@@ -125,16 +131,21 @@ class PartyStatementLedgerService {
               ]))
             .get();
 
-    final byCustomer = <int, List<CustomerTransaction>>{};
+    // Balance-affecting transactions only (for dropdown balance calculation)
+    final byCustomerBalance = <int, List<CustomerTransaction>>{};
+    // ALL transactions including display-only (for the statement table)
+    final byCustomerAll = <int, List<CustomerTransaction>>{};
     for (final transaction in transactions) {
-      if (!PartyLedgerMovementPolicy.affectsBalance(
-        transaction.transactionType,
-      )) {
-        continue;
-      }
-      byCustomer
+      byCustomerAll
           .putIfAbsent(transaction.customerId, () => <CustomerTransaction>[])
           .add(transaction);
+      if (PartyLedgerMovementPolicy.affectsBalance(
+        transaction.transactionType,
+      )) {
+        byCustomerBalance
+            .putIfAbsent(transaction.customerId, () => <CustomerTransaction>[])
+            .add(transaction);
+      }
     }
 
     final options = customers
@@ -146,7 +157,9 @@ class PartyStatementLedgerService {
             phone: customer.phone,
             balanceCents:
                 customer.openingBalanceCents.toBigInt().toInt() +
-                _customerMovementTotal(byCustomer[customer.id] ?? const []),
+                _customerMovementTotal(
+                  byCustomerBalance[customer.id] ?? const [],
+                ),
           ),
         )
         .toList();
@@ -160,7 +173,8 @@ class PartyStatementLedgerService {
     }
 
     final customer = selected.first;
-    final movements = byCustomer[customer.id] ?? const <CustomerTransaction>[];
+    final movements =
+        byCustomerAll[customer.id] ?? const <CustomerTransaction>[];
     return _buildSnapshot(
       party: PartyStatementPartyRecord(
         id: customer.id,
@@ -186,6 +200,9 @@ class PartyStatementLedgerService {
           amountCents: transaction.amountCents.toBigInt().toInt(),
           referenceId: transaction.referenceId,
           referenceType: transaction.referenceType,
+          isDisplayOnly: !PartyLedgerMovementPolicy.affectsBalance(
+            transaction.transactionType,
+          ),
         ),
       ),
     );
@@ -215,16 +232,21 @@ class PartyStatementLedgerService {
               ]))
             .get();
 
-    final bySupplier = <int, List<SupplierTransaction>>{};
+    // Balance-affecting transactions only (for dropdown balance calculation)
+    final bySupplierBalance = <int, List<SupplierTransaction>>{};
+    // ALL transactions including display-only (for the statement table)
+    final bySupplierAll = <int, List<SupplierTransaction>>{};
     for (final transaction in transactions) {
-      if (!PartyLedgerMovementPolicy.affectsBalance(
-        transaction.transactionType,
-      )) {
-        continue;
-      }
-      bySupplier
+      bySupplierAll
           .putIfAbsent(transaction.supplierId, () => <SupplierTransaction>[])
           .add(transaction);
+      if (PartyLedgerMovementPolicy.affectsBalance(
+        transaction.transactionType,
+      )) {
+        bySupplierBalance
+            .putIfAbsent(transaction.supplierId, () => <SupplierTransaction>[])
+            .add(transaction);
+      }
     }
 
     final options = suppliers
@@ -236,7 +258,9 @@ class PartyStatementLedgerService {
             phone: supplier.phone,
             balanceCents:
                 supplier.openingBalanceCents.toBigInt().toInt() +
-                _supplierMovementTotal(bySupplier[supplier.id] ?? const []),
+                _supplierMovementTotal(
+                  bySupplierBalance[supplier.id] ?? const [],
+                ),
           ),
         )
         .toList();
@@ -250,7 +274,8 @@ class PartyStatementLedgerService {
     }
 
     final supplier = selected.first;
-    final movements = bySupplier[supplier.id] ?? const <SupplierTransaction>[];
+    final movements =
+        bySupplierAll[supplier.id] ?? const <SupplierTransaction>[];
     return _buildSnapshot(
       party: PartyStatementPartyRecord(
         id: supplier.id,
@@ -275,6 +300,9 @@ class PartyStatementLedgerService {
           amountCents: transaction.amountCents.toBigInt().toInt(),
           referenceId: transaction.referenceId,
           referenceType: transaction.referenceType,
+          isDisplayOnly: !PartyLedgerMovementPolicy.affectsBalance(
+            transaction.transactionType,
+          ),
         ),
       ),
     );
@@ -291,7 +319,11 @@ class PartyStatementLedgerService {
     final periodMovements = <_Movement>[];
     for (final movement in movements) {
       if (movement.date.isBefore(startDate)) {
-        openingBalance += movement.amountCents;
+        // Only balance-affecting transactions contribute to opening balance.
+        // Display-only transactions before the period are skipped entirely.
+        if (!movement.isDisplayOnly) {
+          openingBalance += movement.amountCents;
+        }
       } else {
         periodMovements.add(movement);
       }
@@ -302,6 +334,26 @@ class PartyStatementLedgerService {
     var totalCredits = 0;
     final transactions = <PartyStatementTransactionRecord>[];
     for (final movement in periodMovements) {
+      if (movement.isDisplayOnly) {
+        // Display-only: show in the list but don't touch running balance
+        // or debit/credit totals.
+        transactions.add(
+          PartyStatementTransactionRecord(
+            id: movement.id,
+            date: movement.date,
+            type: movement.type,
+            transactionNumber: movement.transactionNumber,
+            discountType: movement.discountType,
+            description: movement.description,
+            amountCents: movement.amountCents,
+            runningBalanceCents: runningBalance.current,
+            referenceId: movement.referenceId,
+            referenceType: movement.referenceType,
+            isDisplayOnly: true,
+          ),
+        );
+        continue;
+      }
       final balanceAfterMovement = runningBalance.apply(movement.amountCents);
       if (movement.amountCents > 0) {
         totalDebits += movement.amountCents;
@@ -360,6 +412,7 @@ class _Movement {
   final int amountCents;
   final int? referenceId;
   final String? referenceType;
+  final bool isDisplayOnly;
 
   const _Movement({
     required this.id,
@@ -371,5 +424,6 @@ class _Movement {
     required this.amountCents,
     this.referenceId,
     this.referenceType,
+    this.isDisplayOnly = false,
   });
 }

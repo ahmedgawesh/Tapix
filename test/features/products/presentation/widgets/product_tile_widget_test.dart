@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -177,6 +179,26 @@ void main() {
 
       expect(find.byKey(const Key('out_of_stock_indicator')), findsOneWidget);
       expect(find.text('0'), findsOneWidget);
+    });
+
+    testWidgets('displays a product image received from the master', (
+      tester,
+    ) async {
+      final bytes = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      );
+
+      await tester.pumpWidget(
+        createWidget(
+          ProductTileWidget(
+            product: testProduct,
+            remoteImage: Future.value(bytes),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Image), findsOneWidget);
     });
 
     testWidgets('calls onTap when tapped', (tester) async {

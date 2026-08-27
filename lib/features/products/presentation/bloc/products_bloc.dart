@@ -1,9 +1,12 @@
+
 import 'package:decimal/decimal.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/repositories/product_repository.dart';
@@ -119,6 +122,10 @@ class ProductLoadMoreRequested extends ProductsEvent {
 /// Products Bloc that extends RealtimeBloc for automatic real-time updates
 class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
   final ProductRepository _repository;
+  final LanNetworkService? _lan;
+  final CurrencyService? _currencyService;
+  final Map<int, LanCatalogProduct> _remoteCatalog = {};
+  final Map<int, Future<Uint8List?>> _remoteImageFutures = {};
   String? _currentSearchQuery;
   int? _currentCategoryFilter;
   String? _currentStockStatusFilter;
@@ -128,10 +135,125 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
   bool _hasMoreData = false;
   bool _isLoadingMore = false;
 
-  ProductsBloc(this._repository) : super();
+  ProductsBloc(this._repository, [this._lan, this._currencyService]) : super();
+
+  bool get isRemoteClient => _lan?.snapshot.mode == LanMode.client;
+
+  int? remoteVariantCount(int productId) =>
+      _remoteCatalog[productId]?.variants.length;
+
+  int? remoteVariantStock(int productId) {
+    final variants = _remoteCatalog[productId]?.variants;
+    if (variants == null || variants.isEmpty) return null;
+    return variants.fold<int>(0, (sum, item) => sum + item.stockQuantity);
+  }
+
+  String? remotePreviewSize(int productId) {
+    final variants = _remoteCatalog[productId]?.variants;
+    return variants == null || variants.isEmpty
+        ? null
+        : variants.first.sizeName;
+  }
+
+  String? remotePreviewColorHex(int productId) {
+    final variants = _remoteCatalog[productId]?.variants;
+    return variants == null || variants.isEmpty
+        ? null
+        : variants.first.colorHex;
+  }
+
+  Future<Uint8List?>? remoteImage(int productId) {
+    final product = _remoteCatalog[productId];
+    final lan = _lan;
+    if (product?.hasImage != true || lan == null) return null;
+    return _remoteImageFutures.putIfAbsent(
+      productId,
+      () => lan.fetchRemoteProductImage(productId).catchError((_) => null),
+    );
+  }
+
+  Future<void> _applyRemoteCurrency(LanCatalogPage page) async {
+    final service = _currencyService;
+    if (service == null) return;
+    final known = Currency.fromCode(page.currencyCode);
+    if (known.code != page.currencyCode ||
+        known.symbol != page.currencySymbol) {
+      await service.addCustomCurrency(
+        Currency(
+          code: page.currencyCode,
+          symbol: page.currencySymbol,
+          name: page.currencyCode,
+          isCustom: true,
+        ),
+      );
+    }
+    await service.setCurrency(page.currencyCode);
+  }
+
+  Product _mapRemoteProduct(LanCatalogProduct item) {
+    return Product(
+      id: item.id,
+      name: item.name,
+      nameAr: item.nameAr,
+      nameFr: item.nameFr,
+      description: item.description,
+      sku: item.sku,
+      barcode: item.barcode,
+      costCents: Decimal.fromInt(item.costCents ?? 0),
+      priceCents: Decimal.fromInt(item.priceCents),
+      wholesalePriceCents: item.wholesalePriceCents == null
+          ? null
+          : Decimal.fromInt(item.wholesalePriceCents!),
+      lastPurchasePriceCents: item.lastPurchasePriceCents == null
+          ? null
+          : Decimal.fromInt(item.lastPurchasePriceCents!),
+      stockQuantity: item.stockQuantity,
+      minQuantity: item.minQuantity,
+      categoryId: item.categoryId,
+      supplierId: item.supplierId,
+      currencyId: item.currencyId,
+      hasVariants: item.hasVariants,
+      isTaxable: item.isTaxable,
+      purchaseTaxRateBps: item.purchaseTaxRateBps,
+      salesTaxRateBps: item.salesTaxRateBps,
+      isActive: item.isActive,
+      trackInventory: item.trackInventory,
+      measurementType: item.measurementType,
+      costingMethod: item.costingMethod,
+      inventoryTrackingType: item.inventoryTrackingType,
+    );
+  }
+
+  Future<List<Product>> _fetchRemoteProducts({
+    String query = '',
+    int offset = 0,
+    int limit = _pageSize,
+  }) async {
+    final lan = _lan;
+    if (lan == null) return const [];
+    final page = await lan.fetchRemoteCatalog(
+      query: query,
+      offset: offset,
+      limit: limit,
+      management: true,
+    );
+    await _applyRemoteCurrency(page);
+    if (offset == 0) _remoteCatalog.clear();
+    for (final product in page.products) {
+      _remoteCatalog[product.id] = product;
+    }
+    _hasMoreData = page.hasMore;
+    return page.products.map(_mapRemoteProduct).toList(growable: false);
+  }
 
   @override
   Stream<List<Product>> get dataStream {
+    if (isRemoteClient) {
+      _currentPage = 0;
+      return Stream.fromFuture(
+        _fetchRemoteProducts(query: _currentSearchQuery ?? ''),
+      );
+    }
     // For filter-based views, use DB streams so UI updates instantly
     // (especially for stock status which depends on variants).
     final hasDbFilters =
@@ -309,6 +431,11 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     emit(RealtimeLoading<List<Product>>(previousData: currentData));
 
     try {
+      if (isRemoteClient) {
+        final results = await _fetchRemoteProducts(query: event.query);
+        emit(RealtimeSuccess<List<Product>>(data: results));
+        return;
+      }
       final results = await _repository.searchProducts(
         event.query,
         isActive: _currentIsActiveFilter,
@@ -382,6 +509,25 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     emit(RealtimeLoading<List<Product>>(previousData: currentData));
 
     try {
+      if (isRemoteClient) {
+        final results = await _fetchRemoteProducts(query: event.barcode);
+        final normalized = event.barcode.trim();
+        final matches = results
+            .where((product) {
+              final remote = _remoteCatalog[product.id];
+              return product.barcode == normalized ||
+                  product.sku == normalized ||
+                  (remote?.variants.any(
+                        (variant) =>
+                            variant.barcode == normalized ||
+                            variant.sku == normalized,
+                      ) ??
+                      false);
+            })
+            .toList(growable: false);
+        emit(RealtimeSuccess<List<Product>>(data: matches));
+        return;
+      }
       final product = await _repository.findByBarcode(event.barcode);
       debugPrint('ProductsBloc.barcodeScanned found=${product != null}');
       if (product != null) {
@@ -411,6 +557,15 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     );
 
     try {
+      if (isRemoteClient) {
+        final newProducts = await _fetchRemoteProducts(
+          query: _currentSearchQuery ?? '',
+          offset: _currentPage * _pageSize,
+        );
+        final allProducts = [...currentProducts, ...newProducts];
+        emit(RealtimeSuccess<List<Product>>(data: allProducts));
+        return;
+      }
       final threshold = _getLowStockThreshold();
       final newProducts = await _repository.filterProducts(
         categoryId: _currentCategoryFilter,

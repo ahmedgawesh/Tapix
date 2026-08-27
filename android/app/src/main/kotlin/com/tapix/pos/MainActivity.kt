@@ -18,13 +18,17 @@ import java.util.concurrent.Executors
 class MainActivity : FlutterFragmentActivity() {
     private companion object {
         const val BLUETOOTH_CHANNEL = "com.tapix.pos/bluetooth_label_printer"
+        const val MASTER_KEEP_ALIVE_CHANNEL = "com.tapix.pos/master_keep_alive"
         const val BLUETOOTH_PERMISSION_REQUEST = 7012
+        const val NOTIFICATION_PERMISSION_REQUEST = 7013
         val SERIAL_PORT_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
     }
 
     private val bluetoothExecutor = Executors.newSingleThreadExecutor()
     private var pendingPermissionResult: MethodChannel.Result? = null
     private var pendingPermissionAction: (() -> Unit)? = null
+    private var pendingMasterResult: MethodChannel.Result? = null
+    private var pendingMasterPort: Int? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -37,6 +41,69 @@ class MainActivity : FlutterFragmentActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             BLUETOOTH_CHANNEL,
         ).setMethodCallHandler(::handleBluetoothCall)
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            MASTER_KEEP_ALIVE_CHANNEL,
+        ).setMethodCallHandler(::handleMasterKeepAliveCall)
+    }
+
+    private fun handleMasterKeepAliveCall(call: MethodCall, result: MethodChannel.Result) {
+        when (call.method) {
+            "start" -> {
+                val port = call.argument<Int>("port")
+                if (port == null || port !in 1..65535) {
+                    result.error("invalid_port", "A valid master port is required", null)
+                    return
+                }
+                if (
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                        PackageManager.PERMISSION_GRANTED
+                ) {
+                    if (pendingMasterResult != null) {
+                        result.error(
+                            "permission_request_busy",
+                            "A notification permission request is already active",
+                            null,
+                        )
+                        return
+                    }
+                    pendingMasterResult = result
+                    pendingMasterPort = port
+                    requestPermissions(
+                        arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                        NOTIFICATION_PERMISSION_REQUEST,
+                    )
+                } else {
+                    startMasterKeepAlive(port, result, notificationPermissionGranted = true)
+                }
+            }
+            "stop" -> {
+                MasterKeepAliveService.stop(this)
+                result.success(null)
+            }
+            "isRunning" -> result.success(MasterKeepAliveService.isRunning)
+            else -> result.notImplemented()
+        }
+    }
+
+    private fun startMasterKeepAlive(
+        port: Int,
+        result: MethodChannel.Result,
+        notificationPermissionGranted: Boolean,
+    ) {
+        try {
+            MasterKeepAliveService.start(this, port)
+            result.success(
+                mapOf("notificationPermissionGranted" to notificationPermissionGranted),
+            )
+        } catch (error: Exception) {
+            result.error(
+                "master_keep_alive_failed",
+                error.message ?: "Could not keep the master service active",
+                error.javaClass.simpleName,
+            )
+        }
     }
 
     private fun handleBluetoothCall(call: MethodCall, result: MethodChannel.Result) {
@@ -87,6 +154,19 @@ class MainActivity : FlutterFragmentActivity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == NOTIFICATION_PERMISSION_REQUEST) {
+            val result = pendingMasterResult
+            val port = pendingMasterPort
+            pendingMasterResult = null
+            pendingMasterPort = null
+            if (result != null && port != null) {
+                val granted =
+                    grantResults.isNotEmpty() &&
+                        grantResults[0] == PackageManager.PERMISSION_GRANTED
+                startMasterKeepAlive(port, result, notificationPermissionGranted = granted)
+            }
+            return
+        }
         if (requestCode != BLUETOOTH_PERMISSION_REQUEST) return
 
         val result = pendingPermissionResult

@@ -7,7 +7,9 @@ import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Callback type for getting session timeout settings dynamically
-typedef SessionTimeoutSettingsCallback = ({bool enabled, int timeoutMinutes, int rememberMeDurationHours}) Function();
+typedef SessionTimeoutSettingsCallback =
+    ({bool enabled, int timeoutMinutes, int rememberMeDurationHours})
+    Function();
 
 class SessionService {
   final FlutterSecureStorage _storage;
@@ -16,6 +18,8 @@ class SessionService {
   static const String _lastActivityKey = 'last_activity';
   static const String _rememberMeKey = 'remember_me';
   static const String _rememberMeExpiryKey = 'remember_me_expiry';
+  static const String _lastAuthenticatedUserIdKey =
+      'last_authenticated_user_id';
 
   /// Callback to get current session timeout settings from AppSettings
   SessionTimeoutSettingsCallback? _getTimeoutSettings;
@@ -28,11 +32,14 @@ class SessionService {
 
   final _sessionController = StreamController<int?>.broadcast();
 
-  SessionService({
-    FlutterSecureStorage? storage,
-  }) : _storage = storage ?? const FlutterSecureStorage(
-          iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
-        );
+  SessionService({FlutterSecureStorage? storage})
+    : _storage =
+          storage ??
+          const FlutterSecureStorage(
+            iOptions: IOSOptions(
+              accessibility: KeychainAccessibility.first_unlock,
+            ),
+          );
 
   /// Configure the callback to get session timeout settings dynamically
   void configureTimeoutSettings(SessionTimeoutSettingsCallback callback) {
@@ -44,16 +51,29 @@ class SessionService {
   Future<void> saveSession(int userId, {bool rememberMe = false}) async {
     _cachedUserId = userId;
     _cacheInitialized = true;
-    developer.log('SessionService.saveSession: userId=$userId, rememberMe=$rememberMe', name: 'SessionService');
+    developer.log(
+      'SessionService.saveSession: userId=$userId, rememberMe=$rememberMe',
+      name: 'SessionService',
+    );
     final token = _generateToken();
     await _storage.write(key: _userIdKey, value: userId.toString());
+    // Keep identity separate from the active session. Logout invalidates the
+    // session token without making biometric re-authentication forget which
+    // local account was last verified by password.
+    await _storage.write(
+      key: _lastAuthenticatedUserIdKey,
+      value: userId.toString(),
+    );
     await _storage.write(key: _sessionTokenKey, value: token);
     await _storage.write(key: _rememberMeKey, value: rememberMe.toString());
     if (rememberMe) {
       final settings = _getTimeoutSettings?.call();
       final durationHours = settings?.rememberMeDurationHours ?? 72;
       final expiry = DateTime.now().add(Duration(hours: durationHours));
-      await _storage.write(key: _rememberMeExpiryKey, value: expiry.toIso8601String());
+      await _storage.write(
+        key: _rememberMeExpiryKey,
+        value: expiry.toIso8601String(),
+      );
     } else {
       await _storage.delete(key: _rememberMeExpiryKey);
     }
@@ -72,12 +92,31 @@ class SessionService {
       final userIdStr = await _storage.read(key: _userIdKey);
       _cachedUserId = userIdStr != null ? int.tryParse(userIdStr) : null;
     } catch (e) {
-      developer.log('SessionService.getCurrentUserId: storage read failed: $e', name: 'SessionService');
+      developer.log(
+        'SessionService.getCurrentUserId: storage read failed: $e',
+        name: 'SessionService',
+      );
       _cachedUserId = null;
     }
     _cacheInitialized = true;
-    developer.log('SessionService.getCurrentUserId: resolved userId=$_cachedUserId', name: 'SessionService');
+    developer.log(
+      'SessionService.getCurrentUserId: resolved userId=$_cachedUserId',
+      name: 'SessionService',
+    );
     return _cachedUserId;
+  }
+
+  Future<int?> getLastAuthenticatedUserId() async {
+    try {
+      final value = await _storage.read(key: _lastAuthenticatedUserIdKey);
+      return value != null ? int.tryParse(value) : null;
+    } catch (e) {
+      developer.log(
+        'SessionService.getLastAuthenticatedUserId: storage read failed: $e',
+        name: 'SessionService',
+      );
+      return null;
+    }
   }
 
   Future<bool> isSessionValid() async {
@@ -100,7 +139,7 @@ class SessionService {
     // Normal session timeout logic
     // Get timeout settings from AppSettings via callback
     final settings = _getTimeoutSettings?.call();
-    
+
     // If session timeout is disabled, session is always valid (if token exists)
     if (settings != null && !settings.enabled) {
       return true;
@@ -123,6 +162,16 @@ class SessionService {
   }
 
   Future<void> clearSession() async {
+    // Back-fill existing installations before deleting current_user_id.
+    // The retained ID is not a session or credential; biometric verification
+    // is still mandatory before a new session can be created.
+    final currentUserId = await getCurrentUserId();
+    if (currentUserId != null) {
+      await _storage.write(
+        key: _lastAuthenticatedUserIdKey,
+        value: currentUserId.toString(),
+      );
+    }
     _cachedUserId = null;
     _cacheInitialized = true;
     await _storage.delete(key: _userIdKey);

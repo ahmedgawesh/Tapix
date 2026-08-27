@@ -8,6 +8,7 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/widgets/theme_toggle_button.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../auth/data/services/permission_service.dart';
 import '../../../auth/domain/entities/permission_constants.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
@@ -440,22 +441,21 @@ class _ProductListViewState extends State<_ProductListView> {
     final authState = context.watch<AuthBloc>().state;
     final user = authState is AuthAuthenticated ? authState.user : null;
     final permissions = sl<PermissionService>();
-    final canManageProducts = permissions.hasPermission(
-      user,
-      Permissions.editProducts,
-    );
-    final canDeleteProducts = permissions.hasPermission(
-      user,
-      Permissions.deleteProducts,
-    );
+    final isRemoteClient =
+        sl<LanNetworkService>().snapshot.mode == LanMode.client;
+    final canManageProducts =
+        !isRemoteClient &&
+        permissions.hasPermission(user, Permissions.editProducts);
+    final canDeleteProducts =
+        !isRemoteClient &&
+        permissions.hasPermission(user, Permissions.deleteProducts);
     final canViewProductCost = permissions.hasPermission(
       user,
       Permissions.viewProductCost,
     );
-    final canAccessSettings = permissions.hasPermission(
-      user,
-      Permissions.accessSettings,
-    );
+    final canAccessSettings =
+        !isRemoteClient &&
+        permissions.hasPermission(user, Permissions.accessSettings);
 
     return Scaffold(
       appBar: AppBar(
@@ -508,136 +508,138 @@ class _ProductListViewState extends State<_ProductListView> {
                   ),
               ]
             : [
-                IconButton(
-                  icon: const Icon(LucideIcons.layers),
-                  onPressed: () async {
-                    await context.push('/products/variants');
-                    if (!context.mounted) return;
-                    context.read<ProductsBloc>().refresh();
-                    context.read<VariantSummariesBloc>().refresh();
-                  },
-                  tooltip: 'variants.title'.tr(),
-                ),
-                PopupMenuButton<String>(
-                  icon: const Icon(LucideIcons.moreVertical),
-                  onSelected: (value) {
-                    switch (value) {
-                      case 'bulk':
-                        context.push('/products/bulk');
-                        break;
-                      case 'edit_prices':
-                        context.push('/products/edit-prices');
-                        break;
-                      case 'import':
-                        context.push('/products/import');
-                        break;
-                      case 'export':
-                        context.push('/products/export');
-                        break;
-                      case 'variants':
-                        context.push('/products/variants');
-                        break;
-                      case 'categories':
-                        context.push('/products/categories');
-                        break;
-                      case 'colors':
-                        context.push('/products/colors');
-                        break;
-                      case 'sizes':
-                        context.push('/products/sizes');
-                        break;
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    if (canManageProducts)
+                if (!isRemoteClient)
+                  IconButton(
+                    icon: const Icon(LucideIcons.layers),
+                    onPressed: () async {
+                      await context.push('/products/variants');
+                      if (!context.mounted) return;
+                      context.read<ProductsBloc>().refresh();
+                      context.read<VariantSummariesBloc>().refresh();
+                    },
+                    tooltip: 'variants.title'.tr(),
+                  ),
+                if (!isRemoteClient)
+                  PopupMenuButton<String>(
+                    icon: const Icon(LucideIcons.moreVertical),
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'bulk':
+                          context.push('/products/bulk');
+                          break;
+                        case 'edit_prices':
+                          context.push('/products/edit-prices');
+                          break;
+                        case 'import':
+                          context.push('/products/import');
+                          break;
+                        case 'export':
+                          context.push('/products/export');
+                          break;
+                        case 'variants':
+                          context.push('/products/variants');
+                          break;
+                        case 'categories':
+                          context.push('/products/categories');
+                          break;
+                        case 'colors':
+                          context.push('/products/colors');
+                          break;
+                        case 'sizes':
+                          context.push('/products/sizes');
+                          break;
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      if (canManageProducts)
+                        PopupMenuItem(
+                          value: 'bulk',
+                          child: Row(
+                            children: [
+                              const Icon(LucideIcons.layers),
+                              const SizedBox(width: 12),
+                              Text('bulk_product.title'.tr()),
+                            ],
+                          ),
+                        ),
+                      if (canManageProducts)
+                        PopupMenuItem(
+                          value: 'edit_prices',
+                          child: Row(
+                            children: [
+                              const Icon(LucideIcons.dollarSign),
+                              const SizedBox(width: 12),
+                              Text('edit_prices.title'.tr()),
+                            ],
+                          ),
+                        ),
+                      if (canManageProducts)
+                        PopupMenuItem(
+                          value: 'import',
+                          child: Row(
+                            children: [
+                              const Icon(LucideIcons.upload),
+                              const SizedBox(width: 12),
+                              Text('import_products.title'.tr()),
+                            ],
+                          ),
+                        ),
+                      if (canViewProductCost)
+                        PopupMenuItem(
+                          value: 'export',
+                          child: Row(
+                            children: [
+                              const Icon(LucideIcons.download),
+                              const SizedBox(width: 12),
+                              Text('export_products.title'.tr()),
+                            ],
+                          ),
+                        ),
                       PopupMenuItem(
-                        value: 'bulk',
+                        value: 'variants',
                         child: Row(
                           children: [
                             const Icon(LucideIcons.layers),
                             const SizedBox(width: 12),
-                            Text('bulk_product.title'.tr()),
+                            Text('variants.title'.tr()),
                           ],
                         ),
                       ),
-                    if (canManageProducts)
-                      PopupMenuItem(
-                        value: 'edit_prices',
-                        child: Row(
-                          children: [
-                            const Icon(LucideIcons.dollarSign),
-                            const SizedBox(width: 12),
-                            Text('edit_prices.title'.tr()),
-                          ],
+                      if (canManageProducts)
+                        PopupMenuItem(
+                          value: 'categories',
+                          child: Row(
+                            children: [
+                              const Icon(LucideIcons.folder),
+                              const SizedBox(width: 12),
+                              Text('categories.title'.tr()),
+                            ],
+                          ),
                         ),
-                      ),
-                    if (canManageProducts)
-                      PopupMenuItem(
-                        value: 'import',
-                        child: Row(
-                          children: [
-                            const Icon(LucideIcons.upload),
-                            const SizedBox(width: 12),
-                            Text('import_products.title'.tr()),
-                          ],
+                      if (canManageProducts)
+                        PopupMenuItem(
+                          value: 'colors',
+                          child: Row(
+                            children: [
+                              const Icon(LucideIcons.palette),
+                              const SizedBox(width: 12),
+                              Text('colors.title'.tr()),
+                            ],
+                          ),
                         ),
-                      ),
-                    if (canViewProductCost)
-                      PopupMenuItem(
-                        value: 'export',
-                        child: Row(
-                          children: [
-                            const Icon(LucideIcons.download),
-                            const SizedBox(width: 12),
-                            Text('export_products.title'.tr()),
-                          ],
+                      if (canManageProducts)
+                        PopupMenuItem(
+                          value: 'sizes',
+                          child: Row(
+                            children: [
+                              const Icon(LucideIcons.ruler),
+                              const SizedBox(width: 12),
+                              Text('sizes.title'.tr()),
+                            ],
+                          ),
                         ),
-                      ),
-                    PopupMenuItem(
-                      value: 'variants',
-                      child: Row(
-                        children: [
-                          const Icon(LucideIcons.layers),
-                          const SizedBox(width: 12),
-                          Text('variants.title'.tr()),
-                        ],
-                      ),
-                    ),
-                    if (canManageProducts)
-                      PopupMenuItem(
-                        value: 'categories',
-                        child: Row(
-                          children: [
-                            const Icon(LucideIcons.folder),
-                            const SizedBox(width: 12),
-                            Text('categories.title'.tr()),
-                          ],
-                        ),
-                      ),
-                    if (canManageProducts)
-                      PopupMenuItem(
-                        value: 'colors',
-                        child: Row(
-                          children: [
-                            const Icon(LucideIcons.palette),
-                            const SizedBox(width: 12),
-                            Text('colors.title'.tr()),
-                          ],
-                        ),
-                      ),
-                    if (canManageProducts)
-                      PopupMenuItem(
-                        value: 'sizes',
-                        child: Row(
-                          children: [
-                            const Icon(LucideIcons.ruler),
-                            const SizedBox(width: 12),
-                            Text('sizes.title'.tr()),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
+                    ],
+                  ),
                 const ThemeToggleButton(),
                 if (canAccessSettings)
                   IconButton(
@@ -666,36 +668,60 @@ class _ProductListViewState extends State<_ProductListView> {
             onChanged: (query) {
               context.read<ProductsBloc>().add(ProductSearchRequested(query));
             },
-            onScanBarcode: () async {
-              final bloc = context.read<ProductsBloc>();
-              final barcode = await context.push<String>(
-                '/barcode-scanner',
-                extra: {'returnOnScan': true},
-              );
+            onScanBarcode: isRemoteClient
+                ? null
+                : () async {
+                    final bloc = context.read<ProductsBloc>();
+                    final barcode = await context.push<String>(
+                      '/barcode-scanner',
+                      extra: {'returnOnScan': true},
+                    );
 
-              if (barcode != null && barcode.isNotEmpty) {
-                if (mounted) {
-                  bloc.add(ProductBarcodeScanned(barcode));
-                }
-              }
-            },
+                    if (barcode != null && barcode.isNotEmpty) {
+                      if (mounted) {
+                        bloc.add(ProductBarcodeScanned(barcode));
+                      }
+                    }
+                  },
           ),
-          // Print Labels action bar
-          _buildPrintLabelsBar(context, canDeleteProducts: canDeleteProducts),
-          BlocBuilder<ProductsBloc, RealtimeState<List<Product>>>(
-            builder: (context, state) {
-              final bloc = context.read<ProductsBloc>();
-              return ProductFilterWidget(
-                onClearAll: () {
-                  bloc.add(const ProductFilterCleared());
-                },
-                activeFiltersCount: bloc.activeFiltersCount,
-                selectedCategoryId: bloc.currentCategoryFilter,
-                selectedStockStatus: bloc.currentStockStatusFilter,
-                selectedIsActive: bloc.currentIsActiveFilter,
-              );
-            },
-          ),
+          if (isRemoteClient)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Card(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                child: ListTile(
+                  leading: const Icon(LucideIcons.server),
+                  title: Text('settings.network.remote_products_live'.tr()),
+                  subtitle: Text(
+                    'settings.network.remote_products_read_only'.tr(),
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(LucideIcons.refreshCw),
+                    tooltip: 'common.refresh'.tr(),
+                    onPressed: () => context.read<ProductsBloc>().refresh(),
+                  ),
+                ),
+              ),
+            ),
+          // Printing and local category filters remain disabled on a client
+          // until their write/read dependencies are served atomically.
+          if (!isRemoteClient)
+            _buildPrintLabelsBar(context, canDeleteProducts: canDeleteProducts),
+          if (!isRemoteClient)
+            BlocBuilder<ProductsBloc, RealtimeState<List<Product>>>(
+              builder: (context, state) {
+                final bloc = context.read<ProductsBloc>();
+                return ProductFilterWidget(
+                  onClearAll: () {
+                    bloc.add(const ProductFilterCleared());
+                  },
+                  activeFiltersCount: bloc.activeFiltersCount,
+                  selectedCategoryId: bloc.currentCategoryFilter,
+                  selectedStockStatus: bloc.currentStockStatusFilter,
+                  selectedIsActive: bloc.currentIsActiveFilter,
+                );
+              },
+            ),
           const SizedBox(height: 8),
           Expanded(
             child: BlocBuilder<ProductsBloc, RealtimeState<List<Product>>>(
@@ -831,10 +857,19 @@ class _ProductListViewState extends State<_ProductListView> {
                             }
 
                             final p = displayProducts[index];
-                            final summary = summaries[p.id];
-                            final variantCount = summary?.count ?? 0;
-                            final totalStock = summary?.totalStock ?? 0;
-                            final preview = previews[p.id];
+                            final summary = isRemoteClient
+                                ? null
+                                : summaries[p.id];
+                            final variantCount = isRemoteClient
+                                ? (bloc.remoteVariantCount(p.id) ?? 0)
+                                : (summary?.count ?? 0);
+                            final totalStock = isRemoteClient
+                                ? (bloc.remoteVariantStock(p.id) ??
+                                      p.stockQuantity)
+                                : (summary?.totalStock ?? 0);
+                            final preview = isRemoteClient
+                                ? null
+                                : previews[p.id];
 
                             // variantInfo is used for display in ProductTileWidget
                             final _ = variantCount > 0
@@ -848,27 +883,43 @@ class _ProductListViewState extends State<_ProductListView> {
                               ),
                               child: ProductTileWidget(
                                 product: p,
-                                isSelected: _selectedProductIds.contains(p.id),
+                                isSelected: isRemoteClient
+                                    ? null
+                                    : _selectedProductIds.contains(p.id),
                                 variantCount: variantCount,
                                 totalVariantStock: totalStock,
-                                previewSizeName: preview?.sizeName,
-                                previewColorHex: preview?.colorHex,
-                                expirySummary: expirySummaries[p.id],
-                                onCheckboxChanged: (_) {
-                                  setState(() {
-                                    if (!_isSelectionMode) {
-                                      _isSelectionMode = true;
-                                    }
-                                    if (_selectedProductIds.contains(p.id)) {
-                                      _selectedProductIds.remove(p.id);
-                                    } else {
-                                      _selectedProductIds.add(p.id);
-                                    }
-                                    if (_selectedProductIds.isEmpty) {
-                                      _isSelectionMode = false;
-                                    }
-                                  });
-                                },
+                                previewSizeName: isRemoteClient
+                                    ? bloc.remotePreviewSize(p.id)
+                                    : preview?.sizeName,
+                                previewColorHex: isRemoteClient
+                                    ? bloc.remotePreviewColorHex(p.id)
+                                    : preview?.colorHex,
+                                expirySummary: isRemoteClient
+                                    ? null
+                                    : expirySummaries[p.id],
+                                enableVariantDetails: !isRemoteClient,
+                                remoteImage: isRemoteClient
+                                    ? bloc.remoteImage(p.id)
+                                    : null,
+                                onCheckboxChanged: isRemoteClient
+                                    ? null
+                                    : (_) {
+                                        setState(() {
+                                          if (!_isSelectionMode) {
+                                            _isSelectionMode = true;
+                                          }
+                                          if (_selectedProductIds.contains(
+                                            p.id,
+                                          )) {
+                                            _selectedProductIds.remove(p.id);
+                                          } else {
+                                            _selectedProductIds.add(p.id);
+                                          }
+                                          if (_selectedProductIds.isEmpty) {
+                                            _isSelectionMode = false;
+                                          }
+                                        });
+                                      },
                                 onTap: (_) async {
                                   if (_isSelectionMode) {
                                     setState(() {
@@ -894,14 +945,16 @@ class _ProductListViewState extends State<_ProductListView> {
                                   context.read<VariantPreviewsBloc>().refresh();
                                   context.read<ExpirySummariesBloc>().refresh();
                                 },
-                                onLongPress: (_) {
-                                  if (!_isSelectionMode) {
-                                    setState(() {
-                                      _isSelectionMode = true;
-                                      _selectedProductIds.add(p.id);
-                                    });
-                                  }
-                                },
+                                onLongPress: isRemoteClient
+                                    ? null
+                                    : (_) {
+                                        if (!_isSelectionMode) {
+                                          setState(() {
+                                            _isSelectionMode = true;
+                                            _selectedProductIds.add(p.id);
+                                          });
+                                        }
+                                      },
                               ),
                             );
                           },

@@ -115,6 +115,14 @@ abstract class SaleRepository {
     DateTime? dueDate,
     bool allowNegativeStock = false,
 
+    /// Optional request identity. Re-sending the same non-empty value returns
+    /// the already-created sale and never posts stock or journals twice.
+    String? idempotencyKey,
+
+    /// Explicit actor for trusted master-side LAN commands. Local callers
+    /// leave this null and continue using the current local session.
+    int? actorUserId,
+
     /// Phase 11.2 — tax-inclusive flag the engine used to produce the
     /// totals being persisted. Stamped on `sales.tax_inclusive_at_post`.
     bool taxInclusiveAtPost = false,
@@ -220,6 +228,10 @@ abstract class SaleRepository {
     /// double-tap or retried network call cannot create two returns / GL
     /// entries / stock movements.
     String? idempotencyKey,
+
+    /// Explicit actor for trusted master-side LAN commands. Local callers
+    /// leave this null and continue using the current local session.
+    int? actorUserId,
 
     /// Phase 11.2 — tax-inclusive flag the engine used to produce the
     /// totals being persisted. Stamped on

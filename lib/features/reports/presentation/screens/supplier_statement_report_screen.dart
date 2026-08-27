@@ -6,6 +6,7 @@ import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../services/party_transaction_localizer.dart';
 import '../../services/supplier_statement_pdf_service.dart';
 import '../bloc/supplier_statement_report_bloc.dart';
 import '../widgets/date_range_selector.dart';
@@ -35,8 +36,10 @@ class _SupplierStatementReportView extends StatelessWidget {
       appBar: AppBar(
         title: Text('reports.supplier_statement_report'.tr()),
         actions: [
-          BlocBuilder<SupplierStatementReportBloc,
-              RealtimeState<SupplierStatementData>>(
+          BlocBuilder<
+            SupplierStatementReportBloc,
+            RealtimeState<SupplierStatementData>
+          >(
             builder: (context, state) {
               if (state is! RealtimeSuccess<SupplierStatementData>) {
                 return const SizedBox.shrink();
@@ -63,69 +66,78 @@ class _SupplierStatementReportView extends StatelessWidget {
           ),
         ],
       ),
-      body: BlocBuilder<SupplierStatementReportBloc,
-          RealtimeState<SupplierStatementData>>(
-        builder: (context, state) {
-          if (state is RealtimeLoading<SupplierStatementData>) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body:
+          BlocBuilder<
+            SupplierStatementReportBloc,
+            RealtimeState<SupplierStatementData>
+          >(
+            builder: (context, state) {
+              if (state is RealtimeLoading<SupplierStatementData>) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (state is RealtimeError<SupplierStatementData>) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline,
-                      size: 48, color: colorScheme.error),
-                  const SizedBox(height: 16),
-                  Text(state.error.toString(),
-                      style: theme.textTheme.bodyLarge),
-                ],
-              ),
-            );
-          }
-
-          if (state is RealtimeSuccess<SupplierStatementData>) {
-            return Column(
-              children: [
-                // Supplier selector
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: _SupplierSelector(
-                    suppliers: state.data.suppliers,
-                    selectedId: state.data.supplierId,
-                    onChanged: (id) => context
-                        .read<SupplierStatementReportBloc>()
-                        .add(SupplierStatementReportSupplierChanged(id)),
+              if (state is RealtimeError<SupplierStatementData>) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        state.error.toString(),
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
+                );
+              }
 
-                // Date range selector
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: DateRangeSelector(
-                    dateRange: state.data.dateRange,
-                    onChanged: (range) => context
-                        .read<SupplierStatementReportBloc>()
-                        .add(SupplierStatementReportDateRangeChanged(range)),
-                  ),
-                ),
-                const SizedBox(height: 8),
+              if (state is RealtimeSuccess<SupplierStatementData>) {
+                return Column(
+                  children: [
+                    // Supplier selector
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: _SupplierSelector(
+                        suppliers: state.data.suppliers,
+                        selectedId: state.data.supplierId,
+                        onChanged: (id) => context
+                            .read<SupplierStatementReportBloc>()
+                            .add(SupplierStatementReportSupplierChanged(id)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
 
-                // Content
-                Expanded(
-                  child: state.data.supplierId == null
-                      ? _buildSelectSupplierPrompt(context)
-                      : _StatementContent(data: state.data),
-                ),
-              ],
-            );
-          }
+                    // Date range selector
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: DateRangeSelector(
+                        dateRange: state.data.dateRange,
+                        onChanged: (range) =>
+                            context.read<SupplierStatementReportBloc>().add(
+                              SupplierStatementReportDateRangeChanged(range),
+                            ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
 
-          return const SizedBox.shrink();
-        },
-      ),
+                    // Content
+                    Expanded(
+                      child: state.data.supplierId == null
+                          ? _buildSelectSupplierPrompt(context)
+                          : _StatementContent(data: state.data),
+                    ),
+                  ],
+                );
+              }
+
+              return const SizedBox.shrink();
+            },
+          ),
     );
   }
 
@@ -135,23 +147,28 @@ class _SupplierStatementReportView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(LucideIcons.search,
-              size: 48, color: theme.colorScheme.primary),
+          Icon(LucideIcons.search, size: 48, color: theme.colorScheme.primary),
           const SizedBox(height: 16),
-          Text('reports.select_supplier_prompt'.tr(),
-              style: theme.textTheme.bodyLarge),
+          Text(
+            'reports.select_supplier_prompt'.tr(),
+            style: theme.textTheme.bodyLarge,
+          ),
           const SizedBox(height: 8),
-          Text('reports.select_supplier_prompt_desc'.tr(),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              )),
+          Text(
+            'reports.select_supplier_prompt_desc'.tr(),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );
   }
 
   Future<void> _printReport(
-      BuildContext context, SupplierStatementData data) async {
+    BuildContext context,
+    SupplierStatementData data,
+  ) async {
     await SupplierStatementPdfService.printSupplierStatement(
       context: context,
       data: data,
@@ -164,7 +181,9 @@ class _SupplierStatementReportView extends StatelessWidget {
   }
 
   Future<void> _shareReport(
-      BuildContext context, SupplierStatementData data) async {
+    BuildContext context,
+    SupplierStatementData data,
+  ) async {
     await SupplierStatementPdfService.shareSupplierStatement(
       context: context,
       data: data,
@@ -200,12 +219,14 @@ class _SupplierSelector extends StatelessWidget {
       selectedId: selectedId,
       onChanged: onChanged,
       options: suppliers
-          .map((s) => SearchablePartyOption(
-                id: s.id,
-                name: s.name,
-                phone: s.phone,
-                balanceCents: s.balanceCents,
-              ))
+          .map(
+            (s) => SearchablePartyOption(
+              id: s.id,
+              name: s.name,
+              phone: s.phone,
+              balanceCents: s.balanceCents,
+            ),
+          )
           .toList(),
     );
   }
@@ -303,12 +324,14 @@ class _StatementContent extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('reports.statement_transactions'.tr(),
-                style: theme.textTheme.titleSmall
-                    ?.copyWith(fontWeight: FontWeight.bold)),
             Text(
-              'reports.supplier_count'
-                  .tr(args: ['${data.transactionCount}']),
+              'reports.statement_transactions'.tr(),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              'reports.supplier_count'.tr(args: ['${data.transactionCount}']),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -334,8 +357,9 @@ class _StatementContent extends StatelessWidget {
               children: [
                 Text(
                   'reports.closing_balance'.tr(),
-                  style: theme.textTheme.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.bold),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 Text(
                   cs.formatCents(data.closingBalanceCents),
@@ -371,8 +395,9 @@ class _StatementContent extends StatelessWidget {
                 Expanded(
                   child: Text(
                     data.supplierName ?? '',
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -384,13 +409,18 @@ class _StatementContent extends StatelessWidget {
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Icon(LucideIcons.phone,
-                      size: 14, color: colorScheme.onSurfaceVariant),
+                  Icon(
+                    LucideIcons.phone,
+                    size: 14,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                   const SizedBox(width: 6),
-                  Text(data.supplierPhone!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      )),
+                  Text(
+                    data.supplierPhone!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -399,16 +429,21 @@ class _StatementContent extends StatelessWidget {
               const SizedBox(height: 2),
               Row(
                 children: [
-                  Icon(LucideIcons.mail,
-                      size: 14, color: colorScheme.onSurfaceVariant),
+                  Icon(
+                    LucideIcons.mail,
+                    size: 14,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
-                    child: Text(data.supplierEmail!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
+                    child: Text(
+                      data.supplierEmail!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
@@ -418,16 +453,21 @@ class _StatementContent extends StatelessWidget {
               const SizedBox(height: 2),
               Row(
                 children: [
-                  Icon(LucideIcons.mapPin,
-                      size: 14, color: colorScheme.onSurfaceVariant),
+                  Icon(
+                    LucideIcons.mapPin,
+                    size: 14,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
-                    child: Text(data.supplierAddress!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
+                    child: Text(
+                      data.supplierAddress!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
@@ -470,11 +510,14 @@ class _StatementContent extends StatelessWidget {
         if (isWide) {
           return Row(
             children: cards
-                .map((c) => Expanded(
-                        child: Padding(
+                .map(
+                  (c) => Expanded(
+                    child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: c,
-                    )))
+                    ),
+                  ),
+                )
                 .toList(),
           );
         }
@@ -484,15 +527,17 @@ class _StatementContent extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                    child: Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: cards[0],
-                )),
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: cards[0],
+                  ),
+                ),
                 Expanded(
-                    child: Padding(
-                  padding: const EdgeInsets.only(left: 4),
-                  child: cards[1],
-                )),
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: cards[1],
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -513,9 +558,12 @@ class _StatementContent extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('reports.balance_summary'.tr(),
-                style: theme.textTheme.titleSmall
-                    ?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'reports.balance_summary'.tr(),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 12),
             _BalanceSummaryRow(
               label: 'reports.opening_balance'.tr(),
@@ -555,11 +603,16 @@ class _StatementContent extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.fileText,
-                size: 48, color: theme.colorScheme.primary),
+            Icon(
+              LucideIcons.fileText,
+              size: 48,
+              color: theme.colorScheme.primary,
+            ),
             const SizedBox(height: 16),
-            Text('reports.no_transactions_in_period'.tr(),
-                style: theme.textTheme.bodyLarge),
+            Text(
+              'reports.no_transactions_in_period'.tr(),
+              style: theme.textTheme.bodyLarge,
+            ),
           ],
         ),
       ),
@@ -579,175 +632,207 @@ class _StatementContent extends StatelessWidget {
           DataColumn(label: Text('reports.date'.tr())),
           DataColumn(label: Text('reports.type'.tr())),
           DataColumn(label: Text('reports.description'.tr())),
-          DataColumn(
-            label: Text('reports.debit'.tr()),
-            numeric: true,
-          ),
-          DataColumn(
-            label: Text('reports.credit'.tr()),
-            numeric: true,
-          ),
-          DataColumn(
-            label: Text('reports.balance'.tr()),
-            numeric: true,
-          ),
+          DataColumn(label: Text('reports.debit'.tr()), numeric: true),
+          DataColumn(label: Text('reports.credit'.tr()), numeric: true),
+          DataColumn(label: Text('reports.balance'.tr()), numeric: true),
         ],
         rows: [
           // Opening balance row
           DataRow(
-            color: WidgetStateProperty.all(
-                colorScheme.surfaceContainerHighest),
+            color: WidgetStateProperty.all(colorScheme.surfaceContainerHighest),
             cells: [
-              DataCell(Text(
-                DateFormat.yMd().format(data.dateRange.startDate),
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(fontWeight: FontWeight.w600),
-              )),
-              DataCell(Text(
-                'reports.opening_balance'.tr(),
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(fontWeight: FontWeight.w600),
-              )),
-              const DataCell(Text('-')),
-              const DataCell(Text('-')),
-              const DataCell(Text('-')),
-              DataCell(Text(
-                cs.formatCents(data.openingBalanceCents),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.bold,
+              DataCell(
+                Text(
+                  DateFormat.yMd().format(data.dateRange.startDate),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              )),
+              ),
+              DataCell(
+                Text(
+                  'reports.opening_balance'.tr(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const DataCell(Text('-')),
+              const DataCell(Text('-')),
+              const DataCell(Text('-')),
+              DataCell(
+                Text(
+                  cs.formatCents(data.openingBalanceCents),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
             ],
           ),
           // Transaction rows
           ...data.transactions.map((txn) {
             final isDebit = txn.amountCents > 0;
+            final isDisplayOnly = txn.isDisplayOnly;
             // Build description with transaction number and discount type
             final descParts = <String>[];
-            if (txn.transactionNumber != null) descParts.add(txn.transactionNumber!);
+            if (txn.transactionNumber != null) {
+              descParts.add(txn.transactionNumber!);
+            }
             if (txn.type == 'discount' && txn.discountType != null) {
               descParts.add('suppliers.discount_type_${txn.discountType}'.tr());
             }
             if (txn.description != null && txn.description!.isNotEmpty) {
-              descParts.add(txn.description!);
+              descParts.add(
+                localizedPartyTransactionDescription(txn.description),
+              );
+            }
+            if (isDisplayOnly) {
+              descParts.add(
+                'reports.display_only_transaction_amount'.tr(
+                  namedArgs: {'amount': cs.formatCents(txn.amountCents.abs())},
+                ),
+              );
             }
             final descText = descParts.isNotEmpty ? descParts.join(' · ') : '-';
-            return DataRow(cells: [
-              DataCell(Text(
-                DateFormat.yMd().format(txn.date),
-                style: theme.textTheme.bodySmall,
-              )),
-              DataCell(Text(
-                _localizeTransactionType(txn.type),
-                style: theme.textTheme.bodySmall,
-              )),
-              DataCell(
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 200),
-                  child: Text(
-                    descText,
+            return DataRow(
+              color: isDisplayOnly
+                  ? WidgetStateProperty.all(colorScheme.surfaceContainerLow)
+                  : null,
+              cells: [
+                DataCell(
+                  Text(
+                    DateFormat.yMd().format(txn.date),
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
+                      color: isDisplayOnly
+                          ? colorScheme.onSurfaceVariant
+                          : null,
+                      fontStyle: isDisplayOnly ? FontStyle.italic : null,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-              ),
-              DataCell(Text(
-                isDebit ? cs.formatCents(txn.amountCents) : '-',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.error,
+                DataCell(
+                  Text(
+                    localizedPartyTransactionType(txn.type),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: isDisplayOnly
+                          ? colorScheme.onSurfaceVariant
+                          : null,
+                      fontStyle: isDisplayOnly ? FontStyle.italic : null,
+                    ),
+                  ),
                 ),
-              )),
-              DataCell(Text(
-                !isDebit ? cs.formatCents(txn.amountCents.abs()) : '-',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.tertiary,
+                DataCell(
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 200),
+                    child: Text(
+                      descText,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontStyle: isDisplayOnly ? FontStyle.italic : null,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ),
-              )),
-              DataCell(Text(
-                cs.formatCents(txn.runningBalanceCents),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: txn.runningBalanceCents > 0
-                      ? colorScheme.error
-                      : colorScheme.primary,
+                DataCell(
+                  Text(
+                    isDisplayOnly
+                        ? '-'
+                        : (isDebit ? cs.formatCents(txn.amountCents) : '-'),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: isDisplayOnly
+                          ? colorScheme.onSurfaceVariant
+                          : colorScheme.error,
+                    ),
+                  ),
                 ),
-              )),
-            ]);
+                DataCell(
+                  Text(
+                    isDisplayOnly
+                        ? '-'
+                        : (!isDebit
+                              ? cs.formatCents(txn.amountCents.abs())
+                              : '-'),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: isDisplayOnly
+                          ? colorScheme.onSurfaceVariant
+                          : colorScheme.tertiary,
+                    ),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    cs.formatCents(txn.runningBalanceCents),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: isDisplayOnly
+                          ? colorScheme.onSurfaceVariant
+                          : (txn.runningBalanceCents > 0
+                                ? colorScheme.error
+                                : colorScheme.primary),
+                    ),
+                  ),
+                ),
+              ],
+            );
           }),
           // Closing balance row
           DataRow(
-            color: WidgetStateProperty.all(
-                colorScheme.surfaceContainerHighest),
+            color: WidgetStateProperty.all(colorScheme.surfaceContainerHighest),
             cells: [
-              DataCell(Text(
-                DateFormat.yMd().format(data.dateRange.endDate),
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(fontWeight: FontWeight.w600),
-              )),
-              DataCell(Text(
-                'reports.closing_balance'.tr(),
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(fontWeight: FontWeight.w600),
-              )),
+              DataCell(
+                Text(
+                  DateFormat.yMd().format(data.dateRange.endDate),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              DataCell(
+                Text(
+                  'reports.closing_balance'.tr(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
               const DataCell(Text('-')),
-              DataCell(Text(
-                cs.formatCents(data.totalDebitsCents),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.error,
+              DataCell(
+                Text(
+                  cs.formatCents(data.totalDebitsCents),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.error,
+                  ),
                 ),
-              )),
-              DataCell(Text(
-                cs.formatCents(data.totalCreditsCents),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.tertiary,
+              ),
+              DataCell(
+                Text(
+                  cs.formatCents(data.totalCreditsCents),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.tertiary,
+                  ),
                 ),
-              )),
-              DataCell(Text(
-                cs.formatCents(data.closingBalanceCents),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: data.closingBalanceCents > 0
-                      ? colorScheme.error
-                      : colorScheme.primary,
+              ),
+              DataCell(
+                Text(
+                  cs.formatCents(data.closingBalanceCents),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: data.closingBalanceCents > 0
+                        ? colorScheme.error
+                        : colorScheme.primary,
+                  ),
                 ),
-              )),
+              ),
             ],
           ),
         ],
       ),
     );
-  }
-
-  String _localizeTransactionType(String type) {
-    switch (type) {
-      case 'purchase':
-        return 'reports.txn_type_purchase'.tr();
-      case 'payment':
-        return 'reports.txn_type_payment'.tr();
-      case 'return':
-        return 'reports.txn_type_return'.tr();
-      case 'refund':
-        return 'reports.txn_type_refund'.tr();
-      case 'adjustment':
-        return 'reports.txn_type_adjustment'.tr();
-      case 'discount':
-        return 'reports.txn_type_discount'.tr();
-      case 'adjustment_return':
-        return 'reports.txn_type_adjustment_return'.tr();
-      case 'credit_note':
-        return 'reports.txn_type_credit_note'.tr();
-      case 'opening_balance':
-        return 'reports.txn_type_opening_balance'.tr();
-      case 'adjustment_return_reversal':
-        return 'reports.txn_type_adjustment_return_reversal'.tr();
-      default:
-        return type;
-    }
   }
 }
 
@@ -771,16 +856,19 @@ class _BalanceSummaryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = isBold
-        ? Theme.of(context)
-            .textTheme
-            .bodyMedium
-            ?.copyWith(fontWeight: FontWeight.bold, color: color)
+        ? Theme.of(context).textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: color,
+          )
         : Theme.of(context).textTheme.bodyMedium?.copyWith(color: color);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [Text(label, style: style), Text(value, style: style)],
+        children: [
+          Text(label, style: style),
+          Text(value, style: style),
+        ],
       ),
     );
   }

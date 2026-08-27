@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/services/return_calculation_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../domain/repositories/sale_repository.dart';
 
@@ -319,8 +320,11 @@ class SaleReturnFormSubmitted extends SaleReturnFormEvent {
 class SaleReturnFormBloc
     extends Bloc<SaleReturnFormEvent, SaleReturnFormState> {
   final SaleRepository _repository;
+  final LanNetworkService? _lan;
 
-  SaleReturnFormBloc(this._repository) : super(SaleReturnFormState()) {
+  SaleReturnFormBloc(this._repository, {LanNetworkService? lan})
+    : _lan = lan,
+      super(SaleReturnFormState()) {
     on<SaleReturnFormInitialized>(_onInitialized);
     on<SaleReturnItemToggled>(_onItemToggled);
     on<SaleReturnItemQuantityChanged>(_onQuantityChanged);
@@ -332,6 +336,80 @@ class SaleReturnFormBloc
     on<SaleReturnFormSubmitted>(_onSubmitted);
   }
 
+  bool get _isRemoteClient =>
+      _lan?.snapshot.mode == LanMode.client &&
+      _lan?.hasRemoteUserSession == true;
+
+  Future<SaleReturnFormState> _loadRemoteState(int saleId) async {
+    final details = await _lan!.fetchRemoteReturnableSale(saleId);
+    final summary = details.sale;
+    final now = DateTime.now();
+    final sale = SaleEntity(
+      id: summary.saleId,
+      invoiceNumber: summary.invoiceNumber,
+      customerName: summary.customerName,
+      subtotalCents: Decimal.fromInt(summary.totalCents),
+      taxCents: Decimal.zero,
+      discountCents: Decimal.zero,
+      totalCents: Decimal.fromInt(summary.totalCents),
+      paidAmountCents: Decimal.fromInt(summary.totalCents),
+      currencyId: summary.currencyId,
+      paymentMethod: summary.paymentMethod,
+      status: 'completed',
+      saleDate: summary.saleDate,
+      taxInclusiveAtPost: summary.taxInclusiveAtPost,
+      createdAt: summary.saleDate,
+      updatedAt: now,
+    );
+    final items = details.lines
+        .map(
+          (line) => SaleItemEntity(
+            id: line.saleItemId,
+            saleId: summary.saleId,
+            productId: line.productId,
+            productName: line.productName,
+            variantId: line.variantId,
+            variantSku: line.variantSku,
+            colorName: line.colorName,
+            sizeName: line.sizeName,
+            quantity: line.originalQuantity,
+            quantityScale: line.quantityScale,
+            measurementType: line.measurementType,
+            unitPriceCents: Decimal.fromInt(line.unitPriceCents),
+            subtotalCents: Decimal.fromInt(line.subtotalCents),
+            discountCents: Decimal.fromInt(line.discountCents),
+            taxCents: Decimal.fromInt(line.taxCents),
+            totalCents: Decimal.fromInt(line.totalCents),
+            createdAt: summary.saleDate,
+          ),
+        )
+        .toList(growable: false);
+    final returned = <int, int>{
+      for (final line in details.lines)
+        if (line.returnedQuantity > 0) line.saleItemId: line.returnedQuantity,
+    };
+    final histories = <int, LinkedReturnHistory>{
+      for (final line in details.lines)
+        if (line.linkedReturnedQuantity > 0)
+          line.saleItemId: LinkedReturnHistory(
+            quantity: line.linkedReturnedQuantity,
+            subtotalCents: line.linkedReturnedSubtotalCents,
+            discountCents: line.linkedReturnedDiscountCents,
+            taxCents: line.linkedReturnedTaxCents,
+            refundCents: line.linkedReturnedRefundCents,
+          ),
+    };
+    return state.copyWith(
+      saleId: saleId,
+      sale: sale,
+      availableItems: items,
+      currencyId: summary.currencyId,
+      isLoading: false,
+      alreadyReturnedQty: returned,
+      linkedReturnHistory: histories,
+    );
+  }
+
   Future<void> _onInitialized(
     SaleReturnFormInitialized event,
     Emitter<SaleReturnFormState> emit,
@@ -339,6 +417,10 @@ class SaleReturnFormBloc
     emit(state.copyWith(isLoading: true, saleId: event.saleId));
 
     try {
+      if (_isRemoteClient) {
+        emit(await _loadRemoteState(event.saleId));
+        return;
+      }
       final sale = await _repository.getSaleById(event.saleId);
       final items = await _repository.getSaleItems(event.saleId);
 
@@ -504,6 +586,30 @@ class SaleReturnFormBloc
     emit(state.copyWith(isSubmitting: true, error: null));
 
     try {
+      if (_isRemoteClient) {
+        await _lan!.submitRemoteSaleReturn(
+          LanSaleReturnRequest(
+            idempotencyKey: const Uuid().v4(),
+            saleId: state.saleId!,
+            dispositionType: state.dispositionType,
+            refundMethod: state.refundMethod,
+            reason: state.reason,
+            dueDate: state.dueDate,
+            lines: state.returnItems
+                .map(
+                  (item) => LanSaleReturnLineRequest(
+                    saleItemId: item.originalItem.id,
+                    quantity: item.returnQuantity,
+                    reason: item.reason,
+                  ),
+                )
+                .toList(growable: false),
+          ),
+        );
+        emit(state.copyWith(isSubmitting: false, isSuccess: true));
+        return;
+      }
+
       final items = state.returnItems
           .map(
             (item) => SaleReturnItemInput(

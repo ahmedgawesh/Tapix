@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -16,8 +17,8 @@ class AuthBloc extends RealtimeBloc<UserEntity?, AuthEvent> {
   final AuthRepositoryInterface _repository;
 
   AuthBloc({required AuthRepositoryInterface repository})
-      : _repository = repository,
-        super(const AuthLoading());
+    : _repository = repository,
+      super(const AuthLoading());
 
   @override
   Stream<UserEntity?> get dataStream => _repository.watchCurrentUser();
@@ -85,7 +86,11 @@ class AuthBloc extends RealtimeBloc<UserEntity?, AuthEvent> {
     emit(const AuthLoading());
 
     try {
-      final user = await _repository.login(event.username, event.password, rememberMe: event.rememberMe);
+      final user = await _repository.login(
+        event.username,
+        event.password,
+        rememberMe: event.rememberMe,
+      );
       if (user != null) {
         CrashlyticsService.instance.setUser(
           userId: user.id,
@@ -99,6 +104,8 @@ class AuthBloc extends RealtimeBloc<UserEntity?, AuthEvent> {
       } else {
         emit(const AuthError(message: 'Invalid username or password'));
       }
+    } on RemoteAuthenticationRequiredException {
+      emit(AuthError(message: 'auth.remote_login_pending'.tr()));
     } catch (e) {
       emit(const AuthError(message: 'Invalid username or password'));
     }
@@ -155,10 +162,12 @@ class AuthBloc extends RealtimeBloc<UserEntity?, AuthEvent> {
     try {
       final question = await _repository.getSecurityQuestion(event.username);
       if (question != null && question.isNotEmpty) {
-        emit(AuthSecurityQuestionLoaded(
-          username: event.username,
-          question: question,
-        ));
+        emit(
+          AuthSecurityQuestionLoaded(
+            username: event.username,
+            question: question,
+          ),
+        );
       } else {
         emit(AuthSecurityQuestionNotSet(username: event.username));
       }
@@ -176,7 +185,7 @@ class AuthBloc extends RealtimeBloc<UserEntity?, AuthEvent> {
     try {
       final biometricService = sl<BiometricService>();
       final authenticated = await biometricService.authenticate(
-        localizedReason: 'Authenticate to log in',
+        localizedReason: 'auth.biometric_reason'.tr(),
       );
 
       if (!authenticated) {
@@ -196,7 +205,11 @@ class AuthBloc extends RealtimeBloc<UserEntity?, AuthEvent> {
         });
         emit(AuthAuthenticated(user: user));
       } else {
-        emit(const AuthError(message: 'Biometric login failed: no previous session'));
+        emit(
+          const AuthError(
+            message: 'Biometric login failed: no previous session',
+          ),
+        );
       }
     } catch (e) {
       emit(const AuthError(message: 'Biometric authentication failed'));

@@ -12,8 +12,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../auth/auth.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/router/pro_route_policy.dart';
+import '../../../../core/router/route_permissions.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/feature_gate_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../settings/presentation/bloc/company_bloc.dart';
 import '../../../settings/domain/entities/company_profile.dart';
 import '../widgets/stock_alerts_section.dart';
@@ -55,6 +57,13 @@ const _kAllDefaultItems = [
     titleKey: 'dashboard.new_sale',
     color: Color(0xFF6750A4), // resolved to colorScheme.primary at runtime
     route: '/sales',
+  ),
+  DashboardItemData(
+    id: 'sales_returns',
+    icon: LucideIcons.undo2,
+    titleKey: 'sales.returns',
+    color: Color(0xFFC62828),
+    route: '/sales/returns',
   ),
   DashboardItemData(
     id: 'cashier_shifts',
@@ -125,6 +134,14 @@ const _kAllDefaultItems = [
     titleKey: 'dashboard.settings',
     color: Colors.blueGrey,
     route: '/settings',
+  ),
+  DashboardItemData(
+    id: 'devices_network',
+    icon: LucideIcons.network,
+    titleKey: 'dashboard.devices_network',
+    color: Color(0xFF00695C),
+    route: '/devices',
+    ownerOnly: true,
   ),
   DashboardItemData(
     id: 'financial_mgmt',
@@ -233,9 +250,33 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   // ─── Filter items by user role ─────────────────────────────────────────────
 
-  List<DashboardItemData> _visibleItems(bool isOwner) {
-    if (isOwner) return _items;
-    return _items.where((item) => !item.ownerOnly).toList();
+  List<DashboardItemData> _visibleItems(UserEntity user) {
+    final allowed = _items.where((item) {
+      final roles = RoutePermissions.rolesForPath(item.route);
+      return roles == null || roles.contains(user.role);
+    });
+
+    final lan = sl<LanNetworkService>();
+    if (lan.snapshot.mode != LanMode.client) return allowed.toList();
+
+    // Only these original entry points currently use the authenticated master
+    // API. Keeping the list explicit is safer than accidentally opening a
+    // local-only repository on the client device.
+    return allowed.where((item) {
+      if (item.id == 'cashier_shifts') return user.role == UserRole.cashier;
+      return item.id == 'new_sale' ||
+          item.id == 'sales_returns' ||
+          item.id == 'products';
+    }).toList();
+  }
+
+  String _effectiveRoute(DashboardItemData item) {
+    if (sl<LanNetworkService>().snapshot.mode != LanMode.client) {
+      return item.route;
+    }
+    if (item.id == 'new_sale') return '/sales/new';
+    if (item.id == 'cashier_shifts') return '/client-session';
+    return item.route;
   }
 
   // ─── Build ─────────────────────────────────────────────────────────────────
@@ -245,6 +286,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final screenWidth = MediaQuery.of(context).size.width;
+    final isRemoteClient =
+        sl<LanNetworkService>().snapshot.mode == LanMode.client;
 
     // Responsive breakpoints
     final isDesktop = screenWidth >= 1024;
@@ -268,53 +311,57 @@ class _DashboardScreenState extends State<DashboardScreen>
               style: TextButton.styleFrom(foregroundColor: colorScheme.primary),
             ),
           if (!_isEditMode) ...[
-            // Company info
-            BlocBuilder<CompanyBloc, RealtimeState<CompanyProfile>>(
-              builder: (context, state) {
-                if (state is RealtimeSuccess<CompanyProfile>) {
-                  final profile = state.data;
-                  if (profile.name.isNotEmpty) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircleAvatar(
-                            radius: 16,
-                            backgroundColor:
-                                colorScheme.surfaceContainerHighest,
-                            backgroundImage:
-                                (profile.logoBase64 != null &&
-                                    profile.logoBase64!.isNotEmpty)
-                                ? MemoryImage(base64Decode(profile.logoBase64!))
-                                : null,
-                            child:
-                                (profile.logoBase64 == null ||
-                                    profile.logoBase64!.isEmpty)
-                                ? Icon(
-                                    LucideIcons.building2,
-                                    size: 18,
-                                    color: colorScheme.onSurfaceVariant,
-                                  )
-                                : null,
-                          ),
-                          if (isDesktop || isTablet) ...[
-                            const SizedBox(width: 8),
-                            Text(
-                              profile.name,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w500,
-                              ),
+            // Company info is loaded locally only. A client never displays
+            // stale local company data while connected to a master.
+            if (!isRemoteClient)
+              BlocBuilder<CompanyBloc, RealtimeState<CompanyProfile>>(
+                builder: (context, state) {
+                  if (state is RealtimeSuccess<CompanyProfile>) {
+                    final profile = state.data;
+                    if (profile.name.isNotEmpty) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircleAvatar(
+                              radius: 16,
+                              backgroundColor:
+                                  colorScheme.surfaceContainerHighest,
+                              backgroundImage:
+                                  (profile.logoBase64 != null &&
+                                      profile.logoBase64!.isNotEmpty)
+                                  ? MemoryImage(
+                                      base64Decode(profile.logoBase64!),
+                                    )
+                                  : null,
+                              child:
+                                  (profile.logoBase64 == null ||
+                                      profile.logoBase64!.isEmpty)
+                                  ? Icon(
+                                      LucideIcons.building2,
+                                      size: 18,
+                                      color: colorScheme.onSurfaceVariant,
+                                    )
+                                  : null,
                             ),
+                            if (isDesktop || isTablet) ...[
+                              const SizedBox(width: 8),
+                              Text(
+                                profile.name,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
-                      ),
-                    );
+                        ),
+                      );
+                    }
                   }
-                }
-                return const SizedBox.shrink();
-              },
-            ),
+                  return const SizedBox.shrink();
+                },
+              ),
             const SizedBox(width: 8),
             // User info
             BlocBuilder<AuthBloc, RealtimeState<UserEntity?>>(
@@ -378,9 +425,10 @@ class _DashboardScreenState extends State<DashboardScreen>
       body: SafeArea(
         child: BlocBuilder<AuthBloc, RealtimeState<UserEntity?>>(
           builder: (context, authState) {
-            final isOwner =
-                authState is AuthAuthenticated && authState.user.isOwner;
-            final visibleItems = _visibleItems(isOwner);
+            final user = authState is AuthAuthenticated ? authState.user : null;
+            final visibleItems = user == null
+                ? <DashboardItemData>[]
+                : _visibleItems(user);
 
             return SingleChildScrollView(
               padding: EdgeInsets.all(padding),
@@ -452,7 +500,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ),
 
                   // Info sections (hidden in edit mode)
-                  if (!_isEditMode) ...[
+                  if (!_isEditMode && !isRemoteClient) ...[
                     const StockAlertsSection(),
                     const ExpiryAlertsSection(),
                     const DailySalesSummarySection(),
@@ -486,15 +534,16 @@ class _DashboardScreenState extends State<DashboardScreen>
                           childAspectRatio: isDesktop ? 1.3 : 1.1,
                           children: visibleItems.map((item) {
                             final color = _resolveColor(item, colorScheme);
+                            final effectiveRoute = _effectiveRoute(item);
                             final locked =
                                 !isPro &&
-                                ProRoutePolicy.requiresPro(item.route);
+                                ProRoutePolicy.requiresPro(effectiveRoute);
                             return _DashboardCard(
                               icon: item.icon,
                               title: item.titleKey.tr(),
                               color: color,
                               locked: locked,
-                              onTap: () => context.push(item.route),
+                              onTap: () => context.push(effectiveRoute),
                               onLongPress: _enterEditMode,
                             );
                           }).toList(),

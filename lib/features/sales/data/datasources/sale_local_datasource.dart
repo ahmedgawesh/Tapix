@@ -87,6 +87,8 @@ class SaleLocalDatasourceImpl implements SaleLocalDatasource {
   Stream<List<SaleReturnEntity>> watchAllSaleReturns() {
     List<SaleReturnEntity> lastLinked = [];
     List<SaleReturnEntity> lastAdj = [];
+    var linkedLoaded = false;
+    var adjustmentLoaded = false;
 
     List<SaleReturnEntity> merge() {
       final merged = <SaleReturnEntity>[...lastLinked, ...lastAdj];
@@ -96,19 +98,21 @@ class SaleLocalDatasourceImpl implements SaleLocalDatasource {
 
     final controller = StreamController<List<SaleReturnEntity>>.broadcast();
     final sub1 = _dao.watchAllSaleReturnsWithParty().listen((rows) {
+      linkedLoaded = true;
       lastLinked = rows
           .map((r) => SaleReturnModel.fromDriftWithParty(r) as SaleReturnEntity)
           .toList();
-      controller.add(merge());
+      if (adjustmentLoaded) controller.add(merge());
     });
     final sub2 = _adjDao.watchAllSaleAdjReturnsWithParty().listen((rows) {
+      adjustmentLoaded = true;
       lastAdj = rows
           .map(
             (a) =>
                 SaleReturnModel.fromAdjustmentWithParty(a) as SaleReturnEntity,
           )
           .toList();
-      controller.add(merge());
+      if (linkedLoaded) controller.add(merge());
     });
     controller.onCancel = () {
       sub1.cancel();
@@ -122,15 +126,19 @@ class SaleLocalDatasourceImpl implements SaleLocalDatasource {
   Stream<Map<String, List<String>>> watchSaleReturnProductSearchTerms() {
     Map<String, List<String>> lastLinked = {};
     Map<String, List<String>> lastAdj = {};
+    var linkedLoaded = false;
+    var adjustmentLoaded = false;
 
     final controller = StreamController<Map<String, List<String>>>.broadcast();
     final sub1 = _dao.watchSaleReturnProductSearchTerms().listen((data) {
+      linkedLoaded = true;
       lastLinked = data;
-      controller.add({...lastLinked, ...lastAdj});
+      if (adjustmentLoaded) controller.add({...lastLinked, ...lastAdj});
     });
     final sub2 = _adjDao.watchSaleAdjReturnProductSearchTerms().listen((data) {
+      adjustmentLoaded = true;
       lastAdj = data;
-      controller.add({...lastLinked, ...lastAdj});
+      if (linkedLoaded) controller.add({...lastLinked, ...lastAdj});
     });
     controller.onCancel = () {
       sub1.cancel();

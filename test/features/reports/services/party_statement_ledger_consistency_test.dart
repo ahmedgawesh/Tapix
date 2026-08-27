@@ -25,9 +25,7 @@ void main() {
   setUp(() async {
     db = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
     await db.customSelect('SELECT 1').get();
-    currencyId = (await (db.select(
-      db.currencies,
-    )..where((currency) => currency.code.equals('USD'))).getSingle()).id;
+    currencyId = (await (db.select(db.currencies)..where((currency) => currency.code.equals('USD'))).getSingle()).id;
   });
 
   tearDown(() => db.close());
@@ -90,196 +88,198 @@ void main() {
         ),
       );
 
-  test(
-    'statements, ledgers, drilldown, balance and aging share one snapshot',
-    () async {
-      final customerId = await createCustomer();
+  test('statements, ledgers, drilldown, balance and aging share one snapshot', () async {
+    final customerId = await createCustomer();
+    await addCustomerTransaction(customerId: customerId, type: 'sale', amountCents: 10000, date: DateTime(2026, 7, 15));
+    for (final movement in <(String, int, DateTime)>[
+      ('sale', 2000, DateTime(2026, 8, 2)),
+      ('payment', -3000, DateTime(2026, 8, 3)),
+      ('credit_note', -1000, DateTime(2026, 8, 4)),
+      ('payment_reversal', 500, DateTime(2026, 8, 5)),
+      ('sale_void', -2000, DateTime(2026, 8, 6)),
+      ('credit_note_reversal', 1000, DateTime(2026, 8, 7)),
+      // Audit-only cash refund: must not change accounts receivable.
+      ('refund', -9000, DateTime(2026, 8, 7, 12)),
+      ('adjustment', 250, DateTime(2026, 8, 8, 23, 59, 59, 999)),
+      ('sale', 9999, DateTime(2026, 8, 9)),
+    ]) {
       await addCustomerTransaction(
         customerId: customerId,
-        type: 'sale',
-        amountCents: 10000,
-        date: DateTime(2026, 7, 15),
+        type: movement.$1,
+        amountCents: movement.$2,
+        date: movement.$3,
       );
-      for (final movement in <(String, int, DateTime)>[
-        ('sale', 2000, DateTime(2026, 8, 2)),
-        ('payment', -3000, DateTime(2026, 8, 3)),
-        ('credit_note', -1000, DateTime(2026, 8, 4)),
-        ('payment_reversal', 500, DateTime(2026, 8, 5)),
-        ('sale_void', -2000, DateTime(2026, 8, 6)),
-        ('credit_note_reversal', 1000, DateTime(2026, 8, 7)),
-        // Audit-only cash refund: must not change accounts receivable.
-        ('refund', -9000, DateTime(2026, 8, 7, 12)),
-        ('adjustment', 250, DateTime(2026, 8, 8, 23, 59, 59, 999)),
-        ('sale', 9999, DateTime(2026, 8, 9)),
-      ]) {
-        await addCustomerTransaction(
-          customerId: customerId,
-          type: movement.$1,
-          amountCents: movement.$2,
-          date: movement.$3,
-        );
-      }
+    }
 
-      final supplierId = await createSupplier();
+    final supplierId = await createSupplier();
+    await addSupplierTransaction(
+      supplierId: supplierId,
+      type: 'purchase',
+      amountCents: 6000,
+      date: DateTime(2026, 7, 15),
+    );
+    for (final movement in <(String, int, DateTime)>[
+      ('purchase', 4000, DateTime(2026, 8, 2)),
+      ('payment', -1500, DateTime(2026, 8, 3)),
+      ('credit_note', -500, DateTime(2026, 8, 4)),
+      ('purchase_void', -4000, DateTime(2026, 8, 5)),
+      ('payment_reversal', 1500, DateTime(2026, 8, 6)),
+      ('credit_note_reversal', 500, DateTime(2026, 8, 7)),
+      ('adjustment', -250, DateTime(2026, 8, 7, 12)),
+      // Audit-only cash refund: must not change accounts payable.
+      ('refund', -8000, DateTime(2026, 8, 8, 12)),
+      ('discount', -250, DateTime(2026, 8, 8, 23, 59, 59, 999)),
+      ('purchase', 7777, DateTime(2026, 8, 9)),
+    ]) {
       await addSupplierTransaction(
         supplierId: supplierId,
-        type: 'purchase',
-        amountCents: 6000,
-        date: DateTime(2026, 7, 15),
+        type: movement.$1,
+        amountCents: movement.$2,
+        date: movement.$3,
       );
-      for (final movement in <(String, int, DateTime)>[
-        ('purchase', 4000, DateTime(2026, 8, 2)),
-        ('payment', -1500, DateTime(2026, 8, 3)),
-        ('credit_note', -500, DateTime(2026, 8, 4)),
-        ('purchase_void', -4000, DateTime(2026, 8, 5)),
-        ('payment_reversal', 1500, DateTime(2026, 8, 6)),
-        ('credit_note_reversal', 500, DateTime(2026, 8, 7)),
-        ('adjustment', -250, DateTime(2026, 8, 7, 12)),
-        // Audit-only cash refund: must not change accounts payable.
-        ('refund', -8000, DateTime(2026, 8, 8, 12)),
-        ('discount', -250, DateTime(2026, 8, 8, 23, 59, 59, 999)),
-        ('purchase', 7777, DateTime(2026, 8, 9)),
-      ]) {
-        await addSupplierTransaction(
-          supplierId: supplierId,
-          type: movement.$1,
-          amountCents: movement.$2,
-          date: movement.$3,
-        );
-      }
+    }
 
-      final service = PartyStatementLedgerService(db);
-      final customerSnapshot = await service.loadCustomer(
-        customerId: customerId,
-        startDate: startDate,
-        endDate: endDate,
-      );
-      expect(customerSnapshot.openingBalanceCents, 11000);
-      expect(customerSnapshot.closingBalanceCents, 8750);
-      expect(customerSnapshot.totalDebitsCents, 3750);
-      expect(customerSnapshot.totalCreditsCents, 6000);
-      expect(customerSnapshot.transactions, hasLength(7));
-      expect(customerSnapshot.transactions.last.amountCents, 250);
-      expect(customerSnapshot.options.single.balanceCents, 8750);
+    final service = PartyStatementLedgerService(db);
+    final customerSnapshot = await service.loadCustomer(customerId: customerId, startDate: startDate, endDate: endDate);
+    expect(customerSnapshot.openingBalanceCents, 11000);
+    expect(customerSnapshot.closingBalanceCents, 8750);
+    expect(customerSnapshot.totalDebitsCents, 3750);
+    expect(customerSnapshot.totalCreditsCents, 6000);
+    expect(customerSnapshot.transactions, hasLength(8));
+    expect(customerSnapshot.transactions.last.amountCents, 250);
+    final customerCashRefund = customerSnapshot.transactions.singleWhere((transaction) => transaction.type == 'refund');
+    expect(customerCashRefund.isDisplayOnly, isTrue);
+    expect(customerCashRefund.amountCents, -9000);
+    expect(customerCashRefund.runningBalanceCents, 8500);
+    expect(customerSnapshot.options.single.balanceCents, 8750);
 
-      final supplierSnapshot = await service.loadSupplier(
-        supplierId: supplierId,
-        startDate: startDate,
-        endDate: endDate,
-      );
-      expect(supplierSnapshot.openingBalanceCents, 5500);
-      expect(supplierSnapshot.closingBalanceCents, 5000);
-      expect(supplierSnapshot.totalDebitsCents, 6000);
-      expect(supplierSnapshot.totalCreditsCents, 6500);
-      expect(supplierSnapshot.transactions, hasLength(8));
-      expect(supplierSnapshot.transactions.last.amountCents, -250);
-      expect(supplierSnapshot.options.single.balanceCents, 5000);
+    final supplierSnapshot = await service.loadSupplier(supplierId: supplierId, startDate: startDate, endDate: endDate);
+    expect(supplierSnapshot.openingBalanceCents, 5500);
+    expect(supplierSnapshot.closingBalanceCents, 5000);
+    expect(supplierSnapshot.totalDebitsCents, 6000);
+    expect(supplierSnapshot.totalCreditsCents, 6500);
+    expect(supplierSnapshot.transactions, hasLength(9));
+    expect(supplierSnapshot.transactions.last.amountCents, -250);
+    final supplierCashRefund = supplierSnapshot.transactions.singleWhere((transaction) => transaction.type == 'refund');
+    expect(supplierCashRefund.isDisplayOnly, isTrue);
+    expect(supplierCashRefund.amountCents, -8000);
+    expect(supplierCashRefund.runningBalanceCents, 5250);
+    expect(supplierSnapshot.options.single.balanceCents, 5000);
 
-      final customerStatementBloc = CustomerStatementReportBloc(db);
-      addTearDown(customerStatementBloc.close);
-      customerStatementBloc.add(CustomerStatementReportDateRangeChanged(range));
-      customerStatementBloc.add(
-        CustomerStatementReportCustomerChanged(customerId),
-      );
-      final customerStatementState =
-          await customerStatementBloc.stream.firstWhere(
-                (state) =>
-                    state is RealtimeSuccess<CustomerStatementData> &&
-                    state.data.customerId == customerId &&
-                    state.data.dateRange.endDate == endDate,
-              )
-              as RealtimeSuccess<CustomerStatementData>;
-      expect(customerStatementState.data.openingBalanceCents, 11000);
-      expect(customerStatementState.data.closingBalanceCents, 8750);
+    final customerStatementBloc = CustomerStatementReportBloc(db);
+    addTearDown(customerStatementBloc.close);
+    customerStatementBloc.add(CustomerStatementReportDateRangeChanged(range));
+    customerStatementBloc.add(CustomerStatementReportCustomerChanged(customerId));
+    final customerStatementState =
+        await customerStatementBloc.stream.firstWhere(
+              (state) =>
+                  state is RealtimeSuccess<CustomerStatementData> &&
+                  state.data.customerId == customerId &&
+                  state.data.dateRange.endDate == endDate,
+            )
+            as RealtimeSuccess<CustomerStatementData>;
+    expect(customerStatementState.data.openingBalanceCents, 11000);
+    expect(customerStatementState.data.closingBalanceCents, 8750);
+    expect(
+      customerStatementState.data.transactions.singleWhere((transaction) => transaction.type == 'refund').isDisplayOnly,
+      isTrue,
+    );
 
-      final customerLedgerBloc = CustomerLedgerReportBloc(db);
-      addTearDown(customerLedgerBloc.close);
-      customerLedgerBloc.add(CustomerLedgerDateRangeChanged(range));
-      customerLedgerBloc.add(CustomerLedgerCustomerChanged(customerId));
-      final customerLedgerState =
-          await customerLedgerBloc.stream.firstWhere(
-                (state) =>
-                    state is RealtimeSuccess<CustomerLedgerData> &&
-                    state.data.customerId == customerId &&
-                    state.data.dateRange.endDate == endDate,
-              )
-              as RealtimeSuccess<CustomerLedgerData>;
-      expect(customerLedgerState.data.closingBalanceCents, 8750);
-      expect(customerLedgerState.data.totalSalesCents, 250);
-      expect(customerLedgerState.data.totalReturnsCents, 0);
-      expect(customerLedgerState.data.totalPaymentsCents, 2500);
+    final customerLedgerBloc = CustomerLedgerReportBloc(db);
+    addTearDown(customerLedgerBloc.close);
+    customerLedgerBloc.add(CustomerLedgerDateRangeChanged(range));
+    customerLedgerBloc.add(CustomerLedgerCustomerChanged(customerId));
+    final customerLedgerState =
+        await customerLedgerBloc.stream.firstWhere(
+              (state) =>
+                  state is RealtimeSuccess<CustomerLedgerData> &&
+                  state.data.customerId == customerId &&
+                  state.data.dateRange.endDate == endDate,
+            )
+            as RealtimeSuccess<CustomerLedgerData>;
+    expect(customerLedgerState.data.closingBalanceCents, 8750);
+    expect(customerLedgerState.data.totalSalesCents, 250);
+    expect(customerLedgerState.data.totalReturnsCents, 0);
+    expect(customerLedgerState.data.totalPaymentsCents, 2500);
+    final customerCashRefundRow = customerLedgerState.data.rows.singleWhere(
+      (row) => row.isCashRefund,
+    );
+    expect(customerCashRefundRow.isCashRefundReversal, isFalse);
+    expect(customerCashRefundRow.returnTotalCents, 9000);
+    expect(customerCashRefundRow.runningBalanceCents, 8500);
 
-      final supplierStatementBloc = SupplierStatementReportBloc(db);
-      addTearDown(supplierStatementBloc.close);
-      supplierStatementBloc.add(SupplierStatementReportDateRangeChanged(range));
-      supplierStatementBloc.add(
-        SupplierStatementReportSupplierChanged(supplierId),
-      );
-      final supplierStatementState =
-          await supplierStatementBloc.stream.firstWhere(
-                (state) =>
-                    state is RealtimeSuccess<SupplierStatementData> &&
-                    state.data.supplierId == supplierId &&
-                    state.data.dateRange.endDate == endDate,
-              )
-              as RealtimeSuccess<SupplierStatementData>;
-      expect(supplierStatementState.data.openingBalanceCents, 5500);
-      expect(supplierStatementState.data.closingBalanceCents, 5000);
+    final supplierStatementBloc = SupplierStatementReportBloc(db);
+    addTearDown(supplierStatementBloc.close);
+    supplierStatementBloc.add(SupplierStatementReportDateRangeChanged(range));
+    supplierStatementBloc.add(SupplierStatementReportSupplierChanged(supplierId));
+    final supplierStatementState =
+        await supplierStatementBloc.stream.firstWhere(
+              (state) =>
+                  state is RealtimeSuccess<SupplierStatementData> &&
+                  state.data.supplierId == supplierId &&
+                  state.data.dateRange.endDate == endDate,
+            )
+            as RealtimeSuccess<SupplierStatementData>;
+    expect(supplierStatementState.data.openingBalanceCents, 5500);
+    expect(supplierStatementState.data.closingBalanceCents, 5000);
+    expect(
+      supplierStatementState.data.transactions.singleWhere((transaction) => transaction.type == 'refund').isDisplayOnly,
+      isTrue,
+    );
 
-      final supplierLedgerBloc = SupplierLedgerReportBloc(db);
-      addTearDown(supplierLedgerBloc.close);
-      supplierLedgerBloc.add(SupplierLedgerDateRangeChanged(range));
-      supplierLedgerBloc.add(SupplierLedgerSupplierChanged(supplierId));
-      final supplierLedgerState =
-          await supplierLedgerBloc.stream.firstWhere(
-                (state) =>
-                    state is RealtimeSuccess<SupplierLedgerData> &&
-                    state.data.supplierId == supplierId &&
-                    state.data.dateRange.endDate == endDate,
-              )
-              as RealtimeSuccess<SupplierLedgerData>;
-      expect(supplierLedgerState.data.closingBalanceCents, 5000);
-      expect(supplierLedgerState.data.totalPurchasesCents, 0);
-      expect(supplierLedgerState.data.totalReturnsCents, 0);
-      expect(supplierLedgerState.data.totalPaymentsCents, 250);
-      expect(supplierLedgerState.data.totalDiscountsCents, 250);
+    final supplierLedgerBloc = SupplierLedgerReportBloc(db);
+    addTearDown(supplierLedgerBloc.close);
+    supplierLedgerBloc.add(SupplierLedgerDateRangeChanged(range));
+    supplierLedgerBloc.add(SupplierLedgerSupplierChanged(supplierId));
+    final supplierLedgerState =
+        await supplierLedgerBloc.stream.firstWhere(
+              (state) =>
+                  state is RealtimeSuccess<SupplierLedgerData> &&
+                  state.data.supplierId == supplierId &&
+                  state.data.dateRange.endDate == endDate,
+            )
+            as RealtimeSuccess<SupplierLedgerData>;
+    expect(supplierLedgerState.data.closingBalanceCents, 5000);
+    expect(supplierLedgerState.data.totalPurchasesCents, 0);
+    expect(supplierLedgerState.data.totalReturnsCents, 0);
+    expect(supplierLedgerState.data.totalPaymentsCents, 250);
+    expect(supplierLedgerState.data.totalDiscountsCents, 250);
+    final supplierCashRefundRow = supplierLedgerState.data.rows.singleWhere(
+      (row) => row.isCashRefund,
+    );
+    expect(supplierCashRefundRow.isCashRefundReversal, isFalse);
+    expect(supplierCashRefundRow.returnTotalCents, 8000);
+    expect(supplierCashRefundRow.runningBalanceCents, 5250);
 
-      final drilldownBloc = SupplierBalanceDrilldownBloc(db);
-      addTearDown(drilldownBloc.close);
-      drilldownBloc.add(SupplierBalanceDrilldownDateRangeChanged(range));
-      drilldownBloc.add(SupplierBalanceDrilldownSupplierChanged(supplierId));
-      final drilldownState =
-          await drilldownBloc.stream.firstWhere(
-                (state) =>
-                    state is RealtimeSuccess<SupplierBalanceDrilldownData> &&
-                    state.data.supplierId == supplierId &&
-                    state.data.dateRange.endDate == endDate,
-              )
-              as RealtimeSuccess<SupplierBalanceDrilldownData>;
-      expect(drilldownState.data.openingBalanceCents, 5500);
-      expect(drilldownState.data.closingBalanceCents, 5000);
-      expect(drilldownState.data.transactions, hasLength(8));
+    final drilldownBloc = SupplierBalanceDrilldownBloc(db);
+    addTearDown(drilldownBloc.close);
+    drilldownBloc.add(SupplierBalanceDrilldownDateRangeChanged(range));
+    drilldownBloc.add(SupplierBalanceDrilldownSupplierChanged(supplierId));
+    final drilldownState =
+        await drilldownBloc.stream.firstWhere(
+              (state) =>
+                  state is RealtimeSuccess<SupplierBalanceDrilldownData> &&
+                  state.data.supplierId == supplierId &&
+                  state.data.dateRange.endDate == endDate,
+            )
+            as RealtimeSuccess<SupplierBalanceDrilldownData>;
+    expect(drilldownState.data.openingBalanceCents, 5500);
+    expect(drilldownState.data.closingBalanceCents, 5000);
+    expect(drilldownState.data.transactions, hasLength(9));
 
-      final supplierBalance = (await SupplierBalanceLedgerService(
-        db,
-      ).load(startDate: startDate, endDate: endDate)).single;
-      expect(supplierBalance.netBalanceCents, 5000);
+    final supplierBalance = (await SupplierBalanceLedgerService(
+      db,
+    ).load(startDate: startDate, endDate: endDate)).single;
+    expect(supplierBalance.netBalanceCents, 5000);
 
-      final aging = PartyAgingLedgerService(db);
-      expect(
-        (await aging.loadCustomers(asOf: endDate)).single.buckets.totalCents,
-        8750,
-      );
-      expect(
-        (await aging.loadSuppliers(asOf: endDate)).single.buckets.totalCents,
-        5000,
-      );
+    final aging = PartyAgingLedgerService(db);
+    expect((await aging.loadCustomers(asOf: endDate)).single.buckets.totalCents, 8750);
+    expect((await aging.loadSuppliers(asOf: endDate)).single.buckets.totalCents, 5000);
 
-      // Rebuild must follow the same balance-effect policy. Future financial
-      // movements are included in the current cached balance; cash-refund
-      // audit rows are not.
-      expect(await db.customerDao.recalculateBalance(customerId), 18749);
-      expect(await db.supplierDao.recalculateBalance(supplierId), 12777);
-    },
-  );
+    // Rebuild must follow the same balance-effect policy. Future financial
+    // movements are included in the current cached balance; cash-refund
+    // audit rows are not.
+    expect(await db.customerDao.recalculateBalance(customerId), 18749);
+    expect(await db.supplierDao.recalculateBalance(supplierId), 12777);
+  });
 }

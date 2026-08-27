@@ -80,6 +80,7 @@ import '../../features/purchases/presentation/bloc/purchase_returns_bloc.dart';
 import '../../features/purchases/presentation/bloc/purchase_return_form_bloc.dart';
 import '../../features/sales/data/datasources/sale_local_datasource.dart';
 import '../../features/sales/data/repositories/sale_repository_impl.dart';
+import '../../features/sales/data/services/lan_master_business_gateway.dart';
 import '../../features/sales/domain/repositories/sale_repository.dart';
 import '../../features/sales/presentation/bloc/sales_bloc.dart';
 import '../../features/sales/presentation/bloc/sale_form_bloc.dart';
@@ -190,6 +191,7 @@ import '../services/revenuecat_service.dart';
 import '../services/device_fingerprint_service.dart';
 import '../services/license_service.dart';
 import '../services/connectivity_service.dart';
+import '../services/lan/lan_network_service.dart';
 import '../services/remote_security_service.dart';
 import '../services/code_integrity_service.dart';
 import '../services/app_guard_service.dart';
@@ -238,6 +240,9 @@ Future<void> init() async {
       database: sl(),
       passwordService: sl(),
       sessionService: sl(),
+      lanNetworkService: sl<LanNetworkService>(),
+      auditLogService: sl<AuditLogService>(),
+      currencyService: sl<CurrencyService>(),
     ),
   );
   sl.registerLazySingleton<UserRepositoryInterface>(
@@ -566,7 +571,13 @@ Future<void> init() async {
   );
 
   // Feature Blocs
-  sl.registerFactory(() => ProductsBloc(sl()));
+  sl.registerFactory(
+    () => ProductsBloc(
+      sl<ProductRepository>(),
+      sl<LanNetworkService>(),
+      sl<CurrencyService>(),
+    ),
+  );
   sl.registerFactory(
     () => ProductFormBloc(
       sl<ProductRepository>(),
@@ -624,10 +635,16 @@ Future<void> init() async {
       sl<AuditLogService>(),
       belowCostService: sl<BelowCostSaleService>(),
       loyaltyRepository: sl<LoyaltyRepository>(),
+      lan: sl<LanNetworkService>(),
     ),
   );
-  sl.registerFactory(() => SaleReturnsBloc(sl<SaleRepository>()));
-  sl.registerFactory(() => SaleReturnFormBloc(sl<SaleRepository>()));
+  sl.registerFactory(
+    () => SaleReturnsBloc(sl<SaleRepository>(), lan: sl<LanNetworkService>()),
+  );
+  sl.registerFactory(
+    () =>
+        SaleReturnFormBloc(sl<SaleRepository>(), lan: sl<LanNetworkService>()),
+  );
 
   // Customers Blocs
   sl.registerFactory(() => CustomersBloc(sl<CustomerRepository>()));
@@ -1008,6 +1025,34 @@ Future<void> init() async {
     () => LicenseService(fingerprintService: sl<DeviceFingerprintService>()),
   );
   sl.registerLazySingleton(() => ConnectivityService());
+  sl.registerLazySingleton<LanMasterAuthGateway>(
+    () => LanMasterAuthGatewayImpl(
+      database: sl<AppDatabase>(),
+      permissionService: sl<PermissionService>(),
+      auditLogService: sl<AuditLogService>(),
+    ),
+  );
+  sl.registerLazySingleton<LanMasterBusinessGateway>(
+    () => LanMasterBusinessGatewayImpl(
+      database: sl<AppDatabase>(),
+      sales: sl<SaleRepository>(),
+      settings: sl<AppSettingsService>(),
+      shifts: sl<CashierShiftService>(),
+      currencyService: sl<CurrencyService>(),
+      adjustmentReturns: sl<AdjustmentReturnDao>(),
+      journalEntries: sl<JournalEntryService>(),
+      commissions: sl<CommissionService>(),
+      loyaltyPoints: sl<LoyaltyPointsService>(),
+    ),
+  );
+  sl.registerLazySingleton(
+    () => LanNetworkService(
+      sl<SettingsDao>(),
+      authGateway: sl<LanMasterAuthGateway>(),
+      businessGateway: sl<LanMasterBusinessGateway>(),
+      localizationService: sl<LocalizationService>(),
+    ),
+  );
   sl.registerLazySingleton(() => RemoteSecurityService());
   sl.registerLazySingleton(() => CodeIntegrityService());
 

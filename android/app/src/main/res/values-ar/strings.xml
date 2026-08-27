@@ -1,0 +1,6 @@
+<resources>
+    <string name="master_service_channel_name">جهاز الماستر على الشبكة المحلية</string>
+    <string name="master_service_channel_description">يحافظ على اتصال أجهزة الكاشير بهذا الجهاز الماستر</string>
+    <string name="master_service_title">جهاز TapBix الماستر يعمل</string>
+    <string name="master_service_text">يستمر اتصال أجهزة الكاشير على المنفذ %1$d حتى عند إغلاق الشاشة.</string>
+</resources>

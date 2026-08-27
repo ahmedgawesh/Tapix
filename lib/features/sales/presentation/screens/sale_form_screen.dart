@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -14,6 +15,7 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/services/below_cost_sale_service.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../../core/services/pricing/discount_converter.dart';
 import '../../../../core/services/parties/party_balance_classifier.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
@@ -48,6 +50,43 @@ import '../bloc/sale_form_bloc.dart';
 import '../services/sale_pdf_service.dart';
 
 part 'sale_form_dialogs.dart';
+
+Product _productFromLan(LanCatalogProduct value) => Product(
+  id: value.id,
+  name: value.name,
+  sku: value.sku,
+  barcode: value.barcode,
+  imagePath: value.hasImage ? 'lan:${value.id}' : null,
+  costCents: Decimal.zero,
+  priceCents: Decimal.fromInt(value.priceCents),
+  wholesalePriceCents: value.wholesalePriceCents == null
+      ? null
+      : Decimal.fromInt(value.wholesalePriceCents!),
+  stockQuantity: value.stockQuantity,
+  minQuantity: 0,
+  hasVariants: value.hasVariants,
+  isTaxable: value.isTaxable,
+  purchaseTaxRateBps: 0,
+  salesTaxRateBps: value.salesTaxRateBps,
+  isActive: true,
+  trackInventory: value.trackInventory,
+  measurementType: value.measurementType,
+);
+
+ProductVariant _variantFromLan(LanCatalogVariant value) => ProductVariant(
+  id: value.id,
+  productId: value.productId,
+  sku: value.sku,
+  barcode: value.barcode,
+  costCents: Decimal.zero,
+  priceCents: Decimal.fromInt(value.priceCents),
+  wholesalePriceCents: value.wholesalePriceCents == null
+      ? null
+      : Decimal.fromInt(value.wholesalePriceCents!),
+  priceAdjustmentCents: Decimal.zero,
+  stockQuantity: value.stockQuantity,
+  isActive: true,
+);
 
 class SaleFormScreen extends StatefulWidget {
   final int? saleId;
@@ -170,6 +209,7 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
 
 class _SaleFormView extends StatelessWidget {
   final TextEditingController notesCtrl;
+  final Map<int, Future<Uint8List?>> _remoteImageFutures = {};
   final bool isEditMode;
   final bool canViewProductCost;
   final int tabCount;
@@ -178,7 +218,7 @@ class _SaleFormView extends StatelessWidget {
   final void Function(int)? onCloseTab;
   final void Function(int) onSwitchTab;
 
-  const _SaleFormView({
+  _SaleFormView({
     required this.notesCtrl,
     required this.isEditMode,
     required this.canViewProductCost,
@@ -216,7 +256,9 @@ class _SaleFormView extends StatelessWidget {
   void _navigateBack(BuildContext context) async {
     final shouldPop = await _onWillPop(context);
     if (shouldPop && context.mounted) {
-      if (context.canPop()) {
+      if (sl<LanNetworkService>().snapshot.mode == LanMode.client) {
+        context.go('/dashboard');
+      } else if (context.canPop()) {
         context.pop();
       } else {
         context.go('/sales');
@@ -240,7 +282,9 @@ class _SaleFormView extends StatelessWidget {
           // Capture state snapshot before navigating away
           final stateSnapshot = state;
           // Navigate back immediately to prevent duplicate submissions
-          if (context.canPop()) {
+          if (sl<LanNetworkService>().snapshot.mode == LanMode.client) {
+            context.go('/dashboard');
+          } else if (context.canPop()) {
             context.pop();
           } else {
             context.go('/sales');
@@ -288,8 +332,10 @@ class _SaleFormView extends StatelessWidget {
         }
       },
       builder: (context, state) {
+        final isRemoteClient =
+            sl<LanNetworkService>().snapshot.mode == LanMode.client;
         return PopScope(
-          canPop: !state.hasUnsavedChanges,
+          canPop: !isRemoteClient && !state.hasUnsavedChanges,
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop) return;
             _navigateBack(context);
@@ -722,6 +768,62 @@ class _SaleFormView extends StatelessWidget {
       extra: {'returnOnScan': true},
     );
     if (result != null && result.isNotEmpty && context.mounted) {
+      final lan = sl<LanNetworkService>();
+      if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+        try {
+          final page = await lan.fetchRemoteCatalog(query: result, limit: 50);
+          if (!context.mounted) return;
+          LanCatalogProduct? productMatch;
+          LanCatalogProduct? variantProduct;
+          LanCatalogVariant? variantMatch;
+          for (final product in page.products) {
+            if (product.barcode == result || product.sku == result) {
+              productMatch = product;
+              break;
+            }
+            for (final variant in product.variants) {
+              if (variant.barcode == result || variant.sku == result) {
+                if (variantMatch != null) {
+                  variantMatch = null;
+                  variantProduct = null;
+                  break;
+                }
+                variantMatch = variant;
+                variantProduct = product;
+              }
+            }
+          }
+          if (variantMatch != null && variantProduct != null) {
+            _addRemoteCatalogLine(context, variantProduct, variantMatch);
+            return;
+          }
+          if (productMatch != null) {
+            if (productMatch.hasVariants) {
+              _showRemoteAddItemSheet(context, initial: productMatch);
+            } else {
+              _addRemoteCatalogLine(context, productMatch, null);
+            }
+            return;
+          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('sales.no_products'.tr()),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        } catch (_) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('sales.no_products'.tr()),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        }
+        return;
+      }
+
       final resolver = ProductBarcodeResolver(
         productRepository: sl<ProductRepository>(),
         variantRepository: sl<ProductVariantRepository>(),
@@ -896,8 +998,12 @@ class _SaleFormView extends StatelessWidget {
     ColorScheme cs,
     CurrencyService curr,
   ) {
+    final hasRemoteImage =
+        _usesRemoteMaster && item.product.imagePath?.startsWith('lan:') == true;
     final hasImage =
-        item.product.imagePath != null && item.product.imagePath!.isNotEmpty;
+        !hasRemoteImage &&
+        item.product.imagePath != null &&
+        item.product.imagePath!.isNotEmpty;
     final itemTaxCents = item.taxCentsWithSettings(
       enableTaxCalculations: state.enableTaxCalculations,
       defaultTaxRateBps: state.defaultSalesTaxRateBps,
@@ -916,27 +1022,11 @@ class _SaleFormView extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(10),
-                  image: hasImage
-                      ? DecorationImage(
-                          image: FileImage(File(item.product.imagePath!)),
-                          fit: BoxFit.cover,
-                          onError: (exception, stackTrace) {},
-                        )
-                      : null,
-                ),
-                child: !hasImage
-                    ? Icon(
-                        LucideIcons.package,
-                        size: 20,
-                        color: cs.onSurfaceVariant,
-                      )
-                    : null,
+              _saleLineImage(
+                productId: item.product.id,
+                localPath: hasImage ? item.product.imagePath : null,
+                hasRemoteImage: hasRemoteImage,
+                colorScheme: cs,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1288,6 +1378,11 @@ class _SaleFormView extends StatelessWidget {
   }
 
   // Dialog launchers
+  bool get _usesRemoteMaster {
+    final lan = sl<LanNetworkService>();
+    return lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession;
+  }
+
   void _showCustomerPicker(BuildContext ctx) {
     final bloc = ctx.read<SaleFormBloc>();
     showModalBottomSheet<void>(
@@ -1296,12 +1391,26 @@ class _SaleFormView extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (sc) => _CustomerPickerSheet(
-        onSelected: (c) {
-          bloc.add(SaleCustomerChanged(customerId: c.id, customerName: c.name));
-          Navigator.pop(sc);
-        },
-      ),
+      builder: (sc) => _usesRemoteMaster
+          ? _RemoteCustomerPickerSheet(
+              onSelected: (customer) {
+                bloc.add(
+                  SaleCustomerChanged(
+                    customerId: customer.id,
+                    customerName: customer.name,
+                  ),
+                );
+                Navigator.pop(sc);
+              },
+            )
+          : _CustomerPickerSheet(
+              onSelected: (c) {
+                bloc.add(
+                  SaleCustomerChanged(customerId: c.id, customerName: c.name),
+                );
+                Navigator.pop(sc);
+              },
+            ),
     );
   }
 
@@ -1313,16 +1422,125 @@ class _SaleFormView extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (sc) => _EmployeePickerSheet(
-        onSelected: (e) {
-          bloc.add(SaleEmployeeChanged(employeeId: e.id, employeeName: e.name));
-          Navigator.pop(sc);
+      builder: (sc) => _usesRemoteMaster
+          ? _RemoteEmployeePickerSheet(
+              onSelected: (employee) {
+                bloc.add(
+                  SaleEmployeeChanged(
+                    employeeId: employee.id,
+                    employeeName: employee.name,
+                  ),
+                );
+                Navigator.pop(sc);
+              },
+            )
+          : _EmployeePickerSheet(
+              onSelected: (e) {
+                bloc.add(
+                  SaleEmployeeChanged(employeeId: e.id, employeeName: e.name),
+                );
+                Navigator.pop(sc);
+              },
+            ),
+    );
+  }
+
+  void _addRemoteCatalogLine(
+    BuildContext context,
+    LanCatalogProduct remoteProduct,
+    LanCatalogVariant? remoteVariant,
+  ) {
+    final product = _productFromLan(remoteProduct);
+    final variant = remoteVariant == null
+        ? null
+        : _variantFromLan(remoteVariant);
+    context.read<SaleFormBloc>().add(
+      SaleLineItemAdded(
+        product: product,
+        variant: variant,
+        quantity: product.quantityScale,
+        unitPriceCents: Decimal.fromInt(
+          remoteVariant?.priceCents ?? remoteProduct.priceCents,
+        ),
+        colorName: remoteVariant?.colorName,
+        sizeName: remoteVariant?.sizeName,
+      ),
+    );
+  }
+
+  Future<Uint8List?> _remoteImage(int productId) =>
+      _remoteImageFutures.putIfAbsent(
+        productId,
+        () => sl<LanNetworkService>()
+            .fetchRemoteProductImage(productId)
+            .catchError((_) => null),
+      );
+
+  Widget _saleLineImage({
+    required int productId,
+    required String? localPath,
+    required bool hasRemoteImage,
+    required ColorScheme colorScheme,
+  }) {
+    Widget fallback() => Icon(
+      LucideIcons.package,
+      size: 20,
+      color: colorScheme.onSurfaceVariant,
+    );
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: hasRemoteImage
+          ? FutureBuilder<Uint8List?>(
+              future: _remoteImage(productId),
+              builder: (context, snapshot) {
+                final bytes = snapshot.data;
+                return bytes != null && bytes.isNotEmpty
+                    ? Image.memory(
+                        bytes,
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                      )
+                    : fallback();
+              },
+            )
+          : localPath != null
+          ? Image.file(
+              File(localPath),
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => fallback(),
+            )
+          : fallback(),
+    );
+  }
+
+  void _showRemoteAddItemSheet(BuildContext ctx, {LanCatalogProduct? initial}) {
+    showModalBottomSheet<void>(
+      context: ctx,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => _RemoteAddItemSheet(
+        initialProduct: initial,
+        onSelected: (product, variant) {
+          _addRemoteCatalogLine(ctx, product, variant);
+          Navigator.pop(sheetContext);
         },
       ),
     );
   }
 
   void _showAddItemSheet(BuildContext ctx, {Product? initialProduct}) {
+    if (_usesRemoteMaster) {
+      _showRemoteAddItemSheet(ctx);
+      return;
+    }
     final bloc = ctx.read<SaleFormBloc>();
     showModalBottomSheet<void>(
       context: ctx,

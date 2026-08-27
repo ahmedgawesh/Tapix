@@ -14,6 +14,7 @@ import '../../../../core/pricing/discount.dart';
 import '../../../../core/pricing/invoice_pricing_engine.dart';
 import '../../../../core/pricing/pricing_snapshot.dart';
 import '../../../../core/services/journal_entry_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../../core/services/commissions/commission_service.dart';
 import '../../../../core/services/loyalty/loyalty_points_service.dart';
 import '../../../auth/data/services/session_service.dart';
@@ -380,14 +381,21 @@ class SaleAdjReturnFormBloc
   final CommissionService _commissionService;
   final LoyaltyPointsService _loyaltyPointsService;
   final SessionService _sessionService;
+  final LanNetworkService? _lan;
+
+  bool get _isRemoteClient =>
+      _lan?.snapshot.mode == LanMode.client &&
+      _lan?.hasRemoteUserSession == true;
 
   SaleAdjReturnFormBloc(
     this._dao,
     this._journalEntryService,
     this._commissionService,
     this._loyaltyPointsService,
-    this._sessionService,
-  ) : super(SaleAdjReturnFormState()) {
+    this._sessionService, {
+    LanNetworkService? lan,
+  }) : _lan = lan,
+       super(SaleAdjReturnFormState()) {
     on<_SaleAdjReturnInitialized>(_onInitialized);
     on<_SaleAdjReturnRecomputeLoyalty>(_onRecomputeLoyalty);
     on<SaleAdjReturnCustomerSelected>(_onCustomerSelected);
@@ -412,6 +420,10 @@ class SaleAdjReturnFormBloc
     _SaleAdjReturnInitialized event,
     Emitter<SaleAdjReturnFormState> emit,
   ) async {
+    if (_isRemoteClient) {
+      emit(state.copyWith(returnNumber: 'SRS'));
+      return;
+    }
     try {
       final number = await _dao.generateSaleAdjReturnNumber();
       emit(state.copyWith(returnNumber: number));
@@ -424,6 +436,18 @@ class SaleAdjReturnFormBloc
     _SaleAdjReturnRecomputeLoyalty event,
     Emitter<SaleAdjReturnFormState> emit,
   ) async {
+    if (_isRemoteClient) {
+      if (state.loyaltyEnabled || state.loyaltyPointsToDeduct != 0) {
+        emit(
+          state.copyWith(
+            loyaltyEnabled: false,
+            loyaltyPointsToDeduct: 0,
+            loyaltyPointValueCents: 0,
+          ),
+        );
+      }
+      return;
+    }
     final isCredit = state.paymentMethod == AdjReturnPaymentMethod.credit;
     if (!isCredit || state.customerId == null || state.totalCents <= 0) {
       if (state.loyaltyPointsToDeduct != 0 || state.loyaltyEnabled) {
@@ -632,6 +656,62 @@ class SaleAdjReturnFormBloc
     }
   }
 
+  Future<void> _submitRemote(Emitter<SaleAdjReturnFormState> emit) async {
+    try {
+      final result = await _lan!.submitRemoteSaleAdjustmentReturn(
+        LanSaleAdjustmentReturnRequest(
+          idempotencyKey: const Uuid().v4(),
+          customerId: state.customerId,
+          employeeId: state.employeeId,
+          refundMethod: state.paymentMethod.name,
+          dueDate: state.dueDate,
+          returnDate: state.returnDate,
+          reasonCode: state.reasonCode!.name,
+          notes: state.notes,
+          overallDiscountCents: state.overallDiscountCents,
+          overallDiscountIsPercent: state.overallDiscountIsPercent,
+          lines: state.items
+              .map(
+                (item) => LanSaleAdjustmentReturnLineRequest(
+                  productId: item.productId,
+                  variantId: item.variantId,
+                  quantity: item.quantity,
+                  unitPriceCents: item.unitPriceCents,
+                  discountCents: item.discountCents,
+                  discountPercentBps: item.discountPercentBps,
+                  reason: item.reason,
+                ),
+              )
+              .toList(growable: false),
+        ),
+      );
+      emit(
+        state.copyWith(
+          returnNumber: result.returnNumber,
+          isSubmitting: false,
+          isSuccess: true,
+          hasUnsavedChanges: false,
+          createdReturnId: result.returnId,
+        ),
+      );
+    } on LanBusinessException catch (error) {
+      emit(state.copyWith(isSubmitting: false, error: error.message));
+    } catch (error, stackTrace) {
+      developer.log(
+        'Remote sale adjustment return submission failed: $error',
+        name: 'SaleAdjReturnFormBloc',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      emit(
+        state.copyWith(
+          isSubmitting: false,
+          error: 'returns.return_failed'.tr(),
+        ),
+      );
+    }
+  }
+
   Future<void> _onSubmitted(
     SaleAdjReturnSubmitted event,
     Emitter<SaleAdjReturnFormState> emit,
@@ -660,6 +740,11 @@ class SaleAdjReturnFormBloc
     }
 
     emit(state.copyWith(isSubmitting: true, error: null));
+
+    if (_isRemoteClient) {
+      await _submitRemote(emit);
+      return;
+    }
 
     try {
       // Idempotency: per-submission UUID. The UNIQUE constraint on

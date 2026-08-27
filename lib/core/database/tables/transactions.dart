@@ -64,6 +64,10 @@ class Sales extends Table {
   TextColumn get paymentMethod => text()();
   TextColumn get status => text().withDefault(const Constant('completed'))();
   TextColumn get notes => text().nullable()();
+
+  /// Client-generated token used by LAN/offline retries. A repeated request
+  /// returns the original sale instead of posting stock and journals twice.
+  TextColumn get idempotencyKey => text().nullable().unique()();
   DateTimeColumn get saleDate => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get dueDate => dateTime().nullable()();
 

@@ -36,6 +36,8 @@ class CustomerLedgerRow {
   // Return invoices
   final int? returnId;
   final String? returnNumber;
+  final bool isCashRefund;
+  final bool isCashRefundReversal;
   final int returnItemCount;
   final int returnTotalCents;
 
@@ -56,6 +58,8 @@ class CustomerLedgerRow {
     this.saleNumber,
     this.saleItemCount = 0,
     this.saleTotalCents = 0,
+    this.isCashRefund = false,
+    this.isCashRefundReversal = false,
     this.returnId,
     this.returnNumber,
     this.returnItemCount = 0,
@@ -211,12 +215,16 @@ class CustomerLedgerReportBloc
       final runningBalance = transaction.runningBalanceCents;
 
       final isSaleTx = type == 'sale' || type == 'sale_void';
+      final isAuditOnlyReturnTx =
+          transaction.isDisplayOnly &&
+          (type == 'refund' || type == 'refund_reversal');
       final isLinkedReturnTx =
           type == 'credit_note' ||
           type == 'sale_return' ||
           type == 'return' ||
           type == 'credit_note_reversal' ||
-          type == 'sale_return_reversal';
+          type == 'sale_return_reversal' ||
+          isAuditOnlyReturnTx;
       final isAdjustmentReturnTx =
           type == 'adjustment_return' || type == 'adjustment_return_reversal';
       final isReturnTx = isLinkedReturnTx || isAdjustmentReturnTx;
@@ -239,12 +247,14 @@ class CustomerLedgerReportBloc
 
       if (isReturnTx) {
         final returnValue = -amountCents;
-        totalReturns += returnValue;
-        totalReturnItems += amountCents < 0
-            ? totalPiecesCount
-            : amountCents > 0
-            ? -totalPiecesCount
-            : 0;
+        if (!transaction.isDisplayOnly) {
+          totalReturns += returnValue;
+          totalReturnItems += amountCents < 0
+              ? totalPiecesCount
+              : amountCents > 0
+              ? -totalPiecesCount
+              : 0;
+        }
         final label =
             resolvedReturnNumber ??
             txNumber ??
@@ -256,6 +266,8 @@ class CustomerLedgerReportBloc
             returnNumber: isAdjustmentReturnTx ? '${label ?? ''} ⓐ' : label,
             returnItemCount: totalPiecesCount,
             returnTotalCents: returnValue,
+            isCashRefund: isAuditOnlyReturnTx,
+            isCashRefundReversal: type == 'refund_reversal',
             runningBalanceCents: runningBalance,
           ),
         );

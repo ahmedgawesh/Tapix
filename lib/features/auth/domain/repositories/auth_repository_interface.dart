@@ -1,7 +1,15 @@
 import '../entities/user_entity.dart';
 
+class RemoteAuthenticationRequiredException implements Exception {
+  const RemoteAuthenticationRequiredException();
+}
+
 abstract class AuthRepositoryInterface {
-  Future<UserEntity?> login(String username, String password, {bool rememberMe = false});
+  Future<UserEntity?> login(
+    String username,
+    String password, {
+    bool rememberMe = false,
+  });
   Future<void> logout();
   Future<UserEntity?> getCurrentUser();
   Stream<UserEntity?> watchCurrentUser();

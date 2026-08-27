@@ -10,7 +10,10 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/measurement/measurement.dart';
 import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
+import '../../../../core/widgets/pin_verification_dialog.dart';
+import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../domain/repositories/sale_repository.dart';
 import '../bloc/sale_return_form_bloc.dart';
@@ -138,6 +141,9 @@ class _SaleReturnFormView extends StatelessWidget {
   // RETURN SAVED OVERLAY (Print / Share / Finish)
   // Shown AFTER navigating back to the sales list.
   // ═══════════════════════════════════════════════════════
+  bool get _isRemoteClient =>
+      sl<LanNetworkService>().snapshot.mode == LanMode.client;
+
   void _showReturnSavedOverlay(
     BuildContext context,
     SaleReturnFormState returnState,
@@ -175,30 +181,32 @@ class _SaleReturnFormView extends StatelessWidget {
           ),
           actionsAlignment: MainAxisAlignment.center,
           actions: [
-            TextButton.icon(
-              icon: const Icon(LucideIcons.printer, size: 18),
-              label: Text('sales.print_invoice'.tr()),
-              onPressed: () async {
-                Navigator.pop(ctx);
-                await _printOrShareReturnFromState(
-                  context,
-                  returnState,
-                  share: false,
-                );
-              },
-            ),
-            TextButton.icon(
-              icon: const Icon(LucideIcons.share2, size: 18),
-              label: Text('sales.share_invoice'.tr()),
-              onPressed: () async {
-                Navigator.pop(ctx);
-                await _printOrShareReturnFromState(
-                  context,
-                  returnState,
-                  share: true,
-                );
-              },
-            ),
+            if (!_isRemoteClient)
+              TextButton.icon(
+                icon: const Icon(LucideIcons.printer, size: 18),
+                label: Text('sales.print_invoice'.tr()),
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  await _printOrShareReturnFromState(
+                    context,
+                    returnState,
+                    share: false,
+                  );
+                },
+              ),
+            if (!_isRemoteClient)
+              TextButton.icon(
+                icon: const Icon(LucideIcons.share2, size: 18),
+                label: Text('sales.share_invoice'.tr()),
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  await _printOrShareReturnFromState(
+                    context,
+                    returnState,
+                    share: true,
+                  );
+                },
+              ),
             FilledButton.icon(
               icon: const Icon(LucideIcons.checkCircle, size: 18),
               label: Text('sales.finish'.tr()),
@@ -1405,9 +1413,20 @@ class _SaleReturnFormView extends StatelessWidget {
                       state.returnItems.isEmpty ||
                       state.isChequeMissingDueDate
                   ? null
-                  : () => context.read<SaleReturnFormBloc>().add(
-                      const SaleReturnFormSubmitted(),
-                    ),
+                  : () async {
+                      final requirePin = context
+                          .read<AppSettingsBloc>()
+                          .state
+                          .settings
+                          .requirePinForVoidRefund;
+                      if (requirePin) {
+                        final pinOk = await showPinVerificationDialog(context);
+                        if (!pinOk || !context.mounted) return;
+                      }
+                      context.read<SaleReturnFormBloc>().add(
+                        const SaleReturnFormSubmitted(),
+                      );
+                    },
               style: FilledButton.styleFrom(backgroundColor: colorScheme.error),
               icon: state.isSubmitting
                   ? const SizedBox(

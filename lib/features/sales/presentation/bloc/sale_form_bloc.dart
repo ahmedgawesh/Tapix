@@ -1,6 +1,7 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../core/database/app_database.dart' show LoyaltySettings;
 import '../../../../core/money/money.dart';
@@ -11,6 +12,7 @@ import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/below_cost_sale_service.dart';
 import '../../../../core/services/crashlytics_service.dart';
 import '../../../../core/services/free_quota_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../domain/repositories/sale_repository.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../customers/domain/repositories/loyalty_repository.dart';
@@ -737,6 +739,8 @@ class SaleLineItemAdded extends SaleFormEvent {
   final int quantity;
   final Decimal unitPriceCents;
   final Decimal? discountCents;
+  final String? colorName;
+  final String? sizeName;
 
   const SaleLineItemAdded({
     required this.product,
@@ -744,6 +748,8 @@ class SaleLineItemAdded extends SaleFormEvent {
     required this.quantity,
     required this.unitPriceCents,
     this.discountCents,
+    this.colorName,
+    this.sizeName,
   });
 
   @override
@@ -753,6 +759,8 @@ class SaleLineItemAdded extends SaleFormEvent {
     quantity,
     unitPriceCents,
     discountCents,
+    colorName,
+    sizeName,
   ];
 }
 
@@ -885,9 +893,15 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
   final BelowCostSaleService _belowCostService;
   final AuditLogService _auditService;
   final LoyaltyRepository? _loyaltyRepository;
+  final LanNetworkService? _lan;
   UserRole currentUserRole;
   int? currentUserId;
   int _lineCounter = 0;
+  final String _remoteIdempotencyKey = const Uuid().v4();
+
+  bool get _isRemoteClient =>
+      _lan?.snapshot.mode == LanMode.client &&
+      _lan?.hasRemoteUserSession == true;
 
   Map<int, String> _colorNames = {};
   Map<int, String?> _colorHexes = {};
@@ -900,10 +914,12 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     this._auditService, {
     BelowCostSaleService? belowCostService,
     LoyaltyRepository? loyaltyRepository,
+    LanNetworkService? lan,
     UserRole userRole = UserRole.cashier,
     int? userId,
   }) : _belowCostService = belowCostService ?? const BelowCostSaleService(),
        _loyaltyRepository = loyaltyRepository,
+       _lan = lan,
        currentUserId = userId,
        currentUserRole = userRole,
        super(SaleFormState(currencyId: 1, saleDate: DateTime.now())) {
@@ -932,7 +948,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
   }
 
   Future<void> _loadColorSizeLookups() async {
-    if (_colorNames.isNotEmpty) return;
+    if (_isRemoteClient || _colorNames.isNotEmpty) return;
     try {
       final colors = await _variantRepository.getAllColors();
       _colorNames = {for (final c in colors) c.id: c.name};
@@ -967,6 +983,37 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     }
 
     final initialPaymentMethod = parseMethod(event.defaultPaymentMethodStr);
+
+    if (_isRemoteClient) {
+      if (event.saleId != null) {
+        emit(state.copyWith(error: 'sales.remote_edit_not_supported'));
+        return;
+      }
+      try {
+        final catalog = await _lan!.fetchRemoteCatalog(limit: 1);
+        emit(
+          state.copyWith(
+            currencyId: catalog.currencyId,
+            saleNumber: '—',
+            enableTaxCalculations: catalog.enableTaxCalculations,
+            defaultSalesTaxRateBps: catalog.defaultSalesTaxRateBps,
+            taxInclusivePricing: catalog.taxInclusivePricing,
+            allowNegativeStock: catalog.allowNegativeStock,
+            allowPartialPayments: catalog.allowPartialPayments,
+            allowDiscounts: catalog.allowDiscounts,
+            maxDiscountPercent: catalog.maxDiscountPercent,
+            requireCustomerForSales: catalog.requireCustomerForSales,
+            enableLoyaltyPoints: false,
+            paymentMethod: initialPaymentMethod,
+          ),
+        );
+      } on LanBusinessException catch (error) {
+        emit(state.copyWith(error: error.message));
+      } catch (error) {
+        emit(state.copyWith(error: error.toString()));
+      }
+      return;
+    }
 
     if (event.saleId == null) {
       // New sale: generate next invoice number
@@ -1159,7 +1206,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         ),
       );
       // Auto-load loyalty data for the selected customer
-      if (_loyaltyRepository != null) {
+      if (!_isRemoteClient && _loyaltyRepository != null) {
         add(SaleLoyaltyDataRequested(event.customerId!));
       }
     }
@@ -1216,6 +1263,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         discountMode: event.mode,
         items: clearedItems,
         invoiceDiscountCents: Decimal.zero,
+        belowCostOverrides: const [],
         hasUnsavedChanges: true,
       ),
     );
@@ -1225,7 +1273,13 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     SaleInvoiceDiscountChanged event,
     Emitter<SaleFormState> emit,
   ) {
-    emit(state.copyWith(invoiceDiscountCents: event.discountCents));
+    emit(
+      state.copyWith(
+        invoiceDiscountCents: event.discountCents,
+        belowCostOverrides: const [],
+        clearBelowCostWarning: true,
+      ),
+    );
   }
 
   Future<void> _onLineItemAdded(
@@ -1235,7 +1289,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     await _loadColorSizeLookups();
 
     ProductVariant? resolvedVariant = event.variant;
-    if (resolvedVariant == null) {
+    if (!_isRemoteClient && resolvedVariant == null) {
       try {
         resolvedVariant = await _variantRepository.getDefaultVariantByProduct(
           event.product.id,
@@ -1250,9 +1304,9 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       quantity: event.quantity,
       unitPriceCents: event.unitPriceCents,
       discountCents: event.discountCents,
-      colorName: _resolveColorName(resolvedVariant?.colorId),
+      colorName: event.colorName ?? _resolveColorName(resolvedVariant?.colorId),
       colorHex: _resolveColorHex(resolvedVariant?.colorId),
-      sizeName: _resolveSizeName(resolvedVariant?.sizeId),
+      sizeName: event.sizeName ?? _resolveSizeName(resolvedVariant?.sizeId),
     );
 
     // Below-cost check: use variant cost if available, else product cost
@@ -1288,6 +1342,10 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     SaleLineItemUpdated event,
     Emitter<SaleFormState> emit,
   ) {
+    final pricingChanged =
+        event.quantity != null ||
+        event.unitPriceCents != null ||
+        event.discountCents != null;
     final updatedItems = state.items.map((item) {
       if (item.tempId == event.tempId) {
         return item.copyWith(
@@ -1302,42 +1360,50 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       }
       return item;
     }).toList();
-    emit(state.copyWith(items: updatedItems, hasUnsavedChanges: true));
+    final filteredOverrides = pricingChanged
+        ? state.belowCostOverrides
+              .where((value) => value.tempId != event.tempId)
+              .toList()
+        : state.belowCostOverrides;
+    final nextState = state.copyWith(
+      items: updatedItems,
+      belowCostOverrides: filteredOverrides,
+      clearBelowCostWarning: pricingChanged,
+      hasUnsavedChanges: true,
+    );
+    emit(nextState);
 
-    // Re-check below-cost if price was changed
-    if (event.unitPriceCents != null) {
-      final item = updatedItems.firstWhere((i) => i.tempId == event.tempId);
-      // Remove any previous override for this item since price changed
-      final filteredOverrides = state.belowCostOverrides
-          .where((o) => o.tempId != event.tempId)
-          .toList();
+    if (!pricingChanged) return;
+    final lineIndex = updatedItems.indexWhere(
+      (item) => item.tempId == event.tempId,
+    );
+    if (lineIndex < 0) return;
+    final item = updatedItems[lineIndex];
+    final costCents = item.variant?.costCents ?? item.product.costCents;
+    if (costCents <= Decimal.zero || item.quantity <= 0) return;
 
-      final costCents = item.variant?.costCents ?? item.product.costCents;
-      final check = _belowCostService.check(
-        costCents: costCents,
-        sellingPriceCents: event.unitPriceCents!,
-        productName: item.displayName,
-        productId: item.product.id,
-        userRole: currentUserRole,
-      );
+    final lineNet = nextState.pricing.lines[lineIndex].adjustedNet;
+    final totalCost = Money.fromDecimalCents(
+      costCents,
+    ).multiplyRatio(item.quantity, item.product.quantityScale).round();
+    if (lineNet.cents >= totalCost.cents) return;
 
-      if (check.isBelowCost) {
-        emit(
-          state.copyWith(
-            belowCostWarning: check,
-            belowCostOverrides: filteredOverrides,
-          ),
-        );
-      } else {
-        // Price is now above cost, clear any warning
-        emit(
-          state.copyWith(
-            clearBelowCostWarning: true,
-            belowCostOverrides: filteredOverrides,
-          ),
-        );
-      }
-    }
+    final effectiveUnitNet = lineNet
+        .multiplyRatio(item.product.quantityScale, item.quantity)
+        .decimalCents;
+    final check = _belowCostService.check(
+      costCents: costCents,
+      sellingPriceCents: effectiveUnitNet,
+      productName: item.displayName,
+      productId: item.product.id,
+      userRole: currentUserRole,
+    );
+    emit(
+      state.copyWith(
+        belowCostWarning: check,
+        belowCostOverrides: filteredOverrides,
+      ),
+    );
   }
 
   void _onLineItemRemoved(
@@ -1384,25 +1450,37 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       }
     }
 
-    // 3. Below-cost final gate
+    // 3. Below-cost final gate. Compare the final pre-tax net after all
+    // item/invoice discounts against the scaled cost of the sold quantity.
     final overriddenTempIds = state.belowCostOverrides
         .map((o) => o.tempId)
         .toSet();
-    for (final item in state.items) {
+    for (var index = 0; index < state.items.length; index++) {
+      final item = state.items[index];
       final costCents = item.variant?.costCents ?? item.product.costCents;
-      if (costCents > Decimal.zero && item.unitPriceCents < costCents) {
-        if (!overriddenTempIds.contains(item.tempId)) {
-          final check = _belowCostService.check(
-            costCents: costCents,
-            sellingPriceCents: item.unitPriceCents,
-            productName: item.displayName,
-            productId: item.product.id,
-            userRole: currentUserRole,
-          );
-          emit(state.copyWith(belowCostWarning: check));
-          return;
-        }
+      if (costCents <= Decimal.zero || item.quantity <= 0) continue;
+
+      final lineNet = state.pricing.lines[index].adjustedNet;
+      final totalCost = Money.fromDecimalCents(
+        costCents,
+      ).multiplyRatio(item.quantity, item.product.quantityScale).round();
+      if (lineNet.cents >= totalCost.cents ||
+          overriddenTempIds.contains(item.tempId)) {
+        continue;
       }
+
+      final effectiveUnitNet = lineNet
+          .multiplyRatio(item.product.quantityScale, item.quantity)
+          .decimalCents;
+      final check = _belowCostService.check(
+        costCents: costCents,
+        sellingPriceCents: effectiveUnitNet,
+        productName: item.displayName,
+        productId: item.product.id,
+        userRole: currentUserRole,
+      );
+      emit(state.copyWith(belowCostWarning: check));
+      return;
     }
 
     // 4. Payment / Partial Payment Validation
@@ -1474,6 +1552,71 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         SalePaymentMethod.credit => Decimal.zero,
         SalePaymentMethod.cheque => Decimal.zero,
       };
+
+      if (_isRemoteClient) {
+        if (state.saleId != null) {
+          throw const LanBusinessException(
+            'remote_edit_not_supported',
+            'Editing an existing sale over the network is not available yet.',
+            statusCode: 409,
+          );
+        }
+        final remoteLines = <LanSaleLineRequest>[];
+        for (var index = 0; index < state.items.length; index++) {
+          final item = state.items[index];
+          final retail = item.variant?.priceCents ?? item.product.priceCents;
+          final wholesale =
+              item.variant?.wholesalePriceCents ??
+              item.product.wholesalePriceCents;
+          final String priceTier;
+          if (wholesale != null && item.unitPriceCents == wholesale) {
+            priceTier = 'wholesale';
+          } else if (item.unitPriceCents == retail) {
+            priceTier = 'retail';
+          } else {
+            throw const LanBusinessException(
+              'remote_price_override_not_supported',
+              'Choose the configured retail or wholesale price.',
+              statusCode: 409,
+            );
+          }
+          remoteLines.add(
+            LanSaleLineRequest(
+              productId: item.product.id,
+              variantId: item.variant?.id,
+              quantity: item.quantity,
+              priceTier: priceTier,
+              salespersonId: item.employeeId,
+              discountType:
+                  state.pricing.lines[index].totalLineDiscount.cents == 0
+                  ? 'none'
+                  : 'fixed',
+              discountValue: state.pricing.lines[index].totalLineDiscount.cents,
+            ),
+          );
+        }
+        final result = await _lan!.submitRemoteSale(
+          LanSaleRequest(
+            idempotencyKey: _remoteIdempotencyKey,
+            customerId: state.customerId,
+            salespersonId: state.employeeId,
+            paymentMethod: paymentMethodStr,
+            paidAmountCents: effectivePaidCents.toBigInt().toInt(),
+            notes: state.notes,
+            lines: remoteLines,
+          ),
+        );
+        emit(
+          state.copyWith(
+            saleId: result.saleId,
+            saleNumber: result.invoiceNumber,
+            isSubmitting: false,
+            isSuccess: true,
+            hasUnsavedChanges: false,
+          ),
+        );
+        return;
+      }
 
       if (state.saleId == null) {
         final saleId = await _repository.createSale(
@@ -1734,7 +1877,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     SaleLoyaltyDataRequested event,
     Emitter<SaleFormState> emit,
   ) async {
-    if (_loyaltyRepository == null) return;
+    if (_isRemoteClient || _loyaltyRepository == null) return;
     try {
       final settings = await _loyaltyRepository.getLoyaltySettings();
       if (settings == null ||

@@ -7,6 +7,7 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../../core/services/unified_return_service.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../bloc/sale_returns_bloc.dart';
@@ -287,13 +288,21 @@ class _SaleReturnsViewState extends State<_SaleReturnsView> {
                             clipBehavior: Clip.antiAlias,
                             child: InkWell(
                               borderRadius: BorderRadius.circular(14),
-                              onTap: () {
-                                if (ret.isAdjustment) {
-                                  context.push('/sales/returns/adj/${ret.id}');
-                                } else {
-                                  context.push('/sales/returns/${ret.id}');
-                                }
-                              },
+                              onTap:
+                                  sl<LanNetworkService>().snapshot.mode ==
+                                      LanMode.client
+                                  ? null
+                                  : () {
+                                      if (ret.isAdjustment) {
+                                        context.push(
+                                          '/sales/returns/adj/${ret.id}',
+                                        );
+                                      } else {
+                                        context.push(
+                                          '/sales/returns/${ret.id}',
+                                        );
+                                      }
+                                    },
                               child: Container(
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(14),

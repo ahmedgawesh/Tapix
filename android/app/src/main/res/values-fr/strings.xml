@@ -1,0 +1,6 @@
+<resources>
+    <string name="master_service_channel_name">Appareil maître sur le réseau local</string>
+    <string name="master_service_channel_description">Maintient les caisses connectées à cet appareil maître</string>
+    <string name="master_service_title">Le maître TapBix est actif</string>
+    <string name="master_service_text">Les caisses restent connectées sur le port %1$d, même lorsque l’écran est éteint.</string>
+</resources>

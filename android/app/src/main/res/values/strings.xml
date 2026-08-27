@@ -1,0 +1,6 @@
+<resources>
+    <string name="master_service_channel_name">Local network master</string>
+    <string name="master_service_channel_description">Keeps cashier devices connected to this master device</string>
+    <string name="master_service_title">TapBix master is running</string>
+    <string name="master_service_text">Cashier devices stay connected on port %1$d, including while the screen is off.</string>
+</resources>

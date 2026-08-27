@@ -14,17 +14,23 @@ class BiometricService {
   final LocalAuthentication _auth;
 
   BiometricService({LocalAuthentication? auth})
-      : _auth = auth ?? LocalAuthentication();
+    : _auth = auth ?? LocalAuthentication();
 
   /// Check if the device supports biometric authentication.
   Future<bool> isDeviceSupported() async {
     try {
       return await _auth.isDeviceSupported();
     } on LocalAuthException catch (e) {
-      developer.log('BiometricService.isDeviceSupported error: $e', name: 'BiometricService');
+      developer.log(
+        'BiometricService.isDeviceSupported error: $e',
+        name: 'BiometricService',
+      );
       return false;
     } on PlatformException catch (e) {
-      developer.log('BiometricService.isDeviceSupported error: $e', name: 'BiometricService');
+      developer.log(
+        'BiometricService.isDeviceSupported error: $e',
+        name: 'BiometricService',
+      );
       return false;
     }
   }
@@ -34,10 +40,16 @@ class BiometricService {
     try {
       return await _auth.canCheckBiometrics;
     } on LocalAuthException catch (e) {
-      developer.log('BiometricService.canCheckBiometrics error: $e', name: 'BiometricService');
+      developer.log(
+        'BiometricService.canCheckBiometrics error: $e',
+        name: 'BiometricService',
+      );
       return false;
     } on PlatformException catch (e) {
-      developer.log('BiometricService.canCheckBiometrics error: $e', name: 'BiometricService');
+      developer.log(
+        'BiometricService.canCheckBiometrics error: $e',
+        name: 'BiometricService',
+      );
       return false;
     }
   }
@@ -47,10 +59,16 @@ class BiometricService {
     try {
       return await _auth.getAvailableBiometrics();
     } on LocalAuthException catch (e) {
-      developer.log('BiometricService.getAvailableBiometrics error: $e', name: 'BiometricService');
+      developer.log(
+        'BiometricService.getAvailableBiometrics error: $e',
+        name: 'BiometricService',
+      );
       return [];
     } on PlatformException catch (e) {
-      developer.log('BiometricService.getAvailableBiometrics error: $e', name: 'BiometricService');
+      developer.log(
+        'BiometricService.getAvailableBiometrics error: $e',
+        name: 'BiometricService',
+      );
       return [];
     }
   }
@@ -66,25 +84,33 @@ class BiometricService {
   /// Authenticate the user using biometrics.
   /// [localizedReason] is shown to the user explaining why authentication is needed.
   /// Returns true if authentication succeeded, false otherwise.
-  Future<bool> authenticate({
-    required String localizedReason,
-  }) async {
+  Future<bool> authenticate({required String localizedReason}) async {
     try {
       final isAvailable = await isBiometricAvailable();
       if (!isAvailable) {
-        developer.log('BiometricService: Biometrics not available', name: 'BiometricService');
+        developer.log(
+          'BiometricService: Biometrics not available',
+          name: 'BiometricService',
+        );
         return false;
       }
 
       return await _auth.authenticate(
         localizedReason: localizedReason,
         persistAcrossBackgrounding: true,
+        biometricOnly: true,
       );
     } on LocalAuthException catch (e) {
-      developer.log('BiometricService.authenticate error: ${e.code} - $e', name: 'BiometricService');
+      developer.log(
+        'BiometricService.authenticate error: ${e.code} - $e',
+        name: 'BiometricService',
+      );
       return false;
     } on PlatformException catch (e) {
-      developer.log('BiometricService.authenticate error: $e', name: 'BiometricService');
+      developer.log(
+        'BiometricService.authenticate error: $e',
+        name: 'BiometricService',
+      );
       return false;
     }
   }

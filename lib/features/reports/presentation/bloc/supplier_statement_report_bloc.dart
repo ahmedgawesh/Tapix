@@ -35,6 +35,7 @@ class SupplierStatementTransaction {
   final int runningBalanceCents;
   final int? referenceId;
   final String? referenceType;
+  final bool isDisplayOnly;
 
   const SupplierStatementTransaction({
     required this.id,
@@ -47,6 +48,7 @@ class SupplierStatementTransaction {
     required this.runningBalanceCents,
     this.referenceId,
     this.referenceType,
+    this.isDisplayOnly = false,
   });
 }
 
@@ -222,6 +224,7 @@ class SupplierStatementReportBloc
               runningBalanceCents: transaction.runningBalanceCents,
               referenceId: transaction.referenceId,
               referenceType: transaction.referenceType,
+              isDisplayOnly: transaction.isDisplayOnly,
             ),
           )
           .toList(),

@@ -49,6 +49,7 @@ class RoutePermissions {
       UserRole.cashier,
       UserRole.salesperson,
     ],
+    '/sales/returns': [UserRole.owner, UserRole.manager, UserRole.cashier],
     '/customers': [
       UserRole.owner,
       UserRole.manager,
@@ -60,6 +61,7 @@ class RoutePermissions {
     '/expenses': [UserRole.owner, UserRole.manager, UserRole.accountant],
     '/reports': [UserRole.owner, UserRole.manager, UserRole.accountant],
     '/settings': [UserRole.owner],
+    '/devices': [UserRole.owner],
     '/settings/admin-tools': [UserRole.owner],
     '/users': [UserRole.owner],
     '/employees': [UserRole.owner, UserRole.manager],
@@ -90,6 +92,11 @@ class RoutePermissions {
     if (exact != null) return exact;
     if (RegExp(r'^/products/\d+/edit$').hasMatch(path)) {
       return productManagers;
+    }
+    final prefixes = map.keys.toList()
+      ..sort((a, b) => b.length.compareTo(a.length));
+    for (final prefix in prefixes) {
+      if (path.startsWith('$prefix/')) return map[prefix];
     }
     return null;
   }

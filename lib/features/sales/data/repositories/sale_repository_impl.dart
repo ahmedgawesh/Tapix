@@ -103,15 +103,28 @@ class SaleRepositoryImpl implements SaleRepository {
     DateTime? saleDate,
     DateTime? dueDate,
     bool allowNegativeStock = false,
+    String? idempotencyKey,
+    int? actorUserId,
     bool taxInclusiveAtPost = false,
   }) async {
+    final normalizedIdempotencyKey = idempotencyKey?.trim();
+    if (normalizedIdempotencyKey != null &&
+        normalizedIdempotencyKey.isNotEmpty) {
+      final existing =
+          await (_dao.db.select(_dao.db.sales)..where(
+                (row) => row.idempotencyKey.equals(normalizedIdempotencyKey),
+              ))
+              .getSingleOrNull();
+      if (existing != null) return existing.id;
+    }
+
     // Phase B4 — enforce free-tier cumulative cap BEFORE opening the tx.
     // Pro users bypass; free users at or past the cap get
     // [FreeQuotaExceededException]. Done up-front so we don't waste a tx
     // and a row-lock just to fail the quota check.
     _freeQuotaService?.guardSaleCreation();
 
-    final userId = await _currentUserId();
+    final userId = actorUserId ?? await _currentUserId();
     final cashierShiftId = await _cashierShiftService?.resolveOpenShiftId(
       userId,
     );
@@ -135,6 +148,11 @@ class SaleRepositoryImpl implements SaleRepository {
       paymentMethod: Value(paymentMethod),
       status: const Value('draft'),
       notes: notes != null ? Value(notes) : const Value.absent(),
+      idempotencyKey:
+          normalizedIdempotencyKey != null &&
+              normalizedIdempotencyKey.isNotEmpty
+          ? Value(normalizedIdempotencyKey)
+          : const Value.absent(),
       saleDate: saleDate != null ? Value(saleDate) : Value(DateTime.now()),
       dueDate: dueDate != null ? Value(dueDate) : const Value.absent(),
     ).withPricingSnapshot(taxInclusive: taxInclusiveAtPost);
@@ -257,6 +275,17 @@ class SaleRepositoryImpl implements SaleRepository {
         });
         break; // success
       } catch (e) {
+        if (normalizedIdempotencyKey != null &&
+            normalizedIdempotencyKey.isNotEmpty &&
+            e.toString().contains('UNIQUE constraint failed')) {
+          final existing =
+              await (_dao.db.select(_dao.db.sales)..where(
+                    (row) =>
+                        row.idempotencyKey.equals(normalizedIdempotencyKey),
+                  ))
+                  .getSingleOrNull();
+          if (existing != null) return existing.id;
+        }
         // Retry on UNIQUE constraint violation (concurrent invoice number)
         final isUniqueViolation = e.toString().contains(
           'UNIQUE constraint failed',
@@ -759,6 +788,7 @@ class SaleRepositoryImpl implements SaleRepository {
     DateTime? returnDate,
     DateTime? dueDate,
     String? idempotencyKey,
+    int? actorUserId,
     bool taxInclusiveAtPost = false,
   }) async {
     final returnNumber = await _datasource.generateSaleReturnNumber();
@@ -770,7 +800,7 @@ class SaleRepositoryImpl implements SaleRepository {
 
     // ATOMIC: Wrap return creation, stock restoration, journal entries,
     // and commission reversal in a single transaction.
-    final userId = await _currentUserId();
+    final userId = actorUserId ?? await _currentUserId();
     final cashierShiftId = await _cashierShiftService?.resolveOpenShiftId(
       userId,
     );

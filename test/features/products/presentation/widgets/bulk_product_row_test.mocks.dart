@@ -384,6 +384,16 @@ class MockProductVariantRepository extends _i1.Mock
           as _i5.Future<int>);
 
   @override
+  _i5.Future<int> countActiveDimensionalVariantsWithStock(int? productId) =>
+      (super.noSuchMethod(
+            Invocation.method(#countActiveDimensionalVariantsWithStock, [
+              productId,
+            ]),
+            returnValue: _i5.Future<int>.value(0),
+          )
+          as _i5.Future<int>);
+
+  @override
   _i5.Future<int> deactivateDimensionalVariants(int? productId) =>
       (super.noSuchMethod(
             Invocation.method(#deactivateDimensionalVariants, [productId]),

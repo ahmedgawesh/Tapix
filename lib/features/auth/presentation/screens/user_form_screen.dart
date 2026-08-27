@@ -22,12 +22,14 @@ class UserFormScreen extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider(
-          create: (context) => UserFormBloc(sl<UserRepositoryInterface>())
-            ..add(UserFormLoadRequested(userId: userId)),
+          create: (context) =>
+              UserFormBloc(sl<UserRepositoryInterface>())
+                ..add(UserFormLoadRequested(userId: userId)),
         ),
         BlocProvider(
-          create: (context) => EmployeesBloc(sl<EmployeeRepository>())
-            ..add(const EmployeesInitialized()),
+          create: (context) =>
+              EmployeesBloc(sl<EmployeeRepository>())
+                ..add(const EmployeesInitialized()),
         ),
       ],
       child: _UserFormContent(userId: userId),
@@ -61,13 +63,13 @@ class _UserFormContentState extends State<_UserFormContent> {
   String? _existingSecurityQuestion;
 
   List<String> get _securityQuestions => [
-        'auth.security_questions.q1'.tr(),
-        'auth.security_questions.q2'.tr(),
-        'auth.security_questions.q3'.tr(),
-        'auth.security_questions.q4'.tr(),
-        'auth.security_questions.q5'.tr(),
-        'auth.security_questions.q6'.tr(),
-      ];
+    'auth.security_questions.q1'.tr(),
+    'auth.security_questions.q2'.tr(),
+    'auth.security_questions.q3'.tr(),
+    'auth.security_questions.q4'.tr(),
+    'auth.security_questions.q5'.tr(),
+    'auth.security_questions.q6'.tr(),
+  ];
 
   @override
   void dispose() {
@@ -142,20 +144,27 @@ class _UserFormContentState extends State<_UserFormContent> {
     if (!_formKey.currentState!.validate()) return;
 
     context.read<UserFormBloc>().add(
-          UserFormSubmitRequested(
-            userId: widget.userId,
-            username: _usernameController.text,
-            password: _passwordController.text,
-            confirmPassword: _confirmPasswordController.text,
-            role: _selectedRole,
-            employeeId: _selectedEmployeeId,
-            clearEmployeeLink: _selectedEmployeeId == null && _isEdit,
-            securityQuestion: _selectedSecurityQuestion,
-            securityAnswer: _securityAnswerController.text.trim().isNotEmpty
-                ? _securityAnswerController.text.trim()
-                : null,
-          ),
-        );
+      UserFormSubmitRequested(
+        userId: widget.userId,
+        username: _usernameController.text,
+        password: _passwordController.text,
+        confirmPassword: _confirmPasswordController.text,
+        role: _selectedRole,
+        employeeId: _selectedEmployeeId,
+        clearEmployeeLink: _selectedEmployeeId == null && _isEdit,
+        securityQuestion: _selectedSecurityQuestion,
+        securityAnswer: _securityAnswerController.text.trim().isNotEmpty
+            ? _securityAnswerController.text.trim()
+            : null,
+      ),
+    );
+  }
+
+  Future<void> _loadSelectedEmployeeName(int? employeeId) async {
+    if (employeeId == null) return;
+    final employee = await sl<EmployeeRepository>().getEmployee(employeeId);
+    if (!mounted || _selectedEmployeeId != employeeId) return;
+    setState(() => _selectedEmployeeName = employee?.name);
   }
 
   void _showEmployeeSelector() {
@@ -210,6 +219,7 @@ class _UserFormContentState extends State<_UserFormContent> {
           _selectedRole = user.role;
           _selectedEmployeeId = user.employeeId;
           _isEdit = true;
+          _loadSelectedEmployeeName(user.employeeId);
           setState(() {});
         }
         if (state is UserFormSuccess) {
@@ -228,9 +238,7 @@ class _UserFormContentState extends State<_UserFormContent> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                localizedError != 'users.$errorKey'
-                    ? localizedError
-                    : errorKey,
+                localizedError != 'users.$errorKey' ? localizedError : errorKey,
               ),
               backgroundColor: colorScheme.error,
             ),
@@ -316,7 +324,9 @@ class _UserFormContentState extends State<_UserFormContent> {
                                           : Icons.visibility_off_outlined,
                                     ),
                                     onPressed: () => setState(
-                                        () => _obscurePassword = !_obscurePassword),
+                                      () =>
+                                          _obscurePassword = !_obscurePassword,
+                                    ),
                                   ),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
@@ -350,9 +360,10 @@ class _UserFormContentState extends State<_UserFormContent> {
                                           ? Icons.visibility_outlined
                                           : Icons.visibility_off_outlined,
                                     ),
-                                    onPressed: () => setState(() =>
-                                        _obscureConfirmPassword =
-                                            !_obscureConfirmPassword),
+                                    onPressed: () => setState(
+                                      () => _obscureConfirmPassword =
+                                          !_obscureConfirmPassword,
+                                    ),
                                   ),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
@@ -402,16 +413,19 @@ class _UserFormContentState extends State<_UserFormContent> {
                                     Expanded(
                                       child: Text(
                                         'auth.security_question_info'.tr(),
-                                        style: theme.textTheme.bodySmall?.copyWith(
-                                          color: colorScheme.onSurfaceVariant,
-                                        ),
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color:
+                                                  colorScheme.onSurfaceVariant,
+                                            ),
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
                               const SizedBox(height: 12),
-                              if (_isEdit && _existingSecurityQuestion != null) ...[
+                              if (_isEdit &&
+                                  _existingSecurityQuestion != null) ...[
                                 Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
@@ -430,9 +444,10 @@ class _UserFormContentState extends State<_UserFormContent> {
                                       Expanded(
                                         child: Text(
                                           'users.security_question_set'.tr(),
-                                          style: theme.textTheme.bodySmall?.copyWith(
-                                            color: colorScheme.primary,
-                                          ),
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: colorScheme.primary,
+                                              ),
                                         ),
                                       ),
                                     ],
@@ -443,7 +458,8 @@ class _UserFormContentState extends State<_UserFormContent> {
                               DropdownButtonFormField<String>(
                                 initialValue: _selectedSecurityQuestion,
                                 decoration: InputDecoration(
-                                  labelText: 'auth.security_question_label'.tr(),
+                                  labelText: 'auth.security_question_label'
+                                      .tr(),
                                   prefixIcon: const Icon(Icons.help_outline),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
@@ -451,13 +467,15 @@ class _UserFormContentState extends State<_UserFormContent> {
                                 ),
                                 isExpanded: true,
                                 items: _securityQuestions
-                                    .map((q) => DropdownMenuItem(
-                                          value: q,
-                                          child: Text(
-                                            q,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ))
+                                    .map(
+                                      (q) => DropdownMenuItem(
+                                        value: q,
+                                        child: Text(
+                                          q,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    )
                                     .toList(),
                                 onChanged: (value) {
                                   setState(() {
@@ -471,7 +489,9 @@ class _UserFormContentState extends State<_UserFormContent> {
                                 decoration: InputDecoration(
                                   labelText: 'auth.security_answer_label'.tr(),
                                   hintText: 'auth.security_answer_hint'.tr(),
-                                  prefixIcon: const Icon(Icons.message_outlined),
+                                  prefixIcon: const Icon(
+                                    Icons.message_outlined,
+                                  ),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
@@ -486,7 +506,8 @@ class _UserFormContentState extends State<_UserFormContent> {
                                   if (value != null &&
                                       value.trim().isNotEmpty &&
                                       value.trim().length < 2) {
-                                    return 'auth.security_answer_min_length'.tr();
+                                    return 'auth.security_answer_min_length'
+                                        .tr();
                                   }
                                   return null;
                                 },
@@ -527,14 +548,17 @@ class _UserFormContentState extends State<_UserFormContent> {
                                     avatar: Icon(
                                       _roleIcon(role),
                                       size: 18,
-                                      color:
-                                          isSelected ? color : colorScheme.onSurfaceVariant,
+                                      color: isSelected
+                                          ? color
+                                          : colorScheme.onSurfaceVariant,
                                     ),
                                     label: Text(_roleLabel(role)),
                                     selected: isSelected,
                                     onSelected: (_) =>
                                         setState(() => _selectedRole = role),
-                                    selectedColor: color.withValues(alpha: 0.15),
+                                    selectedColor: color.withValues(
+                                      alpha: 0.15,
+                                    ),
                                     checkmarkColor: color,
                                     labelStyle: TextStyle(
                                       color: isSelected
@@ -579,9 +603,11 @@ class _UserFormContentState extends State<_UserFormContent> {
                                     Expanded(
                                       child: Text(
                                         _roleDescription(_selectedRole),
-                                        style: theme.textTheme.bodySmall?.copyWith(
-                                          color: colorScheme.onSurfaceVariant,
-                                        ),
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color:
+                                                  colorScheme.onSurfaceVariant,
+                                            ),
                                       ),
                                     ),
                                   ],
@@ -598,7 +624,10 @@ class _UserFormContentState extends State<_UserFormContent> {
                               ),
                               const SizedBox(height: 8),
                               Text(
-                                'users.link_employee_desc'.tr(),
+                                (_selectedRole == UserRole.cashier
+                                        ? 'users.link_employee_cashier_required'
+                                        : 'users.link_employee_desc')
+                                    .tr(),
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: colorScheme.onSurfaceVariant,
                                 ),
@@ -636,11 +665,15 @@ class _UserFormContentState extends State<_UserFormContent> {
                                         child: Text(
                                           _selectedEmployeeName ??
                                               'users.no_employee_link'.tr(),
-                                          style: theme.textTheme.bodyLarge?.copyWith(
-                                            color: _selectedEmployeeName != null
-                                                ? colorScheme.onSurface
-                                                : colorScheme.onSurfaceVariant,
-                                          ),
+                                          style: theme.textTheme.bodyLarge
+                                              ?.copyWith(
+                                                color:
+                                                    _selectedEmployeeName !=
+                                                        null
+                                                    ? colorScheme.onSurface
+                                                    : colorScheme
+                                                          .onSurfaceVariant,
+                                              ),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -799,9 +832,7 @@ class _EmployeeSelectorSheet extends StatelessWidget {
               if (state is RealtimeSuccess<List<Employee>>) {
                 final employees = state.data;
                 if (employees.isEmpty) {
-                  return Center(
-                    child: Text('employees.no_employees'.tr()),
-                  );
+                  return Center(child: Text('employees.no_employees'.tr()));
                 }
 
                 return ListView.builder(
@@ -834,8 +865,7 @@ class _EmployeeSelectorSheet extends StatelessWidget {
                           : null,
                       selected: isSelected,
                       trailing: isSelected
-                          ? Icon(Icons.check_circle,
-                              color: colorScheme.primary)
+                          ? Icon(Icons.check_circle, color: colorScheme.primary)
                           : null,
                       onTap: () => onSelected(employee),
                     );

@@ -37,8 +37,12 @@ class _AuditLogScreenContentState extends State<_AuditLogScreenContent> {
 
   AuditLogViewModel _vm(RealtimeState<AuditLogViewModel> s) {
     if (s is RealtimeSuccess<AuditLogViewModel>) return s.data;
-    if (s is RealtimeLoading<AuditLogViewModel> && s.previousData != null) return s.previousData!;
-    if (s is RealtimeError<AuditLogViewModel> && s.previousData != null) return s.previousData!;
+    if (s is RealtimeLoading<AuditLogViewModel> && s.previousData != null) {
+      return s.previousData!;
+    }
+    if (s is RealtimeError<AuditLogViewModel> && s.previousData != null) {
+      return s.previousData!;
+    }
     if (s is RealtimeOptimistic<AuditLogViewModel>) return s.optimisticData;
     return const AuditLogViewModel();
   }
@@ -86,7 +90,9 @@ class _AuditLogScreenContentState extends State<_AuditLogScreenContent> {
                           icon: const Icon(Icons.clear, size: 18),
                           onPressed: () {
                             _searchController.clear();
-                            context.read<AuditLogBloc>().add(const AuditLogSearchChanged(''));
+                            context.read<AuditLogBloc>().add(
+                              const AuditLogSearchChanged(''),
+                            );
                             setState(() {});
                           },
                         )
@@ -100,7 +106,9 @@ class _AuditLogScreenContentState extends State<_AuditLogScreenContent> {
                   contentPadding: const EdgeInsets.symmetric(vertical: 12),
                 ),
                 onChanged: (value) {
-                  context.read<AuditLogBloc>().add(AuditLogSearchChanged(value));
+                  context.read<AuditLogBloc>().add(
+                    AuditLogSearchChanged(value),
+                  );
                   setState(() {});
                 },
               ),
@@ -120,8 +128,11 @@ class _AuditLogScreenContentState extends State<_AuditLogScreenContent> {
                 return _FilterSection(
                   entityTypeFilter: vm.entityTypeFilter,
                   actionFilter: vm.actionFilter,
-                  entityTypes: vm.logs.map((l) => l.targetTable).toSet().toList()..sort(),
-                  actions: vm.logs.map((l) => l.action).toSet().toList()..sort(),
+                  entityTypes:
+                      vm.logs.map((l) => l.targetTable).toSet().toList()
+                        ..sort(),
+                  actions: vm.logs.map((l) => l.action).toSet().toList()
+                    ..sort(),
                 );
               },
             ),
@@ -136,22 +147,34 @@ class _AuditLogScreenContentState extends State<_AuditLogScreenContent> {
               },
               builder: (context, state) {
                 final vm = _vm(state);
-                final hasFilter = vm.entityTypeFilter != null ||
+                final hasFilter =
+                    vm.entityTypeFilter != null ||
                     vm.actionFilter != null ||
                     vm.searchQuery.isNotEmpty;
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 6,
+                  ),
                   child: Row(
                     children: [
-                      Icon(LucideIcons.activity, size: 14, color: cs.onSurfaceVariant),
+                      Icon(
+                        LucideIcons.activity,
+                        size: 14,
+                        color: cs.onSurfaceVariant,
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         hasFilter
-                            ? 'audit.showing_filtered'.tr(args: [
-                                vm.filteredLogs.length.toString(),
-                                vm.logs.length.toString(),
-                              ])
-                            : 'audit.total_entries'.tr(args: [vm.logs.length.toString()]),
+                            ? 'audit.showing_filtered'.tr(
+                                args: [
+                                  vm.filteredLogs.length.toString(),
+                                  vm.logs.length.toString(),
+                                ],
+                              )
+                            : 'audit.total_entries'.tr(
+                                args: [vm.logs.length.toString()],
+                              ),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: cs.onSurfaceVariant,
                         ),
@@ -161,7 +184,9 @@ class _AuditLogScreenContentState extends State<_AuditLogScreenContent> {
                         TextButton.icon(
                           onPressed: () {
                             _searchController.clear();
-                            context.read<AuditLogBloc>().add(const AuditLogFiltersCleared());
+                            context.read<AuditLogBloc>().add(
+                              const AuditLogFiltersCleared(),
+                            );
                             setState(() {});
                           },
                           icon: const Icon(LucideIcons.x, size: 14),
@@ -184,20 +209,32 @@ class _AuditLogScreenContentState extends State<_AuditLogScreenContent> {
             Expanded(
               child: BlocBuilder<AuditLogBloc, RealtimeState<AuditLogViewModel>>(
                 builder: (context, state) {
-                  if (state is RealtimeLoading<AuditLogViewModel> && state.previousData == null) {
+                  if (state is RealtimeLoading<AuditLogViewModel> &&
+                      state.previousData == null) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
-                  if (state is RealtimeError<AuditLogViewModel> && state.previousData == null) {
+                  if (state is RealtimeError<AuditLogViewModel> &&
+                      state.previousData == null) {
                     return Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(LucideIcons.alertTriangle, size: 48, color: cs.error),
+                          Icon(
+                            LucideIcons.alertTriangle,
+                            size: 48,
+                            color: cs.error,
+                          ),
                           const SizedBox(height: 16),
-                          Text('common.error'.tr(), style: theme.textTheme.titleMedium),
+                          Text(
+                            'common.error'.tr(),
+                            style: theme.textTheme.titleMedium,
+                          ),
                           const SizedBox(height: 8),
-                          Text(state.error.toString(), style: theme.textTheme.bodySmall),
+                          Text(
+                            state.error.toString(),
+                            style: theme.textTheme.bodySmall,
+                          ),
                         ],
                       ),
                     );
@@ -210,16 +247,24 @@ class _AuditLogScreenContentState extends State<_AuditLogScreenContent> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(LucideIcons.fileSearch, size: 56, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+                          Icon(
+                            LucideIcons.fileSearch,
+                            size: 56,
+                            color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+                          ),
                           const SizedBox(height: 16),
                           Text(
                             'audit.empty'.tr(),
-                            style: theme.textTheme.titleMedium?.copyWith(color: cs.onSurfaceVariant),
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             'audit.empty_hint'.tr(),
-                            style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
                             textAlign: TextAlign.center,
                           ),
                         ],
@@ -228,18 +273,21 @@ class _AuditLogScreenContentState extends State<_AuditLogScreenContent> {
                   }
 
                   return ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     itemCount: vm.filteredLogs.length,
                     separatorBuilder: (_, _) => const SizedBox(height: 6),
                     itemBuilder: (context, index) {
                       final log = vm.filteredLogs[index];
                       // Resolve username: userNames map → changes.performedBy fallback
-                      final resolvedName = (log.userId != null ? vm.userNames[log.userId] : null)
-                          ?? log.changes['performedBy']?.toString();
-                      return _AuditLogTile(
-                        log: log,
-                        userName: resolvedName,
-                      );
+                      final resolvedName =
+                          (log.userId != null
+                              ? vm.userNames[log.userId]
+                              : null) ??
+                          log.changes['performedBy']?.toString();
+                      return _AuditLogTile(log: log, userName: resolvedName);
                     },
                   );
                 },
@@ -281,7 +329,9 @@ class _FilterSection extends StatelessWidget {
           // Entity type filters
           Text(
             'audit.filter_entity'.tr(),
-            style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: cs.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 6),
           SingleChildScrollView(
@@ -292,14 +342,18 @@ class _FilterSection extends StatelessWidget {
                   context,
                   label: 'common.all'.tr(),
                   isSelected: entityTypeFilter == null,
-                  onTap: () => context.read<AuditLogBloc>().add(const AuditLogEntityTypeFilterChanged(null)),
+                  onTap: () => context.read<AuditLogBloc>().add(
+                    const AuditLogEntityTypeFilterChanged(null),
+                  ),
                 ),
                 for (final type in entityTypes)
                   _buildChip(
                     context,
                     label: _entityTypeLabel(type),
                     isSelected: entityTypeFilter == type,
-                    onTap: () => context.read<AuditLogBloc>().add(AuditLogEntityTypeFilterChanged(type)),
+                    onTap: () => context.read<AuditLogBloc>().add(
+                      AuditLogEntityTypeFilterChanged(type),
+                    ),
                     color: _entityTypeColor(type, cs),
                   ),
               ],
@@ -309,7 +363,9 @@ class _FilterSection extends StatelessWidget {
           // Action filters
           Text(
             'audit.filter_action'.tr(),
-            style: theme.textTheme.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: cs.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 6),
           SingleChildScrollView(
@@ -320,14 +376,18 @@ class _FilterSection extends StatelessWidget {
                   context,
                   label: 'common.all'.tr(),
                   isSelected: actionFilter == null,
-                  onTap: () => context.read<AuditLogBloc>().add(const AuditLogActionFilterChanged(null)),
+                  onTap: () => context.read<AuditLogBloc>().add(
+                    const AuditLogActionFilterChanged(null),
+                  ),
                 ),
                 for (final action in actions)
                   _buildChip(
                     context,
                     label: _actionLabel(action),
                     isSelected: actionFilter == action,
-                    onTap: () => context.read<AuditLogBloc>().add(AuditLogActionFilterChanged(action)),
+                    onTap: () => context.read<AuditLogBloc>().add(
+                      AuditLogActionFilterChanged(action),
+                    ),
                     color: _actionColor(action, cs),
                   ),
               ],
@@ -356,7 +416,9 @@ class _FilterSection extends StatelessWidget {
         checkmarkColor: color ?? cs.onPrimaryContainer,
         labelStyle: TextStyle(
           fontSize: 11,
-          color: isSelected ? (color ?? cs.onPrimaryContainer) : cs.onSurfaceVariant,
+          color: isSelected
+              ? (color ?? cs.onPrimaryContainer)
+              : cs.onSurfaceVariant,
         ),
         visualDensity: VisualDensity.compact,
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -391,6 +453,8 @@ class _FilterSection extends StatelessWidget {
         return 'audit.entity_journal_entry'.tr();
       case 'expense':
         return 'audit.entity_expense'.tr();
+      case 'lan_session':
+        return 'audit.entity_lan_session'.tr();
       default:
         return type.replaceAll('_', ' ');
     }
@@ -418,6 +482,8 @@ class _FilterSection extends StatelessWidget {
         return Colors.indigo;
       case 'expense':
         return Colors.deepOrange;
+      case 'lan_session':
+        return Colors.cyan;
       default:
         return cs.secondary;
     }
@@ -451,6 +517,32 @@ class _FilterSection extends StatelessWidget {
         return 'audit.action_login'.tr();
       case 'logout':
         return 'audit.action_logout'.tr();
+      case 'login_failed':
+        return 'audit.action_login_failed'.tr();
+      case 'login_rate_limited':
+        return 'audit.action_login_rate_limited'.tr();
+      case 'device_paired':
+        return 'audit.action_device_paired'.tr();
+      case 'device_renamed':
+        return 'audit.action_device_renamed'.tr();
+      case 'device_remote_logout':
+        return 'audit.action_device_remote_logout'.tr();
+      case 'device_revoked':
+        return 'audit.action_device_revoked'.tr();
+      case 'session_expired':
+        return 'audit.action_session_expired'.tr();
+      case 'session_revoked':
+        return 'audit.action_session_revoked'.tr();
+      case 'session_replaced':
+        return 'audit.action_session_replaced'.tr();
+      case 'remote_sale_created':
+        return 'audit.action_remote_sale_created'.tr();
+      case 'remote_sale_replayed':
+        return 'audit.action_remote_sale_replayed'.tr();
+      case 'cashier_shift_opened':
+        return 'audit.action_cashier_shift_opened'.tr();
+      case 'cashier_shift_closed':
+        return 'audit.action_cashier_shift_closed'.tr();
       default:
         return action.replaceAll('_', ' ');
     }
@@ -482,7 +574,21 @@ class _FilterSection extends StatelessWidget {
       case 'login':
         return Colors.cyan;
       case 'logout':
+      case 'session_expired':
+      case 'session_replaced':
         return Colors.grey;
+      case 'login_failed':
+      case 'login_rate_limited':
+      case 'session_revoked':
+        return cs.error;
+      case 'device_paired':
+      case 'remote_sale_created':
+      case 'cashier_shift_opened':
+        return Colors.teal;
+      case 'cashier_shift_closed':
+        return Colors.indigo;
+      case 'remote_sale_replayed':
+        return Colors.amber;
       default:
         return cs.secondary;
     }
@@ -525,7 +631,11 @@ class _AuditLogTile extends StatelessWidget {
                   color: actionColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: Icon(_actionIcon(log.action), size: 18, color: actionColor),
+                child: Icon(
+                  _actionIcon(log.action),
+                  size: 18,
+                  color: actionColor,
+                ),
               ),
               const SizedBox(width: 12),
               // Content
@@ -537,7 +647,10 @@ class _AuditLogTile extends StatelessWidget {
                       children: [
                         // Action badge
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: actionColor.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(4),
@@ -554,7 +667,10 @@ class _AuditLogTile extends StatelessWidget {
                         const SizedBox(width: 6),
                         // Entity badge
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: entityColor.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(4),
@@ -583,7 +699,11 @@ class _AuditLogTile extends StatelessWidget {
                     // User + time
                     Row(
                       children: [
-                        Icon(LucideIcons.user, size: 12, color: cs.onSurfaceVariant),
+                        Icon(
+                          LucideIcons.user,
+                          size: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           userName ?? 'audit.system'.tr(),
@@ -592,7 +712,11 @@ class _AuditLogTile extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        Icon(LucideIcons.clock, size: 12, color: cs.onSurfaceVariant),
+                        Icon(
+                          LucideIcons.clock,
+                          size: 12,
+                          color: cs.onSurfaceVariant,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           _formatTime(log.createdAt),
@@ -605,7 +729,11 @@ class _AuditLogTile extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(LucideIcons.chevronRight, size: 16, color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
+              Icon(
+                LucideIcons.chevronRight,
+                size: 16,
+                color: cs.onSurfaceVariant.withValues(alpha: 0.5),
+              ),
             ],
           ),
         ),
@@ -642,9 +770,15 @@ class _AuditLogTile extends StatelessWidget {
     final diff = now.difference(dt);
 
     if (diff.inMinutes < 1) return 'audit.just_now'.tr();
-    if (diff.inMinutes < 60) return 'audit.minutes_ago'.tr(args: [diff.inMinutes.toString()]);
-    if (diff.inHours < 24) return 'audit.hours_ago'.tr(args: [diff.inHours.toString()]);
-    if (diff.inDays < 7) return 'audit.days_ago'.tr(args: [diff.inDays.toString()]);
+    if (diff.inMinutes < 60) {
+      return 'audit.minutes_ago'.tr(args: [diff.inMinutes.toString()]);
+    }
+    if (diff.inHours < 24) {
+      return 'audit.hours_ago'.tr(args: [diff.inHours.toString()]);
+    }
+    if (diff.inDays < 7) {
+      return 'audit.days_ago'.tr(args: [diff.inDays.toString()]);
+    }
 
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
         '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
@@ -686,25 +820,54 @@ class _AuditLogTile extends StatelessWidget {
               // Title
               Text(
                 'audit.detail_title'.tr(),
-                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 16),
               // Info rows
               _detailRow(context, LucideIcons.hash, 'ID', log.id.toString()),
-              _detailRow(context, LucideIcons.layers, 'audit.entity'.tr(),
-                  _FilterSection._entityTypeLabel(log.targetTable)),
-              _detailRow(context, LucideIcons.hash, 'audit.record_id'.tr(), log.recordId.toString()),
-              _detailRow(context, LucideIcons.zap, 'audit.action_label'.tr(),
-                  _FilterSection._actionLabel(log.action)),
-              _detailRow(context, LucideIcons.user, 'audit.user'.tr(),
-                  userName ?? 'audit.system'.tr()),
-              _detailRow(context, LucideIcons.clock, 'audit.timestamp'.tr(),
-                  log.createdAt.toIso8601String().replaceFirst('T', ' ').split('.').first),
+              _detailRow(
+                context,
+                LucideIcons.layers,
+                'audit.entity'.tr(),
+                _FilterSection._entityTypeLabel(log.targetTable),
+              ),
+              _detailRow(
+                context,
+                LucideIcons.hash,
+                'audit.record_id'.tr(),
+                log.recordId.toString(),
+              ),
+              _detailRow(
+                context,
+                LucideIcons.zap,
+                'audit.action_label'.tr(),
+                _FilterSection._actionLabel(log.action),
+              ),
+              _detailRow(
+                context,
+                LucideIcons.user,
+                'audit.user'.tr(),
+                userName ?? 'audit.system'.tr(),
+              ),
+              _detailRow(
+                context,
+                LucideIcons.clock,
+                'audit.timestamp'.tr(),
+                log.createdAt
+                    .toIso8601String()
+                    .replaceFirst('T', ' ')
+                    .split('.')
+                    .first,
+              ),
               const SizedBox(height: 16),
               // Changes
               Text(
                 'audit.changes'.tr(),
-                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 8),
               Container(
@@ -729,7 +892,12 @@ class _AuditLogTile extends StatelessWidget {
     );
   }
 
-  Widget _detailRow(BuildContext context, IconData icon, String label, String value) {
+  Widget _detailRow(
+    BuildContext context,
+    IconData icon,
+    String label,
+    String value,
+  ) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     return Padding(
@@ -740,13 +908,21 @@ class _AuditLogTile extends StatelessWidget {
           const SizedBox(width: 10),
           SizedBox(
             width: 100,
-            child: Text(label,
-                style: theme.textTheme.bodySmall?.copyWith(
-                    color: cs.onSurfaceVariant, fontWeight: FontWeight.w500)),
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: cs.onSurfaceVariant,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ),
           Expanded(
-            child: Text(value,
-                style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500)),
+            child: Text(
+              value,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ),
         ],
       ),

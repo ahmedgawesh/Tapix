@@ -6,6 +6,7 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../../core/di/injection_container.dart';
 import '../../../core/services/currency_service.dart';
 import '../../../core/services/unified_return_service.dart';
+import '../../../core/services/lan/lan_network_service.dart';
 
 /// Opens the unified return search bottom sheet.
 ///
@@ -64,6 +65,10 @@ class _UnifiedReturnSearchSheetState extends State<_UnifiedReturnSearchSheet> {
   final _searchController = TextEditingController();
   final _service = sl<UnifiedReturnService>();
   final _currencyService = sl<CurrencyService>();
+  final _lan = sl<LanNetworkService>();
+
+  bool get _isRemoteClient =>
+      _lan.snapshot.mode == LanMode.client && _lan.hasRemoteUserSession;
 
   List<InvoiceSearchResult> _invoices = [];
   List<ProductSearchResult> _products = [];
@@ -92,23 +97,44 @@ class _UnifiedReturnSearchSheetState extends State<_UnifiedReturnSearchSheet> {
 
     try {
       late List<InvoiceSearchResult> invoices;
-      if (widget.side == ReturnSide.sale) {
-        invoices = await _service.searchSaleInvoices(
-          q,
-          customerId: widget.partyId,
-        );
+      late List<ProductSearchResult> products;
+      if (_isRemoteClient && widget.side == ReturnSide.sale) {
+        final responses = await Future.wait([
+          _lan.fetchRemoteReturnableSales(query: q, limit: 50),
+          _lan.fetchRemoteCatalog(query: q, limit: 50),
+        ]);
+        final invoicePage = responses[0] as LanReturnableSalesPage;
+        final catalogPage = responses[1] as LanCatalogPage;
+        invoices = invoicePage.sales
+            .map(
+              (sale) => InvoiceSearchResult(
+                invoiceId: sale.saleId,
+                invoiceNumber: sale.invoiceNumber,
+                date: sale.saleDate,
+                totalCents: sale.totalCents,
+                partyName: sale.customerName,
+              ),
+            )
+            .toList(growable: false);
+        products = _mapRemoteProducts(catalogPage.products);
       } else {
-        invoices = await _service.searchPurchaseInvoices(
+        if (widget.side == ReturnSide.sale) {
+          invoices = await _service.searchSaleInvoices(
+            q,
+            customerId: widget.partyId,
+          );
+        } else {
+          invoices = await _service.searchPurchaseInvoices(
+            q,
+            supplierId: widget.partyId,
+          );
+        }
+        products = await _service.searchProducts(
           q,
-          supplierId: widget.partyId,
+          side: widget.side,
+          partyId: widget.partyId,
         );
       }
-
-      final products = await _service.searchProducts(
-        q,
-        side: widget.side,
-        partyId: widget.partyId,
-      );
 
       if (mounted) {
         setState(() {
@@ -122,6 +148,52 @@ class _UnifiedReturnSearchSheetState extends State<_UnifiedReturnSearchSheet> {
       debugPrint('UnifiedReturnSearchSheet search error: $e\n$st');
       if (mounted) setState(() => _isSearching = false);
     }
+  }
+
+  List<ProductSearchResult> _mapRemoteProducts(
+    List<LanCatalogProduct> catalog,
+  ) {
+    final results = <ProductSearchResult>[];
+    for (final product in catalog) {
+      if (product.hasVariants) {
+        for (final variant in product.variants) {
+          results.add(
+            ProductSearchResult(
+              productId: product.id,
+              variantId: variant.id,
+              productName: product.name,
+              variantLabel: variant.label,
+              sku: variant.sku,
+              barcode: variant.barcode,
+              lastPriceCents: variant.priceCents,
+              taxRateBps: product.salesTaxRateBps,
+              stockQuantity: variant.stockQuantity,
+              measurementType: product.measurementType,
+            ),
+          );
+        }
+      } else {
+        final defaultVariant = product.variants.isEmpty
+            ? null
+            : product.variants.first;
+        final rawLabel = defaultVariant?.label;
+        results.add(
+          ProductSearchResult(
+            productId: product.id,
+            variantId: defaultVariant?.id,
+            productName: product.name,
+            variantLabel: rawLabel == 'Default' ? null : rawLabel,
+            sku: product.sku ?? defaultVariant?.sku,
+            barcode: product.barcode ?? defaultVariant?.barcode,
+            lastPriceCents: product.priceCents,
+            taxRateBps: product.salesTaxRateBps,
+            stockQuantity: product.stockQuantity,
+            measurementType: product.measurementType,
+          ),
+        );
+      }
+    }
+    return results;
   }
 
   void _onInvoiceTap(InvoiceSearchResult inv) {

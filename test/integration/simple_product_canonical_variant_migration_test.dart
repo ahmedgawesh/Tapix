@@ -137,7 +137,7 @@ void main() {
           db.productVariants,
         )..where((v) => v.id.equals(operationalId))).getSingle();
         expect(after.stockQuantity, 1500);
-        expect(db.schemaVersion, 10068);
+        expect(db.schemaVersion, 10069);
       } finally {
         await db?.close();
         await temp.delete(recursive: true);

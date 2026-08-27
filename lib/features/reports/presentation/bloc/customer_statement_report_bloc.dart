@@ -33,6 +33,7 @@ class StatementTransaction {
   final int runningBalanceCents;
   final int? referenceId;
   final String? referenceType;
+  final bool isDisplayOnly;
 
   const StatementTransaction({
     required this.id,
@@ -43,6 +44,7 @@ class StatementTransaction {
     required this.runningBalanceCents,
     this.referenceId,
     this.referenceType,
+    this.isDisplayOnly = false,
   });
 }
 
@@ -221,6 +223,7 @@ class CustomerStatementReportBloc
               runningBalanceCents: transaction.runningBalanceCents,
               referenceId: transaction.referenceId,
               referenceType: transaction.referenceType,
+              isDisplayOnly: transaction.isDisplayOnly,
             ),
           )
           .toList(),

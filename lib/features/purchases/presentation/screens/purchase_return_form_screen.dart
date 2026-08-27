@@ -11,6 +11,7 @@ import '../../../../core/measurement/measurement.dart';
 import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
+import '../../../../core/widgets/pin_verification_dialog.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../../domain/repositories/purchase_repository.dart';
@@ -1544,15 +1545,19 @@ class _ReturnFormView extends StatelessWidget {
                       state.returnItems.isEmpty ||
                       state.isChequeMissingDueDate
                   ? null
-                  : () {
-                      final allowNegativeStock = context
+                  : () async {
+                      final settings = context
                           .read<AppSettingsBloc>()
                           .state
-                          .settings
-                          .allowNegativeStock;
+                          .settings;
+                      if (settings.requirePinForVoidRefund) {
+                        final pinOk = await showPinVerificationDialog(context);
+                        if (!pinOk || !context.mounted) return;
+                      }
+                      if (!context.mounted) return;
                       context.read<PurchaseReturnFormBloc>().add(
                         PurchaseReturnFormSubmitted(
-                          allowNegativeStock: allowNegativeStock,
+                          allowNegativeStock: settings.allowNegativeStock,
                         ),
                       );
                     },

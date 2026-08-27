@@ -67,6 +67,7 @@ void main() {
           password: 'password123',
           confirmPassword: 'password123',
           role: UserRole.cashier,
+          employeeId: 7,
         )),
         expect: () => [
           isA<UserFormSubmitting>(),
@@ -83,6 +84,7 @@ void main() {
           password: 'password123',
           confirmPassword: 'password123',
           role: UserRole.cashier,
+          employeeId: 7,
         )),
         expect: () => [
           isA<UserFormSubmitting>(),
@@ -103,6 +105,7 @@ void main() {
           password: 'password123',
           confirmPassword: 'password123',
           role: UserRole.cashier,
+          employeeId: 7,
         )),
         expect: () => [
           isA<UserFormSubmitting>(),
@@ -123,6 +126,7 @@ void main() {
           password: '',
           confirmPassword: '',
           role: UserRole.cashier,
+          employeeId: 7,
         )),
         expect: () => [
           isA<UserFormSubmitting>(),
@@ -143,6 +147,7 @@ void main() {
           password: '12345',
           confirmPassword: '12345',
           role: UserRole.cashier,
+          employeeId: 7,
         )),
         expect: () => [
           isA<UserFormSubmitting>(),
@@ -163,6 +168,7 @@ void main() {
           password: 'password123',
           confirmPassword: 'different',
           role: UserRole.cashier,
+          employeeId: 7,
         )),
         expect: () => [
           isA<UserFormSubmitting>(),
@@ -180,7 +186,7 @@ void main() {
                 username: 'newuser',
                 password: 'password123',
                 role: UserRole.cashier,
-                employeeId: null,
+                employeeId: 7,
               )).thenAnswer((_) async => testUser);
         },
         build: () => UserFormBloc(mockRepository),
@@ -189,6 +195,7 @@ void main() {
           password: 'password123',
           confirmPassword: 'password123',
           role: UserRole.cashier,
+          employeeId: 7,
         )),
         expect: () => [
           isA<UserFormSubmitting>(),

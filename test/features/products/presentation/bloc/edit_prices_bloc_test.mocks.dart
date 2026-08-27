@@ -322,6 +322,34 @@ class MockProductRepository extends _i1.Mock implements _i2.ProductRepository {
           as _i3.Future<String?>);
 
   @override
+  _i3.Future<String?> setMeasurementType({
+    required int? productId,
+    required String? measurementType,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#setMeasurementType, [], {
+              #productId: productId,
+              #measurementType: measurementType,
+            }),
+            returnValue: _i3.Future<String?>.value(),
+          )
+          as _i3.Future<String?>);
+
+  @override
+  _i3.Future<String?> setTrackInventory({
+    required int? productId,
+    required bool? trackInventory,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(#setTrackInventory, [], {
+              #productId: productId,
+              #trackInventory: trackInventory,
+            }),
+            returnValue: _i3.Future<String?>.value(),
+          )
+          as _i3.Future<String?>);
+
+  @override
   _i3.Future<int> deleteProduct(int? id) =>
       (super.noSuchMethod(
             Invocation.method(#deleteProduct, [id]),
@@ -669,6 +697,16 @@ class MockProductVariantRepository extends _i1.Mock
   _i3.Future<int> countActiveDimensionalVariants(int? productId) =>
       (super.noSuchMethod(
             Invocation.method(#countActiveDimensionalVariants, [productId]),
+            returnValue: _i3.Future<int>.value(0),
+          )
+          as _i3.Future<int>);
+
+  @override
+  _i3.Future<int> countActiveDimensionalVariantsWithStock(int? productId) =>
+      (super.noSuchMethod(
+            Invocation.method(#countActiveDimensionalVariantsWithStock, [
+              productId,
+            ]),
             returnValue: _i3.Future<int>.value(0),
           )
           as _i3.Future<int>);

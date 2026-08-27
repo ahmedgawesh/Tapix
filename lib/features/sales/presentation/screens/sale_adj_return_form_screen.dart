@@ -15,10 +15,13 @@ import '../../../../core/measurement/measurement.dart';
 import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../../core/services/commissions/commission_service.dart';
 import '../../../../core/services/loyalty/loyalty_points_service.dart';
 import '../../../auth/data/services/session_service.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
+import '../../../../core/widgets/pin_verification_dialog.dart';
+import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../../purchases/presentation/bloc/purchase_adj_return_form_bloc.dart'
     show AdjReturnLineItem, AdjReturnPaymentMethod, AdjReturnReasonCode;
 import '../bloc/sale_adj_return_form_bloc.dart';
@@ -62,6 +65,7 @@ class SaleAdjReturnFormScreen extends StatelessWidget {
           sl<CommissionService>(),
           sl<LoyaltyPointsService>(),
           sl<SessionService>(),
+          lan: sl<LanNetworkService>(),
         );
         if (customerId != null && customerName != null) {
           bloc.add(SaleAdjReturnCustomerSelected(customerId!, customerName!));
@@ -153,7 +157,8 @@ class _FormView extends StatelessWidget {
           // Replace form with returns list, then push detail on top
           // so that Back from detail returns to the list.
           router.go('/sales/returns');
-          if (createdId != null) {
+          final lan = sl<LanNetworkService>();
+          if (createdId != null && lan.snapshot.mode != LanMode.client) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               router.push('/sales/returns/adj/$createdId');
             });
@@ -536,7 +541,9 @@ class _FormView extends StatelessWidget {
   }
 
   void _showProductPicker(BuildContext context) async {
-    final db = sl<AppDatabase>();
+    final lan = sl<LanNetworkService>();
+    final isRemote =
+        lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession;
 
     final result = await showModalBottomSheet<AdjReturnLineItem>(
       context: context,
@@ -544,7 +551,9 @@ class _FormView extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => _ProductPickerSheet(db: db, isSale: true),
+      builder: (ctx) => isRemote
+          ? _RemoteProductPickerSheet(lan: lan)
+          : _ProductPickerSheet(db: sl<AppDatabase>(), isSale: true),
     );
 
     if (result != null && context.mounted) {
@@ -808,6 +817,32 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   }
 
   void _showCustomerPicker(BuildContext context) async {
+    final lan = sl<LanNetworkService>();
+    if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+      final customers = await lan.fetchRemoteCustomers(limit: 200);
+      if (!context.mounted) return;
+      final selected = await showModalBottomSheet<LanCustomerSummary>(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) => _PartyPickerSheet<LanCustomerSummary>(
+          title: 'returns.select_customer'.tr(),
+          items: customers,
+          getName: (customer) => customer.name,
+          getInitial: (customer) =>
+              customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?',
+        ),
+      );
+      if (selected != null && context.mounted) {
+        context.read<SaleAdjReturnFormBloc>().add(
+          SaleAdjReturnCustomerSelected(selected.id, selected.name),
+        );
+      }
+      return;
+    }
+
     final db = sl<AppDatabase>();
     final customers = await db.select(db.customers).get();
     customers.sort(
@@ -837,6 +872,35 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   }
 
   void _showEmployeePicker(BuildContext context) async {
+    final lan = sl<LanNetworkService>();
+    if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+      final employees = await lan.fetchRemoteSalespeople(limit: 200);
+      if (!context.mounted) return;
+      final selected = await showModalBottomSheet<LanEmployeeSummary>(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) => _PartyPickerSheet<LanEmployeeSummary>(
+          title: 'sales.select_salesperson'.tr(),
+          items: employees,
+          getName: (employee) => employee.name,
+          getInitial: (employee) =>
+              employee.name.isNotEmpty ? employee.name[0].toUpperCase() : '?',
+        ),
+      );
+      if (selected != null && context.mounted) {
+        context.read<SaleAdjReturnFormBloc>().add(
+          SaleAdjReturnEmployeeChanged(
+            employeeId: selected.id,
+            employeeName: selected.name,
+          ),
+        );
+      }
+      return;
+    }
+
     final employees = await sl<EmployeeRepository>().searchEmployees(
       '',
       isActive: true,
@@ -867,7 +931,17 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     }
   }
 
-  void _onConfirm(BuildContext context) {
+  Future<void> _onConfirm(BuildContext context) async {
+    final requirePin = context
+        .read<AppSettingsBloc>()
+        .state
+        .settings
+        .requirePinForVoidRefund;
+    if (requirePin) {
+      final pinOk = await showPinVerificationDialog(context);
+      if (!pinOk || !context.mounted) return;
+    }
+    if (!context.mounted) return;
     context.read<SaleAdjReturnFormBloc>().add(const SaleAdjReturnSubmitted());
   }
 
@@ -2744,6 +2818,210 @@ class _PickerRow {
   }
 }
 
+class _RemoteProductPickerSheet extends StatefulWidget {
+  final LanNetworkService lan;
+
+  const _RemoteProductPickerSheet({required this.lan});
+
+  @override
+  State<_RemoteProductPickerSheet> createState() =>
+      _RemoteProductPickerSheetState();
+}
+
+class _RemoteProductPickerSheetState extends State<_RemoteProductPickerSheet> {
+  final _searchController = TextEditingController();
+  List<_PickerRow> _rows = const [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load([String query = '']) async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final page = await widget.lan.fetchRemoteCatalog(
+        query: query,
+        limit: 200,
+      );
+      final rows = <_PickerRow>[];
+      for (final product in page.products) {
+        if (product.hasVariants) {
+          for (final variant in product.variants) {
+            rows.add(
+              _PickerRow(
+                productId: product.id,
+                variantId: variant.id,
+                productName: product.name,
+                variantLabel: variant.label,
+                sku: variant.sku,
+                priceCents: variant.priceCents,
+                wholesalePriceCents: variant.wholesalePriceCents,
+                costCents: 0,
+                stockQuantity: variant.stockQuantity,
+                measurementType: product.measurementType,
+                taxRateBps: product.salesTaxRateBps,
+                hasVariants: true,
+              ),
+            );
+          }
+        } else {
+          final defaultVariant = product.variants.isEmpty
+              ? null
+              : product.variants.first;
+          final label = defaultVariant?.label;
+          rows.add(
+            _PickerRow(
+              productId: product.id,
+              variantId: defaultVariant?.id,
+              productName: product.name,
+              variantLabel: label == 'Default' ? null : label,
+              sku: product.sku ?? defaultVariant?.sku,
+              priceCents: product.priceCents,
+              wholesalePriceCents: product.wholesalePriceCents,
+              costCents: 0,
+              stockQuantity: product.stockQuantity,
+              measurementType: product.measurementType,
+              taxRateBps: product.salesTaxRateBps,
+              hasVariants: false,
+            ),
+          );
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _rows = rows;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final currency = sl<CurrencyService>();
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (context, scrollController) => Column(
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: cs.outlineVariant,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              'returns.select_product'.tr(),
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TextField(
+              controller: _searchController,
+              autofocus: true,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: 'products_search_hint'.tr(),
+                prefixIcon: const Icon(LucideIcons.search, size: 18),
+                suffixIcon: IconButton(
+                  onPressed: () => _load(_searchController.text.trim()),
+                  icon: const Icon(LucideIcons.arrowRight, size: 18),
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                isDense: true,
+              ),
+              onSubmitted: (value) => _load(value.trim()),
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (_loading)
+            const Expanded(child: Center(child: CircularProgressIndicator()))
+          else if (_error != null)
+            Expanded(child: Center(child: Text(_error!)))
+          else if (_rows.isEmpty)
+            Expanded(child: Center(child: Text('common.no_results'.tr())))
+          else
+            Expanded(
+              child: ListView.builder(
+                controller: scrollController,
+                itemCount: _rows.length,
+                itemBuilder: (context, index) {
+                  final row = _rows[index];
+                  return ListTile(
+                    leading: Icon(
+                      row.hasVariants
+                          ? LucideIcons.layers
+                          : LucideIcons.package,
+                    ),
+                    title: Text(row.productName),
+                    subtitle: Text(
+                      [row.variantLabel, row.sku]
+                          .whereType<String>()
+                          .where((value) => value.trim().isNotEmpty)
+                          .join(' • '),
+                    ),
+                    trailing: Text(currency.format(row.priceCents)),
+                    onTap: () => Navigator.pop(
+                      context,
+                      AdjReturnLineItem(
+                        productId: row.productId,
+                        variantId: row.variantId,
+                        productName: row.productName,
+                        variantLabel: row.variantLabel,
+                        variantSku: row.sku,
+                        quantity: row.measurementType == 'piece' ? 1 : 1000,
+                        quantityScale: row.measurementType == 'piece'
+                            ? 1
+                            : 1000,
+                        measurementType: row.measurementType,
+                        unitPriceCents: row.priceCents,
+                        retailPriceCents: row.priceCents,
+                        wholesalePriceCents: row.wholesalePriceCents,
+                        taxRateBps: row.taxRateBps,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ProductPickerSheet extends StatefulWidget {
   final AppDatabase db;
   final bool isSale;
@@ -3120,6 +3398,10 @@ class _SaleFraudWarnings extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lan = sl<LanNetworkService>();
+    if (lan.snapshot.mode == LanMode.client) {
+      return const SizedBox.shrink();
+    }
     // Nothing attributed (no customer AND no salesperson) or no items:
     // nothing to verify.
     if (items.isEmpty || (customerId == null && employeeId == null)) {
