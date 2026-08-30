@@ -181,6 +181,31 @@ void main() {
       expect(find.text('0'), findsOneWidget);
     });
 
+    testWidgets(
+      'formats measured variant stock instead of exposing the stored scale',
+      (tester) async {
+        final measuredProduct = testProduct.copyWith(
+          hasVariants: true,
+          stockQuantity: 977300,
+          measurementType: 'length',
+        );
+
+        await tester.pumpWidget(
+          createWidget(
+            ProductTileWidget(
+              product: measuredProduct,
+              variantCount: 2,
+              totalVariantStock: 977300,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('977.3'), findsOneWidget);
+        expect(find.textContaining('977300'), findsNothing);
+      },
+    );
+
     testWidgets('displays a product image received from the master', (
       tester,
     ) async {

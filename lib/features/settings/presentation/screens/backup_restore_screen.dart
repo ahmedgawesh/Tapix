@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -225,18 +225,11 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   Future<void> _restoreFromFile() async {
     if (_isBusy) return;
 
-    final result = await FilePicker.pickFiles(
-      type: FileType.any,
-      allowMultiple: false,
-    );
+    final pickedFile = await FilePicker.pickFile(type: FileType.any);
 
-    if (result == null || result.files.isEmpty) return;
-
-    final pickedPath = result.files.single.path;
-    if (pickedPath == null) return;
+    if (pickedFile == null) return;
 
     // Validate it looks like a SQLite file
-    final pickedFile = File(pickedPath);
     final bytes = await pickedFile.readAsBytes();
     if (bytes.length < 16 ||
         String.fromCharCodes(bytes.sublist(0, 15)) != 'SQLite format 3') {
@@ -304,9 +297,9 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       }
 
       // Overwrite the database file with the backup
-      await pickedFile.copy(dbPath);
+      await File(dbPath).writeAsBytes(bytes, flush: true);
       debugPrint(
-        '[Backup:Restore] Restored database from: $pickedPath to: $dbPath',
+        '[Backup:Restore] Restored database from: ${pickedFile.uri} to: $dbPath',
       );
 
       if (mounted) {

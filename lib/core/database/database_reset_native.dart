@@ -18,3 +18,18 @@ Future<bool> deleteDatabaseFileImpl() async {
   }
   return false;
 }
+
+Future<void> deleteAllLocalDatabaseFilesImpl() async {
+  final dbFolder = await getApplicationSupportDirectory();
+  const databaseNames = ['tapix.db', 'tapix_encrypted.db'];
+  const suffixes = ['', '-wal', '-shm'];
+
+  for (final name in databaseNames) {
+    for (final suffix in suffixes) {
+      final file = File(p.join(dbFolder.path, '$name$suffix'));
+      if (await file.exists()) {
+        await file.delete();
+      }
+    }
+  }
+}

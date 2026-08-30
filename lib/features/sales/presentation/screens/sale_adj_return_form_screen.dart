@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:intl/intl.dart' as intl;
 
@@ -901,10 +901,49 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
       return;
     }
 
-    final employees = await sl<EmployeeRepository>().searchEmployees(
+    final repo = sl<EmployeeRepository>();
+    final employees = await repo.searchEmployees(
       '',
       isActive: true,
     );
+
+    // Fetch roles to identify salesperson & manager role IDs.
+    final allRoles = await repo.watchAllRoles(isActive: true).first;
+    final salespersonRoleIds = <int>{};
+    final managerRoleIds = <int>{};
+    for (final role in allRoles) {
+      final rn = role.name.toLowerCase();
+      if (rn == 'salesperson') {
+        salespersonRoleIds.add(role.id);
+      } else if (rn == 'manager') {
+        managerRoleIds.add(role.id);
+      }
+    }
+
+    // Collect manager IDs of salespeople.
+    final salespersonManagerIds = <int>{};
+    for (final e in employees) {
+      if (e.roleId != null && salespersonRoleIds.contains(e.roleId)) {
+        if (e.managerId != null) {
+          salespersonManagerIds.add(e.managerId!);
+        }
+      }
+    }
+
+    // Filter: keep salespeople, managers, and managers-of-salespeople.
+    final filteredEmployees = employees.where((e) {
+      if (e.roleId != null && salespersonRoleIds.contains(e.roleId)) {
+        return true;
+      }
+      if (e.roleId != null && managerRoleIds.contains(e.roleId)) {
+        return true;
+      }
+      if (salespersonManagerIds.contains(e.id)) {
+        return true;
+      }
+      return false;
+    }).toList();
+
     if (!context.mounted) return;
 
     final selected = await showModalBottomSheet<Employee>(
@@ -915,7 +954,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
       ),
       builder: (ctx) => _PartyPickerSheet<Employee>(
         title: 'sales.select_salesperson'.tr(),
-        items: employees,
+        items: filteredEmployees,
         getName: (e) => e.name,
         getInitial: (e) => e.name.isNotEmpty ? e.name[0].toUpperCase() : '?',
       ),

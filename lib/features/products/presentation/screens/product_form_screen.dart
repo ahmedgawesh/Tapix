@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 import '../../../../core/database/daos/product_dao.dart';
@@ -34,6 +34,8 @@ import '../bloc/categories_event.dart';
 import '../widgets/money_input_widget.dart';
 import '../widgets/variant_management_widget.dart';
 import '../widgets/inventory_adjustment_dialog.dart';
+import '../widgets/medicine_alternatives_dialog.dart';
+import '../widgets/medicine_profile_form_section.dart';
 import '../../domain/entities/product_color_entity.dart';
 import '../../domain/entities/size_entity.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
@@ -70,6 +72,7 @@ class ProductFormScreen extends StatelessWidget {
                 // of truth for the *default*, while `products.min_quantity`
                 // remains the per-product authoritative value once saved.
                 defaultMinQuantity: settings.lowStockThreshold,
+                enablePharmacyFeatures: settings.enablePharmacyFeatures,
               ),
             ),
         ),
@@ -461,6 +464,18 @@ class _ProductFormViewState extends State<_ProductFormView>
               _buildPricingSection(context, state),
               const SizedBox(height: 24),
               _buildInventorySection(context, state),
+              if (state.pharmacyEditorEnabled) ...[
+                const SizedBox(height: 24),
+                MedicineProfileFormSection(
+                  state: state,
+                  onShowAlternatives: state.productId == null
+                      ? null
+                      : () => MedicineAlternativesDialog.show(
+                          context,
+                          productId: state.productId!,
+                        ),
+                ),
+              ],
             ],
           ),
         ),
@@ -497,6 +512,18 @@ class _ProductFormViewState extends State<_ProductFormView>
         _buildPricingSection(context, state),
         const SizedBox(height: 24),
         _buildInventorySection(context, state),
+        if (state.pharmacyEditorEnabled) ...[
+          const SizedBox(height: 24),
+          MedicineProfileFormSection(
+            state: state,
+            onShowAlternatives: state.productId == null
+                ? null
+                : () => MedicineAlternativesDialog.show(
+                    context,
+                    productId: state.productId!,
+                  ),
+          ),
+        ],
         const SizedBox(height: 24),
         _buildTaxSection(context, state),
         const SizedBox(height: 24),

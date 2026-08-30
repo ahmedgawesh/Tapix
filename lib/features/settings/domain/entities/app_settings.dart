@@ -41,6 +41,7 @@ class AppSettings {
   final bool enableLengthUnits;
   final bool enableWeightUnits;
   final bool enableVolumeUnits;
+  final bool enablePharmacyFeatures;
 
   // ── Sales ──
   final String defaultPaymentMethod; // 'cash', 'card', 'bank_transfer'
@@ -109,6 +110,7 @@ class AppSettings {
     this.enableLengthUnits = false,
     this.enableWeightUnits = false,
     this.enableVolumeUnits = false,
+    this.enablePharmacyFeatures = false,
     // Sales
     this.defaultPaymentMethod = 'cash',
     this.allowPartialPayments = false,
@@ -168,6 +170,7 @@ class AppSettings {
     bool? enableLengthUnits,
     bool? enableWeightUnits,
     bool? enableVolumeUnits,
+    bool? enablePharmacyFeatures,
     String? defaultPaymentMethod,
     bool? allowPartialPayments,
     bool? allowDiscounts,
@@ -227,6 +230,8 @@ class AppSettings {
       enableLengthUnits: enableLengthUnits ?? this.enableLengthUnits,
       enableWeightUnits: enableWeightUnits ?? this.enableWeightUnits,
       enableVolumeUnits: enableVolumeUnits ?? this.enableVolumeUnits,
+      enablePharmacyFeatures:
+          enablePharmacyFeatures ?? this.enablePharmacyFeatures,
       defaultPaymentMethod: defaultPaymentMethod ?? this.defaultPaymentMethod,
       allowPartialPayments: allowPartialPayments ?? this.allowPartialPayments,
       allowDiscounts: allowDiscounts ?? this.allowDiscounts,
@@ -291,6 +296,7 @@ class AppSettings {
     'enableLengthUnits': enableLengthUnits,
     'enableWeightUnits': enableWeightUnits,
     'enableVolumeUnits': enableVolumeUnits,
+    'enablePharmacyFeatures': enablePharmacyFeatures,
     'defaultPaymentMethod': defaultPaymentMethod,
     'allowPartialPayments': allowPartialPayments,
     'allowDiscounts': allowDiscounts,
@@ -351,6 +357,7 @@ class AppSettings {
       enableLengthUnits: (m['enableLengthUnits'] as bool?) ?? false,
       enableWeightUnits: (m['enableWeightUnits'] as bool?) ?? false,
       enableVolumeUnits: (m['enableVolumeUnits'] as bool?) ?? false,
+      enablePharmacyFeatures: (m['enablePharmacyFeatures'] as bool?) ?? false,
       defaultPaymentMethod: (m['defaultPaymentMethod'] as String?) ?? 'cash',
       allowPartialPayments: (m['allowPartialPayments'] as bool?) ?? false,
       allowDiscounts: (m['allowDiscounts'] as bool?) ?? true,

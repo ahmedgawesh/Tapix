@@ -24,6 +24,14 @@
       "milliliter": "millilitre"
     }
   },
+  "pharmacy": {
+    "settings": {"title":"Pharmacy settings","enable":"Enable medicines and alternatives","enable_desc":"Record active ingredients and strengths and show exact medicine alternatives","safety_note":"Alternatives are advisory only. Tapix never substitutes a medicine automatically."},
+    "form": {"title":"Medicine details","is_medicine":"This product is a medicine","is_medicine_desc":"Record active ingredients, strength, dosage form and route","dosage_form":"Dosage form","route":"Administration route","ingredient":"Active ingredient","add_ingredient":"Add active ingredient","new_ingredient":"Create active ingredient","ingredient_name":"Scientific name in English","ingredient_name_ar":"Scientific name in Arabic","search_ingredient":"Search active ingredients","no_ingredients":"Add at least one active ingredient","strength":"Strength","unit":"Unit","per":"Per","basis_unit":"Basis unit","eligible":"Allow exact alternatives","eligible_desc":"Ingredient, strength, form and route must all match","notes":"Medicine notes","remove":"Remove ingredient"},
+    "alternatives": {"title":"Exact medicine alternatives","button":"Show alternatives","none":"No exact alternatives are registered","not_medicine":"No medicine details are registered for this product","formula":"Formula","available":"Available","select":"Select this alternative","search_hint":"Search by medicine or active ingredient"},
+    "validation": {"dosage_form_required":"Select a dosage form","route_required":"Select an administration route","ingredient_required":"Add at least one active ingredient","strength_invalid":"Enter a valid strength for every ingredient","save_failed":"Medicine details could not be saved"},
+    "forms": {"tablet":"Tablet","capsule":"Capsule","syrup":"Syrup","suspension":"Suspension","solution":"Solution","cream":"Cream","ointment":"Ointment","gel":"Gel","drops":"Drops","injection":"Injection","vial":"Vial","ampoule":"Ampoule","inhaler":"Inhaler","suppository":"Suppository","powder":"Powder","spray":"Spray"},
+    "routes": {"oral":"Oral","topical":"Topical","ophthalmic":"Ophthalmic","otic":"Otic","nasal":"Nasal","inhalation":"Inhalation","rectal":"Rectal","vaginal":"Vaginal","intramuscular":"Intramuscular","intravenous":"Intravenous","subcutaneous":"Subcutaneous"}
+  },
   "welcome": {
     "title": "Welcome to Tapix",
     "subtitle": "Let's personalize your experience",
@@ -226,7 +234,25 @@
       "title": "Devices & Network",
       "devices": "Connect Tapix devices",
       "subtitle": "Run multiple devices on the same LAN or Wi-Fi network",
+      "activity": {
+        "sale": "New sale from a cashier device",
+        "sale_return": "New linked sales return",
+        "sale_adjustment_return": "New adjustment sales return",
+        "details": "Cashier: {} • Device: {} • {} • {}"
+      },
+      "sales_details_next_phase": "Remote invoice details are the next phase; this sales history is currently a secure read-only view from the master.",
+      "remote_void_pin_required": "PIN protection is enabled on the master. To keep the PIN secure, void this sale on the master device.",
       "phase_notice": "LAN sales are enabled through the master. The master remains the only owner of prices, stock, invoice numbering and accounting posting. More business modules will be enabled after their transactional APIs pass verification.",
+      "fresh_reset": {
+        "owner_notice": "These tools are visible to the owner only. They reset this device locally and send no delete or change request to the current master.",
+        "standalone_desc": "Disconnect this device and create a new local database as a standalone device",
+        "master_desc": "Disconnect this device, create a new local database, then run it as a master",
+        "standalone_target": "standalone device",
+        "master_target": "master device",
+        "confirm_title": "Reset this device?",
+        "confirm_message": "The app will close and only this device local data will be deleted. You will then create a new owner account for a {target}. The current master database and its devices will not be changed. This cannot be undone without a backup.",
+        "confirm_action": "Delete local data and restart"
+      },
       "standalone": "Standalone device",
       "standalone_desc": "Use the local database exactly as the app works today",
       "master": "Master device",

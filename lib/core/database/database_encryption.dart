@@ -18,7 +18,7 @@ class DatabaseEncryptionKeyManager {
   final FlutterSecureStorage _secureStorage;
 
   DatabaseEncryptionKeyManager({FlutterSecureStorage? secureStorage})
-      : _secureStorage = secureStorage ?? const FlutterSecureStorage();
+    : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   /// Check if database encryption is enabled.
   Future<bool> isEncryptionEnabled() async {
@@ -39,10 +39,23 @@ class DatabaseEncryptionKeyManager {
     await _secureStorage.write(key: _encryptionEnabledKey, value: 'false');
   }
 
+  /// Returns the persisted encryption key without creating a replacement.
+  ///
+  /// This is intentionally separate from [getOrCreateKey]. Opening an existing
+  /// encrypted database with a newly generated key would hide the real problem
+  /// (a missing secure-storage key) and can make recovery diagnostics harder.
+  Future<String?> getExistingKey() async {
+    final existing = await _secureStorage.read(key: _storageKey);
+    if (existing == null || existing.isEmpty) {
+      return null;
+    }
+    return existing;
+  }
+
   /// Get the existing encryption key, or generate and store a new one.
   Future<String> getOrCreateKey() async {
-    final existing = await _secureStorage.read(key: _storageKey);
-    if (existing != null && existing.isNotEmpty) {
+    final existing = await getExistingKey();
+    if (existing != null) {
       return existing;
     }
 

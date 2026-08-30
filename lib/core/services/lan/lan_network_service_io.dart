@@ -55,6 +55,8 @@ class LanNetworkService {
   final LocalizationService? _localizationService;
   final _random = Random.secure();
   final _controller = StreamController<LanNetworkSnapshot>.broadcast();
+  final _masterActivityController =
+      StreamController<LanMasterActivityEvent>.broadcast();
 
   LanNetworkSnapshot _snapshot = const LanNetworkSnapshot();
   HttpServer? _server;
@@ -62,6 +64,7 @@ class LanNetworkService {
   Timer? _masterMonitorTimer;
   RawDatagramSocket? _discoverySocket;
   bool _masterRefreshInFlight = false;
+  bool _clientMonitorInFlight = false;
   DateTime? _masterStartedAt;
   String? _deviceId;
   String? _clientDeviceName;
@@ -77,6 +80,8 @@ class LanNetworkService {
   bool get hasRemoteUserSession =>
       _remoteUser != null && _remoteSessionToken != null;
   Stream<LanNetworkSnapshot> get changes => _controller.stream;
+  Stream<LanMasterActivityEvent> get masterActivityEvents =>
+      _masterActivityController.stream;
 
   Future<void> initialize() async {
     _deviceId = await _loadOrCreateDeviceId();
@@ -117,7 +122,7 @@ class LanNetworkService {
       // Do not hold application startup behind a stale DHCP address.
       // Reconnection continues in the background and can discover the same
       // authorized master at its new local address.
-      unawaited(testConnection());
+      unawaited(_runClientMonitorCheck());
     }
   }
 
@@ -469,6 +474,22 @@ class LanNetworkService {
     return LanCatalogPage.fromJson(response.body);
   }
 
+  Future<LanMedicineAlternativesResult> fetchRemoteMedicineAlternatives(
+    int productId,
+  ) async {
+    if (productId <= 0) {
+      throw const LanBusinessException(
+        'invalid_product',
+        'A valid product is required.',
+      );
+    }
+    final response = await _authenticatedClientRequest(
+      method: 'GET',
+      path: '/v1/pharmacy/alternatives/$productId',
+    );
+    return LanMedicineAlternativesResult.fromJson(response.body);
+  }
+
   Future<Uint8List?> fetchRemoteProductImage(int productId) async {
     final host =
         _snapshot.masterHost ?? await _settingsDao.getSetting(_masterHostKey);
@@ -533,6 +554,31 @@ class LanNetworkService {
     } finally {
       client.close(force: true);
     }
+  }
+
+  Future<LanSalesPage> fetchRemoteSales({int limit = 500}) async {
+    final response = await _authenticatedClientRequest(
+      method: 'GET',
+      path: '/v1/sales',
+      queryParameters: {'limit': limit.toString()},
+    );
+    return LanSalesPage.fromJson(response.body);
+  }
+
+  Future<LanSaleDetails> fetchRemoteSaleDetails(int saleId) async {
+    final response = await _authenticatedClientRequest(
+      method: 'GET',
+      path: '/v1/sales/$saleId',
+    );
+    return LanSaleDetails.fromJson(response.body);
+  }
+
+  Future<LanSaleVoidResult> voidRemoteSale(int saleId) async {
+    final response = await _authenticatedClientRequest(
+      method: 'POST',
+      path: '/v1/sales/$saleId/void',
+    );
+    return LanSaleVoidResult.fromJson(response.body);
   }
 
   Future<List<LanCustomerSummary>> fetchRemoteCustomers({
@@ -605,6 +651,24 @@ class LanNetworkService {
       },
     );
     return LanSaleReturnsPage.fromJson(response.body);
+  }
+
+  Future<LanSaleReturnDetails> fetchRemoteSaleReturnDetails({
+    required int returnId,
+    required bool adjustment,
+  }) async {
+    if (returnId <= 0) {
+      throw const LanBusinessException(
+        'invalid_sale_return',
+        'A valid sale return is required.',
+      );
+    }
+    final response = await _authenticatedClientRequest(
+      method: 'GET',
+      path:
+          '/v1/sale-returns/${adjustment ? 'adjustment' : 'linked'}/$returnId',
+    );
+    return LanSaleReturnDetails.fromJson(response.body);
   }
 
   Future<LanSaleReturnResult> submitRemoteSaleReturn(
@@ -845,6 +909,10 @@ class LanNetworkService {
           ),
         );
       }
+    } on SocketException {
+      // Network interfaces can disappear briefly while Wi-Fi reconnects or
+      // Android moves the app between foreground/background states. The
+      // listener remains valid, so retry on the next monitor tick.
     } finally {
       _masterRefreshInFlight = false;
     }
@@ -882,23 +950,40 @@ class LanNetworkService {
         reuseAddress: true,
       );
       _discoverySocket = socket;
-      socket.listen((event) {
-        if (event != RawSocketEvent.read) return;
-        final datagram = socket.receive();
-        if (datagram == null) return;
-        final probe = utf8.decode(datagram.data, allowMalformed: true).trim();
-        if (probe != _discoveryProbe) return;
-        final response = utf8.encode(
-          jsonEncode({
-            'app': 'Tapix',
-            'protocolVersion': protocolVersion,
-            'masterId': _deviceId,
-            'port': _server?.port ?? _snapshot.port,
-            'localeCode': _masterLocaleCode,
-          }),
-        );
-        socket.send(response, datagram.address, datagram.port);
-      });
+      socket.listen(
+        (event) {
+          if (event != RawSocketEvent.read) return;
+          try {
+            final datagram = socket.receive();
+            if (datagram == null) return;
+            final probe = utf8
+                .decode(datagram.data, allowMalformed: true)
+                .trim();
+            if (probe != _discoveryProbe) return;
+            final response = utf8.encode(
+              jsonEncode({
+                'app': 'Tapix',
+                'protocolVersion': protocolVersion,
+                'masterId': _deviceId,
+                'port': _server?.port ?? _snapshot.port,
+                'localeCode': _masterLocaleCode,
+              }),
+            );
+            socket.send(response, datagram.address, datagram.port);
+          } on SocketException {
+            // A client may disappear between receiving the discovery probe and
+            // sending the reply. Discovery is best-effort and direct IP access
+            // remains available.
+          }
+        },
+        onError: (Object _) {
+          if (identical(_discoverySocket, socket)) {
+            _discoverySocket = null;
+          }
+          socket.close();
+        },
+        cancelOnError: true,
+      );
     } catch (_) {
       // Discovery is a convenience. Direct IP pairing remains available.
       _discoverySocket?.close();
@@ -916,30 +1001,42 @@ class LanNetworkService {
       socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
       socket.broadcastEnabled = true;
       final completer = Completer<_DiscoveredMaster?>();
-      subscription = socket.listen((event) {
-        if (event != RawSocketEvent.read || completer.isCompleted) return;
-        final datagram = socket?.receive();
-        if (datagram == null) return;
-        try {
-          final decoded = jsonDecode(utf8.decode(datagram.data));
-          if (decoded is! Map<String, dynamic> ||
-              decoded['app']?.toString() != 'Tapix' ||
-              decoded['masterId']?.toString() != expectedMasterId) {
-            return;
+      subscription = socket.listen(
+        (event) {
+          if (event != RawSocketEvent.read || completer.isCompleted) return;
+          final datagram = socket?.receive();
+          if (datagram == null) return;
+          try {
+            final decoded = jsonDecode(utf8.decode(datagram.data));
+            if (decoded is! Map<String, dynamic> ||
+                decoded['app']?.toString() != 'Tapix' ||
+                decoded['masterId']?.toString() != expectedMasterId) {
+              return;
+            }
+            final discoveredPort = (decoded['port'] as num?)?.toInt();
+            if (discoveredPort == null ||
+                discoveredPort < 1 ||
+                discoveredPort > 65535) {
+              return;
+            }
+            completer.complete(
+              _DiscoveredMaster(datagram.address.address, discoveredPort),
+            );
+          } catch (_) {
+            // Ignore unrelated UDP traffic on the discovery response socket.
           }
-          final discoveredPort = (decoded['port'] as num?)?.toInt();
-          if (discoveredPort == null ||
-              discoveredPort < 1 ||
-              discoveredPort > 65535) {
-            return;
-          }
-          completer.complete(
-            _DiscoveredMaster(datagram.address.address, discoveredPort),
-          );
-        } catch (_) {
-          // Ignore unrelated UDP traffic on the discovery response socket.
-        }
-      });
+        },
+        onError: (Object _) {
+          // Android reports broadcast send failures asynchronously through the
+          // socket stream (for example while Wi-Fi is disabled). Complete this
+          // best-effort phase normally instead of leaking a fatal zone error.
+          if (!completer.isCompleted) completer.complete(null);
+        },
+        onDone: () {
+          if (!completer.isCompleted) completer.complete(null);
+        },
+        cancelOnError: true,
+      );
       socket.send(
         utf8.encode(_discoveryProbe),
         InternetAddress('255.255.255.255'),
@@ -957,7 +1054,12 @@ class LanNetworkService {
       await subscription?.cancel();
       socket?.close();
     }
-    return _scanLocalSubnetsForMaster(expectedMasterId, preferredPort);
+    try {
+      return await _scanLocalSubnetsForMaster(expectedMasterId, preferredPort);
+    } on SocketException {
+      // No active local interface is a normal offline state.
+      return null;
+    }
   }
 
   Future<_DiscoveredMaster?> _scanLocalSubnetsForMaster(
@@ -1244,8 +1346,28 @@ class LanNetworkService {
     _monitorTimer?.cancel();
     _monitorTimer = Timer.periodic(
       const Duration(seconds: 15),
-      (_) => testConnection(),
+      (_) => unawaited(_runClientMonitorCheck()),
     );
+  }
+
+  Future<void> _runClientMonitorCheck() async {
+    if (_clientMonitorInFlight || _snapshot.mode != LanMode.client) return;
+    _clientMonitorInFlight = true;
+    try {
+      await testConnection();
+    } on Object catch (error) {
+      // Reconnection is background best-effort work. A transient socket,
+      // interface, or platform failure must never escape into the app's fatal
+      // error zone; expose it as connection state and retry on the next tick.
+      _emit(
+        _snapshot.copyWith(
+          status: LanConnectionStatus.error,
+          error: error.toString(),
+        ),
+      );
+    } finally {
+      _clientMonitorInFlight = false;
+    }
   }
 
   Future<void> _handleRequest(HttpRequest request) async {
@@ -1698,6 +1820,60 @@ class LanNetworkService {
         return;
       }
 
+      if (request.method == 'GET' &&
+          path.startsWith('/v1/pharmacy/alternatives/')) {
+        final device = _authorizeDevice(request);
+        if (device == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'device_unauthorized',
+            'message': 'Device is not authorized.',
+          });
+          return;
+        }
+        final session = await _authorizeUserSession(request, device);
+        if (session == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'authentication_required',
+            'message': 'User session is invalid or expired.',
+          });
+          return;
+        }
+        if (!_hasAnyPermission(session.user, const [
+          'view_products',
+          'create_sales',
+          'process_sales',
+          'manage_sales',
+        ])) {
+          await _respond(request, HttpStatus.forbidden, {
+            'code': 'permission_denied',
+            'message': 'This user cannot view products.',
+          });
+          return;
+        }
+        final productId = int.tryParse(
+          path.substring('/v1/pharmacy/alternatives/'.length),
+        );
+        if (productId == null || productId <= 0) {
+          await _respond(request, HttpStatus.badRequest, {
+            'code': 'invalid_product',
+            'message': 'A valid product is required.',
+          });
+          return;
+        }
+        if (_businessGateway == null) {
+          await _respond(request, HttpStatus.serviceUnavailable, {
+            'code': 'business_api_unavailable',
+            'message': 'Master business services are unavailable.',
+          });
+          return;
+        }
+        final result = await _businessGateway.fetchMedicineAlternatives(
+          productId: productId,
+        );
+        await _respond(request, HttpStatus.ok, result.toJson());
+        return;
+      }
+
       if (request.method == 'GET' && path == '/v1/customers') {
         final device = _authorizeDevice(request);
         if (device == null) {
@@ -1890,6 +2066,177 @@ class LanNetworkService {
         return;
       }
 
+      if (request.method == 'GET' && path == '/v1/sales') {
+        final device = _authorizeDevice(request);
+        if (device == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'device_unauthorized',
+            'message': 'Device is not authorized.',
+          });
+          return;
+        }
+        final session = await _authorizeUserSession(request, device);
+        if (session == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'authentication_required',
+            'message': 'User session is invalid or expired.',
+          });
+          return;
+        }
+        if (!_hasAnyPermission(session.user, const [
+          'view_daily_reports',
+          'process_sales',
+          'manage_sales',
+        ])) {
+          await _respond(request, HttpStatus.forbidden, {
+            'code': 'permission_denied',
+            'message': 'This user cannot view sales.',
+          });
+          return;
+        }
+        if (_businessGateway == null) {
+          await _respond(request, HttpStatus.serviceUnavailable, {
+            'code': 'business_api_unavailable',
+            'message': 'Master business services are unavailable.',
+          });
+          return;
+        }
+        final limit = int.tryParse(request.uri.queryParameters['limit'] ?? '');
+        final result = await _businessGateway.fetchSales(limit: limit ?? 500);
+        await _respond(request, HttpStatus.ok, result.toJson());
+        return;
+      }
+
+      if (request.method == 'POST' &&
+          path.startsWith('/v1/sales/') &&
+          path.endsWith('/void')) {
+        final device = _authorizeDevice(request);
+        if (device == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'device_unauthorized',
+            'message': 'Device is not authorized.',
+          });
+          return;
+        }
+        final session = await _authorizeUserSession(request, device);
+        if (session == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'authentication_required',
+            'message': 'User session is invalid or expired.',
+          });
+          return;
+        }
+        if (!session.user.permissions.contains('void_transactions')) {
+          await _respond(request, HttpStatus.forbidden, {
+            'code': 'permission_denied',
+            'message': 'This user cannot void sales.',
+          });
+          return;
+        }
+        if (_businessGateway == null) {
+          await _respond(request, HttpStatus.serviceUnavailable, {
+            'code': 'business_api_unavailable',
+            'message': 'Master business services are unavailable.',
+          });
+          return;
+        }
+        final rawId = path.substring(
+          '/v1/sales/'.length,
+          path.length - '/void'.length,
+        );
+        final saleId = int.tryParse(rawId);
+        if (saleId == null || saleId <= 0) {
+          await _respond(request, HttpStatus.badRequest, {
+            'code': 'invalid_sale',
+            'message': 'Invalid sale.',
+          });
+          return;
+        }
+        try {
+          final result = await _businessGateway.voidSale(
+            actor: session.user,
+            saleId: saleId,
+          );
+          await _recordSecurityEventSafe(
+            LanAuthAuditEvent(
+              action: 'remote_sale_voided',
+              targetUserId: session.user.id,
+              username: session.user.username,
+              role: session.user.role,
+              deviceId: device.id,
+              deviceName: device.name,
+              remoteAddress: _remoteAddress(request),
+              authenticatedActor: true,
+              reason: 'sale:$saleId',
+            ),
+          );
+          await _respond(request, HttpStatus.ok, result.toJson());
+        } on LanBusinessException catch (error) {
+          await _respond(request, error.statusCode, {
+            'code': error.code,
+            'message': error.message,
+          });
+        }
+        return;
+      }
+
+      if (request.method == 'GET' &&
+          path.startsWith('/v1/sales/') &&
+          !path.endsWith('/returnable')) {
+        final device = _authorizeDevice(request);
+        if (device == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'device_unauthorized',
+            'message': 'Device is not authorized.',
+          });
+          return;
+        }
+        final session = await _authorizeUserSession(request, device);
+        if (session == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'authentication_required',
+            'message': 'User session is invalid or expired.',
+          });
+          return;
+        }
+        if (!_hasAnyPermission(session.user, const [
+          'view_daily_reports',
+          'process_sales',
+          'manage_sales',
+        ])) {
+          await _respond(request, HttpStatus.forbidden, {
+            'code': 'permission_denied',
+            'message': 'This user cannot view sale details.',
+          });
+          return;
+        }
+        if (_businessGateway == null) {
+          await _respond(request, HttpStatus.serviceUnavailable, {
+            'code': 'business_api_unavailable',
+            'message': 'Master business services are unavailable.',
+          });
+          return;
+        }
+        final saleId = int.tryParse(path.substring('/v1/sales/'.length));
+        if (saleId == null || saleId <= 0) {
+          await _respond(request, HttpStatus.badRequest, {
+            'code': 'invalid_sale',
+            'message': 'Invalid sale.',
+          });
+          return;
+        }
+        final details = await _businessGateway.fetchSaleDetails(saleId: saleId);
+        if (details == null) {
+          await _respond(request, HttpStatus.notFound, {
+            'code': 'sale_not_found',
+            'message': 'Sale not found.',
+          });
+          return;
+        }
+        await _respond(request, HttpStatus.ok, details.toJson());
+        return;
+      }
+
       if (request.method == 'GET' &&
           (path == '/v1/sales/returnable' ||
               (path.startsWith('/v1/sales/') &&
@@ -1963,6 +2310,71 @@ class LanNetworkService {
           await _respond(request, HttpStatus.notFound, {
             'code': 'sale_not_returnable',
             'message': 'Sale not found or has no returnable items.',
+          });
+          return;
+        }
+        await _respond(request, HttpStatus.ok, details.toJson());
+        return;
+      }
+
+      if (request.method == 'GET' &&
+          path.startsWith('/v1/sale-returns/') &&
+          path != '/v1/sale-returns/') {
+        final device = _authorizeDevice(request);
+        if (device == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'device_unauthorized',
+            'message': 'Device is not authorized.',
+          });
+          return;
+        }
+        final session = await _authorizeUserSession(request, device);
+        if (session == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'authentication_required',
+            'message': 'User session is invalid or expired.',
+          });
+          return;
+        }
+        if (!_hasAnyPermission(session.user, const [
+          'view_daily_reports',
+          'process_sales',
+          'handle_returns',
+          'manage_sales',
+        ])) {
+          await _respond(request, HttpStatus.forbidden, {
+            'code': 'permission_denied',
+            'message': 'This user cannot view sale return details.',
+          });
+          return;
+        }
+        if (_businessGateway == null) {
+          await _respond(request, HttpStatus.serviceUnavailable, {
+            'code': 'business_api_unavailable',
+            'message': 'Master business services are unavailable.',
+          });
+          return;
+        }
+        final segments = request.uri.pathSegments;
+        final kind = segments.length > 2 ? segments[2] : '';
+        final returnId = segments.length > 3 ? int.tryParse(segments[3]) : null;
+        if ((kind != 'linked' && kind != 'adjustment') ||
+            returnId == null ||
+            returnId <= 0) {
+          await _respond(request, HttpStatus.badRequest, {
+            'code': 'invalid_sale_return',
+            'message': 'Invalid sale return.',
+          });
+          return;
+        }
+        final details = await _businessGateway.fetchSaleReturnDetails(
+          returnId: returnId,
+          adjustment: kind == 'adjustment',
+        );
+        if (details == null) {
+          await _respond(request, HttpStatus.notFound, {
+            'code': 'sale_return_not_found',
+            'message': 'Sale return not found.',
           });
           return;
         }
@@ -2072,6 +2484,14 @@ class LanNetworkService {
               reason: result.returnNumber,
             ),
           );
+          _publishMasterActivity(
+            type: LanMasterActivityType.saleReturn,
+            actor: session.user,
+            deviceName: device.name,
+            documentNumber: result.returnNumber,
+            totalCents: result.totalCents,
+            duplicate: result.duplicate,
+          );
           await _respond(request, HttpStatus.ok, result.toJson());
         } on LanBusinessException catch (error) {
           await _respond(request, error.statusCode, {
@@ -2141,6 +2561,14 @@ class LanNetworkService {
               authenticatedActor: true,
               reason: result.returnNumber,
             ),
+          );
+          _publishMasterActivity(
+            type: LanMasterActivityType.saleAdjustmentReturn,
+            actor: session.user,
+            deviceName: device.name,
+            documentNumber: result.returnNumber,
+            totalCents: result.totalCents,
+            duplicate: result.duplicate,
           );
           await _respond(request, HttpStatus.ok, result.toJson());
         } on LanBusinessException catch (error) {
@@ -2212,6 +2640,14 @@ class LanNetworkService {
               authenticatedActor: true,
               reason: result.invoiceNumber,
             ),
+          );
+          _publishMasterActivity(
+            type: LanMasterActivityType.sale,
+            actor: session.user,
+            deviceName: device.name,
+            documentNumber: result.invoiceNumber,
+            totalCents: result.totalCents,
+            duplicate: result.duplicate,
           );
           await _respond(request, HttpStatus.ok, result.toJson());
         } on LanBusinessException catch (error) {
@@ -2404,6 +2840,29 @@ class LanNetworkService {
 
   String? _remoteAddress(HttpRequest request) =>
       request.connectionInfo?.remoteAddress.address;
+
+  void _publishMasterActivity({
+    required LanMasterActivityType type,
+    required LanRemoteUser actor,
+    required String deviceName,
+    required String documentNumber,
+    required int totalCents,
+    required bool duplicate,
+  }) {
+    if (duplicate || _masterActivityController.isClosed) return;
+    final employeeName = actor.employeeName?.trim();
+    _masterActivityController.add(
+      LanMasterActivityEvent(
+        type: type,
+        actorName: employeeName != null && employeeName.isNotEmpty
+            ? employeeName
+            : actor.username,
+        deviceName: deviceName,
+        documentNumber: documentNumber,
+        totalCents: totalCents,
+      ),
+    );
+  }
 
   Future<void> _recordSecurityEventSafe(LanAuthAuditEvent event) async {
     try {

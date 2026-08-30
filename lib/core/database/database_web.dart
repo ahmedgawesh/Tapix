@@ -4,7 +4,7 @@ import 'dart:developer' as developer;
 
 import 'web/storage_notifier.dart';
 
-Future<QueryExecutor> openDatabase() async {
+Future<QueryExecutor> openDatabase({int? targetSchemaVersion}) async {
   final result = await WasmDatabase.open(
     databaseName: 'tapix.db',
     sqlite3Uri: Uri.parse('sqlite3.wasm'),

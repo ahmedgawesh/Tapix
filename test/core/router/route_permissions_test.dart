@@ -13,6 +13,14 @@ void main() {
       isNot(contains(UserRole.salesperson)),
     );
     expect(
+      RoutePermissions.rolesForPath('/sales'),
+      contains(UserRole.accountant),
+    );
+    expect(
+      RoutePermissions.rolesForPath('/sales/new'),
+      isNot(contains(UserRole.accountant)),
+    );
+    expect(
       RoutePermissions.rolesForPath('/sales/new'),
       containsAll([
         UserRole.owner,
@@ -31,6 +39,13 @@ void main() {
     expect(
       RoutePermissions.rolesForPath('/products/42/edit'),
       unorderedEquals([UserRole.owner, UserRole.manager]),
+    );
+  });
+
+  test('devices and network is restricted to the owner', () {
+    expect(
+      RoutePermissions.rolesForPath('/devices'),
+      unorderedEquals([UserRole.owner]),
     );
   });
 }

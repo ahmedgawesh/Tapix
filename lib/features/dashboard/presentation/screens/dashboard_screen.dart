@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../auth/auth.dart';
@@ -266,7 +266,8 @@ class _DashboardScreenState extends State<DashboardScreen>
       if (item.id == 'cashier_shifts') return user.role == UserRole.cashier;
       return item.id == 'new_sale' ||
           item.id == 'sales_returns' ||
-          item.id == 'products';
+          item.id == 'products' ||
+          item.id == 'devices_network';
     }).toList();
   }
 
@@ -274,7 +275,13 @@ class _DashboardScreenState extends State<DashboardScreen>
     if (sl<LanNetworkService>().snapshot.mode != LanMode.client) {
       return item.route;
     }
-    if (item.id == 'new_sale') return '/sales/new';
+    if (item.id == 'new_sale') {
+      final authState = context.read<AuthBloc>().state;
+      final role = authState is AuthAuthenticated ? authState.user.role : null;
+      return role == UserRole.cashier || role == UserRole.salesperson
+          ? '/sales/new'
+          : '/sales';
+    }
     if (item.id == 'cashier_shifts') return '/client-session';
     return item.route;
   }
@@ -582,7 +589,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                           child: child,
                         );
                       },
-                      onReorder: (oldIndex, newIndex) {
+                      onReorderItem: (oldIndex, newIndex) {
                         // Convert visible indices to _items indices.
                         final visOld = visibleItems[oldIndex];
                         final realOld = _items.indexOf(visOld);
@@ -590,9 +597,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                         // Determine the real new index.
                         int realNew;
                         if (newIndex > oldIndex) {
-                          // Moving down: insert after the item at
-                          // newIndex-1 in the visible list.
-                          final visAfter = visibleItems[newIndex - 1];
+                          // The new Flutter callback already adjusts newIndex
+                          // after removing the dragged item. Insert after the
+                          // item that will precede it in the final list.
+                          final visAfter = visibleItems[newIndex];
                           realNew = _items.indexOf(visAfter) + 1;
                         } else {
                           // Moving up: insert before the item at

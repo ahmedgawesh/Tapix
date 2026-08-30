@@ -438,6 +438,30 @@ void main() {
       expect(catalog.products.single.name, 'Milk');
       expect(catalog.products.single.stockQuantity, 2500);
       expect(catalog.products.single.costCents, isNull);
+      expect(catalog.enablePharmacyFeatures, isTrue);
+      expect(
+        catalog.products.single.medicine?.ingredients.single.canonicalName,
+        'ibuprofen',
+      );
+      expect(catalog.products.single.toJson(), isNot(contains('costCents')));
+
+      final alternatives = await client.fetchRemoteMedicineAlternatives(7);
+      expect(alternatives.sourceProductId, 7);
+      expect(alternatives.alternatives.single.id, 8);
+      expect(
+        alternatives
+            .alternatives
+            .single
+            .medicine
+            ?.ingredients
+            .single
+            .canonicalName,
+        'ibuprofen',
+      );
+      expect(
+        alternatives.alternatives.single.toJson(),
+        isNot(contains('costCents')),
+      );
 
       final managementCatalog = await client.fetchRemoteCatalog(
         management: true,
@@ -476,9 +500,19 @@ void main() {
       );
       await client.openOwnRemoteShift(openingCashCents: 10000);
 
+      final activities = <LanMasterActivityEvent>[];
+      final activitySub = master.masterActivityEvents.listen(activities.add);
+      addTearDown(activitySub.cancel);
       final created = await client.submitRemoteSale(request);
       final replayed = await client.submitRemoteSale(request);
+      await Future<void>.delayed(Duration.zero);
 
+      expect(activities, hasLength(1));
+      expect(activities.single.type, LanMasterActivityType.sale);
+      expect(activities.single.actorName, 'cashier-1');
+      expect(activities.single.deviceName, 'Linux POS');
+      expect(activities.single.documentNumber, 'SI-202608-0044');
+      expect(activities.single.totalCents, 250);
       expect(created.saleId, replayed.saleId);
       expect(created.duplicate, isFalse);
       expect(replayed.duplicate, isTrue);
@@ -543,6 +577,18 @@ void main() {
     );
 
     expect((await client.fetchRemoteCatalog()).products, isNotEmpty);
+    final salesPage = await client.fetchRemoteSales();
+    expect(salesPage.sales.single.invoiceNumber, 'SI-202608-0044');
+    expect(salesPage.sales.single.employeeName, 'Cashier One');
+    expect(salesPage.stats.totalSalesCents, 250);
+    expect(salesPage.saleIdsWithReturns, contains(44));
+    expect(salesPage.productSearchTerms[44], contains('MILK-1'));
+    final saleDetails = await client.fetchRemoteSaleDetails(44);
+    expect(saleDetails.sale.invoiceNumber, 'SI-202608-0044');
+    expect(saleDetails.lines.single.productName, 'Milk');
+    expect(saleDetails.lines.single.quantity, 500);
+    expect(saleDetails.cashierName, 'Cashier One');
+    expect(saleDetails.toJson().toString(), isNot(contains('costCents')));
     final managementCatalog = await client.fetchRemoteCatalog(management: true);
     expect(managementCatalog.products.single.minQuantity, 500);
     expect(managementCatalog.products.single.costCents, 275);
@@ -586,6 +632,55 @@ void main() {
     expect(details.lines.single.measurementType, 'volume');
   });
 
+  test('cashier cannot void a master sale', () async {
+    await addMasterUser(
+      username: 'cashier-no-void',
+      password: 'cashier-secret',
+      role: 'cashier',
+    );
+    await pairClient();
+    expect(
+      (await client.loginToMaster(
+        username: 'cashier-no-void',
+        password: 'cashier-secret',
+      )).success,
+      isTrue,
+    );
+
+    await expectLater(
+      client.voidRemoteSale(44),
+      throwsA(
+        isA<LanBusinessException>()
+            .having((error) => error.statusCode, 'statusCode', 403)
+            .having((error) => error.code, 'code', 'permission_denied'),
+      ),
+    );
+    expect(businessGateway.voidedSaleId, isNull);
+  });
+
+  test(
+    'manager can void a master sale and the action reaches the gateway',
+    () async {
+      await addMasterUser(
+        username: 'manager-void',
+        password: 'manager-secret',
+        role: 'manager',
+      );
+      await pairClient();
+      expect(
+        (await client.loginToMaster(
+          username: 'manager-void',
+          password: 'manager-secret',
+        )).success,
+        isTrue,
+      );
+
+      final result = await client.voidRemoteSale(44);
+      expect(result.status, 'voided');
+      expect(businessGateway.voidedSaleId, 44);
+    },
+  );
+
   test(
     'cashier lists returns and safely retries one network sale return',
     () async {
@@ -605,6 +700,16 @@ void main() {
 
       final returns = await client.fetchRemoteSaleReturns();
       expect(returns.returns.single.returnNumber, 'SR-202608-0005');
+      final returnDetails = await client.fetchRemoteSaleReturnDetails(
+        returnId: 5,
+        adjustment: false,
+      );
+      expect(returnDetails.summary.saleId, 44);
+      expect(returnDetails.lines.single.productName, 'Milk');
+      expect(returnDetails.lines.single.totalCents, 125);
+      final activities = <LanMasterActivityEvent>[];
+      final activitySub = master.masterActivityEvents.listen(activities.add);
+      addTearDown(activitySub.cancel);
 
       const request = LanSaleReturnRequest(
         idempotencyKey: 'lan-sale-return-safe-retry-001',
@@ -615,7 +720,12 @@ void main() {
       );
       final created = await client.submitRemoteSaleReturn(request);
       final replayed = await client.submitRemoteSaleReturn(request);
+      await Future<void>.delayed(Duration.zero);
 
+      expect(activities, hasLength(1));
+      expect(activities.single.type, LanMasterActivityType.saleReturn);
+      expect(activities.single.documentNumber, 'SR-202608-0005');
+      expect(activities.single.totalCents, 125);
       expect(created.returnId, replayed.returnId);
       expect(created.duplicate, isFalse);
       expect(replayed.duplicate, isTrue);
@@ -648,6 +758,9 @@ void main() {
       isTrue,
     );
 
+    final activities = <LanMasterActivityEvent>[];
+    final activitySub = master.masterActivityEvents.listen(activities.add);
+    addTearDown(activitySub.cancel);
     final request = LanSaleAdjustmentReturnRequest(
       idempotencyKey: 'lan-sale-adjustment-safe-retry-001',
       refundMethod: 'cash',
@@ -663,7 +776,12 @@ void main() {
     );
     final created = await client.submitRemoteSaleAdjustmentReturn(request);
     final replayed = await client.submitRemoteSaleAdjustmentReturn(request);
+    await Future<void>.delayed(Duration.zero);
 
+    expect(activities, hasLength(1));
+    expect(activities.single.type, LanMasterActivityType.saleAdjustmentReturn);
+    expect(activities.single.documentNumber, 'SRS-202608-0008');
+    expect(activities.single.totalCents, 250);
     expect(created.returnId, replayed.returnId);
     expect(created.duplicate, isFalse);
     expect(replayed.duplicate, isTrue);
@@ -794,6 +912,100 @@ class _FakeBusinessGateway implements LanMasterBusinessGateway {
   LanSaleReturnRequest? lastReturnRequest;
   LanSaleAdjustmentReturnRequest? lastAdjustmentReturnRequest;
   String? productImagePath;
+  int? voidedSaleId;
+
+  @override
+  Future<LanSalesPage> fetchSales({required int limit}) async {
+    final now = DateTime.utc(2026, 8, 25);
+    return LanSalesPage(
+      currencyCode: 'USD',
+      currencySymbol: r'$',
+      currencyDecimalDigits: 2,
+      currencySymbolAfter: false,
+      sales: [
+        LanSaleSummary(
+          id: 44,
+          invoiceNumber: 'SI-202608-0044',
+          customerId: 3,
+          customerName: 'Network Customer',
+          employeeId: 9,
+          employeeName: 'Cashier One',
+          subtotalCents: 250,
+          taxCents: 0,
+          discountCents: 0,
+          totalCents: 250,
+          paidAmountCents: 250,
+          currencyId: 1,
+          paymentMethod: 'cash',
+          status: 'completed',
+          saleDate: now,
+          taxInclusiveAtPost: false,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ],
+      stats: const LanSaleDashboardStats(
+        totalCount: 1,
+        completedCount: 1,
+        voidedCount: 0,
+        totalSalesCents: 250,
+        totalPaidCents: 250,
+        returnsCount: 1,
+        totalReturnsCents: 125,
+        todaySalesCents: 250,
+        todayCount: 1,
+      ),
+      saleIdsWithReturns: const {44},
+      productSearchTerms: const {
+        44: ['Milk', 'MILK-1', '123456789'],
+      },
+    );
+  }
+
+  @override
+  Future<LanSaleDetails?> fetchSaleDetails({required int saleId}) async {
+    if (saleId != 44) return null;
+    final page = await fetchSales(limit: 1);
+    final now = DateTime.utc(2026, 8, 25);
+    return LanSaleDetails(
+      sale: page.sales.single,
+      lines: [
+        LanSaleDetailLine(
+          id: 70,
+          saleId: 44,
+          productId: 7,
+          productName: 'Milk',
+          productSku: 'MILK-1',
+          quantity: 500,
+          quantityScale: 1000,
+          measurementType: 'volume',
+          unitPriceCents: 500,
+          subtotalCents: 250,
+          discountCents: 0,
+          taxCents: 0,
+          totalCents: 250,
+          employeeId: 9,
+          employeeName: 'Salesperson',
+          createdAt: now,
+        ),
+      ],
+      currencyCode: 'USD',
+      currencySymbol: r'$',
+      currencyDecimalDigits: 2,
+      currencySymbolAfter: false,
+      cashierName: 'Cashier One',
+      cashierShiftNumber: 'SHIFT-202608-0001',
+    );
+  }
+
+  @override
+  Future<LanSaleVoidResult> voidSale({
+    required LanRemoteUser actor,
+    required int saleId,
+  }) async {
+    voidedSaleId = saleId;
+    return LanSaleVoidResult(saleId: saleId, status: 'voided');
+  }
 
   @override
   Future<LanCatalogPage> fetchCatalog({
@@ -820,6 +1032,22 @@ class _FakeBusinessGateway implements LanMasterBusinessGateway {
           costCents: 275,
           lastPurchasePriceCents: 300,
           minQuantity: 500,
+          medicine: const LanMedicineProfile(
+            dosageForm: 'suspension',
+            administrationRoute: 'oral',
+            substitutionEligible: true,
+            ingredients: [
+              LanMedicineIngredient(
+                ingredientId: 1,
+                canonicalName: 'ibuprofen',
+                nameAr: 'إيبوبروفين',
+                strengthValueMicros: 100000000,
+                strengthUnit: 'mg',
+                basisValueMicros: 5000000,
+                basisUnit: 'ml',
+              ),
+            ],
+          ),
         ),
       ],
       offset: 0,
@@ -834,6 +1062,46 @@ class _FakeBusinessGateway implements LanMasterBusinessGateway {
       allowNegativeStock: false,
       allowPartialPayments: false,
       requireCustomerForSales: false,
+      enablePharmacyFeatures: true,
+    );
+  }
+
+  @override
+  Future<LanMedicineAlternativesResult> fetchMedicineAlternatives({
+    required int productId,
+  }) async {
+    return LanMedicineAlternativesResult(
+      sourceProductId: productId,
+      alternatives: [
+        const LanCatalogProduct(
+          id: 8,
+          name: 'Alternative Milk',
+          priceCents: 450,
+          stockQuantity: 1200,
+          hasVariants: false,
+          isTaxable: false,
+          salesTaxRateBps: 0,
+          trackInventory: true,
+          measurementType: 'volume',
+          quantityScale: 1000,
+          medicine: LanMedicineProfile(
+            dosageForm: 'suspension',
+            administrationRoute: 'oral',
+            substitutionEligible: true,
+            ingredients: [
+              LanMedicineIngredient(
+                ingredientId: 1,
+                canonicalName: 'ibuprofen',
+                nameAr: 'إيبوبروفين',
+                strengthValueMicros: 100000000,
+                strengthUnit: 'mg',
+                basisValueMicros: 5000000,
+                basisUnit: 'ml',
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -951,6 +1219,46 @@ class _FakeBusinessGateway implements LanMasterBusinessGateway {
       offset: offset,
       limit: limit,
       hasMore: false,
+    );
+  }
+
+  @override
+  Future<LanSaleReturnDetails?> fetchSaleReturnDetails({
+    required int returnId,
+    required bool adjustment,
+  }) async {
+    if (returnId != 5 || adjustment) return null;
+    final summary = (await fetchSaleReturns(
+      query: '',
+      offset: 0,
+      limit: 1,
+    )).returns.single;
+    return LanSaleReturnDetails(
+      summary: summary,
+      lines: [
+        LanSaleReturnDetailLine(
+          id: 12,
+          returnId: returnId,
+          saleItemId: 70,
+          productId: 7,
+          productName: 'Milk',
+          productSku: 'MILK-1',
+          quantity: 250,
+          quantityScale: 1000,
+          measurementType: 'volume',
+          unitPriceCents: 500,
+          subtotalCents: 125,
+          discountCents: 0,
+          taxCents: 0,
+          totalCents: 125,
+          dispositionType: 'restock',
+          createdAt: DateTime.utc(2026, 8, 25),
+        ),
+      ],
+      currencyCode: 'USD',
+      currencySymbol: r'$',
+      currencyDecimalDigits: 2,
+      currencySymbolAfter: false,
     );
   }
 

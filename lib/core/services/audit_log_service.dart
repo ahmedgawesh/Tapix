@@ -390,10 +390,7 @@ class AuditLogService {
       entityType: 'product',
       entityId: productId,
       action: 'update',
-      newValue: {
-        'name': productName,
-        if (changedFields != null) ...changedFields,
-      },
+      newValue: {'name': productName, ...?changedFields},
       userId: userId,
       userRole: userRole,
     );
@@ -451,7 +448,7 @@ class AuditLogService {
       entityId: targetUserId,
       action: 'update',
       oldValue: {'username': username, 'role': ?oldRole},
-      newValue: {'role': ?newRole, if (changedFields != null) ...changedFields},
+      newValue: {'role': ?newRole, ...?changedFields},
       userId: userId,
       userRole: userRole,
       severity: AuditSeverity.critical,

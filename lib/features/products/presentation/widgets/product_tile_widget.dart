@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import '../../../../core/measurement/measurement_localization.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 import '../../domain/entities/expiry_summary.dart';
@@ -168,7 +168,8 @@ class ProductTileWidget extends StatelessWidget {
                             if (totalVariantStock != null) ...[
                               const SizedBox(width: 12),
                               Text(
-                                '${'variants.stock'.tr()}: $totalVariantStock',
+                                '${'variants.stock'.tr()}: '
+                                '${localizedQuantity(totalVariantStock!, product.measurementType)}',
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ],
@@ -493,7 +494,9 @@ class ProductTileWidget extends StatelessWidget {
     // Build display text: show variant count and/or total stock if available
     String displayText;
     if (variantCount != null && totalVariantStock != null) {
-      displayText = '$variantCount × $totalVariantStock';
+      displayText =
+          '$variantCount × '
+          '${localizedQuantity(totalVariantStock!, product.measurementType)}';
     } else if (variantCount != null) {
       displayText = '×$variantCount';
     } else {

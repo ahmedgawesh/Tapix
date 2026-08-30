@@ -143,6 +143,25 @@ class SaleItemEntity extends Equatable {
     return productName ?? '';
   }
 
+  /// Full identity required while selecting a return line. A human-readable
+  /// color/size pair identifies the physical variant, while the SKU remains
+  /// visible for barcode and invoice reconciliation.
+  String get returnDisplayName {
+    final name = productName?.trim();
+    final base = name == null || name.isEmpty ? 'Product #$productId' : name;
+    final attributes = <String>[
+      if (colorName != null && colorName!.trim().isNotEmpty) colorName!.trim(),
+      if (sizeName != null && sizeName!.trim().isNotEmpty) sizeName!.trim(),
+    ];
+    final sku = (variantSku ?? productSku)?.trim();
+    final withAttributes = attributes.isEmpty
+        ? base
+        : '$base (${attributes.join(' / ')})';
+    return sku == null || sku.isEmpty
+        ? withAttributes
+        : '$withAttributes • SKU: $sku';
+  }
+
   @override
   List<Object?> get props => [
     id,

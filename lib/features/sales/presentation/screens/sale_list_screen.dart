@@ -3,12 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../bloc/sales_bloc.dart';
 import '../../../shared/widgets/date_range_filter_sheet.dart';
@@ -38,6 +39,23 @@ class _SaleHubViewState extends State<_SaleHubView> {
   String? _selectedStatus;
   DateTimeRange? _dateRange;
   String? _datePresetLabel;
+
+  bool get _isRemoteClient =>
+      sl<LanNetworkService>().snapshot.mode == LanMode.client;
+
+  bool get _canCreateSale =>
+      !_isRemoteClient ||
+      sl<LanNetworkService>().remoteUser?.permissions.any(
+            const ['create_sales', 'process_sales', 'manage_sales'].contains,
+          ) ==
+          true;
+
+  bool get _canHandleReturns =>
+      !_isRemoteClient ||
+      sl<LanNetworkService>().remoteUser?.permissions.any(
+            const ['handle_returns', 'manage_sales'].contains,
+          ) ==
+          true;
 
   void _onSearchChanged(String value) {
     _debounceTimer?.cancel();
@@ -72,35 +90,40 @@ class _SaleHubViewState extends State<_SaleHubView> {
         ),
         title: Text('sales.title'.tr()),
         actions: [
-          Tooltip(
-            message: 'sales.returns'.tr(),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: () => context.push('/sales/returns'),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(LucideIcons.undo2, size: 22),
-                    const SizedBox(height: 2),
-                    Text(
-                      'sales.returns'.tr(),
-                      style: Theme.of(
-                        context,
-                      ).textTheme.labelSmall?.copyWith(fontSize: 10),
-                    ),
-                  ],
+          if (_canHandleReturns)
+            Tooltip(
+              message: 'sales.returns'.tr(),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => context.push('/sales/returns'),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(LucideIcons.undo2, size: 22),
+                      const SizedBox(height: 2),
+                      Text(
+                        'sales.returns'.tr(),
+                        style: Theme.of(
+                          context,
+                        ).textTheme.labelSmall?.copyWith(fontSize: 10),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          IconButton(
-            icon: const Icon(LucideIcons.settings),
-            onPressed: () => context.push('/settings'),
-            tooltip: 'settings.title'.tr(),
-          ),
+          if (!_isRemoteClient)
+            IconButton(
+              icon: const Icon(LucideIcons.settings),
+              onPressed: () => context.push('/settings'),
+              tooltip: 'settings.title'.tr(),
+            ),
         ],
       ),
       body: SafeArea(
@@ -133,12 +156,14 @@ class _SaleHubViewState extends State<_SaleHubView> {
           },
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push('/sales/new'),
-        icon: const Icon(LucideIcons.plus),
-        label: Text('sales.new'.tr()),
-        elevation: 2,
-      ),
+      floatingActionButton: _canCreateSale
+          ? FloatingActionButton.extended(
+              onPressed: () => context.push('/sales/new'),
+              icon: const Icon(LucideIcons.plus),
+              label: Text('sales.new'.tr()),
+              elevation: 2,
+            )
+          : null,
     );
   }
 
@@ -174,7 +199,7 @@ class _SaleHubViewState extends State<_SaleHubView> {
   Widget _buildContent(BuildContext context, SalesHubData data) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final currencyService = sl<CurrencyService>();
+    String formatCurrency(int cents) => _formatCurrency(data, cents);
 
     return RefreshIndicator(
       onRefresh: () async => context.read<SalesBloc>().refresh(),
@@ -196,14 +221,14 @@ class _SaleHubViewState extends State<_SaleHubView> {
                         colorScheme.primary.withValues(alpha: 0.7),
                       ],
                       label: 'sales.total_revenue'.tr(),
-                      value: currencyService.format(data.stats.totalSalesCents),
+                      value: formatCurrency(data.stats.totalSalesCents),
                     ),
                     _StatCard(
                       icon: LucideIcons.trendingUp,
                       iconColor: Colors.green,
                       gradientColors: [Colors.green, Colors.green.shade300],
                       label: 'sales.today_sales'.tr(),
-                      value: currencyService.format(data.stats.todaySalesCents),
+                      value: formatCurrency(data.stats.todaySalesCents),
                     ),
                     _StatCard(
                       icon: LucideIcons.checkCircle,
@@ -416,7 +441,7 @@ class _SaleHubViewState extends State<_SaleHubView> {
                 }
                 return _SaleTile(
                   sale: sale,
-                  currencyService: currencyService,
+                  currencyFormatter: formatCurrency,
                   hasReturn: data.saleIdsWithReturns.contains(sale.id),
                   searchQuery: data.searchQuery,
                   isProductMatch: data.productMatchedSaleIds.contains(sale.id),
@@ -429,6 +454,22 @@ class _SaleHubViewState extends State<_SaleHubView> {
         ],
       ),
     );
+  }
+
+  String _formatCurrency(SalesHubData data, int cents) {
+    final symbol = data.currencySymbol;
+    final digits = data.currencyDecimalDigits;
+    if (symbol == null || digits == null) {
+      return sl<CurrencyService>().format(cents);
+    }
+    final value = cents / 100.0;
+    final formatted = NumberFormat.decimalPatternDigits(
+      locale: Intl.getCurrentLocale(),
+      decimalDigits: digits,
+    ).format(value);
+    return data.currencySymbolAfter
+        ? '$formatted $symbol'
+        : '$symbol$formatted';
   }
 
   Widget _buildDateFilterButton(BuildContext context) {
@@ -503,18 +544,20 @@ class _SaleHubViewState extends State<_SaleHubView> {
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 28),
-            FilledButton.icon(
-              onPressed: () => context.push('/sales/new'),
-              icon: const Icon(LucideIcons.plus, size: 18),
-              label: Text('sales.add_first'.tr()),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 14,
+            if (_canCreateSale) ...[
+              const SizedBox(height: 28),
+              FilledButton.icon(
+                onPressed: () => context.push('/sales/new'),
+                icon: const Icon(LucideIcons.plus, size: 18),
+                label: Text('sales.add_first'.tr()),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 14,
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
         ),
       ),
@@ -649,7 +692,7 @@ class _FilterChip extends StatelessWidget {
 // ─── Sale Tile ───
 class _SaleTile extends StatelessWidget {
   final SaleEntity sale;
-  final CurrencyService currencyService;
+  final String Function(int) currencyFormatter;
   final bool hasReturn;
   final String? searchQuery;
   final bool isProductMatch;
@@ -657,7 +700,7 @@ class _SaleTile extends StatelessWidget {
 
   const _SaleTile({
     required this.sale,
-    required this.currencyService,
+    required this.currencyFormatter,
     this.hasReturn = false,
     this.searchQuery,
     this.isProductMatch = false,
@@ -983,7 +1026,7 @@ class _SaleTile extends StatelessWidget {
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                currencyService.format(
+                                currencyFormatter(
                                   sale.totalCents.toBigInt().toInt(),
                                 ),
                                 style: theme.textTheme.titleMedium?.copyWith(

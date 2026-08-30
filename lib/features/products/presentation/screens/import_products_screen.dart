@@ -3,7 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../auth/auth.dart';
 import '../bloc/import_products_bloc.dart';
@@ -285,51 +285,25 @@ class _ImportProductsView extends StatelessWidget {
 
       debugPrint('[ImportProductsScreen] Opening file picker');
 
-      final result = await FilePicker.pickFiles(
+      final file = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: ['csv', 'xlsx', 'xls'],
-        allowMultiple: false,
-        withData: true,
-        withReadStream: true,
       );
 
       debugPrint(
-        '[ImportProductsScreen] File picker result: ${result == null ? 'null' : 'files=${result.files.length}'}',
+        '[ImportProductsScreen] File picker result: ${file == null ? 'null' : file.name}',
       );
 
-      if (result != null && result.files.isNotEmpty) {
-        final file = result.files.first;
-
+      if (file != null) {
         debugPrint(
-          '[ImportProductsScreen] Selected: name=${file.name}, size=${file.size}, bytes=${file.bytes?.length}, path=${file.path}, readStream=${file.readStream != null}',
+          '[ImportProductsScreen] Selected: name=${file.name}, uri=${file.uri}',
         );
 
-        final bytes =
-            file.bytes ??
-            (file.readStream == null
-                ? null
-                : await file.readStream!.fold<List<int>>(
-                    <int>[],
-                    (acc, chunk) => acc..addAll(chunk),
-                  ));
-
-        if (bytes != null) {
-          if (!context.mounted) return;
-          context.read<ImportProductsBloc>().add(
-            ImportFileSelected(fileBytes: bytes, fileName: file.name),
-          );
-        } else {
-          if (!context.mounted) return;
-          debugPrint(
-            '[ImportProductsScreen] File bytes are null (cannot read file)',
-          );
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('import_products.file_pick_error'.tr()),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
-        }
+        final bytes = await file.readAsBytes();
+        if (!context.mounted) return;
+        context.read<ImportProductsBloc>().add(
+          ImportFileSelected(fileBytes: bytes, fileName: file.name),
+        );
       } else {
         if (!context.mounted) return;
         debugPrint(

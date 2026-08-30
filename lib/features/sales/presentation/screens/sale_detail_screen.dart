@@ -3,13 +3,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:decimal/decimal.dart';
 
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/currency_service.dart'
+    as currency_model
+    show Currency, SymbolPosition;
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../../core/services/cashier_shift_service.dart';
 import '../../../../core/services/void_impact_analyzer.dart';
 import '../../../../core/database/app_database.dart';
@@ -36,6 +40,8 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
   List<SaleItemEntity> _items = [];
   List<SaleReturnEntity> _returns = [];
   CashierShiftView? _cashierShift;
+  LanSaleDetails? _remoteDetails;
+  Object? _loadError;
   bool _loading = true;
   StreamSubscription<List<SaleReturnEntity>>? _returnsSub;
 
@@ -52,6 +58,16 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
   }
 
   Future<void> _loadSale() async {
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _loadError = null;
+      });
+    }
+    if (sl<LanNetworkService>().snapshot.mode == LanMode.client) {
+      await _loadRemoteSale();
+      return;
+    }
     final repo = sl<SaleRepository>();
     final sale = await repo.getSaleById(widget.saleId);
     final items = await repo.getSaleItems(widget.saleId);
@@ -73,6 +89,130 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
       });
     }
   }
+
+  Future<void> _loadRemoteSale() async {
+    try {
+      final details = await sl<LanNetworkService>().fetchRemoteSaleDetails(
+        widget.saleId,
+      );
+      await _applyRemoteCurrency(details);
+      final source = details.sale;
+      final sale = SaleEntity(
+        id: source.id,
+        invoiceNumber: source.invoiceNumber,
+        customerId: source.customerId,
+        customerName: source.customerName,
+        customerPhone: source.customerPhone,
+        employeeId: source.employeeId,
+        employeeName: source.employeeName,
+        subtotalCents: Decimal.fromInt(source.subtotalCents),
+        taxCents: Decimal.fromInt(source.taxCents),
+        discountCents: Decimal.fromInt(source.discountCents),
+        totalCents: Decimal.fromInt(source.totalCents),
+        paidAmountCents: Decimal.fromInt(source.paidAmountCents),
+        currencyId: source.currencyId,
+        paymentMethod: source.paymentMethod,
+        status: source.status,
+        notes: source.notes,
+        saleDate: source.saleDate,
+        dueDate: source.dueDate,
+        taxInclusiveAtPost: source.taxInclusiveAtPost,
+        createdAt: source.createdAt,
+        updatedAt: source.updatedAt,
+      );
+      final items = details.lines
+          .map(
+            (line) => SaleItemEntity(
+              id: line.id,
+              saleId: line.saleId,
+              productId: line.productId,
+              productName: line.productName,
+              productSku: line.productSku,
+              variantId: line.variantId,
+              variantSku: line.variantSku,
+              colorName: line.colorName,
+              colorHex: line.colorHex,
+              sizeName: line.sizeName,
+              quantity: line.quantity,
+              quantityScale: line.quantityScale,
+              measurementType: line.measurementType,
+              unitPriceCents: Decimal.fromInt(line.unitPriceCents),
+              subtotalCents: Decimal.fromInt(line.subtotalCents),
+              discountCents: Decimal.fromInt(line.discountCents),
+              taxCents: Decimal.fromInt(line.taxCents),
+              totalCents: Decimal.fromInt(line.totalCents),
+              employeeId: line.employeeId,
+              employeeName: line.employeeName,
+              createdAt: line.createdAt,
+            ),
+          )
+          .toList(growable: false);
+      if (!mounted) return;
+      setState(() {
+        _remoteDetails = details;
+        _sale = sale;
+        _items = items;
+        _returns = const [];
+        _cashierShift = null;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = error;
+        _sale = null;
+        _items = const [];
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _applyRemoteCurrency(LanSaleDetails details) async {
+    final service = sl<CurrencyService>();
+    final current = service.getCurrency();
+    if (current.code != details.currencyCode ||
+        current.symbol != details.currencySymbol ||
+        current.decimalDigits != details.currencyDecimalDigits ||
+        (current.symbolPosition == SymbolPosition.after) !=
+            details.currencySymbolAfter) {
+      await service.addCustomCurrency(
+        currency_model.Currency(
+          code: details.currencyCode,
+          symbol: details.currencySymbol,
+          name: details.currencyCode,
+          decimalDigits: details.currencyDecimalDigits,
+          symbolPosition: details.currencySymbolAfter
+              ? currency_model.SymbolPosition.after
+              : currency_model.SymbolPosition.before,
+          isCustom: true,
+        ),
+      );
+    }
+    await service.setCurrency(details.currencyCode);
+  }
+
+  bool get _isRemoteClient =>
+      sl<LanNetworkService>().snapshot.mode == LanMode.client;
+
+  bool get _canReturnRemote =>
+      !_isRemoteClient ||
+      sl<LanNetworkService>().remoteUser?.permissions.any(
+            const ['handle_returns', 'manage_sales'].contains,
+          ) ==
+          true;
+
+  bool get _canVoidRemote =>
+      !_isRemoteClient ||
+      sl<LanNetworkService>().remoteUser?.permissions.contains(
+            'void_transactions',
+          ) ==
+          true;
+
+  String? get _cashierName =>
+      _cashierShift?.cashierName ?? _remoteDetails?.cashierName;
+
+  String? get _cashierShiftNumber =>
+      _cashierShift?.shift.shiftNumber ?? _remoteDetails?.cashierShiftNumber;
 
   @override
   Widget build(BuildContext context) {
@@ -96,7 +236,19 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
             children: [
               Icon(LucideIcons.alertCircle, size: 64, color: colorScheme.error),
               const SizedBox(height: 16),
-              Text('sales.not_found'.tr(), style: theme.textTheme.titleLarge),
+              Text(
+                _loadError == null
+                    ? 'sales.not_found'.tr()
+                    : _loadError.toString(),
+                style: theme.textTheme.titleLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _loadSale,
+                icon: const Icon(LucideIcons.refreshCw),
+                label: Text('common.retry'.tr()),
+              ),
             ],
           ),
         ),
@@ -148,24 +300,26 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
         );
 
     if (sale.isCompleted) {
-      actions.add(
-        FilledButton.tonalIcon(
-          onPressed: () {
-            // In-invoice button always creates a LINKED return for this invoice.
-            // Adjustment (unlinked) returns are created from the Returns list.
-            context.push('/sales/returns/new?saleId=${sale.id}');
-          },
-          icon: const Icon(LucideIcons.undo2, size: 16),
-          label: Text('sales.create_return'.tr()),
-        ),
-      );
-      actions.add(const SizedBox(width: 4));
+      if (_canReturnRemote) {
+        actions.add(
+          FilledButton.tonalIcon(
+            onPressed: () {
+              // In-invoice button always creates a LINKED return for this invoice.
+              // Adjustment (unlinked) returns are created from the Returns list.
+              context.push('/sales/returns/new?saleId=${sale.id}');
+            },
+            icon: const Icon(LucideIcons.undo2, size: 16),
+            label: Text('sales.create_return'.tr()),
+          ),
+        );
+        actions.add(const SizedBox(width: 4));
+      }
       actions.add(
         PopupMenuButton<String>(
           icon: const Icon(LucideIcons.moreVertical),
           onSelected: (v) => _handleAction(v, context),
           itemBuilder: (_) => [
-            if (canEdit)
+            if (canEdit && !_isRemoteClient)
               PopupMenuItem(
                 value: 'edit',
                 child: ListTile(
@@ -193,19 +347,21 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                 contentPadding: EdgeInsets.zero,
               ),
             ),
-            const PopupMenuDivider(),
-            PopupMenuItem(
-              value: 'void',
-              child: ListTile(
-                leading: Icon(LucideIcons.ban, color: colorScheme.error),
-                title: Text(
-                  'sales.void_sale'.tr(),
-                  style: TextStyle(color: colorScheme.error),
+            if (_canVoidRemote) ...[
+              const PopupMenuDivider(),
+              PopupMenuItem(
+                value: 'void',
+                child: ListTile(
+                  leading: Icon(LucideIcons.ban, color: colorScheme.error),
+                  title: Text(
+                    'sales.void_sale'.tr(),
+                    style: TextStyle(color: colorScheme.error),
+                  ),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
                 ),
-                dense: true,
-                contentPadding: EdgeInsets.zero,
               ),
-            ),
+            ],
           ],
         ),
       );
@@ -224,6 +380,8 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
               context: context,
               sale: _sale!,
               items: _items,
+              cashierName: _cashierName,
+              cashierShiftNumber: _cashierShiftNumber,
             );
           } catch (e) {
             if (context.mounted) {
@@ -244,6 +402,8 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
               context: context,
               sale: _sale!,
               items: _items,
+              cashierName: _cashierName,
+              cashierShiftNumber: _cashierShiftNumber,
             );
           } catch (_) {}
         }
@@ -253,6 +413,62 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
         context.push('/sales/${widget.saleId}/edit?posted=true');
         break;
       case 'void':
+        if (_isRemoteClient) {
+          final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              icon: Icon(
+                LucideIcons.alertTriangle,
+                color: Theme.of(ctx).colorScheme.error,
+              ),
+              title: Text('sales.void_confirm_title'.tr()),
+              content: Text('sales.void_confirm_message'.tr()),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: Text('common.cancel'.tr()),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: Text('sales.void_sale'.tr()),
+                ),
+              ],
+            ),
+          );
+          if (confirmed != true || !context.mounted) return;
+          final messenger = ScaffoldMessenger.of(context);
+          try {
+            await sl<LanNetworkService>().voidRemoteSale(widget.saleId);
+            await _loadSale();
+            if (!mounted) return;
+            messenger.showSnackBar(
+              SnackBar(content: Text('sales.void_success'.tr())),
+            );
+          } on LanBusinessException catch (error) {
+            if (!context.mounted) return;
+            final message = error.code == 'remote_pin_required'
+                ? 'settings.network.remote_void_pin_required'.tr()
+                : error.message;
+            await showDialog<void>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                icon: Icon(
+                  LucideIcons.alertTriangle,
+                  color: Theme.of(ctx).colorScheme.error,
+                ),
+                title: Text('sales.void_failed_title'.tr()),
+                content: Text(message),
+                actions: [
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: Text('common.ok'.tr()),
+                  ),
+                ],
+              ),
+            );
+          }
+          return;
+        }
         // Check if PIN is required for void/refund
         final settings = context.read<AppSettingsBloc>().state.settings;
         if (settings.requirePinForVoidRefund) {
@@ -347,7 +563,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                 _buildReturnsCard(context, cs),
               ],
               const SizedBox(height: 16),
-              BatchFlowWidget(saleId: widget.saleId),
+              if (!_isRemoteClient) BatchFlowWidget(saleId: widget.saleId),
             ],
           ),
         ),
@@ -373,8 +589,10 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
           _buildReturnsCard(context, cs),
         ],
         const SizedBox(height: 16),
-        BatchFlowWidget(saleId: widget.saleId),
-        const SizedBox(height: 16),
+        if (!_isRemoteClient) ...[
+          BatchFlowWidget(saleId: widget.saleId),
+          const SizedBox(height: 16),
+        ],
         _buildTotalsCard(context, sale, cs),
         if (sale.notes != null && sale.notes!.isNotEmpty) ...[
           const SizedBox(height: 16),
@@ -619,20 +837,20 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                 sale.employeeName!,
               ),
             ],
-            if (_cashierShift != null) ...[
+            if (_cashierName != null && _cashierName!.isNotEmpty) ...[
               const SizedBox(height: 10),
               _detailRow(
                 theme,
                 LucideIcons.userCheck,
                 'cashier_shifts.cashier'.tr(),
-                _cashierShift!.cashierName,
+                _cashierName!,
               ),
               const SizedBox(height: 10),
               _detailRow(
                 theme,
                 LucideIcons.hash,
                 'cashier_shifts.shift_number'.tr(),
-                _cashierShift!.shift.shiftNumber,
+                _cashierShiftNumber ?? '',
               ),
             ],
             const SizedBox(height: 10),

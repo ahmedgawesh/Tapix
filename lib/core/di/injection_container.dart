@@ -7,6 +7,7 @@ import '../bloc/localization_bloc.dart';
 import '../bloc/theme_bloc.dart';
 import '../database/app_database.dart';
 import '../database/daos/product_dao.dart';
+import '../database/daos/pharmacy_dao.dart';
 import '../database/daos/product_variant_dao.dart';
 import '../database/daos/product_color_dao.dart';
 import '../database/daos/category_dao.dart';
@@ -139,6 +140,7 @@ import '../services/owner_finance_service.dart';
 import '../services/fixed_asset_service.dart';
 import '../services/commissions/commission_service.dart';
 import '../services/loyalty/loyalty_points_service.dart';
+import '../services/pharmacy/medicine_normalization_service.dart';
 import '../services/returns/return_approval_service.dart';
 import '../services/returns/return_journal_policy.dart';
 import '../services/returns/return_posting_service.dart';
@@ -189,9 +191,11 @@ import '../../features/reports/presentation/bloc/discount_reports_bloc.dart';
 import '../../features/reports/presentation/bloc/profit_reports_bloc.dart';
 import '../services/revenuecat_service.dart';
 import '../services/device_fingerprint_service.dart';
+import '../services/desktop_license_service.dart';
 import '../services/license_service.dart';
 import '../services/connectivity_service.dart';
 import '../services/lan/lan_network_service.dart';
+import '../services/lan/device_mode_reset_service.dart';
 import '../services/remote_security_service.dart';
 import '../services/code_integrity_service.dart';
 import '../services/app_guard_service.dart';
@@ -211,6 +215,7 @@ Future<void> init() async {
 
   // DAOs
   sl.registerLazySingleton(() => ProductDao(sl()));
+  sl.registerLazySingleton(() => PharmacyDao(sl()));
   sl.registerLazySingleton(() => ProductVariantDao(sl()));
   sl.registerLazySingleton(() => ProductColorDao(sl()));
   sl.registerLazySingleton(() => CategoryDao(sl()));
@@ -226,6 +231,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => AdjustmentReturnDao(sl()));
   sl.registerLazySingleton(() => InventoryAdjustmentDao(sl()));
   sl.registerLazySingleton(() => BatchAuditDao(sl()));
+  sl.registerLazySingleton(() => const MedicineNormalizationService());
   // Phase 14.0 — cheque confirmation lifecycle (DB-backed).
   sl.registerLazySingleton(() => ChequeConfirmationDao(sl()));
 
@@ -582,6 +588,7 @@ Future<void> init() async {
     () => ProductFormBloc(
       sl<ProductRepository>(),
       sl<ProductVariantRepository>(),
+      sl<PharmacyDao>(),
     ),
   );
   sl.registerFactory(() => ProductVariantsBloc(sl<ProductVariantRepository>()));
@@ -626,7 +633,9 @@ Future<void> init() async {
   sl.registerFactory(() => PurchaseReturnFormBloc(sl<PurchaseRepository>()));
 
   // Sales Blocs
-  sl.registerFactory(() => SalesBloc(sl<SaleRepository>()));
+  sl.registerFactory(
+    () => SalesBloc(sl<SaleRepository>(), lan: sl<LanNetworkService>()),
+  );
   sl.registerFactory(
     () => SaleFormBloc(
       sl<SaleRepository>(),
@@ -1022,6 +1031,11 @@ Future<void> init() async {
   // Security & Licensing Services
   sl.registerLazySingleton(() => DeviceFingerprintService());
   sl.registerLazySingleton(
+    () => DesktopLicenseService(
+      fingerprintService: sl<DeviceFingerprintService>(),
+    ),
+  );
+  sl.registerLazySingleton(
     () => LicenseService(fingerprintService: sl<DeviceFingerprintService>()),
   );
   sl.registerLazySingleton(() => ConnectivityService());
@@ -1043,6 +1057,7 @@ Future<void> init() async {
       journalEntries: sl<JournalEntryService>(),
       commissions: sl<CommissionService>(),
       loyaltyPoints: sl<LoyaltyPointsService>(),
+      pharmacy: sl<PharmacyDao>(),
     ),
   );
   sl.registerLazySingleton(
@@ -1051,6 +1066,13 @@ Future<void> init() async {
       authGateway: sl<LanMasterAuthGateway>(),
       businessGateway: sl<LanMasterBusinessGateway>(),
       localizationService: sl<LocalizationService>(),
+    ),
+  );
+  sl.registerLazySingleton(
+    () => DeviceModeResetService(
+      preferences: sl<SharedPreferences>(),
+      database: sl<AppDatabase>(),
+      lan: sl<LanNetworkService>(),
     ),
   );
   sl.registerLazySingleton(() => RemoteSecurityService());
@@ -1075,7 +1097,10 @@ Future<void> init() async {
     ),
   );
   sl.registerLazySingleton(
-    () => FeatureGateService(revenueCatService: sl<RevenueCatService>()),
+    () => FeatureGateService(
+      revenueCatService: sl<RevenueCatService>(),
+      desktopLicenseService: sl<DesktopLicenseService>(),
+    ),
   );
   sl.registerLazySingleton(
     () => FreeQuotaService(

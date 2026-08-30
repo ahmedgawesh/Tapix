@@ -2,7 +2,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
@@ -562,7 +562,7 @@ class _LoyaltySettingsScreenState extends State<LoyaltySettingsScreen>
     return ReorderableListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: _tiers.length,
-      onReorder: (oldIndex, newIndex) {
+      onReorderItem: (oldIndex, newIndex) {
         // TODO: Implement reorder
       },
       itemBuilder: (context, index) {

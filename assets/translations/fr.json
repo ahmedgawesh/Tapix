@@ -24,6 +24,14 @@
       "milliliter": "millilitre"
     }
   },
+  "pharmacy": {
+    "settings": {"title":"Paramètres de pharmacie","enable":"Activer les médicaments et alternatives","enable_desc":"Enregistrer les principes actifs et dosages et afficher les alternatives exactes","safety_note":"Les alternatives sont indicatives. Tapix ne remplace jamais un médicament automatiquement."},
+    "form": {"title":"Détails du médicament","is_medicine":"Ce produit est un médicament","is_medicine_desc":"Enregistrer les principes actifs, le dosage, la forme et la voie","dosage_form":"Forme pharmaceutique","route":"Voie d'administration","ingredient":"Principe actif","add_ingredient":"Ajouter un principe actif","new_ingredient":"Créer un principe actif","ingredient_name":"Nom scientifique en anglais","ingredient_name_ar":"Nom scientifique en arabe","search_ingredient":"Rechercher un principe actif","no_ingredients":"Ajoutez au moins un principe actif","strength":"Dosage","unit":"Unité","per":"Par","basis_unit":"Unité de base","eligible":"Autoriser les alternatives exactes","eligible_desc":"Le principe, le dosage, la forme et la voie doivent correspondre","notes":"Notes pharmaceutiques","remove":"Supprimer le principe"},
+    "alternatives": {"title":"Alternatives médicamenteuses exactes","button":"Afficher les alternatives","none":"Aucune alternative exacte enregistrée","not_medicine":"Aucune donnée médicamenteuse enregistrée pour ce produit","formula":"Formule","available":"Disponible","select":"Choisir cette alternative","search_hint":"Rechercher par médicament ou principe actif"},
+    "validation": {"dosage_form_required":"Choisissez une forme pharmaceutique","route_required":"Choisissez une voie d'administration","ingredient_required":"Ajoutez au moins un principe actif","strength_invalid":"Saisissez un dosage valide pour chaque principe","save_failed":"Impossible d'enregistrer les données du médicament"},
+    "forms": {"tablet":"Comprimé","capsule":"Gélule","syrup":"Sirop","suspension":"Suspension","solution":"Solution","cream":"Crème","ointment":"Pommade","gel":"Gel","drops":"Gouttes","injection":"Injection","vial":"Flacon","ampoule":"Ampoule","inhaler":"Inhalateur","suppository":"Suppositoire","powder":"Poudre","spray":"Spray"},
+    "routes": {"oral":"Orale","topical":"Topique","ophthalmic":"Ophtalmique","otic":"Auriculaire","nasal":"Nasale","inhalation":"Inhalation","rectal":"Rectale","vaginal":"Vaginale","intramuscular":"Intramusculaire","intravenous":"Intraveineuse","subcutaneous":"Sous-cutanée"}
+  },
   "welcome": {
     "title": "Bienvenue sur Tapix",
     "subtitle": "Personnalisons votre expérience",
@@ -226,7 +234,25 @@
       "title": "Appareils et réseau",
       "devices": "Connecter les appareils Tapix",
       "subtitle": "Utiliser plusieurs appareils sur le même réseau LAN ou Wi-Fi",
+      "activity": {
+        "sale": "Nouvelle vente depuis une caisse",
+        "sale_return": "Nouveau retour de vente lié",
+        "sale_adjustment_return": "Nouveau retour de vente d’ajustement",
+        "details": "Caissier : {} • Appareil : {} • {} • {}"
+      },
+      "sales_details_next_phase": "Les détails des factures à distance seront ajoutés à la prochaine étape ; cet historique est actuellement une vue sécurisée en lecture seule du maître.",
+      "remote_void_pin_required": "La protection par PIN est activée sur le maître. Pour préserver la sécurité du code, annulez cette vente sur l’appareil maître.",
       "phase_notice": "Les ventes LAN passent désormais par le maître, seule source des prix, stocks, numéros de facture et écritures comptables. Les autres modules seront ouverts après validation de leurs API transactionnelles.",
+      "fresh_reset": {
+        "owner_notice": "Ces outils sont réservés au propriétaire. Ils réinitialisent uniquement cet appareil sans envoyer de suppression ni de modification au maître actuel.",
+        "standalone_desc": "Dissocier cet appareil et créer une nouvelle base locale autonome",
+        "master_desc": "Dissocier cet appareil, créer une nouvelle base locale puis le démarrer comme maître",
+        "standalone_target": "appareil autonome",
+        "master_target": "appareil maître",
+        "confirm_title": "Réinitialiser cet appareil ?",
+        "confirm_message": "L’application va se fermer et seules les données locales de cet appareil seront supprimées. Vous créerez ensuite un nouveau compte propriétaire pour un {target}. La base du maître actuel et ses appareils ne seront pas modifiés. Cette action est irréversible sans sauvegarde.",
+        "confirm_action": "Supprimer les données locales et redémarrer"
+      },
       "standalone": "Appareil autonome",
       "standalone_desc": "Utiliser la base locale comme l'application fonctionne actuellement",
       "master": "Appareil maître",

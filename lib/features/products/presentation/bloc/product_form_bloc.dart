@@ -6,6 +6,8 @@ import '../../../barcode/services/barcode_generation_service.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/free_quota_service.dart';
 import '../../../../core/measurement/measurement.dart';
+import '../../../../core/database/daos/pharmacy_dao.dart';
+import '../../../../core/services/pharmacy/medicine_normalization_service.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/repositories/product_repository.dart';
 import '../../domain/repositories/product_variant_repository.dart';
@@ -24,12 +26,14 @@ class ProductFormInitialized extends ProductFormEvent {
   // Global inventory settings for new products
   final bool defaultTrackInventory;
   final int defaultMinQuantity;
+  final bool enablePharmacyFeatures;
 
   const ProductFormInitialized({
     this.productId,
     this.initialBarcode,
     this.defaultTrackInventory = true,
     this.defaultMinQuantity = 0,
+    this.enablePharmacyFeatures = false,
   });
 
   @override
@@ -38,6 +42,7 @@ class ProductFormInitialized extends ProductFormEvent {
     initialBarcode,
     defaultTrackInventory,
     defaultMinQuantity,
+    enablePharmacyFeatures,
   ];
 }
 
@@ -91,6 +96,16 @@ class ProductFormState extends Equatable {
   final bool isActive;
   final bool trackInventory;
   final String measurementType;
+
+  // Optional pharmacy profile. It belongs to the parent product, never to a
+  // colour/size/package variant.
+  final bool pharmacyEditorEnabled;
+  final bool isMedicine;
+  final String medicineDosageForm;
+  final String medicineRoute;
+  final bool medicineSubstitutionEligible;
+  final String medicineNotes;
+  final List<MedicineIngredientDraft> medicineIngredients;
 
   /// `null` when [inventoryTrackingType] is editable, otherwise one of:
   ///   - `'has_stock'`        → on-hand stock > 0 prevents the change.
@@ -146,6 +161,13 @@ class ProductFormState extends Equatable {
     this.isActive = true,
     this.trackInventory = true,
     this.measurementType = 'piece',
+    this.pharmacyEditorEnabled = false,
+    this.isMedicine = false,
+    this.medicineDosageForm = 'tablet',
+    this.medicineRoute = 'oral',
+    this.medicineSubstitutionEligible = true,
+    this.medicineNotes = '',
+    this.medicineIngredients = const [],
     this.costingMethodLockReason,
     this.inventoryTrackingType = 'standard',
     this.selectedColorId,
@@ -196,6 +218,13 @@ class ProductFormState extends Equatable {
     bool? isActive,
     bool? trackInventory,
     String? measurementType,
+    bool? pharmacyEditorEnabled,
+    bool? isMedicine,
+    String? medicineDosageForm,
+    String? medicineRoute,
+    bool? medicineSubstitutionEligible,
+    String? medicineNotes,
+    List<MedicineIngredientDraft>? medicineIngredients,
     Object? costingMethodLockReason = _unset,
     String? inventoryTrackingType,
     int? selectedColorId,
@@ -232,6 +261,15 @@ class ProductFormState extends Equatable {
       isActive: isActive ?? this.isActive,
       trackInventory: trackInventory ?? this.trackInventory,
       measurementType: measurementType ?? this.measurementType,
+      pharmacyEditorEnabled:
+          pharmacyEditorEnabled ?? this.pharmacyEditorEnabled,
+      isMedicine: isMedicine ?? this.isMedicine,
+      medicineDosageForm: medicineDosageForm ?? this.medicineDosageForm,
+      medicineRoute: medicineRoute ?? this.medicineRoute,
+      medicineSubstitutionEligible:
+          medicineSubstitutionEligible ?? this.medicineSubstitutionEligible,
+      medicineNotes: medicineNotes ?? this.medicineNotes,
+      medicineIngredients: medicineIngredients ?? this.medicineIngredients,
       costingMethodLockReason: identical(costingMethodLockReason, _unset)
           ? this.costingMethodLockReason
           : costingMethodLockReason as String?,
@@ -274,6 +312,13 @@ class ProductFormState extends Equatable {
     isActive,
     trackInventory,
     measurementType,
+    pharmacyEditorEnabled,
+    isMedicine,
+    medicineDosageForm,
+    medicineRoute,
+    medicineSubstitutionEligible,
+    medicineNotes,
+    medicineIngredients,
     costingMethodLockReason,
     inventoryTrackingType,
     selectedColorId,
@@ -293,6 +338,8 @@ const Object _unset = Object();
 class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
   final ProductRepository _repository;
   final ProductVariantRepository _variantRepository;
+  final PharmacyDao? _pharmacyDao;
+  static const _medicineNormalization = MedicineNormalizationService();
 
   /// Tracks the value of `hasVariants` as originally loaded from the DB for
   /// the product currently being edited. Used in [_onSubmitted] to detect a
@@ -309,8 +356,11 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
   String _originalMeasurementType = 'piece';
   bool _originalTrackInventory = true;
 
-  ProductFormBloc(this._repository, this._variantRepository)
-    : super(ProductFormState()) {
+  ProductFormBloc(
+    this._repository,
+    this._variantRepository, [
+    this._pharmacyDao,
+  ]) : super(ProductFormState()) {
     on<ProductFormInitialized>(_onInitialized);
     on<ProductFormFieldChanged>(_onFieldChanged);
     on<ProductFormSubmitted>(_onSubmitted);
@@ -328,6 +378,7 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
         barcode: event.initialBarcode,
         trackInventory: event.defaultTrackInventory,
         minQuantity: event.defaultMinQuantity,
+        pharmacyEditorEnabled: event.enablePharmacyFeatures,
       );
       emit(newState.copyWith(fieldWarnings: _computeWarningsFor(newState)));
       return;
@@ -344,6 +395,7 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
     try {
       final product = await _repository.watchProduct(event.productId!).first;
       if (product != null) {
+        final medicine = await _pharmacyDao?.getMedicineProfile(product.id);
         _originalHasVariants = product.hasVariants;
         _originalInventoryTrackingType = product.inventoryTrackingType;
         _originalMeasurementType = product.measurementType;
@@ -412,6 +464,38 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
           isActive: product.isActive,
           trackInventory: product.trackInventory,
           measurementType: product.measurementType,
+          pharmacyEditorEnabled:
+              event.enablePharmacyFeatures || medicine != null,
+          isMedicine: medicine != null,
+          medicineDosageForm: medicine?.profile.dosageForm ?? 'tablet',
+          medicineRoute: medicine?.profile.administrationRoute ?? 'oral',
+          medicineSubstitutionEligible:
+              medicine?.profile.substitutionEligible ?? true,
+          medicineNotes: medicine?.profile.notes ?? '',
+          medicineIngredients:
+              medicine?.ingredients
+                  .map(
+                    (row) => MedicineIngredientDraft(
+                      ingredientId: row.ingredient.id,
+                      displayName:
+                          row.ingredient.nameAr?.trim().isNotEmpty == true
+                          ? row.ingredient.nameAr
+                          : row.ingredient.canonicalName,
+                      value: _medicineNormalization.editableValue(
+                        row.strength.normalizedStrengthValueMicros,
+                      ),
+                      unit: row.strength.normalizedStrengthUnit,
+                      basisValue:
+                          row.strength.normalizedBasisValueMicros == null
+                          ? null
+                          : _medicineNormalization.editableValue(
+                              row.strength.normalizedBasisValueMicros!,
+                            ),
+                      basisUnit: row.strength.normalizedBasisUnit,
+                    ),
+                  )
+                  .toList() ??
+              const [],
           costingMethodLockReason: effectiveLockReason,
           inventoryTrackingType: product.inventoryTrackingType,
           selectedColorId: product.hasVariants ? null : selectedColorId,
@@ -592,6 +676,56 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
           state.copyWith(isActive: event.value as bool, fieldErrors: newErrors),
         );
         break;
+      case 'isMedicine':
+        emit(
+          state.copyWith(
+            isMedicine: event.value as bool,
+            fieldErrors: newErrors,
+          ),
+        );
+        break;
+      case 'medicineDosageForm':
+        emit(
+          state.copyWith(
+            medicineDosageForm: event.value as String,
+            fieldErrors: newErrors,
+          ),
+        );
+        break;
+      case 'medicineRoute':
+        emit(
+          state.copyWith(
+            medicineRoute: event.value as String,
+            fieldErrors: newErrors,
+          ),
+        );
+        break;
+      case 'medicineSubstitutionEligible':
+        emit(
+          state.copyWith(
+            medicineSubstitutionEligible: event.value as bool,
+            fieldErrors: newErrors,
+          ),
+        );
+        break;
+      case 'medicineNotes':
+        emit(
+          state.copyWith(
+            medicineNotes: event.value as String,
+            fieldErrors: newErrors,
+          ),
+        );
+        break;
+      case 'medicineIngredients':
+        emit(
+          state.copyWith(
+            medicineIngredients: List<MedicineIngredientDraft>.unmodifiable(
+              event.value as List<MedicineIngredientDraft>,
+            ),
+            fieldErrors: newErrors,
+          ),
+        );
+        break;
       case 'trackInventory':
         if (state.costingMethodLockReason != null &&
             event.value as bool != state.trackInventory) {
@@ -710,6 +844,33 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
       errors['purchaseTaxRateBps'] = 'products.validation_tax_rate_required';
     }
 
+    if (state.isMedicine) {
+      if (state.medicineDosageForm.trim().isEmpty) {
+        errors['medicineDosageForm'] =
+            'pharmacy.validation.dosage_form_required';
+      }
+      if (state.medicineRoute.trim().isEmpty) {
+        errors['medicineRoute'] = 'pharmacy.validation.route_required';
+      }
+      if (state.medicineIngredients.isEmpty) {
+        errors['medicineIngredients'] =
+            'pharmacy.validation.ingredient_required';
+      } else {
+        try {
+          for (final ingredient in state.medicineIngredients) {
+            _medicineNormalization.normalizeStrength(
+              value: ingredient.value,
+              unit: ingredient.unit,
+              basisValue: ingredient.basisValue,
+              basisUnit: ingredient.basisUnit,
+            );
+          }
+        } on PharmacyValidationException {
+          errors['medicineStrength'] = 'pharmacy.validation.strength_invalid';
+        }
+      }
+    }
+
     return errors;
   }
 
@@ -805,6 +966,7 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
     emit(state.copyWith(isSubmitting: true, error: null));
 
     try {
+      int? savedProductId = state.productId;
       // Entire product + variant orchestration runs inside a single DB
       // transaction. If any inner operation throws (UNIQUE conflict, FK
       // violation, etc.) the whole save rolls back — the product row and
@@ -979,6 +1141,7 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
             // `setInventoryTrackingType` in the edit path).
             inventoryTrackingType: state.inventoryTrackingType,
           );
+          savedProductId = createdProductId;
 
           if (!state.hasVariants) {
             await _variantRepository.ensureDefaultVariantForProduct(
@@ -1006,13 +1169,39 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
             }
           }
         }
+
+        final medicineProductId = savedProductId;
+        if (_pharmacyDao != null &&
+            medicineProductId != null &&
+            state.pharmacyEditorEnabled) {
+          if (state.isMedicine) {
+            await _pharmacyDao.saveMedicineProfile(
+              MedicineProfileDraft(
+                productId: medicineProductId,
+                dosageForm: state.medicineDosageForm,
+                administrationRoute: state.medicineRoute,
+                substitutionEligible: state.medicineSubstitutionEligible,
+                notes: state.medicineNotes,
+                ingredients: state.medicineIngredients,
+              ),
+            );
+          } else if (state.isEditing) {
+            await _pharmacyDao.deleteMedicineProfile(medicineProductId);
+          }
+        }
       });
 
       _originalHasVariants = state.hasVariants;
       _originalInventoryTrackingType = state.inventoryTrackingType;
       _originalMeasurementType = state.measurementType;
       _originalTrackInventory = state.trackInventory;
-      emit(state.copyWith(isSubmitting: false, isSuccess: true));
+      emit(
+        state.copyWith(
+          productId: savedProductId,
+          isSubmitting: false,
+          isSuccess: true,
+        ),
+      );
     } on FreeQuotaExceededException catch (e) {
       // Free-tier cumulative cap reached. Surface a recognizable code so the
       // screen can present the paywall instead of a generic error.
@@ -1020,6 +1209,17 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
         state.copyWith(
           isSubmitting: false,
           error: 'quota_exceeded:products:${e.limit}',
+        ),
+      );
+      return;
+    } on PharmacyValidationException {
+      emit(
+        state.copyWith(
+          isSubmitting: false,
+          fieldErrors: {
+            ...state.fieldErrors,
+            'medicineStrength': 'pharmacy.validation.strength_invalid',
+          },
         ),
       );
       return;

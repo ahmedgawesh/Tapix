@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'package:tapix/core/bloc/realtime_bloc.dart';
 import 'package:tapix/features/products/domain/entities/size_entity.dart';

@@ -4,29 +4,42 @@ import 'package:tapix/core/services/feature_gate_service.dart';
 import 'package:tapix/core/services/revenuecat_service.dart';
 
 void main() {
-  group('FeatureGateService — unsupported platform (web/desktop)', () {
-    // The test host is a desktop platform, so `RevenueCatConfig.isSupported`
-    // is false. Purchases are impossible there, so the gate must grant full
-    // access (Issue: desktop users were wrongly locked out of Pro features).
+  group('FeatureGateService — licensed Linux desktop', () {
+    // RevenueCat is intentionally unsupported on desktop. Windows/Linux now
+    // receive Pro entitlement from DesktopLicenseService instead, so absence
+    // of a valid desktop license must never unlock Pro features.
     test('isSupported is false on the test host', () {
       expect(RevenueCatConfig.isSupported, isFalse);
     });
 
-    test('isPro is true so the whole app is usable without a subscription', () {
+    test('isPro is false when no valid desktop license is supplied', () {
       final gate = FeatureGateService(
         revenueCatService: RevenueCatService.instance,
       );
-      expect(gate.isPro, isTrue);
+      addTearDown(gate.dispose);
+
+      expect(gate.isPro, isFalse);
       expect(gate.isInitialized, isTrue);
     });
 
-    test('canAccess grants every Pro feature on unsupported platforms', () {
+    test('canAccess grants free features and denies Pro features', () {
       final gate = FeatureGateService(
         revenueCatService: RevenueCatService.instance,
       );
+      addTearDown(gate.dispose);
+
       for (final f in AppFeature.values) {
-        expect(gate.canAccess(f).granted, isTrue,
-            reason: '$f should be accessible when purchases are unsupported');
+        final access = gate.canAccess(f);
+        final requiresPro = FeatureGateService.requiresPro(f);
+        expect(
+          access.granted,
+          !requiresPro,
+          reason: '$f must follow its tier when no desktop license is valid',
+        );
+        expect(
+          access.denyReason,
+          requiresPro ? FeatureDenyReason.requiresPro : isNull,
+        );
       }
     });
   });
@@ -54,6 +67,10 @@ void main() {
 
     test('employees requires Pro', () {
       expect(FeatureGateService.requiresPro(AppFeature.employees), isTrue);
+    });
+
+    test('cashierShifts requires Pro on every entitlement platform', () {
+      expect(FeatureGateService.requiresPro(AppFeature.cashierShifts), isTrue);
     });
 
     test('inventoryAdvanced requires Pro', () {

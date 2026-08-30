@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
 import '../../../../core/database/daos/adjustment_return_dao.dart';
+import '../../../../core/database/daos/pharmacy_dao.dart';
 import '../../../../core/measurement/measurement.dart';
 import '../../../../core/money/money.dart';
 import '../../../../core/pricing/discount.dart';
@@ -10,13 +11,18 @@ import '../../../../core/pricing/invoice_pricing_engine.dart';
 import '../../../../core/pricing/line_item_pricing_engine.dart';
 import '../../../../core/pricing/pricing_snapshot.dart';
 import '../../../../core/services/cashier_shift_service.dart';
-import '../../../../core/services/currency_service.dart' show CurrencyService;
+import '../../../../core/services/currency_service.dart'
+    show CurrencyService, SymbolPosition;
+import '../../../../core/services/currency_service.dart'
+    as currency_model
+    show Currency;
 import '../../../../core/services/commissions/commission_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
 import '../../../../core/services/loyalty/loyalty_points_service.dart';
 import '../../../../core/services/lan/lan_business_models.dart';
 import '../../../../core/services/lan/lan_models.dart';
 import '../../../settings/data/services/app_settings_service.dart';
+import '../../domain/entities/sale_entity.dart';
 import '../../domain/repositories/sale_repository.dart';
 
 class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
@@ -29,6 +35,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
   final JournalEntryService _journalEntries;
   final CommissionService _commissions;
   final LoyaltyPointsService _loyaltyPoints;
+  final PharmacyDao _pharmacy;
 
   const LanMasterBusinessGatewayImpl({
     required AppDatabase database,
@@ -40,6 +47,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     required JournalEntryService journalEntries,
     required CommissionService commissions,
     required LoyaltyPointsService loyaltyPoints,
+    required PharmacyDao pharmacy,
   }) : _database = database,
        _sales = sales,
        _settings = settings,
@@ -48,7 +56,195 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
        _adjustmentReturns = adjustmentReturns,
        _journalEntries = journalEntries,
        _commissions = commissions,
-       _loyaltyPoints = loyaltyPoints;
+       _loyaltyPoints = loyaltyPoints,
+       _pharmacy = pharmacy;
+
+  @override
+  Future<LanSalesPage> fetchSales({required int limit}) async {
+    final safeLimit = limit.clamp(1, 500);
+    final results = await Future.wait<dynamic>([
+      _sales.watchAllSales().first,
+      _sales.watchDashboardStats().first,
+      _sales.watchSaleIdsWithReturns().first,
+      _sales.watchSaleProductSearchTerms().first,
+    ]);
+    final sales = (results[0] as List<SaleEntity>)
+        .take(safeLimit)
+        .toList(growable: false);
+    final stats = results[1] as SaleDashboardStats;
+    final returnIds = results[2] as Set<int>;
+    final terms = results[3] as Map<int, List<String>>;
+    final visibleIds = sales.map((sale) => sale.id).toSet();
+
+    final currency = _currencyService.getCurrency();
+    return LanSalesPage(
+      currencyCode: currency.code,
+      currencySymbol: currency.symbol,
+      currencyDecimalDigits: currency.decimalDigits,
+      currencySymbolAfter: currency.symbolPosition.name == 'after',
+      sales: sales
+          .map<LanSaleSummary>(
+            (sale) => LanSaleSummary(
+              id: sale.id,
+              invoiceNumber: sale.invoiceNumber,
+              customerId: sale.customerId,
+              customerName: sale.customerName,
+              customerPhone: sale.customerPhone,
+              employeeId: sale.employeeId,
+              employeeName: sale.employeeName,
+              subtotalCents: _cents(sale.subtotalCents),
+              taxCents: _cents(sale.taxCents),
+              discountCents: _cents(sale.discountCents),
+              totalCents: _cents(sale.totalCents),
+              paidAmountCents: _cents(sale.paidAmountCents),
+              currencyId: sale.currencyId,
+              paymentMethod: sale.paymentMethod,
+              status: sale.status,
+              notes: sale.notes,
+              saleDate: sale.saleDate,
+              dueDate: sale.dueDate,
+              taxInclusiveAtPost: sale.taxInclusiveAtPost,
+              createdAt: sale.createdAt,
+              updatedAt: sale.updatedAt,
+            ),
+          )
+          .toList(growable: false),
+      stats: LanSaleDashboardStats(
+        totalCount: stats.totalCount,
+        completedCount: stats.completedCount,
+        voidedCount: stats.voidedCount,
+        totalSalesCents: stats.totalSalesCents,
+        totalPaidCents: stats.totalPaidCents,
+        overdueCount: stats.overdueCount,
+        returnsCount: stats.returnsCount,
+        totalReturnsCents: stats.totalReturnsCents,
+        todaySalesCents: stats.todaySalesCents,
+        todayCount: stats.todayCount,
+      ),
+      saleIdsWithReturns: returnIds.intersection(visibleIds),
+      productSearchTerms: Map<int, List<String>>.fromEntries(
+        terms.entries.where((entry) => visibleIds.contains(entry.key)),
+      ),
+    );
+  }
+
+  @override
+  Future<LanSaleDetails?> fetchSaleDetails({required int saleId}) async {
+    if (saleId <= 0) return null;
+    final sale = await _sales.getSaleById(saleId);
+    if (sale == null) return null;
+    final items = await _sales.getSaleItems(saleId);
+    final shift = await _shifts.getSaleShift(saleId);
+    final storedCurrency =
+        await (_database.select(_database.currencies)
+              ..where((row) => row.id.equals(sale.currencyId))
+              ..limit(1))
+            .getSingleOrNull();
+    final configuredCurrency = _currencyService.getCurrency();
+    final currencyCode = storedCurrency?.code ?? configuredCurrency.code;
+    final currencyDefinition = configuredCurrency.code == currencyCode
+        ? configuredCurrency
+        : currency_model.Currency.fromCode(currencyCode);
+
+    return LanSaleDetails(
+      sale: LanSaleSummary(
+        id: sale.id,
+        invoiceNumber: sale.invoiceNumber,
+        customerId: sale.customerId,
+        customerName: sale.customerName,
+        customerPhone: sale.customerPhone,
+        employeeId: sale.employeeId,
+        employeeName: sale.employeeName,
+        subtotalCents: _cents(sale.subtotalCents),
+        taxCents: _cents(sale.taxCents),
+        discountCents: _cents(sale.discountCents),
+        totalCents: _cents(sale.totalCents),
+        paidAmountCents: _cents(sale.paidAmountCents),
+        currencyId: sale.currencyId,
+        paymentMethod: sale.paymentMethod,
+        status: sale.status,
+        notes: sale.notes,
+        saleDate: sale.saleDate,
+        dueDate: sale.dueDate,
+        taxInclusiveAtPost: sale.taxInclusiveAtPost,
+        createdAt: sale.createdAt,
+        updatedAt: sale.updatedAt,
+      ),
+      lines: items
+          .map(
+            (item) => LanSaleDetailLine(
+              id: item.id,
+              saleId: item.saleId,
+              productId: item.productId,
+              productName: item.productName ?? '',
+              productSku: item.productSku,
+              variantId: item.variantId,
+              variantSku: item.variantSku,
+              colorName: item.colorName,
+              colorHex: item.colorHex,
+              sizeName: item.sizeName,
+              quantity: item.quantity,
+              quantityScale: item.quantityScale,
+              measurementType: item.measurementType,
+              unitPriceCents: _cents(item.unitPriceCents),
+              subtotalCents: _cents(item.subtotalCents),
+              discountCents: _cents(item.discountCents),
+              taxCents: _cents(item.taxCents),
+              totalCents: _cents(item.totalCents),
+              employeeId: item.employeeId,
+              employeeName: item.employeeName,
+              createdAt: item.createdAt,
+            ),
+          )
+          .toList(growable: false),
+      currencyCode: currencyCode,
+      currencySymbol: storedCurrency?.symbol ?? currencyDefinition.symbol,
+      currencyDecimalDigits: currencyDefinition.decimalDigits,
+      currencySymbolAfter:
+          currencyDefinition.symbolPosition == SymbolPosition.after,
+      cashierName: shift?.cashierName,
+      cashierShiftNumber: shift?.shift.shiftNumber,
+    );
+  }
+
+  @override
+  Future<LanSaleVoidResult> voidSale({
+    required LanRemoteUser actor,
+    required int saleId,
+  }) async {
+    if (_settings.current.requirePinForVoidRefund) {
+      throw const LanBusinessException(
+        'remote_pin_required',
+        'PIN-protected voids must be completed on the master device.',
+        statusCode: 409,
+      );
+    }
+    final sale = await _sales.getSaleById(saleId);
+    if (sale == null) {
+      throw const LanBusinessException(
+        'sale_not_found',
+        'Sale not found.',
+        statusCode: 404,
+      );
+    }
+    if (!sale.isCompleted) {
+      throw const LanBusinessException(
+        'sale_not_voidable',
+        'Only a completed sale can be voided.',
+        statusCode: 409,
+      );
+    }
+    try {
+      await _sales.voidSale(saleId, actorUserId: actor.id);
+      return LanSaleVoidResult(saleId: saleId, status: 'voided');
+    } catch (error) {
+      throw LanBusinessException(
+        'sale_void_failed',
+        error.toString().replaceFirst('Exception: ', ''),
+        statusCode: 409,
+      );
+    }
+  }
 
   @override
   Future<LanCatalogPage> fetchCatalog({
@@ -59,6 +255,11 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     final safeOffset = offset.clamp(0, 1000000);
     final safeLimit = limit.clamp(1, 200);
     final normalized = query.trim();
+    final appSettings = _settings.current;
+    final medicineProductIds =
+        appSettings.enablePharmacyFeatures && normalized.isNotEmpty
+        ? await _pharmacy.searchMedicineProductIds(normalized)
+        : const <int>{};
     final statement = _database.select(_database.products)
       ..where((row) {
         var expression = row.isActive.equals(true);
@@ -68,7 +269,10 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
               expression &
               (row.name.like(pattern) |
                   row.sku.like(pattern) |
-                  row.barcode.like(pattern));
+                  row.barcode.like(pattern) |
+                  (medicineProductIds.isEmpty
+                      ? const Constant(false)
+                      : row.id.isIn(medicineProductIds)));
         }
         return expression;
       })
@@ -77,8 +281,58 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     final rows = await statement.get();
     final hasMore = rows.length > safeLimit;
     final pageRows = rows.take(safeLimit).toList(growable: false);
-    final productIds = pageRows.map((row) => row.id).toList(growable: false);
+    final catalogProducts = await _buildCatalogProducts(
+      pageRows,
+      includeMedicine: appSettings.enablePharmacyFeatures,
+    );
+    final currency = await _selectedCurrency();
 
+    return LanCatalogPage(
+      products: catalogProducts,
+      offset: safeOffset,
+      limit: safeLimit,
+      hasMore: hasMore,
+      currencyId: currency?.id ?? 1,
+      currencyCode: _currencyService.currencyCode,
+      currencySymbol: _currencyService.currencySymbol,
+      enableTaxCalculations: appSettings.enableTaxCalculations,
+      defaultSalesTaxRateBps: (appSettings.defaultSalesTaxRate * 100).round(),
+      taxInclusivePricing: appSettings.taxInclusivePricing,
+      allowNegativeStock: appSettings.allowNegativeStock,
+      allowPartialPayments: appSettings.allowPartialPayments,
+      requireCustomerForSales: appSettings.requireCustomerForSales,
+      allowDiscounts: appSettings.allowDiscounts,
+      maxDiscountPercent: appSettings.maxDiscountPercent,
+      enablePharmacyFeatures: appSettings.enablePharmacyFeatures,
+    );
+  }
+
+  @override
+  Future<LanMedicineAlternativesResult> fetchMedicineAlternatives({
+    required int productId,
+  }) async {
+    if (!_settings.current.enablePharmacyFeatures) {
+      return LanMedicineAlternativesResult(
+        sourceProductId: productId,
+        alternatives: const [],
+      );
+    }
+    final details = await _pharmacy.findExactAlternatives(productId);
+    final products = await _buildCatalogProducts(
+      details.map((row) => row.product).toList(growable: false),
+      includeMedicine: true,
+    );
+    return LanMedicineAlternativesResult(
+      sourceProductId: productId,
+      alternatives: products,
+    );
+  }
+
+  Future<List<LanCatalogProduct>> _buildCatalogProducts(
+    List<Product> products, {
+    required bool includeMedicine,
+  }) async {
+    final productIds = products.map((row) => row.id).toList(growable: false);
     final variants = productIds.isEmpty
         ? <ProductVariant>[]
         : await (_database.select(_database.productVariants)
@@ -94,6 +348,9 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     final colorNames = {for (final value in colors) value.id: value.name};
     final colorHexes = {for (final value in colors) value.id: value.hexCode};
     final sizeNames = {for (final value in sizes) value.id: value.name};
+    final medicineProfiles = includeMedicine
+        ? await _pharmacy.getMedicineProfilesForProducts(productIds)
+        : const <int, MedicineProfileDetails>{};
 
     final variantsByProduct = <int, List<LanCatalogVariant>>{};
     for (final variant in variants) {
@@ -123,64 +380,69 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
           );
     }
 
-    final appSettings = _settings.current;
-    final currency = await _selectedCurrency();
+    return products
+        .map(
+          (product) => LanCatalogProduct(
+            id: product.id,
+            name: product.name,
+            sku: product.sku,
+            barcode: product.barcode,
+            priceCents: _cents(product.priceCents),
+            wholesalePriceCents: product.wholesalePriceCents == null
+                ? null
+                : _cents(product.wholesalePriceCents!),
+            stockQuantity: product.stockQuantity,
+            hasVariants: product.hasVariants,
+            isTaxable: product.isTaxable,
+            salesTaxRateBps: product.salesTaxRateBps,
+            trackInventory: product.trackInventory,
+            measurementType: product.measurementType,
+            quantityScale: MeasurementType.fromDb(
+              product.measurementType,
+            ).quantityScale,
+            hasImage: product.imagePath?.trim().isNotEmpty == true,
+            variants: variantsByProduct[product.id] ?? const [],
+            medicine: _toLanMedicine(medicineProfiles[product.id]),
+            nameAr: product.nameAr,
+            nameFr: product.nameFr,
+            description: product.description,
+            costCents: _cents(product.costCents),
+            lastPurchasePriceCents: product.lastPurchasePriceCents == null
+                ? null
+                : _cents(product.lastPurchasePriceCents!),
+            minQuantity: product.minQuantity,
+            categoryId: product.categoryId,
+            supplierId: product.supplierId,
+            currencyId: product.currencyId,
+            purchaseTaxRateBps: product.purchaseTaxRateBps,
+            isActive: product.isActive,
+            costingMethod: product.costingMethod,
+            inventoryTrackingType: product.inventoryTrackingType,
+          ),
+        )
+        .toList(growable: false);
+  }
 
-    return LanCatalogPage(
-      products: pageRows
+  LanMedicineProfile? _toLanMedicine(MedicineProfileDetails? details) {
+    if (details == null) return null;
+    return LanMedicineProfile(
+      dosageForm: details.profile.dosageForm,
+      administrationRoute: details.profile.administrationRoute,
+      substitutionEligible: details.profile.substitutionEligible,
+      ingredients: details.ingredients
           .map(
-            (product) => LanCatalogProduct(
-              id: product.id,
-              name: product.name,
-              sku: product.sku,
-              barcode: product.barcode,
-              priceCents: _cents(product.priceCents),
-              wholesalePriceCents: product.wholesalePriceCents == null
-                  ? null
-                  : _cents(product.wholesalePriceCents!),
-              stockQuantity: product.stockQuantity,
-              hasVariants: product.hasVariants,
-              isTaxable: product.isTaxable,
-              salesTaxRateBps: product.salesTaxRateBps,
-              trackInventory: product.trackInventory,
-              measurementType: product.measurementType,
-              quantityScale: MeasurementType.fromDb(
-                product.measurementType,
-              ).quantityScale,
-              hasImage: product.imagePath?.trim().isNotEmpty == true,
-              variants: variantsByProduct[product.id] ?? const [],
-              nameAr: product.nameAr,
-              nameFr: product.nameFr,
-              description: product.description,
-              costCents: _cents(product.costCents),
-              lastPurchasePriceCents: product.lastPurchasePriceCents == null
-                  ? null
-                  : _cents(product.lastPurchasePriceCents!),
-              minQuantity: product.minQuantity,
-              categoryId: product.categoryId,
-              supplierId: product.supplierId,
-              currencyId: product.currencyId,
-              purchaseTaxRateBps: product.purchaseTaxRateBps,
-              isActive: product.isActive,
-              costingMethod: product.costingMethod,
-              inventoryTrackingType: product.inventoryTrackingType,
+            (row) => LanMedicineIngredient(
+              ingredientId: row.ingredient.id,
+              canonicalName: row.ingredient.canonicalName,
+              nameAr: row.ingredient.nameAr,
+              nameFr: row.ingredient.nameFr,
+              strengthValueMicros: row.strength.normalizedStrengthValueMicros,
+              strengthUnit: row.strength.normalizedStrengthUnit,
+              basisValueMicros: row.strength.normalizedBasisValueMicros,
+              basisUnit: row.strength.normalizedBasisUnit,
             ),
           )
           .toList(growable: false),
-      offset: safeOffset,
-      limit: safeLimit,
-      hasMore: hasMore,
-      currencyId: currency?.id ?? 1,
-      currencyCode: _currencyService.currencyCode,
-      currencySymbol: _currencyService.currencySymbol,
-      enableTaxCalculations: appSettings.enableTaxCalculations,
-      defaultSalesTaxRateBps: (appSettings.defaultSalesTaxRate * 100).round(),
-      taxInclusivePricing: appSettings.taxInclusivePricing,
-      allowNegativeStock: appSettings.allowNegativeStock,
-      allowPartialPayments: appSettings.allowPartialPayments,
-      requireCustomerForSales: appSettings.requireCustomerForSales,
-      allowDiscounts: appSettings.allowDiscounts,
-      maxDiscountPercent: appSettings.maxDiscountPercent,
     );
   }
 
@@ -239,6 +501,9 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     required int limit,
   }) async {
     final normalized = query.trim();
+    final safeLimit = limit.clamp(1, 200);
+
+    // Fetch all active employees (with optional search filter).
     final statement = _database.select(_database.employees)
       ..where((row) {
         var expression = row.isActive.equals(true);
@@ -252,10 +517,52 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
         }
         return expression;
       })
-      ..orderBy([(row) => OrderingTerm.asc(row.name)])
-      ..limit(limit.clamp(1, 200));
-    final rows = await statement.get();
-    return rows
+      ..orderBy([(row) => OrderingTerm.asc(row.name)]);
+    final allRows = await statement.get();
+
+    // Fetch roles to identify salesperson & manager role IDs.
+    final roles = await (_database.select(
+      _database.roles,
+    )..where((r) => r.isActive.equals(true))).get();
+    final salespersonRoleIds = <int>{};
+    final managerRoleIds = <int>{};
+    for (final role in roles) {
+      final rn = role.name.toLowerCase();
+      if (rn == 'salesperson') {
+        salespersonRoleIds.add(role.id);
+      } else if (rn == 'manager') {
+        managerRoleIds.add(role.id);
+      }
+    }
+
+    // Collect manager IDs of salespeople.
+    final salespersonManagerIds = <int>{};
+    for (final e in allRows) {
+      if (e.roleId != null && salespersonRoleIds.contains(e.roleId)) {
+        if (e.managerId != null) {
+          salespersonManagerIds.add(e.managerId!);
+        }
+      }
+    }
+
+    // Filter: keep salespeople, managers, and managers-of-salespeople.
+    final filtered = allRows
+        .where((e) {
+          if (e.roleId != null && salespersonRoleIds.contains(e.roleId)) {
+            return true;
+          }
+          if (e.roleId != null && managerRoleIds.contains(e.roleId)) {
+            return true;
+          }
+          if (salespersonManagerIds.contains(e.id)) {
+            return true;
+          }
+          return false;
+        })
+        .take(safeLimit)
+        .toList(growable: false);
+
+    return filtered
         .map(
           (row) => LanEmployeeSummary(
             id: row.id,
@@ -287,7 +594,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
         openingCashCents: openingCashCents,
         notes: notes,
       );
-      return _shiftSnapshot(view);
+      return await _shiftSnapshot(view);
     } on StateError catch (error) {
       throw LanBusinessException(
         'shift_open_failed',
@@ -320,7 +627,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
         notes: notes,
       );
       final closed = await _shifts.getShift(view.shift.id);
-      return _shiftSnapshot(closed!);
+      return await _shiftSnapshot(closed!);
     } on StateError catch (error) {
       throw LanBusinessException(
         'shift_close_failed',
@@ -587,10 +894,195 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
   }
 
   @override
+  Future<LanSaleReturnDetails?> fetchSaleReturnDetails({
+    required int returnId,
+    required bool adjustment,
+  }) async {
+    if (returnId <= 0) return null;
+
+    if (!adjustment) {
+      final ret = await _sales.getSaleReturnById(returnId);
+      if (ret == null || ret.isAdjustment) return null;
+      final currency = await _returnCurrency(ret.currencyId);
+      final results = await Future.wait<dynamic>([
+        _sales.watchSaleReturnItemsWithDetails(returnId).first,
+        _sales.getSaleItems(ret.saleId),
+      ]);
+      final returnItems = results[0] as List<SaleReturnItemEntity>;
+      final saleItems = results[1] as List<SaleItemEntity>;
+      final saleItemsById = {for (final value in saleItems) value.id: value};
+
+      return LanSaleReturnDetails(
+        summary: LanSaleReturnSummary(
+          id: ret.id,
+          saleId: ret.saleId,
+          saleInvoiceNumber: ret.saleInvoiceNumber,
+          customerName: ret.customerName,
+          customerPhone: ret.customerPhone,
+          customerId: ret.customerId,
+          returnNumber: ret.returnNumber,
+          subtotalCents: _cents(ret.subtotalCents),
+          discountCents: _cents(ret.discountCents),
+          taxCents: _cents(ret.taxCents),
+          totalCents: _cents(ret.totalCents),
+          currencyId: ret.currencyId,
+          status: ret.status,
+          dispositionType: ret.dispositionType,
+          refundMethod: ret.refundMethod,
+          reason: ret.reason,
+          returnDate: ret.returnDate,
+          createdAt: ret.createdAt,
+          isAdjustment: false,
+          unifiedId: ret.unifiedId,
+        ),
+        lines: returnItems
+            .map((item) {
+              final original = saleItemsById[item.saleItemId];
+              return LanSaleReturnDetailLine(
+                id: item.id,
+                returnId: item.returnId,
+                saleItemId: item.saleItemId,
+                productId: original?.productId ?? 0,
+                variantId: original?.variantId,
+                productName: item.productName ?? original?.productName ?? '',
+                productSku: item.productSku ?? original?.productSku,
+                variantSku: item.variantSku ?? original?.variantSku,
+                colorName: item.colorName ?? original?.colorName,
+                colorHex: item.colorHex ?? original?.colorHex,
+                sizeName: item.sizeName ?? original?.sizeName,
+                quantity: item.quantity,
+                quantityScale: item.quantityScale,
+                measurementType: item.measurementType,
+                unitPriceCents: original == null
+                    ? null
+                    : _cents(original.unitPriceCents),
+                subtotalCents: _cents(item.subtotalCents),
+                discountCents: _cents(item.discountCents),
+                taxCents: _cents(item.taxCents),
+                totalCents: _cents(item.refundCents),
+                reason: item.reason,
+                dispositionType: ret.dispositionType,
+                createdAt: item.createdAt,
+              );
+            })
+            .toList(growable: false),
+        currencyCode: currency.code,
+        currencySymbol: currency.symbol,
+        currencyDecimalDigits: currency.decimalDigits,
+        currencySymbolAfter: currency.symbolPosition == SymbolPosition.after,
+      );
+    }
+
+    final ret = await _adjustmentReturns.getSaleAdjReturnById(returnId);
+    if (ret == null) return null;
+    final currency = await _returnCurrency(ret.currencyId);
+    final rows = await _adjustmentReturns
+        .watchSaleAdjReturnItemsWithDetails(returnId)
+        .first;
+    Customer? customer;
+    Employee? employee;
+    if (ret.customerId != null) {
+      customer = await (_database.select(
+        _database.customers,
+      )..where((row) => row.id.equals(ret.customerId!))).getSingleOrNull();
+    }
+    if (ret.employeeId != null) {
+      employee = await (_database.select(
+        _database.employees,
+      )..where((row) => row.id.equals(ret.employeeId!))).getSingleOrNull();
+    }
+    final disposition = rows.isEmpty
+        ? 'restock'
+        : rows.first.item.dispositionType;
+
+    return LanSaleReturnDetails(
+      summary: LanSaleReturnSummary(
+        id: ret.id,
+        saleId: 0,
+        customerName: customer?.name,
+        customerPhone: customer?.phone,
+        customerId: ret.customerId,
+        returnNumber: ret.returnNumber,
+        subtotalCents: _cents(ret.subtotalCents),
+        discountCents: _cents(ret.discountCents),
+        taxCents: _cents(ret.taxCents),
+        totalCents: _cents(ret.totalCents),
+        currencyId: ret.currencyId,
+        status: ret.status,
+        dispositionType: disposition,
+        refundMethod: ret.refundMethod,
+        reason: ret.notes,
+        returnDate: ret.returnDate,
+        createdAt: ret.createdAt,
+        isAdjustment: true,
+        unifiedId: 'SRA-${ret.id}',
+      ),
+      lines: rows
+          .map((row) {
+            final item = row.item;
+            final total = _cents(item.totalCents);
+            final discount = _cents(item.discountCents);
+            final tax = _cents(item.taxCents);
+            return LanSaleReturnDetailLine(
+              id: item.id,
+              returnId: item.returnId,
+              productId: item.productId,
+              variantId: item.variantId,
+              productName: row.product.name,
+              productSku: row.product.sku,
+              variantSku: row.variant?.sku,
+              variantBarcode: row.variant?.barcode,
+              colorName: row.colorName,
+              colorHex: row.colorHex,
+              quantity: item.quantity,
+              quantityScale: item.quantityScale,
+              measurementType: item.measurementType,
+              unitPriceCents: _cents(item.unitPriceCents),
+              subtotalCents: total + discount - tax,
+              discountCents: discount,
+              taxCents: tax,
+              totalCents: total,
+              reason: item.reason,
+              dispositionType: item.dispositionType,
+              createdAt: item.createdAt,
+            );
+          })
+          .toList(growable: false),
+      currencyCode: currency.code,
+      currencySymbol: currency.symbol,
+      currencyDecimalDigits: currency.decimalDigits,
+      currencySymbolAfter: currency.symbolPosition == SymbolPosition.after,
+      employeeName: employee?.name,
+      returnMode: ret.returnMode,
+      notes: ret.notes,
+    );
+  }
+
+  Future<currency_model.Currency> _returnCurrency(int currencyId) async {
+    final configured = _currencyService.getCurrency();
+    final stored =
+        await (_database.select(_database.currencies)
+              ..where((row) => row.id.equals(currencyId))
+              ..limit(1))
+            .getSingleOrNull();
+    if (stored == null || stored.code == configured.code) return configured;
+    final definition = currency_model.Currency.fromCode(stored.code);
+    return currency_model.Currency(
+      code: stored.code,
+      symbol: stored.symbol,
+      name: definition.name,
+      symbolPosition: definition.symbolPosition,
+      decimalDigits: definition.decimalDigits,
+      isCustom: definition.isCustom,
+    );
+  }
+
+  @override
   Future<LanSaleReturnResult> createSaleReturn({
     required LanRemoteUser actor,
     required LanSaleReturnRequest request,
   }) async {
+    _guardRemotePinProtectedOperation();
     final key = request.idempotencyKey.trim();
     if (key.isEmpty || key.length > 120) {
       throw const LanBusinessException(
@@ -727,6 +1219,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     required LanRemoteUser actor,
     required LanSaleAdjustmentReturnRequest request,
   }) async {
+    _guardRemotePinProtectedOperation();
     final key = request.idempotencyKey.trim();
     if (key.length < 8 || key.length > 128) {
       throw const LanBusinessException(
@@ -1529,6 +2022,16 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       paidAmountCents: _cents(sale.paidAmountCents),
       duplicate: duplicate,
     );
+  }
+
+  void _guardRemotePinProtectedOperation() {
+    if (_settings.current.requirePinForVoidRefund) {
+      throw const LanBusinessException(
+        'remote_pin_required',
+        'PIN-protected returns must be completed on the master device.',
+        statusCode: 409,
+      );
+    }
   }
 
   Future<Currency?> _selectedCurrency() async {

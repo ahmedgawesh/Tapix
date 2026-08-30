@@ -189,14 +189,56 @@ class _EmployeePickerSheetState extends State<_EmployeePickerSheet> {
 
   Future<void> _load() async {
     try {
-      final employees = await sl<EmployeeRepository>().searchEmployees(
-        '',
-        isActive: true,
-      );
+      final repo = sl<EmployeeRepository>();
+      final employees = await repo.searchEmployees('', isActive: true);
+
+      // Fetch all roles to identify salesperson & manager role IDs.
+      // Using .first on the stream to get the current snapshot once.
+      final allRoles = await repo.watchAllRoles(isActive: true).first;
+      final salespersonRoleIds = <int>{};
+      final managerRoleIds = <int>{};
+      for (final role in allRoles) {
+        final rn = role.name.toLowerCase();
+        if (rn == 'salesperson') {
+          salespersonRoleIds.add(role.id);
+        } else if (rn == 'manager') {
+          managerRoleIds.add(role.id);
+        }
+      }
+
+      // Collect IDs of salespeople so we can include their managers.
+      final salespersonIds = <int>{};
+      final salespersonManagerIds = <int>{};
+      for (final e in employees) {
+        if (e.roleId != null && salespersonRoleIds.contains(e.roleId)) {
+          salespersonIds.add(e.id);
+          if (e.managerId != null) {
+            salespersonManagerIds.add(e.managerId!);
+          }
+        }
+      }
+
+      // Filter: keep salespeople, managers, and managers-of-salespeople.
+      final filtered = employees.where((e) {
+        // Employee is a salesperson
+        if (e.roleId != null && salespersonRoleIds.contains(e.roleId)) {
+          return true;
+        }
+        // Employee is a manager
+        if (e.roleId != null && managerRoleIds.contains(e.roleId)) {
+          return true;
+        }
+        // Employee is assigned as a manager to a salesperson
+        if (salespersonManagerIds.contains(e.id)) {
+          return true;
+        }
+        return false;
+      }).toList();
+
       if (mounted) {
         setState(() {
-          _all = employees;
-          _filtered = employees;
+          _all = filtered;
+          _filtered = filtered;
           _loading = false;
         });
       }
@@ -640,8 +682,18 @@ class _RemoteAddItemSheetState extends State<_RemoteAddItemSheet> {
     return '${page.currencySymbol}${(cents / 100).toStringAsFixed(2)}';
   }
 
-  Future<bool> _canSelect(int stock) async {
+  Future<bool> _canSelect(LanCatalogProduct source, int stock) async {
     if (_page?.allowNegativeStock == true || stock > 0) return true;
+    if (_page?.enablePharmacyFeatures == true && source.medicine != null) {
+      final alternative = await RemoteMedicineAlternativesDialog.showOutOfStock(
+        context,
+        source: source,
+      );
+      if (alternative != null && mounted) {
+        await _selectRemoteProduct(alternative);
+      }
+      return false;
+    }
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -659,6 +711,24 @@ class _RemoteAddItemSheetState extends State<_RemoteAddItemSheet> {
       ),
     );
     return false;
+  }
+
+  Future<void> _selectRemoteProduct(LanCatalogProduct product) async {
+    if (product.hasVariants) {
+      if (mounted) setState(() => _selected = product);
+      return;
+    }
+    if (await _canSelect(product, product.stockQuantity) && mounted) {
+      widget.onSelected(product, null);
+    }
+  }
+
+  Future<void> _showRemoteAlternatives(LanCatalogProduct product) async {
+    final selected = await RemoteMedicineAlternativesDialog.show(
+      context,
+      source: product,
+    );
+    if (selected != null && mounted) await _selectRemoteProduct(selected);
   }
 
   Widget _productImage(LanCatalogProduct product, ColorScheme cs) {
@@ -737,7 +807,9 @@ class _RemoteAddItemSheetState extends State<_RemoteAddItemSheet> {
                 controller: _searchCtrl,
                 autofocus: true,
                 decoration: InputDecoration(
-                  hintText: 'sales.search_products'.tr(),
+                  hintText: _page?.enablePharmacyFeatures == true
+                      ? 'pharmacy.alternatives.search_hint'.tr()
+                      : 'sales.search_products'.tr(),
                   prefixIcon: const Icon(LucideIcons.search),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -788,7 +860,7 @@ class _RemoteAddItemSheetState extends State<_RemoteAddItemSheet> {
             ),
             trailing: const Icon(LucideIcons.plusCircle),
             onTap: () async {
-              if (await _canSelect(variant.stockQuantity)) {
+              if (await _canSelect(selected, variant.stockQuantity)) {
                 widget.onSelected(selected, variant);
               }
             },
@@ -813,20 +885,24 @@ class _RemoteAddItemSheetState extends State<_RemoteAddItemSheet> {
           subtitle: Text(
             '${localizedQuantity(product.stockQuantity, product.measurementType)} • ${_money(product.priceCents)}',
           ),
-          trailing: Icon(
-            product.hasVariants
-                ? LucideIcons.chevronRight
-                : LucideIcons.plusCircle,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_page?.enablePharmacyFeatures == true &&
+                  product.medicine != null)
+                IconButton(
+                  tooltip: 'pharmacy.alternatives.button'.tr(),
+                  onPressed: () => _showRemoteAlternatives(product),
+                  icon: Icon(LucideIcons.pill, color: cs.tertiary),
+                ),
+              Icon(
+                product.hasVariants
+                    ? LucideIcons.chevronRight
+                    : LucideIcons.plusCircle,
+              ),
+            ],
           ),
-          onTap: () async {
-            if (product.hasVariants) {
-              setState(() => _selected = product);
-              return;
-            }
-            if (await _canSelect(product.stockQuantity)) {
-              widget.onSelected(product, null);
-            }
-          },
+          onTap: () => _selectRemoteProduct(product),
         );
       },
     );
@@ -856,17 +932,140 @@ class _AddItemSheetState extends State<_AddItemSheet> {
   Product? _selectedProduct;
   final _searchController = TextEditingController();
   int? _selectedCategoryId;
+  bool _pharmacyEnabled = false;
+  Set<int> _medicineProductIds = const {};
+  Set<int> _ingredientSearchProductIds = const {};
+  Timer? _pharmacySearchDebounce;
 
   @override
   void initState() {
     super.initState();
     _selectedProduct = widget.initialProduct;
+    _pharmacyEnabled = context
+        .read<AppSettingsBloc>()
+        .state
+        .settings
+        .enablePharmacyFeatures;
+    if (_pharmacyEnabled) unawaited(_loadMedicineProductIds());
+  }
+
+  Future<void> _loadMedicineProductIds() async {
+    try {
+      final ids = await sl<PharmacyDao>().getMedicineProductIds();
+      if (mounted) setState(() => _medicineProductIds = ids);
+    } catch (_) {
+      // Product selection must remain usable if pharmacy metadata cannot load.
+    }
   }
 
   @override
   void dispose() {
+    _pharmacySearchDebounce?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _searchProducts(String value) {
+    if (!_pharmacyEnabled) {
+      context.read<ProductsBloc>().add(ProductSearchRequested(value));
+      return;
+    }
+    _pharmacySearchDebounce?.cancel();
+    _pharmacySearchDebounce = Timer(
+      const Duration(milliseconds: 250),
+      () async {
+        try {
+          final ids = value.trim().isEmpty
+              ? const <int>{}
+              : await sl<PharmacyDao>().searchMedicineProductIds(value);
+          if (mounted) setState(() => _ingredientSearchProductIds = ids);
+        } catch (_) {
+          if (mounted) setState(() => _ingredientSearchProductIds = const {});
+        }
+      },
+    );
+    setState(() {});
+  }
+
+  Future<void> _selectProduct(Product product) async {
+    if (product.hasVariants) {
+      if (mounted) setState(() => _selectedProduct = product);
+      return;
+    }
+    try {
+      final variantRepo = sl<ProductVariantRepository>();
+      final defaultVariant = await variantRepo.getDefaultVariantByProduct(
+        product.id,
+      );
+      if (defaultVariant != null &&
+          defaultVariant.stockQuantity <= 0 &&
+          mounted) {
+        await _showOutOfStock(product);
+        return;
+      }
+    } catch (_) {
+      // Keep the existing POS behaviour if the stock preview cannot load.
+    }
+    if (mounted) {
+      widget.onItemAdded(
+        product,
+        null,
+        product.quantityScale,
+        product.priceCents,
+      );
+    }
+  }
+
+  Future<void> _showAlternatives(Product product) async {
+    final selectedId = await MedicineAlternativesDialog.show(
+      context,
+      productId: product.id,
+      allowSelection: true,
+    );
+    if (selectedId == null || !mounted) return;
+    final selected = await sl<ProductRepository>().getProductById(selectedId);
+    if (selected != null && mounted) await _selectProduct(selected);
+  }
+
+  Future<void> _showOutOfStock(Product product) async {
+    var isMedicine = _medicineProductIds.contains(product.id);
+    if (_pharmacyEnabled && !isMedicine) {
+      try {
+        isMedicine =
+            await sl<PharmacyDao>().getMedicineProfile(product.id) != null;
+      } catch (_) {
+        // Keep the standard out-of-stock warning if pharmacy data is unavailable.
+      }
+    }
+    if (!mounted) return;
+
+    if (_pharmacyEnabled && isMedicine) {
+      final selectedId = await MedicineAlternativesDialog.showOutOfStock(
+        context,
+        productId: product.id,
+      );
+      if (selectedId == null || !mounted) return;
+      final selected = await sl<ProductRepository>().getProductById(selectedId);
+      if (selected != null && mounted) await _selectProduct(selected);
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(
+          LucideIcons.alertTriangle,
+          color: Theme.of(ctx).colorScheme.error,
+          size: 32,
+        ),
+        title: Text('sales.out_of_stock_warning'.tr()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('common.ok'.tr()),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -920,9 +1119,7 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                     ),
                     filled: true,
                   ),
-                  onChanged: (v) => context.read<ProductsBloc>().add(
-                    ProductSearchRequested(v),
-                  ),
+                  onChanged: _searchProducts,
                 ),
               ),
               // Category filter chips
@@ -1042,7 +1239,8 @@ class _AddItemSheetState extends State<_AddItemSheet> {
               if (query.isEmpty) return true;
               return p.name.toLowerCase().contains(query) ||
                   (p.sku?.toLowerCase().contains(query) ?? false) ||
-                  (p.barcode?.toLowerCase().contains(query) ?? false);
+                  (p.barcode?.toLowerCase().contains(query) ?? false) ||
+                  _ingredientSearchProductIds.contains(p.id);
             }).toList();
 
             if (filtered.isEmpty) {
@@ -1190,61 +1388,26 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                       ],
                     ],
                   ),
-                  trailing: product.hasVariants
-                      ? Icon(
-                          LucideIcons.chevronRight,
-                          size: 20,
-                          color: cs.primary,
-                        )
-                      : Icon(
-                          LucideIcons.plusCircle,
-                          size: 20,
-                          color: cs.primary,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_pharmacyEnabled &&
+                          _medicineProductIds.contains(product.id))
+                        IconButton(
+                          tooltip: 'pharmacy.alternatives.button'.tr(),
+                          onPressed: () => _showAlternatives(product),
+                          icon: Icon(LucideIcons.pill, color: cs.tertiary),
                         ),
-                  onTap: () async {
-                    if (product.hasVariants) {
-                      setState(() => _selectedProduct = product);
-                    } else {
-                      // Check stock via default variant
-                      try {
-                        final variantRepo = sl<ProductVariantRepository>();
-                        final defaultVariant = await variantRepo
-                            .getDefaultVariantByProduct(product.id);
-                        if (defaultVariant != null &&
-                            defaultVariant.stockQuantity <= 0 &&
-                            context.mounted) {
-                          await showDialog<void>(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              icon: Icon(
-                                LucideIcons.alertTriangle,
-                                color: Theme.of(ctx).colorScheme.error,
-                                size: 32,
-                              ),
-                              title: Text('sales.out_of_stock_warning'.tr()),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.of(ctx).pop(),
-                                  child: Text('common.ok'.tr()),
-                                ),
-                              ],
-                            ),
-                          );
-                          return;
-                        }
-                      } catch (_) {
-                        // If we can't check stock, allow the sale
-                      }
-                      if (context.mounted) {
-                        widget.onItemAdded(
-                          product,
-                          null,
-                          product.quantityScale,
-                          product.priceCents,
-                        );
-                      }
-                    }
-                  },
+                      Icon(
+                        product.hasVariants
+                            ? LucideIcons.chevronRight
+                            : LucideIcons.plusCircle,
+                        size: 20,
+                        color: cs.primary,
+                      ),
+                    ],
+                  ),
+                  onTap: () => _selectProduct(product),
                 );
               },
             );
@@ -1443,23 +1606,7 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                         ),
                         onTap: () async {
                           if (variant.stockQuantity <= 0) {
-                            await showDialog<void>(
-                              context: context,
-                              builder: (ctx) => AlertDialog(
-                                icon: Icon(
-                                  LucideIcons.alertTriangle,
-                                  color: Theme.of(ctx).colorScheme.error,
-                                  size: 32,
-                                ),
-                                title: Text('sales.out_of_stock_warning'.tr()),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.of(ctx).pop(),
-                                    child: Text('common.ok'.tr()),
-                                  ),
-                                ],
-                              ),
-                            );
+                            await _showOutOfStock(_selectedProduct!);
                             return;
                           }
                           widget.onItemAdded(

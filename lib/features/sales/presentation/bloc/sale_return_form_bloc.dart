@@ -29,11 +29,12 @@ class SaleReturnLineItem extends Equatable {
     this.reason,
   });
 
+  /// Keep the original invoice variant identity visible while processing a
+  /// return. [SaleItemEntity.returnDisplayName] keeps both the human-readable
+  /// color/size pair and the invoice SKU visible.
   String get displayName {
-    if (originalItem.variantSku != null) {
-      return '${originalItem.productName ?? 'Product'} (${originalItem.variantSku})';
-    }
-    return originalItem.productName ?? 'Product #${originalItem.productId}';
+    final name = originalItem.returnDisplayName.trim();
+    return name.isNotEmpty ? name : 'Product #${originalItem.productId}';
   }
 
   SaleReturnLineItem copyWith({

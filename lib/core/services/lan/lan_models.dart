@@ -2,6 +2,24 @@ enum LanMode { standalone, master, client }
 
 enum LanConnectionStatus { idle, starting, online, connecting, paired, error }
 
+enum LanMasterActivityType { sale, saleReturn, saleAdjustmentReturn }
+
+class LanMasterActivityEvent {
+  final LanMasterActivityType type;
+  final String actorName;
+  final String deviceName;
+  final String documentNumber;
+  final int totalCents;
+
+  const LanMasterActivityEvent({
+    required this.type,
+    required this.actorName,
+    required this.deviceName,
+    required this.documentNumber,
+    required this.totalCents,
+  });
+}
+
 class LanRemoteUser {
   final int id;
   final String username;

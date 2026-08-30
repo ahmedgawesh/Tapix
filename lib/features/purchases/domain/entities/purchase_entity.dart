@@ -153,6 +153,25 @@ class PurchaseItemEntity extends Equatable {
     required this.createdAt,
   }) : discountCents = discountCents ?? Decimal.zero;
 
+  /// Human-readable invoice-line identity used by return screens and PDFs.
+  /// Color and size are more useful to the operator than a technical SKU;
+  /// the SKU remains the safe fallback for variants without named attributes.
+  String get returnDisplayName {
+    final attributes = <String>[
+      if (colorName != null && colorName!.trim().isNotEmpty) colorName!.trim(),
+      if (sizeName != null && sizeName!.trim().isNotEmpty) sizeName!.trim(),
+    ];
+    final name = productName?.trim();
+    final base = name == null || name.isEmpty ? 'Product #$productId' : name;
+    final withAttributes = attributes.isEmpty
+        ? base
+        : '$base (${attributes.join(' / ')})';
+    final sku = variantSku?.trim();
+    return sku == null || sku.isEmpty
+        ? withAttributes
+        : '$withAttributes • SKU: $sku';
+  }
+
   @override
   List<Object?> get props => [
     id,

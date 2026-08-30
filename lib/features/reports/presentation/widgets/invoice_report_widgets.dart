@@ -1,6 +1,6 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/measurement/measurement_localization.dart';
 import '../bloc/customer_invoices_report_bloc.dart' show InvoiceLineItem;

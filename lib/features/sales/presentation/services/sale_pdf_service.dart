@@ -83,6 +83,8 @@ class SalePdfService {
     required BuildContext context,
     required SaleEntity sale,
     required List<SaleItemEntity> items,
+    String? cashierName,
+    String? cashierShiftNumber,
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
@@ -100,6 +102,8 @@ class SalePdfService {
           locale: locale,
           isRtl: isRtl,
           company: company,
+          cashierName: cashierName,
+          cashierShiftNumber: cashierShiftNumber,
         );
         return pdf.save();
       },
@@ -112,6 +116,8 @@ class SalePdfService {
     required BuildContext context,
     required SaleEntity sale,
     required List<SaleItemEntity> items,
+    String? cashierName,
+    String? cashierShiftNumber,
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
@@ -127,6 +133,8 @@ class SalePdfService {
       locale: locale,
       isRtl: isRtl,
       company: company,
+      cashierName: cashierName,
+      cashierShiftNumber: cashierShiftNumber,
     );
 
     final bytes = await pdf.save();
@@ -674,6 +682,8 @@ class SalePdfService {
     required Locale locale,
     required bool isRtl,
     required CompanyProfile company,
+    String? cashierName,
+    String? cashierShiftNumber,
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
@@ -722,8 +732,9 @@ class SalePdfService {
                 date: sale.saleDate,
                 customerName: sale.customerName ?? 'sales.walk_in'.tr(),
                 salespersonName: sale.employeeName,
-                cashierName: cashierShift?.cashierName,
-                cashierShiftNumber: cashierShift?.shift.shiftNumber,
+                cashierName: cashierName ?? cashierShift?.cashierName,
+                cashierShiftNumber:
+                    cashierShiftNumber ?? cashierShift?.shift.shiftNumber,
                 paymentMethod: sale.paymentMethod,
                 locale: locale,
                 fonts: fonts,

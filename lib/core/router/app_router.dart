@@ -48,6 +48,7 @@ import '../../features/sales/presentation/screens/sale_return_form_screen.dart';
 import '../../features/sales/presentation/screens/sale_return_detail_screen.dart';
 import '../../features/sales/presentation/screens/sale_adj_return_form_screen.dart';
 import '../../features/sales/presentation/screens/sale_adj_return_detail_screen.dart';
+import '../../features/sales/presentation/screens/lan_sale_return_detail_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_scanner_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_label_designer_screen.dart';
 import '../../features/barcode/presentation/screens/barcode_design_screen.dart';
@@ -237,18 +238,25 @@ class AppRouter {
 
           final isRemoteSaleForm = currentPath == '/sales/new';
           final isRemoteReturnForm = currentPath == '/sales/returns/new';
+          final isRemoteSaleDetail = RegExp(
+            r'^/sales/\d+$',
+          ).hasMatch(currentPath);
+          final isRemoteReturnDetail = RegExp(
+            r'^/sales/returns/(?:adj/)?\d+$',
+          ).hasMatch(currentPath);
           final isRemoteReady =
               currentPath == '/dashboard' ||
               currentPath == '/client-session' ||
+              currentPath == '/sales' ||
               currentPath == '/sales/returns' ||
               currentPath == '/products' ||
+              (currentPath == '/devices' && user.role == UserRole.owner) ||
               isRemoteSaleForm ||
               isRemoteReturnForm ||
+              isRemoteSaleDetail ||
+              isRemoteReturnDetail ||
               currentPath == '/access-denied';
-          if (!isRemoteReady) {
-            if (currentPath == '/sales') return '/sales/new';
-            return '/dashboard';
-          }
+          if (!isRemoteReady) return '/dashboard';
           if (isRemoteSaleForm && user.role == UserRole.cashier) {
             try {
               final shift = await sl<LanNetworkService>().fetchOwnRemoteShift();
@@ -527,6 +535,12 @@ class AppRouter {
                     state.pathParameters['returnId'] ?? '',
                   );
                   if (returnId == null) return const SaleReturnsScreen();
+                  if (sl<LanNetworkService>().snapshot.mode == LanMode.client) {
+                    return LanSaleReturnDetailScreen(
+                      returnId: returnId,
+                      adjustment: true,
+                    );
+                  }
                   return SaleAdjReturnDetailScreen(returnId: returnId);
                 },
               ),
@@ -537,6 +551,12 @@ class AppRouter {
                     state.pathParameters['returnId'] ?? '',
                   );
                   if (returnId == null) return const SaleReturnsScreen();
+                  if (sl<LanNetworkService>().snapshot.mode == LanMode.client) {
+                    return LanSaleReturnDetailScreen(
+                      returnId: returnId,
+                      adjustment: false,
+                    );
+                  }
                   return SaleReturnDetailScreen(returnId: returnId);
                 },
               ),

@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:decimal/decimal.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../domain/repositories/sale_repository.dart';
 
@@ -16,6 +18,10 @@ class SalesHubData {
   final Set<int> saleIdsWithReturns;
   final Map<int, List<String>> productSearchTerms;
   final Set<int> productMatchedSaleIds;
+  final String? currencyCode;
+  final String? currencySymbol;
+  final int? currencyDecimalDigits;
+  final bool currencySymbolAfter;
 
   static const int searchResultLimit = 20;
 
@@ -27,6 +33,10 @@ class SalesHubData {
     this.saleIdsWithReturns = const {},
     this.productSearchTerms = const {},
     this.productMatchedSaleIds = const {},
+    this.currencyCode,
+    this.currencySymbol,
+    this.currencyDecimalDigits,
+    this.currencySymbolAfter = false,
   });
 
   List<SaleEntity> get filteredSales {
@@ -123,6 +133,7 @@ class SaleDeleteRequested extends SalesEvent {
 
 class SalesBloc extends RealtimeBloc<SalesHubData, SalesEvent> {
   final SaleRepository _repository;
+  final LanNetworkService? _lan;
   String? _searchQuery;
   String? _statusFilter;
 
@@ -134,7 +145,10 @@ class SalesBloc extends RealtimeBloc<SalesHubData, SalesEvent> {
   StreamSubscription<Set<int>>? _returnIdsSub;
   StreamSubscription<Map<int, List<String>>>? _productTermsSub;
 
-  SalesBloc(this._repository) : super(const RealtimeLoading()) {
+  SalesBloc(this._repository, {LanNetworkService? lan})
+    : _lan = lan,
+      super(const RealtimeLoading()) {
+    if (_isRemoteClient) return;
     _statsSub = _repository.watchDashboardStats().listen((stats) {
       _latestStats = stats;
       _emitCombined();
@@ -151,6 +165,8 @@ class SalesBloc extends RealtimeBloc<SalesHubData, SalesEvent> {
     });
   }
 
+  bool get _isRemoteClient => _lan?.snapshot.mode == LanMode.client;
+
   @override
   void registerEventHandlers() {
     on<SalesSearchRequested>(_onSearch);
@@ -161,6 +177,9 @@ class SalesBloc extends RealtimeBloc<SalesHubData, SalesEvent> {
 
   @override
   Stream<SalesHubData> get dataStream {
+    if (_isRemoteClient) {
+      return Stream.fromFuture(_lan!.fetchRemoteSales()).map(_remotePageToData);
+    }
     return _repository.watchAllSales().map((sales) {
       _latestSales = sales;
       final terms = _productSearchTerms ?? const {};
@@ -189,6 +208,70 @@ class SalesBloc extends RealtimeBloc<SalesHubData, SalesEvent> {
         ),
       );
     });
+  }
+
+  SalesHubData _remotePageToData(LanSalesPage page) {
+    final sales = page.sales
+        .map(
+          (sale) => SaleEntity(
+            id: sale.id,
+            invoiceNumber: sale.invoiceNumber,
+            customerId: sale.customerId,
+            customerName: sale.customerName,
+            customerPhone: sale.customerPhone,
+            employeeId: sale.employeeId,
+            employeeName: sale.employeeName,
+            subtotalCents: Decimal.fromInt(sale.subtotalCents),
+            taxCents: Decimal.fromInt(sale.taxCents),
+            discountCents: Decimal.fromInt(sale.discountCents),
+            totalCents: Decimal.fromInt(sale.totalCents),
+            paidAmountCents: Decimal.fromInt(sale.paidAmountCents),
+            currencyId: sale.currencyId,
+            paymentMethod: sale.paymentMethod,
+            status: sale.status,
+            notes: sale.notes,
+            saleDate: sale.saleDate,
+            dueDate: sale.dueDate,
+            taxInclusiveAtPost: sale.taxInclusiveAtPost,
+            createdAt: sale.createdAt,
+            updatedAt: sale.updatedAt,
+          ),
+        )
+        .toList(growable: false);
+    final remoteStats = page.stats;
+    final stats = SaleDashboardStats(
+      totalCount: remoteStats.totalCount,
+      completedCount: remoteStats.completedCount,
+      voidedCount: remoteStats.voidedCount,
+      totalSalesCents: remoteStats.totalSalesCents,
+      totalPaidCents: remoteStats.totalPaidCents,
+      overdueCount: remoteStats.overdueCount,
+      returnsCount: remoteStats.returnsCount,
+      totalReturnsCents: remoteStats.totalReturnsCents,
+      todaySalesCents: remoteStats.todaySalesCents,
+      todayCount: remoteStats.todayCount,
+    );
+    _latestSales = sales;
+    _latestStats = stats;
+    _returnSaleIds = page.saleIdsWithReturns;
+    _productSearchTerms = page.productSearchTerms;
+    return SalesHubData(
+      sales: sales,
+      stats: stats,
+      searchQuery: _searchQuery,
+      statusFilter: _statusFilter,
+      saleIdsWithReturns: page.saleIdsWithReturns,
+      productSearchTerms: page.productSearchTerms,
+      currencyCode: page.currencyCode,
+      currencySymbol: page.currencySymbol,
+      currencyDecimalDigits: page.currencyDecimalDigits,
+      currencySymbolAfter: page.currencySymbolAfter,
+      productMatchedSaleIds: SalesHubData.computeProductMatchedIds(
+        sales,
+        _searchQuery,
+        page.productSearchTerms,
+      ),
+    );
   }
 
   void _emitCombined() {
@@ -232,6 +315,10 @@ class SalesBloc extends RealtimeBloc<SalesHubData, SalesEvent> {
             statusFilter: _statusFilter,
             saleIdsWithReturns: data.saleIdsWithReturns,
             productSearchTerms: terms,
+            currencyCode: data.currencyCode,
+            currencySymbol: data.currencySymbol,
+            currencyDecimalDigits: data.currencyDecimalDigits,
+            currencySymbolAfter: data.currencySymbolAfter,
             productMatchedSaleIds: SalesHubData.computeProductMatchedIds(
               data.sales,
               _searchQuery,
@@ -260,6 +347,10 @@ class SalesBloc extends RealtimeBloc<SalesHubData, SalesEvent> {
             statusFilter: _statusFilter,
             saleIdsWithReturns: data.saleIdsWithReturns,
             productSearchTerms: terms,
+            currencyCode: data.currencyCode,
+            currencySymbol: data.currencySymbol,
+            currencyDecimalDigits: data.currencyDecimalDigits,
+            currencySymbolAfter: data.currencySymbolAfter,
             productMatchedSaleIds: SalesHubData.computeProductMatchedIds(
               data.sales,
               _searchQuery,

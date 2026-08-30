@@ -155,7 +155,7 @@ abstract class SaleRepository {
   Future<void> postSale(int saleId, {bool allowNegativeStock = false});
 
   /// Void a sale (restores stock if completed)
-  Future<void> voidSale(int saleId);
+  Future<void> voidSale(int saleId, {int? actorUserId});
 
   /// Edit a posted sale by voiding the original and creating a new one.
   /// Returns the new sale ID.

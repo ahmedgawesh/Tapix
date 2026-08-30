@@ -517,7 +517,8 @@ class SaleRepositoryImpl implements SaleRepository {
       _dao.postSale(saleId, allowNegativeStock: allowNegativeStock);
 
   @override
-  Future<void> voidSale(int saleId) async {
+  Future<void> voidSale(int saleId, {int? actorUserId}) async {
+    final resolvedUserId = actorUserId ?? await _currentUserId();
     // 2026-05-13 — pre-flight integrity guard. The analyzer is a side-
     // effect-free SoT that surfaces every condition that would corrupt
     // the books if the void went through (entangled adjustment returns,
@@ -536,7 +537,7 @@ class SaleRepositoryImpl implements SaleRepository {
       sourceTable: 'sales',
       sourceId: saleId,
       reason: 'Sale voided',
-      userId: await _currentUserId(),
+      userId: resolvedUserId,
     );
 
     // 2026-05-18 — Phase 15.2 — Reverse the GL journal entry for EVERY
@@ -553,7 +554,7 @@ class SaleRepositoryImpl implements SaleRepository {
         sourceTable: 'sale_payments',
         sourceId: p.id,
         reason: 'Sale voided — payment JE reversed',
-        userId: await _currentUserId(),
+        userId: resolvedUserId,
       );
     }
 
@@ -575,13 +576,13 @@ class SaleRepositoryImpl implements SaleRepository {
     await _dao.voidSale(
       saleId,
       journalEntryService: _journalService,
-      userId: await _currentUserId(),
+      userId: resolvedUserId,
     );
     // Audit: log sale void (CRITICAL)
-    _audit.logSaleVoided(
+    await _audit.logSaleVoided(
       saleId: saleId,
       reason: 'voided',
-      userId: await _currentUserId(),
+      userId: resolvedUserId,
     );
   }
 

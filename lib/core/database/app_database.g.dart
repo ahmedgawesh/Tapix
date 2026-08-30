@@ -9682,6 +9682,2153 @@ class BatchConsumptionsCompanion extends UpdateCompanion<BatchConsumption> {
   }
 }
 
+class $ActiveIngredientsTable extends ActiveIngredients
+    with TableInfo<$ActiveIngredientsTable, ActiveIngredient> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ActiveIngredientsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _canonicalNameMeta = const VerificationMeta(
+    'canonicalName',
+  );
+  @override
+  late final GeneratedColumn<String> canonicalName = GeneratedColumn<String>(
+    'canonical_name',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(
+      minTextLength: 1,
+      maxTextLength: 200,
+    ),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _normalizedNameMeta = const VerificationMeta(
+    'normalizedName',
+  );
+  @override
+  late final GeneratedColumn<String> normalizedName = GeneratedColumn<String>(
+    'normalized_name',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(
+      minTextLength: 1,
+      maxTextLength: 200,
+    ),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _nameArMeta = const VerificationMeta('nameAr');
+  @override
+  late final GeneratedColumn<String> nameAr = GeneratedColumn<String>(
+    'name_ar',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _nameFrMeta = const VerificationMeta('nameFr');
+  @override
+  late final GeneratedColumn<String> nameFr = GeneratedColumn<String>(
+    'name_fr',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isActiveMeta = const VerificationMeta(
+    'isActive',
+  );
+  @override
+  late final GeneratedColumn<bool> isActive = GeneratedColumn<bool>(
+    'is_active',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_active" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    canonicalName,
+    normalizedName,
+    nameAr,
+    nameFr,
+    description,
+    isActive,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'active_ingredients';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ActiveIngredient> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('canonical_name')) {
+      context.handle(
+        _canonicalNameMeta,
+        canonicalName.isAcceptableOrUnknown(
+          data['canonical_name']!,
+          _canonicalNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_canonicalNameMeta);
+    }
+    if (data.containsKey('normalized_name')) {
+      context.handle(
+        _normalizedNameMeta,
+        normalizedName.isAcceptableOrUnknown(
+          data['normalized_name']!,
+          _normalizedNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_normalizedNameMeta);
+    }
+    if (data.containsKey('name_ar')) {
+      context.handle(
+        _nameArMeta,
+        nameAr.isAcceptableOrUnknown(data['name_ar']!, _nameArMeta),
+      );
+    }
+    if (data.containsKey('name_fr')) {
+      context.handle(
+        _nameFrMeta,
+        nameFr.isAcceptableOrUnknown(data['name_fr']!, _nameFrMeta),
+      );
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('is_active')) {
+      context.handle(
+        _isActiveMeta,
+        isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ActiveIngredient map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ActiveIngredient(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      canonicalName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}canonical_name'],
+      )!,
+      normalizedName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}normalized_name'],
+      )!,
+      nameAr: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name_ar'],
+      ),
+      nameFr: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name_fr'],
+      ),
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      ),
+      isActive: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_active'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ActiveIngredientsTable createAlias(String alias) {
+    return $ActiveIngredientsTable(attachedDatabase, alias);
+  }
+}
+
+class ActiveIngredient extends DataClass
+    implements Insertable<ActiveIngredient> {
+  final int id;
+  final String canonicalName;
+  final String normalizedName;
+  final String? nameAr;
+  final String? nameFr;
+  final String? description;
+  final bool isActive;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const ActiveIngredient({
+    required this.id,
+    required this.canonicalName,
+    required this.normalizedName,
+    this.nameAr,
+    this.nameFr,
+    this.description,
+    required this.isActive,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['canonical_name'] = Variable<String>(canonicalName);
+    map['normalized_name'] = Variable<String>(normalizedName);
+    if (!nullToAbsent || nameAr != null) {
+      map['name_ar'] = Variable<String>(nameAr);
+    }
+    if (!nullToAbsent || nameFr != null) {
+      map['name_fr'] = Variable<String>(nameFr);
+    }
+    if (!nullToAbsent || description != null) {
+      map['description'] = Variable<String>(description);
+    }
+    map['is_active'] = Variable<bool>(isActive);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  ActiveIngredientsCompanion toCompanion(bool nullToAbsent) {
+    return ActiveIngredientsCompanion(
+      id: Value(id),
+      canonicalName: Value(canonicalName),
+      normalizedName: Value(normalizedName),
+      nameAr: nameAr == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nameAr),
+      nameFr: nameFr == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nameFr),
+      description: description == null && nullToAbsent
+          ? const Value.absent()
+          : Value(description),
+      isActive: Value(isActive),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory ActiveIngredient.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ActiveIngredient(
+      id: serializer.fromJson<int>(json['id']),
+      canonicalName: serializer.fromJson<String>(json['canonicalName']),
+      normalizedName: serializer.fromJson<String>(json['normalizedName']),
+      nameAr: serializer.fromJson<String?>(json['nameAr']),
+      nameFr: serializer.fromJson<String?>(json['nameFr']),
+      description: serializer.fromJson<String?>(json['description']),
+      isActive: serializer.fromJson<bool>(json['isActive']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'canonicalName': serializer.toJson<String>(canonicalName),
+      'normalizedName': serializer.toJson<String>(normalizedName),
+      'nameAr': serializer.toJson<String?>(nameAr),
+      'nameFr': serializer.toJson<String?>(nameFr),
+      'description': serializer.toJson<String?>(description),
+      'isActive': serializer.toJson<bool>(isActive),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  ActiveIngredient copyWith({
+    int? id,
+    String? canonicalName,
+    String? normalizedName,
+    Value<String?> nameAr = const Value.absent(),
+    Value<String?> nameFr = const Value.absent(),
+    Value<String?> description = const Value.absent(),
+    bool? isActive,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => ActiveIngredient(
+    id: id ?? this.id,
+    canonicalName: canonicalName ?? this.canonicalName,
+    normalizedName: normalizedName ?? this.normalizedName,
+    nameAr: nameAr.present ? nameAr.value : this.nameAr,
+    nameFr: nameFr.present ? nameFr.value : this.nameFr,
+    description: description.present ? description.value : this.description,
+    isActive: isActive ?? this.isActive,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  ActiveIngredient copyWithCompanion(ActiveIngredientsCompanion data) {
+    return ActiveIngredient(
+      id: data.id.present ? data.id.value : this.id,
+      canonicalName: data.canonicalName.present
+          ? data.canonicalName.value
+          : this.canonicalName,
+      normalizedName: data.normalizedName.present
+          ? data.normalizedName.value
+          : this.normalizedName,
+      nameAr: data.nameAr.present ? data.nameAr.value : this.nameAr,
+      nameFr: data.nameFr.present ? data.nameFr.value : this.nameFr,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+      isActive: data.isActive.present ? data.isActive.value : this.isActive,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ActiveIngredient(')
+          ..write('id: $id, ')
+          ..write('canonicalName: $canonicalName, ')
+          ..write('normalizedName: $normalizedName, ')
+          ..write('nameAr: $nameAr, ')
+          ..write('nameFr: $nameFr, ')
+          ..write('description: $description, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    canonicalName,
+    normalizedName,
+    nameAr,
+    nameFr,
+    description,
+    isActive,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ActiveIngredient &&
+          other.id == this.id &&
+          other.canonicalName == this.canonicalName &&
+          other.normalizedName == this.normalizedName &&
+          other.nameAr == this.nameAr &&
+          other.nameFr == this.nameFr &&
+          other.description == this.description &&
+          other.isActive == this.isActive &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ActiveIngredientsCompanion extends UpdateCompanion<ActiveIngredient> {
+  final Value<int> id;
+  final Value<String> canonicalName;
+  final Value<String> normalizedName;
+  final Value<String?> nameAr;
+  final Value<String?> nameFr;
+  final Value<String?> description;
+  final Value<bool> isActive;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const ActiveIngredientsCompanion({
+    this.id = const Value.absent(),
+    this.canonicalName = const Value.absent(),
+    this.normalizedName = const Value.absent(),
+    this.nameAr = const Value.absent(),
+    this.nameFr = const Value.absent(),
+    this.description = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  ActiveIngredientsCompanion.insert({
+    this.id = const Value.absent(),
+    required String canonicalName,
+    required String normalizedName,
+    this.nameAr = const Value.absent(),
+    this.nameFr = const Value.absent(),
+    this.description = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : canonicalName = Value(canonicalName),
+       normalizedName = Value(normalizedName);
+  static Insertable<ActiveIngredient> custom({
+    Expression<int>? id,
+    Expression<String>? canonicalName,
+    Expression<String>? normalizedName,
+    Expression<String>? nameAr,
+    Expression<String>? nameFr,
+    Expression<String>? description,
+    Expression<bool>? isActive,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (canonicalName != null) 'canonical_name': canonicalName,
+      if (normalizedName != null) 'normalized_name': normalizedName,
+      if (nameAr != null) 'name_ar': nameAr,
+      if (nameFr != null) 'name_fr': nameFr,
+      if (description != null) 'description': description,
+      if (isActive != null) 'is_active': isActive,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  ActiveIngredientsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? canonicalName,
+    Value<String>? normalizedName,
+    Value<String?>? nameAr,
+    Value<String?>? nameFr,
+    Value<String?>? description,
+    Value<bool>? isActive,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return ActiveIngredientsCompanion(
+      id: id ?? this.id,
+      canonicalName: canonicalName ?? this.canonicalName,
+      normalizedName: normalizedName ?? this.normalizedName,
+      nameAr: nameAr ?? this.nameAr,
+      nameFr: nameFr ?? this.nameFr,
+      description: description ?? this.description,
+      isActive: isActive ?? this.isActive,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (canonicalName.present) {
+      map['canonical_name'] = Variable<String>(canonicalName.value);
+    }
+    if (normalizedName.present) {
+      map['normalized_name'] = Variable<String>(normalizedName.value);
+    }
+    if (nameAr.present) {
+      map['name_ar'] = Variable<String>(nameAr.value);
+    }
+    if (nameFr.present) {
+      map['name_fr'] = Variable<String>(nameFr.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (isActive.present) {
+      map['is_active'] = Variable<bool>(isActive.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ActiveIngredientsCompanion(')
+          ..write('id: $id, ')
+          ..write('canonicalName: $canonicalName, ')
+          ..write('normalizedName: $normalizedName, ')
+          ..write('nameAr: $nameAr, ')
+          ..write('nameFr: $nameFr, ')
+          ..write('description: $description, ')
+          ..write('isActive: $isActive, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ActiveIngredientAliasesTable extends ActiveIngredientAliases
+    with TableInfo<$ActiveIngredientAliasesTable, ActiveIngredientAlias> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ActiveIngredientAliasesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _ingredientIdMeta = const VerificationMeta(
+    'ingredientId',
+  );
+  @override
+  late final GeneratedColumn<int> ingredientId = GeneratedColumn<int>(
+    'ingredient_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES active_ingredients (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _aliasMeta = const VerificationMeta('alias');
+  @override
+  late final GeneratedColumn<String> alias = GeneratedColumn<String>(
+    'alias',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(
+      minTextLength: 1,
+      maxTextLength: 200,
+    ),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _normalizedAliasMeta = const VerificationMeta(
+    'normalizedAlias',
+  );
+  @override
+  late final GeneratedColumn<String> normalizedAlias = GeneratedColumn<String>(
+    'normalized_alias',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(
+      minTextLength: 1,
+      maxTextLength: 200,
+    ),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _languageCodeMeta = const VerificationMeta(
+    'languageCode',
+  );
+  @override
+  late final GeneratedColumn<String> languageCode = GeneratedColumn<String>(
+    'language_code',
+    aliasedName,
+    true,
+    additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 10),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    ingredientId,
+    alias,
+    normalizedAlias,
+    languageCode,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'active_ingredient_aliases';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ActiveIngredientAlias> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('ingredient_id')) {
+      context.handle(
+        _ingredientIdMeta,
+        ingredientId.isAcceptableOrUnknown(
+          data['ingredient_id']!,
+          _ingredientIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_ingredientIdMeta);
+    }
+    if (data.containsKey('alias')) {
+      context.handle(
+        _aliasMeta,
+        alias.isAcceptableOrUnknown(data['alias']!, _aliasMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_aliasMeta);
+    }
+    if (data.containsKey('normalized_alias')) {
+      context.handle(
+        _normalizedAliasMeta,
+        normalizedAlias.isAcceptableOrUnknown(
+          data['normalized_alias']!,
+          _normalizedAliasMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_normalizedAliasMeta);
+    }
+    if (data.containsKey('language_code')) {
+      context.handle(
+        _languageCodeMeta,
+        languageCode.isAcceptableOrUnknown(
+          data['language_code']!,
+          _languageCodeMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ActiveIngredientAlias map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ActiveIngredientAlias(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      ingredientId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}ingredient_id'],
+      )!,
+      alias: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}alias'],
+      )!,
+      normalizedAlias: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}normalized_alias'],
+      )!,
+      languageCode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}language_code'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ActiveIngredientAliasesTable createAlias(String alias) {
+    return $ActiveIngredientAliasesTable(attachedDatabase, alias);
+  }
+}
+
+class ActiveIngredientAlias extends DataClass
+    implements Insertable<ActiveIngredientAlias> {
+  final int id;
+  final int ingredientId;
+  final String alias;
+  final String normalizedAlias;
+  final String? languageCode;
+  final DateTime createdAt;
+  const ActiveIngredientAlias({
+    required this.id,
+    required this.ingredientId,
+    required this.alias,
+    required this.normalizedAlias,
+    this.languageCode,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['ingredient_id'] = Variable<int>(ingredientId);
+    map['alias'] = Variable<String>(alias);
+    map['normalized_alias'] = Variable<String>(normalizedAlias);
+    if (!nullToAbsent || languageCode != null) {
+      map['language_code'] = Variable<String>(languageCode);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  ActiveIngredientAliasesCompanion toCompanion(bool nullToAbsent) {
+    return ActiveIngredientAliasesCompanion(
+      id: Value(id),
+      ingredientId: Value(ingredientId),
+      alias: Value(alias),
+      normalizedAlias: Value(normalizedAlias),
+      languageCode: languageCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(languageCode),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory ActiveIngredientAlias.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ActiveIngredientAlias(
+      id: serializer.fromJson<int>(json['id']),
+      ingredientId: serializer.fromJson<int>(json['ingredientId']),
+      alias: serializer.fromJson<String>(json['alias']),
+      normalizedAlias: serializer.fromJson<String>(json['normalizedAlias']),
+      languageCode: serializer.fromJson<String?>(json['languageCode']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'ingredientId': serializer.toJson<int>(ingredientId),
+      'alias': serializer.toJson<String>(alias),
+      'normalizedAlias': serializer.toJson<String>(normalizedAlias),
+      'languageCode': serializer.toJson<String?>(languageCode),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  ActiveIngredientAlias copyWith({
+    int? id,
+    int? ingredientId,
+    String? alias,
+    String? normalizedAlias,
+    Value<String?> languageCode = const Value.absent(),
+    DateTime? createdAt,
+  }) => ActiveIngredientAlias(
+    id: id ?? this.id,
+    ingredientId: ingredientId ?? this.ingredientId,
+    alias: alias ?? this.alias,
+    normalizedAlias: normalizedAlias ?? this.normalizedAlias,
+    languageCode: languageCode.present ? languageCode.value : this.languageCode,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  ActiveIngredientAlias copyWithCompanion(
+    ActiveIngredientAliasesCompanion data,
+  ) {
+    return ActiveIngredientAlias(
+      id: data.id.present ? data.id.value : this.id,
+      ingredientId: data.ingredientId.present
+          ? data.ingredientId.value
+          : this.ingredientId,
+      alias: data.alias.present ? data.alias.value : this.alias,
+      normalizedAlias: data.normalizedAlias.present
+          ? data.normalizedAlias.value
+          : this.normalizedAlias,
+      languageCode: data.languageCode.present
+          ? data.languageCode.value
+          : this.languageCode,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ActiveIngredientAlias(')
+          ..write('id: $id, ')
+          ..write('ingredientId: $ingredientId, ')
+          ..write('alias: $alias, ')
+          ..write('normalizedAlias: $normalizedAlias, ')
+          ..write('languageCode: $languageCode, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    ingredientId,
+    alias,
+    normalizedAlias,
+    languageCode,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ActiveIngredientAlias &&
+          other.id == this.id &&
+          other.ingredientId == this.ingredientId &&
+          other.alias == this.alias &&
+          other.normalizedAlias == this.normalizedAlias &&
+          other.languageCode == this.languageCode &&
+          other.createdAt == this.createdAt);
+}
+
+class ActiveIngredientAliasesCompanion
+    extends UpdateCompanion<ActiveIngredientAlias> {
+  final Value<int> id;
+  final Value<int> ingredientId;
+  final Value<String> alias;
+  final Value<String> normalizedAlias;
+  final Value<String?> languageCode;
+  final Value<DateTime> createdAt;
+  const ActiveIngredientAliasesCompanion({
+    this.id = const Value.absent(),
+    this.ingredientId = const Value.absent(),
+    this.alias = const Value.absent(),
+    this.normalizedAlias = const Value.absent(),
+    this.languageCode = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  ActiveIngredientAliasesCompanion.insert({
+    this.id = const Value.absent(),
+    required int ingredientId,
+    required String alias,
+    required String normalizedAlias,
+    this.languageCode = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  }) : ingredientId = Value(ingredientId),
+       alias = Value(alias),
+       normalizedAlias = Value(normalizedAlias);
+  static Insertable<ActiveIngredientAlias> custom({
+    Expression<int>? id,
+    Expression<int>? ingredientId,
+    Expression<String>? alias,
+    Expression<String>? normalizedAlias,
+    Expression<String>? languageCode,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (ingredientId != null) 'ingredient_id': ingredientId,
+      if (alias != null) 'alias': alias,
+      if (normalizedAlias != null) 'normalized_alias': normalizedAlias,
+      if (languageCode != null) 'language_code': languageCode,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  ActiveIngredientAliasesCompanion copyWith({
+    Value<int>? id,
+    Value<int>? ingredientId,
+    Value<String>? alias,
+    Value<String>? normalizedAlias,
+    Value<String?>? languageCode,
+    Value<DateTime>? createdAt,
+  }) {
+    return ActiveIngredientAliasesCompanion(
+      id: id ?? this.id,
+      ingredientId: ingredientId ?? this.ingredientId,
+      alias: alias ?? this.alias,
+      normalizedAlias: normalizedAlias ?? this.normalizedAlias,
+      languageCode: languageCode ?? this.languageCode,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (ingredientId.present) {
+      map['ingredient_id'] = Variable<int>(ingredientId.value);
+    }
+    if (alias.present) {
+      map['alias'] = Variable<String>(alias.value);
+    }
+    if (normalizedAlias.present) {
+      map['normalized_alias'] = Variable<String>(normalizedAlias.value);
+    }
+    if (languageCode.present) {
+      map['language_code'] = Variable<String>(languageCode.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ActiveIngredientAliasesCompanion(')
+          ..write('id: $id, ')
+          ..write('ingredientId: $ingredientId, ')
+          ..write('alias: $alias, ')
+          ..write('normalizedAlias: $normalizedAlias, ')
+          ..write('languageCode: $languageCode, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $MedicineProfilesTable extends MedicineProfiles
+    with TableInfo<$MedicineProfilesTable, MedicineProfile> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MedicineProfilesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _productIdMeta = const VerificationMeta(
+    'productId',
+  );
+  @override
+  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES products (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _dosageFormMeta = const VerificationMeta(
+    'dosageForm',
+  );
+  @override
+  late final GeneratedColumn<String> dosageForm = GeneratedColumn<String>(
+    'dosage_form',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(
+      minTextLength: 1,
+      maxTextLength: 80,
+    ),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _administrationRouteMeta =
+      const VerificationMeta('administrationRoute');
+  @override
+  late final GeneratedColumn<String> administrationRoute =
+      GeneratedColumn<String>(
+        'administration_route',
+        aliasedName,
+        true,
+        additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 80),
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _substitutionEligibleMeta =
+      const VerificationMeta('substitutionEligible');
+  @override
+  late final GeneratedColumn<bool> substitutionEligible = GeneratedColumn<bool>(
+    'substitution_eligible',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("substitution_eligible" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _notesMeta = const VerificationMeta('notes');
+  @override
+  late final GeneratedColumn<String> notes = GeneratedColumn<String>(
+    'notes',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    productId,
+    dosageForm,
+    administrationRoute,
+    substitutionEligible,
+    notes,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'medicine_profiles';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MedicineProfile> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('product_id')) {
+      context.handle(
+        _productIdMeta,
+        productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta),
+      );
+    }
+    if (data.containsKey('dosage_form')) {
+      context.handle(
+        _dosageFormMeta,
+        dosageForm.isAcceptableOrUnknown(data['dosage_form']!, _dosageFormMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dosageFormMeta);
+    }
+    if (data.containsKey('administration_route')) {
+      context.handle(
+        _administrationRouteMeta,
+        administrationRoute.isAcceptableOrUnknown(
+          data['administration_route']!,
+          _administrationRouteMeta,
+        ),
+      );
+    }
+    if (data.containsKey('substitution_eligible')) {
+      context.handle(
+        _substitutionEligibleMeta,
+        substitutionEligible.isAcceptableOrUnknown(
+          data['substitution_eligible']!,
+          _substitutionEligibleMeta,
+        ),
+      );
+    }
+    if (data.containsKey('notes')) {
+      context.handle(
+        _notesMeta,
+        notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {productId};
+  @override
+  MedicineProfile map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MedicineProfile(
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}product_id'],
+      )!,
+      dosageForm: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}dosage_form'],
+      )!,
+      administrationRoute: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}administration_route'],
+      ),
+      substitutionEligible: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}substitution_eligible'],
+      )!,
+      notes: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}notes'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $MedicineProfilesTable createAlias(String alias) {
+    return $MedicineProfilesTable(attachedDatabase, alias);
+  }
+}
+
+class MedicineProfile extends DataClass implements Insertable<MedicineProfile> {
+  final int productId;
+
+  /// Canonical extensible code such as tablet, capsule, syrup, cream or vial.
+  final String dosageForm;
+
+  /// Canonical administration route (oral, topical, intravenous, ...).
+  /// Nullable for legacy/imported rows; safe exact-alternative matching will
+  /// require a populated, equal route before suggesting a substitution.
+  final String? administrationRoute;
+
+  /// Lets the pharmacist exclude a product from automatic alternative lists
+  /// even when ingredient, strength, form and route are identical.
+  final bool substitutionEligible;
+  final String? notes;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const MedicineProfile({
+    required this.productId,
+    required this.dosageForm,
+    this.administrationRoute,
+    required this.substitutionEligible,
+    this.notes,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['product_id'] = Variable<int>(productId);
+    map['dosage_form'] = Variable<String>(dosageForm);
+    if (!nullToAbsent || administrationRoute != null) {
+      map['administration_route'] = Variable<String>(administrationRoute);
+    }
+    map['substitution_eligible'] = Variable<bool>(substitutionEligible);
+    if (!nullToAbsent || notes != null) {
+      map['notes'] = Variable<String>(notes);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  MedicineProfilesCompanion toCompanion(bool nullToAbsent) {
+    return MedicineProfilesCompanion(
+      productId: Value(productId),
+      dosageForm: Value(dosageForm),
+      administrationRoute: administrationRoute == null && nullToAbsent
+          ? const Value.absent()
+          : Value(administrationRoute),
+      substitutionEligible: Value(substitutionEligible),
+      notes: notes == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notes),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory MedicineProfile.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MedicineProfile(
+      productId: serializer.fromJson<int>(json['productId']),
+      dosageForm: serializer.fromJson<String>(json['dosageForm']),
+      administrationRoute: serializer.fromJson<String?>(
+        json['administrationRoute'],
+      ),
+      substitutionEligible: serializer.fromJson<bool>(
+        json['substitutionEligible'],
+      ),
+      notes: serializer.fromJson<String?>(json['notes']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'productId': serializer.toJson<int>(productId),
+      'dosageForm': serializer.toJson<String>(dosageForm),
+      'administrationRoute': serializer.toJson<String?>(administrationRoute),
+      'substitutionEligible': serializer.toJson<bool>(substitutionEligible),
+      'notes': serializer.toJson<String?>(notes),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  MedicineProfile copyWith({
+    int? productId,
+    String? dosageForm,
+    Value<String?> administrationRoute = const Value.absent(),
+    bool? substitutionEligible,
+    Value<String?> notes = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => MedicineProfile(
+    productId: productId ?? this.productId,
+    dosageForm: dosageForm ?? this.dosageForm,
+    administrationRoute: administrationRoute.present
+        ? administrationRoute.value
+        : this.administrationRoute,
+    substitutionEligible: substitutionEligible ?? this.substitutionEligible,
+    notes: notes.present ? notes.value : this.notes,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  MedicineProfile copyWithCompanion(MedicineProfilesCompanion data) {
+    return MedicineProfile(
+      productId: data.productId.present ? data.productId.value : this.productId,
+      dosageForm: data.dosageForm.present
+          ? data.dosageForm.value
+          : this.dosageForm,
+      administrationRoute: data.administrationRoute.present
+          ? data.administrationRoute.value
+          : this.administrationRoute,
+      substitutionEligible: data.substitutionEligible.present
+          ? data.substitutionEligible.value
+          : this.substitutionEligible,
+      notes: data.notes.present ? data.notes.value : this.notes,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MedicineProfile(')
+          ..write('productId: $productId, ')
+          ..write('dosageForm: $dosageForm, ')
+          ..write('administrationRoute: $administrationRoute, ')
+          ..write('substitutionEligible: $substitutionEligible, ')
+          ..write('notes: $notes, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    productId,
+    dosageForm,
+    administrationRoute,
+    substitutionEligible,
+    notes,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MedicineProfile &&
+          other.productId == this.productId &&
+          other.dosageForm == this.dosageForm &&
+          other.administrationRoute == this.administrationRoute &&
+          other.substitutionEligible == this.substitutionEligible &&
+          other.notes == this.notes &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class MedicineProfilesCompanion extends UpdateCompanion<MedicineProfile> {
+  final Value<int> productId;
+  final Value<String> dosageForm;
+  final Value<String?> administrationRoute;
+  final Value<bool> substitutionEligible;
+  final Value<String?> notes;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const MedicineProfilesCompanion({
+    this.productId = const Value.absent(),
+    this.dosageForm = const Value.absent(),
+    this.administrationRoute = const Value.absent(),
+    this.substitutionEligible = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  MedicineProfilesCompanion.insert({
+    this.productId = const Value.absent(),
+    required String dosageForm,
+    this.administrationRoute = const Value.absent(),
+    this.substitutionEligible = const Value.absent(),
+    this.notes = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : dosageForm = Value(dosageForm);
+  static Insertable<MedicineProfile> custom({
+    Expression<int>? productId,
+    Expression<String>? dosageForm,
+    Expression<String>? administrationRoute,
+    Expression<bool>? substitutionEligible,
+    Expression<String>? notes,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (productId != null) 'product_id': productId,
+      if (dosageForm != null) 'dosage_form': dosageForm,
+      if (administrationRoute != null)
+        'administration_route': administrationRoute,
+      if (substitutionEligible != null)
+        'substitution_eligible': substitutionEligible,
+      if (notes != null) 'notes': notes,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  MedicineProfilesCompanion copyWith({
+    Value<int>? productId,
+    Value<String>? dosageForm,
+    Value<String?>? administrationRoute,
+    Value<bool>? substitutionEligible,
+    Value<String?>? notes,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return MedicineProfilesCompanion(
+      productId: productId ?? this.productId,
+      dosageForm: dosageForm ?? this.dosageForm,
+      administrationRoute: administrationRoute ?? this.administrationRoute,
+      substitutionEligible: substitutionEligible ?? this.substitutionEligible,
+      notes: notes ?? this.notes,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (productId.present) {
+      map['product_id'] = Variable<int>(productId.value);
+    }
+    if (dosageForm.present) {
+      map['dosage_form'] = Variable<String>(dosageForm.value);
+    }
+    if (administrationRoute.present) {
+      map['administration_route'] = Variable<String>(administrationRoute.value);
+    }
+    if (substitutionEligible.present) {
+      map['substitution_eligible'] = Variable<bool>(substitutionEligible.value);
+    }
+    if (notes.present) {
+      map['notes'] = Variable<String>(notes.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MedicineProfilesCompanion(')
+          ..write('productId: $productId, ')
+          ..write('dosageForm: $dosageForm, ')
+          ..write('administrationRoute: $administrationRoute, ')
+          ..write('substitutionEligible: $substitutionEligible, ')
+          ..write('notes: $notes, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $MedicineActiveIngredientsTable extends MedicineActiveIngredients
+    with TableInfo<$MedicineActiveIngredientsTable, MedicineActiveIngredient> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MedicineActiveIngredientsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _productIdMeta = const VerificationMeta(
+    'productId',
+  );
+  @override
+  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES medicine_profiles (product_id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _ingredientIdMeta = const VerificationMeta(
+    'ingredientId',
+  );
+  @override
+  late final GeneratedColumn<int> ingredientId = GeneratedColumn<int>(
+    'ingredient_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES active_ingredients (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _normalizedStrengthValueMicrosMeta =
+      const VerificationMeta('normalizedStrengthValueMicros');
+  @override
+  late final GeneratedColumn<int> normalizedStrengthValueMicros =
+      GeneratedColumn<int>(
+        'normalized_strength_value_micros',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _normalizedStrengthUnitMeta =
+      const VerificationMeta('normalizedStrengthUnit');
+  @override
+  late final GeneratedColumn<String> normalizedStrengthUnit =
+      GeneratedColumn<String>(
+        'normalized_strength_unit',
+        aliasedName,
+        false,
+        additionalChecks: GeneratedColumn.checkTextLength(
+          minTextLength: 1,
+          maxTextLength: 24,
+        ),
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _normalizedBasisValueMicrosMeta =
+      const VerificationMeta('normalizedBasisValueMicros');
+  @override
+  late final GeneratedColumn<int> normalizedBasisValueMicros =
+      GeneratedColumn<int>(
+        'normalized_basis_value_micros',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _normalizedBasisUnitMeta =
+      const VerificationMeta('normalizedBasisUnit');
+  @override
+  late final GeneratedColumn<String> normalizedBasisUnit =
+      GeneratedColumn<String>(
+        'normalized_basis_unit',
+        aliasedName,
+        true,
+        additionalChecks: GeneratedColumn.checkTextLength(maxTextLength: 24),
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    productId,
+    ingredientId,
+    normalizedStrengthValueMicros,
+    normalizedStrengthUnit,
+    normalizedBasisValueMicros,
+    normalizedBasisUnit,
+    sortOrder,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'medicine_active_ingredients';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MedicineActiveIngredient> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('product_id')) {
+      context.handle(
+        _productIdMeta,
+        productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('ingredient_id')) {
+      context.handle(
+        _ingredientIdMeta,
+        ingredientId.isAcceptableOrUnknown(
+          data['ingredient_id']!,
+          _ingredientIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_ingredientIdMeta);
+    }
+    if (data.containsKey('normalized_strength_value_micros')) {
+      context.handle(
+        _normalizedStrengthValueMicrosMeta,
+        normalizedStrengthValueMicros.isAcceptableOrUnknown(
+          data['normalized_strength_value_micros']!,
+          _normalizedStrengthValueMicrosMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_normalizedStrengthValueMicrosMeta);
+    }
+    if (data.containsKey('normalized_strength_unit')) {
+      context.handle(
+        _normalizedStrengthUnitMeta,
+        normalizedStrengthUnit.isAcceptableOrUnknown(
+          data['normalized_strength_unit']!,
+          _normalizedStrengthUnitMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_normalizedStrengthUnitMeta);
+    }
+    if (data.containsKey('normalized_basis_value_micros')) {
+      context.handle(
+        _normalizedBasisValueMicrosMeta,
+        normalizedBasisValueMicros.isAcceptableOrUnknown(
+          data['normalized_basis_value_micros']!,
+          _normalizedBasisValueMicrosMeta,
+        ),
+      );
+    }
+    if (data.containsKey('normalized_basis_unit')) {
+      context.handle(
+        _normalizedBasisUnitMeta,
+        normalizedBasisUnit.isAcceptableOrUnknown(
+          data['normalized_basis_unit']!,
+          _normalizedBasisUnitMeta,
+        ),
+      );
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {productId, ingredientId};
+  @override
+  MedicineActiveIngredient map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MedicineActiveIngredient(
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}product_id'],
+      )!,
+      ingredientId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}ingredient_id'],
+      )!,
+      normalizedStrengthValueMicros: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}normalized_strength_value_micros'],
+      )!,
+      normalizedStrengthUnit: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}normalized_strength_unit'],
+      )!,
+      normalizedBasisValueMicros: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}normalized_basis_value_micros'],
+      ),
+      normalizedBasisUnit: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}normalized_basis_unit'],
+      ),
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $MedicineActiveIngredientsTable createAlias(String alias) {
+    return $MedicineActiveIngredientsTable(attachedDatabase, alias);
+  }
+}
+
+class MedicineActiveIngredient extends DataClass
+    implements Insertable<MedicineActiveIngredient> {
+  final int productId;
+  final int ingredientId;
+  final int normalizedStrengthValueMicros;
+
+  /// Normalized numerator unit family, for example mg, iu, unit, mmol, meq.
+  final String normalizedStrengthUnit;
+
+  /// Optional denominator for concentrations (e.g. 100 mg / 5 ml).
+  final int? normalizedBasisValueMicros;
+  final String? normalizedBasisUnit;
+  final int sortOrder;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const MedicineActiveIngredient({
+    required this.productId,
+    required this.ingredientId,
+    required this.normalizedStrengthValueMicros,
+    required this.normalizedStrengthUnit,
+    this.normalizedBasisValueMicros,
+    this.normalizedBasisUnit,
+    required this.sortOrder,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['product_id'] = Variable<int>(productId);
+    map['ingredient_id'] = Variable<int>(ingredientId);
+    map['normalized_strength_value_micros'] = Variable<int>(
+      normalizedStrengthValueMicros,
+    );
+    map['normalized_strength_unit'] = Variable<String>(normalizedStrengthUnit);
+    if (!nullToAbsent || normalizedBasisValueMicros != null) {
+      map['normalized_basis_value_micros'] = Variable<int>(
+        normalizedBasisValueMicros,
+      );
+    }
+    if (!nullToAbsent || normalizedBasisUnit != null) {
+      map['normalized_basis_unit'] = Variable<String>(normalizedBasisUnit);
+    }
+    map['sort_order'] = Variable<int>(sortOrder);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  MedicineActiveIngredientsCompanion toCompanion(bool nullToAbsent) {
+    return MedicineActiveIngredientsCompanion(
+      productId: Value(productId),
+      ingredientId: Value(ingredientId),
+      normalizedStrengthValueMicros: Value(normalizedStrengthValueMicros),
+      normalizedStrengthUnit: Value(normalizedStrengthUnit),
+      normalizedBasisValueMicros:
+          normalizedBasisValueMicros == null && nullToAbsent
+          ? const Value.absent()
+          : Value(normalizedBasisValueMicros),
+      normalizedBasisUnit: normalizedBasisUnit == null && nullToAbsent
+          ? const Value.absent()
+          : Value(normalizedBasisUnit),
+      sortOrder: Value(sortOrder),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory MedicineActiveIngredient.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MedicineActiveIngredient(
+      productId: serializer.fromJson<int>(json['productId']),
+      ingredientId: serializer.fromJson<int>(json['ingredientId']),
+      normalizedStrengthValueMicros: serializer.fromJson<int>(
+        json['normalizedStrengthValueMicros'],
+      ),
+      normalizedStrengthUnit: serializer.fromJson<String>(
+        json['normalizedStrengthUnit'],
+      ),
+      normalizedBasisValueMicros: serializer.fromJson<int?>(
+        json['normalizedBasisValueMicros'],
+      ),
+      normalizedBasisUnit: serializer.fromJson<String?>(
+        json['normalizedBasisUnit'],
+      ),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'productId': serializer.toJson<int>(productId),
+      'ingredientId': serializer.toJson<int>(ingredientId),
+      'normalizedStrengthValueMicros': serializer.toJson<int>(
+        normalizedStrengthValueMicros,
+      ),
+      'normalizedStrengthUnit': serializer.toJson<String>(
+        normalizedStrengthUnit,
+      ),
+      'normalizedBasisValueMicros': serializer.toJson<int?>(
+        normalizedBasisValueMicros,
+      ),
+      'normalizedBasisUnit': serializer.toJson<String?>(normalizedBasisUnit),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  MedicineActiveIngredient copyWith({
+    int? productId,
+    int? ingredientId,
+    int? normalizedStrengthValueMicros,
+    String? normalizedStrengthUnit,
+    Value<int?> normalizedBasisValueMicros = const Value.absent(),
+    Value<String?> normalizedBasisUnit = const Value.absent(),
+    int? sortOrder,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => MedicineActiveIngredient(
+    productId: productId ?? this.productId,
+    ingredientId: ingredientId ?? this.ingredientId,
+    normalizedStrengthValueMicros:
+        normalizedStrengthValueMicros ?? this.normalizedStrengthValueMicros,
+    normalizedStrengthUnit:
+        normalizedStrengthUnit ?? this.normalizedStrengthUnit,
+    normalizedBasisValueMicros: normalizedBasisValueMicros.present
+        ? normalizedBasisValueMicros.value
+        : this.normalizedBasisValueMicros,
+    normalizedBasisUnit: normalizedBasisUnit.present
+        ? normalizedBasisUnit.value
+        : this.normalizedBasisUnit,
+    sortOrder: sortOrder ?? this.sortOrder,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  MedicineActiveIngredient copyWithCompanion(
+    MedicineActiveIngredientsCompanion data,
+  ) {
+    return MedicineActiveIngredient(
+      productId: data.productId.present ? data.productId.value : this.productId,
+      ingredientId: data.ingredientId.present
+          ? data.ingredientId.value
+          : this.ingredientId,
+      normalizedStrengthValueMicros: data.normalizedStrengthValueMicros.present
+          ? data.normalizedStrengthValueMicros.value
+          : this.normalizedStrengthValueMicros,
+      normalizedStrengthUnit: data.normalizedStrengthUnit.present
+          ? data.normalizedStrengthUnit.value
+          : this.normalizedStrengthUnit,
+      normalizedBasisValueMicros: data.normalizedBasisValueMicros.present
+          ? data.normalizedBasisValueMicros.value
+          : this.normalizedBasisValueMicros,
+      normalizedBasisUnit: data.normalizedBasisUnit.present
+          ? data.normalizedBasisUnit.value
+          : this.normalizedBasisUnit,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MedicineActiveIngredient(')
+          ..write('productId: $productId, ')
+          ..write('ingredientId: $ingredientId, ')
+          ..write(
+            'normalizedStrengthValueMicros: $normalizedStrengthValueMicros, ',
+          )
+          ..write('normalizedStrengthUnit: $normalizedStrengthUnit, ')
+          ..write('normalizedBasisValueMicros: $normalizedBasisValueMicros, ')
+          ..write('normalizedBasisUnit: $normalizedBasisUnit, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    productId,
+    ingredientId,
+    normalizedStrengthValueMicros,
+    normalizedStrengthUnit,
+    normalizedBasisValueMicros,
+    normalizedBasisUnit,
+    sortOrder,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MedicineActiveIngredient &&
+          other.productId == this.productId &&
+          other.ingredientId == this.ingredientId &&
+          other.normalizedStrengthValueMicros ==
+              this.normalizedStrengthValueMicros &&
+          other.normalizedStrengthUnit == this.normalizedStrengthUnit &&
+          other.normalizedBasisValueMicros == this.normalizedBasisValueMicros &&
+          other.normalizedBasisUnit == this.normalizedBasisUnit &&
+          other.sortOrder == this.sortOrder &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class MedicineActiveIngredientsCompanion
+    extends UpdateCompanion<MedicineActiveIngredient> {
+  final Value<int> productId;
+  final Value<int> ingredientId;
+  final Value<int> normalizedStrengthValueMicros;
+  final Value<String> normalizedStrengthUnit;
+  final Value<int?> normalizedBasisValueMicros;
+  final Value<String?> normalizedBasisUnit;
+  final Value<int> sortOrder;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const MedicineActiveIngredientsCompanion({
+    this.productId = const Value.absent(),
+    this.ingredientId = const Value.absent(),
+    this.normalizedStrengthValueMicros = const Value.absent(),
+    this.normalizedStrengthUnit = const Value.absent(),
+    this.normalizedBasisValueMicros = const Value.absent(),
+    this.normalizedBasisUnit = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MedicineActiveIngredientsCompanion.insert({
+    required int productId,
+    required int ingredientId,
+    required int normalizedStrengthValueMicros,
+    required String normalizedStrengthUnit,
+    this.normalizedBasisValueMicros = const Value.absent(),
+    this.normalizedBasisUnit = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : productId = Value(productId),
+       ingredientId = Value(ingredientId),
+       normalizedStrengthValueMicros = Value(normalizedStrengthValueMicros),
+       normalizedStrengthUnit = Value(normalizedStrengthUnit);
+  static Insertable<MedicineActiveIngredient> custom({
+    Expression<int>? productId,
+    Expression<int>? ingredientId,
+    Expression<int>? normalizedStrengthValueMicros,
+    Expression<String>? normalizedStrengthUnit,
+    Expression<int>? normalizedBasisValueMicros,
+    Expression<String>? normalizedBasisUnit,
+    Expression<int>? sortOrder,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (productId != null) 'product_id': productId,
+      if (ingredientId != null) 'ingredient_id': ingredientId,
+      if (normalizedStrengthValueMicros != null)
+        'normalized_strength_value_micros': normalizedStrengthValueMicros,
+      if (normalizedStrengthUnit != null)
+        'normalized_strength_unit': normalizedStrengthUnit,
+      if (normalizedBasisValueMicros != null)
+        'normalized_basis_value_micros': normalizedBasisValueMicros,
+      if (normalizedBasisUnit != null)
+        'normalized_basis_unit': normalizedBasisUnit,
+      if (sortOrder != null) 'sort_order': sortOrder,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MedicineActiveIngredientsCompanion copyWith({
+    Value<int>? productId,
+    Value<int>? ingredientId,
+    Value<int>? normalizedStrengthValueMicros,
+    Value<String>? normalizedStrengthUnit,
+    Value<int?>? normalizedBasisValueMicros,
+    Value<String?>? normalizedBasisUnit,
+    Value<int>? sortOrder,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return MedicineActiveIngredientsCompanion(
+      productId: productId ?? this.productId,
+      ingredientId: ingredientId ?? this.ingredientId,
+      normalizedStrengthValueMicros:
+          normalizedStrengthValueMicros ?? this.normalizedStrengthValueMicros,
+      normalizedStrengthUnit:
+          normalizedStrengthUnit ?? this.normalizedStrengthUnit,
+      normalizedBasisValueMicros:
+          normalizedBasisValueMicros ?? this.normalizedBasisValueMicros,
+      normalizedBasisUnit: normalizedBasisUnit ?? this.normalizedBasisUnit,
+      sortOrder: sortOrder ?? this.sortOrder,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (productId.present) {
+      map['product_id'] = Variable<int>(productId.value);
+    }
+    if (ingredientId.present) {
+      map['ingredient_id'] = Variable<int>(ingredientId.value);
+    }
+    if (normalizedStrengthValueMicros.present) {
+      map['normalized_strength_value_micros'] = Variable<int>(
+        normalizedStrengthValueMicros.value,
+      );
+    }
+    if (normalizedStrengthUnit.present) {
+      map['normalized_strength_unit'] = Variable<String>(
+        normalizedStrengthUnit.value,
+      );
+    }
+    if (normalizedBasisValueMicros.present) {
+      map['normalized_basis_value_micros'] = Variable<int>(
+        normalizedBasisValueMicros.value,
+      );
+    }
+    if (normalizedBasisUnit.present) {
+      map['normalized_basis_unit'] = Variable<String>(
+        normalizedBasisUnit.value,
+      );
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MedicineActiveIngredientsCompanion(')
+          ..write('productId: $productId, ')
+          ..write('ingredientId: $ingredientId, ')
+          ..write(
+            'normalizedStrengthValueMicros: $normalizedStrengthValueMicros, ',
+          )
+          ..write('normalizedStrengthUnit: $normalizedStrengthUnit, ')
+          ..write('normalizedBasisValueMicros: $normalizedBasisValueMicros, ')
+          ..write('normalizedBasisUnit: $normalizedBasisUnit, ')
+          ..write('sortOrder: $sortOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $LoyaltyTiersTable extends LoyaltyTiers
     with TableInfo<$LoyaltyTiersTable, LoyaltyTier> {
   @override
@@ -60517,6 +62664,15 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ProductBatchesTable productBatches = $ProductBatchesTable(this);
   late final $BatchConsumptionsTable batchConsumptions =
       $BatchConsumptionsTable(this);
+  late final $ActiveIngredientsTable activeIngredients =
+      $ActiveIngredientsTable(this);
+  late final $ActiveIngredientAliasesTable activeIngredientAliases =
+      $ActiveIngredientAliasesTable(this);
+  late final $MedicineProfilesTable medicineProfiles = $MedicineProfilesTable(
+    this,
+  );
+  late final $MedicineActiveIngredientsTable medicineActiveIngredients =
+      $MedicineActiveIngredientsTable(this);
   late final $LoyaltyTiersTable loyaltyTiers = $LoyaltyTiersTable(this);
   late final $CustomersTable customers = $CustomersTable(this);
   late final $CustomerTransactionsTable customerTransactions =
@@ -60648,6 +62804,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     productPriceHistories,
     productBatches,
     batchConsumptions,
+    activeIngredients,
+    activeIngredientAliases,
+    medicineProfiles,
+    medicineActiveIngredients,
     loyaltyTiers,
     customers,
     customerTransactions,
@@ -60747,6 +62907,31 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('product_batches', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'active_ingredients',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [
+        TableUpdate('active_ingredient_aliases', kind: UpdateKind.delete),
+      ],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'products',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('medicine_profiles', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'medicine_profiles',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [
+        TableUpdate('medicine_active_ingredients', kind: UpdateKind.delete),
+      ],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -70266,6 +72451,26 @@ final class $$ProductsTableReferences
     );
   }
 
+  static MultiTypedResultKey<$MedicineProfilesTable, List<MedicineProfile>>
+  _medicineProfilesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.medicineProfiles,
+    aliasName: 'products__id__medicine_profiles__product_id',
+  );
+
+  $$MedicineProfilesTableProcessedTableManager get medicineProfilesRefs {
+    final manager = $$MedicineProfilesTableTableManager(
+      $_db,
+      $_db.medicineProfiles,
+    ).filter((f) => f.productId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _medicineProfilesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$SaleItemsTable, List<SaleItem>>
   _saleItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.saleItems,
@@ -70688,6 +72893,31 @@ class $$ProductsTableFilterComposer
           }) => $$ProductBatchesTableFilterComposer(
             $db: $db,
             $table: $db.productBatches,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> medicineProfilesRefs(
+    Expression<bool> Function($$MedicineProfilesTableFilterComposer f) f,
+  ) {
+    final $$MedicineProfilesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.medicineProfiles,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MedicineProfilesTableFilterComposer(
+            $db: $db,
+            $table: $db.medicineProfiles,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -71350,6 +73580,31 @@ class $$ProductsTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> medicineProfilesRefs<T extends Object>(
+    Expression<T> Function($$MedicineProfilesTableAnnotationComposer a) f,
+  ) {
+    final $$MedicineProfilesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.medicineProfiles,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MedicineProfilesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.medicineProfiles,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> saleItemsRefs<T extends Object>(
     Expression<T> Function($$SaleItemsTableAnnotationComposer a) f,
   ) {
@@ -71528,6 +73783,7 @@ class $$ProductsTableTableManager
             bool productVariantsRefs,
             bool productPriceHistoriesRefs,
             bool productBatchesRefs,
+            bool medicineProfilesRefs,
             bool saleItemsRefs,
             bool purchaseItemsRefs,
             bool printHistoriesRefs,
@@ -71697,6 +73953,7 @@ class $$ProductsTableTableManager
                 productVariantsRefs = false,
                 productPriceHistoriesRefs = false,
                 productBatchesRefs = false,
+                medicineProfilesRefs = false,
                 saleItemsRefs = false,
                 purchaseItemsRefs = false,
                 printHistoriesRefs = false,
@@ -71710,6 +73967,7 @@ class $$ProductsTableTableManager
                     if (productVariantsRefs) db.productVariants,
                     if (productPriceHistoriesRefs) db.productPriceHistories,
                     if (productBatchesRefs) db.productBatches,
+                    if (medicineProfilesRefs) db.medicineProfiles,
                     if (saleItemsRefs) db.saleItems,
                     if (purchaseItemsRefs) db.purchaseItems,
                     if (printHistoriesRefs) db.printHistories,
@@ -71836,6 +74094,27 @@ class $$ProductsTableTableManager
                                 table,
                                 p0,
                               ).productBatchesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.productId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (medicineProfilesRefs)
+                        await $_getPrefetchedData<
+                          Product,
+                          $ProductsTable,
+                          MedicineProfile
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProductsTableReferences
+                              ._medicineProfilesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProductsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).medicineProfilesRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.productId == item.id,
@@ -71995,6 +74274,7 @@ typedef $$ProductsTableProcessedTableManager =
         bool productVariantsRefs,
         bool productPriceHistoriesRefs,
         bool productBatchesRefs,
+        bool medicineProfilesRefs,
         bool saleItemsRefs,
         bool purchaseItemsRefs,
         bool printHistoriesRefs,
@@ -75588,6 +77868,1665 @@ typedef $$BatchConsumptionsTableProcessedTableManager =
       (BatchConsumption, $$BatchConsumptionsTableReferences),
       BatchConsumption,
       PrefetchHooks Function({bool batchId})
+    >;
+typedef $$ActiveIngredientsTableCreateCompanionBuilder =
+    ActiveIngredientsCompanion Function({
+      Value<int> id,
+      required String canonicalName,
+      required String normalizedName,
+      Value<String?> nameAr,
+      Value<String?> nameFr,
+      Value<String?> description,
+      Value<bool> isActive,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+typedef $$ActiveIngredientsTableUpdateCompanionBuilder =
+    ActiveIngredientsCompanion Function({
+      Value<int> id,
+      Value<String> canonicalName,
+      Value<String> normalizedName,
+      Value<String?> nameAr,
+      Value<String?> nameFr,
+      Value<String?> description,
+      Value<bool> isActive,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$ActiveIngredientsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $ActiveIngredientsTable,
+          ActiveIngredient
+        > {
+  $$ActiveIngredientsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static MultiTypedResultKey<
+    $ActiveIngredientAliasesTable,
+    List<ActiveIngredientAlias>
+  >
+  _activeIngredientAliasesRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.activeIngredientAliases,
+        aliasName:
+            'active_ingredients__id__active_ingredient_aliases__ingredient_id',
+      );
+
+  $$ActiveIngredientAliasesTableProcessedTableManager
+  get activeIngredientAliasesRefs {
+    final manager = $$ActiveIngredientAliasesTableTableManager(
+      $_db,
+      $_db.activeIngredientAliases,
+    ).filter((f) => f.ingredientId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _activeIngredientAliasesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $MedicineActiveIngredientsTable,
+    List<MedicineActiveIngredient>
+  >
+  _medicineActiveIngredientsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.medicineActiveIngredients,
+    aliasName:
+        'active_ingredients__id__medicine_active_ingredients__ingredient_id',
+  );
+
+  $$MedicineActiveIngredientsTableProcessedTableManager
+  get medicineActiveIngredientsRefs {
+    final manager = $$MedicineActiveIngredientsTableTableManager(
+      $_db,
+      $_db.medicineActiveIngredients,
+    ).filter((f) => f.ingredientId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _medicineActiveIngredientsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$ActiveIngredientsTableFilterComposer
+    extends Composer<_$AppDatabase, $ActiveIngredientsTable> {
+  $$ActiveIngredientsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get canonicalName => $composableBuilder(
+    column: $table.canonicalName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get normalizedName => $composableBuilder(
+    column: $table.normalizedName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get nameAr => $composableBuilder(
+    column: $table.nameAr,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get nameFr => $composableBuilder(
+    column: $table.nameFr,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> activeIngredientAliasesRefs(
+    Expression<bool> Function($$ActiveIngredientAliasesTableFilterComposer f) f,
+  ) {
+    final $$ActiveIngredientAliasesTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.activeIngredientAliases,
+          getReferencedColumn: (t) => t.ingredientId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ActiveIngredientAliasesTableFilterComposer(
+                $db: $db,
+                $table: $db.activeIngredientAliases,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> medicineActiveIngredientsRefs(
+    Expression<bool> Function($$MedicineActiveIngredientsTableFilterComposer f)
+    f,
+  ) {
+    final $$MedicineActiveIngredientsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.medicineActiveIngredients,
+          getReferencedColumn: (t) => t.ingredientId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$MedicineActiveIngredientsTableFilterComposer(
+                $db: $db,
+                $table: $db.medicineActiveIngredients,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$ActiveIngredientsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ActiveIngredientsTable> {
+  $$ActiveIngredientsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get canonicalName => $composableBuilder(
+    column: $table.canonicalName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get normalizedName => $composableBuilder(
+    column: $table.normalizedName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get nameAr => $composableBuilder(
+    column: $table.nameAr,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get nameFr => $composableBuilder(
+    column: $table.nameFr,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ActiveIngredientsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ActiveIngredientsTable> {
+  $$ActiveIngredientsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get canonicalName => $composableBuilder(
+    column: $table.canonicalName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get normalizedName => $composableBuilder(
+    column: $table.normalizedName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get nameAr =>
+      $composableBuilder(column: $table.nameAr, builder: (column) => column);
+
+  GeneratedColumn<String> get nameFr =>
+      $composableBuilder(column: $table.nameFr, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isActive =>
+      $composableBuilder(column: $table.isActive, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  Expression<T> activeIngredientAliasesRefs<T extends Object>(
+    Expression<T> Function($$ActiveIngredientAliasesTableAnnotationComposer a)
+    f,
+  ) {
+    final $$ActiveIngredientAliasesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.activeIngredientAliases,
+          getReferencedColumn: (t) => t.ingredientId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ActiveIngredientAliasesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.activeIngredientAliases,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> medicineActiveIngredientsRefs<T extends Object>(
+    Expression<T> Function($$MedicineActiveIngredientsTableAnnotationComposer a)
+    f,
+  ) {
+    final $$MedicineActiveIngredientsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.medicineActiveIngredients,
+          getReferencedColumn: (t) => t.ingredientId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$MedicineActiveIngredientsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.medicineActiveIngredients,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$ActiveIngredientsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ActiveIngredientsTable,
+          ActiveIngredient,
+          $$ActiveIngredientsTableFilterComposer,
+          $$ActiveIngredientsTableOrderingComposer,
+          $$ActiveIngredientsTableAnnotationComposer,
+          $$ActiveIngredientsTableCreateCompanionBuilder,
+          $$ActiveIngredientsTableUpdateCompanionBuilder,
+          (ActiveIngredient, $$ActiveIngredientsTableReferences),
+          ActiveIngredient,
+          PrefetchHooks Function({
+            bool activeIngredientAliasesRefs,
+            bool medicineActiveIngredientsRefs,
+          })
+        > {
+  $$ActiveIngredientsTableTableManager(
+    _$AppDatabase db,
+    $ActiveIngredientsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ActiveIngredientsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ActiveIngredientsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ActiveIngredientsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> canonicalName = const Value.absent(),
+                Value<String> normalizedName = const Value.absent(),
+                Value<String?> nameAr = const Value.absent(),
+                Value<String?> nameFr = const Value.absent(),
+                Value<String?> description = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => ActiveIngredientsCompanion(
+                id: id,
+                canonicalName: canonicalName,
+                normalizedName: normalizedName,
+                nameAr: nameAr,
+                nameFr: nameFr,
+                description: description,
+                isActive: isActive,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String canonicalName,
+                required String normalizedName,
+                Value<String?> nameAr = const Value.absent(),
+                Value<String?> nameFr = const Value.absent(),
+                Value<String?> description = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => ActiveIngredientsCompanion.insert(
+                id: id,
+                canonicalName: canonicalName,
+                normalizedName: normalizedName,
+                nameAr: nameAr,
+                nameFr: nameFr,
+                description: description,
+                isActive: isActive,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$ActiveIngredientsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                activeIngredientAliasesRefs = false,
+                medicineActiveIngredientsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (activeIngredientAliasesRefs) db.activeIngredientAliases,
+                    if (medicineActiveIngredientsRefs)
+                      db.medicineActiveIngredients,
+                  ],
+                  addJoins: null,
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (activeIngredientAliasesRefs)
+                        await $_getPrefetchedData<
+                          ActiveIngredient,
+                          $ActiveIngredientsTable,
+                          ActiveIngredientAlias
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ActiveIngredientsTableReferences
+                              ._activeIngredientAliasesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ActiveIngredientsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).activeIngredientAliasesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.ingredientId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (medicineActiveIngredientsRefs)
+                        await $_getPrefetchedData<
+                          ActiveIngredient,
+                          $ActiveIngredientsTable,
+                          MedicineActiveIngredient
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ActiveIngredientsTableReferences
+                              ._medicineActiveIngredientsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ActiveIngredientsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).medicineActiveIngredientsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.ingredientId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$ActiveIngredientsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ActiveIngredientsTable,
+      ActiveIngredient,
+      $$ActiveIngredientsTableFilterComposer,
+      $$ActiveIngredientsTableOrderingComposer,
+      $$ActiveIngredientsTableAnnotationComposer,
+      $$ActiveIngredientsTableCreateCompanionBuilder,
+      $$ActiveIngredientsTableUpdateCompanionBuilder,
+      (ActiveIngredient, $$ActiveIngredientsTableReferences),
+      ActiveIngredient,
+      PrefetchHooks Function({
+        bool activeIngredientAliasesRefs,
+        bool medicineActiveIngredientsRefs,
+      })
+    >;
+typedef $$ActiveIngredientAliasesTableCreateCompanionBuilder =
+    ActiveIngredientAliasesCompanion Function({
+      Value<int> id,
+      required int ingredientId,
+      required String alias,
+      required String normalizedAlias,
+      Value<String?> languageCode,
+      Value<DateTime> createdAt,
+    });
+typedef $$ActiveIngredientAliasesTableUpdateCompanionBuilder =
+    ActiveIngredientAliasesCompanion Function({
+      Value<int> id,
+      Value<int> ingredientId,
+      Value<String> alias,
+      Value<String> normalizedAlias,
+      Value<String?> languageCode,
+      Value<DateTime> createdAt,
+    });
+
+final class $$ActiveIngredientAliasesTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $ActiveIngredientAliasesTable,
+          ActiveIngredientAlias
+        > {
+  $$ActiveIngredientAliasesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ActiveIngredientsTable _ingredientIdTable(_$AppDatabase db) =>
+      db.activeIngredients.createAlias(
+        'active_ingredient_aliases__ingredient_id__active_ingredients__id',
+      );
+
+  $$ActiveIngredientsTableProcessedTableManager get ingredientId {
+    final $_column = $_itemColumn<int>('ingredient_id')!;
+
+    final manager = $$ActiveIngredientsTableTableManager(
+      $_db,
+      $_db.activeIngredients,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_ingredientIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$ActiveIngredientAliasesTableFilterComposer
+    extends Composer<_$AppDatabase, $ActiveIngredientAliasesTable> {
+  $$ActiveIngredientAliasesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get alias => $composableBuilder(
+    column: $table.alias,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get normalizedAlias => $composableBuilder(
+    column: $table.normalizedAlias,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get languageCode => $composableBuilder(
+    column: $table.languageCode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ActiveIngredientsTableFilterComposer get ingredientId {
+    final $$ActiveIngredientsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.ingredientId,
+      referencedTable: $db.activeIngredients,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ActiveIngredientsTableFilterComposer(
+            $db: $db,
+            $table: $db.activeIngredients,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ActiveIngredientAliasesTableOrderingComposer
+    extends Composer<_$AppDatabase, $ActiveIngredientAliasesTable> {
+  $$ActiveIngredientAliasesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get alias => $composableBuilder(
+    column: $table.alias,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get normalizedAlias => $composableBuilder(
+    column: $table.normalizedAlias,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get languageCode => $composableBuilder(
+    column: $table.languageCode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ActiveIngredientsTableOrderingComposer get ingredientId {
+    final $$ActiveIngredientsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.ingredientId,
+      referencedTable: $db.activeIngredients,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ActiveIngredientsTableOrderingComposer(
+            $db: $db,
+            $table: $db.activeIngredients,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ActiveIngredientAliasesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ActiveIngredientAliasesTable> {
+  $$ActiveIngredientAliasesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get alias =>
+      $composableBuilder(column: $table.alias, builder: (column) => column);
+
+  GeneratedColumn<String> get normalizedAlias => $composableBuilder(
+    column: $table.normalizedAlias,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get languageCode => $composableBuilder(
+    column: $table.languageCode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$ActiveIngredientsTableAnnotationComposer get ingredientId {
+    final $$ActiveIngredientsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.ingredientId,
+          referencedTable: $db.activeIngredients,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ActiveIngredientsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.activeIngredients,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+}
+
+class $$ActiveIngredientAliasesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ActiveIngredientAliasesTable,
+          ActiveIngredientAlias,
+          $$ActiveIngredientAliasesTableFilterComposer,
+          $$ActiveIngredientAliasesTableOrderingComposer,
+          $$ActiveIngredientAliasesTableAnnotationComposer,
+          $$ActiveIngredientAliasesTableCreateCompanionBuilder,
+          $$ActiveIngredientAliasesTableUpdateCompanionBuilder,
+          (ActiveIngredientAlias, $$ActiveIngredientAliasesTableReferences),
+          ActiveIngredientAlias,
+          PrefetchHooks Function({bool ingredientId})
+        > {
+  $$ActiveIngredientAliasesTableTableManager(
+    _$AppDatabase db,
+    $ActiveIngredientAliasesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ActiveIngredientAliasesTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$ActiveIngredientAliasesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ActiveIngredientAliasesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> ingredientId = const Value.absent(),
+                Value<String> alias = const Value.absent(),
+                Value<String> normalizedAlias = const Value.absent(),
+                Value<String?> languageCode = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => ActiveIngredientAliasesCompanion(
+                id: id,
+                ingredientId: ingredientId,
+                alias: alias,
+                normalizedAlias: normalizedAlias,
+                languageCode: languageCode,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int ingredientId,
+                required String alias,
+                required String normalizedAlias,
+                Value<String?> languageCode = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => ActiveIngredientAliasesCompanion.insert(
+                id: id,
+                ingredientId: ingredientId,
+                alias: alias,
+                normalizedAlias: normalizedAlias,
+                languageCode: languageCode,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$ActiveIngredientAliasesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({ingredientId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (ingredientId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.ingredientId,
+                                referencedTable:
+                                    $$ActiveIngredientAliasesTableReferences
+                                        ._ingredientIdTable(db),
+                                referencedColumn:
+                                    $$ActiveIngredientAliasesTableReferences
+                                        ._ingredientIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$ActiveIngredientAliasesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ActiveIngredientAliasesTable,
+      ActiveIngredientAlias,
+      $$ActiveIngredientAliasesTableFilterComposer,
+      $$ActiveIngredientAliasesTableOrderingComposer,
+      $$ActiveIngredientAliasesTableAnnotationComposer,
+      $$ActiveIngredientAliasesTableCreateCompanionBuilder,
+      $$ActiveIngredientAliasesTableUpdateCompanionBuilder,
+      (ActiveIngredientAlias, $$ActiveIngredientAliasesTableReferences),
+      ActiveIngredientAlias,
+      PrefetchHooks Function({bool ingredientId})
+    >;
+typedef $$MedicineProfilesTableCreateCompanionBuilder =
+    MedicineProfilesCompanion Function({
+      Value<int> productId,
+      required String dosageForm,
+      Value<String?> administrationRoute,
+      Value<bool> substitutionEligible,
+      Value<String?> notes,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+typedef $$MedicineProfilesTableUpdateCompanionBuilder =
+    MedicineProfilesCompanion Function({
+      Value<int> productId,
+      Value<String> dosageForm,
+      Value<String?> administrationRoute,
+      Value<bool> substitutionEligible,
+      Value<String?> notes,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$MedicineProfilesTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $MedicineProfilesTable, MedicineProfile> {
+  $$MedicineProfilesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ProductsTable _productIdTable(_$AppDatabase db) =>
+      db.products.createAlias('medicine_profiles__product_id__products__id');
+
+  $$ProductsTableProcessedTableManager get productId {
+    final $_column = $_itemColumn<int>('product_id')!;
+
+    final manager = $$ProductsTableTableManager(
+      $_db,
+      $_db.products,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_productIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$MedicineProfilesTableFilterComposer
+    extends Composer<_$AppDatabase, $MedicineProfilesTable> {
+  $$MedicineProfilesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get dosageForm => $composableBuilder(
+    column: $table.dosageForm,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get administrationRoute => $composableBuilder(
+    column: $table.administrationRoute,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get substitutionEligible => $composableBuilder(
+    column: $table.substitutionEligible,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ProductsTableFilterComposer get productId {
+    final $$ProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$MedicineProfilesTableOrderingComposer
+    extends Composer<_$AppDatabase, $MedicineProfilesTable> {
+  $$MedicineProfilesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get dosageForm => $composableBuilder(
+    column: $table.dosageForm,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get administrationRoute => $composableBuilder(
+    column: $table.administrationRoute,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get substitutionEligible => $composableBuilder(
+    column: $table.substitutionEligible,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get notes => $composableBuilder(
+    column: $table.notes,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ProductsTableOrderingComposer get productId {
+    final $$ProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$MedicineProfilesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MedicineProfilesTable> {
+  $$MedicineProfilesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get dosageForm => $composableBuilder(
+    column: $table.dosageForm,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get administrationRoute => $composableBuilder(
+    column: $table.administrationRoute,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get substitutionEligible => $composableBuilder(
+    column: $table.substitutionEligible,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get notes =>
+      $composableBuilder(column: $table.notes, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$ProductsTableAnnotationComposer get productId {
+    final $$ProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$MedicineProfilesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $MedicineProfilesTable,
+          MedicineProfile,
+          $$MedicineProfilesTableFilterComposer,
+          $$MedicineProfilesTableOrderingComposer,
+          $$MedicineProfilesTableAnnotationComposer,
+          $$MedicineProfilesTableCreateCompanionBuilder,
+          $$MedicineProfilesTableUpdateCompanionBuilder,
+          (MedicineProfile, $$MedicineProfilesTableReferences),
+          MedicineProfile,
+          PrefetchHooks Function({bool productId})
+        > {
+  $$MedicineProfilesTableTableManager(
+    _$AppDatabase db,
+    $MedicineProfilesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MedicineProfilesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MedicineProfilesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MedicineProfilesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> productId = const Value.absent(),
+                Value<String> dosageForm = const Value.absent(),
+                Value<String?> administrationRoute = const Value.absent(),
+                Value<bool> substitutionEligible = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => MedicineProfilesCompanion(
+                productId: productId,
+                dosageForm: dosageForm,
+                administrationRoute: administrationRoute,
+                substitutionEligible: substitutionEligible,
+                notes: notes,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> productId = const Value.absent(),
+                required String dosageForm,
+                Value<String?> administrationRoute = const Value.absent(),
+                Value<bool> substitutionEligible = const Value.absent(),
+                Value<String?> notes = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => MedicineProfilesCompanion.insert(
+                productId: productId,
+                dosageForm: dosageForm,
+                administrationRoute: administrationRoute,
+                substitutionEligible: substitutionEligible,
+                notes: notes,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$MedicineProfilesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({productId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (productId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.productId,
+                                referencedTable:
+                                    $$MedicineProfilesTableReferences
+                                        ._productIdTable(db),
+                                referencedColumn:
+                                    $$MedicineProfilesTableReferences
+                                        ._productIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$MedicineProfilesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $MedicineProfilesTable,
+      MedicineProfile,
+      $$MedicineProfilesTableFilterComposer,
+      $$MedicineProfilesTableOrderingComposer,
+      $$MedicineProfilesTableAnnotationComposer,
+      $$MedicineProfilesTableCreateCompanionBuilder,
+      $$MedicineProfilesTableUpdateCompanionBuilder,
+      (MedicineProfile, $$MedicineProfilesTableReferences),
+      MedicineProfile,
+      PrefetchHooks Function({bool productId})
+    >;
+typedef $$MedicineActiveIngredientsTableCreateCompanionBuilder =
+    MedicineActiveIngredientsCompanion Function({
+      required int productId,
+      required int ingredientId,
+      required int normalizedStrengthValueMicros,
+      required String normalizedStrengthUnit,
+      Value<int?> normalizedBasisValueMicros,
+      Value<String?> normalizedBasisUnit,
+      Value<int> sortOrder,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+typedef $$MedicineActiveIngredientsTableUpdateCompanionBuilder =
+    MedicineActiveIngredientsCompanion Function({
+      Value<int> productId,
+      Value<int> ingredientId,
+      Value<int> normalizedStrengthValueMicros,
+      Value<String> normalizedStrengthUnit,
+      Value<int?> normalizedBasisValueMicros,
+      Value<String?> normalizedBasisUnit,
+      Value<int> sortOrder,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+final class $$MedicineActiveIngredientsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $MedicineActiveIngredientsTable,
+          MedicineActiveIngredient
+        > {
+  $$MedicineActiveIngredientsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ActiveIngredientsTable _ingredientIdTable(_$AppDatabase db) =>
+      db.activeIngredients.createAlias(
+        'medicine_active_ingredients__ingredient_id__active_ingredients__id',
+      );
+
+  $$ActiveIngredientsTableProcessedTableManager get ingredientId {
+    final $_column = $_itemColumn<int>('ingredient_id')!;
+
+    final manager = $$ActiveIngredientsTableTableManager(
+      $_db,
+      $_db.activeIngredients,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_ingredientIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$MedicineActiveIngredientsTableFilterComposer
+    extends Composer<_$AppDatabase, $MedicineActiveIngredientsTable> {
+  $$MedicineActiveIngredientsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get normalizedStrengthValueMicros => $composableBuilder(
+    column: $table.normalizedStrengthValueMicros,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get normalizedStrengthUnit => $composableBuilder(
+    column: $table.normalizedStrengthUnit,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get normalizedBasisValueMicros => $composableBuilder(
+    column: $table.normalizedBasisValueMicros,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get normalizedBasisUnit => $composableBuilder(
+    column: $table.normalizedBasisUnit,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ActiveIngredientsTableFilterComposer get ingredientId {
+    final $$ActiveIngredientsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.ingredientId,
+      referencedTable: $db.activeIngredients,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ActiveIngredientsTableFilterComposer(
+            $db: $db,
+            $table: $db.activeIngredients,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$MedicineActiveIngredientsTableOrderingComposer
+    extends Composer<_$AppDatabase, $MedicineActiveIngredientsTable> {
+  $$MedicineActiveIngredientsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get normalizedStrengthValueMicros => $composableBuilder(
+    column: $table.normalizedStrengthValueMicros,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get normalizedStrengthUnit => $composableBuilder(
+    column: $table.normalizedStrengthUnit,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get normalizedBasisValueMicros => $composableBuilder(
+    column: $table.normalizedBasisValueMicros,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get normalizedBasisUnit => $composableBuilder(
+    column: $table.normalizedBasisUnit,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ActiveIngredientsTableOrderingComposer get ingredientId {
+    final $$ActiveIngredientsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.ingredientId,
+      referencedTable: $db.activeIngredients,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ActiveIngredientsTableOrderingComposer(
+            $db: $db,
+            $table: $db.activeIngredients,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$MedicineActiveIngredientsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MedicineActiveIngredientsTable> {
+  $$MedicineActiveIngredientsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get normalizedStrengthValueMicros => $composableBuilder(
+    column: $table.normalizedStrengthValueMicros,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get normalizedStrengthUnit => $composableBuilder(
+    column: $table.normalizedStrengthUnit,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get normalizedBasisValueMicros => $composableBuilder(
+    column: $table.normalizedBasisValueMicros,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get normalizedBasisUnit => $composableBuilder(
+    column: $table.normalizedBasisUnit,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$ActiveIngredientsTableAnnotationComposer get ingredientId {
+    final $$ActiveIngredientsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.ingredientId,
+          referencedTable: $db.activeIngredients,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ActiveIngredientsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.activeIngredients,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+}
+
+class $$MedicineActiveIngredientsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $MedicineActiveIngredientsTable,
+          MedicineActiveIngredient,
+          $$MedicineActiveIngredientsTableFilterComposer,
+          $$MedicineActiveIngredientsTableOrderingComposer,
+          $$MedicineActiveIngredientsTableAnnotationComposer,
+          $$MedicineActiveIngredientsTableCreateCompanionBuilder,
+          $$MedicineActiveIngredientsTableUpdateCompanionBuilder,
+          (
+            MedicineActiveIngredient,
+            $$MedicineActiveIngredientsTableReferences,
+          ),
+          MedicineActiveIngredient,
+          PrefetchHooks Function({bool ingredientId})
+        > {
+  $$MedicineActiveIngredientsTableTableManager(
+    _$AppDatabase db,
+    $MedicineActiveIngredientsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MedicineActiveIngredientsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$MedicineActiveIngredientsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$MedicineActiveIngredientsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> productId = const Value.absent(),
+                Value<int> ingredientId = const Value.absent(),
+                Value<int> normalizedStrengthValueMicros = const Value.absent(),
+                Value<String> normalizedStrengthUnit = const Value.absent(),
+                Value<int?> normalizedBasisValueMicros = const Value.absent(),
+                Value<String?> normalizedBasisUnit = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MedicineActiveIngredientsCompanion(
+                productId: productId,
+                ingredientId: ingredientId,
+                normalizedStrengthValueMicros: normalizedStrengthValueMicros,
+                normalizedStrengthUnit: normalizedStrengthUnit,
+                normalizedBasisValueMicros: normalizedBasisValueMicros,
+                normalizedBasisUnit: normalizedBasisUnit,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required int productId,
+                required int ingredientId,
+                required int normalizedStrengthValueMicros,
+                required String normalizedStrengthUnit,
+                Value<int?> normalizedBasisValueMicros = const Value.absent(),
+                Value<String?> normalizedBasisUnit = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MedicineActiveIngredientsCompanion.insert(
+                productId: productId,
+                ingredientId: ingredientId,
+                normalizedStrengthValueMicros: normalizedStrengthValueMicros,
+                normalizedStrengthUnit: normalizedStrengthUnit,
+                normalizedBasisValueMicros: normalizedBasisValueMicros,
+                normalizedBasisUnit: normalizedBasisUnit,
+                sortOrder: sortOrder,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$MedicineActiveIngredientsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({ingredientId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (ingredientId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.ingredientId,
+                                referencedTable:
+                                    $$MedicineActiveIngredientsTableReferences
+                                        ._ingredientIdTable(db),
+                                referencedColumn:
+                                    $$MedicineActiveIngredientsTableReferences
+                                        ._ingredientIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$MedicineActiveIngredientsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $MedicineActiveIngredientsTable,
+      MedicineActiveIngredient,
+      $$MedicineActiveIngredientsTableFilterComposer,
+      $$MedicineActiveIngredientsTableOrderingComposer,
+      $$MedicineActiveIngredientsTableAnnotationComposer,
+      $$MedicineActiveIngredientsTableCreateCompanionBuilder,
+      $$MedicineActiveIngredientsTableUpdateCompanionBuilder,
+      (MedicineActiveIngredient, $$MedicineActiveIngredientsTableReferences),
+      MedicineActiveIngredient,
+      PrefetchHooks Function({bool ingredientId})
     >;
 typedef $$LoyaltyTiersTableCreateCompanionBuilder =
     LoyaltyTiersCompanion Function({
@@ -117837,6 +121776,20 @@ class $AppDatabaseManager {
       $$ProductBatchesTableTableManager(_db, _db.productBatches);
   $$BatchConsumptionsTableTableManager get batchConsumptions =>
       $$BatchConsumptionsTableTableManager(_db, _db.batchConsumptions);
+  $$ActiveIngredientsTableTableManager get activeIngredients =>
+      $$ActiveIngredientsTableTableManager(_db, _db.activeIngredients);
+  $$ActiveIngredientAliasesTableTableManager get activeIngredientAliases =>
+      $$ActiveIngredientAliasesTableTableManager(
+        _db,
+        _db.activeIngredientAliases,
+      );
+  $$MedicineProfilesTableTableManager get medicineProfiles =>
+      $$MedicineProfilesTableTableManager(_db, _db.medicineProfiles);
+  $$MedicineActiveIngredientsTableTableManager get medicineActiveIngredients =>
+      $$MedicineActiveIngredientsTableTableManager(
+        _db,
+        _db.medicineActiveIngredients,
+      );
   $$LoyaltyTiersTableTableManager get loyaltyTiers =>
       $$LoyaltyTiersTableTableManager(_db, _db.loyaltyTiers);
   $$CustomersTableTableManager get customers =>

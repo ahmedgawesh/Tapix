@@ -18,12 +18,18 @@ class LanNetworkService {
 
   final SettingsDao _settingsDao;
   final _controller = StreamController<LanNetworkSnapshot>.broadcast();
+  // Singleton service: the stream stays alive across LAN role changes.
+  // ignore: close_sinks
+  final _masterActivityController =
+      StreamController<LanMasterActivityEvent>.broadcast();
   LanNetworkSnapshot _snapshot = const LanNetworkSnapshot();
 
   LanNetworkSnapshot get snapshot => _snapshot;
   LanRemoteUser? get remoteUser => null;
   bool get hasRemoteUserSession => false;
   Stream<LanNetworkSnapshot> get changes => _controller.stream;
+  Stream<LanMasterActivityEvent> get masterActivityEvents =>
+      _masterActivityController.stream;
 
   Future<void> initialize() async {
     final mode = await _settingsDao.getSetting('lan.mode');
@@ -74,8 +80,20 @@ class LanNetworkService {
     bool management = false,
   }) async => _unsupported();
 
+  Future<LanMedicineAlternativesResult> fetchRemoteMedicineAlternatives(
+    int productId,
+  ) async => _unsupported();
+
   Future<Uint8List?> fetchRemoteProductImage(int productId) async =>
       _unsupported();
+
+  Future<LanSalesPage> fetchRemoteSales({int limit = 500}) async =>
+      _unsupported();
+
+  Future<LanSaleDetails> fetchRemoteSaleDetails(int saleId) async =>
+      _unsupported();
+
+  Future<LanSaleVoidResult> voidRemoteSale(int saleId) async => _unsupported();
 
   Future<List<LanCustomerSummary>> fetchRemoteCustomers({
     String query = '',
@@ -101,6 +119,11 @@ class LanNetworkService {
     String query = '',
     int offset = 0,
     int limit = 100,
+  }) async => _unsupported();
+
+  Future<LanSaleReturnDetails> fetchRemoteSaleReturnDetails({
+    required int returnId,
+    required bool adjustment,
   }) async => _unsupported();
 
   Future<LanSaleReturnResult> submitRemoteSaleReturn(

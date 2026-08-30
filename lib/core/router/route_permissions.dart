@@ -46,6 +46,13 @@ class RoutePermissions {
     '/sales': [
       UserRole.owner,
       UserRole.manager,
+      UserRole.accountant,
+      UserRole.cashier,
+      UserRole.salesperson,
+    ],
+    '/sales/new': [
+      UserRole.owner,
+      UserRole.manager,
       UserRole.cashier,
       UserRole.salesperson,
     ],

@@ -89,6 +89,9 @@ void main() {
       '/users/add',
       '/employees',
       '/employees/payroll',
+      '/cashier-shifts',
+      '/cashier-shifts/42',
+      '/client-session',
       '/financial-management',
       '/financial-management/chart-of-accounts',
       '/accounting',
@@ -123,6 +126,21 @@ void main() {
       expect(ProRoutePolicy.featureFor('/settings'), AppFeature.basicSettings);
       expect(ProRoutePolicy.featureFor('/settings/backup'),
           AppFeature.backupRestore);
+    });
+
+    test('manager and cashier shift routes use the same Pro feature', () {
+      expect(
+        ProRoutePolicy.featureFor('/cashier-shifts'),
+        AppFeature.cashierShifts,
+      );
+      expect(
+        ProRoutePolicy.featureFor('/cashier-shifts/42'),
+        AppFeature.cashierShifts,
+      );
+      expect(
+        ProRoutePolicy.featureFor('/client-session'),
+        AppFeature.cashierShifts,
+      );
     });
 
     test('unknown path is ungated (null)', () {

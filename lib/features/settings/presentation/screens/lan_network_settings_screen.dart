@@ -7,7 +7,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/lan/lan_network_service.dart';
+import '../../../../core/services/lan/device_mode_reset_service.dart';
+import '../../../../core/utils/app_restart.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../../auth/domain/entities/user_entity.dart';
 import 'lan_master_devices_sheet.dart';
 
 class LanNetworkSettingsScreen extends StatefulWidget {
@@ -135,9 +138,67 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
     );
   });
 
+  Future<void> _confirmFreshReset(FreshDeviceModeTarget target) async {
+    final authState = context.read<AuthBloc>().state;
+    if (authState is! AuthAuthenticated ||
+        authState.user.role != UserRole.owner ||
+        _snapshot.mode != LanMode.client) {
+      context.go('/access-denied');
+      return;
+    }
+
+    final targetKey = target == FreshDeviceModeTarget.master
+        ? 'settings.network.fresh_reset.master_target'
+        : 'settings.network.fresh_reset.standalone_target';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        icon: Icon(
+          Icons.warning_amber_rounded,
+          color: Theme.of(dialogContext).colorScheme.error,
+        ),
+        title: Text('settings.network.fresh_reset.confirm_title'.tr()),
+        content: Text(
+          'settings.network.fresh_reset.confirm_message'.tr(
+            namedArgs: {'target': targetKey.tr()},
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text('common.cancel'.tr()),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text('settings.network.fresh_reset.confirm_action'.tr()),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    await _run(() async {
+      await sl<DeviceModeResetService>().resetClientToFreshDatabase(
+        target: target,
+        actorRole: authState.user.role,
+      );
+      await closeAppForFreshRestart();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final authState = context.watch<AuthBloc>().state;
+    final ownerClientReset =
+        !widget.clientOnly &&
+        _snapshot.mode == LanMode.client &&
+        authState is AuthAuthenticated &&
+        authState.user.role == UserRole.owner;
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -169,24 +230,59 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
             ),
             const SizedBox(height: 12),
             if (!widget.clientOnly) ...[
+              if (ownerClientReset) ...[
+                Card(
+                  color: theme.colorScheme.errorContainer,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.admin_panel_settings_outlined,
+                          color: theme.colorScheme.onErrorContainer,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'settings.network.fresh_reset.owner_notice'.tr(),
+                            style: TextStyle(
+                              color: theme.colorScheme.onErrorContainer,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               _RoleCard(
                 title: 'settings.network.standalone'.tr(),
-                subtitle: 'settings.network.standalone_desc'.tr(),
+                subtitle: ownerClientReset
+                    ? 'settings.network.fresh_reset.standalone_desc'.tr()
+                    : 'settings.network.standalone_desc'.tr(),
                 icon: Icons.smartphone,
                 selected: _snapshot.mode == LanMode.standalone,
-                onTap: () => _run(_service.setStandalone),
+                onTap: ownerClientReset
+                    ? () => _confirmFreshReset(FreshDeviceModeTarget.standalone)
+                    : () => _run(_service.setStandalone),
               ),
               const SizedBox(height: 12),
               _RoleCard(
                 title: 'settings.network.master'.tr(),
-                subtitle: 'settings.network.master_desc'.tr(),
+                subtitle: ownerClientReset
+                    ? 'settings.network.fresh_reset.master_desc'.tr()
+                    : 'settings.network.master_desc'.tr(),
                 icon: Icons.dns_outlined,
                 selected: _snapshot.mode == LanMode.master,
                 trailing: _snapshot.mode == LanMode.master
                     ? _statusChip(context)
                     : null,
-                onTap: _snapshot.mode == LanMode.master ? () {} : _startMaster,
-                child: _buildMasterControls(context),
+                onTap: ownerClientReset
+                    ? () => _confirmFreshReset(FreshDeviceModeTarget.master)
+                    : (_snapshot.mode == LanMode.master ? () {} : _startMaster),
+                child: ownerClientReset ? null : _buildMasterControls(context),
               ),
               const SizedBox(height: 12),
             ],

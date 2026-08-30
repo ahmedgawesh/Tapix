@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'tables/settings.dart';
 import 'tables/users.dart';
 import 'tables/products.dart';
+import 'tables/pharmacy.dart';
 import 'tables/parties.dart';
 import 'tables/loyalty.dart';
 import 'tables/people.dart';
@@ -51,6 +52,8 @@ import 'database_native.dart' if (dart.library.html) 'database_web.dart';
 
 part 'app_database.g.dart';
 
+const _currentDatabaseSchemaVersion = 10070;
+
 @DriftDatabase(
   tables: [
     Users,
@@ -66,6 +69,11 @@ part 'app_database.g.dart';
     ProductPriceHistories,
     ProductBatches,
     BatchConsumptions,
+    // Optional pharmacy catalogue and exact active-ingredient matching.
+    ActiveIngredients,
+    ActiveIngredientAliases,
+    MedicineProfiles,
+    MedicineActiveIngredients,
     Customers,
     CustomerTransactions,
     LoyaltyTiers,
@@ -1697,7 +1705,7 @@ CREATE TABLE IF NOT EXISTS sale_payments (
   }
 
   @override
-  int get schemaVersion => 10069;
+  int get schemaVersion => _currentDatabaseSchemaVersion;
 
   @override
   MigrationStrategy get migration {
@@ -1719,17 +1727,10 @@ CREATE TABLE IF NOT EXISTS sale_payments (
           name: 'DB_MIGRATION',
         );
 
-        // Create a backup before applying any migration.
-        // Import is conditional (native only) so this is safe.
-        try {
-          // ignore: unused_local_variable
-          final backup = await _createPreMigrationBackup();
-        } catch (e) {
-          developer.log(
-            'Pre-migration backup failed (continuing): $e',
-            name: 'DB_MIGRATION',
-          );
-        }
+        // The native database opener has already created and verified a
+        // file-level backup before Drift opened this connection. Doing that
+        // before onUpgrade keeps the copy outside the migration transaction
+        // and allows the WAL to be checkpointed safely.
 
         // Migration from 10000 to 10001: Add barcode, name_ar, name_fr columns to products and product_variants
         if (from < 10001) {
@@ -3622,6 +3623,18 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
           );
         }
 
+        if (from < 10070) {
+          await m.createTable(activeIngredients);
+          await m.createTable(activeIngredientAliases);
+          await m.createTable(medicineProfiles);
+          await m.createTable(medicineActiveIngredients);
+          developer.log(
+            'Migration 10070: added the optional pharmacy catalogue, '
+            'medicine profiles, and normalized multi-ingredient strengths.',
+            name: 'DB_MIGRATION',
+          );
+        }
+
         await _createIndexes();
         await _seedInitialData();
       },
@@ -3671,17 +3684,6 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
     ''');
   }
 
-  /// Log pre-migration backup intent.
-  /// The actual file-level backup is performed by [createDatabaseBackup] in
-  /// database_native.dart, which the DI layer calls before database open.
-  /// This method ensures the migration log records the backup attempt.
-  Future<void> _createPreMigrationBackup() async {
-    developer.log(
-      'Pre-migration backup requested. File-level backup handled by DI init.',
-      name: 'DB_MIGRATION',
-    );
-  }
-
   @visibleForTesting
   Future<void> seedInitialDataForTest() => _seedInitialData();
 
@@ -3718,6 +3720,22 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
     );
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_products_active ON products(is_active, name)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_active_ingredients_active_name '
+      'ON active_ingredients(is_active, normalized_name)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_active_ingredient_aliases_ingredient '
+      'ON active_ingredient_aliases(ingredient_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_medicine_profiles_match '
+      'ON medicine_profiles(dosage_form, administration_route, substitution_eligible)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_medicine_ingredients_match '
+      'ON medicine_active_ingredients(ingredient_id, normalized_strength_unit, normalized_strength_value_micros)',
     );
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id)',
@@ -4295,6 +4313,18 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
       description:
           'Business-wide inventory valuation method (IAS 2 / ASC 330). '
           "Allowed values: 'wac' | 'fifo'.",
+    );
+
+    // Optional vertical feature: preserve the user choice once it exists.
+    await into(appSettings).insert(
+      AppSettingsCompanion.insert(
+        key: 'pharmacy_features_enabled',
+        value: '0',
+        description: const Value(
+          'Enables medicine profiles and active-ingredient alternatives.',
+        ),
+      ),
+      mode: InsertMode.insertOrIgnore,
     );
 
     await _seedDefaultColors();
@@ -5194,6 +5224,6 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
 
 QueryExecutor _openConnection() {
   return LazyDatabase(() async {
-    return openDatabase();
+    return openDatabase(targetSchemaVersion: _currentDatabaseSchemaVersion);
   });
 }

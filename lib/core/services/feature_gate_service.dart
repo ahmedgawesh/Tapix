@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../utils/platform_utils.dart';
+import 'desktop_license_service.dart';
 import 'revenuecat_service.dart';
 
 /// Enumeration of every gated feature in Tapix.
@@ -48,6 +50,9 @@ enum AppFeature {
 
   /// Employees module (HR, commissions, payroll).
   employees,
+
+  /// Cashier shift lifecycle (open, close, history, and reconciliation).
+  cashierShifts,
 
   /// Inventory operations beyond product CRUD (stock count, transfers, batches, expiry).
   inventoryAdvanced,
@@ -112,6 +117,7 @@ enum FeatureDenyReason {
 /// [requiresPro] directly.
 class FeatureGateService extends ChangeNotifier {
   final RevenueCatService _revenueCatService;
+  final DesktopLicenseService? _desktopLicenseService;
 
   /// Cached last-known Pro state, refreshed by [refresh] and by listening to
   /// [RevenueCatService.subscriptionStatusStream]. Reads are sync so the
@@ -122,11 +128,26 @@ class FeatureGateService extends ChangeNotifier {
   bool get isInitialized => _initialized;
   bool _initialized = false;
 
-  FeatureGateService({required RevenueCatService revenueCatService})
-      : _revenueCatService = revenueCatService {
-    // On platforms where in-app purchases are unavailable (web / desktop),
-    // there is no way to subscribe, so the freemium gate must NOT apply.
-    // Treat the user as Pro so the whole app is usable.
+  FeatureGateService({
+    required RevenueCatService revenueCatService,
+    DesktopLicenseService? desktopLicenseService,
+  })  : _revenueCatService = revenueCatService,
+        _desktopLicenseService = desktopLicenseService {
+    if (PlatformUtils.isWindows || PlatformUtils.isLinux) {
+      final desktop = _desktopLicenseService;
+      _isPro = desktop?.status == DesktopLicenseStatus.valid;
+      _initialized = desktop == null ||
+          desktop.status != DesktopLicenseStatus.checking;
+      desktop?.addListener(() {
+        _setPro(desktop.status == DesktopLicenseStatus.valid);
+      });
+      desktop?.initialize().then((status) {
+        _setPro(status == DesktopLicenseStatus.valid);
+      });
+      return;
+    }
+
+    // Web/macOS are not currently sold through either entitlement source.
     if (!RevenueCatConfig.isSupported) {
       _isPro = true;
       _initialized = true;
@@ -143,8 +164,10 @@ class FeatureGateService extends ChangeNotifier {
   }
 
   /// Whether the user currently has Pro entitlement (sync, cached).
-  /// Always `true` on platforms where purchases are unsupported.
-  bool get isPro => !RevenueCatConfig.isSupported || _isPro;
+  bool get isPro {
+    if (PlatformUtils.isWindows || PlatformUtils.isLinux) return _isPro;
+    return !RevenueCatConfig.isSupported || _isPro;
+  }
 
   /// Update the cached state and notify listeners only when it actually
   /// changed, so the router / widgets rebuild exactly once per real transition.
@@ -160,6 +183,11 @@ class FeatureGateService extends ChangeNotifier {
 
   /// Refresh the cached Pro state from RevenueCat.
   Future<void> refresh() async {
+    if (PlatformUtils.isWindows || PlatformUtils.isLinux) {
+      final status = await _desktopLicenseService?.initialize(force: true);
+      _setPro(status == DesktopLicenseStatus.valid);
+      return;
+    }
     if (!RevenueCatConfig.isSupported) {
       _setPro(true);
       return;
@@ -199,6 +227,7 @@ class FeatureGateService extends ChangeNotifier {
       case AppFeature.customers:
       case AppFeature.suppliers:
       case AppFeature.employees:
+      case AppFeature.cashierShifts:
       case AppFeature.inventoryAdvanced:
       case AppFeature.returns:
       case AppFeature.cheques:

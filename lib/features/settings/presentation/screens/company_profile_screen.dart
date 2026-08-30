@@ -4,7 +4,7 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/di/injection_container.dart';
 import '../../data/services/company_profile_service.dart';
@@ -121,13 +121,9 @@ class _CompanyProfileScreenState extends State<CompanyProfileScreen> {
 
   Future<void> _pickLogo() async {
     try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.image,
-        withData: true,
-      );
-      if (result == null) return;
-      final bytes = result.files.single.bytes;
-      if (bytes == null) return;
+      final file = await FilePicker.pickFile(type: FileType.image);
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
 
       if (!mounted) return;
       setState(() {

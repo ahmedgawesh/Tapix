@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -12,22 +11,13 @@ class _ExportFileSaverIo implements ExportFileSaver {
     required String filename,
     required String mimeType,
   }) async {
-    final path = await FilePicker.saveFile(
+    final uri = await FilePicker.saveFile(
       dialogTitle: filename,
       fileName: filename,
       bytes: bytes,
+      mimeType: mimeType,
     );
-
-    if (path == null || path.isEmpty) {
-      return false;
-    }
-
-    if (Platform.isAndroid || Platform.isIOS) {
-      return true;
-    }
-
-    await File(path).writeAsBytes(bytes, flush: true);
-    return true;
+    return uri != null;
   }
 }
 

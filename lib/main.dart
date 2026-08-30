@@ -27,7 +27,10 @@ import 'features/settings/presentation/bloc/app_settings_bloc.dart';
 import 'features/subscription/subscription.dart';
 import 'core/services/connectivity_service.dart';
 import 'core/services/lan/lan_network_service.dart';
+import 'core/services/lan/device_mode_reset_service.dart';
+import 'core/services/desktop_license_service.dart';
 import 'core/utils/platform_utils.dart';
+import 'core/widgets/desktop_license_gate.dart';
 
 /// Check if running on Linux desktop (not web)
 bool get _isLinuxDesktop => !kIsWeb && PlatformUtils.isLinux;
@@ -135,6 +138,10 @@ class TapixApp extends StatefulWidget {
 
 class _TapixAppState extends State<TapixApp> {
   StreamSubscription<LanNetworkSnapshot>? _lanLocaleSubscription;
+  StreamSubscription<LanMasterActivityEvent>? _lanActivitySubscription;
+  StreamSubscription<RealtimeState<UserEntity?>>?
+  _pendingDeviceModeSubscription;
+  final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
   String? _appliedMasterLocaleCode;
 
   @override
@@ -143,6 +150,12 @@ class _TapixAppState extends State<TapixApp> {
     _setupBackButtonHandler();
     final lan = di.sl<LanNetworkService>();
     _lanLocaleSubscription = lan.changes.listen(_syncMasterLocale);
+    _lanActivitySubscription = lan.masterActivityEvents.listen(
+      _showMasterActivity,
+    );
+    _pendingDeviceModeSubscription = di.sl<AuthBloc>().stream.listen(
+      _applyPendingDeviceMode,
+    );
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _syncMasterLocale(lan.snapshot),
     );
@@ -167,9 +180,87 @@ class _TapixAppState extends State<TapixApp> {
     await di.sl<LocalizationService>().setLocale(locale);
   }
 
+  void _applyPendingDeviceMode(RealtimeState<UserEntity?> state) {
+    if (state is! AuthAuthenticated) return;
+    unawaited(
+      di
+          .sl<DeviceModeResetService>()
+          .applyPendingTargetForOwner(state.user)
+          .catchError((Object error, StackTrace stackTrace) {
+            LoggingService.error(
+              'Unable to apply pending fresh device mode',
+              error: error,
+              stackTrace: stackTrace,
+            );
+          }),
+    );
+  }
+
+  void _showMasterActivity(LanMasterActivityEvent event) {
+    if (!mounted ||
+        di.sl<LanNetworkService>().snapshot.mode != LanMode.master) {
+      return;
+    }
+    final titleKey = switch (event.type) {
+      LanMasterActivityType.sale => 'settings.network.activity.sale',
+      LanMasterActivityType.saleReturn =>
+        'settings.network.activity.sale_return',
+      LanMasterActivityType.saleAdjustmentReturn =>
+        'settings.network.activity.sale_adjustment_return',
+    };
+    final color = event.type == LanMasterActivityType.sale
+        ? const Color(0xFF1B5E20)
+        : const Color(0xFFE65100);
+    final amount = di.sl<CurrencyService>().formatCents(event.totalCents);
+    final details = 'settings.network.activity.details'.tr(
+      args: [event.actorName, event.deviceName, event.documentNumber, amount],
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final messenger = _scaffoldMessengerKey.currentState;
+      if (!mounted || messenger == null) return;
+      messenger.showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+          backgroundColor: color,
+          content: Row(
+            children: [
+              Icon(
+                event.type == LanMasterActivityType.sale
+                    ? Icons.point_of_sale
+                    : Icons.assignment_return,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      titleKey.tr(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(details, style: const TextStyle(color: Colors.white)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
+  }
+
   @override
   void dispose() {
     _lanLocaleSubscription?.cancel();
+    _lanActivitySubscription?.cancel();
+    _pendingDeviceModeSubscription?.cancel();
     super.dispose();
   }
 
@@ -221,6 +312,7 @@ class _TapixAppState extends State<TapixApp> {
 
             return MaterialApp.router(
               title: 'TapBix',
+              scaffoldMessengerKey: _scaffoldMessengerKey,
               debugShowCheckedModeBanner: false,
               localizationsDelegates: context.localizationDelegates,
               supportedLocales: context.supportedLocales,
@@ -233,10 +325,13 @@ class _TapixAppState extends State<TapixApp> {
               // renders behind the system navigation bar (edge-to-edge mode).
               // top: false because AppBar handles status-bar insets itself.
               builder: (context, child) {
-                return SafeArea(
-                  top: false,
-                  bottom: true,
-                  child: child ?? const SizedBox.shrink(),
+                return DesktopLicenseGate(
+                  service: di.sl<DesktopLicenseService>(),
+                  child: SafeArea(
+                    top: false,
+                    bottom: true,
+                    child: child ?? const SizedBox.shrink(),
+                  ),
                 );
               },
             );

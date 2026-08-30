@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/database/daos/adjustment_return_dao.dart';
+import 'package:tapix/core/database/daos/pharmacy_dao.dart';
 import 'package:tapix/core/services/audit_log_service.dart';
 import 'package:tapix/core/services/cashier_shift_service.dart';
 import 'package:tapix/core/services/commissions/commission_service.dart';
@@ -65,6 +66,7 @@ void main() {
       journalEntries: journal,
       commissions: commissions,
       loyaltyPoints: loyaltyPoints,
+      pharmacy: PharmacyDao(db),
     );
 
     final currency = await (db.select(
@@ -161,6 +163,116 @@ void main() {
     },
   );
 
+  test(
+    'pharmacy catalog searches active ingredients and returns exact alternatives',
+    () async {
+      await settings.patch(
+        (current) => current.copyWith(enablePharmacyFeatures: true),
+      );
+      final pharmacy = PharmacyDao(db);
+      final ingredient = await pharmacy.saveActiveIngredient(
+        canonicalName: 'Ibuprofen',
+        nameAr: 'إيبوبروفين',
+      );
+      final currency = await (db.select(
+        db.currencies,
+      )..where((row) => row.isBase.equals(true))).getSingle();
+      final alternativeId = await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              sku: const Value('LAN-MED-ALT'),
+              name: 'Equivalent medicine',
+              costCents: Decimal.fromInt(700),
+              priceCents: Decimal.fromInt(1100),
+              currencyId: Value(currency.id),
+              stockQuantity: const Value(3000),
+              measurementType: const Value('length'),
+            ),
+          );
+      await db
+          .into(db.productVariants)
+          .insert(
+            ProductVariantsCompanion.insert(
+              productId: alternativeId,
+              stockQuantity: const Value(3000),
+              costCents: Decimal.fromInt(700),
+              priceCents: Decimal.fromInt(1100),
+            ),
+          );
+      final sourceFormula = MedicineProfileDraft(
+        productId: productId,
+        dosageForm: 'suspension',
+        administrationRoute: 'oral',
+        ingredients: [
+          MedicineIngredientDraft(
+            ingredientId: ingredient.id,
+            value: '100',
+            unit: 'mg',
+            basisValue: '5',
+            basisUnit: 'ml',
+          ),
+        ],
+      );
+      await pharmacy.saveMedicineProfile(sourceFormula);
+      await pharmacy.saveMedicineProfile(
+        MedicineProfileDraft(
+          productId: alternativeId,
+          dosageForm: 'suspension',
+          administrationRoute: 'oral',
+          ingredients: [
+            MedicineIngredientDraft(
+              ingredientId: ingredient.id,
+              value: '20',
+              unit: 'mg',
+              basisValue: '1',
+              basisUnit: 'ml',
+            ),
+          ],
+        ),
+      );
+
+      final catalog = await gateway.fetchCatalog(
+        query: 'ibuprofen',
+        offset: 0,
+        limit: 20,
+      );
+      expect(catalog.enablePharmacyFeatures, isTrue);
+      expect(catalog.products.map((value) => value.id).toSet(), {
+        productId,
+        alternativeId,
+      });
+      expect(catalog.products.every((value) => value.medicine != null), isTrue);
+      expect(
+        catalog.products.every(
+          (value) => !value.toJson().containsKey('costCents'),
+        ),
+        isTrue,
+      );
+
+      final alternatives = await gateway.fetchMedicineAlternatives(
+        productId: productId,
+      );
+      expect(alternatives.alternatives.map((value) => value.id), [
+        alternativeId,
+      ]);
+      expect(
+        alternatives
+            .alternatives
+            .single
+            .medicine
+            ?.ingredients
+            .single
+            .strengthValueMicros,
+        20000000,
+      );
+      expect(
+        alternatives.alternatives.single.toJson(),
+        isNot(contains('costCents')),
+      );
+    },
+  );
+
   test('returnable invoice search matches a product name', () async {
     final created = await gateway.createSale(
       actor: actor(),
@@ -179,6 +291,99 @@ void main() {
     );
 
     expect(page.sales.map((value) => value.saleId), contains(created.saleId));
+  });
+
+  test(
+    'sale details expose complete measured lines and cashier shift',
+    () async {
+      final created = await gateway.createSale(
+        actor: actor(),
+        request: LanSaleRequest(
+          idempotencyKey: 'lan-sale-details-001',
+          paymentMethod: 'cash',
+          paidAmountCents: 600,
+          lines: [LanSaleLineRequest(productId: productId, quantity: 500)],
+        ),
+      );
+
+      final details = await gateway.fetchSaleDetails(saleId: created.saleId);
+
+      expect(details, isNotNull);
+      expect(details!.sale.invoiceNumber, created.invoiceNumber);
+      expect(details.cashierName, 'Cashier Employee');
+      expect(details.cashierShiftNumber, isNotEmpty);
+      expect(details.lines, hasLength(1));
+      expect(details.lines.single.productName, 'Measured fabric');
+      expect(details.lines.single.quantity, 500);
+      expect(details.lines.single.quantityScale, 1000);
+      expect(details.lines.single.measurementType, 'length');
+      expect(details.toJson().toString(), isNot(contains('costCents')));
+    },
+  );
+
+  test('remote void reverses a sale and records the remote actor', () async {
+    final created = await gateway.createSale(
+      actor: actor(),
+      request: LanSaleRequest(
+        idempotencyKey: 'lan-sale-void-001',
+        paymentMethod: 'cash',
+        paidAmountCents: 600,
+        lines: [LanSaleLineRequest(productId: productId, quantity: 500)],
+      ),
+    );
+
+    final result = await gateway.voidSale(
+      actor: actor(),
+      saleId: created.saleId,
+    );
+
+    expect(result.status, 'voided');
+    final stored = await (db.select(
+      db.sales,
+    )..where((row) => row.id.equals(created.saleId))).getSingle();
+    expect(stored.status, 'voided');
+  });
+
+  test('master PIN policy blocks remote void and returns', () async {
+    await settings.patch(
+      (current) => current.copyWith(requirePinForVoidRefund: true),
+    );
+
+    await expectLater(
+      gateway.voidSale(actor: actor(), saleId: 999),
+      throwsA(
+        isA<LanBusinessException>().having(
+          (error) => error.code,
+          'code',
+          'remote_pin_required',
+        ),
+      ),
+    );
+    await expectLater(
+      gateway.createSaleAdjustmentReturn(
+        actor: actor(),
+        request: LanSaleAdjustmentReturnRequest(
+          idempotencyKey: 'pin-protected-return-001',
+          refundMethod: 'cash',
+          returnDate: DateTime(2026, 8, 28),
+          reasonCode: 'noReceipt',
+          lines: [
+            LanSaleAdjustmentReturnLineRequest(
+              productId: productId,
+              quantity: 500,
+              unitPriceCents: 1200,
+            ),
+          ],
+        ),
+      ),
+      throwsA(
+        isA<LanBusinessException>().having(
+          (error) => error.code,
+          'code',
+          'remote_pin_required',
+        ),
+      ),
+    );
   });
 
   test(
@@ -226,6 +431,15 @@ void main() {
       expect(page.returns, hasLength(1));
       expect(page.returns.single.isAdjustment, isTrue);
       expect(page.returns.single.returnNumber, created.returnNumber);
+      final details = await gateway.fetchSaleReturnDetails(
+        returnId: created.returnId,
+        adjustment: true,
+      );
+      expect(details, isNotNull);
+      expect(details!.summary.isAdjustment, isTrue);
+      expect(details.lines.single.productName, 'Measured fabric');
+      expect(details.lines.single.quantity, 500);
+      expect(details.lines.single.totalCents, 600);
 
       final stored = await (db.select(
         db.saleReturnAdjustments,
@@ -336,6 +550,15 @@ void main() {
       expect(created.duplicate, isFalse);
       expect(replayed.duplicate, isTrue);
       expect(created.totalCents, 240);
+      final details = await gateway.fetchSaleReturnDetails(
+        returnId: created.returnId,
+        adjustment: false,
+      );
+      expect(details, isNotNull);
+      expect(details!.summary.saleId, sale.saleId);
+      expect(details.lines.single.saleItemId, item.id);
+      expect(details.lines.single.quantity, 200);
+      expect(details.lines.single.totalCents, 240);
 
       final postedItem = await (db.select(
         db.saleItems,
