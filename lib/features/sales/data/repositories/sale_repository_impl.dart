@@ -1,13 +1,22 @@
 import 'dart:developer' as developer;
+import 'dart:convert';
 
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart' as db;
+import '../../../../core/database/daos/cheque_confirmation_dao.dart';
+import '../../../../core/database/daos/cheque_instrument_dao.dart';
 import '../../../../core/database/daos/sale_dao.dart' hide SaleDashboardStats;
+import '../../../../core/payments/checkout_settlement.dart';
+import '../../../../core/payments/return_settlement_service.dart';
 import '../../../../core/pricing/pricing_snapshot.dart';
+import '../../../../core/promotions/promotion_engine.dart';
+import '../../../../core/promotions/promotion_repository.dart';
+import '../../../../core/promotions/promotion_return_policy.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/cashier_shift_service.dart';
+import '../../../../core/services/cheque_source_void_service.dart';
 import '../../../../core/services/commissions/commission_service.dart';
 import '../../../../core/services/einvoice/einvoice_dispatch_service.dart';
 import '../../../../core/services/einvoice/einvoice_document.dart';
@@ -106,7 +115,30 @@ class SaleRepositoryImpl implements SaleRepository {
     String? idempotencyKey,
     int? actorUserId,
     bool taxInclusiveAtPost = false,
+    List<AppliedPromotion> appliedPromotions = const [],
+    List<CheckoutPaymentAllocation> initialPayments = const [],
   }) async {
+    final settlement = CheckoutSettlement(initialPayments);
+    final isPureCheque =
+        initialPayments.isEmpty &&
+        (paymentMethod == 'cheque' || paymentMethod == 'check');
+    if (initialPayments.isNotEmpty) {
+      settlement.validate(invoiceTotalCents: totalCents.toBigInt().toInt());
+      if (settlement.totalSettledCents != paidAmountCents.toBigInt().toInt()) {
+        throw ArgumentError('settlement_total_mismatch');
+      }
+      if (customerId == null &&
+          (initialPayments.any((payment) => payment.isCheque) ||
+              settlement.totalAllocatedCents < totalCents.toBigInt().toInt())) {
+        throw ArgumentError('customer_required_for_deferred_settlement');
+      }
+    }
+    if (isPureCheque && dueDate == null) {
+      throw ArgumentError('cheque_due_date_required');
+    }
+    if (isPureCheque && customerId == null) {
+      throw ArgumentError('customer_required_for_cheque_settlement');
+    }
     final normalizedIdempotencyKey = idempotencyKey?.trim();
     if (normalizedIdempotencyKey != null &&
         normalizedIdempotencyKey.isNotEmpty) {
@@ -143,7 +175,12 @@ class SaleRepositoryImpl implements SaleRepository {
       taxCents: Value(taxCents),
       discountCents: Value(discountCents),
       totalCents: Value(totalCents),
-      paidAmountCents: Value(paidAmountCents),
+      // Structured settlements are posted through AR one leg at a time below.
+      paidAmountCents: Value(
+        initialPayments.isEmpty && !isPureCheque
+            ? paidAmountCents
+            : Decimal.zero,
+      ),
       currencyId: Value(currencyId),
       paymentMethod: Value(paymentMethod),
       status: const Value('draft'),
@@ -199,6 +236,12 @@ class SaleRepositoryImpl implements SaleRepository {
             itemCompanions,
           );
 
+          await _persistPromotionSnapshots(
+            saleId: id,
+            inputs: items,
+            applications: appliedPromotions,
+          );
+
           // Auto-post: deduct stock and update customer balance
           await _dao.postSale(id, allowNegativeStock: allowNegativeStock);
 
@@ -206,12 +249,70 @@ class SaleRepositoryImpl implements SaleRepository {
           await _journalService.recordSaleJournalEntry(
             saleId: id,
             totalCents: totalCents.toBigInt().toInt(),
-            paidAmountCents: paidAmountCents.toBigInt().toInt(),
+            paidAmountCents: initialPayments.isEmpty && !isPureCheque
+                ? paidAmountCents.toBigInt().toInt()
+                : 0,
             currencyId: currencyId,
             taxCents: taxCents.toBigInt().toInt(),
-            paymentMethod: paymentMethod,
+            paymentMethod: initialPayments.isEmpty && !isPureCheque
+                ? paymentMethod
+                : 'credit',
             userId: userId,
           );
+
+          for (final allocation in initialPayments) {
+            if (allocation.isCheque) {
+              await ChequeInstrumentDao(_dao.db).create(
+                direction: ChequeDirectionValue.incoming,
+                sourceTable: ChequeSourceTables.sale,
+                sourceId: id,
+                amountCents: allocation.amountCents,
+                currencyId: currencyId,
+                dueDate: allocation.dueDate!,
+                partyType: 'customer',
+                partyId: customerId,
+                chequeNumber: allocation.reference,
+                bankName: allocation.bankName,
+                issueDate: allocation.issueDate ?? effectiveSaleDate,
+                userId: userId,
+                note: allocation.note,
+              );
+              continue;
+            }
+            final paymentId = await _dao.recordPayment(
+              db.SalePaymentsCompanion.insert(
+                saleId: id,
+                cashierShiftId: Value(cashierShiftId),
+                amountCents: Decimal.fromInt(allocation.amountCents),
+                currencyId: currencyId,
+                paymentMethod: allocation.method,
+                reference: Value(allocation.reference),
+                notes: Value(allocation.note ?? 'Initial invoice settlement'),
+                paymentDate: Value(allocation.issueDate ?? effectiveSaleDate),
+              ),
+            );
+            await _journalService.recordCustomerPaymentJournalEntry(
+              paymentId: paymentId,
+              amountCents: allocation.amountCents,
+              currencyId: currencyId,
+              paymentMethod: allocation.method,
+              userId: userId,
+            );
+          }
+
+          if (isPureCheque && dueDate != null) {
+            await ChequeInstrumentDao(_dao.db).ensurePrimary(
+              direction: ChequeDirectionValue.incoming,
+              sourceTable: ChequeSourceTables.sale,
+              sourceId: id,
+              amountCents: totalCents.toBigInt().toInt(),
+              currencyId: currencyId,
+              dueDate: dueDate,
+              partyType: customerId == null ? null : 'customer',
+              partyId: customerId,
+              userId: userId,
+            );
+          }
 
           // COGS journal entry — MANDATORY (Dr COGS, Cr Inventory)
           final costCents = await _dao.computeSaleCostCents(id);
@@ -342,6 +443,124 @@ class SaleRepositoryImpl implements SaleRepository {
 
     return saleId;
   }
+
+  Future<void> _persistPromotionSnapshots({
+    required int saleId,
+    required List<SaleItemInput> inputs,
+    required List<AppliedPromotion> applications,
+  }) async {
+    if (applications.isEmpty) return;
+    final lineIds = inputs.map((row) => row.lineId).toList(growable: false);
+    if (lineIds.any((id) => id.trim().isEmpty) ||
+        lineIds.toSet().length != lineIds.length) {
+      throw StateError('Promotion snapshot contains invalid sale line IDs.');
+    }
+    final storedItems =
+        await (_dao.db.select(_dao.db.saleItems)
+              ..where((row) => row.saleId.equals(saleId))
+              ..orderBy([(row) => OrderingTerm.asc(row.id)]))
+            .get();
+    if (storedItems.length != inputs.length) {
+      throw StateError('Promotion snapshot sale line count mismatch.');
+    }
+    final storedByLine = <String, db.SaleItem>{};
+    final inputByLine = <String, SaleItemInput>{};
+    for (var index = 0; index < inputs.length; index++) {
+      storedByLine[inputs[index].lineId] = storedItems[index];
+      inputByLine[inputs[index].lineId] = inputs[index];
+    }
+
+    final allocatedByLine = <String, int>{};
+    for (final application in applications) {
+      final allocationTotal = application.allocations.fold<int>(
+        0,
+        (sum, row) => sum + row.discount.cents,
+      );
+      if (allocationTotal <= 0 ||
+          allocationTotal != application.totalDiscount.cents) {
+        throw StateError('Promotion snapshot discount total mismatch.');
+      }
+      final applicationId = await _dao.db
+          .into(_dao.db.salePromotionApplications)
+          .insert(
+            db.SalePromotionApplicationsCompanion.insert(
+              saleId: saleId,
+              promotionId: application.promotionId,
+              promotionCode: application.code,
+              promotionName: application.name,
+              promotionVersion: application.version,
+              promotionType: _promotionTypeToDb(application.type),
+              concurrencyMode: _promotionConcurrencyToDb(
+                application.concurrencyMode,
+              ),
+              applicationCount: Value(application.applicationCount),
+              discountCents: Decimal.fromInt(application.totalDiscount.cents),
+              promotionEngineVersion: PromotionEngineVersion.current,
+              calculationSnapshotJson: jsonEncode(application.toSnapshotMap()),
+            ),
+          );
+      for (final allocation in application.allocations) {
+        final stored = storedByLine[allocation.lineId];
+        final input = inputByLine[allocation.lineId];
+        if (stored == null || input == null || allocation.discount.cents <= 0) {
+          throw StateError(
+            'Promotion snapshot references an invalid sale line.',
+          );
+        }
+        allocatedByLine.update(
+          allocation.lineId,
+          (value) => value + allocation.discount.cents,
+          ifAbsent: () => allocation.discount.cents,
+        );
+        await _dao.db
+            .into(_dao.db.saleItemPromotionAllocations)
+            .insert(
+              db.SaleItemPromotionAllocationsCompanion.insert(
+                applicationId: applicationId,
+                saleItemId: stored.id,
+                discountCents: Decimal.fromInt(allocation.discount.cents),
+                appliedQuantity: allocation.appliedQuantity,
+                quantityScale: Value(allocation.quantityScale),
+                originalUnitPriceCents: input.unitPriceCents,
+                rewardType: _promotionRewardToDb(allocation.rewardType),
+              ),
+            );
+      }
+    }
+    for (final entry in allocatedByLine.entries) {
+      final storedDiscount = inputByLine[entry.key]!.discountCents
+          .toBigInt()
+          .toInt();
+      if (entry.value > storedDiscount) {
+        throw StateError(
+          'Promotion allocation exceeds persisted line discount.',
+        );
+      }
+    }
+  }
+
+  static String _promotionTypeToDb(PromotionType type) => switch (type) {
+    PromotionType.simple => 'simple',
+    PromotionType.quantity => 'quantity',
+    PromotionType.fixedBundle => 'fixed_bundle',
+    PromotionType.buyXGetY => 'buy_x_get_y',
+    PromotionType.threshold => 'threshold',
+  };
+
+  static String _promotionConcurrencyToDb(PromotionConcurrencyMode mode) =>
+      switch (mode) {
+        PromotionConcurrencyMode.exclusive => 'exclusive',
+        PromotionConcurrencyMode.bestPrice => 'best_price',
+        PromotionConcurrencyMode.compound => 'compound',
+      };
+
+  static String _promotionRewardToDb(PromotionRewardType type) =>
+      switch (type) {
+        PromotionRewardType.percentageOff => 'percentage_off',
+        PromotionRewardType.amountOff => 'amount_off',
+        PromotionRewardType.fixedBundlePrice => 'fixed_bundle_price',
+        PromotionRewardType.freeQuantity => 'free_quantity',
+      };
 
   @override
   Future<bool> updateSale({
@@ -530,6 +749,31 @@ class SaleRepositoryImpl implements SaleRepository {
     if (report.hasBlockers) {
       throw VoidBlockedByImpactException(report);
     }
+
+    final linkedReturns =
+        await (_dao.db.select(_dao.db.saleReturns)..where(
+              (row) =>
+                  row.saleId.equals(saleId) & row.status.isNotValue('voided'),
+            ))
+            .get();
+    for (final saleReturn in linkedReturns) {
+      await ChequeSourceVoidService.voidForSource(
+        db: _dao.db,
+        journalService: _journalService,
+        sourceTable: ChequeSourceTables.saleReturn,
+        sourceId: saleReturn.id,
+        reason: 'Sale voided — linked return cheque cancelled',
+        userId: resolvedUserId,
+      );
+    }
+    await ChequeSourceVoidService.voidForSource(
+      db: _dao.db,
+      journalService: _journalService,
+      sourceTable: ChequeSourceTables.sale,
+      sourceId: saleId,
+      reason: 'Sale voided — cheque cancelled',
+      userId: resolvedUserId,
+    );
 
     // Void journal entries BEFORE voiding the sale (so we can still read the data).
     // This MUST succeed — if it fails the entire void is aborted to prevent GL drift.
@@ -791,13 +1035,24 @@ class SaleRepositoryImpl implements SaleRepository {
     String? idempotencyKey,
     int? actorUserId,
     bool taxInclusiveAtPost = false,
+    List<CheckoutPaymentAllocation> settlementAllocations = const [],
   }) async {
+    final structuredSettlement = settlementAllocations.isNotEmpty;
+    final effectiveRefundMethod = structuredSettlement
+        ? 'mixed'
+        : (refundMethod ?? 'cash');
+    final isChequeRefund =
+        !structuredSettlement &&
+        (effectiveRefundMethod == 'cheque' || effectiveRefundMethod == 'check');
+    if (isChequeRefund && dueDate == null) {
+      throw ArgumentError('cheque_due_date_required');
+    }
     final returnNumber = await _datasource.generateSaleReturnNumber();
 
     // Phase 14.0 — only persist dueDate when refund method is cheque.
     // For cash/credit refunds the column stays NULL so the dashboard
     // reminder cannot accidentally surface a non-cheque refund.
-    final effectiveDueDate = refundMethod == 'cheque' ? dueDate : null;
+    final effectiveDueDate = isChequeRefund ? dueDate : null;
 
     // ATOMIC: Wrap return creation, stock restoration, journal entries,
     // and commission reversal in a single transaction.
@@ -815,19 +1070,59 @@ class SaleRepositoryImpl implements SaleRepository {
     final returnId = await _dao.db.transaction(() async {
       final originalSale = await _dao.getSaleById(saleId);
       if (originalSale == null) throw Exception('Sale not found');
+      if (structuredSettlement) {
+        if (originalSale.customerId == null) {
+          throw ArgumentError('customer_required_for_deferred_settlement');
+        }
+      }
+      if (isChequeRefund && originalSale.customerId == null) {
+        throw ArgumentError('customer_required_for_cheque_return');
+      }
       final inclusive = originalSale.taxInclusiveAtPost ?? false;
       final originalItems = await _datasource.getSaleItems(saleId);
       final originalById = {for (final item in originalItems) item.id: item};
       final histories = <int, LinkedReturnHistory>{};
       final calculatedItems = <SaleReturnItemInput>[];
 
+      final requestedQuantities = <int, int>{};
       for (final input in items) {
-        final original = originalById[input.saleItemId];
-        if (original == null) {
+        if (!originalById.containsKey(input.saleItemId)) {
           throw Exception(
             'Sale item #${input.saleItemId} does not belong to sale #$saleId',
           );
         }
+        requestedQuantities.update(
+          input.saleItemId,
+          (quantity) => quantity + input.quantity,
+          ifAbsent: () => input.quantity,
+        );
+      }
+
+      final promotionApplications = await PromotionRepository(
+        _dao.db,
+        _audit,
+      ).loadSaleApplications(saleId);
+      final protectedSaleItemIds = promotionApplications
+          .expand((application) => application.allocations)
+          .map((allocation) => allocation.saleItemId)
+          .toSet();
+      for (final saleItemId in protectedSaleItemIds) {
+        histories[saleItemId] = await _dao.getLinkedReturnHistory(saleItemId);
+      }
+      final bundleViolation = PromotionReturnPolicy.validateLinkedReturn(
+        promotionApplications: promotionApplications,
+        previouslyReturnedQuantityBySaleItemId: {
+          for (final entry in histories.entries)
+            entry.key: entry.value.quantity,
+        },
+        requestedQuantityBySaleItemId: requestedQuantities,
+      );
+      if (bundleViolation != null) {
+        throw PromotionBundleReturnException(bundleViolation);
+      }
+
+      for (final input in items) {
+        final original = originalById[input.saleItemId]!;
         final history =
             histories[input.saleItemId] ??
             await _dao.getLinkedReturnHistory(input.saleItemId);
@@ -883,9 +1178,7 @@ class SaleRepositoryImpl implements SaleRepository {
         dispositionType: dispositionType != null
             ? Value(dispositionType)
             : const Value.absent(),
-        refundMethod: refundMethod != null
-            ? Value(refundMethod)
-            : const Value.absent(),
+        refundMethod: Value(effectiveRefundMethod),
         returnDate: Value(effectiveReturnDate),
         dueDate: Value(effectiveDueDate),
         idempotencyKey: Value(idempotencyKey),
@@ -924,11 +1217,41 @@ class SaleRepositoryImpl implements SaleRepository {
         totalCents: postedTotalCents,
         currencyId: currencyId,
         taxCents: postedTaxCents,
-        refundMethod: refundMethod ?? 'cash',
+        refundMethod: structuredSettlement ? 'credit' : effectiveRefundMethod,
         partyId: sale?.customerId,
         userId: userId,
         postingDate: effectiveReturnDate,
       );
+
+      if (structuredSettlement) {
+        await ReturnSettlementService.apply(
+          db: _dao.db,
+          journalService: _journalService,
+          side: ReturnSettlementSide.sale,
+          sourceTable: ChequeSourceTables.saleReturn,
+          sourceId: id,
+          partyId: originalSale.customerId!,
+          totalCents: postedTotalCents,
+          currencyId: currencyId,
+          allocations: settlementAllocations,
+          documentDate: effectiveReturnDate,
+          userId: userId,
+        );
+      } else if (effectiveDueDate != null &&
+          (effectiveRefundMethod == 'cheque' ||
+              effectiveRefundMethod == 'check')) {
+        await ChequeInstrumentDao(_dao.db).ensurePrimary(
+          direction: ChequeDirectionValue.outgoing,
+          sourceTable: ChequeSourceTables.saleReturn,
+          sourceId: id,
+          amountCents: postedTotalCents,
+          currencyId: currencyId,
+          dueDate: effectiveDueDate,
+          partyType: sale?.customerId == null ? null : 'customer',
+          partyId: sale?.customerId,
+          userId: userId,
+        );
+      }
 
       // COGS reversal journal entry — MANDATORY (Dr Inventory, Cr COGS)
       final returnCostCents = await _dao.computeSaleReturnCostCents(id);
@@ -1004,19 +1327,36 @@ class SaleRepositoryImpl implements SaleRepository {
     int returnId, {
     bool allowNegativeStock = false,
   }) async {
-    // Void journal entries BEFORE voiding the return.
-    // This MUST succeed — if it fails the entire void is aborted to prevent GL drift.
-    await _journalService.voidJournalEntriesForSource(
-      sourceTable: 'sale_returns',
-      sourceId: returnId,
-      reason: 'Sale return voided',
-      userId: await _currentUserId(),
-    );
-
-    await _datasource.voidSaleReturn(
-      returnId,
-      allowNegativeStock: allowNegativeStock,
-    );
+    final userId = await _currentUserId();
+    await _dao.db.transaction(() async {
+      await ChequeSourceVoidService.voidForSource(
+        db: _dao.db,
+        journalService: _journalService,
+        sourceTable: ChequeSourceTables.saleReturn,
+        sourceId: returnId,
+        reason: 'Sale return voided — cheque cancelled',
+        userId: userId,
+      );
+      await ReturnSettlementService.voidImmediate(
+        db: _dao.db,
+        journalService: _journalService,
+        side: ReturnSettlementSide.sale,
+        sourceTable: ChequeSourceTables.saleReturn,
+        sourceId: returnId,
+        reason: 'Sale return settlement voided',
+        userId: userId,
+      );
+      await _journalService.voidJournalEntriesForSource(
+        sourceTable: 'sale_returns',
+        sourceId: returnId,
+        reason: 'Sale return voided',
+        userId: userId,
+      );
+      await _datasource.voidSaleReturn(
+        returnId,
+        allowNegativeStock: allowNegativeStock,
+      );
+    });
     // Audit: log sale return void (CRITICAL)
     _audit.logVoid(
       entityType: 'sale_return',

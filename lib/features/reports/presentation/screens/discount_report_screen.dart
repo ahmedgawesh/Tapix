@@ -10,12 +10,7 @@ import '../../../../core/bloc/realtime_bloc.dart';
 import '../widgets/date_range_selector.dart';
 import '../../services/discount_reports_pdf_service.dart';
 
-enum DiscountReportType {
-  byProduct,
-  byCategory,
-  byCustomer,
-  byInvoice,
-}
+enum DiscountReportType { byProduct, byCategory, byCustomer, byInvoice }
 
 class DiscountReportScreen extends StatelessWidget {
   final DiscountReportType reportType;
@@ -63,19 +58,23 @@ class _DiscountReportViewState extends State<_DiscountReportView> {
         actions: [
           BlocBuilder<DiscountReportsBloc, RealtimeState<DiscountReportsData>>(
             builder: (context, state) {
-              if (state is! RealtimeSuccess<DiscountReportsData>) return const SizedBox.shrink();
-              return Row(children: [
-                IconButton(
-                  icon: const Icon(LucideIcons.printer),
-                  tooltip: 'reports.print'.tr(),
-                  onPressed: () => _onPrint(context, state.data),
-                ),
-                IconButton(
-                  icon: const Icon(LucideIcons.share2),
-                  tooltip: 'reports.share'.tr(),
-                  onPressed: () => _onShare(context, state.data),
-                ),
-              ]);
+              if (state is! RealtimeSuccess<DiscountReportsData>) {
+                return const SizedBox.shrink();
+              }
+              return Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(LucideIcons.printer),
+                    tooltip: 'reports.print'.tr(),
+                    onPressed: () => _onPrint(context, state.data),
+                  ),
+                  IconButton(
+                    icon: const Icon(LucideIcons.share2),
+                    tooltip: 'reports.share'.tr(),
+                    onPressed: () => _onShare(context, state.data),
+                  ),
+                ],
+              );
             },
           ),
         ],
@@ -88,7 +87,8 @@ class _DiscountReportViewState extends State<_DiscountReportView> {
               final bloc = context.read<DiscountReportsBloc>();
               return DateRangeSelector(
                 dateRange: bloc.dateRange,
-                onChanged: (range) => bloc.add(DiscountReportsDateRangeChanged(range)),
+                onChanged: (range) =>
+                    bloc.add(DiscountReportsDateRangeChanged(range)),
               );
             },
           ),
@@ -108,17 +108,31 @@ class _DiscountReportViewState extends State<_DiscountReportView> {
           // Summary cards
           BlocBuilder<DiscountReportsBloc, RealtimeState<DiscountReportsData>>(
             builder: (context, state) {
-              if (state is! RealtimeSuccess<DiscountReportsData>) return const SizedBox.shrink();
+              if (state is! RealtimeSuccess<DiscountReportsData>) {
+                return const SizedBox.shrink();
+              }
               final s = state.data.summary;
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
                 child: Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    _SummaryChip(label: 'reports.total_discount'.tr(), value: cs.formatCents(s.totalDiscountCents)),
-                    _SummaryChip(label: 'reports.discounted_invoices'.tr(), value: '${s.discountedInvoiceCount}'),
-                    _SummaryChip(label: 'reports.avg_discount'.tr(), value: '${s.averageDiscountPercent.toStringAsFixed(1)}%'),
+                    _SummaryChip(
+                      label: 'reports.total_discount'.tr(),
+                      value: cs.formatCents(s.totalDiscountCents),
+                    ),
+                    _SummaryChip(
+                      label: 'reports.discounted_invoices'.tr(),
+                      value: '${s.discountedInvoiceCount}',
+                    ),
+                    _SummaryChip(
+                      label: 'reports.avg_discount'.tr(),
+                      value: '${s.averageDiscountPercent.toStringAsFixed(1)}%',
+                    ),
                   ],
                 ),
               );
@@ -127,30 +141,36 @@ class _DiscountReportViewState extends State<_DiscountReportView> {
           const SizedBox(height: 8),
           // Data
           Expanded(
-            child: BlocBuilder<DiscountReportsBloc, RealtimeState<DiscountReportsData>>(
-              builder: (context, state) {
-                if (state is RealtimeLoading) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (state is RealtimeError) {
-                  return Center(child: Text('${(state as RealtimeError).error}'));
-                }
-                if (state is! RealtimeSuccess<DiscountReportsData>) {
-                  return const SizedBox.shrink();
-                }
-                final data = state.data;
-                switch (widget.reportType) {
-                  case DiscountReportType.byProduct:
-                    return _buildByProductTable(data, cs);
-                  case DiscountReportType.byCategory:
-                    return _buildByCategoryTable(data, cs);
-                  case DiscountReportType.byCustomer:
-                    return _buildByCustomerTable(data, cs);
-                  case DiscountReportType.byInvoice:
-                    return _buildByInvoiceTable(data, cs);
-                }
-              },
-            ),
+            child:
+                BlocBuilder<
+                  DiscountReportsBloc,
+                  RealtimeState<DiscountReportsData>
+                >(
+                  builder: (context, state) {
+                    if (state is RealtimeLoading) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (state is RealtimeError) {
+                      return Center(
+                        child: Text('${(state as RealtimeError).error}'),
+                      );
+                    }
+                    if (state is! RealtimeSuccess<DiscountReportsData>) {
+                      return const SizedBox.shrink();
+                    }
+                    final data = state.data;
+                    switch (widget.reportType) {
+                      case DiscountReportType.byProduct:
+                        return _buildByProductTable(data, cs);
+                      case DiscountReportType.byCategory:
+                        return _buildByCategoryTable(data, cs);
+                      case DiscountReportType.byCustomer:
+                        return _buildByCustomerTable(data, cs);
+                      case DiscountReportType.byInvoice:
+                        return _buildByInvoiceTable(data, cs);
+                    }
+                  },
+                ),
           ),
         ],
       ),
@@ -171,11 +191,17 @@ class _DiscountReportViewState extends State<_DiscountReportView> {
   }
 
   Widget _buildByProductTable(DiscountReportsData data, CurrencyService cs) {
-    final items = data.byProduct.where((i) =>
-        _searchQuery.isEmpty ||
-        i.productName.toLowerCase().contains(_searchQuery) ||
-        (i.categoryName?.toLowerCase().contains(_searchQuery) ?? false)).toList();
-    if (items.isEmpty) return Center(child: Text('reports.no_discount_data'.tr()));
+    final items = data.byProduct
+        .where(
+          (i) =>
+              _searchQuery.isEmpty ||
+              i.productName.toLowerCase().contains(_searchQuery) ||
+              (i.categoryName?.toLowerCase().contains(_searchQuery) ?? false),
+        )
+        .toList();
+    if (items.isEmpty) {
+      return Center(child: Text('reports.no_discount_data'.tr()));
+    }
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: SingleChildScrollView(
@@ -186,23 +212,28 @@ class _DiscountReportViewState extends State<_DiscountReportView> {
             DataColumn(label: Text('reports.product'.tr())),
             DataColumn(label: Text('reports.category'.tr())),
             DataColumn(label: Text('reports.quantity'.tr()), numeric: true),
-            DataColumn(label: Text('reports.total_sales_col'.tr()), numeric: true),
+            DataColumn(
+              label: Text('reports.total_sales_col'.tr()),
+              numeric: true,
+            ),
             DataColumn(label: Text('reports.discount'.tr()), numeric: true),
             DataColumn(label: Text('reports.discount_pct'.tr()), numeric: true),
             DataColumn(label: Text('reports.invoices'.tr()), numeric: true),
           ],
           rows: items.asMap().entries.map((e) {
             final i = e.value;
-            return DataRow(cells: [
-              DataCell(Text('${e.key + 1}')),
-              DataCell(Text(i.productName)),
-              DataCell(Text(i.categoryName ?? '-')),
-              DataCell(Text('${i.totalQuantity}')),
-              DataCell(Text(cs.formatCents(i.totalSalesCents))),
-              DataCell(Text(cs.formatCents(i.totalDiscountCents))),
-              DataCell(Text('${i.discountPercent.toStringAsFixed(1)}%')),
-              DataCell(Text('${i.invoiceCount}')),
-            ]);
+            return DataRow(
+              cells: [
+                DataCell(Text('${e.key + 1}')),
+                DataCell(Text(i.productName)),
+                DataCell(Text(i.categoryName ?? '-')),
+                DataCell(Text('${i.totalQuantity}')),
+                DataCell(Text(cs.formatCents(i.totalSalesCents))),
+                DataCell(Text(cs.formatCents(i.totalDiscountCents))),
+                DataCell(Text('${i.discountPercent.toStringAsFixed(1)}%')),
+                DataCell(Text('${i.invoiceCount}')),
+              ],
+            );
           }).toList(),
         ),
       ),
@@ -210,10 +241,16 @@ class _DiscountReportViewState extends State<_DiscountReportView> {
   }
 
   Widget _buildByCategoryTable(DiscountReportsData data, CurrencyService cs) {
-    final items = data.byCategory.where((i) =>
-        _searchQuery.isEmpty ||
-        i.categoryName.toLowerCase().contains(_searchQuery)).toList();
-    if (items.isEmpty) return Center(child: Text('reports.no_discount_data'.tr()));
+    final items = data.byCategory
+        .where(
+          (i) =>
+              _searchQuery.isEmpty ||
+              i.categoryName.toLowerCase().contains(_searchQuery),
+        )
+        .toList();
+    if (items.isEmpty) {
+      return Center(child: Text('reports.no_discount_data'.tr()));
+    }
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: SingleChildScrollView(
@@ -224,23 +261,28 @@ class _DiscountReportViewState extends State<_DiscountReportView> {
             DataColumn(label: Text('reports.category'.tr())),
             DataColumn(label: Text('reports.products'.tr()), numeric: true),
             DataColumn(label: Text('reports.quantity'.tr()), numeric: true),
-            DataColumn(label: Text('reports.total_sales_col'.tr()), numeric: true),
+            DataColumn(
+              label: Text('reports.total_sales_col'.tr()),
+              numeric: true,
+            ),
             DataColumn(label: Text('reports.discount'.tr()), numeric: true),
             DataColumn(label: Text('reports.discount_pct'.tr()), numeric: true),
             DataColumn(label: Text('reports.invoices'.tr()), numeric: true),
           ],
           rows: items.asMap().entries.map((e) {
             final i = e.value;
-            return DataRow(cells: [
-              DataCell(Text('${e.key + 1}')),
-              DataCell(Text(i.categoryName)),
-              DataCell(Text('${i.productCount}')),
-              DataCell(Text('${i.totalQuantity}')),
-              DataCell(Text(cs.formatCents(i.totalSalesCents))),
-              DataCell(Text(cs.formatCents(i.totalDiscountCents))),
-              DataCell(Text('${i.discountPercent.toStringAsFixed(1)}%')),
-              DataCell(Text('${i.invoiceCount}')),
-            ]);
+            return DataRow(
+              cells: [
+                DataCell(Text('${e.key + 1}')),
+                DataCell(Text(i.categoryName)),
+                DataCell(Text('${i.productCount}')),
+                DataCell(Text('${i.totalQuantity}')),
+                DataCell(Text(cs.formatCents(i.totalSalesCents))),
+                DataCell(Text(cs.formatCents(i.totalDiscountCents))),
+                DataCell(Text('${i.discountPercent.toStringAsFixed(1)}%')),
+                DataCell(Text('${i.invoiceCount}')),
+              ],
+            );
           }).toList(),
         ),
       ),
@@ -248,10 +290,16 @@ class _DiscountReportViewState extends State<_DiscountReportView> {
   }
 
   Widget _buildByCustomerTable(DiscountReportsData data, CurrencyService cs) {
-    final items = data.byCustomer.where((i) =>
-        _searchQuery.isEmpty ||
-        i.customerName.toLowerCase().contains(_searchQuery)).toList();
-    if (items.isEmpty) return Center(child: Text('reports.no_discount_data'.tr()));
+    final items = data.byCustomer
+        .where(
+          (i) =>
+              _searchQuery.isEmpty ||
+              i.customerName.toLowerCase().contains(_searchQuery),
+        )
+        .toList();
+    if (items.isEmpty) {
+      return Center(child: Text('reports.no_discount_data'.tr()));
+    }
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: SingleChildScrollView(
@@ -260,21 +308,26 @@ class _DiscountReportViewState extends State<_DiscountReportView> {
           columns: [
             const DataColumn(label: Text('#')),
             DataColumn(label: Text('reports.customer'.tr())),
-            DataColumn(label: Text('reports.total_sales_col'.tr()), numeric: true),
+            DataColumn(
+              label: Text('reports.total_sales_col'.tr()),
+              numeric: true,
+            ),
             DataColumn(label: Text('reports.discount'.tr()), numeric: true),
             DataColumn(label: Text('reports.discount_pct'.tr()), numeric: true),
             DataColumn(label: Text('reports.invoices'.tr()), numeric: true),
           ],
           rows: items.asMap().entries.map((e) {
             final i = e.value;
-            return DataRow(cells: [
-              DataCell(Text('${e.key + 1}')),
-              DataCell(Text(i.customerName)),
-              DataCell(Text(cs.formatCents(i.totalSalesCents))),
-              DataCell(Text(cs.formatCents(i.totalDiscountCents))),
-              DataCell(Text('${i.discountPercent.toStringAsFixed(1)}%')),
-              DataCell(Text('${i.invoiceCount}')),
-            ]);
+            return DataRow(
+              cells: [
+                DataCell(Text('${e.key + 1}')),
+                DataCell(Text(i.customerName)),
+                DataCell(Text(cs.formatCents(i.totalSalesCents))),
+                DataCell(Text(cs.formatCents(i.totalDiscountCents))),
+                DataCell(Text('${i.discountPercent.toStringAsFixed(1)}%')),
+                DataCell(Text('${i.invoiceCount}')),
+              ],
+            );
           }).toList(),
         ),
       ),
@@ -282,11 +335,17 @@ class _DiscountReportViewState extends State<_DiscountReportView> {
   }
 
   Widget _buildByInvoiceTable(DiscountReportsData data, CurrencyService cs) {
-    final items = data.byInvoice.where((i) =>
-        _searchQuery.isEmpty ||
-        i.invoiceNumber.toLowerCase().contains(_searchQuery) ||
-        (i.customerName?.toLowerCase().contains(_searchQuery) ?? false)).toList();
-    if (items.isEmpty) return Center(child: Text('reports.no_discount_data'.tr()));
+    final items = data.byInvoice
+        .where(
+          (i) =>
+              _searchQuery.isEmpty ||
+              i.invoiceNumber.toLowerCase().contains(_searchQuery) ||
+              (i.customerName?.toLowerCase().contains(_searchQuery) ?? false),
+        )
+        .toList();
+    if (items.isEmpty) {
+      return Center(child: Text('reports.no_discount_data'.tr()));
+    }
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: SingleChildScrollView(
@@ -304,16 +363,18 @@ class _DiscountReportViewState extends State<_DiscountReportView> {
           ],
           rows: items.asMap().entries.map((e) {
             final i = e.value;
-            return DataRow(cells: [
-              DataCell(Text('${e.key + 1}')),
-              DataCell(Text(i.invoiceNumber)),
-              DataCell(Text(i.customerName ?? '-')),
-              DataCell(Text(cs.formatCents(i.subtotalCents))),
-              DataCell(Text(cs.formatCents(i.discountCents))),
-              DataCell(Text('${i.discountPercent.toStringAsFixed(1)}%')),
-              DataCell(Text(cs.formatCents(i.totalCents))),
-              DataCell(Text(DateFormat.yMd().format(i.saleDate))),
-            ]);
+            return DataRow(
+              cells: [
+                DataCell(Text('${e.key + 1}')),
+                DataCell(Text(i.invoiceNumber)),
+                DataCell(Text(i.customerName ?? '-')),
+                DataCell(Text(cs.formatCents(i.subtotalCents))),
+                DataCell(Text(cs.formatCents(i.discountCents))),
+                DataCell(Text('${i.discountPercent.toStringAsFixed(1)}%')),
+                DataCell(Text(cs.formatCents(i.totalCents))),
+                DataCell(Text(DateFormat('dd/MM/yyyy').format(i.saleDate))),
+              ],
+            );
           }).toList(),
         ),
       ),
@@ -323,16 +384,32 @@ class _DiscountReportViewState extends State<_DiscountReportView> {
   void _onPrint(BuildContext context, DiscountReportsData data) {
     switch (widget.reportType) {
       case DiscountReportType.byProduct:
-        DiscountReportsPdfService.printByProduct(context: context, items: data.byProduct, data: data);
+        DiscountReportsPdfService.printByProduct(
+          context: context,
+          items: data.byProduct,
+          data: data,
+        );
         break;
       case DiscountReportType.byCategory:
-        DiscountReportsPdfService.printByCategory(context: context, items: data.byCategory, data: data);
+        DiscountReportsPdfService.printByCategory(
+          context: context,
+          items: data.byCategory,
+          data: data,
+        );
         break;
       case DiscountReportType.byCustomer:
-        DiscountReportsPdfService.printByCustomer(context: context, items: data.byCustomer, data: data);
+        DiscountReportsPdfService.printByCustomer(
+          context: context,
+          items: data.byCustomer,
+          data: data,
+        );
         break;
       case DiscountReportType.byInvoice:
-        DiscountReportsPdfService.printByInvoice(context: context, items: data.byInvoice, data: data);
+        DiscountReportsPdfService.printByInvoice(
+          context: context,
+          items: data.byInvoice,
+          data: data,
+        );
         break;
     }
   }
@@ -340,16 +417,32 @@ class _DiscountReportViewState extends State<_DiscountReportView> {
   void _onShare(BuildContext context, DiscountReportsData data) {
     switch (widget.reportType) {
       case DiscountReportType.byProduct:
-        DiscountReportsPdfService.shareByProduct(context: context, items: data.byProduct, data: data);
+        DiscountReportsPdfService.shareByProduct(
+          context: context,
+          items: data.byProduct,
+          data: data,
+        );
         break;
       case DiscountReportType.byCategory:
-        DiscountReportsPdfService.shareByCategory(context: context, items: data.byCategory, data: data);
+        DiscountReportsPdfService.shareByCategory(
+          context: context,
+          items: data.byCategory,
+          data: data,
+        );
         break;
       case DiscountReportType.byCustomer:
-        DiscountReportsPdfService.shareByCustomer(context: context, items: data.byCustomer, data: data);
+        DiscountReportsPdfService.shareByCustomer(
+          context: context,
+          items: data.byCustomer,
+          data: data,
+        );
         break;
       case DiscountReportType.byInvoice:
-        DiscountReportsPdfService.shareByInvoice(context: context, items: data.byInvoice, data: data);
+        DiscountReportsPdfService.shareByInvoice(
+          context: context,
+          items: data.byInvoice,
+          data: data,
+        );
         break;
     }
   }

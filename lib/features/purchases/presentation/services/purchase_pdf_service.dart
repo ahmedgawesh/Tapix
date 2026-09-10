@@ -279,10 +279,11 @@ class PurchasePdfService {
                 taxCents: purchase.taxCents.toBigInt().toInt(),
                 totalCents: purchase.totalCents.toBigInt().toInt(),
                 totalItems: items.length,
-                totalPieces:
-                    items.every((item) => item.measurementType == 'piece')
-                    ? items.fold<int>(0, (sum, item) => sum + item.quantity)
-                    : null,
+                quantitySummary: localizedQuantitySummary(
+                  items,
+                  quantityOf: (item) => item.quantity,
+                  measurementTypeOf: (item) => item.measurementType,
+                ),
                 cs: cs,
                 fonts: fonts,
                 includeTaxBreakdown: appSettings.includeTaxBreakdown,
@@ -415,15 +416,11 @@ class PurchasePdfService {
                 taxCents: state.taxCents.toBigInt().toInt(),
                 totalCents: state.totalCents.toBigInt().toInt(),
                 totalItems: state.items.length,
-                totalPieces:
-                    state.items.every(
-                      (item) => item.product.measurementType == 'piece',
-                    )
-                    ? state.items.fold<int>(
-                        0,
-                        (sum, item) => sum + item.quantity,
-                      )
-                    : null,
+                quantitySummary: localizedQuantitySummary(
+                  state.items,
+                  quantityOf: (item) => item.quantity,
+                  measurementTypeOf: (item) => item.product.measurementType,
+                ),
                 cs: cs,
                 fonts: fonts,
                 includeTaxBreakdown: appSettings.includeTaxBreakdown,
@@ -537,9 +534,7 @@ class PurchasePdfService {
                     ),
                     _pdfInfoRow(
                       'purchases.return_date'.tr(),
-                      DateFormat.yMMMd(
-                        locale.toString(),
-                      ).format(returnEntity.returnDate),
+                      DateFormat('dd/MM/yyyy').format(returnEntity.returnDate),
                       fonts.regular,
                     ),
                     _pdfInfoRow(
@@ -595,8 +590,12 @@ class PurchasePdfService {
                       fonts.regular,
                     ),
                     _pdfMoneyRow(
-                      'purchases.total_pieces_count'.tr(),
-                      '${returnItems.fold<int>(0, (sum, item) => sum + item.quantity)}',
+                      'measurement.total_quantity'.tr(),
+                      localizedQuantitySummary(
+                        returnItems,
+                        quantityOf: (item) => item.quantity,
+                        measurementTypeOf: (item) => item.measurementType,
+                      ),
                       fonts.regular,
                     ),
                     pw.SizedBox(height: 4),
@@ -800,6 +799,8 @@ class PurchasePdfService {
         return 'purchases.payment_card'.tr();
       case 'cheque':
         return 'purchases.payment_cheque'.tr();
+      case 'mixed':
+        return 'purchases.payment_mixed'.tr();
       case 'purchaseOrder':
         return 'purchases.payment_po'.tr();
       default:
@@ -831,7 +832,7 @@ class PurchasePdfService {
           ),
           _pdfInfoRow(
             'purchases.invoice_date'.tr(),
-            DateFormat.yMMMd(locale.toString()).format(date),
+            DateFormat('dd/MM/yyyy').format(date),
             fonts.regular,
           ),
           if (supplierName != null)
@@ -1000,7 +1001,7 @@ class PurchasePdfService {
     required int taxCents,
     required int totalCents,
     required int totalItems,
-    required int? totalPieces,
+    required String quantitySummary,
     required CurrencyService cs,
     required _PdfFonts fonts,
     bool includeTaxBreakdown = true,
@@ -1019,12 +1020,11 @@ class PurchasePdfService {
             '$totalItems',
             fonts.regular,
           ),
-          if (totalPieces != null)
-            _pdfMoneyRow(
-              'purchases.total_pieces_count'.tr(),
-              '$totalPieces',
-              fonts.regular,
-            ),
+          _pdfMoneyRow(
+            'measurement.total_quantity'.tr(),
+            quantitySummary,
+            fonts.regular,
+          ),
           pw.SizedBox(height: 4),
           _pdfMoneyRow(
             'purchases.subtotal'.tr(),
@@ -1338,9 +1338,10 @@ class PurchasePdfService {
     final discountCents = returnEntity.discountCents.toBigInt().toInt();
     final taxCents = returnEntity.taxCents.toBigInt().toInt();
     final totalCents = returnEntity.totalCents.toBigInt().toInt();
-    final totalPieces = returnItems.fold<int>(
-      0,
-      (sum, d) => sum + d.item.quantity,
+    final quantitySummary = localizedQuantitySummary(
+      returnItems,
+      quantityOf: (entry) => entry.item.quantity,
+      measurementTypeOf: (entry) => entry.item.measurementType,
     );
 
     pdf.addPage(
@@ -1376,9 +1377,7 @@ class PurchasePdfService {
                     ),
                     _pdfInfoRow(
                       'purchases.return_date'.tr(),
-                      DateFormat.yMMMd(
-                        locale.toString(),
-                      ).format(returnEntity.returnDate),
+                      DateFormat('dd/MM/yyyy').format(returnEntity.returnDate),
                       fonts.regular,
                     ),
                     if (supplierName != null && supplierName.isNotEmpty)
@@ -1439,8 +1438,8 @@ class PurchasePdfService {
                       fonts.regular,
                     ),
                     _pdfMoneyRow(
-                      'purchases.total_pieces_count'.tr(),
-                      '$totalPieces',
+                      'measurement.total_quantity'.tr(),
+                      quantitySummary,
                       fonts.regular,
                     ),
                     pw.SizedBox(height: 4),

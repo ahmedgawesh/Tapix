@@ -59,6 +59,8 @@ import '../../features/settings/presentation/screens/backup_restore_screen.dart'
 import '../../features/settings/presentation/screens/lan_network_settings_screen.dart';
 import '../../features/settings/presentation/screens/lan_client_session_screen.dart';
 import '../../features/settings/presentation/screens/lan_remote_sale_screen.dart';
+import '../../features/promotions/presentation/screens/promotions_screen.dart';
+import '../../features/promotions/presentation/screens/promotion_usage_report_screen.dart';
 import '../../features/employees/presentation/screens/employees_screen.dart';
 import '../../features/employees/presentation/screens/attendance_screen.dart';
 import '../../features/employees/presentation/screens/leave_requests_screen.dart';
@@ -120,6 +122,7 @@ import '../../features/reports/presentation/screens/profit_reports_hub_screen.da
 import '../../features/reports/presentation/screens/profit_report_screen.dart';
 import '../../features/reports/presentation/screens/stock_movement_report_screen.dart';
 import '../../features/financial_management/presentation/screens/financial_management_hub_screen.dart';
+import '../../features/cheques/presentation/screens/cheque_management_screen.dart';
 import '../../features/financial_management/presentation/screens/chart_of_accounts_screen.dart';
 import '../../features/financial_management/presentation/screens/accounting_periods_screen.dart';
 import '../../features/financial_management/presentation/screens/owner_finance_screen.dart';
@@ -768,6 +771,10 @@ class AppRouter {
         builder: (context, state) => const ReportsHubScreen(),
         routes: [
           GoRoute(
+            path: 'promotions',
+            builder: (context, state) => const PromotionUsageReportScreen(),
+          ),
+          GoRoute(
             path: 'trial-balance',
             builder: (context, state) => const TrialBalanceScreen(),
           ),
@@ -1154,6 +1161,10 @@ class AppRouter {
         builder: (context, state) => const LanNetworkSettingsScreen(),
       ),
       GoRoute(
+        path: '/promotions',
+        builder: (context, state) => const PromotionsScreen(),
+      ),
+      GoRoute(
         path: '/settings',
         builder: (context, state) => const SettingsScreen(),
         routes: [
@@ -1304,6 +1315,12 @@ class AppRouter {
             builder: (context, state) => const FixedAssetsScreen(),
           ),
         ],
+      ),
+      GoRoute(
+        path: '/cheques',
+        builder: (context, state) => ChequeManagementScreen(
+          initialStatus: state.uri.queryParameters['status'] ?? 'open',
+        ),
       ),
       GoRoute(
         path: '/accounting',

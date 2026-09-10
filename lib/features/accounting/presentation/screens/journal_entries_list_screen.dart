@@ -7,6 +7,8 @@ import '../../../../core/database/app_database.dart' hide Currency;
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../bloc/journal_entries_bloc.dart';
+import '../utils/journal_description_localizer.dart';
+import '../utils/journal_entry_localizer.dart';
 
 class JournalEntriesListScreen extends StatelessWidget {
   const JournalEntriesListScreen({super.key});
@@ -51,7 +53,11 @@ class _JournalEntriesListView extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.error_outline, size: 48, color: theme.colorScheme.error),
+                  Icon(
+                    Icons.error_outline,
+                    size: 48,
+                    color: theme.colorScheme.error,
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     'accounting.error_loading'.tr(),
@@ -70,7 +76,11 @@ class _JournalEntriesListView extends StatelessWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.book_outlined, size: 64, color: theme.colorScheme.outline),
+                      Icon(
+                        Icons.book_outlined,
+                        size: 64,
+                        color: theme.colorScheme.outline,
+                      ),
                       const SizedBox(height: 16),
                       Text(
                         'accounting.no_journal_entries'.tr(),
@@ -124,7 +134,9 @@ class _JournalEntriesListView extends StatelessWidget {
                       return _JournalEntryCard(
                         entry: entry,
                         currency: currency,
-                        onTap: () => context.push('/accounting/journal-entries/${entry.id}'),
+                        onTap: () => context.push(
+                          '/accounting/journal-entries/${entry.id}',
+                        ),
                       );
                     },
                   ),
@@ -163,28 +175,36 @@ class _JournalEntriesListView extends StatelessWidget {
                       label: Text('accounting.all'.tr()),
                       selected: true,
                       onSelected: (_) {
-                        bloc.add(const JournalEntriesFilterByStatusRequested(null));
+                        bloc.add(
+                          const JournalEntriesFilterByStatusRequested(null),
+                        );
                         Navigator.pop(ctx);
                       },
                     ),
                     FilterChip(
                       label: Text('accounting.status_draft'.tr()),
                       onSelected: (_) {
-                        bloc.add(const JournalEntriesFilterByStatusRequested('draft'));
+                        bloc.add(
+                          const JournalEntriesFilterByStatusRequested('draft'),
+                        );
                         Navigator.pop(ctx);
                       },
                     ),
                     FilterChip(
                       label: Text('accounting.status_posted'.tr()),
                       onSelected: (_) {
-                        bloc.add(const JournalEntriesFilterByStatusRequested('posted'));
+                        bloc.add(
+                          const JournalEntriesFilterByStatusRequested('posted'),
+                        );
                         Navigator.pop(ctx);
                       },
                     ),
                     FilterChip(
                       label: Text('accounting.status_voided'.tr()),
                       onSelected: (_) {
-                        bloc.add(const JournalEntriesFilterByStatusRequested('voided'));
+                        bloc.add(
+                          const JournalEntriesFilterByStatusRequested('voided'),
+                        );
                         Navigator.pop(ctx);
                       },
                     ),
@@ -202,28 +222,36 @@ class _JournalEntriesListView extends StatelessWidget {
                     FilterChip(
                       label: Text('accounting.type_manual'.tr()),
                       onSelected: (_) {
-                        bloc.add(const JournalEntriesFilterByTypeRequested('manual'));
+                        bloc.add(
+                          const JournalEntriesFilterByTypeRequested('manual'),
+                        );
                         Navigator.pop(ctx);
                       },
                     ),
                     FilterChip(
                       label: Text('accounting.type_sale'.tr()),
                       onSelected: (_) {
-                        bloc.add(const JournalEntriesFilterByTypeRequested('sale'));
+                        bloc.add(
+                          const JournalEntriesFilterByTypeRequested('sale'),
+                        );
                         Navigator.pop(ctx);
                       },
                     ),
                     FilterChip(
                       label: Text('accounting.type_purchase'.tr()),
                       onSelected: (_) {
-                        bloc.add(const JournalEntriesFilterByTypeRequested('purchase'));
+                        bloc.add(
+                          const JournalEntriesFilterByTypeRequested('purchase'),
+                        );
                         Navigator.pop(ctx);
                       },
                     ),
                     FilterChip(
                       label: Text('accounting.type_expense'.tr()),
                       onSelected: (_) {
-                        bloc.add(const JournalEntriesFilterByTypeRequested('expense'));
+                        bloc.add(
+                          const JournalEntriesFilterByTypeRequested('expense'),
+                        );
                         Navigator.pop(ctx);
                       },
                     ),
@@ -296,21 +324,26 @@ class _JournalEntryCard extends StatelessWidget {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: statusColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       'accounting.status_${entry.status}'.tr(),
-                      style: theme.textTheme.labelSmall?.copyWith(color: statusColor),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: statusColor,
+                      ),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
               Text(
-                entry.description,
+                localizedJournalDescription(entry.description),
                 style: theme.textTheme.bodyMedium,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -318,10 +351,14 @@ class _JournalEntryCard extends StatelessWidget {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Icon(Icons.calendar_today, size: 14, color: theme.colorScheme.onSurfaceVariant),
+                  Icon(
+                    Icons.calendar_today,
+                    size: 14,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                   const SizedBox(width: 4),
                   Text(
-                    DateFormat.yMMMd().format(entry.entryDate),
+                    DateFormat('dd/MM/yyyy').format(entry.entryDate),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -339,11 +376,15 @@ class _JournalEntryCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Icon(Icons.link, size: 14, color: theme.colorScheme.onSurfaceVariant),
+                    Icon(
+                      Icons.link,
+                      size: 14,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
-                        'accounting.type_${entry.entryType}'.tr(),
+                        localizedJournalEntryType(entry.entryType),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),

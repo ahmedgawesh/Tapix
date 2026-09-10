@@ -906,9 +906,9 @@ class _SaleTile extends StatelessWidget {
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
-                                        DateFormat.yMMMd().format(
-                                          sale.saleDate,
-                                        ),
+                                        DateFormat(
+                                          'dd/MM/yyyy',
+                                        ).format(sale.saleDate),
                                         style: theme.textTheme.bodySmall
                                             ?.copyWith(
                                               color: cs.onSurfaceVariant,

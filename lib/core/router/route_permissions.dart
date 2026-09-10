@@ -66,6 +66,7 @@ class RoutePermissions {
     '/suppliers': [UserRole.owner, UserRole.manager, UserRole.accountant],
     '/purchases': [UserRole.owner, UserRole.manager, UserRole.accountant],
     '/expenses': [UserRole.owner, UserRole.manager, UserRole.accountant],
+    '/promotions': [UserRole.owner, UserRole.manager],
     '/reports': [UserRole.owner, UserRole.manager, UserRole.accountant],
     '/settings': [UserRole.owner],
     '/devices': [UserRole.owner],
@@ -79,6 +80,7 @@ class RoutePermissions {
     '/employees/settings': [UserRole.owner, UserRole.manager],
     '/accounting': [UserRole.owner, UserRole.accountant],
     '/financial-management': [UserRole.owner, UserRole.accountant],
+    '/cheques': [UserRole.owner, UserRole.manager, UserRole.accountant],
     '/financial-management/chart-of-accounts': [
       UserRole.owner,
       UserRole.accountant,

@@ -57,7 +57,8 @@ class SupplierBalanceExcelService {
     await SharePlus.instance.share(
       ShareParams(
         files: [xFile],
-        subject: '${'reports.supplier_balance_report'.tr()} - ${item.supplierName}',
+        subject:
+            '${'reports.supplier_balance_report'.tr()} - ${item.supplierName}',
       ),
     );
   }
@@ -72,12 +73,10 @@ class SupplierBalanceExcelService {
     final sheet = excel['Supplier Balances'];
 
     // Summary header rows
-    sheet.appendRow([
-      TextCellValue('reports.supplier_balance_report'.tr()),
-    ]);
+    sheet.appendRow([TextCellValue('reports.supplier_balance_report'.tr())]);
     sheet.appendRow([
       TextCellValue(
-        '${DateFormat.yMMMd().format(data.dateRange.startDate)} - ${DateFormat.yMMMd().format(data.dateRange.endDate)}',
+        '${DateFormat('dd/MM/yyyy').format(data.dateRange.startDate)} - ${DateFormat('dd/MM/yyyy').format(data.dateRange.endDate)}',
       ),
     ]);
     sheet.appendRow([]); // blank row
@@ -164,16 +163,14 @@ class SupplierBalanceExcelService {
         item.isPayable
             ? 'reports.payable'.tr()
             : item.isReceivable
-                ? 'reports.receivable'.tr()
-                : 'reports.settled'.tr(),
+            ? 'reports.receivable'.tr()
+            : 'reports.settled'.tr(),
       ),
     ]);
     sheet.appendRow([]); // blank row
 
     // Detailed breakdown table
-    sheet.appendRow([
-      TextCellValue('reports.balance_breakdown'.tr()),
-    ]);
+    sheet.appendRow([TextCellValue('reports.balance_breakdown'.tr())]);
     sheet.appendRow([
       TextCellValue('reports.opening_balance'.tr()),
       TextCellValue(cs.formatCents(item.openingBalanceCents)),

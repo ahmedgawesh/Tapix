@@ -9,6 +9,9 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/measurement/measurement.dart';
 import '../../../../core/measurement/measurement_localization.dart';
+import '../../../../core/promotions/promotion_sale_snapshot.dart';
+import '../../../../core/payments/checkout_settlement.dart';
+import '../../../../core/payments/return_cheque_settlement_dialog.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
@@ -34,8 +37,15 @@ class SaleReturnFormScreen extends StatelessWidget {
   }
 }
 
-class _SaleReturnFormView extends StatelessWidget {
+class _SaleReturnFormView extends StatefulWidget {
   const _SaleReturnFormView();
+
+  @override
+  State<_SaleReturnFormView> createState() => _SaleReturnFormViewState();
+}
+
+class _SaleReturnFormViewState extends State<_SaleReturnFormView> {
+  List<CheckoutPaymentAllocation> _settlementAllocations = const [];
 
   Future<bool> _onWillPop(BuildContext context) async {
     final state = context.read<SaleReturnFormBloc>().state;
@@ -98,9 +108,12 @@ class _SaleReturnFormView extends StatelessWidget {
           });
         }
         if (state.error != null) {
+          final error = state.error!;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(state.error!),
+              content: Text(
+                error.startsWith('promotions.') ? error.tr() : error,
+              ),
               backgroundColor: colorScheme.error,
               behavior: SnackBarBehavior.floating,
             ),
@@ -420,7 +433,9 @@ class _SaleReturnFormView extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             'sales.cheque_warning_message'.tr(
-                              args: [DateFormat.yMMMd().format(sale.dueDate!)],
+                              args: [
+                                DateFormat('dd/MM/yyyy').format(sale.dueDate!),
+                              ],
                             ),
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: colorScheme.onSurfaceVariant,
@@ -536,7 +551,7 @@ class _SaleReturnFormView extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  DateFormat.yMMMd().format(sale.saleDate),
+                  DateFormat('dd/MM/yyyy').format(sale.saleDate),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w500,
                   ),
@@ -636,9 +651,19 @@ class _SaleReturnFormView extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(10),
-                    onTap: () => context.read<SaleReturnFormBloc>().add(
-                      SaleReturnRefundMethodChanged(m.$1),
-                    ),
+                    onTap: () async {
+                      if (m.$1 != 'cheque') {
+                        setState(() => _settlementAllocations = const []);
+                        context.read<SaleReturnFormBloc>().add(
+                          SaleReturnRefundMethodChanged(m.$1),
+                        );
+                        return;
+                      }
+                      context.read<SaleReturnFormBloc>().add(
+                        const SaleReturnRefundMethodChanged('cheque'),
+                      );
+                      await _configureChequeSettlement(context, state);
+                    },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
@@ -692,7 +717,12 @@ class _SaleReturnFormView extends StatelessWidget {
             // ── Phase 14.0 — cheque due date (only shown for cheque) ──
             if (state.refundMethod == 'cheque') ...[
               const SizedBox(height: 6),
-              _buildChequeDueDatePicker(context, state, theme, cs),
+              ReturnChequeSettlementSummary(
+                allocations: _settlementAllocations,
+                totalCents: state.totalRefundCents.toBigInt().toInt(),
+                formatAmount: sl<CurrencyService>().format,
+                onEdit: () => _configureChequeSettlement(context, state),
+              ),
             ],
             Divider(
               height: 20,
@@ -833,82 +863,29 @@ class _SaleReturnFormView extends StatelessWidget {
     );
   }
 
-  /// Phase 14.0 — cheque due-date picker shown when refund method is cheque.
-  /// Required-to-submit; an error border highlights the field until set.
-  Widget _buildChequeDueDatePicker(
+  Future<void> _configureChequeSettlement(
     BuildContext context,
     SaleReturnFormState state,
-    ThemeData theme,
-    ColorScheme cs,
-  ) {
-    final missing = state.dueDate == null;
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: () async {
-        final picked = await showDatePicker(
-          context: context,
-          initialDate:
-              state.dueDate ?? DateTime.now().add(const Duration(days: 30)),
-          firstDate: DateTime.now(),
-          lastDate: DateTime.now().add(const Duration(days: 365)),
-        );
-        if (picked != null && context.mounted) {
-          context.read<SaleReturnFormBloc>().add(
-            SaleReturnDueDateChanged(picked),
-          );
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        decoration: BoxDecoration(
-          color: missing
-              ? cs.errorContainer.withValues(alpha: 0.18)
-              : cs.surfaceContainerHighest.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: missing
-                ? cs.error.withValues(alpha: 0.5)
-                : cs.outlineVariant,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              LucideIcons.calendar,
-              size: 18,
-              color: missing ? cs.error : cs.primary,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'sales.cheque_due_date'.tr(),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: missing ? cs.error : cs.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    state.dueDate != null
-                        ? '${state.dueDate!.year}-'
-                              '${state.dueDate!.month.toString().padLeft(2, '0')}-'
-                              '${state.dueDate!.day.toString().padLeft(2, '0')}'
-                        : 'sales.select_due_date'.tr(),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: state.dueDate != null ? null : cs.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(LucideIcons.chevronDown, size: 18, color: cs.onSurfaceVariant),
-          ],
-        ),
-      ),
+  ) async {
+    final totalCents = state.totalRefundCents.toBigInt().toInt();
+    if (totalCents <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('sales.select_items_to_return'.tr())),
+      );
+      return;
+    }
+    final currency = sl<CurrencyService>();
+    final allocations = await showReturnChequeSettlementDialog(
+      context,
+      totalCents: totalCents,
+      formattedTotal: currency.format(totalCents),
+      initialDueDate: state.dueDate,
+      initialAllocations: _settlementAllocations,
+    );
+    if (allocations == null || !context.mounted) return;
+    setState(() => _settlementAllocations = allocations);
+    context.read<SaleReturnFormBloc>().add(
+      SaleReturnDueDateChanged(returnChequePrimaryDueDate(allocations)),
     );
   }
 
@@ -1071,6 +1048,7 @@ class _SaleReturnFormView extends StatelessWidget {
 
                   return _ReturnItemTile(
                     item: item,
+                    promotionApplications: state.promotionsForSaleItem(item.id),
                     returnItem: isSelected ? returnItem.first : null,
                     isSelected: isSelected,
                     currencyService: cs,
@@ -1423,8 +1401,30 @@ class _SaleReturnFormView extends StatelessWidget {
                         final pinOk = await showPinVerificationDialog(context);
                         if (!pinOk || !context.mounted) return;
                       }
+                      var allocations = _settlementAllocations;
+                      if (state.refundMethod == 'cheque' &&
+                          !isReturnChequeSettlementValid(
+                            allocations,
+                            totalCents: state.totalRefundCents
+                                .toBigInt()
+                                .toInt(),
+                          )) {
+                        await _configureChequeSettlement(context, state);
+                        allocations = _settlementAllocations;
+                        if (!isReturnChequeSettlementValid(
+                          allocations,
+                          totalCents: state.totalRefundCents.toBigInt().toInt(),
+                        )) {
+                          return;
+                        }
+                      }
+                      if (!context.mounted) return;
                       context.read<SaleReturnFormBloc>().add(
-                        const SaleReturnFormSubmitted(),
+                        SaleReturnFormSubmitted(
+                          settlementAllocations: state.refundMethod == 'cheque'
+                              ? allocations
+                              : const [],
+                        ),
                       );
                     },
               style: FilledButton.styleFrom(backgroundColor: colorScheme.error),
@@ -1454,6 +1454,7 @@ class _ReturnItemTile extends StatefulWidget {
   final CurrencyService currencyService;
   final int maxReturnableQty;
   final int alreadyReturnedQty;
+  final List<SalePromotionSnapshot> promotionApplications;
   final VoidCallback? onToggle;
   final ValueChanged<int> onQuantityChanged;
   final ValueChanged<String> onReasonChanged;
@@ -1465,6 +1466,7 @@ class _ReturnItemTile extends StatefulWidget {
     required this.currencyService,
     required this.maxReturnableQty,
     required this.alreadyReturnedQty,
+    this.promotionApplications = const [],
     this.onToggle,
     required this.onQuantityChanged,
     required this.onReasonChanged,
@@ -1607,6 +1609,30 @@ class _ReturnItemTileState extends State<_ReturnItemTile> {
                             : null,
                       ),
                     ),
+                    if (widget.promotionApplications.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: widget.promotionApplications
+                            .map((offer) {
+                              final allocation = offer.allocations.firstWhere(
+                                (row) => row.saleItemId == widget.item.id,
+                              );
+                              return Chip(
+                                visualDensity: VisualDensity.compact,
+                                avatar: const Icon(
+                                  LucideIcons.badgePercent,
+                                  size: 14,
+                                ),
+                                label: Text(
+                                  '${offer.name}  -${cs.format(allocation.discountCents)}',
+                                ),
+                              );
+                            })
+                            .toList(growable: false),
+                      ),
+                    ],
                     const SizedBox(height: 2),
                     Text(
                       '${cs.format(widget.item.unitPriceCents.toBigInt().toInt())} × ${localizedQuantity(widget.item.quantity, widget.item.measurementType)}  •  ${cs.format(widget.item.totalCents.toBigInt().toInt())}',

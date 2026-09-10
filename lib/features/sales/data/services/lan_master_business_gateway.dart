@@ -6,16 +6,22 @@ import '../../../../core/database/daos/adjustment_return_dao.dart';
 import '../../../../core/database/daos/pharmacy_dao.dart';
 import '../../../../core/measurement/measurement.dart';
 import '../../../../core/money/money.dart';
+import '../../../../core/payments/checkout_settlement.dart';
 import '../../../../core/pricing/discount.dart';
 import '../../../../core/pricing/invoice_pricing_engine.dart';
 import '../../../../core/pricing/line_item_pricing_engine.dart';
 import '../../../../core/pricing/pricing_snapshot.dart';
+import '../../../../core/promotions/promotion_engine.dart';
+import '../../../../core/promotions/promotion_margin_policy.dart';
+import '../../../../core/promotions/promotion_repository.dart';
+import '../../../../core/promotions/promotion_return_policy.dart';
 import '../../../../core/services/cashier_shift_service.dart';
 import '../../../../core/services/currency_service.dart'
     show CurrencyService, SymbolPosition;
 import '../../../../core/services/currency_service.dart'
     as currency_model
     show Currency;
+import '../../../../core/services/feature_gate_service.dart';
 import '../../../../core/services/commissions/commission_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
 import '../../../../core/services/loyalty/loyalty_points_service.dart';
@@ -36,6 +42,8 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
   final CommissionService _commissions;
   final LoyaltyPointsService _loyaltyPoints;
   final PharmacyDao _pharmacy;
+  final PromotionRepository _promotions;
+  final FeatureGateService _featureGate;
 
   const LanMasterBusinessGatewayImpl({
     required AppDatabase database,
@@ -48,6 +56,8 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     required CommissionService commissions,
     required LoyaltyPointsService loyaltyPoints,
     required PharmacyDao pharmacy,
+    required PromotionRepository promotions,
+    required FeatureGateService featureGate,
   }) : _database = database,
        _sales = sales,
        _settings = settings,
@@ -57,7 +67,12 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
        _journalEntries = journalEntries,
        _commissions = commissions,
        _loyaltyPoints = loyaltyPoints,
-       _pharmacy = pharmacy;
+       _pharmacy = pharmacy,
+       _promotions = promotions,
+       _featureGate = featureGate;
+
+  bool _isEnabled(AppFeature feature, bool settingEnabled) =>
+      _featureGate.isEnabled(feature, settingEnabled: settingEnabled);
 
   @override
   Future<LanSalesPage> fetchSales({required int limit}) async {
@@ -135,6 +150,9 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     if (sale == null) return null;
     final items = await _sales.getSaleItems(saleId);
     final shift = await _shifts.getSaleShift(saleId);
+    final promotionApplications = await _promotions.loadSaleApplications(
+      saleId,
+    );
     final storedCurrency =
         await (_database.select(_database.currencies)
               ..where((row) => row.id.equals(sale.currencyId))
@@ -197,6 +215,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
             ),
           )
           .toList(growable: false),
+      promotionApplications: promotionApplications,
       currencyCode: currencyCode,
       currencySymbol: storedCurrency?.symbol ?? currencyDefinition.symbol,
       currencyDecimalDigits: currencyDefinition.decimalDigits,
@@ -256,8 +275,15 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     final safeLimit = limit.clamp(1, 200);
     final normalized = query.trim();
     final appSettings = _settings.current;
-    final medicineProductIds =
-        appSettings.enablePharmacyFeatures && normalized.isNotEmpty
+    final pharmacyEnabled = _isEnabled(
+      AppFeature.pharmacy,
+      appSettings.enablePharmacyFeatures,
+    );
+    final promotionsEnabled = _isEnabled(
+      AppFeature.promotions,
+      appSettings.enablePromotions,
+    );
+    final medicineProductIds = pharmacyEnabled && normalized.isNotEmpty
         ? await _pharmacy.searchMedicineProductIds(normalized)
         : const <int>{};
     final statement = _database.select(_database.products)
@@ -283,9 +309,44 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     final pageRows = rows.take(safeLimit).toList(growable: false);
     final catalogProducts = await _buildCatalogProducts(
       pageRows,
-      includeMedicine: appSettings.enablePharmacyFeatures,
+      includeMedicine: pharmacyEnabled,
     );
     final currency = await _selectedCurrency();
+    final activePromotionRules = promotionsEnabled
+        ? await _promotions.loadActiveRules()
+        : const <PromotionRule>[];
+    final promotionProductIds = <int>{};
+    final promotionVariantIds = <int>{};
+    for (final rule in activePromotionRules) {
+      for (final scope in rule.qualifierScopes.where(
+        (scope) => scope.isRequiredComponent,
+      )) {
+        if (scope.type == PromotionScopeType.product) {
+          promotionProductIds.add(scope.targetId!);
+        } else if (scope.type == PromotionScopeType.variant) {
+          promotionVariantIds.add(scope.targetId!);
+        }
+      }
+    }
+    if (promotionVariantIds.isNotEmpty) {
+      final variantRows = await (_database.select(
+        _database.productVariants,
+      )..where((row) => row.id.isIn(promotionVariantIds))).get();
+      promotionProductIds.addAll(variantRows.map((row) => row.productId));
+    }
+    final promotionProducts = promotionProductIds.isEmpty
+        ? const <LanCatalogProduct>[]
+        : await _buildCatalogProducts(
+            await (_database.select(_database.products)
+                  ..where(
+                    (row) =>
+                        row.isActive.equals(true) &
+                        row.id.isIn(promotionProductIds),
+                  )
+                  ..orderBy([(row) => OrderingTerm.asc(row.name)]))
+                .get(),
+            includeMedicine: false,
+          );
 
     return LanCatalogPage(
       products: catalogProducts,
@@ -303,7 +364,12 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       requireCustomerForSales: appSettings.requireCustomerForSales,
       allowDiscounts: appSettings.allowDiscounts,
       maxDiscountPercent: appSettings.maxDiscountPercent,
-      enablePharmacyFeatures: appSettings.enablePharmacyFeatures,
+      enablePharmacyFeatures: pharmacyEnabled,
+      enablePromotions: promotionsEnabled,
+      promotionRules: activePromotionRules
+          .map((rule) => rule.toTransportMap())
+          .toList(growable: false),
+      promotionProducts: promotionProducts,
     );
   }
 
@@ -311,7 +377,10 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
   Future<LanMedicineAlternativesResult> fetchMedicineAlternatives({
     required int productId,
   }) async {
-    if (!_settings.current.enablePharmacyFeatures) {
+    if (!_isEnabled(
+      AppFeature.pharmacy,
+      _settings.current.enablePharmacyFeatures,
+    )) {
       return LanMedicineAlternativesResult(
         sourceProductId: productId,
         alternatives: const [],
@@ -703,6 +772,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       summaries[sale.id] = LanReturnableSaleSummary(
         saleId: sale.id,
         invoiceNumber: sale.invoiceNumber,
+        customerId: sale.customerId,
         customerName: customer?.name,
         saleDate: sale.saleDate,
         totalCents: _cents(sale.totalCents),
@@ -815,6 +885,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       sale: LanReturnableSaleSummary(
         saleId: sale.id,
         invoiceNumber: sale.invoiceNumber,
+        customerId: sale.customerId,
         customerName: customer?.name,
         saleDate: sale.saleDate,
         totalCents: _cents(sale.totalCents),
@@ -826,6 +897,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
         returnableLineCount: lines.length,
       ),
       lines: lines,
+      promotionApplications: await _promotions.loadSaleApplications(sale.id),
     );
   }
 
@@ -970,6 +1042,9 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
         currencySymbol: currency.symbol,
         currencyDecimalDigits: currency.decimalDigits,
         currencySymbolAfter: currency.symbolPosition == SymbolPosition.after,
+        promotionApplications: await _promotions.loadSaleApplications(
+          ret.saleId,
+        ),
       );
     }
 
@@ -1151,6 +1226,25 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
         statusCode: 409,
       );
     }
+    if (request.refundMethod == 'cheque' && details.sale.customerId == null) {
+      throw const LanBusinessException(
+        'customer_required_for_cheque_return',
+        'A cheque refund requires a customer.',
+      );
+    }
+    final settlementAllocations = request.payments
+        .map(
+          (payment) => CheckoutPaymentAllocation(
+            method: payment.method,
+            amountCents: payment.amountCents,
+            reference: payment.reference,
+            bankName: payment.bankName,
+            issueDate: payment.issueDate,
+            dueDate: payment.dueDate,
+            note: payment.note,
+          ),
+        )
+        .toList(growable: false);
     final availableById = {
       for (final line in details.lines) line.saleItemId: line,
     };
@@ -1185,6 +1279,24 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       );
     }
 
+    final bundleViolation = PromotionReturnPolicy.validateLinkedReturn(
+      promotionApplications: details.promotionApplications,
+      previouslyReturnedQuantityBySaleItemId: {
+        for (final line in details.lines)
+          line.saleItemId: line.linkedReturnedQuantity,
+      },
+      requestedQuantityBySaleItemId: {
+        for (final line in request.lines) line.saleItemId: line.quantity,
+      },
+    );
+    if (bundleViolation != null) {
+      throw const LanBusinessException(
+        'promotion_bundle_return_required',
+        'All items and quantities in this free-item promotion must be returned together.',
+        statusCode: 409,
+      );
+    }
+
     final returnId = await _sales.createSaleReturn(
       saleId: request.saleId,
       currencyId: details.sale.currencyId,
@@ -1201,6 +1313,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       idempotencyKey: key,
       actorUserId: actor.id,
       taxInclusiveAtPost: details.sale.taxInclusiveAtPost,
+      settlementAllocations: settlementAllocations,
     );
     final created =
         await (_database.select(_database.saleReturns)
@@ -1246,6 +1359,19 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
         'A cheque due date is required.',
       );
     }
+    final settlementAllocations = request.payments
+        .map(
+          (payment) => CheckoutPaymentAllocation(
+            method: payment.method,
+            amountCents: payment.amountCents,
+            reference: payment.reference,
+            bankName: payment.bankName,
+            issueDate: payment.issueDate?.toLocal(),
+            dueDate: payment.dueDate?.toLocal(),
+            note: payment.note,
+          ),
+        )
+        .toList(growable: false);
     const reasons = {
       'damaged',
       'defective',
@@ -1304,7 +1430,8 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       }
     }
     if ((request.refundMethod == 'credit' ||
-            request.refundMethod == 'cheque') &&
+            request.refundMethod == 'cheque' ||
+            settlementAllocations.isNotEmpty) &&
         customer == null) {
       throw const LanBusinessException(
         'customer_required_for_credit',
@@ -1489,8 +1616,12 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       totalCents: Decimal.fromInt(pricing.total.cents),
       notes: Value(taggedNotes),
       returnDate: Value(request.returnDate.toLocal()),
-      refundMethod: Value(request.refundMethod),
-      dueDate: Value(request.dueDate?.toLocal()),
+      refundMethod: Value(
+        settlementAllocations.isEmpty ? request.refundMethod : 'mixed',
+      ),
+      dueDate: Value(
+        settlementAllocations.isEmpty ? request.dueDate?.toLocal() : null,
+      ),
       idempotencyKey: Value(key),
       returnMode: const Value('auto_adjustment'),
       modeReason: const Value('Remote unlinked sale return'),
@@ -1527,6 +1658,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
         userId: actor.id,
         commissionService: _commissions,
         loyaltyPointsService: _loyaltyPoints,
+        settlementAllocations: settlementAllocations,
       );
       final created = await _adjustmentReturns.getSaleAdjReturnById(returnId);
       if (created == null) {
@@ -1596,7 +1728,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       }
     }
 
-    const allowedPayments = {'cash', 'card', 'credit', 'cheque'};
+    const allowedPayments = {'cash', 'card', 'credit', 'cheque', 'mixed'};
     if (!allowedPayments.contains(request.paymentMethod)) {
       throw const LanBusinessException(
         'invalid_payment_method',
@@ -1626,7 +1758,11 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       );
     }
     if ((request.paymentMethod == 'credit' ||
-            request.paymentMethod == 'cheque') &&
+            request.paymentMethod == 'cheque' ||
+            request.payments.any(
+              (payment) =>
+                  payment.method == 'cheque' || payment.method == 'check',
+            )) &&
         customer == null) {
       throw const LanBusinessException(
         'customer_required_for_credit',
@@ -1781,7 +1917,16 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       );
     }
 
-    final pricing = InvoicePricingEngine.compute(
+    final currency = await _selectedCurrency();
+    if (currency == null) {
+      throw const LanBusinessException(
+        'currency_unavailable',
+        'The master has no configured currency.',
+        statusCode: 409,
+      );
+    }
+
+    final manualPricing = InvoicePricingEngine.compute(
       InvoicePricingInput(
         lines: pricingInputs,
         enableTaxCalculations: appSettings.enableTaxCalculations,
@@ -1789,6 +1934,93 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
         taxInclusivePricing: appSettings.taxInclusivePricing,
       ),
     );
+
+    var promotionEvaluation = const PromotionEvaluationResult(applications: []);
+    if (_isEnabled(AppFeature.promotions, appSettings.enablePromotions)) {
+      final rules = await _promotions.loadActiveRules();
+      final promotionLines = <PromotionCartLine>[];
+      for (var index = 0; index < resolved.length; index++) {
+        final value = resolved[index];
+        final quantityScale = MeasurementType.fromDb(
+          value.product.measurementType,
+        ).quantityScale;
+        promotionLines.add(
+          PromotionCartLine(
+            lineId: 'lan_$index',
+            productId: value.product.id,
+            variantId: value.variant?.id,
+            categoryId: value.product.categoryId,
+            measurementType: value.product.measurementType,
+            priceMode: value.request.priceTier,
+            quantity: value.request.quantity,
+            quantityScale: quantityScale,
+            unitPrice: Money.fromCents(value.unitPriceCents),
+            existingDiscount: manualPricing.lines[index].totalLineDiscount,
+          ),
+        );
+      }
+      promotionEvaluation = PromotionEngine.evaluate(
+        cart: PromotionCart(
+          currencyId: currency.id,
+          evaluatedAt: DateTime.now(),
+          lines: promotionLines,
+        ),
+        promotions: rules,
+      );
+    }
+
+    final promotionByLine = promotionEvaluation.discountByLine;
+    final finalPricingInputs = <LineItemPricingInput>[];
+    for (var index = 0; index < resolved.length; index++) {
+      final value = resolved[index];
+      final combinedDiscount =
+          manualPricing.lines[index].totalLineDiscount +
+          (promotionByLine['lan_$index'] ?? Money.zero);
+      finalPricingInputs.add(
+        LineItemPricingInput(
+          unitPrice: Money.fromCents(value.unitPriceCents),
+          quantity: value.request.quantity,
+          quantityScale: MeasurementType.fromDb(
+            value.product.measurementType,
+          ).quantityScale,
+          discount: combinedDiscount.isPositive
+              ? Discount.fixed(combinedDiscount)
+              : Discount.none,
+          isTaxable: value.product.isTaxable,
+          productTaxRateBps: value.product.salesTaxRateBps,
+        ),
+      );
+    }
+    final pricing = InvoicePricingEngine.compute(
+      InvoicePricingInput(
+        lines: finalPricingInputs,
+        enableTaxCalculations: appSettings.enableTaxCalculations,
+        defaultTaxRateBps: (appSettings.defaultSalesTaxRate * 100).round(),
+        taxInclusivePricing: appSettings.taxInclusivePricing,
+      ),
+    );
+
+    final profitableFreeBundleLineIds =
+        PromotionMarginPolicy.profitableFreeBundleLineIds(
+          evaluation: promotionEvaluation,
+          lines: [
+            for (var index = 0; index < resolved.length; index++)
+              PromotionMarginLine(
+                lineId: 'lan_$index',
+                quantity: resolved[index].request.quantity,
+                quantityScale: MeasurementType.fromDb(
+                  resolved[index].product.measurementType,
+                ).quantityScale,
+                unitCost: Money.fromCents(
+                  _cents(
+                    resolved[index].variant?.costCents ??
+                        resolved[index].product.costCents,
+                  ),
+                ),
+                netBeforePromotions: manualPricing.lines[index].adjustedNet,
+              ),
+          ],
+        );
 
     for (var index = 0; index < resolved.length; index++) {
       final value = resolved[index];
@@ -1802,7 +2034,8 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       final totalCostCents = Money.fromCents(
         unitCostCents,
       ).multiplyRatio(value.request.quantity, quantityScale).round().cents;
-      if (pricing.lines[index].adjustedNet.cents < totalCostCents) {
+      if (pricing.lines[index].adjustedNet.cents < totalCostCents &&
+          !profitableFreeBundleLineIds.contains('lan_$index')) {
         throw const LanBusinessException(
           'sale_below_cost',
           'The discount would sell an item below its recorded cost.',
@@ -1836,45 +2069,105 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     }
 
     final totalCents = pricing.total.cents;
+    final initialPayments = request.payments
+        .map(
+          (payment) => CheckoutPaymentAllocation(
+            method: payment.method,
+            amountCents: payment.amountCents,
+            reference: payment.reference,
+            bankName: payment.bankName,
+            issueDate: payment.issueDate,
+            dueDate: payment.dueDate,
+            note: payment.note,
+          ),
+        )
+        .toList(growable: false);
     final requestedPaid = request.paidAmountCents ?? totalCents;
     late final int paidAmountCents;
-    switch (request.paymentMethod) {
-      case 'card':
-        paidAmountCents = totalCents;
-        break;
-      case 'credit':
-      case 'cheque':
-        paidAmountCents = 0;
-        break;
-      case 'cash':
-        if (requestedPaid < 0) {
+    if (initialPayments.isNotEmpty) {
+      const allowedSettlementMethods = {'cash', 'card', 'cheque', 'check'};
+      if (initialPayments.any(
+        (payment) => !allowedSettlementMethods.contains(payment.method),
+      )) {
+        throw const LanBusinessException(
+          'invalid_payment_method',
+          'Unsupported settlement payment method.',
+        );
+      }
+      final settlement = CheckoutSettlement(initialPayments);
+      try {
+        settlement.validate(invoiceTotalCents: totalCents);
+      } on ArgumentError catch (error) {
+        throw LanBusinessException(
+          'invalid_settlement',
+          error.message?.toString() ?? 'Invalid checkout settlement.',
+        );
+      }
+      paidAmountCents = settlement.totalSettledCents;
+      if (requestedPaid != paidAmountCents) {
+        throw const LanBusinessException(
+          'settlement_total_mismatch',
+          'Settlement total does not match the paid amount.',
+        );
+      }
+      if (settlement.totalAllocatedCents < totalCents) {
+        if (!appSettings.allowPartialPayments) {
           throw const LanBusinessException(
-            'invalid_paid_amount',
-            'Paid amount cannot be negative.',
+            'partial_payment_disabled',
+            'Partial payments are disabled on the master.',
           );
         }
-        if (requestedPaid < totalCents) {
-          if (!appSettings.allowPartialPayments) {
-            throw const LanBusinessException(
-              'partial_payment_disabled',
-              'Partial payments are disabled on the master.',
-            );
-          }
-          if (customer == null) {
-            throw const LanBusinessException(
-              'customer_required_for_partial_payment',
-              'Partial payment requires a customer.',
-            );
-          }
+        if (customer == null) {
+          throw const LanBusinessException(
+            'customer_required_for_partial_payment',
+            'Partial payment requires a customer.',
+          );
         }
-        // The original sale screen sends the full amount only when the user
-        // explicitly chooses to keep an overpayment as customer credit. A
-        // walk-in customer cannot own a credit balance, so their excess is
-        // still treated as returned change and capped at the invoice total.
-        paidAmountCents = requestedPaid > totalCents && customer == null
-            ? totalCents
-            : requestedPaid;
-        break;
+      }
+    } else {
+      switch (request.paymentMethod) {
+        case 'card':
+          paidAmountCents = totalCents;
+          break;
+        case 'credit':
+        case 'cheque':
+          paidAmountCents = 0;
+          break;
+        case 'cash':
+          if (requestedPaid < 0) {
+            throw const LanBusinessException(
+              'invalid_paid_amount',
+              'Paid amount cannot be negative.',
+            );
+          }
+          if (requestedPaid < totalCents) {
+            if (!appSettings.allowPartialPayments) {
+              throw const LanBusinessException(
+                'partial_payment_disabled',
+                'Partial payments are disabled on the master.',
+              );
+            }
+            if (customer == null) {
+              throw const LanBusinessException(
+                'customer_required_for_partial_payment',
+                'Partial payment requires a customer.',
+              );
+            }
+          }
+          // The original sale screen sends the full amount only when the user
+          // explicitly chooses to keep an overpayment as customer credit. A
+          // walk-in customer cannot own a credit balance, so their excess is
+          // still treated as returned change and capped at the invoice total.
+          paidAmountCents = requestedPaid > totalCents && customer == null
+              ? totalCents
+              : requestedPaid;
+          break;
+        case 'mixed':
+          throw const LanBusinessException(
+            'settlement_required',
+            'Mixed payment requires settlement details.',
+          );
+      }
     }
 
     final items = <SaleItemInput>[];
@@ -1886,6 +2179,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       ).quantityScale;
       items.add(
         SaleItemInput(
+          lineId: 'lan_$index',
           productId: value.product.id,
           variantId: value.variant?.id,
           quantity: value.request.quantity,
@@ -1899,15 +2193,6 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
           employeeId: value.salesperson?.id,
           employeeName: value.salesperson?.name,
         ),
-      );
-    }
-
-    final currency = await _selectedCurrency();
-    if (currency == null) {
-      throw const LanBusinessException(
-        'currency_unavailable',
-        'The master has no configured currency.',
-        statusCode: 409,
       );
     }
 
@@ -1928,6 +2213,8 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       idempotencyKey: key,
       actorUserId: actor.id,
       taxInclusiveAtPost: appSettings.taxInclusivePricing,
+      appliedPromotions: promotionEvaluation.applications,
+      initialPayments: initialPayments,
     );
 
     final sale = await (_database.select(

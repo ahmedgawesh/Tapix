@@ -5,8 +5,10 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/database/daos/cheque_instrument_dao.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/utils/app_date_formatter.dart';
 import '../../../auth/domain/entities/permission_constants.dart';
 import '../../../auth/presentation/widgets/permission_gate.dart';
 import '../../../accounting/domain/repositories/journal_repository.dart';
@@ -493,133 +495,216 @@ class _AccountTypeGroup extends StatelessWidget {
 
         // Account cards
         ...accounts.map(
-          (acc) => Card(
-            margin: const EdgeInsets.only(bottom: 6),
-            elevation: 0,
-            child: ListTile(
-              dense: true,
-              leading: CircleAvatar(
-                radius: 16,
-                backgroundColor: color.withValues(alpha: 0.12),
-                child: Text(
-                  acc.accountCode.length > 2
-                      ? acc.accountCode.substring(0, 2)
-                      : acc.accountCode,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              title: Row(
-                children: [
-                  Text(
-                    acc.accountCode,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      localizedAccountName(acc),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              subtitle: localizedAccountDescription(acc) != null
-                  ? Text(
-                      localizedAccountDescription(acc)!,
-                      style: theme.textTheme.bodySmall,
-                    )
-                  : null,
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _PostedAccountBalance(
-                    account: acc,
-                    currencyService: cs,
-                    positiveColor: color,
-                  ),
-                  if (!acc.isSystemAccount) ...[
-                    const SizedBox(width: 4),
-                    PermissionGate(
-                      permission: Permissions.manageAccounting,
-                      child: PopupMenuButton<String>(
-                        itemBuilder: (_) => [
-                          PopupMenuItem(
-                            value: 'edit',
-                            child: Row(
-                              children: [
-                                const Icon(LucideIcons.edit, size: 16),
-                                const SizedBox(width: 8),
-                                Text('common.edit'.tr()),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Row(
-                              children: [
-                                Icon(
-                                  LucideIcons.trash2,
-                                  size: 16,
-                                  color: colorScheme.error,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'common.delete'.tr(),
-                                  style: TextStyle(color: colorScheme.error),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                        onSelected: (action) {
-                          if (action == 'edit') onEdit(acc);
-                          if (action == 'delete') onDelete(acc);
-                        },
-                      ),
-                    ),
-                  ],
-                  IconButton(
-                    icon: Icon(
-                      LucideIcons.info,
-                      size: 16,
-                      color: colorScheme.onSurfaceVariant.withValues(
-                        alpha: 0.6,
-                      ),
-                    ),
-                    tooltip: 'financial_management.account_info_tooltip'.tr(),
-                    onPressed: () => onInfo(acc),
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 28,
-                      minHeight: 28,
-                    ),
-                  ),
-                  if (acc.isSystemAccount)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4),
-                      child: Icon(
-                        LucideIcons.lock,
-                        size: 14,
-                        color: colorScheme.onSurfaceVariant.withValues(
-                          alpha: 0.5,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+          (acc) => _AccountCard(
+            account: acc,
+            color: color,
+            currencyService: cs,
+            onEdit: () => onEdit(acc),
+            onDelete: () => onDelete(acc),
+            onInfo: () => onInfo(acc),
           ),
         ),
         const SizedBox(height: 12),
+      ],
+    );
+  }
+}
+
+class _AccountCard extends StatelessWidget {
+  final Account account;
+  final Color color;
+  final CurrencyService currencyService;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onInfo;
+
+  const _AccountCard({
+    required this.account,
+    required this.color,
+    required this.currencyService,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onInfo,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final description = localizedAccountDescription(account);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 6),
+      elevation: 0,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 440;
+          final balance = _PostedAccountBalance(
+            account: account,
+            currencyService: currencyService,
+            positiveColor: color,
+          );
+          return Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(12, 10, 8, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: color.withValues(alpha: 0.12),
+                      child: Text(
+                        account.accountCode.length > 2
+                            ? account.accountCode.substring(0, 2)
+                            : account.accountCode,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: color,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                account.accountCode,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  localizedAccountName(account),
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (description != null) ...[
+                            const SizedBox(height: 2),
+                            Text(description, style: theme.textTheme.bodySmall),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    if (!compact) ...[
+                      Flexible(child: balance),
+                      const SizedBox(width: 6),
+                    ],
+                    _AccountCardActions(
+                      account: account,
+                      onEdit: onEdit,
+                      onDelete: onDelete,
+                      onInfo: onInfo,
+                    ),
+                  ],
+                ),
+                if (compact) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: balance,
+                  ),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _AccountCardActions extends StatelessWidget {
+  final Account account;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onInfo;
+
+  const _AccountCardActions({
+    required this.account,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onInfo,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (!account.isSystemAccount)
+          PermissionGate(
+            permission: Permissions.manageAccounting,
+            child: PopupMenuButton<String>(
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      const Icon(LucideIcons.edit, size: 16),
+                      const SizedBox(width: 8),
+                      Text('common.edit'.tr()),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(
+                        LucideIcons.trash2,
+                        size: 16,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'common.delete'.tr(),
+                        style: TextStyle(color: colorScheme.error),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              onSelected: (action) {
+                if (action == 'edit') onEdit();
+                if (action == 'delete') onDelete();
+              },
+            ),
+          ),
+        IconButton(
+          icon: Icon(
+            LucideIcons.info,
+            size: 16,
+            color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+          ),
+          tooltip: 'financial_management.account_info_tooltip'.tr(),
+          onPressed: onInfo,
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+        ),
+        if (account.isSystemAccount)
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: 4),
+            child: Icon(
+              LucideIcons.lock,
+              size: 14,
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+            ),
+          ),
       ],
     );
   }
@@ -640,6 +725,54 @@ class _PostedAccountBalance extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    if (_PendingChequeMonitor.isPendingAccount(account.accountCode)) {
+      return StreamBuilder<List<ChequeInstrument>>(
+        stream: ChequeInstrumentDao(sl<AppDatabase>()).watchAll(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            );
+          }
+          final pending = snapshot.data!
+              .where(
+                (cheque) => _PendingChequeMonitor.belongsToAccount(
+                  account.accountCode,
+                  cheque,
+                ),
+              )
+              .toList(growable: false);
+          final pendingCents = pending.fold<int>(
+            0,
+            (sum, cheque) => sum + cheque.amountCents.toBigInt().toInt(),
+          );
+          return Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                currencyService.formatCents(pendingCents),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: positiveColor,
+                ),
+              ),
+              Text(
+                'financial_management.pending_cheque_card_hint'.tr(
+                  args: [pending.length.toString()],
+                ),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          );
+        },
+      );
+    }
     return StreamBuilder<List<JournalEntryLine>>(
       stream: sl<JournalRepository>().watchJournalLinesByAccount(account.id),
       builder: (context, snapshot) {
@@ -661,6 +794,11 @@ class _PostedAccountBalance extends StatelessWidget {
             account.accountType == 'asset' || account.accountType == 'expense';
         final balance = debitNormal ? debits - credits : credits - debits;
         final direction = balance >= 0 ? 'positive' : 'negative';
+        final balanceHintKey =
+            balance < 0 &&
+                (account.accountCode == '1000' || account.accountCode == '1010')
+            ? 'financial_management.acct_${account.accountCode}_negative'
+            : 'financial_management.balance_${direction}_${account.accountType}';
 
         return Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -674,8 +812,7 @@ class _PostedAccountBalance extends StatelessWidget {
               ),
             ),
             Text(
-              'financial_management.balance_${direction}_${account.accountType}'
-                  .tr(),
+              balanceHintKey.tr(),
               style: theme.textTheme.labelSmall?.copyWith(
                 color: colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
                 fontSize: 10,
@@ -702,7 +839,10 @@ class _AccountDiagnosticDialog extends StatelessWidget {
     return Dialog(
       insetPadding: const EdgeInsets.all(16),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 600, maxHeight: 500),
+        constraints: BoxConstraints(
+          maxWidth: 600,
+          maxHeight: MediaQuery.sizeOf(context).height * 0.86,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -738,6 +878,13 @@ class _AccountDiagnosticDialog extends StatelessWidget {
               ),
             ),
             const Divider(),
+            if (_PendingChequeMonitor.supports(account.accountCode)) ...[
+              _PendingChequeMonitor(
+                accountCode: account.accountCode,
+                currencyService: cs,
+              ),
+              const Divider(height: 1),
+            ],
 
             // Journal lines stream
             Flexible(
@@ -941,6 +1088,132 @@ class _AccountDiagnosticDialog extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _PendingChequeMonitor extends StatelessWidget {
+  final String accountCode;
+  final CurrencyService currencyService;
+
+  const _PendingChequeMonitor({
+    required this.accountCode,
+    required this.currencyService,
+  });
+
+  static bool supports(String accountCode) =>
+      accountCode == '1020' || accountCode == '2020' || accountCode == '1030';
+
+  static bool isPendingAccount(String accountCode) =>
+      accountCode == '1020' || accountCode == '2020';
+
+  static bool belongsToAccount(String accountCode, ChequeInstrument cheque) {
+    if (accountCode == '1020') {
+      return cheque.direction == ChequeDirectionValue.incoming &&
+          ChequeInstrumentStatus.open.contains(cheque.status);
+    }
+    if (accountCode == '2020') {
+      return cheque.direction == ChequeDirectionValue.outgoing &&
+          ChequeInstrumentStatus.open.contains(cheque.status);
+    }
+    return cheque.status == ChequeInstrumentStatus.bounced &&
+        cheque.resolvedAt == null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return StreamBuilder<List<ChequeInstrument>>(
+      stream: ChequeInstrumentDao(sl<AppDatabase>()).watchAll(),
+      builder: (context, snapshot) {
+        final cheques = (snapshot.data ?? const <ChequeInstrument>[])
+            .where((cheque) => belongsToAccount(accountCode, cheque))
+            .toList(growable: false);
+        final visibleChequeRows = cheques.length > 5 ? 5 : cheques.length;
+        return Container(
+          constraints: const BoxConstraints(maxHeight: 380),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+          color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    LucideIcons.fileClock,
+                    size: 16,
+                    color: theme.colorScheme.secondary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'financial_management.pending_cheque_monitor'.tr(
+                        args: [cheques.length.toString()],
+                      ),
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 3),
+              Text(
+                'financial_management.pending_cheque_monitor_note'.tr(),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              if (cheques.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                SizedBox(
+                  // A two-line ListTile needs a little more than 52 logical
+                  // pixels with Arabic text/font scaling on compact phones.
+                  // Show normal-sized lists in full; only long lists scroll.
+                  height: visibleChequeRows * 58.0,
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: cheques.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final cheque = cheques[index];
+                      final label =
+                          cheque.chequeNumber?.trim().isNotEmpty == true
+                          ? cheque.chequeNumber!
+                          : '#${cheque.id}';
+                      return ListTile(
+                        dense: true,
+                        visualDensity: VisualDensity.compact,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          '${'cheques.status_${cheque.status}'.tr()} · '
+                          '${AppDateFormatter.date(cheque.dueDate)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: Text(
+                          currencyService.formatCents(
+                            cheque.amountCents.toBigInt().toInt(),
+                          ),
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }

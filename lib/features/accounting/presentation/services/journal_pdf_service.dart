@@ -15,6 +15,9 @@ import '../../domain/models/trial_balance.dart';
 import '../../../reports/presentation/bloc/customer_reports_bloc.dart';
 import '../../../reports/presentation/bloc/customer_sales_returns_reports_bloc.dart';
 import '../../../reports/presentation/widgets/report_date_range.dart';
+import '../utils/account_display_name.dart';
+import '../utils/journal_description_localizer.dart';
+import '../utils/journal_entry_localizer.dart';
 
 class JournalPdfService {
   /// Print a journal entry PDF
@@ -303,7 +306,8 @@ class JournalPdfService {
                     style: pw.TextStyle(font: fonts.bold, fontSize: 12),
                   ),
                   pw.Text(
-                    '${'accounting.entry_date'.tr()}: ${DateFormat.yMMMd().format(entry.entryDate)}',
+                    '${'accounting.entry_date'.tr()}: '
+                    '${DateFormat('dd/MM/yyyy').format(entry.entryDate)}',
                     style: pw.TextStyle(font: fonts.regular, fontSize: 10),
                   ),
                 ],
@@ -317,14 +321,16 @@ class JournalPdfService {
                     style: pw.TextStyle(font: fonts.regular, fontSize: 10),
                   ),
                   pw.Text(
-                    '${'accounting.type'.tr()}: ${'accounting.type_${entry.entryType}'.tr()}',
+                    '${'accounting.type'.tr()}: '
+                    '${localizedJournalEntryType(entry.entryType)}',
                     style: pw.TextStyle(font: fonts.regular, fontSize: 10),
                   ),
                 ],
               ),
               pw.SizedBox(height: 8),
               pw.Text(
-                '${'accounting.description'.tr()}: ${entry.description}',
+                '${'accounting.description'.tr()}: '
+                '${localizedJournalDescription(entry.description)}',
                 style: pw.TextStyle(font: fonts.regular, fontSize: 10),
               ),
               pw.SizedBox(height: 16),
@@ -356,9 +362,10 @@ class JournalPdfService {
                   final credit = line.creditCents.toBigInt().toInt();
                   return [
                     account != null
-                        ? '${account.accountCode} - ${account.accountName}'
+                        ? '${account.accountCode} - '
+                              '${localizedAccountName(account)}'
                         : '?',
-                    line.description ?? '',
+                    localizedJournalDescription(line.description),
                     debit > 0 ? cs.formatCents(debit) : '-',
                     credit > 0 ? cs.formatCents(credit) : '-',
                   ];
@@ -392,7 +399,8 @@ class JournalPdfService {
               // Footer
               pw.Divider(),
               pw.Text(
-                '${'accounting.printed_on'.tr()}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+                '${'accounting.printed_on'.tr()}: '
+                '${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
                 style: pw.TextStyle(
                   font: fonts.regular,
                   fontSize: 8,
@@ -452,7 +460,7 @@ class JournalPdfService {
               ),
               pw.SizedBox(height: 8),
               pw.Text(
-                '${'accounting.as_of'.tr()}: ${DateFormat.yMMMd().format(trialBalance.asOfDate)}',
+                '${'accounting.as_of'.tr()}: ${DateFormat('dd/MM/yyyy').format(trialBalance.asOfDate)}',
                 style: pw.TextStyle(font: fonts.regular, fontSize: 10),
               ),
               pw.SizedBox(height: 16),
@@ -516,7 +524,7 @@ class JournalPdfService {
               pw.Spacer(),
               pw.Divider(),
               pw.Text(
-                '${'accounting.printed_on'.tr()}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+                '${'accounting.printed_on'.tr()}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
                 style: pw.TextStyle(
                   font: fonts.regular,
                   fontSize: 8,
@@ -563,8 +571,8 @@ class JournalPdfService {
               _buildHeader(company, 'reports.profit_loss'.tr(), fonts, dir),
               pw.SizedBox(height: 8),
               pw.Text(
-                '${DateFormat.yMMMd().format(startDate)} – '
-                '${DateFormat.yMMMd().format(asOfDate)}',
+                '${DateFormat('dd/MM/yyyy').format(startDate)} – '
+                '${DateFormat('dd/MM/yyyy').format(asOfDate)}',
                 style: pw.TextStyle(font: fonts.regular, fontSize: 10),
               ),
               pw.SizedBox(height: 16),
@@ -686,7 +694,7 @@ class JournalPdfService {
               pw.Spacer(),
               pw.Divider(),
               pw.Text(
-                '${'accounting.printed_on'.tr()}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+                '${'accounting.printed_on'.tr()}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
                 style: pw.TextStyle(
                   font: fonts.regular,
                   fontSize: 8,
@@ -733,7 +741,7 @@ class JournalPdfService {
               _buildHeader(company, 'reports.balance_sheet'.tr(), fonts, dir),
               pw.SizedBox(height: 8),
               pw.Text(
-                '${'accounting.as_of'.tr()}: ${DateFormat.yMMMd().format(asOfDate)}',
+                '${'accounting.as_of'.tr()}: ${DateFormat('dd/MM/yyyy').format(asOfDate)}',
                 style: pw.TextStyle(font: fonts.regular, fontSize: 10),
               ),
               pw.SizedBox(height: 16),
@@ -916,7 +924,7 @@ class JournalPdfService {
               pw.Spacer(),
               pw.Divider(),
               pw.Text(
-                '${'accounting.printed_on'.tr()}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+                '${'accounting.printed_on'.tr()}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
                 style: pw.TextStyle(
                   font: fonts.regular,
                   fontSize: 8,
@@ -1038,7 +1046,7 @@ class JournalPdfService {
               _buildHeader(company, 'reports.customer_aging'.tr(), fonts, dir),
               pw.SizedBox(height: 8),
               pw.Text(
-                '${DateFormat.yMMMd().format(dateRange.startDate)} — ${DateFormat.yMMMd().format(dateRange.endDate)}',
+                '${DateFormat('dd/MM/yyyy').format(dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(dateRange.endDate)}',
                 style: pw.TextStyle(font: fonts.regular, fontSize: 10),
               ),
               pw.SizedBox(height: 8),
@@ -1114,7 +1122,7 @@ class JournalPdfService {
               pw.Spacer(),
               pw.Divider(),
               pw.Text(
-                '${'accounting.printed_on'.tr()}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+                '${'accounting.printed_on'.tr()}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
                 style: pw.TextStyle(
                   font: fonts.regular,
                   fontSize: 8,
@@ -1150,7 +1158,7 @@ class JournalPdfService {
                 ),
                 pw.SizedBox(height: 4),
                 pw.Text(
-                  '${DateFormat.yMMMd().format(dateRange.startDate)} — ${DateFormat.yMMMd().format(dateRange.endDate)}',
+                  '${DateFormat('dd/MM/yyyy').format(dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(dateRange.endDate)}',
                   style: pw.TextStyle(font: fonts.regular, fontSize: 10),
                 ),
                 pw.SizedBox(height: 8),
@@ -1224,7 +1232,7 @@ class JournalPdfService {
                 pw.Spacer(),
                 pw.Divider(),
                 pw.Text(
-                  '${'accounting.printed_on'.tr()}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+                  '${'accounting.printed_on'.tr()}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
                   style: pw.TextStyle(
                     font: fonts.regular,
                     fontSize: 8,
@@ -1354,7 +1362,7 @@ class JournalPdfService {
               ),
               pw.SizedBox(height: 8),
               pw.Text(
-                '${DateFormat.yMMMd().format(dateRange.startDate)} — ${DateFormat.yMMMd().format(dateRange.endDate)}',
+                '${DateFormat('dd/MM/yyyy').format(dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(dateRange.endDate)}',
                 style: pw.TextStyle(font: fonts.regular, fontSize: 10),
               ),
               pw.SizedBox(height: 8),
@@ -1384,7 +1392,7 @@ class JournalPdfService {
             children: [
               pw.Divider(),
               pw.Text(
-                '${'accounting.printed_on'.tr()}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+                '${'accounting.printed_on'.tr()}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
                 style: pw.TextStyle(
                   font: fonts.regular,
                   fontSize: 8,
@@ -1428,7 +1436,9 @@ class JournalPdfService {
                         cs.formatCents(item.totalReturnedCents),
                         cs.formatCents(item.averageReturnCents),
                         item.lastReturnDate != null
-                            ? DateFormat.yMd().format(item.lastReturnDate!)
+                            ? DateFormat(
+                                'dd/MM/yyyy',
+                              ).format(item.lastReturnDate!)
                             : '-',
                       ],
                     )
@@ -1508,7 +1518,7 @@ class JournalPdfService {
                 ),
                 pw.SizedBox(height: 8),
                 pw.Text(
-                  '${DateFormat.yMMMd().format(dateRange.startDate)} — ${DateFormat.yMMMd().format(dateRange.endDate)}',
+                  '${DateFormat('dd/MM/yyyy').format(dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(dateRange.endDate)}',
                   style: pw.TextStyle(font: fonts.regular, fontSize: 10),
                 ),
                 pw.SizedBox(height: 16),
@@ -1547,7 +1557,7 @@ class JournalPdfService {
                 pw.Spacer(),
                 pw.Divider(),
                 pw.Text(
-                  '${'accounting.printed_on'.tr()}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+                  '${'accounting.printed_on'.tr()}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
                   style: pw.TextStyle(
                     font: fonts.regular,
                     fontSize: 8,
@@ -1579,7 +1589,7 @@ class JournalPdfService {
                 ),
                 pw.SizedBox(height: 8),
                 pw.Text(
-                  '${DateFormat.yMMMd().format(dateRange.startDate)} — ${DateFormat.yMMMd().format(dateRange.endDate)}',
+                  '${DateFormat('dd/MM/yyyy').format(dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(dateRange.endDate)}',
                   style: pw.TextStyle(font: fonts.regular, fontSize: 10),
                 ),
                 pw.SizedBox(height: 12),
@@ -1591,7 +1601,7 @@ class JournalPdfService {
               children: [
                 pw.Divider(),
                 pw.Text(
-                  '${'accounting.printed_on'.tr()}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+                  '${'accounting.printed_on'.tr()}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
                   style: pw.TextStyle(
                     font: fonts.regular,
                     fontSize: 8,
@@ -1629,7 +1639,7 @@ class JournalPdfService {
                     .map(
                       (item) => [
                         item.returnNumber,
-                        DateFormat.yMd().format(item.returnDate),
+                        DateFormat('dd/MM/yyyy').format(item.returnDate),
                         item.originalInvoiceNumber ?? '-',
                         item.reason ?? '-',
                         item.itemCount.toString(),

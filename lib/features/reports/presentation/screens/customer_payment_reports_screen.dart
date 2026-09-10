@@ -34,8 +34,10 @@ class _CustomerPaymentReportsView extends StatelessWidget {
       appBar: AppBar(
         title: Text('reports.customer_payments'.tr()),
         actions: [
-          BlocBuilder<CustomerPaymentReportsBloc,
-              RealtimeState<CustomerPaymentReportsData>>(
+          BlocBuilder<
+            CustomerPaymentReportsBloc,
+            RealtimeState<CustomerPaymentReportsData>
+          >(
             builder: (context, state) {
               if (state is! RealtimeSuccess<CustomerPaymentReportsData>) {
                 return const SizedBox.shrink();
@@ -59,63 +61,71 @@ class _CustomerPaymentReportsView extends StatelessWidget {
           ),
         ],
       ),
-      body: BlocBuilder<CustomerPaymentReportsBloc,
-          RealtimeState<CustomerPaymentReportsData>>(
-        builder: (context, state) {
-          if (state is RealtimeLoading<CustomerPaymentReportsData>) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body:
+          BlocBuilder<
+            CustomerPaymentReportsBloc,
+            RealtimeState<CustomerPaymentReportsData>
+          >(
+            builder: (context, state) {
+              if (state is RealtimeLoading<CustomerPaymentReportsData>) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (state is RealtimeError<CustomerPaymentReportsData>) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline,
-                      size: 48, color: colorScheme.error),
-                  const SizedBox(height: 16),
-                  Text(state.error.toString(),
-                      style: theme.textTheme.bodyLarge),
-                ],
-              ),
-            );
-          }
-
-          if (state is RealtimeSuccess<CustomerPaymentReportsData>) {
-            return Column(
-              children: [
-                // Date range selector
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: DateRangeSelector(
-                    dateRange: state.data.dateRange,
-                    onChanged: (range) => context
-                        .read<CustomerPaymentReportsBloc>()
-                        .add(CustomerPaymentReportsDateRangeChanged(range)),
+              if (state is RealtimeError<CustomerPaymentReportsData>) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        state.error.toString(),
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
+                );
+              }
 
-                // Summary cards
-                _buildSummaryCards(context, state.data),
-                const SizedBox(height: 8),
+              if (state is RealtimeSuccess<CustomerPaymentReportsData>) {
+                return Column(
+                  children: [
+                    // Date range selector
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: DateRangeSelector(
+                        dateRange: state.data.dateRange,
+                        onChanged: (range) => context
+                            .read<CustomerPaymentReportsBloc>()
+                            .add(CustomerPaymentReportsDateRangeChanged(range)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
 
-                // Content
-                Expanded(
-                  child: _PaymentReportContent(data: state.data),
-                ),
-              ],
-            );
-          }
+                    // Summary cards
+                    _buildSummaryCards(context, state.data),
+                    const SizedBox(height: 8),
 
-          return const SizedBox.shrink();
-        },
-      ),
+                    // Content
+                    Expanded(child: _PaymentReportContent(data: state.data)),
+                  ],
+                );
+              }
+
+              return const SizedBox.shrink();
+            },
+          ),
     );
   }
 
   Widget _buildSummaryCards(
-      BuildContext context, CustomerPaymentReportsData data) {
+    BuildContext context,
+    CustomerPaymentReportsData data,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final cs = sl<CurrencyService>();
@@ -149,11 +159,14 @@ class _CustomerPaymentReportsView extends StatelessWidget {
           if (isWide) {
             return Row(
               children: cards
-                  .map((c) => Expanded(
-                          child: Padding(
+                  .map(
+                    (c) => Expanded(
+                      child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: c,
-                      )))
+                      ),
+                    ),
+                  )
                   .toList(),
             );
           }
@@ -163,15 +176,17 @@ class _CustomerPaymentReportsView extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: cards[0],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: cards[0],
+                    ),
+                  ),
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: cards[1],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: cards[1],
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -184,7 +199,9 @@ class _CustomerPaymentReportsView extends StatelessWidget {
   }
 
   Future<void> _printReport(
-      BuildContext context, CustomerPaymentReportsData data) async {
+    BuildContext context,
+    CustomerPaymentReportsData data,
+  ) async {
     await CustomerPaymentPdfService.printCustomerPaymentReport(
       context: context,
       data: data,
@@ -197,7 +214,9 @@ class _CustomerPaymentReportsView extends StatelessWidget {
   }
 
   Future<void> _shareReport(
-      BuildContext context, CustomerPaymentReportsData data) async {
+    BuildContext context,
+    CustomerPaymentReportsData data,
+  ) async {
     await CustomerPaymentPdfService.shareCustomerPaymentReport(
       context: context,
       data: data,
@@ -287,16 +306,23 @@ class _PaymentReportContent extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.banknote,
-                size: 48, color: theme.colorScheme.onSurfaceVariant),
+            Icon(
+              LucideIcons.banknote,
+              size: 48,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 16),
-            Text('reports.no_payment_data'.tr(),
-                style: theme.textTheme.bodyLarge),
+            Text(
+              'reports.no_payment_data'.tr(),
+              style: theme.textTheme.bodyLarge,
+            ),
             const SizedBox(height: 8),
-            Text('reports.no_payment_data_desc'.tr(),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                )),
+            Text(
+              'reports.no_payment_data_desc'.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       );
@@ -307,24 +333,31 @@ class _PaymentReportContent extends StatelessWidget {
       children: [
         // Payment method breakdown
         if (data.methodSummaries.isNotEmpty) ...[
-          Text('reports.payment_method_breakdown'.tr(),
-              style: theme.textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.bold)),
+          Text(
+            'reports.payment_method_breakdown'.tr(),
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 8),
-          ...data.methodSummaries.map((summary) => _PaymentMethodCard(
-                summary: summary,
-                isSelected: data.methodFilter == summary.method,
-                onTap: () {
-                  final bloc = context.read<CustomerPaymentReportsBloc>();
-                  if (data.methodFilter == summary.method) {
-                    bloc.add(
-                        const CustomerPaymentReportsMethodFilterChanged(null));
-                  } else {
-                    bloc.add(CustomerPaymentReportsMethodFilterChanged(
-                        summary.method));
-                  }
-                },
-              )),
+          ...data.methodSummaries.map(
+            (summary) => _PaymentMethodCard(
+              summary: summary,
+              isSelected: data.methodFilter == summary.method,
+              onTap: () {
+                final bloc = context.read<CustomerPaymentReportsBloc>();
+                if (data.methodFilter == summary.method) {
+                  bloc.add(
+                    const CustomerPaymentReportsMethodFilterChanged(null),
+                  );
+                } else {
+                  bloc.add(
+                    CustomerPaymentReportsMethodFilterChanged(summary.method),
+                  );
+                }
+              },
+            ),
+          ),
           const SizedBox(height: 8),
           // Totals row
           Card(
@@ -335,8 +368,9 @@ class _PaymentReportContent extends StatelessWidget {
                 children: [
                   Text(
                     'reports.grand_total'.tr(),
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   Text(
                     cs.formatCents(data.totalAmountCents),
@@ -357,15 +391,18 @@ class _PaymentReportContent extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('reports.payment_details'.tr(),
-                  style: theme.textTheme.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.bold)),
+              Text(
+                'reports.payment_details'.tr(),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               if (data.methodFilter != null)
                 TextButton.icon(
-                  onPressed: () => context
-                      .read<CustomerPaymentReportsBloc>()
-                      .add(const CustomerPaymentReportsMethodFilterChanged(
-                          null)),
+                  onPressed: () =>
+                      context.read<CustomerPaymentReportsBloc>().add(
+                        const CustomerPaymentReportsMethodFilterChanged(null),
+                      ),
                   icon: const Icon(LucideIcons.x, size: 14),
                   label: Text('reports.clear_filter'.tr()),
                   style: TextButton.styleFrom(
@@ -384,43 +421,54 @@ class _PaymentReportContent extends StatelessWidget {
                 DataColumn(label: Text('reports.date'.tr())),
                 DataColumn(label: Text('reports.customer'.tr())),
                 DataColumn(label: Text('reports.type'.tr())),
-                DataColumn(
-                    label: Text('reports.amount'.tr()), numeric: true),
+                DataColumn(label: Text('reports.amount'.tr()), numeric: true),
                 DataColumn(label: Text('reports.description_col'.tr())),
               ],
               rows: data.details.map((detail) {
-                return DataRow(cells: [
-                  DataCell(Text(
-                    DateFormat.yMd().format(detail.transactionDate),
-                    style: theme.textTheme.bodySmall,
-                  )),
-                  DataCell(Text(
-                    detail.customerName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  )),
-                  DataCell(Text(
-                    _transactionTypeLabel(detail.transactionType),
-                    style: theme.textTheme.bodySmall,
-                  )),
-                  DataCell(Text(
-                    cs.formatCents(detail.amountCents.abs()),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: detail.amountCents < 0
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.error,
+                return DataRow(
+                  cells: [
+                    DataCell(
+                      Text(
+                        DateFormat('dd/MM/yyyy').format(detail.transactionDate),
+                        style: theme.textTheme.bodySmall,
+                      ),
                     ),
-                  )),
-                  DataCell(Text(
-                    detail.description ?? '-',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                    DataCell(
+                      Text(
+                        detail.customerName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  )),
-                ]);
+                    DataCell(
+                      Text(
+                        _transactionTypeLabel(detail.transactionType),
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                    DataCell(
+                      Text(
+                        cs.formatCents(detail.amountCents.abs()),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: detail.amountCents < 0
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.error,
+                        ),
+                      ),
+                    ),
+                    DataCell(
+                      Text(
+                        detail.description ?? '-',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                );
               }).toList(),
             ),
           ),
@@ -503,14 +551,16 @@ class _PaymentMethodCard extends StatelessWidget {
                   children: [
                     Text(
                       _methodLabel(summary.method),
-                      style: theme.textTheme.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.bold),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
-                      'reports.transaction_count'
-                          .tr(args: ['${summary.transactionCount}']),
+                      'reports.transaction_count'.tr(
+                        args: ['${summary.transactionCount}'],
+                      ),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: colorScheme.onSurfaceVariant,
                       ),

@@ -8,7 +8,9 @@ import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/audit_log_service.dart';
+import '../../../../core/utils/app_date_formatter.dart';
 import '../bloc/audit_log_bloc.dart';
+import '../utils/audit_log_localizer.dart';
 
 class AuditLogScreen extends StatelessWidget {
   const AuditLogScreen({super.key});
@@ -428,36 +430,7 @@ class _FilterSection extends StatelessWidget {
   }
 
   static String _entityTypeLabel(String type) {
-    switch (type) {
-      case 'purchase':
-        return 'audit.entity_purchase'.tr();
-      case 'purchase_return':
-        return 'audit.entity_purchase_return'.tr();
-      case 'purchase_payment':
-        return 'audit.entity_purchase_payment'.tr();
-      case 'sale':
-        return 'audit.entity_sale'.tr();
-      case 'sale_return':
-        return 'audit.entity_sale_return'.tr();
-      case 'product':
-        return 'audit.entity_product'.tr();
-      case 'customer':
-        return 'audit.entity_customer'.tr();
-      case 'supplier':
-        return 'audit.entity_supplier'.tr();
-      case 'user':
-        return 'audit.entity_user'.tr();
-      case 'accounting_period':
-        return 'audit.entity_accounting_period'.tr();
-      case 'journal_entry':
-        return 'audit.entity_journal_entry'.tr();
-      case 'expense':
-        return 'audit.entity_expense'.tr();
-      case 'lan_session':
-        return 'audit.entity_lan_session'.tr();
-      default:
-        return type.replaceAll('_', ' ');
-    }
+    return localizedAuditEntityType(type);
   }
 
   static Color _entityTypeColor(String type, ColorScheme cs) {
@@ -490,62 +463,7 @@ class _FilterSection extends StatelessWidget {
   }
 
   static String _actionLabel(String action) {
-    switch (action) {
-      case 'create':
-        return 'audit.action_create'.tr();
-      case 'update':
-        return 'audit.action_update'.tr();
-      case 'delete':
-        return 'audit.action_delete'.tr();
-      case 'post':
-        return 'audit.action_post'.tr();
-      case 'void':
-        return 'audit.action_void'.tr();
-      case 'create_and_post':
-        return 'audit.action_create_and_post'.tr();
-      case 'balance_change':
-        return 'audit.action_balance_change'.tr();
-      case 'price_change':
-        return 'audit.action_price_change'.tr();
-      case 'stock_adjustment':
-        return 'audit.action_stock_adjustment'.tr();
-      case 'close_period':
-        return 'audit.action_close_period'.tr();
-      case 'below_cost_override':
-        return 'audit.action_below_cost_override'.tr();
-      case 'login':
-        return 'audit.action_login'.tr();
-      case 'logout':
-        return 'audit.action_logout'.tr();
-      case 'login_failed':
-        return 'audit.action_login_failed'.tr();
-      case 'login_rate_limited':
-        return 'audit.action_login_rate_limited'.tr();
-      case 'device_paired':
-        return 'audit.action_device_paired'.tr();
-      case 'device_renamed':
-        return 'audit.action_device_renamed'.tr();
-      case 'device_remote_logout':
-        return 'audit.action_device_remote_logout'.tr();
-      case 'device_revoked':
-        return 'audit.action_device_revoked'.tr();
-      case 'session_expired':
-        return 'audit.action_session_expired'.tr();
-      case 'session_revoked':
-        return 'audit.action_session_revoked'.tr();
-      case 'session_replaced':
-        return 'audit.action_session_replaced'.tr();
-      case 'remote_sale_created':
-        return 'audit.action_remote_sale_created'.tr();
-      case 'remote_sale_replayed':
-        return 'audit.action_remote_sale_replayed'.tr();
-      case 'cashier_shift_opened':
-        return 'audit.action_cashier_shift_opened'.tr();
-      case 'cashier_shift_closed':
-        return 'audit.action_cashier_shift_closed'.tr();
-      default:
-        return action.replaceAll('_', ' ');
-    }
+    return localizedAuditAction(action);
   }
 
   static Color _actionColor(String action, ColorScheme cs) {
@@ -644,47 +562,57 @@ class _AuditLogTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Action badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: actionColor.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            _FilterSection._actionLabel(log.action),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: actionColor,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 10,
-                            ),
+                        Expanded(
+                          child: Wrap(
+                            spacing: 6,
+                            runSpacing: 4,
+                            children: [
+                              // Action badge
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: actionColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  _FilterSection._actionLabel(log.action),
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: actionColor,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ),
+                              // Entity badge
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: entityColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  _FilterSection._entityTypeLabel(
+                                    log.targetTable,
+                                  ),
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: entityColor,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(width: 6),
-                        // Entity badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: entityColor.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            _FilterSection._entityTypeLabel(log.targetTable),
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: entityColor,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 10,
-                            ),
-                          ),
-                        ),
-                        const Spacer(),
                         // Record ID
                         Text(
                           '#${log.recordId}',
@@ -780,8 +708,7 @@ class _AuditLogTile extends StatelessWidget {
       return 'audit.days_ago'.tr(args: [diff.inDays.toString()]);
     }
 
-    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
-        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    return AppDateFormatter.dateTime(dt);
   }
 
   void _showDetails(BuildContext context) {
@@ -826,7 +753,12 @@ class _AuditLogTile extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               // Info rows
-              _detailRow(context, LucideIcons.hash, 'ID', log.id.toString()),
+              _detailRow(
+                context,
+                LucideIcons.hash,
+                'audit.id'.tr(),
+                log.id.toString(),
+              ),
               _detailRow(
                 context,
                 LucideIcons.layers,
@@ -878,7 +810,7 @@ class _AuditLogTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: SelectableText(
-                  _formatChanges(changes),
+                  formatLocalizedAuditChanges(changes),
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontFamily: 'monospace',
                     fontSize: 12,
@@ -927,21 +859,5 @@ class _AuditLogTile extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  String _formatChanges(Map<String, dynamic> changes) {
-    if (changes.isEmpty) return '(empty)';
-    final buffer = StringBuffer();
-    for (final entry in changes.entries) {
-      if (entry.value is Map) {
-        buffer.writeln('${entry.key}:');
-        for (final sub in (entry.value as Map).entries) {
-          buffer.writeln('  ${sub.key}: ${sub.value}');
-        }
-      } else {
-        buffer.writeln('${entry.key}: ${entry.value}');
-      }
-    }
-    return buffer.toString().trimRight();
   }
 }

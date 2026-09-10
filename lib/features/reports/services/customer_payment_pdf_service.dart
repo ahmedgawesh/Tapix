@@ -79,10 +79,15 @@ class CustomerPaymentPdfService {
         textDirection: dir,
         build: (pw.Context context) {
           return [
-            _buildHeader(company, _t('customer_payment_report', lang), fonts, dir),
+            _buildHeader(
+              company,
+              _t('customer_payment_report', lang),
+              fonts,
+              dir,
+            ),
             pw.SizedBox(height: 8),
             pw.Text(
-              '${_t('period', lang)}: ${DateFormat.yMMMd().format(data.dateRange.startDate)} — ${DateFormat.yMMMd().format(data.dateRange.endDate)}',
+              '${_t('period', lang)}: ${DateFormat('dd/MM/yyyy').format(data.dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(data.dateRange.endDate)}',
               style: pw.TextStyle(font: fonts.regular, fontSize: 10),
             ),
             pw.SizedBox(height: 4),
@@ -117,8 +122,9 @@ class CustomerPaymentPdfService {
               pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 9),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 9),
-                headerDecoration:
-                    const pw.BoxDecoration(color: PdfColors.grey200),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.grey200,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.centerLeft,
                   1: pw.Alignment.centerRight,
@@ -173,8 +179,9 @@ class CustomerPaymentPdfService {
               pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 8),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
-                headerDecoration:
-                    const pw.BoxDecoration(color: PdfColors.grey200),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.grey200,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.center,
                   1: pw.Alignment.centerLeft,
@@ -191,7 +198,7 @@ class CustomerPaymentPdfService {
                 ],
                 data: data.details.map((d) {
                   return [
-                    DateFormat.yMd().format(d.transactionDate),
+                    DateFormat('dd/MM/yyyy').format(d.transactionDate),
                     d.customerName,
                     _typeLabel(d.transactionType, lang),
                     cs.formatCents(d.amountCents.abs()),
@@ -204,11 +211,12 @@ class CustomerPaymentPdfService {
             pw.SizedBox(height: 16),
             pw.Divider(),
             pw.Text(
-              '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+              '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
               style: pw.TextStyle(
-                  font: fonts.regular,
-                  fontSize: 8,
-                  color: PdfColors.grey600),
+                font: fonts.regular,
+                fontSize: 8,
+                color: PdfColors.grey600,
+              ),
             ),
           ];
         },
@@ -270,16 +278,8 @@ class CustomerPaymentPdfService {
     'date': {'en': 'Date', 'ar': 'التاريخ', 'fr': 'Date'},
     'customer': {'en': 'Customer', 'ar': 'العميل', 'fr': 'Client'},
     'type': {'en': 'Type', 'ar': 'النوع', 'fr': 'Type'},
-    'description': {
-      'en': 'Description',
-      'ar': 'الوصف',
-      'fr': 'Description',
-    },
-    'printed_on': {
-      'en': 'Printed on',
-      'ar': 'طُبع في',
-      'fr': 'Imprimé le',
-    },
+    'description': {'en': 'Description', 'ar': 'الوصف', 'fr': 'Description'},
+    'printed_on': {'en': 'Printed on', 'ar': 'طُبع في', 'fr': 'Imprimé le'},
     'method_cash': {'en': 'Cash', 'ar': 'نقدي', 'fr': 'Espèces'},
     'method_card': {'en': 'Card', 'ar': 'بطاقة', 'fr': 'Carte'},
     'method_bank': {
@@ -294,11 +294,7 @@ class CustomerPaymentPdfService {
     },
     'type_payment': {'en': 'Payment', 'ar': 'دفعة', 'fr': 'Paiement'},
     'type_receipt': {'en': 'Receipt', 'ar': 'إيصال', 'fr': 'Reçu'},
-    'type_settlement': {
-      'en': 'Settlement',
-      'ar': 'تسوية',
-      'fr': 'Règlement',
-    },
+    'type_settlement': {'en': 'Settlement', 'ar': 'تسوية', 'fr': 'Règlement'},
   };
 
   static String _t(String key, String lang) {
@@ -362,9 +358,10 @@ class CustomerPaymentPdfService {
           pw.Text(
             company.address!,
             style: pw.TextStyle(
-                font: fonts.regular,
-                fontSize: 9,
-                color: PdfColors.grey600),
+              font: fonts.regular,
+              fontSize: 9,
+              color: PdfColors.grey600,
+            ),
           ),
         pw.SizedBox(height: 8),
         pw.Divider(),
@@ -381,10 +378,12 @@ class CustomerPaymentPdfService {
 
   static Future<_PdfFonts> _loadFonts() async {
     try {
-      final regularData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-      final boldData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+      final regularData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+      );
+      final boldData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+      );
       return _PdfFonts(
         regular: pw.Font.ttf(regularData),
         bold: pw.Font.ttf(boldData),

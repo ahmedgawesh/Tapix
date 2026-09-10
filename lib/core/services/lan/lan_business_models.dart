@@ -1,3 +1,4 @@
+import '../../promotions/promotion_sale_snapshot.dart';
 import 'lan_models.dart';
 
 class LanCatalogVariant {
@@ -439,6 +440,9 @@ class LanCatalogPage {
   final bool allowDiscounts;
   final double maxDiscountPercent;
   final bool enablePharmacyFeatures;
+  final bool enablePromotions;
+  final List<Map<String, dynamic>> promotionRules;
+  final List<LanCatalogProduct> promotionProducts;
 
   const LanCatalogPage({
     required this.products,
@@ -457,6 +461,9 @@ class LanCatalogPage {
     this.allowDiscounts = true,
     this.maxDiscountPercent = 100,
     this.enablePharmacyFeatures = false,
+    this.enablePromotions = false,
+    this.promotionRules = const [],
+    this.promotionProducts = const [],
   });
 
   Map<String, dynamic> toJson({
@@ -486,6 +493,16 @@ class LanCatalogPage {
     'allowDiscounts': allowDiscounts,
     'maxDiscountPercent': maxDiscountPercent,
     'enablePharmacyFeatures': enablePharmacyFeatures,
+    'enablePromotions': enablePromotions,
+    'promotionRules': promotionRules,
+    'promotionProducts': promotionProducts
+        .map(
+          (value) => value.toJson(
+            includeManagement: includeManagement,
+            includeCost: includeCost,
+          ),
+        )
+        .toList(growable: false),
   };
 
   factory LanCatalogPage.fromJson(Map<String, dynamic> json) {
@@ -511,6 +528,15 @@ class LanCatalogPage {
       maxDiscountPercent:
           (json['maxDiscountPercent'] as num?)?.toDouble() ?? 100,
       enablePharmacyFeatures: json['enablePharmacyFeatures'] == true,
+      enablePromotions: json['enablePromotions'] == true,
+      promotionRules: (json['promotionRules'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .toList(growable: false),
+      promotionProducts:
+          (json['promotionProducts'] as List<dynamic>? ?? const [])
+              .whereType<Map<String, dynamic>>()
+              .map(LanCatalogProduct.fromJson)
+              .toList(growable: false),
     );
   }
 }
@@ -543,6 +569,7 @@ class LanMedicineAlternativesResult {
 class LanReturnableSaleSummary {
   final int saleId;
   final String invoiceNumber;
+  final int? customerId;
   final String? customerName;
   final DateTime saleDate;
   final int totalCents;
@@ -556,6 +583,7 @@ class LanReturnableSaleSummary {
   const LanReturnableSaleSummary({
     required this.saleId,
     required this.invoiceNumber,
+    this.customerId,
     this.customerName,
     required this.saleDate,
     required this.totalCents,
@@ -570,6 +598,7 @@ class LanReturnableSaleSummary {
   Map<String, dynamic> toJson() => {
     'saleId': saleId,
     'invoiceNumber': invoiceNumber,
+    'customerId': customerId,
     'customerName': customerName,
     'saleDate': saleDate.toUtc().toIso8601String(),
     'totalCents': totalCents,
@@ -585,6 +614,7 @@ class LanReturnableSaleSummary {
     return LanReturnableSaleSummary(
       saleId: (json['saleId'] as num).toInt(),
       invoiceNumber: json['invoiceNumber']?.toString() ?? '',
+      customerId: (json['customerId'] as num?)?.toInt(),
       customerName: json['customerName']?.toString(),
       saleDate: DateTime.parse(json['saleDate'].toString()),
       totalCents: (json['totalCents'] as num?)?.toInt() ?? 0,
@@ -741,12 +771,20 @@ class LanReturnableSaleLine {
 class LanReturnableSaleDetails {
   final LanReturnableSaleSummary sale;
   final List<LanReturnableSaleLine> lines;
+  final List<SalePromotionSnapshot> promotionApplications;
 
-  const LanReturnableSaleDetails({required this.sale, required this.lines});
+  const LanReturnableSaleDetails({
+    required this.sale,
+    required this.lines,
+    this.promotionApplications = const [],
+  });
 
   Map<String, dynamic> toJson() => {
     'sale': sale.toJson(),
     'lines': lines.map((value) => value.toJson()).toList(),
+    'promotionApplications': promotionApplications
+        .map((value) => value.toTransportMap())
+        .toList(growable: false),
   };
 
   factory LanReturnableSaleDetails.fromJson(Map<String, dynamic> json) {
@@ -758,6 +796,11 @@ class LanReturnableSaleDetails {
           .whereType<Map<String, dynamic>>()
           .map(LanReturnableSaleLine.fromJson)
           .toList(growable: false),
+      promotionApplications:
+          (json['promotionApplications'] as List<dynamic>? ?? const [])
+              .whereType<Map<String, dynamic>>()
+              .map(SalePromotionSnapshot.fromTransportMap)
+              .toList(growable: false),
     );
   }
 }
@@ -1002,6 +1045,7 @@ class LanSaleReturnDetails {
   final String? employeeName;
   final String? returnMode;
   final String? notes;
+  final List<SalePromotionSnapshot> promotionApplications;
 
   const LanSaleReturnDetails({
     required this.summary,
@@ -1013,6 +1057,7 @@ class LanSaleReturnDetails {
     this.employeeName,
     this.returnMode,
     this.notes,
+    this.promotionApplications = const [],
   });
 
   Map<String, dynamic> toJson() => {
@@ -1025,6 +1070,9 @@ class LanSaleReturnDetails {
     'employeeName': employeeName,
     'returnMode': returnMode,
     'notes': notes,
+    'promotionApplications': promotionApplications
+        .map((value) => value.toTransportMap())
+        .toList(growable: false),
   };
 
   factory LanSaleReturnDetails.fromJson(Map<String, dynamic> json) =>
@@ -1044,6 +1092,11 @@ class LanSaleReturnDetails {
         employeeName: json['employeeName']?.toString(),
         returnMode: json['returnMode']?.toString(),
         notes: json['notes']?.toString(),
+        promotionApplications:
+            (json['promotionApplications'] as List<dynamic>? ?? const [])
+                .whereType<Map<String, dynamic>>()
+                .map(SalePromotionSnapshot.fromTransportMap)
+                .toList(growable: false),
       );
 }
 
@@ -1080,6 +1133,7 @@ class LanSaleReturnRequest {
   final String? reason;
   final DateTime? dueDate;
   final List<LanSaleReturnLineRequest> lines;
+  final List<LanCheckoutPaymentRequest> payments;
 
   const LanSaleReturnRequest({
     required this.idempotencyKey,
@@ -1089,6 +1143,7 @@ class LanSaleReturnRequest {
     this.reason,
     this.dueDate,
     required this.lines,
+    this.payments = const [],
   });
 
   Map<String, dynamic> toJson() => {
@@ -1099,6 +1154,7 @@ class LanSaleReturnRequest {
     'reason': reason,
     'dueDate': dueDate?.toUtc().toIso8601String(),
     'lines': lines.map((value) => value.toJson()).toList(),
+    'payments': payments.map((value) => value.toJson()).toList(),
   };
 
   factory LanSaleReturnRequest.fromJson(Map<String, dynamic> json) =>
@@ -1114,6 +1170,10 @@ class LanSaleReturnRequest {
         lines: (json['lines'] as List<dynamic>? ?? const [])
             .whereType<Map<String, dynamic>>()
             .map(LanSaleReturnLineRequest.fromJson)
+            .toList(growable: false),
+        payments: (json['payments'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(LanCheckoutPaymentRequest.fromJson)
             .toList(growable: false),
       );
 }
@@ -1205,6 +1265,7 @@ class LanSaleAdjustmentReturnRequest {
   final int overallDiscountCents;
   final bool overallDiscountIsPercent;
   final List<LanSaleAdjustmentReturnLineRequest> lines;
+  final List<LanCheckoutPaymentRequest> payments;
 
   const LanSaleAdjustmentReturnRequest({
     required this.idempotencyKey,
@@ -1218,6 +1279,7 @@ class LanSaleAdjustmentReturnRequest {
     this.overallDiscountCents = 0,
     this.overallDiscountIsPercent = false,
     required this.lines,
+    this.payments = const [],
   });
 
   Map<String, dynamic> toJson() => {
@@ -1232,6 +1294,7 @@ class LanSaleAdjustmentReturnRequest {
     'overallDiscountCents': overallDiscountCents,
     'overallDiscountIsPercent': overallDiscountIsPercent,
     'lines': lines.map((value) => value.toJson()).toList(),
+    'payments': payments.map((value) => value.toJson()).toList(),
   };
 
   factory LanSaleAdjustmentReturnRequest.fromJson(Map<String, dynamic> json) =>
@@ -1254,6 +1317,10 @@ class LanSaleAdjustmentReturnRequest {
         lines: (json['lines'] as List<dynamic>? ?? const [])
             .whereType<Map<String, dynamic>>()
             .map(LanSaleAdjustmentReturnLineRequest.fromJson)
+            .toList(growable: false),
+        payments: (json['payments'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(LanCheckoutPaymentRequest.fromJson)
             .toList(growable: false),
       );
 }
@@ -1300,6 +1367,57 @@ class LanSaleLineRequest {
   }
 }
 
+/// A real payment leg captured at checkout on a remote device.
+///
+/// Credit is not sent as a payment. Any uncovered invoice balance remains in
+/// accounts receivable on the master. Cheque metadata is included so the
+/// master can create the cheque instrument and its accounting entry in the
+/// same transaction as the sale.
+class LanCheckoutPaymentRequest {
+  final String method;
+  final int amountCents;
+  final String? reference;
+  final String? bankName;
+  final DateTime? issueDate;
+  final DateTime? dueDate;
+  final String? note;
+
+  const LanCheckoutPaymentRequest({
+    required this.method,
+    required this.amountCents,
+    this.reference,
+    this.bankName,
+    this.issueDate,
+    this.dueDate,
+    this.note,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'method': method,
+    'amountCents': amountCents,
+    'reference': reference,
+    'bankName': bankName,
+    'issueDate': issueDate?.toIso8601String(),
+    'dueDate': dueDate?.toIso8601String(),
+    'note': note,
+  };
+
+  factory LanCheckoutPaymentRequest.fromJson(Map<String, dynamic> json) {
+    DateTime? parseDate(Object? value) =>
+        value == null ? null : DateTime.tryParse(value.toString());
+
+    return LanCheckoutPaymentRequest(
+      method: json['method']?.toString() ?? '',
+      amountCents: (json['amountCents'] as num?)?.toInt() ?? 0,
+      reference: json['reference']?.toString(),
+      bankName: json['bankName']?.toString(),
+      issueDate: parseDate(json['issueDate']),
+      dueDate: parseDate(json['dueDate']),
+      note: json['note']?.toString(),
+    );
+  }
+}
+
 class LanSaleRequest {
   final String idempotencyKey;
   final int? customerId;
@@ -1308,6 +1426,7 @@ class LanSaleRequest {
   final int? paidAmountCents;
   final String? notes;
   final List<LanSaleLineRequest> lines;
+  final List<LanCheckoutPaymentRequest> payments;
 
   const LanSaleRequest({
     required this.idempotencyKey,
@@ -1317,6 +1436,7 @@ class LanSaleRequest {
     this.paidAmountCents,
     this.notes,
     required this.lines,
+    this.payments = const [],
   });
 
   Map<String, dynamic> toJson() => {
@@ -1327,6 +1447,7 @@ class LanSaleRequest {
     'paidAmountCents': paidAmountCents,
     'notes': notes,
     'lines': lines.map((value) => value.toJson()).toList(),
+    'payments': payments.map((value) => value.toJson()).toList(),
   };
 
   factory LanSaleRequest.fromJson(Map<String, dynamic> json) {
@@ -1340,6 +1461,10 @@ class LanSaleRequest {
       lines: (json['lines'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(LanSaleLineRequest.fromJson)
+          .toList(growable: false),
+      payments: (json['payments'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(LanCheckoutPaymentRequest.fromJson)
           .toList(growable: false),
     );
   }
@@ -1591,6 +1716,7 @@ class LanSaleDetailLine {
 class LanSaleDetails {
   final LanSaleSummary sale;
   final List<LanSaleDetailLine> lines;
+  final List<SalePromotionSnapshot> promotionApplications;
   final String currencyCode;
   final String currencySymbol;
   final int currencyDecimalDigits;
@@ -1601,6 +1727,7 @@ class LanSaleDetails {
   const LanSaleDetails({
     required this.sale,
     required this.lines,
+    this.promotionApplications = const [],
     required this.currencyCode,
     required this.currencySymbol,
     required this.currencyDecimalDigits,
@@ -1612,6 +1739,9 @@ class LanSaleDetails {
   Map<String, dynamic> toJson() => {
     'sale': sale.toJson(),
     'lines': lines.map((line) => line.toJson()).toList(),
+    'promotionApplications': promotionApplications
+        .map((application) => application.toTransportMap())
+        .toList(growable: false),
     'currencyCode': currencyCode,
     'currencySymbol': currencySymbol,
     'currencyDecimalDigits': currencyDecimalDigits,
@@ -1626,6 +1756,11 @@ class LanSaleDetails {
         .whereType<Map<String, dynamic>>()
         .map(LanSaleDetailLine.fromJson)
         .toList(growable: false),
+    promotionApplications:
+        (json['promotionApplications'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(SalePromotionSnapshot.fromTransportMap)
+            .toList(growable: false),
     currencyCode: json['currencyCode']?.toString() ?? 'USD',
     currencySymbol: json['currencySymbol']?.toString() ?? r'$',
     currencyDecimalDigits:

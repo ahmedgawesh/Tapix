@@ -556,9 +556,9 @@ class _ReturnTile extends StatelessWidget {
                                     ),
                                     const SizedBox(width: 3),
                                     Text(
-                                      DateFormat.yMMMd().format(
-                                        returnEntity.returnDate,
-                                      ),
+                                      DateFormat(
+                                        'dd/MM/yyyy',
+                                      ).format(returnEntity.returnDate),
                                       style: theme.textTheme.bodySmall
                                           ?.copyWith(
                                             color: cs.onSurfaceVariant,

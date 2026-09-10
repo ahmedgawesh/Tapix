@@ -31,8 +31,7 @@ class ExpensePdfService {
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name:
-          'ExpenseReport_${DateFormat('yyyyMMdd').format(DateTime.now())}',
+      name: 'ExpenseReport_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
   }
 
@@ -79,11 +78,10 @@ class ExpensePdfService {
         textDirection: dir,
         build: (pw.Context context) {
           return [
-            _buildHeader(
-                company, _t('expense_report', lang), fonts, dir),
+            _buildHeader(company, _t('expense_report', lang), fonts, dir),
             pw.SizedBox(height: 8),
             pw.Text(
-              '${_t('period', lang)}: ${DateFormat.yMMMd().format(data.dateRange.startDate)} — ${DateFormat.yMMMd().format(data.dateRange.endDate)}',
+              '${_t('period', lang)}: ${DateFormat('dd/MM/yyyy').format(data.dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(data.dateRange.endDate)}',
               style: pw.TextStyle(font: fonts.regular, fontSize: 10),
             ),
             pw.SizedBox(height: 4),
@@ -128,8 +126,9 @@ class ExpensePdfService {
               pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 8),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
-                headerDecoration:
-                    const pw.BoxDecoration(color: PdfColors.grey200),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.grey200,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.center,
                   1: pw.Alignment.centerLeft,
@@ -174,14 +173,12 @@ class ExpensePdfService {
                       children: [
                         pw.Text(
                           '${_t('amount', lang)}: ${cs.formatCents(data.grandTotalCents)}',
-                          style:
-                              pw.TextStyle(font: fonts.regular, fontSize: 9),
+                          style: pw.TextStyle(font: fonts.regular, fontSize: 9),
                         ),
                         pw.SizedBox(width: 16),
                         pw.Text(
                           '${_t('count', lang)}: ${data.totalExpenseCount}',
-                          style:
-                              pw.TextStyle(font: fonts.regular, fontSize: 9),
+                          style: pw.TextStyle(font: fonts.regular, fontSize: 9),
                         ),
                       ],
                     ),
@@ -193,11 +190,12 @@ class ExpensePdfService {
             pw.SizedBox(height: 16),
             pw.Divider(),
             pw.Text(
-              '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+              '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
               style: pw.TextStyle(
-                  font: fonts.regular,
-                  fontSize: 8,
-                  color: PdfColors.grey600),
+                font: fonts.regular,
+                fontSize: 8,
+                color: PdfColors.grey600,
+              ),
             ),
           ];
         },
@@ -228,11 +226,7 @@ class ExpensePdfService {
       'ar': 'العدد الإجمالي',
       'fr': 'Nombre Total',
     },
-    'categories': {
-      'en': 'Categories',
-      'ar': 'الفئات',
-      'fr': 'Catégories',
-    },
+    'categories': {'en': 'Categories', 'ar': 'الفئات', 'fr': 'Catégories'},
     'highest_category': {
       'en': 'Highest Category',
       'ar': 'أعلى فئة',
@@ -252,11 +246,7 @@ class ExpensePdfService {
       'ar': 'المجموع الكلي',
       'fr': 'Total Général',
     },
-    'printed_on': {
-      'en': 'Printed on',
-      'ar': 'طُبع في',
-      'fr': 'Imprimé le',
-    },
+    'printed_on': {'en': 'Printed on', 'ar': 'طُبع في', 'fr': 'Imprimé le'},
   };
 
   static String _t(String key, String lang) {
@@ -284,9 +274,10 @@ class ExpensePdfService {
           pw.Text(
             company.address!,
             style: pw.TextStyle(
-                font: fonts.regular,
-                fontSize: 9,
-                color: PdfColors.grey600),
+              font: fonts.regular,
+              fontSize: 9,
+              color: PdfColors.grey600,
+            ),
           ),
         pw.SizedBox(height: 8),
         pw.Divider(),
@@ -303,10 +294,12 @@ class ExpensePdfService {
 
   static Future<_PdfFonts> _loadFonts() async {
     try {
-      final regularData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-      final boldData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+      final regularData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+      );
+      final boldData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+      );
       return _PdfFonts(
         regular: pw.Font.ttf(regularData),
         bold: pw.Font.ttf(boldData),

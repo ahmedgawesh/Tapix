@@ -556,7 +556,7 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
               theme,
               LucideIcons.calendar,
               'purchases.date'.tr(),
-              DateFormat.yMMMd().format(purchase.purchaseDate),
+              DateFormat('dd/MM/yyyy').format(purchase.purchaseDate),
             ),
             if (purchase.dueDate != null) ...[
               const SizedBox(height: 10),
@@ -564,7 +564,7 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                 theme,
                 LucideIcons.calendarClock,
                 'purchases.due_date'.tr(),
-                DateFormat.yMMMd().format(purchase.dueDate!),
+                DateFormat('dd/MM/yyyy').format(purchase.dueDate!),
                 valueColor: purchase.isOverdue ? colorScheme.error : null,
               ),
             ],
@@ -593,7 +593,7 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
               theme,
               LucideIcons.clock,
               'purchases.created_at'.tr(),
-              DateFormat.yMMMd().add_jm().format(purchase.createdAt),
+              DateFormat('dd/MM/yyyy').add_jm().format(purchase.createdAt),
             ),
             if (purchase.isOverdue) ...[
               const SizedBox(height: 12),
@@ -1073,10 +1073,11 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final totalItems = _items.length;
-    final allPieceItems = _items.every(
-      (item) => item.measurementType == 'piece',
+    final quantitySummary = localizedQuantitySummary(
+      _items,
+      quantityOf: (item) => item.quantity,
+      measurementTypeOf: (item) => item.measurementType,
     );
-    final totalPieces = _items.fold<int>(0, (sum, item) => sum + item.quantity);
 
     return Card(
       elevation: 0,
@@ -1099,15 +1100,13 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                   '$totalItems',
                   icon: LucideIcons.layers,
                 ),
-                if (allPieceItems) ...[
-                  const SizedBox(height: 8),
-                  _summaryRow(
-                    theme,
-                    'purchases.total_pieces_count'.tr(),
-                    '$totalPieces',
-                    icon: LucideIcons.package,
-                  ),
-                ],
+                const SizedBox(height: 8),
+                _summaryRow(
+                  theme,
+                  'measurement.total_quantity'.tr(),
+                  quantitySummary,
+                  icon: LucideIcons.package,
+                ),
                 const SizedBox(height: 8),
                 _summaryRow(
                   theme,
@@ -1508,7 +1507,9 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  DateFormat.yMMMd().format(ret.returnDate),
+                                  DateFormat(
+                                    'dd/MM/yyyy',
+                                  ).format(ret.returnDate),
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     color: colorScheme.onSurfaceVariant,
                                     fontSize: 11,

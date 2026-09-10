@@ -162,9 +162,7 @@ class _LanMasterDevicesSheetState extends State<_LanMasterDevicesSheet> {
 
   String _date(BuildContext context, DateTime? value) {
     if (value == null) return '—';
-    return DateFormat.yMd(
-      context.locale.toString(),
-    ).add_jm().format(value.toLocal());
+    return DateFormat('dd/MM/yyyy').add_jm().format(value.toLocal());
   }
 
   String _role(String? role) {

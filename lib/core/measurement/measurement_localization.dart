@@ -31,13 +31,23 @@ String localizedSignedQuantity(
 /// Formats aggregate quantities without ever adding unlike dimensions
 /// (for example kilograms to litres).
 String localizedQuantityTotals(Map<String, int> quantitiesByType) {
+  final normalized = <String, int>{};
+  for (final entry in quantitiesByType.entries) {
+    final type = MeasurementType.fromDb(entry.key).dbValue;
+    normalized.update(
+      type,
+      (value) => value + entry.value,
+      ifAbsent: () => entry.value,
+    );
+  }
   final nonZero = Map<String, int>.fromEntries(
-    quantitiesByType.entries.where((entry) => entry.value != 0),
+    normalized.entries.where((entry) => entry.value != 0),
   );
-  final values = nonZero.isEmpty ? quantitiesByType : nonZero;
+  final values = nonZero.isEmpty ? normalized : nonZero;
   if (values.isEmpty) return localizedQuantity(0, 'piece');
-  return values.entries
-      .map((entry) => localizedQuantity(entry.value, entry.key))
+  return MeasurementType.values
+      .where((type) => values.containsKey(type.dbValue))
+      .map((type) => localizedQuantity(values[type.dbValue]!, type.dbValue))
       .join(' • ');
 }
 
@@ -48,9 +58,26 @@ Map<String, int> aggregateQuantityTotals<T>(
 }) {
   final totals = <String, int>{};
   for (final item in items) {
-    final type = measurementTypeOf(item);
+    final type = MeasurementType.fromDb(measurementTypeOf(item)).dbValue;
     final quantity = quantityOf(item);
     totals.update(type, (value) => value + quantity, ifAbsent: () => quantity);
   }
   return totals;
+}
+
+/// Builds a display-ready total while keeping pieces, lengths, weights, and
+/// volumes in separate buckets. Stored milli-units are converted only after
+/// aggregation, so 2 pieces plus 2 metres can never become 2002 pieces.
+String localizedQuantitySummary<T>(
+  Iterable<T> items, {
+  required int Function(T item) quantityOf,
+  required String Function(T item) measurementTypeOf,
+}) {
+  return localizedQuantityTotals(
+    aggregateQuantityTotals(
+      items,
+      quantityOf: quantityOf,
+      measurementTypeOf: measurementTypeOf,
+    ),
+  );
 }

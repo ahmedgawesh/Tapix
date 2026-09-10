@@ -97,14 +97,16 @@ void main() {
     });
 
     test('reconciliation requires Pro', () {
-      expect(
-        FeatureGateService.requiresPro(AppFeature.reconciliation),
-        isTrue,
-      );
+      expect(FeatureGateService.requiresPro(AppFeature.reconciliation), isTrue);
     });
 
     test('multiUser requires Pro', () {
       expect(FeatureGateService.requiresPro(AppFeature.multiUser), isTrue);
+    });
+
+    test('promotions and pharmacy require Pro', () {
+      expect(FeatureGateService.requiresPro(AppFeature.promotions), isTrue);
+      expect(FeatureGateService.requiresPro(AppFeature.pharmacy), isTrue);
     });
   });
 
@@ -143,10 +145,7 @@ void main() {
     });
 
     test('basicSettings is free (language, theme)', () {
-      expect(
-        FeatureGateService.requiresPro(AppFeature.basicSettings),
-        isFalse,
-      );
+      expect(FeatureGateService.requiresPro(AppFeature.basicSettings), isFalse);
     });
   });
 

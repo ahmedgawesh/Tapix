@@ -28,6 +28,7 @@ class PurchaseInvoiceItem {
   final int totalCents;
   final int paidAmountCents;
   final String? paymentMethod;
+  final String? chequeStatuses;
   final String status;
   final DateTime purchaseDate;
 
@@ -41,6 +42,7 @@ class PurchaseInvoiceItem {
     required this.totalCents,
     required this.paidAmountCents,
     this.paymentMethod,
+    this.chequeStatuses,
     required this.status,
     required this.purchaseDate,
   });
@@ -169,9 +171,11 @@ class PurchaseReportsSummary {
   final int creditPurchasesCents;
   final int cardPurchasesCents;
   final int chequePurchasesCents;
+
   /// Total value of ALL posted purchase returns in the period — linked
   /// (invoice-based) AND adjustment (unlinked) returns combined.
   final int totalReturnsCents;
+
   /// Count of ALL posted purchase returns (linked + adjustment).
   final int returnCount;
 
@@ -219,10 +223,14 @@ class PurchaseReportsData {
   List<PurchaseInvoiceItem> purchasesByPaymentMethod(String method) =>
       allPurchases.where((p) => p.paymentMethod == method).toList();
 
-  List<PurchaseInvoiceItem> get cashPurchases => purchasesByPaymentMethod('cash');
-  List<PurchaseInvoiceItem> get creditPurchases => purchasesByPaymentMethod('credit');
-  List<PurchaseInvoiceItem> get cardPurchases => purchasesByPaymentMethod('card');
-  List<PurchaseInvoiceItem> get chequePurchases => purchasesByPaymentMethod('cheque');
+  List<PurchaseInvoiceItem> get cashPurchases =>
+      purchasesByPaymentMethod('cash');
+  List<PurchaseInvoiceItem> get creditPurchases =>
+      purchasesByPaymentMethod('credit');
+  List<PurchaseInvoiceItem> get cardPurchases =>
+      purchasesByPaymentMethod('card');
+  List<PurchaseInvoiceItem> get chequePurchases =>
+      purchasesByPaymentMethod('cheque');
 
   PurchaseReportsData copyWith({
     PurchaseReportsSummary? summary,
@@ -255,8 +263,8 @@ class PurchaseReportsBloc
   ReportDateRange _dateRange;
 
   PurchaseReportsBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -368,8 +376,9 @@ class PurchaseReportsBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT
         (SELECT COALESCE(SUM(pr.total_cents), 0) FROM purchase_returns pr
            WHERE pr.status = 'posted'
@@ -384,14 +393,19 @@ class PurchaseReportsBloc
            WHERE pra.status = 'posted'
              AND pra.return_date >= ? AND pra.return_date <= ?) AS return_count
       ''',
-      variables: [
-        Variable.withString(startIso), Variable.withString(endIso),
-        Variable.withString(startIso), Variable.withString(endIso),
-        Variable.withString(startIso), Variable.withString(endIso),
-        Variable.withString(startIso), Variable.withString(endIso),
-      ],
-      readsFrom: {_db.purchaseReturns, _db.purchaseReturnAdjustments},
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {_db.purchaseReturns, _db.purchaseReturnAdjustments},
+        )
+        .get();
 
     if (rows.isEmpty) return (totalCents: 0, count: 0);
     return (
@@ -404,8 +418,9 @@ class PurchaseReportsBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         p.id AS purchase_id,
         p.purchase_number,
@@ -416,6 +431,11 @@ class PurchaseReportsBloc
         p.total_cents,
         p.paid_amount_cents,
         p.payment_method,
+        (
+          SELECT GROUP_CONCAT(DISTINCT ci.status)
+          FROM cheque_instruments ci
+          WHERE ci.source_table = 'purchase' AND ci.source_id = p.id
+        ) AS cheque_statuses,
         p.status,
         p.purchase_date
       FROM purchases p
@@ -425,12 +445,13 @@ class PurchaseReportsBloc
         AND p.purchase_date <= ?
       ORDER BY p.purchase_date DESC
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.purchases, _db.suppliers},
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {_db.purchases, _db.suppliers, _db.chequeInstruments},
+        )
+        .get();
 
     return rows.map((row) {
       return PurchaseInvoiceItem(
@@ -443,6 +464,7 @@ class PurchaseReportsBloc
         totalCents: row.read<int>('total_cents'),
         paidAmountCents: row.read<int>('paid_amount_cents'),
         paymentMethod: row.readNullable<String>('payment_method'),
+        chequeStatuses: row.readNullable<String>('cheque_statuses'),
         status: row.read<String>('status'),
         purchaseDate: DateTime.parse(row.read<String>('purchase_date')),
       );
@@ -453,8 +475,9 @@ class PurchaseReportsBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         pr.id AS product_id,
         pr.name AS product_name,
@@ -474,12 +497,18 @@ class PurchaseReportsBloc
       GROUP BY pr.id
       ORDER BY total_purchases_cents DESC
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.purchases, _db.purchaseItems, _db.products, _db.productCategories},
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.purchases,
+            _db.purchaseItems,
+            _db.products,
+            _db.productCategories,
+          },
+        )
+        .get();
 
     return rows.map((row) {
       return PurchasesByProductItem(
@@ -499,8 +528,9 @@ class PurchaseReportsBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         COALESCE(pc.id, 0) AS category_id,
         COALESCE(pc.name, 'Uncategorized') AS category_name,
@@ -520,12 +550,18 @@ class PurchaseReportsBloc
       GROUP BY COALESCE(pc.id, 0)
       ORDER BY total_purchases_cents DESC
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.purchases, _db.purchaseItems, _db.products, _db.productCategories},
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.purchases,
+            _db.purchaseItems,
+            _db.products,
+            _db.productCategories,
+          },
+        )
+        .get();
 
     return rows.map((row) {
       return PurchasesByCategoryItem(
@@ -545,8 +581,9 @@ class PurchaseReportsBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         su.id AS supplier_id,
         su.name AS supplier_name,
@@ -569,12 +606,13 @@ class PurchaseReportsBloc
       GROUP BY su.id
       ORDER BY total_purchases_cents DESC
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.purchases, _db.purchaseItems, _db.suppliers},
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {_db.purchases, _db.purchaseItems, _db.suppliers},
+        )
+        .get();
 
     return rows.map((row) {
       final lastDateStr = row.readNullable<String>('last_purchase_date');
@@ -586,7 +624,9 @@ class PurchaseReportsBloc
         totalTaxCents: row.read<int>('total_tax_cents'),
         invoiceCount: row.read<int>('invoice_count'),
         totalQuantity: row.read<int>('total_quantity'),
-        lastPurchaseDate: lastDateStr != null ? DateTime.tryParse(lastDateStr) : null,
+        lastPurchaseDate: lastDateStr != null
+            ? DateTime.tryParse(lastDateStr)
+            : null,
       );
     }).toList();
   }
@@ -595,8 +635,9 @@ class PurchaseReportsBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         p.id AS purchase_id,
         p.purchase_number,
@@ -612,12 +653,13 @@ class PurchaseReportsBloc
         AND p.purchase_date <= ?
       ORDER BY p.purchase_date DESC
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.purchases, _db.suppliers},
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {_db.purchases, _db.suppliers},
+        )
+        .get();
 
     return rows.map((row) {
       return CancelledPurchaseItem(
@@ -636,8 +678,9 @@ class PurchaseReportsBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         p.id AS purchase_id,
         p.purchase_number,
@@ -654,12 +697,13 @@ class PurchaseReportsBloc
         AND p.purchase_date <= ?
       ORDER BY p.purchase_date DESC
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.purchases, _db.suppliers},
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {_db.purchases, _db.suppliers},
+        )
+        .get();
 
     return rows.map((row) {
       final dueDateStr = row.readNullable<String>('due_date');

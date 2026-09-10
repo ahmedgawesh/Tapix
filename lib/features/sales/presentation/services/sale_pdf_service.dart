@@ -8,6 +8,8 @@ import 'package:printing/printing.dart';
 
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/measurement/measurement_localization.dart';
+import '../../../../core/promotions/promotion_sale_snapshot.dart';
+import '../../../../core/promotions/promotion_repository.dart';
 import '../../../../core/services/cashier_shift_service.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../settings/data/services/company_profile_service.dart';
@@ -83,6 +85,7 @@ class SalePdfService {
     required BuildContext context,
     required SaleEntity sale,
     required List<SaleItemEntity> items,
+    List<SalePromotionSnapshot> promotionApplications = const [],
     String? cashierName,
     String? cashierShiftNumber,
   }) async {
@@ -97,6 +100,7 @@ class SalePdfService {
         final pdf = await _buildSaleInvoiceFromEntity(
           sale: sale,
           items: items,
+          promotionApplications: promotionApplications,
           cs: cs,
           appSettings: appSettings,
           locale: locale,
@@ -116,6 +120,7 @@ class SalePdfService {
     required BuildContext context,
     required SaleEntity sale,
     required List<SaleItemEntity> items,
+    List<SalePromotionSnapshot> promotionApplications = const [],
     String? cashierName,
     String? cashierShiftNumber,
   }) async {
@@ -128,6 +133,7 @@ class SalePdfService {
     final pdf = await _buildSaleInvoiceFromEntity(
       sale: sale,
       items: items,
+      promotionApplications: promotionApplications,
       cs: cs,
       appSettings: appSettings,
       locale: locale,
@@ -224,6 +230,8 @@ class SalePdfService {
     final cashierShift = await sl<CashierShiftService>().getSaleReturnShift(
       returnEntity.id,
     );
+    final promotionApplications = await sl<PromotionRepository>()
+        .loadSaleApplications(originalSale.id);
 
     // Fetch customer balance for the PDF footer
     pw.Widget? customerBalanceWidget;
@@ -279,9 +287,7 @@ class SalePdfService {
                     ),
                     _pdfInfoRow(
                       'sales.date'.tr(),
-                      DateFormat.yMMMd(
-                        locale.toString(),
-                      ).format(returnEntity.returnDate),
+                      DateFormat('dd/MM/yyyy').format(returnEntity.returnDate),
                       fonts.regular,
                     ),
                     _pdfInfoRow(
@@ -335,6 +341,7 @@ class SalePdfService {
                 cs: cs,
                 fonts: fonts,
                 isRtl: isRtl,
+                promotionApplications: promotionApplications,
               ),
               pw.SizedBox(height: 16),
               // Return summary (items + pieces + total)
@@ -353,8 +360,12 @@ class SalePdfService {
                       fonts.regular,
                     ),
                     _pdfMoneyRow(
-                      'sales.total_pieces_count'.tr(),
-                      '${returnItems.fold<int>(0, (sum, item) => sum + item.quantity)}',
+                      'measurement.total_quantity'.tr(),
+                      localizedQuantitySummary(
+                        returnItems,
+                        quantityOf: (item) => item.quantity,
+                        measurementTypeOf: (item) => item.measurementType,
+                      ),
                       fonts.regular,
                     ),
                     pw.SizedBox(height: 4),
@@ -418,6 +429,7 @@ class SalePdfService {
     required CurrencyService cs,
     required _PdfFonts fonts,
     required bool isRtl,
+    List<SalePromotionSnapshot> promotionApplications = const [],
   }) {
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey300),
@@ -464,6 +476,15 @@ class SalePdfService {
               ? variantParts.join(' \u00b7 ')
               : null;
           final sku = item.variantSku ?? item.productSku;
+          final offerNames = promotionApplications
+              .where(
+                (offer) => offer.allocations.any(
+                  (allocation) => allocation.saleItemId == item.saleItemId,
+                ),
+              )
+              .map((offer) => offer.name)
+              .toSet()
+              .toList(growable: false);
 
           return pw.TableRow(
             children: [
@@ -492,6 +513,16 @@ class SalePdfService {
                           fonts.regular,
                           fontSize: 7,
                           color: PdfColors.grey600,
+                        ),
+                      ),
+                    if (offerNames.isNotEmpty)
+                      pw.Container(
+                        margin: const pw.EdgeInsets.only(top: 2),
+                        child: _bidiText(
+                          '${'promotions.sales.offer'.tr()}: ${offerNames.join(' + ')}',
+                          fonts.bold,
+                          fontSize: 7,
+                          color: PdfColors.blue700,
                         ),
                       ),
                   ],
@@ -593,22 +624,35 @@ class SalePdfService {
               ),
               pw.SizedBox(height: 16),
               _buildItemsTable(
-                items: state.items
-                    .map(
-                      (item) => _PdfLineItem(
-                        name: item.product.name,
-                        variantSku: item.variant?.sku,
-                        productSku: item.product.sku,
-                        colorName: item.colorName,
-                        sizeName: item.sizeName,
-                        employeeName: item.employeeName,
-                        quantity: item.quantity,
-                        measurementType: item.product.measurementType,
-                        unitPriceCents: item.unitPriceCents.toBigInt().toInt(),
-                        totalCents: item.totalCents.toBigInt().toInt(),
-                      ),
-                    )
-                    .toList(),
+                items: state.items.map((item) {
+                  final promotionLabels = state.promotionEvaluation.applications
+                      .expand(
+                        (application) => application.allocations
+                            .where(
+                              (allocation) => allocation.lineId == item.tempId,
+                            )
+                            .map(
+                              (allocation) =>
+                                  '${'promotions.sales.offer'.tr()}: '
+                                  '${application.name} '
+                                  '(-${cs.format(allocation.discount.cents)})',
+                            ),
+                      )
+                      .toList(growable: false);
+                  return _PdfLineItem(
+                    name: item.product.name,
+                    variantSku: item.variant?.sku,
+                    productSku: item.product.sku,
+                    colorName: item.colorName,
+                    sizeName: item.sizeName,
+                    employeeName: item.employeeName,
+                    quantity: item.quantity,
+                    measurementType: item.product.measurementType,
+                    unitPriceCents: item.unitPriceCents.toBigInt().toInt(),
+                    totalCents: item.totalCents.toBigInt().toInt(),
+                    promotionLabels: promotionLabels,
+                  );
+                }).toList(),
                 cs: cs,
                 fonts: fonts,
                 isRtl: isRtl,
@@ -621,15 +665,11 @@ class SalePdfService {
                 totalCents: state.totalCents.toBigInt().toInt(),
                 paidCents: state.paidAmountCents.toBigInt().toInt(),
                 totalItems: state.items.length,
-                totalPieces:
-                    state.items.every(
-                      (item) => item.product.measurementType == 'piece',
-                    )
-                    ? state.items.fold<int>(
-                        0,
-                        (sum, item) => sum + item.quantity,
-                      )
-                    : null,
+                quantitySummary: localizedQuantitySummary(
+                  state.items,
+                  quantityOf: (item) => item.quantity,
+                  measurementTypeOf: (item) => item.product.measurementType,
+                ),
                 cs: cs,
                 fonts: fonts,
                 includeTaxBreakdown: appSettings.includeTaxBreakdown,
@@ -677,6 +717,7 @@ class SalePdfService {
   static Future<pw.Document> _buildSaleInvoiceFromEntity({
     required SaleEntity sale,
     required List<SaleItemEntity> items,
+    required List<SalePromotionSnapshot> promotionApplications,
     required CurrencyService cs,
     required AppSettings appSettings,
     required Locale locale,
@@ -741,22 +782,35 @@ class SalePdfService {
               ),
               pw.SizedBox(height: 16),
               _buildItemsTable(
-                items: items
-                    .map(
-                      (item) => _PdfLineItem(
-                        name: item.productName ?? '',
-                        variantSku: item.variantSku,
-                        productSku: item.productSku,
-                        colorName: item.colorName,
-                        sizeName: item.sizeName,
-                        employeeName: item.employeeName,
-                        quantity: item.quantity,
-                        measurementType: item.measurementType,
-                        unitPriceCents: item.unitPriceCents.toBigInt().toInt(),
-                        totalCents: item.totalCents.toBigInt().toInt(),
-                      ),
-                    )
-                    .toList(),
+                items: items.map((item) {
+                  final promotionLabels = promotionApplications
+                      .expand(
+                        (application) => application.allocations
+                            .where(
+                              (allocation) => allocation.saleItemId == item.id,
+                            )
+                            .map(
+                              (allocation) =>
+                                  '${'promotions.sales.offer'.tr()}: '
+                                  '${application.name} '
+                                  '(-${cs.format(allocation.discountCents)})',
+                            ),
+                      )
+                      .toList(growable: false);
+                  return _PdfLineItem(
+                    name: item.productName ?? '',
+                    variantSku: item.variantSku,
+                    productSku: item.productSku,
+                    colorName: item.colorName,
+                    sizeName: item.sizeName,
+                    employeeName: item.employeeName,
+                    quantity: item.quantity,
+                    measurementType: item.measurementType,
+                    unitPriceCents: item.unitPriceCents.toBigInt().toInt(),
+                    totalCents: item.totalCents.toBigInt().toInt(),
+                    promotionLabels: promotionLabels,
+                  );
+                }).toList(),
                 cs: cs,
                 fonts: fonts,
                 isRtl: isRtl,
@@ -769,10 +823,11 @@ class SalePdfService {
                 totalCents: sale.totalCents.toBigInt().toInt(),
                 paidCents: sale.paidAmountCents.toBigInt().toInt(),
                 totalItems: items.length,
-                totalPieces:
-                    items.every((item) => item.measurementType == 'piece')
-                    ? items.fold<int>(0, (sum, item) => sum + item.quantity)
-                    : null,
+                quantitySummary: localizedQuantitySummary(
+                  items,
+                  quantityOf: (item) => item.quantity,
+                  measurementTypeOf: (item) => item.measurementType,
+                ),
                 cs: cs,
                 fonts: fonts,
                 includeTaxBreakdown: appSettings.includeTaxBreakdown,
@@ -940,6 +995,8 @@ class SalePdfService {
         return 'sales.payment_card'.tr();
       case 'cheque':
         return 'sales.payment_cheque'.tr();
+      case 'mixed':
+        return 'sales.payment_mixed'.tr();
       default:
         return method;
     }
@@ -972,7 +1029,7 @@ class SalePdfService {
           ),
           _pdfInfoRow(
             'sales.invoice_date'.tr(),
-            DateFormat.yMMMd(locale.toString()).format(date),
+            DateFormat('dd/MM/yyyy').format(date),
             fonts.regular,
           ),
           _pdfInfoRow('sales.customer'.tr(), customerName, fonts.regular),
@@ -1075,6 +1132,17 @@ class SalePdfService {
                           color: PdfColors.grey600,
                         ),
                       ),
+                    ...item.promotionLabels.map(
+                      (label) => pw.Container(
+                        margin: const pw.EdgeInsets.only(top: 2),
+                        child: _bidiText(
+                          label,
+                          fonts.bold,
+                          fontSize: 7,
+                          color: PdfColors.blue700,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1100,7 +1168,7 @@ class SalePdfService {
     required int totalCents,
     required int paidCents,
     required int totalItems,
-    required int? totalPieces,
+    required String quantitySummary,
     required CurrencyService cs,
     required _PdfFonts fonts,
     bool includeTaxBreakdown = true,
@@ -1120,12 +1188,11 @@ class SalePdfService {
             '$totalItems',
             fonts.regular,
           ),
-          if (totalPieces != null)
-            _pdfMoneyRow(
-              'sales.total_pieces_count'.tr(),
-              '$totalPieces',
-              fonts.regular,
-            ),
+          _pdfMoneyRow(
+            'measurement.total_quantity'.tr(),
+            quantitySummary,
+            fonts.regular,
+          ),
           pw.SizedBox(height: 4),
           _pdfMoneyRow(
             'sales.subtotal'.tr(),
@@ -1491,9 +1558,10 @@ class SalePdfService {
     final discountCents = returnEntity.discountCents.toBigInt().toInt();
     final taxCents = returnEntity.taxCents.toBigInt().toInt();
     final totalCents = returnEntity.totalCents.toBigInt().toInt();
-    final totalPieces = returnItems.fold<int>(
-      0,
-      (sum, d) => sum + d.item.quantity,
+    final quantitySummary = localizedQuantitySummary(
+      returnItems,
+      quantityOf: (entry) => entry.item.quantity,
+      measurementTypeOf: (entry) => entry.item.measurementType,
     );
 
     pdf.addPage(
@@ -1529,9 +1597,7 @@ class SalePdfService {
                     ),
                     _pdfInfoRow(
                       'sales.date'.tr(),
-                      DateFormat.yMMMd(
-                        locale.toString(),
-                      ).format(returnEntity.returnDate),
+                      DateFormat('dd/MM/yyyy').format(returnEntity.returnDate),
                       fonts.regular,
                     ),
                     _pdfInfoRow(
@@ -1600,8 +1666,8 @@ class SalePdfService {
                       fonts.regular,
                     ),
                     _pdfMoneyRow(
-                      'sales.total_pieces_count'.tr(),
-                      '$totalPieces',
+                      'measurement.total_quantity'.tr(),
+                      quantitySummary,
                       fonts.regular,
                     ),
                     pw.SizedBox(height: 4),
@@ -1744,6 +1810,7 @@ class _PdfLineItem {
   final String measurementType;
   final int unitPriceCents;
   final int totalCents;
+  final List<String> promotionLabels;
 
   const _PdfLineItem({
     required this.name,
@@ -1756,6 +1823,7 @@ class _PdfLineItem {
     this.measurementType = 'piece',
     required this.unitPriceCents,
     required this.totalCents,
+    this.promotionLabels = const [],
   });
 
   String? get sku => variantSku ?? productSku;

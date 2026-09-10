@@ -403,9 +403,9 @@ class _SaleReturnsViewState extends State<_SaleReturnsView> {
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                DateFormat.yMMMd().format(
-                                                  ret.returnDate,
-                                                ),
+                                                DateFormat(
+                                                  'dd/MM/yyyy',
+                                                ).format(ret.returnDate),
                                                 style: theme.textTheme.bodySmall
                                                     ?.copyWith(
                                                       color: colorScheme

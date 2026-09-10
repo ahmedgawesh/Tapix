@@ -35,7 +35,8 @@ class CustomerReportPdfService {
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'CustomerReport_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      filename:
+          'CustomerReport_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
   }
 
@@ -47,7 +48,8 @@ class CustomerReportPdfService {
     final pdf = await _buildSingleCustomerPdf(context, customer);
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'Customer_${customer.customerName}_${DateFormat('yyyyMMdd').format(DateTime.now())}',
+      name:
+          'Customer_${customer.customerName}_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
   }
 
@@ -60,7 +62,8 @@ class CustomerReportPdfService {
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'Customer_${customer.customerName}_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      filename:
+          'Customer_${customer.customerName}_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
   }
 
@@ -92,14 +95,17 @@ class CustomerReportPdfService {
             pw.SizedBox(height: 12),
 
             // Summary table
-            pw.Text(_t('summary', lang),
-                style: pw.TextStyle(font: fonts.bold, fontSize: 12)),
+            pw.Text(
+              _t('summary', lang),
+              style: pw.TextStyle(font: fonts.bold, fontSize: 12),
+            ),
             pw.SizedBox(height: 6),
             pw.TableHelper.fromTextArray(
               headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 9),
               cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 9),
-              headerDecoration:
-                  const pw.BoxDecoration(color: PdfColors.grey200),
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.grey200,
+              ),
               headers: [
                 _t('total_receivables', lang),
                 _t('total_payables', lang),
@@ -123,15 +129,17 @@ class CustomerReportPdfService {
 
             // Per-customer table
             pw.Text(
-                '${_t('active_customers', lang)}: ${data.activeCustomerCount}',
-                style: pw.TextStyle(font: fonts.bold, fontSize: 11)),
+              '${_t('active_customers', lang)}: ${data.activeCustomerCount}',
+              style: pw.TextStyle(font: fonts.bold, fontSize: 11),
+            ),
             pw.SizedBox(height: 6),
 
             pw.TableHelper.fromTextArray(
               headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 8),
               cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
-              headerDecoration:
-                  const pw.BoxDecoration(color: PdfColors.grey200),
+              headerDecoration: const pw.BoxDecoration(
+                color: PdfColors.grey200,
+              ),
               cellAlignments: {
                 0: pw.Alignment.centerLeft,
                 1: pw.Alignment.centerRight,
@@ -151,24 +159,29 @@ class CustomerReportPdfService {
                 _t('current_balance', lang),
               ],
               data: data.customers
-                  .map((c) => [
-                        c.customerName,
-                        cs.formatCents(c.openingBalanceCents),
-                        cs.formatCents(c.totalSalesCents),
-                        cs.formatCents(c.totalPaymentsCents),
-                        cs.formatCents(c.totalDiscountsCents),
-                        cs.formatCents(c.totalReturnsCents),
-                        cs.formatCents(c.currentBalanceCents),
-                      ])
+                  .map(
+                    (c) => [
+                      c.customerName,
+                      cs.formatCents(c.openingBalanceCents),
+                      cs.formatCents(c.totalSalesCents),
+                      cs.formatCents(c.totalPaymentsCents),
+                      cs.formatCents(c.totalDiscountsCents),
+                      cs.formatCents(c.totalReturnsCents),
+                      cs.formatCents(c.currentBalanceCents),
+                    ],
+                  )
                   .toList(),
             ),
 
             pw.SizedBox(height: 16),
             pw.Divider(),
             pw.Text(
-              '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+              '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
               style: pw.TextStyle(
-                  font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                font: fonts.regular,
+                fontSize: 8,
+                color: PdfColors.grey600,
+              ),
             ),
           ];
         },
@@ -207,14 +220,13 @@ class CustomerReportPdfService {
           final balLabel = isZero
               ? _t('balance_settled', lang)
               : isReceivable
-                  ? _t('balance_receivable', lang)
-                  : _t('balance_payable', lang);
+              ? _t('balance_receivable', lang)
+              : _t('balance_payable', lang);
 
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _buildHeader(
-                  company, _t('customer_report', lang), fonts, dir),
+              _buildHeader(company, _t('customer_report', lang), fonts, dir),
               pw.SizedBox(height: 12),
 
               // Customer name
@@ -225,41 +237,64 @@ class CustomerReportPdfService {
               pw.SizedBox(height: 12),
 
               // Balance breakdown
-              _buildRow(_t('opening_balance', lang),
-                  cs.formatCents(customer.openingBalanceCents), fonts),
-              _buildRow(_t('total_sales', lang),
-                  cs.formatCents(customer.totalSalesCents), fonts),
-              _buildRow(_t('total_payments', lang),
-                  cs.formatCents(customer.totalPaymentsCents), fonts),
-              _buildRow(_t('total_discounts', lang),
-                  cs.formatCents(customer.totalDiscountsCents), fonts),
-              _buildRow(_t('total_returns', lang),
-                  cs.formatCents(customer.totalReturnsCents), fonts),
+              _buildRow(
+                _t('opening_balance', lang),
+                cs.formatCents(customer.openingBalanceCents),
+                fonts,
+              ),
+              _buildRow(
+                _t('total_sales', lang),
+                cs.formatCents(customer.totalSalesCents),
+                fonts,
+              ),
+              _buildRow(
+                _t('total_payments', lang),
+                cs.formatCents(customer.totalPaymentsCents),
+                fonts,
+              ),
+              _buildRow(
+                _t('total_discounts', lang),
+                cs.formatCents(customer.totalDiscountsCents),
+                fonts,
+              ),
+              _buildRow(
+                _t('total_returns', lang),
+                cs.formatCents(customer.totalReturnsCents),
+                fonts,
+              ),
               pw.Divider(),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text(_t('current_balance', lang),
-                      style: pw.TextStyle(font: fonts.bold, fontSize: 11)),
-                  pw.Text(cs.formatCents(bal),
-                      style: pw.TextStyle(font: fonts.bold, fontSize: 11)),
+                  pw.Text(
+                    _t('current_balance', lang),
+                    style: pw.TextStyle(font: fonts.bold, fontSize: 11),
+                  ),
+                  pw.Text(
+                    cs.formatCents(bal),
+                    style: pw.TextStyle(font: fonts.bold, fontSize: 11),
+                  ),
                 ],
               ),
               pw.SizedBox(height: 4),
-              pw.Text(balLabel,
-                  style: pw.TextStyle(
-                      font: fonts.regular,
-                      fontSize: 9,
-                      color: PdfColors.grey600)),
+              pw.Text(
+                balLabel,
+                style: pw.TextStyle(
+                  font: fonts.regular,
+                  fontSize: 9,
+                  color: PdfColors.grey600,
+                ),
+              ),
 
               pw.SizedBox(height: 24),
               pw.Divider(),
               pw.Text(
-                '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+                '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
                 style: pw.TextStyle(
-                    font: fonts.regular,
-                    fontSize: 8,
-                    color: PdfColors.grey600),
+                  font: fonts.regular,
+                  fontSize: 8,
+                  color: PdfColors.grey600,
+                ),
               ),
             ],
           );
@@ -274,17 +309,20 @@ class CustomerReportPdfService {
   // HELPERS
   // ═══════════════════════════════════════════════════════
 
-  static pw.Widget _buildRow(
-      String label, String value, _PdfFonts fonts) {
+  static pw.Widget _buildRow(String label, String value, _PdfFonts fonts) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 2),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text(label,
-              style: pw.TextStyle(font: fonts.regular, fontSize: 10)),
-          pw.Text(value,
-              style: pw.TextStyle(font: fonts.regular, fontSize: 10)),
+          pw.Text(
+            label,
+            style: pw.TextStyle(font: fonts.regular, fontSize: 10),
+          ),
+          pw.Text(
+            value,
+            style: pw.TextStyle(font: fonts.regular, fontSize: 10),
+          ),
         ],
       ),
     );
@@ -299,20 +337,27 @@ class CustomerReportPdfService {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(company.name,
-            style: pw.TextStyle(font: fonts.bold, fontSize: 16)),
+        pw.Text(
+          company.name,
+          style: pw.TextStyle(font: fonts.bold, fontSize: 16),
+        ),
         if (company.address != null && company.address!.isNotEmpty)
-          pw.Text(company.address!,
-              style: pw.TextStyle(
-                  font: fonts.regular,
-                  fontSize: 9,
-                  color: PdfColors.grey600)),
+          pw.Text(
+            company.address!,
+            style: pw.TextStyle(
+              font: fonts.regular,
+              fontSize: 9,
+              color: PdfColors.grey600,
+            ),
+          ),
         pw.SizedBox(height: 8),
         pw.Divider(),
         pw.SizedBox(height: 4),
         pw.Center(
-          child: pw.Text(title,
-              style: pw.TextStyle(font: fonts.bold, fontSize: 14)),
+          child: pw.Text(
+            title,
+            style: pw.TextStyle(font: fonts.bold, fontSize: 14),
+          ),
         ),
       ],
     );
@@ -320,10 +365,12 @@ class CustomerReportPdfService {
 
   static Future<_PdfFonts> _loadFonts() async {
     try {
-      final regularData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-      final boldData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+      final regularData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+      );
+      final boldData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+      );
       return _PdfFonts(
         regular: pw.Font.ttf(regularData),
         bold: pw.Font.ttf(boldData),
@@ -346,11 +393,7 @@ class CustomerReportPdfService {
       'ar': 'تقرير العملاء',
       'fr': 'Rapport Clients',
     },
-    'summary': {
-      'en': 'Summary',
-      'ar': 'ملخص',
-      'fr': 'Résumé',
-    },
+    'summary': {'en': 'Summary', 'ar': 'ملخص', 'fr': 'Résumé'},
     'total_receivables': {
       'en': 'Total Receivables',
       'ar': 'إجمالي المستحقات لنا',
@@ -386,11 +429,7 @@ class CustomerReportPdfService {
       'ar': 'العملاء النشطون',
       'fr': 'Clients Actifs',
     },
-    'customer': {
-      'en': 'Customer',
-      'ar': 'العميل',
-      'fr': 'Client',
-    },
+    'customer': {'en': 'Customer', 'ar': 'العميل', 'fr': 'Client'},
     'opening_balance': {
       'en': 'Opening Balance',
       'ar': 'الرصيد الافتتاحي',
@@ -426,11 +465,7 @@ class CustomerReportPdfService {
       'ar': 'أنت مدين للعميل',
       'fr': 'Vous devez au client',
     },
-    'printed_on': {
-      'en': 'Printed on',
-      'ar': 'طُبع في',
-      'fr': 'Imprimé le',
-    },
+    'printed_on': {'en': 'Printed on', 'ar': 'طُبع في', 'fr': 'Imprimé le'},
   };
 
   static String _t(String key, String lang) {

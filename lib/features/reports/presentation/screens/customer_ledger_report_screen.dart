@@ -397,7 +397,7 @@ class _LedgerContent extends StatelessWidget {
           cells: [
             DataCell(
               Text(
-                DateFormat.yMd().format(data.dateRange.startDate),
+                DateFormat('dd/MM/yyyy').format(data.dateRange.startDate),
                 style: boldCellStyle,
               ),
             ),
@@ -438,7 +438,10 @@ class _LedgerContent extends StatelessWidget {
             cells: [
               // Date
               DataCell(
-                Text(DateFormat.yMd().format(row.date), style: cellStyle),
+                Text(
+                  DateFormat('dd/MM/yyyy').format(row.date),
+                  style: cellStyle,
+                ),
               ),
               // Sale columns
               DataCell(
@@ -624,7 +627,7 @@ class _LedgerContent extends StatelessWidget {
           cells: [
             DataCell(
               Text(
-                DateFormat.yMd().format(data.dateRange.endDate),
+                DateFormat('dd/MM/yyyy').format(data.dateRange.endDate),
                 style: boldCellStyle,
               ),
             ),

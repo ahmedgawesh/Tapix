@@ -87,6 +87,13 @@ class _HubView extends StatelessWidget {
             color: colorScheme.tertiary,
             onTap: () => context.push('/financial-management/periods'),
           ),
+          _NavTile(
+            icon: LucideIcons.fileCheck2,
+            title: 'cheques.title'.tr(),
+            subtitle: 'cheques.subtitle'.tr(),
+            color: Colors.green.shade700,
+            onTap: () => context.push('/cheques'),
+          ),
           const SizedBox(height: 20),
 
           // ═══ OWNER EQUITY & LONG-TERM ASSETS ═══

@@ -833,9 +833,9 @@ class _PurchaseTile extends StatelessWidget {
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                DateFormat.yMMMd().format(
-                                  purchase.purchaseDate,
-                                ),
+                                DateFormat(
+                                  'dd/MM/yyyy',
+                                ).format(purchase.purchaseDate),
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: cs.onSurfaceVariant,
                                 ),

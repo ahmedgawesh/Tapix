@@ -34,8 +34,10 @@ class _CustomerSalesReportView extends StatelessWidget {
       appBar: AppBar(
         title: Text('reports.customer_sales'.tr()),
         actions: [
-          BlocBuilder<CustomerSalesReportBloc,
-              RealtimeState<CustomerSalesReportData>>(
+          BlocBuilder<
+            CustomerSalesReportBloc,
+            RealtimeState<CustomerSalesReportData>
+          >(
             builder: (context, state) {
               if (state is! RealtimeSuccess<CustomerSalesReportData>) {
                 return const SizedBox.shrink();
@@ -59,63 +61,71 @@ class _CustomerSalesReportView extends StatelessWidget {
           ),
         ],
       ),
-      body: BlocBuilder<CustomerSalesReportBloc,
-          RealtimeState<CustomerSalesReportData>>(
-        builder: (context, state) {
-          if (state is RealtimeLoading<CustomerSalesReportData>) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body:
+          BlocBuilder<
+            CustomerSalesReportBloc,
+            RealtimeState<CustomerSalesReportData>
+          >(
+            builder: (context, state) {
+              if (state is RealtimeLoading<CustomerSalesReportData>) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (state is RealtimeError<CustomerSalesReportData>) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline,
-                      size: 48, color: colorScheme.error),
-                  const SizedBox(height: 16),
-                  Text(state.error.toString(),
-                      style: theme.textTheme.bodyLarge),
-                ],
-              ),
-            );
-          }
-
-          if (state is RealtimeSuccess<CustomerSalesReportData>) {
-            return Column(
-              children: [
-                // Date range selector
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: DateRangeSelector(
-                    dateRange: state.data.dateRange,
-                    onChanged: (range) => context
-                        .read<CustomerSalesReportBloc>()
-                        .add(CustomerSalesReportDateRangeChanged(range)),
+              if (state is RealtimeError<CustomerSalesReportData>) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        state.error.toString(),
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
+                );
+              }
 
-                // Summary cards
-                _buildSummaryCards(context, state.data),
-                const SizedBox(height: 8),
+              if (state is RealtimeSuccess<CustomerSalesReportData>) {
+                return Column(
+                  children: [
+                    // Date range selector
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: DateRangeSelector(
+                        dateRange: state.data.dateRange,
+                        onChanged: (range) => context
+                            .read<CustomerSalesReportBloc>()
+                            .add(CustomerSalesReportDateRangeChanged(range)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
 
-                // Content
-                Expanded(
-                  child: _CustomerSalesContent(data: state.data),
-                ),
-              ],
-            );
-          }
+                    // Summary cards
+                    _buildSummaryCards(context, state.data),
+                    const SizedBox(height: 8),
 
-          return const SizedBox.shrink();
-        },
-      ),
+                    // Content
+                    Expanded(child: _CustomerSalesContent(data: state.data)),
+                  ],
+                );
+              }
+
+              return const SizedBox.shrink();
+            },
+          ),
     );
   }
 
   Widget _buildSummaryCards(
-      BuildContext context, CustomerSalesReportData data) {
+    BuildContext context,
+    CustomerSalesReportData data,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final cs = sl<CurrencyService>();
@@ -149,11 +159,14 @@ class _CustomerSalesReportView extends StatelessWidget {
           if (isWide) {
             return Row(
               children: cards
-                  .map((c) => Expanded(
-                          child: Padding(
+                  .map(
+                    (c) => Expanded(
+                      child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: c,
-                      )))
+                      ),
+                    ),
+                  )
                   .toList(),
             );
           }
@@ -163,15 +176,17 @@ class _CustomerSalesReportView extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: cards[0],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: cards[0],
+                    ),
+                  ),
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: cards[1],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: cards[1],
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -184,7 +199,9 @@ class _CustomerSalesReportView extends StatelessWidget {
   }
 
   Future<void> _printReport(
-      BuildContext context, CustomerSalesReportData data) async {
+    BuildContext context,
+    CustomerSalesReportData data,
+  ) async {
     await CustomerSalesPdfService.printCustomerSalesReport(
       context: context,
       data: data,
@@ -197,7 +214,9 @@ class _CustomerSalesReportView extends StatelessWidget {
   }
 
   Future<void> _shareReport(
-      BuildContext context, CustomerSalesReportData data) async {
+    BuildContext context,
+    CustomerSalesReportData data,
+  ) async {
     await CustomerSalesPdfService.shareCustomerSalesReport(
       context: context,
       data: data,
@@ -287,16 +306,23 @@ class _CustomerSalesContent extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.shoppingCart,
-                size: 48, color: theme.colorScheme.onSurfaceVariant),
+            Icon(
+              LucideIcons.shoppingCart,
+              size: 48,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 16),
-            Text('reports.no_sales_data'.tr(),
-                style: theme.textTheme.bodyLarge),
+            Text(
+              'reports.no_sales_data'.tr(),
+              style: theme.textTheme.bodyLarge,
+            ),
             const SizedBox(height: 8),
-            Text('reports.no_sales_data_desc'.tr(),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                )),
+            Text(
+              'reports.no_sales_data_desc'.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       );
@@ -309,9 +335,12 @@ class _CustomerSalesContent extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('reports.customer_sales_details'.tr(),
-                style: theme.textTheme.titleSmall
-                    ?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'reports.customer_sales_details'.tr(),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             Text(
               'reports.customer_count'.tr(args: ['${data.customers.length}']),
               style: theme.textTheme.bodySmall?.copyWith(
@@ -329,10 +358,7 @@ class _CustomerSalesContent extends StatelessWidget {
             sortColumnIndex: _sortColumnIndex(data.sort),
             sortAscending: _isSortAscending(data.sort),
             columns: [
-              const DataColumn(
-                label: Text('#'),
-                numeric: true,
-              ),
+              const DataColumn(label: Text('#'), numeric: true),
               DataColumn(
                 label: Text('reports.customer'.tr()),
                 onSort: (columnIndex, ascending) => _toggleSort(
@@ -342,9 +368,7 @@ class _CustomerSalesContent extends StatelessWidget {
                   data.sort,
                 ),
               ),
-              DataColumn(
-                label: Text('reports.segment'.tr()),
-              ),
+              DataColumn(label: Text('reports.segment'.tr())),
               DataColumn(
                 label: Text('reports.total_sales'.tr()),
                 numeric: true,
@@ -365,59 +389,70 @@ class _CustomerSalesContent extends StatelessWidget {
                   data.sort,
                 ),
               ),
-              DataColumn(
-                label: Text('reports.avg_order'.tr()),
-                numeric: true,
-              ),
-              DataColumn(
-                label: Text('reports.last_sale'.tr()),
-              ),
+              DataColumn(label: Text('reports.avg_order'.tr()), numeric: true),
+              DataColumn(label: Text('reports.last_sale'.tr())),
             ],
             rows: data.customers.asMap().entries.map((entry) {
               final idx = entry.key + 1;
               final item = entry.value;
-              return DataRow(cells: [
-                DataCell(Text(
-                  '$idx',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: idx <= 3
-                        ? _rankColor(idx, theme.colorScheme)
-                        : null,
+              return DataRow(
+                cells: [
+                  DataCell(
+                    Text(
+                      '$idx',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: idx <= 3
+                            ? _rankColor(idx, theme.colorScheme)
+                            : null,
+                      ),
+                    ),
                   ),
-                )),
-                DataCell(Text(
-                  item.customerName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                )),
-                DataCell(Text(
-                  _segmentLabel(item.segment),
-                  style: theme.textTheme.bodySmall,
-                )),
-                DataCell(Text(
-                  cs.formatCents(item.totalSalesCents),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w600,
+                  DataCell(
+                    Text(
+                      item.customerName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                )),
-                DataCell(Text(
-                  '${item.invoiceCount}',
-                  style: theme.textTheme.bodySmall,
-                )),
-                DataCell(Text(
-                  cs.formatCents(item.averageOrderCents),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                  DataCell(
+                    Text(
+                      _segmentLabel(item.segment),
+                      style: theme.textTheme.bodySmall,
+                    ),
                   ),
-                )),
-                DataCell(Text(
-                  item.lastSaleDate != null
-                      ? DateFormat.yMd().format(item.lastSaleDate!)
-                      : '-',
-                  style: theme.textTheme.bodySmall,
-                )),
-              ]);
+                  DataCell(
+                    Text(
+                      cs.formatCents(item.totalSalesCents),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  DataCell(
+                    Text(
+                      '${item.invoiceCount}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                  DataCell(
+                    Text(
+                      cs.formatCents(item.averageOrderCents),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  DataCell(
+                    Text(
+                      item.lastSaleDate != null
+                          ? DateFormat('dd/MM/yyyy').format(item.lastSaleDate!)
+                          : '-',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              );
             }).toList(),
           ),
         ),
@@ -432,8 +467,9 @@ class _CustomerSalesContent extends StatelessWidget {
               children: [
                 Text(
                   'reports.grand_total'.tr(),
-                  style: theme.textTheme.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.bold),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 Text(
                   cs.formatCents(data.grandTotalSalesCents),
@@ -497,9 +533,9 @@ class _CustomerSalesContent extends StatelessWidget {
     CustomerSalesSortType current,
   ) {
     final newSort = current == desc ? asc : desc;
-    context
-        .read<CustomerSalesReportBloc>()
-        .add(CustomerSalesReportSortChanged(newSort));
+    context.read<CustomerSalesReportBloc>().add(
+      CustomerSalesReportSortChanged(newSort),
+    );
   }
 
   String _segmentLabel(String segment) {

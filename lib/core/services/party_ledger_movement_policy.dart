@@ -1,8 +1,8 @@
 /// Defines which audit rows change customer/supplier sub-ledger balances.
 ///
-/// Cash/cheque returns are recorded as `refund` rows for traceability, but
-/// their settlement is against cash/bank rather than receivables/payables.
-/// Their reversals are therefore audit-only as well.
+/// Immediate cash refunds are recorded as `refund` rows for traceability and
+/// are audit-only. Return-cheque obligation and recognition rows use their own
+/// transaction types and follow the normal balance rule.
 class PartyLedgerMovementPolicy {
   const PartyLedgerMovementPolicy._();
 

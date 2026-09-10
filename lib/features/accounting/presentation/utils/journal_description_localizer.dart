@@ -135,6 +135,20 @@ String _localizeSegment(String segment, JournalDescriptionResolver resolve) {
     ]);
   }
 
+  final dishonouredResolution = RegExp(
+    r'^Dishonoured cheque #(\d+) resolved by ([a-z_]+)$',
+  ).firstMatch(segment);
+  if (dishonouredResolution != null) {
+    final method = resolve(
+      'cheques.resolution_${dishonouredResolution.group(2)}',
+      const [],
+    );
+    return resolve('journal_descriptions.cheque_dishonour_resolved', [
+      dishonouredResolution.group(1)!,
+      method,
+    ]);
+  }
+
   final reference = _reference(segment, resolve);
   if (reference != null) return reference;
 
@@ -149,6 +163,30 @@ String _localizeSegment(String segment, JournalDescriptionResolver resolve) {
 
 String? _reference(String segment, JournalDescriptionResolver resolve) {
   const patterns = <(String, String)>[
+    (r'^Incoming cheque #(\d+) cleared$', 'incoming_cheque_cleared'),
+    (r'^Outgoing cheque #(\d+) cleared$', 'outgoing_cheque_cleared'),
+    (
+      r'^Incoming return cheque #(\d+) received$',
+      'incoming_return_cheque_received',
+    ),
+    (
+      r'^Outgoing return cheque #(\d+) issued$',
+      'outgoing_return_cheque_issued',
+    ),
+    (
+      r'^Incoming return cheque #(\d+) applied$',
+      'incoming_return_cheque_applied',
+    ),
+    (
+      r'^Outgoing return cheque #(\d+) applied$',
+      'outgoing_return_cheque_applied',
+    ),
+    (
+      r'^Return cheque #(\d+) deferred until clearance$',
+      'return_cheque_deferred',
+    ),
+    (r'^Cheque #(\d+) cancelled$', 'cheque_cancelled'),
+    (r'^Cheque #(\d+) dishonoured$', 'cheque_dishonoured'),
     (r'^Sale #(\d+)$', 'sale'),
     (r'^Purchase #(\d+)$', 'purchase'),
     (r'^Sale Return #(\d+)$', 'sale_return'),

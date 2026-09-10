@@ -31,7 +31,7 @@ void main() {
   test(
     'fresh schema stores multi-ingredient medicine strengths exactly',
     () async {
-      expect(db.schemaVersion, 10070);
+      expect(db.schemaVersion, 10081);
       final flag =
           await (db.select(db.appSettings)
                 ..where((row) => row.key.equals('pharmacy_features_enabled')))
@@ -266,7 +266,7 @@ void main() {
 
       fileDb = AppDatabase.connect(DatabaseConnection(NativeDatabase(file)));
       await fileDb.customSelect('SELECT 1').get();
-      expect(fileDb.schemaVersion, 10070);
+      expect(fileDb.schemaVersion, 10081);
       final existing = await (fileDb.select(
         fileDb.products,
       )..where((row) => row.id.equals(productId))).getSingle();

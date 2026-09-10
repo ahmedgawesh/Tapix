@@ -5,11 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../../../../core/database/app_database.dart';
-import '../../../../core/database/daos/cheque_confirmation_dao.dart';
+import '../../../../core/database/daos/cheque_instrument_dao.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/cheque_lifecycle_service.dart';
-import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/cheque_management_service.dart';
+import '../../../../core/widgets/action_confirmation_dialog.dart';
 
 /// Phase 14.0 — DB-backed cheque reminders.
 ///
@@ -20,8 +20,9 @@ import '../../../../core/services/currency_service.dart';
 ///   • **Mark bounced** — cheque was returned. Captures a reason.
 ///   • **Cancel** — cheque was stopped/voided before clearance.
 ///
-/// All actions persist to `cheque_confirmations` so a future
-/// `LedgerRebuildService` pass or audit query can reproduce the lifecycle.
+/// Every action targets the physical row in `cheque_instruments`. The legacy
+/// `cheque_confirmations` sidecar is kept in sync only for compatibility with
+/// old reports and installations.
 ///
 /// **Direction semantics** (matched in the UI badges):
 /// - `incoming` — cheque is *receivable*, money flowing TO the user.
@@ -43,45 +44,43 @@ enum ChequeDirection { incoming, outgoing }
 enum _ChequeIntent { cleared, bounced, cancelled }
 
 class ChequeReminderItem {
+  final int instrumentId;
+
   /// `sale` | `purchase` | `sale_return` | `purchase_return`
   /// | `sale_return_adjustment` | `purchase_return_adjustment`
   final String sourceTable;
   final int sourceId;
   final String referenceNumber;
+  final String? chequeNumber;
   final DateTime dueDate;
   final int amountCents;
+  final String currencySymbol;
   final ChequeDirection direction;
 
   ChequeReminderItem({
+    required this.instrumentId,
     required this.sourceTable,
     required this.sourceId,
     required this.referenceNumber,
+    this.chequeNumber,
     required this.dueDate,
     required this.amountCents,
+    required this.currencySymbol,
     required this.direction,
   });
-
-  String get uniqueId => '$sourceTable|$sourceId';
 }
 
 class _ChequeRemindersSectionState extends State<ChequeRemindersSection> {
-  late final AppDatabase _db;
-  late final CurrencyService _currency;
-  late final ChequeConfirmationDao _confirmDao;
+  late final ChequeManagementService _management;
   late final ChequeLifecycleService _lifecycle;
   StreamSubscription<List<ChequeReminderItem>>? _chequeSub;
-  StreamSubscription<Map<String, ChequeConfirmation>>? _confirmSub;
   List<ChequeReminderItem> _allCheques = [];
-  Map<String, ChequeConfirmation> _confirmations = {};
   bool _chequesLoaded = false;
-  bool _confirmationsLoaded = false;
 
   @override
   void initState() {
     super.initState();
-    _db = sl<AppDatabase>();
-    _currency = sl<CurrencyService>();
-    _confirmDao = sl<ChequeConfirmationDao>();
+    _management = sl<ChequeManagementService>();
     _lifecycle = sl<ChequeLifecycleService>();
     _subscribeReminders();
   }
@@ -89,126 +88,46 @@ class _ChequeRemindersSectionState extends State<ChequeRemindersSection> {
   @override
   void dispose() {
     _chequeSub?.cancel();
-    _confirmSub?.cancel();
     super.dispose();
   }
 
-  bool get _loaded => _chequesLoaded && _confirmationsLoaded;
+  bool get _loaded => _chequesLoaded;
 
   // ── data stream ───────────────────────────────────────────────────────
 
-  /// UNION across all six cheque-bearing source tables. The aliases
-  /// `source_table` here match the values in `ChequeSourceTables`, NOT
-  /// the underlying physical table names (e.g. `sale_return_adjustment`
-  /// not `sale_return_adjustments`). The DAO's natural-key column
-  /// `cheque_confirmations.source_table` uses these aliases.
+  /// Each row is one physical instrument, so several partial cheques linked
+  /// to the same invoice remain independently visible and actionable.
   void _subscribeReminders() {
-    final reminderStream = _db.customSelect(
-      '''
-      SELECT 'sale' AS source_table, id AS source_id,
-             invoice_number AS reference_number,
-             due_date, total_cents AS amount_cents, 'incoming' AS direction
-      FROM sales
-      WHERE payment_method IN ('cheque', 'check')
-        AND due_date IS NOT NULL
-        AND status NOT IN ('voided', 'draft')
-
-      UNION ALL
-
-      SELECT 'purchase' AS source_table, id AS source_id,
-             purchase_number AS reference_number,
-             due_date, total_cents AS amount_cents, 'outgoing' AS direction
-      FROM purchases
-      WHERE payment_method IN ('cheque', 'check')
-        AND due_date IS NOT NULL
-        AND status NOT IN ('voided', 'draft')
-
-      UNION ALL
-
-      SELECT 'sale_return' AS source_table, id AS source_id,
-             return_number AS reference_number,
-             due_date, total_cents AS amount_cents, 'outgoing' AS direction
-      FROM sale_returns
-      WHERE refund_method IN ('cheque', 'check')
-        AND due_date IS NOT NULL
-        AND status NOT IN ('voided', 'draft')
-
-      UNION ALL
-
-      SELECT 'purchase_return' AS source_table, id AS source_id,
-             return_number AS reference_number,
-             due_date, total_cents AS amount_cents, 'incoming' AS direction
-      FROM purchase_returns
-      WHERE refund_method IN ('cheque', 'check')
-        AND due_date IS NOT NULL
-        AND status NOT IN ('voided', 'draft')
-
-      UNION ALL
-
-      SELECT 'sale_return_adjustment' AS source_table, id AS source_id,
-             return_number AS reference_number,
-             due_date, total_cents AS amount_cents, 'outgoing' AS direction
-      FROM sale_return_adjustments
-      WHERE refund_method IN ('cheque', 'check')
-        AND due_date IS NOT NULL
-        AND status NOT IN ('voided', 'draft')
-
-      UNION ALL
-
-      SELECT 'purchase_return_adjustment' AS source_table, id AS source_id,
-             return_number AS reference_number,
-             due_date, total_cents AS amount_cents, 'incoming' AS direction
-      FROM purchase_return_adjustments
-      WHERE refund_method IN ('cheque', 'check')
-        AND due_date IS NOT NULL
-        AND status NOT IN ('voided', 'draft')
-      ''',
-      readsFrom: {
-        _db.sales,
-        _db.purchases,
-        _db.saleReturns,
-        _db.purchaseReturns,
-        _db.saleReturnAdjustments,
-        _db.purchaseReturnAdjustments,
-      },
-    ).watch().map((rows) {
-      final items = <ChequeReminderItem>[];
-      for (final row in rows) {
-        final rawDate = row.read<String?>('due_date');
-        if (rawDate == null) continue;
-        DateTime date;
-        try {
-          date = DateTime.parse(rawDate);
-        } catch (_) {
-          continue;
-        }
-        final directionStr = row.read<String>('direction');
-        items.add(ChequeReminderItem(
-          sourceTable: row.read<String>('source_table'),
-          sourceId: row.read<int>('source_id'),
-          referenceNumber: row.read<String>('reference_number'),
-          dueDate: date,
-          amountCents: row.read<int>('amount_cents'),
-          direction: directionStr == 'incoming'
-              ? ChequeDirection.incoming
-              : ChequeDirection.outgoing,
-        ));
-      }
-      return items;
-    });
+    final reminderStream = _management.watchRegister().map(
+      (rows) => rows
+          .where(
+            (row) =>
+                ChequeInstrumentStatus.open.contains(row.instrument.status),
+          )
+          .map(
+            (row) => ChequeReminderItem(
+              instrumentId: row.instrument.id,
+              sourceTable: row.instrument.sourceTable,
+              sourceId: row.instrument.sourceId,
+              referenceNumber: row.referenceNumber,
+              chequeNumber: row.instrument.chequeNumber,
+              dueDate: row.instrument.dueDate,
+              amountCents: row.instrument.amountCents.toBigInt().toInt(),
+              currencySymbol: row.currencySymbol,
+              direction:
+                  row.instrument.direction == ChequeDirectionValue.incoming
+                  ? ChequeDirection.incoming
+                  : ChequeDirection.outgoing,
+            ),
+          )
+          .toList(growable: false),
+    );
 
     _chequeSub = reminderStream.listen((cheques) {
       if (!mounted) return;
       setState(() {
         _allCheques = cheques;
         _chequesLoaded = true;
-      });
-    });
-    _confirmSub = _confirmDao.watchAllAsMap().listen((map) {
-      if (!mounted) return;
-      setState(() {
-        _confirmations = map;
-        _confirmationsLoaded = true;
       });
     });
   }
@@ -220,15 +139,33 @@ class _ChequeRemindersSectionState extends State<ChequeRemindersSection> {
   // (b) for `sale`/`purchase` sources also calls
   // `SaleRepository.recordPayment` / `PurchaseRepository.recordPayment`
   // (cleared) or `deletePayment` (bounce/cancel after cleared) so the
-  // AP/AR balance, supplier/customer transaction ledger, and Dr/Cr Bank
-  // journal entry all settle alongside the lifecycle row. Returns
+  // AP/AR balance and party ledger settle when the cheque is posted, while
+  // bank movement is recorded only when it clears. All lifecycle rows and
+  // their clearing-account journal entries remain linked. Returns
   // surface a snackbar via `_showOutcomeSnackbar`.
 
   Future<void> _markCleared(ChequeReminderItem item) async {
+    if (item.chequeNumber?.trim().isEmpty != false) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('cheques.error_cheque_number_required'.tr())),
+      );
+      context.push('/cheques');
+      return;
+    }
+    final confirmed = await showActionConfirmationDialog(
+      context,
+      title: 'cheques.clear_title'.tr(),
+      message: 'cheques.clear_confirm'.tr(),
+      confirmLabel: 'common.confirm'.tr(),
+      icon: Icons.task_alt_rounded,
+    );
+    if (!confirmed || !mounted) return;
     try {
       final result = await _lifecycle.markCleared(
         sourceTable: item.sourceTable,
         sourceId: item.sourceId,
+        instrumentId: item.instrumentId,
       );
       _showOutcomeSnackbar(
         item: item,
@@ -249,6 +186,7 @@ class _ChequeRemindersSectionState extends State<ChequeRemindersSection> {
       final result = await _lifecycle.markBounced(
         sourceTable: item.sourceTable,
         sourceId: item.sourceId,
+        instrumentId: item.instrumentId,
         bounceReason: reason,
       );
       _showOutcomeSnackbar(
@@ -268,9 +206,9 @@ class _ChequeRemindersSectionState extends State<ChequeRemindersSection> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('dashboard.cheque_cancel_title'.tr()),
-        content: Text('dashboard.cheque_cancel_confirm'.tr(
-          args: [item.referenceNumber],
-        )),
+        content: Text(
+          'dashboard.cheque_cancel_confirm'.tr(args: [item.referenceNumber]),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -288,6 +226,7 @@ class _ChequeRemindersSectionState extends State<ChequeRemindersSection> {
       final result = await _lifecycle.markCancelled(
         sourceTable: item.sourceTable,
         sourceId: item.sourceId,
+        instrumentId: item.instrumentId,
       );
       _showOutcomeSnackbar(
         item: item,
@@ -315,9 +254,11 @@ class _ChequeRemindersSectionState extends State<ChequeRemindersSection> {
         if (settled != null && settled > 0) {
           message = isIncoming
               ? 'dashboard.cheque_settled_in'.tr(
-                  args: [_currency.format(settled)])
+                  args: [_formatChequeAmount(settled, item.currencySymbol)],
+                )
               : 'dashboard.cheque_settled_out'.tr(
-                  args: [_currency.format(settled)]);
+                  args: [_formatChequeAmount(settled, item.currencySymbol)],
+                );
         } else {
           message = 'dashboard.cheque_marked_cleared'.tr();
         }
@@ -325,27 +266,30 @@ class _ChequeRemindersSectionState extends State<ChequeRemindersSection> {
       case _ChequeIntent.bounced:
         message = (reversed != null && reversed > 0)
             ? 'dashboard.cheque_bounced_reversed'.tr(
-                args: [_currency.format(reversed)])
+                args: [_formatChequeAmount(reversed, item.currencySymbol)],
+              )
             : 'dashboard.cheque_marked_bounced'.tr();
         break;
       case _ChequeIntent.cancelled:
         message = (reversed != null && reversed > 0)
             ? 'dashboard.cheque_cancelled_reversed'.tr(
-                args: [_currency.format(reversed)])
+                args: [_formatChequeAmount(reversed, item.currencySymbol)],
+              )
             : 'dashboard.cheque_marked_cancelled'.tr();
         break;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _showErrorSnackbar(Object error) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('dashboard.cheque_action_failed'
-            .tr(args: [error.toString()])),
+        content: Text(
+          'dashboard.cheque_action_failed'.tr(args: [error.toString()]),
+        ),
         backgroundColor: Theme.of(context).colorScheme.error,
       ),
     );
@@ -414,20 +358,17 @@ class _ChequeRemindersSectionState extends State<ChequeRemindersSection> {
     // Surface only un-resolved cheques that are due within the next 2 days
     // or already overdue. A resolved cheque (cleared/bounced/cancelled)
     // is hidden from the reminder but its history remains in DB.
-    final today = DateTime(DateTime.now().year, DateTime.now().month,
-        DateTime.now().day);
+    final today = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      DateTime.now().day,
+    );
 
     final visible = _allCheques.where((c) {
-      final cf = _confirmations[c.uniqueId];
-      if (cf != null &&
-          ChequeConfirmationStatus.resolved.contains(cf.status)) {
-        return false;
-      }
       final d = DateTime(c.dueDate.year, c.dueDate.month, c.dueDate.day);
       final diff = d.difference(today).inDays;
       return diff <= 2;
-    }).toList()
-      ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+    }).toList()..sort((a, b) => a.dueDate.compareTo(b.dueDate));
 
     if (visible.isEmpty) return const SizedBox.shrink();
 
@@ -442,7 +383,6 @@ class _ChequeRemindersSectionState extends State<ChequeRemindersSection> {
           today: today,
           isDark: isDark,
           theme: theme,
-          currency: _currency,
           onTap: () => _navigateToSource(context, item),
           onMarkCleared: () => _markCleared(item),
           onMarkBounced: () => _markBounced(item),
@@ -458,7 +398,6 @@ class _ChequeReminderCard extends StatelessWidget {
   final DateTime today;
   final bool isDark;
   final ThemeData theme;
-  final CurrencyService currency;
   final VoidCallback onTap;
   final VoidCallback onMarkCleared;
   final VoidCallback onMarkBounced;
@@ -469,7 +408,6 @@ class _ChequeReminderCard extends StatelessWidget {
     required this.today,
     required this.isDark,
     required this.theme,
-    required this.currency,
     required this.onTap,
     required this.onMarkCleared,
     required this.onMarkBounced,
@@ -479,7 +417,11 @@ class _ChequeReminderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = theme.colorScheme;
-    final rDate = DateTime(item.dueDate.year, item.dueDate.month, item.dueDate.day);
+    final rDate = DateTime(
+      item.dueDate.year,
+      item.dueDate.month,
+      item.dueDate.day,
+    );
     final diff = rDate.difference(today).inDays;
 
     String statusLabel;
@@ -504,8 +446,9 @@ class _ChequeReminderCard extends StatelessWidget {
     final directionLabel = isIncoming
         ? 'dashboard.cheque_direction_incoming'.tr()
         : 'dashboard.cheque_direction_outgoing'.tr();
-    final directionIcon =
-        isIncoming ? LucideIcons.arrowDownToLine : LucideIcons.arrowUpFromLine;
+    final directionIcon = isIncoming
+        ? LucideIcons.arrowDownToLine
+        : LucideIcons.arrowUpFromLine;
 
     final titlePrefix = _titlePrefixFor(item.sourceTable);
     final sourceIcon = _sourceIconFor(item.sourceTable);
@@ -542,7 +485,10 @@ class _ChequeReminderCard extends StatelessWidget {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: statusColor.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(12),
@@ -560,8 +506,7 @@ class _ChequeReminderCard extends StatelessWidget {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  Icon(directionIcon, size: 14,
-                      color: cs.onSurfaceVariant),
+                  Icon(directionIcon, size: 14, color: cs.onSurfaceVariant),
                   const SizedBox(width: 4),
                   Text(
                     directionLabel,
@@ -573,7 +518,12 @@ class _ChequeReminderCard extends StatelessWidget {
                   const SizedBox(width: 10),
                   Text(
                     'dashboard.cheque_for'.tr(
-                      args: [currency.format(item.amountCents)],
+                      args: [
+                        _formatChequeAmount(
+                          item.amountCents,
+                          item.currencySymbol,
+                        ),
+                      ],
                     ),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w600,
@@ -590,12 +540,17 @@ class _ChequeReminderCard extends StatelessWidget {
                   FilledButton.tonalIcon(
                     onPressed: onMarkCleared,
                     icon: const Icon(LucideIcons.checkCircle, size: 14),
-                    label: Text(isIncoming
-                        ? 'dashboard.cheque_confirm_collected'.tr()
-                        : 'dashboard.cheque_confirm_paid'.tr()),
+                    label: Text(
+                      isIncoming
+                          ? 'dashboard.cheque_confirm_collected'.tr()
+                          : 'dashboard.cheque_confirm_paid'.tr(),
+                    ),
                     style: FilledButton.styleFrom(
                       visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       backgroundColor: isOverdue
                           ? Colors.green.withValues(alpha: 0.15)
                           : null,
@@ -607,7 +562,10 @@ class _ChequeReminderCard extends StatelessWidget {
                     label: Text('dashboard.cheque_mark_bounced'.tr()),
                     style: OutlinedButton.styleFrom(
                       visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       foregroundColor: cs.error,
                       side: BorderSide(color: cs.error.withValues(alpha: 0.4)),
                     ),
@@ -618,7 +576,10 @@ class _ChequeReminderCard extends StatelessWidget {
                     label: Text('dashboard.cheque_cancel'.tr()),
                     style: TextButton.styleFrom(
                       visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       foregroundColor: cs.onSurfaceVariant,
                     ),
                   ),
@@ -665,3 +626,6 @@ class _ChequeReminderCard extends StatelessWidget {
     return LucideIcons.banknote;
   }
 }
+
+String _formatChequeAmount(int cents, String symbol) =>
+    NumberFormat.currency(symbol: symbol, decimalDigits: 2).format(cents / 100);

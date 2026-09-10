@@ -34,8 +34,10 @@ class _SalespeopleCommissionReportView extends StatelessWidget {
       appBar: AppBar(
         title: Text('reports.salespeople_commission'.tr()),
         actions: [
-          BlocBuilder<SalespeopleCommissionReportBloc,
-              RealtimeState<SalespeopleCommissionReportData>>(
+          BlocBuilder<
+            SalespeopleCommissionReportBloc,
+            RealtimeState<SalespeopleCommissionReportData>
+          >(
             builder: (context, state) {
               if (state is! RealtimeSuccess<SalespeopleCommissionReportData>) {
                 return const SizedBox.shrink();
@@ -59,68 +61,80 @@ class _SalespeopleCommissionReportView extends StatelessWidget {
           ),
         ],
       ),
-      body: BlocBuilder<SalespeopleCommissionReportBloc,
-          RealtimeState<SalespeopleCommissionReportData>>(
-        builder: (context, state) {
-          if (state is RealtimeLoading<SalespeopleCommissionReportData>) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body:
+          BlocBuilder<
+            SalespeopleCommissionReportBloc,
+            RealtimeState<SalespeopleCommissionReportData>
+          >(
+            builder: (context, state) {
+              if (state is RealtimeLoading<SalespeopleCommissionReportData>) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (state is RealtimeError<SalespeopleCommissionReportData>) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline,
-                      size: 48, color: colorScheme.error),
-                  const SizedBox(height: 16),
-                  Text(state.error.toString(),
-                      style: theme.textTheme.bodyLarge),
-                ],
-              ),
-            );
-          }
-
-          if (state is RealtimeSuccess<SalespeopleCommissionReportData>) {
-            return Column(
-              children: [
-                // Date range selector
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: DateRangeSelector(
-                    dateRange: state.data.dateRange,
-                    onChanged: (range) => context
-                        .read<SalespeopleCommissionReportBloc>()
-                        .add(SalespeopleCommissionReportDateRangeChanged(
-                            range)),
+              if (state is RealtimeError<SalespeopleCommissionReportData>) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        state.error.toString(),
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
+                );
+              }
 
-                // Summary cards
-                _buildSummaryCards(context, state.data),
-                const SizedBox(height: 8),
+              if (state is RealtimeSuccess<SalespeopleCommissionReportData>) {
+                return Column(
+                  children: [
+                    // Date range selector
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: DateRangeSelector(
+                        dateRange: state.data.dateRange,
+                        onChanged: (range) =>
+                            context.read<SalespeopleCommissionReportBloc>().add(
+                              SalespeopleCommissionReportDateRangeChanged(
+                                range,
+                              ),
+                            ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
 
-                // Sort selector
-                _buildSortSelector(context, state.data),
-                const SizedBox(height: 8),
+                    // Summary cards
+                    _buildSummaryCards(context, state.data),
+                    const SizedBox(height: 8),
 
-                // Content
-                Expanded(
-                  child: _SalespeopleCommissionContent(data: state.data),
-                ),
-              ],
-            );
-          }
+                    // Sort selector
+                    _buildSortSelector(context, state.data),
+                    const SizedBox(height: 8),
 
-          return const SizedBox.shrink();
-        },
-      ),
+                    // Content
+                    Expanded(
+                      child: _SalespeopleCommissionContent(data: state.data),
+                    ),
+                  ],
+                );
+              }
+
+              return const SizedBox.shrink();
+            },
+          ),
     );
   }
 
   Widget _buildSummaryCards(
-      BuildContext context, SalespeopleCommissionReportData data) {
+    BuildContext context,
+    SalespeopleCommissionReportData data,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final cs = sl<CurrencyService>();
@@ -153,25 +167,27 @@ class _SalespeopleCommissionReportView extends StatelessWidget {
             ),
             _SummaryCard(
               label: 'reports.avg_target_achievement'.tr(),
-              value:
-                  '${data.avgTargetAchievementPercent.toStringAsFixed(1)}%',
+              value: '${data.avgTargetAchievementPercent.toStringAsFixed(1)}%',
               icon: LucideIcons.target,
               color: data.avgTargetAchievementPercent >= 100
                   ? colorScheme.primary
                   : data.avgTargetAchievementPercent >= 70
-                      ? colorScheme.tertiary
-                      : colorScheme.error,
+                  ? colorScheme.tertiary
+                  : colorScheme.error,
             ),
           ];
 
           if (isWide) {
             return Row(
               children: cards
-                  .map((c) => Expanded(
-                          child: Padding(
+                  .map(
+                    (c) => Expanded(
+                      child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: c,
-                      )))
+                      ),
+                    ),
+                  )
                   .toList(),
             );
           }
@@ -181,30 +197,34 @@ class _SalespeopleCommissionReportView extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: cards[0],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: cards[0],
+                    ),
+                  ),
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: cards[1],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: cards[1],
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: cards[2],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: cards[2],
+                    ),
+                  ),
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: cards[3],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: cards[3],
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -215,17 +235,16 @@ class _SalespeopleCommissionReportView extends StatelessWidget {
   }
 
   Widget _buildSortSelector(
-      BuildContext context, SalespeopleCommissionReportData data) {
+    BuildContext context,
+    SalespeopleCommissionReportData data,
+  ) {
     final theme = Theme.of(context);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          Text(
-            'reports.sort_by'.tr(),
-            style: theme.textTheme.bodySmall,
-          ),
+          Text('reports.sort_by'.tr(), style: theme.textTheme.bodySmall),
           const SizedBox(width: 8),
           Expanded(
             child: SingleChildScrollView(
@@ -234,70 +253,76 @@ class _SalespeopleCommissionReportView extends StatelessWidget {
                 children: [
                   _SortChip(
                     label: 'reports.sort_revenue'.tr(),
-                    selected: data.sort ==
-                            SalespeopleCommissionSortType.revenueDesc ||
+                    selected:
                         data.sort ==
-                            SalespeopleCommissionSortType.revenueAsc,
+                            SalespeopleCommissionSortType.revenueDesc ||
+                        data.sort == SalespeopleCommissionSortType.revenueAsc,
                     onTap: () {
-                      final next = data.sort ==
-                              SalespeopleCommissionSortType.revenueDesc
+                      final next =
+                          data.sort == SalespeopleCommissionSortType.revenueDesc
                           ? SalespeopleCommissionSortType.revenueAsc
                           : SalespeopleCommissionSortType.revenueDesc;
-                      context
-                          .read<SalespeopleCommissionReportBloc>()
-                          .add(SalespeopleCommissionReportSortChanged(next));
+                      context.read<SalespeopleCommissionReportBloc>().add(
+                        SalespeopleCommissionReportSortChanged(next),
+                      );
                     },
-                    ascending: data.sort ==
-                        SalespeopleCommissionSortType.revenueAsc,
+                    ascending:
+                        data.sort == SalespeopleCommissionSortType.revenueAsc,
                   ),
                   _SortChip(
                     label: 'reports.sort_name'.tr(),
                     selected:
                         data.sort == SalespeopleCommissionSortType.nameAsc ||
-                            data.sort ==
-                                SalespeopleCommissionSortType.nameDesc,
+                        data.sort == SalespeopleCommissionSortType.nameDesc,
                     onTap: () {
                       final next =
                           data.sort == SalespeopleCommissionSortType.nameAsc
-                              ? SalespeopleCommissionSortType.nameDesc
-                              : SalespeopleCommissionSortType.nameAsc;
-                      context
-                          .read<SalespeopleCommissionReportBloc>()
-                          .add(SalespeopleCommissionReportSortChanged(next));
+                          ? SalespeopleCommissionSortType.nameDesc
+                          : SalespeopleCommissionSortType.nameAsc;
+                      context.read<SalespeopleCommissionReportBloc>().add(
+                        SalespeopleCommissionReportSortChanged(next),
+                      );
                     },
                     ascending:
                         data.sort == SalespeopleCommissionSortType.nameAsc,
                   ),
                   _SortChip(
                     label: 'reports.sort_commission'.tr(),
-                    selected: data.sort ==
+                    selected:
+                        data.sort ==
                         SalespeopleCommissionSortType.commissionDesc,
                     onTap: () {
                       context.read<SalespeopleCommissionReportBloc>().add(
-                          const SalespeopleCommissionReportSortChanged(
-                              SalespeopleCommissionSortType.commissionDesc));
+                        const SalespeopleCommissionReportSortChanged(
+                          SalespeopleCommissionSortType.commissionDesc,
+                        ),
+                      );
                     },
                   ),
                   _SortChip(
                     label: 'reports.sort_sales_count'.tr(),
-                    selected: data.sort ==
+                    selected:
+                        data.sort ==
                         SalespeopleCommissionSortType.salesCountDesc,
                     onTap: () {
                       context.read<SalespeopleCommissionReportBloc>().add(
-                          const SalespeopleCommissionReportSortChanged(
-                              SalespeopleCommissionSortType.salesCountDesc));
+                        const SalespeopleCommissionReportSortChanged(
+                          SalespeopleCommissionSortType.salesCountDesc,
+                        ),
+                      );
                     },
                   ),
                   _SortChip(
                     label: 'reports.sort_target'.tr(),
-                    selected: data.sort ==
-                        SalespeopleCommissionSortType
-                            .targetAchievementDesc,
+                    selected:
+                        data.sort ==
+                        SalespeopleCommissionSortType.targetAchievementDesc,
                     onTap: () {
                       context.read<SalespeopleCommissionReportBloc>().add(
-                          const SalespeopleCommissionReportSortChanged(
-                              SalespeopleCommissionSortType
-                                  .targetAchievementDesc));
+                        const SalespeopleCommissionReportSortChanged(
+                          SalespeopleCommissionSortType.targetAchievementDesc,
+                        ),
+                      );
                     },
                   ),
                 ],
@@ -310,7 +335,9 @@ class _SalespeopleCommissionReportView extends StatelessWidget {
   }
 
   Future<void> _printReport(
-      BuildContext context, SalespeopleCommissionReportData data) async {
+    BuildContext context,
+    SalespeopleCommissionReportData data,
+  ) async {
     await SalespeopleCommissionPdfService.printSalespeopleCommissionReport(
       context: context,
       data: data,
@@ -323,7 +350,9 @@ class _SalespeopleCommissionReportView extends StatelessWidget {
   }
 
   Future<void> _shareReport(
-      BuildContext context, SalespeopleCommissionReportData data) async {
+    BuildContext context,
+    SalespeopleCommissionReportData data,
+  ) async {
     await SalespeopleCommissionPdfService.shareSalespeopleCommissionReport(
       context: context,
       data: data,
@@ -457,16 +486,23 @@ class _SalespeopleCommissionContent extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.users, size: 48,
-                color: theme.colorScheme.onSurfaceVariant),
+            Icon(
+              LucideIcons.users,
+              size: 48,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 16),
-            Text('reports.no_salespeople_commission'.tr(),
-                style: theme.textTheme.bodyLarge),
+            Text(
+              'reports.no_salespeople_commission'.tr(),
+              style: theme.textTheme.bodyLarge,
+            ),
             const SizedBox(height: 8),
-            Text('reports.no_salespeople_commission_desc'.tr(),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                )),
+            Text(
+              'reports.no_salespeople_commission_desc'.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       );
@@ -477,11 +513,7 @@ class _SalespeopleCommissionContent extends StatelessWidget {
       itemCount: data.salespeople.length,
       itemBuilder: (context, index) {
         final item = data.salespeople[index];
-        return _SalespersonCommissionCard(
-          item: item,
-          cs: cs,
-          rank: index + 1,
-        );
+        return _SalespersonCommissionCard(item: item, cs: cs, rank: index + 1);
       },
     );
   }
@@ -511,8 +543,8 @@ class _SalespersonCommissionCard extends StatelessWidget {
     final targetColor = item.targetAchievementPercent >= 100
         ? colorScheme.primary
         : item.targetAchievementPercent >= 70
-            ? colorScheme.tertiary
-            : colorScheme.error;
+        ? colorScheme.tertiary
+        : colorScheme.error;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -548,8 +580,9 @@ class _SalespersonCommissionCard extends StatelessWidget {
                     children: [
                       Text(
                         item.employeeName,
-                        style: theme.textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.bold),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -599,8 +632,7 @@ class _SalespersonCommissionCard extends StatelessWidget {
                   _MetricItem(
                     label: 'reports.sales'.tr(),
                     value: cs.formatCents(item.totalSalesCents),
-                    subtitle:
-                        '${item.salesCount} ${'reports.invoices'.tr()}',
+                    subtitle: '${item.salesCount} ${'reports.invoices'.tr()}',
                     valueColor: colorScheme.primary,
                   ),
                   _MetricItem(
@@ -613,7 +645,8 @@ class _SalespersonCommissionCard extends StatelessWidget {
                   _MetricItem(
                     label: 'reports.commission_paid'.tr(),
                     value: cs.formatCents(item.paidCommissionCents),
-                    subtitle: '${cs.formatCents(item.pendingCommissionCents)} ${'reports.pending'.tr()}',
+                    subtitle:
+                        '${cs.formatCents(item.pendingCommissionCents)} ${'reports.pending'.tr()}',
                     valueColor: item.paidCommissionCents > 0
                         ? colorScheme.primary
                         : null,
@@ -627,21 +660,24 @@ class _SalespersonCommissionCard extends StatelessWidget {
 
                 if (isWide) {
                   return Row(
-                    children:
-                        metrics.map((m) => Expanded(child: m)).toList(),
+                    children: metrics.map((m) => Expanded(child: m)).toList(),
                   );
                 }
                 return Column(
                   children: [
-                    Row(children: [
-                      Expanded(child: metrics[0]),
-                      Expanded(child: metrics[1]),
-                    ]),
+                    Row(
+                      children: [
+                        Expanded(child: metrics[0]),
+                        Expanded(child: metrics[1]),
+                      ],
+                    ),
                     const SizedBox(height: 4),
-                    Row(children: [
-                      Expanded(child: metrics[2]),
-                      Expanded(child: metrics[3]),
-                    ]),
+                    Row(
+                      children: [
+                        Expanded(child: metrics[2]),
+                        Expanded(child: metrics[3]),
+                      ],
+                    ),
                   ],
                 );
               },
@@ -650,7 +686,7 @@ class _SalespersonCommissionCard extends StatelessWidget {
             if (item.lastSaleAt != null) ...[
               const SizedBox(height: 4),
               Text(
-                '${'reports.last_sale'.tr()}: ${DateFormat.yMMMd().format(item.lastSaleAt!)}',
+                '${'reports.last_sale'.tr()}: ${DateFormat('dd/MM/yyyy').format(item.lastSaleAt!)}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
@@ -686,20 +722,26 @@ class _MetricItem extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            )),
-        Text(value,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: valueColor,
-            )),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        Text(
+          value,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: valueColor,
+          ),
+        ),
         if (subtitle != null)
-          Text(subtitle!,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              )),
+          Text(
+            subtitle!,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
       ],
     );
   }

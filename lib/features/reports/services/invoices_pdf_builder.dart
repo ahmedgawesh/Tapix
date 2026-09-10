@@ -59,7 +59,6 @@ class InvoicesPdfBuilder {
     required int totalAmountCents,
     required int totalDiscountCents,
     required int totalPaidCents,
-    required int totalQuantity,
     required CurrencyService cs,
     required Locale locale,
     required bool isRtl,
@@ -69,6 +68,11 @@ class InvoicesPdfBuilder {
     final pdf = pw.Document();
     final dir = isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr;
     final lang = locale.languageCode;
+    final quantitySummary = localizedQuantitySummary(
+      invoices.expand((invoice) => invoice.items),
+      quantityOf: (item) => item.quantity,
+      measurementTypeOf: (item) => item.measurementType,
+    );
 
     pdf.addPage(
       pw.MultiPage(
@@ -79,7 +83,7 @@ class InvoicesPdfBuilder {
             _header(company, title, fonts),
             pw.SizedBox(height: 8),
             pw.Text(
-              '${_t('period', lang)}: ${DateFormat.yMMMd().format(startDate)} — ${DateFormat.yMMMd().format(endDate)}',
+              '${_t('period', lang)}: ${DateFormat('dd/MM/yyyy').format(startDate)} — ${DateFormat('dd/MM/yyyy').format(endDate)}',
               style: pw.TextStyle(font: fonts.regular, fontSize: 10),
             ),
             pw.SizedBox(height: 8),
@@ -97,7 +101,7 @@ class InvoicesPdfBuilder {
               fonts,
               lang,
               invoices.length,
-              totalQuantity,
+              quantitySummary,
               totalAmountCents,
               totalDiscountCents,
               totalPaidCents,
@@ -117,7 +121,7 @@ class InvoicesPdfBuilder {
             pw.SizedBox(height: 16),
             pw.Divider(),
             pw.Text(
-              '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+              '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
               style: pw.TextStyle(
                 font: fonts.regular,
                 fontSize: 8,
@@ -196,7 +200,7 @@ class InvoicesPdfBuilder {
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
                     pw.Text(
-                      DateFormat.yMd().format(inv.date),
+                      DateFormat('dd/MM/yyyy').format(inv.date),
                       style: pw.TextStyle(font: fonts.regular, fontSize: 8),
                     ),
                     pw.Text(
@@ -311,7 +315,7 @@ class InvoicesPdfBuilder {
     InvoicesPdfFonts fonts,
     String lang,
     int invoiceCount,
-    int totalQuantity,
+    String quantitySummary,
     int totalAmountCents,
     int totalDiscountCents,
     int totalPaidCents,
@@ -337,7 +341,7 @@ class InvoicesPdfBuilder {
       data: [
         [
           invoiceCount.toString(),
-          totalQuantity.toString(),
+          quantitySummary,
           cs.formatCents(totalAmountCents),
           cs.formatCents(totalDiscountCents),
           cs.formatCents(totalPaidCents),
@@ -458,6 +462,7 @@ class InvoicesPdfBuilder {
     'pm_card': {'en': 'Card', 'ar': 'بطاقة', 'fr': 'Carte'},
     'pm_credit': {'en': 'Credit', 'ar': 'آجل', 'fr': 'Crédit'},
     'pm_cheque': {'en': 'Cheque', 'ar': 'شيك', 'fr': 'Chèque'},
+    'pm_mixed': {'en': 'Mixed', 'ar': 'مختلط', 'fr': 'Mixte'},
     'pm_bank_transfer': {
       'en': 'Bank Transfer',
       'ar': 'تحويل بنكي',

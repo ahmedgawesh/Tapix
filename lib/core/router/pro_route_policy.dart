@@ -39,6 +39,7 @@ class ProRoutePolicy {
     '/sales/returns': AppFeature.returns,
     '/settings/backup': AppFeature.backupRestore,
     '/settings/admin-tools': AppFeature.multiUser,
+    '/promotions': AppFeature.promotions,
   };
 
   /// Top-level section prefixes → governing feature.
@@ -60,6 +61,7 @@ class ProRoutePolicy {
     '/cashier-shifts': AppFeature.cashierShifts,
     '/client-session': AppFeature.cashierShifts,
     '/financial-management': AppFeature.accounting,
+    '/cheques': AppFeature.cheques,
     '/accounting': AppFeature.accounting,
     '/audit': AppFeature.multiUser,
   };

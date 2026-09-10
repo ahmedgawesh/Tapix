@@ -8,6 +8,9 @@ import '../../../../core/services/currency_service.dart';
 import '../bloc/journal_entry_form_bloc.dart';
 import '../bloc/journal_entries_bloc.dart';
 import '../services/journal_pdf_service.dart';
+import '../utils/account_display_name.dart';
+import '../utils/journal_description_localizer.dart';
+import '../utils/journal_entry_localizer.dart';
 
 class JournalEntryDetailScreen extends StatelessWidget {
   final int entryId;
@@ -19,8 +22,9 @@ class JournalEntryDetailScreen extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider(
-          create: (_) => sl<JournalEntryFormBloc>()
-            ..add(JournalEntryFormLoadRequested(entryId: entryId)),
+          create: (_) =>
+              sl<JournalEntryFormBloc>()
+                ..add(JournalEntryFormLoadRequested(entryId: entryId)),
         ),
         BlocProvider(create: (_) => sl<JournalEntriesBloc>()),
       ],
@@ -39,7 +43,10 @@ class _JournalEntryDetailView extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = sl<CurrencyService>();
 
-    return BlocBuilder<JournalEntryFormBloc, RealtimeState<JournalEntryFormData>>(
+    return BlocBuilder<
+      JournalEntryFormBloc,
+      RealtimeState<JournalEntryFormData>
+    >(
       builder: (context, state) {
         if (state is RealtimeLoading<JournalEntryFormData>) {
           return Scaffold(
@@ -51,9 +58,7 @@ class _JournalEntryDetailView extends StatelessWidget {
         if (state is RealtimeError<JournalEntryFormData>) {
           return Scaffold(
             appBar: AppBar(title: Text('accounting.journal_entry'.tr())),
-            body: Center(
-              child: Text('accounting.error_loading'.tr()),
-            ),
+            body: Center(child: Text('accounting.error_loading'.tr())),
           );
         }
 
@@ -127,25 +132,33 @@ class _JournalEntryDetailView extends StatelessWidget {
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: statusColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         'accounting.status_${entry.status}'.tr(),
-                        style: theme.textTheme.labelLarge?.copyWith(color: statusColor),
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: statusColor,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: theme.colorScheme.secondaryContainer,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        'accounting.type_${entry.entryType}'.tr(),
+                        localizedJournalEntryType(entry.entryType),
                         style: theme.textTheme.labelLarge?.copyWith(
                           color: theme.colorScheme.onSecondaryContainer,
                         ),
@@ -169,14 +182,21 @@ class _JournalEntryDetailView extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Text(entry.description, style: theme.textTheme.bodyLarge),
+                        Text(
+                          localizedJournalDescription(entry.description),
+                          style: theme.textTheme.bodyLarge,
+                        ),
                         const SizedBox(height: 12),
                         Row(
                           children: [
-                            Icon(Icons.calendar_today, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                            Icon(
+                              Icons.calendar_today,
+                              size: 16,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
                             const SizedBox(width: 4),
                             Text(
-                              DateFormat.yMMMd().format(entry.entryDate),
+                              DateFormat('dd/MM/yyyy').format(entry.entryDate),
                               style: theme.textTheme.bodyMedium,
                             ),
                           ],
@@ -185,11 +205,17 @@ class _JournalEntryDetailView extends StatelessWidget {
                           const SizedBox(height: 8),
                           Row(
                             children: [
-                              Icon(Icons.link, size: 16, color: theme.colorScheme.onSurfaceVariant),
+                              Icon(
+                                Icons.link,
+                                size: 16,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
-                                  '${'accounting.source'.tr()}: ${entry.sourceTable} #${entry.sourceId}',
+                                  '${'accounting.source'.tr()}: '
+                                  '${localizedJournalSourceTable(entry.sourceTable!)} '
+                                  '#${entry.sourceId}',
                                   style: theme.textTheme.bodyMedium,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -220,8 +246,14 @@ class _JournalEntryDetailView extends StatelessWidget {
                       columnSpacing: 24,
                       columns: [
                         DataColumn(label: Text('accounting.account'.tr())),
-                        DataColumn(label: Text('accounting.debit'.tr()), numeric: true),
-                        DataColumn(label: Text('accounting.credit'.tr()), numeric: true),
+                        DataColumn(
+                          label: Text('accounting.debit'.tr()),
+                          numeric: true,
+                        ),
+                        DataColumn(
+                          label: Text('accounting.credit'.tr()),
+                          numeric: true,
+                        ),
                         DataColumn(label: Text('accounting.description'.tr())),
                       ],
                       rows: lines.map((line) {
@@ -231,27 +263,44 @@ class _JournalEntryDetailView extends StatelessWidget {
                         final debit = line.debitCents.toBigInt().toInt();
                         final credit = line.creditCents.toBigInt().toInt();
 
-                        return DataRow(cells: [
-                          DataCell(Text(
-                            account != null
-                                ? '${account.accountCode} - ${account.accountName}'
-                                : 'accounting.unknown_account'.tr(),
-                            overflow: TextOverflow.ellipsis,
-                          )),
-                          DataCell(Text(
-                            debit > 0 ? cs.formatCents(debit) : '-',
-                            style: TextStyle(
-                              fontWeight: debit > 0 ? FontWeight.bold : FontWeight.normal,
+                        return DataRow(
+                          cells: [
+                            DataCell(
+                              Text(
+                                account != null
+                                    ? '${account.accountCode} - '
+                                          '${localizedAccountName(account)}'
+                                    : 'accounting.unknown_account'.tr(),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          )),
-                          DataCell(Text(
-                            credit > 0 ? cs.formatCents(credit) : '-',
-                            style: TextStyle(
-                              fontWeight: credit > 0 ? FontWeight.bold : FontWeight.normal,
+                            DataCell(
+                              Text(
+                                debit > 0 ? cs.formatCents(debit) : '-',
+                                style: TextStyle(
+                                  fontWeight: debit > 0
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
                             ),
-                          )),
-                          DataCell(Text(line.description ?? '')),
-                        ]);
+                            DataCell(
+                              Text(
+                                credit > 0 ? cs.formatCents(credit) : '-',
+                                style: TextStyle(
+                                  fontWeight: credit > 0
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Text(
+                                localizedJournalDescription(line.description),
+                              ),
+                            ),
+                          ],
+                        );
                       }).toList(),
                     ),
                   ),
@@ -269,10 +318,17 @@ class _JournalEntryDetailView extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('accounting.total_debits'.tr(), style: theme.textTheme.bodySmall),
                               Text(
-                                cs.formatCents(entry.totalDebitCents.toBigInt().toInt()),
-                                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                                'accounting.total_debits'.tr(),
+                                style: theme.textTheme.bodySmall,
+                              ),
+                              Text(
+                                cs.formatCents(
+                                  entry.totalDebitCents.toBigInt().toInt(),
+                                ),
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ],
                           ),
@@ -281,10 +337,17 @@ class _JournalEntryDetailView extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('accounting.total_credits'.tr(), style: theme.textTheme.bodySmall),
                               Text(
-                                cs.formatCents(entry.totalCreditCents.toBigInt().toInt()),
-                                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                                'accounting.total_credits'.tr(),
+                                style: theme.textTheme.bodySmall,
+                              ),
+                              Text(
+                                cs.formatCents(
+                                  entry.totalCreditCents.toBigInt().toInt(),
+                                ),
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ],
                           ),
@@ -308,13 +371,27 @@ class _JournalEntryDetailView extends StatelessWidget {
                           style: theme.textTheme.titleSmall,
                         ),
                         const SizedBox(height: 8),
-                        _auditRow(theme, 'accounting.created_at'.tr(),
-                            DateFormat.yMMMd().add_jm().format(entry.createdAt)),
+                        _auditRow(
+                          theme,
+                          'accounting.created_at'.tr(),
+                          DateFormat(
+                            'dd/MM/yyyy',
+                          ).add_jm().format(entry.createdAt),
+                        ),
                         if (entry.postedAt != null)
-                          _auditRow(theme, 'accounting.posted_at'.tr(),
-                              DateFormat.yMMMd().add_jm().format(entry.postedAt!)),
+                          _auditRow(
+                            theme,
+                            'accounting.posted_at'.tr(),
+                            DateFormat(
+                              'dd/MM/yyyy',
+                            ).add_jm().format(entry.postedAt!),
+                          ),
                         if (entry.isReversed)
-                          _auditRow(theme, 'accounting.reversed'.tr(), 'accounting.yes'.tr()),
+                          _auditRow(
+                            theme,
+                            'accounting.reversed'.tr(),
+                            'accounting.yes'.tr(),
+                          ),
                       ],
                     ),
                   ),

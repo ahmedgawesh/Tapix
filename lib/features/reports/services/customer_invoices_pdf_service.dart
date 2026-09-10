@@ -11,17 +11,19 @@ import 'invoices_pdf_builder.dart';
 class CustomerInvoicesPdfService {
   static List<InvoicePdfItem> _mapInvoices(CustomerInvoicesData data) {
     return data.invoices
-        .map((inv) => InvoicePdfItem(
-              invoiceNumber: inv.invoiceNumber,
-              date: inv.date,
-              items: inv.items,
-              subtotalCents: inv.subtotalCents,
-              discountCents: inv.discountCents,
-              taxCents: inv.taxCents,
-              totalCents: inv.totalCents,
-              paidAmountCents: inv.paidAmountCents,
-              paymentMethod: inv.paymentMethod,
-            ))
+        .map(
+          (inv) => InvoicePdfItem(
+            invoiceNumber: inv.invoiceNumber,
+            date: inv.date,
+            items: inv.items,
+            subtotalCents: inv.subtotalCents,
+            discountCents: inv.discountCents,
+            taxCents: inv.taxCents,
+            totalCents: inv.totalCents,
+            paidAmountCents: inv.paidAmountCents,
+            paymentMethod: inv.paymentMethod,
+          ),
+        )
         .toList();
   }
 
@@ -45,7 +47,6 @@ class CustomerInvoicesPdfService {
       totalAmountCents: data.totalAmountCents,
       totalDiscountCents: data.totalDiscountCents,
       totalPaidCents: data.totalPaidCents,
-      totalQuantity: data.totalQuantity,
       cs: cs,
       locale: locale,
       isRtl: locale.languageCode == 'ar',
@@ -79,7 +80,6 @@ class CustomerInvoicesPdfService {
       totalAmountCents: data.totalAmountCents,
       totalDiscountCents: data.totalDiscountCents,
       totalPaidCents: data.totalPaidCents,
-      totalQuantity: data.totalQuantity,
       cs: cs,
       locale: locale,
       isRtl: locale.languageCode == 'ar',

@@ -59,7 +59,8 @@ class InventoryPdfService {
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'InventoryReport_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      filename:
+          'InventoryReport_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
   }
 
@@ -93,7 +94,7 @@ class InventoryPdfService {
               _buildHeader(company, _t('stock_valuation', lang), fonts, dir),
               pw.SizedBox(height: 8),
               pw.Text(
-                '${_t('period', lang)}: ${DateFormat.yMMMd().format(data.dateRange.startDate)} — ${DateFormat.yMMMd().format(data.dateRange.endDate)}',
+                '${_t('period', lang)}: ${DateFormat('dd/MM/yyyy').format(data.dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(data.dateRange.endDate)}',
                 style: pw.TextStyle(font: fonts.regular, fontSize: 10),
               ),
               pw.SizedBox(height: 4),
@@ -114,7 +115,9 @@ class InventoryPdfService {
               pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 8),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.grey200,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.centerLeft,
                   1: pw.Alignment.centerLeft,
@@ -133,15 +136,19 @@ class InventoryPdfService {
                   _priceTypeLabel(priceType, lang),
                   _t('valuation', lang),
                 ],
-                data: data.stockValuation.map((item) => [
-                  item.sku ?? '-',
-                  item.productName,
-                  item.variantLabel.isNotEmpty ? item.variantLabel : '-',
-                  item.categoryName ?? '-',
-                  '${item.totalStock}',
-                  cs.formatCents(item.priceByType(priceType)),
-                  cs.formatCents(item.valuationByType(priceType)),
-                ]).toList(),
+                data: data.stockValuation
+                    .map(
+                      (item) => [
+                        item.sku ?? '-',
+                        item.productName,
+                        item.variantLabel.isNotEmpty ? item.variantLabel : '-',
+                        item.categoryName ?? '-',
+                        '${item.totalStock}',
+                        cs.formatCents(item.priceByType(priceType)),
+                        cs.formatCents(item.valuationByType(priceType)),
+                      ],
+                    )
+                    .toList(),
               ),
               pw.SizedBox(height: 8),
               pw.Container(
@@ -166,8 +173,12 @@ class InventoryPdfService {
               pw.SizedBox(height: 16),
               pw.Divider(),
               pw.Text(
-                '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
-                style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
+                style: pw.TextStyle(
+                  font: fonts.regular,
+                  fontSize: 8,
+                  color: PdfColors.grey600,
+                ),
               ),
             ];
           },
@@ -189,13 +200,19 @@ class InventoryPdfService {
                 pw.SizedBox(height: 8),
                 pw.Text(
                   '${_t('low_stock_alert', lang)}: ${data.lowStockItems.length}',
-                  style: pw.TextStyle(font: fonts.bold, fontSize: 11, color: PdfColors.red700),
+                  style: pw.TextStyle(
+                    font: fonts.bold,
+                    fontSize: 11,
+                    color: PdfColors.red700,
+                  ),
                 ),
                 pw.SizedBox(height: 12),
                 pw.TableHelper.fromTextArray(
                   headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 9),
                   cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 9),
-                  headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                  headerDecoration: const pw.BoxDecoration(
+                    color: PdfColors.grey200,
+                  ),
                   cellAlignments: {
                     0: pw.Alignment.centerLeft,
                     1: pw.Alignment.centerLeft,
@@ -212,20 +229,30 @@ class InventoryPdfService {
                     _t('reorder_level', lang),
                     _t('deficit', lang),
                   ],
-                  data: data.lowStockItems.map((item) => [
-                    item.sku ?? '-',
-                    item.productName,
-                    item.variantLabel.isNotEmpty ? item.variantLabel : '-',
-                    '${item.currentStock}',
-                    '${item.reorderLevel}',
-                    '${item.deficit}',
-                  ]).toList(),
+                  data: data.lowStockItems
+                      .map(
+                        (item) => [
+                          item.sku ?? '-',
+                          item.productName,
+                          item.variantLabel.isNotEmpty
+                              ? item.variantLabel
+                              : '-',
+                          '${item.currentStock}',
+                          '${item.reorderLevel}',
+                          '${item.deficit}',
+                        ],
+                      )
+                      .toList(),
                 ),
                 pw.Spacer(),
                 pw.Divider(),
                 pw.Text(
-                  '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
-                  style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                  '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
+                  style: pw.TextStyle(
+                    font: fonts.regular,
+                    fontSize: 8,
+                    color: PdfColors.grey600,
+                  ),
                 ),
               ],
             );
@@ -243,34 +270,46 @@ class InventoryPdfService {
           build: (pw.Context context) {
             final filterParts = <String>[];
             if (data.movementCategoryName != null) {
-              filterParts.add('${_t('category', lang)}: ${data.movementCategoryName}');
+              filterParts.add(
+                '${_t('category', lang)}: ${data.movementCategoryName}',
+              );
             }
             if (data.movementSupplierName != null) {
-              filterParts.add('${_t('supplier', lang)}: ${data.movementSupplierName}');
+              filterParts.add(
+                '${_t('supplier', lang)}: ${data.movementSupplierName}',
+              );
             }
             if (data.movementSearchQuery.isNotEmpty) {
-              filterParts.add('${_t('search', lang)}: ${data.movementSearchQuery}');
+              filterParts.add(
+                '${_t('search', lang)}: ${data.movementSearchQuery}',
+              );
             }
 
             return [
               _buildHeader(company, _t('product_movement', lang), fonts, dir),
               pw.SizedBox(height: 8),
               pw.Text(
-                '${_t('period', lang)}: ${DateFormat.yMMMd().format(data.dateRange.startDate)} — ${DateFormat.yMMMd().format(data.dateRange.endDate)}',
+                '${_t('period', lang)}: ${DateFormat('dd/MM/yyyy').format(data.dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(data.dateRange.endDate)}',
                 style: pw.TextStyle(font: fonts.regular, fontSize: 10),
               ),
-              if (filterParts.isNotEmpty) ...[  
+              if (filterParts.isNotEmpty) ...[
                 pw.SizedBox(height: 4),
                 pw.Text(
                   filterParts.join('  |  '),
-                  style: pw.TextStyle(font: fonts.regular, fontSize: 9, color: PdfColors.grey700),
+                  style: pw.TextStyle(
+                    font: fonts.regular,
+                    fontSize: 9,
+                    color: PdfColors.grey700,
+                  ),
                 ),
               ],
               pw.SizedBox(height: 12),
               pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 8),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.grey200,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.centerLeft,
                   1: pw.Alignment.centerLeft,
@@ -291,22 +330,32 @@ class InventoryPdfService {
                   _t('purchase_returned', lang),
                   _t('net_movement', lang),
                 ],
-                data: data.productMovement.map((item) => [
-                  item.sku ?? '-',
-                  item.productName,
-                  item.variantLabel.isNotEmpty ? item.variantLabel : '-',
-                  '+${item.purchasedQty}',
-                  '-${item.soldQty}',
-                  '+${item.saleReturnedQty}',
-                  '-${item.purchaseReturnedQty}',
-                  item.netMovement >= 0 ? '+${item.netMovement}' : '${item.netMovement}',
-                ]).toList(),
+                data: data.productMovement
+                    .map(
+                      (item) => [
+                        item.sku ?? '-',
+                        item.productName,
+                        item.variantLabel.isNotEmpty ? item.variantLabel : '-',
+                        '+${item.purchasedQty}',
+                        '-${item.soldQty}',
+                        '+${item.saleReturnedQty}',
+                        '-${item.purchaseReturnedQty}',
+                        item.netMovement >= 0
+                            ? '+${item.netMovement}'
+                            : '${item.netMovement}',
+                      ],
+                    )
+                    .toList(),
               ),
               pw.SizedBox(height: 16),
               pw.Divider(),
               pw.Text(
-                '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
-                style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
+                style: pw.TextStyle(
+                  font: fonts.regular,
+                  fontSize: 8,
+                  color: PdfColors.grey600,
+                ),
               ),
             ];
           },
@@ -322,11 +371,31 @@ class InventoryPdfService {
   // ═══════════════════════════════════════════════════════
 
   static const _translations = {
-    'stock_valuation': {'en': 'Stock Valuation', 'ar': 'تقييم المخزون', 'fr': 'Valorisation du Stock'},
-    'low_stock': {'en': 'Low Stock Alert', 'ar': 'تنبيه مخزون منخفض', 'fr': 'Alerte Stock Bas'},
-    'product_movement': {'en': 'Product Movement', 'ar': 'حركة المنتجات', 'fr': 'Mouvements de Produits'},
-    'total_valuation': {'en': 'Total Valuation', 'ar': 'إجمالي التقييم', 'fr': 'Valorisation Totale'},
-    'total_stock_units': {'en': 'Total Stock Units', 'ar': 'إجمالي وحدات المخزون', 'fr': 'Unités en Stock'},
+    'stock_valuation': {
+      'en': 'Stock Valuation',
+      'ar': 'تقييم المخزون',
+      'fr': 'Valorisation du Stock',
+    },
+    'low_stock': {
+      'en': 'Low Stock Alert',
+      'ar': 'تنبيه مخزون منخفض',
+      'fr': 'Alerte Stock Bas',
+    },
+    'product_movement': {
+      'en': 'Product Movement',
+      'ar': 'حركة المنتجات',
+      'fr': 'Mouvements de Produits',
+    },
+    'total_valuation': {
+      'en': 'Total Valuation',
+      'ar': 'إجمالي التقييم',
+      'fr': 'Valorisation Totale',
+    },
+    'total_stock_units': {
+      'en': 'Total Stock Units',
+      'ar': 'إجمالي وحدات المخزون',
+      'fr': 'Unités en Stock',
+    },
     'period': {'en': 'Period', 'ar': 'الفترة', 'fr': 'Période'},
     'sku': {'en': 'SKU', 'ar': 'رمز المنتج', 'fr': 'Réf.'},
     'product': {'en': 'Product', 'ar': 'المنتج', 'fr': 'Produit'},
@@ -337,19 +406,35 @@ class InventoryPdfService {
     'current_stock': {'en': 'Current', 'ar': 'الحالي', 'fr': 'Actuel'},
     'reorder_level': {'en': 'Reorder', 'ar': 'إعادة الطلب', 'fr': 'Seuil'},
     'deficit': {'en': 'Deficit', 'ar': 'العجز', 'fr': 'Déficit'},
-    'low_stock_alert': {'en': 'Products below reorder level', 'ar': 'منتجات أقل من مستوى إعادة الطلب', 'fr': 'Produits sous le seuil'},
+    'low_stock_alert': {
+      'en': 'Products below reorder level',
+      'ar': 'منتجات أقل من مستوى إعادة الطلب',
+      'fr': 'Produits sous le seuil',
+    },
     'purchased': {'en': 'Purchased', 'ar': 'مشتريات', 'fr': 'Acheté'},
     'sold': {'en': 'Sold', 'ar': 'مبيعات', 'fr': 'Vendu'},
     'returned': {'en': 'Returned', 'ar': 'مرتجعات', 'fr': 'Retourné'},
     'sale_returned': {'en': 'Sale Ret.', 'ar': 'مرتجع بيع', 'fr': 'Ret. Vente'},
-    'purchase_returned': {'en': 'Purch. Ret.', 'ar': 'مرتجع شراء', 'fr': 'Ret. Achat'},
+    'purchase_returned': {
+      'en': 'Purch. Ret.',
+      'ar': 'مرتجع شراء',
+      'fr': 'Ret. Achat',
+    },
     'supplier': {'en': 'Supplier', 'ar': 'المورد', 'fr': 'Fournisseur'},
     'search': {'en': 'Search', 'ar': 'بحث', 'fr': 'Recherche'},
     'net_movement': {'en': 'Net', 'ar': 'الصافي', 'fr': 'Net'},
-    'color_size': {'en': 'Color / Size', 'ar': 'اللون / المقاس', 'fr': 'Couleur / Taille'},
+    'color_size': {
+      'en': 'Color / Size',
+      'ar': 'اللون / المقاس',
+      'fr': 'Couleur / Taille',
+    },
     'cost_price': {'en': 'Cost Price', 'ar': 'سعر التكلفة', 'fr': 'Prix Coût'},
     'sale_price': {'en': 'Sale Price', 'ar': 'سعر البيع', 'fr': 'Prix Vente'},
-    'wholesale_price': {'en': 'Wholesale', 'ar': 'سعر الجملة', 'fr': 'Prix Gros'},
+    'wholesale_price': {
+      'en': 'Wholesale',
+      'ar': 'سعر الجملة',
+      'fr': 'Prix Gros',
+    },
     'printed_on': {'en': 'Printed on', 'ar': 'طُبع في', 'fr': 'Imprimé le'},
   };
 
@@ -388,7 +473,11 @@ class InventoryPdfService {
         if (company.address != null && company.address!.isNotEmpty)
           pw.Text(
             company.address!,
-            style: pw.TextStyle(font: fonts.regular, fontSize: 9, color: PdfColors.grey600),
+            style: pw.TextStyle(
+              font: fonts.regular,
+              fontSize: 9,
+              color: PdfColors.grey600,
+            ),
           ),
         pw.SizedBox(height: 8),
         pw.Divider(),
@@ -405,8 +494,12 @@ class InventoryPdfService {
 
   static Future<_PdfFonts> _loadFonts() async {
     try {
-      final regularData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-      final boldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+      final regularData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+      );
+      final boldData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+      );
       return _PdfFonts(
         regular: pw.Font.ttf(regularData),
         bold: pw.Font.ttf(boldData),

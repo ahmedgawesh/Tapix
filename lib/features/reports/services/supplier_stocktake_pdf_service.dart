@@ -86,7 +86,7 @@ class SupplierStocktakePdfService {
     }
 
     final dateRangeStr =
-        '${DateFormat.yMd().format(data.dateRange.startDate)} - ${DateFormat.yMd().format(data.dateRange.endDate)}';
+        '${DateFormat('dd/MM/yyyy').format(data.dateRange.startDate)} - ${DateFormat('dd/MM/yyyy').format(data.dateRange.endDate)}';
 
     pdf.addPage(
       pw.MultiPage(
@@ -345,7 +345,7 @@ class SupplierStocktakePdfService {
             pw.SizedBox(height: 16),
             pw.Divider(),
             pw.Text(
-              '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+              '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
               style: pw.TextStyle(
                 font: fonts.regular,
                 fontSize: 8,

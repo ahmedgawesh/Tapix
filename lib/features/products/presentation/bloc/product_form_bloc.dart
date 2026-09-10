@@ -464,8 +464,9 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
           isActive: product.isActive,
           trackInventory: product.trackInventory,
           measurementType: product.measurementType,
-          pharmacyEditorEnabled:
-              event.enablePharmacyFeatures || medicine != null,
+          // Existing pharmacy data remains preserved but cannot reopen the
+          // editor after the effective Pro feature has been disabled.
+          pharmacyEditorEnabled: event.enablePharmacyFeatures,
           isMedicine: medicine != null,
           medicineDosageForm: medicine?.profile.dosageForm ?? 'tablet',
           medicineRoute: medicine?.profile.administrationRoute ?? 'oral',

@@ -13,6 +13,7 @@ import 'package:decimal/decimal.dart';
 import '../../../../core/database/app_database.dart' show Customer, Employee;
 import '../../../../core/database/daos/pharmacy_dao.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/feature_gate_service.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/services/below_cost_sale_service.dart';
 import '../../../../core/services/currency_service.dart';
@@ -20,12 +21,17 @@ import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../../core/services/pricing/discount_converter.dart';
 import '../../../../core/services/parties/party_balance_classifier.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
+import '../../../../core/widgets/action_confirmation_dialog.dart';
 import '../../../subscription/presentation/widgets/upgrade_prompt.dart';
 import '../../../../core/money/money.dart';
+import '../../../../core/payments/checkout_settlement.dart';
+import '../../../../core/utils/app_date_formatter.dart';
 import '../../../../core/measurement/measurement.dart';
 import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/pricing/discount.dart';
 import '../../../../core/pricing/line_item_pricing_engine.dart';
+import '../../../../core/promotions/promotion_engine.dart';
+import '../../../../core/promotions/promotion_repository.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/data/services/permission_service.dart';
 import '../../../auth/domain/entities/permission_constants.dart';
@@ -52,6 +58,20 @@ import '../bloc/sale_form_bloc.dart';
 import '../services/sale_pdf_service.dart';
 
 part 'sale_form_dialogs.dart';
+
+class _PromotionBundleLine {
+  final Product product;
+  final ProductVariant? variant;
+  final int quantity;
+  final Decimal unitPriceCents;
+
+  const _PromotionBundleLine({
+    required this.product,
+    required this.variant,
+    required this.quantity,
+    required this.unitPriceCents,
+  });
+}
 
 Product _productFromLan(LanCatalogProduct value) => Product(
   id: value.id,
@@ -148,6 +168,10 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
         maxDiscountPercent: settings.maxDiscountPercent,
         requireCustomerForSales: settings.requireCustomerForSales,
         enableLoyaltyPoints: settings.enableLoyaltyPoints,
+        enablePromotions: sl<FeatureGateService>().isEnabled(
+          AppFeature.promotions,
+          settingEnabled: settings.enablePromotions,
+        ),
         defaultPaymentMethodStr: settings.defaultPaymentMethod,
         isEditingPosted: isEditingPosted,
       ),
@@ -679,7 +703,7 @@ class _SaleFormView extends StatelessWidget {
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            DateFormat.yMd().format(s.saleDate),
+                            AppDateFormatter.date(s.saleDate),
                             style: t.textTheme.bodyMedium?.copyWith(
                               fontWeight: FontWeight.w500,
                             ),
@@ -1010,6 +1034,13 @@ class _SaleFormView extends StatelessWidget {
       enableTaxCalculations: state.enableTaxCalculations,
       defaultTaxRateBps: state.defaultSalesTaxRateBps,
     );
+    final lineOffers = state.promotionEvaluation.applications
+        .where(
+          (offer) => offer.allocations.any(
+            (allocation) => allocation.lineId == item.tempId,
+          ),
+        )
+        .toList(growable: false);
     return Card(
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 8),
@@ -1046,6 +1077,38 @@ class _SaleFormView extends StatelessWidget {
                     const SizedBox(height: 4),
                     if (item.colorHex != null || item.sizeName != null)
                       _variantChips(item, cs),
+                    if (lineOffers.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: lineOffers
+                              .map((offer) {
+                                final discount = offer.allocations
+                                    .where(
+                                      (allocation) =>
+                                          allocation.lineId == item.tempId,
+                                    )
+                                    .fold<int>(
+                                      0,
+                                      (sum, allocation) =>
+                                          sum + allocation.discount.cents,
+                                    );
+                                return Chip(
+                                  visualDensity: VisualDensity.compact,
+                                  avatar: const Icon(
+                                    LucideIcons.badgePercent,
+                                    size: 14,
+                                  ),
+                                  label: Text(
+                                    '${'promotions.sales.offer'.tr()}: ${offer.name} (-${curr.format(discount)})',
+                                  ),
+                                );
+                              })
+                              .toList(growable: false),
+                        ),
+                      ),
                     Row(
                       children: [
                         Text(
@@ -1140,9 +1203,16 @@ class _SaleFormView extends StatelessWidget {
                   ],
                   const SizedBox(height: 4),
                   InkWell(
-                    onTap: () => ctx.read<SaleFormBloc>().add(
-                      SaleLineItemRemoved(item.tempId),
-                    ),
+                    onTap: () async {
+                      final confirmed = await confirmInvoiceLineRemoval(
+                        ctx,
+                        itemName: item.product.name,
+                      );
+                      if (!confirmed || !ctx.mounted) return;
+                      ctx.read<SaleFormBloc>().add(
+                        SaleLineItemRemoved(item.tempId),
+                      );
+                    },
                     borderRadius: BorderRadius.circular(8),
                     child: Padding(
                       padding: const EdgeInsets.all(4),
@@ -1315,6 +1385,11 @@ class _SaleFormView extends StatelessWidget {
     ColorScheme cs,
     CurrencyService curr,
   ) {
+    final quantitySummary = localizedQuantitySummary(
+      s.items,
+      quantityOf: (item) => item.quantity,
+      measurementTypeOf: (item) => item.product.measurementType,
+    );
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -1352,7 +1427,7 @@ class _SaleFormView extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${s.items.length} ${'sales.items'.tr().toLowerCase()}  •  ${s.totalQuantity} ${'sales.pieces'.tr().toLowerCase()}',
+                    '${s.items.length} ${'sales.items'.tr().toLowerCase()}  •  $quantitySummary',
                     style: t.textTheme.bodySmall?.copyWith(
                       color: cs.onSurfaceVariant,
                     ),
@@ -1534,6 +1609,30 @@ class _SaleFormView extends StatelessWidget {
           _addRemoteCatalogLine(ctx, product, variant);
           Navigator.pop(sheetContext);
         },
+        onBundleAdded: (lines, rule) {
+          final bloc = ctx.read<SaleFormBloc>();
+          for (final line in lines) {
+            bloc.add(
+              SaleLineItemAdded(
+                product: line.product,
+                variant: line.variant,
+                quantity: line.quantity,
+                unitPriceCents: line.unitPriceCents,
+              ),
+            );
+          }
+          Navigator.pop(sheetContext);
+          ScaffoldMessenger.of(ctx).showSnackBar(
+            SnackBar(
+              content: Text(
+                'promotions.sales.bundle_added'.tr(
+                  namedArgs: {'name': rule.name},
+                ),
+              ),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        },
       ),
     );
   }
@@ -1573,6 +1672,29 @@ class _SaleFormView extends StatelessWidget {
               ),
             );
             Navigator.pop(sc);
+          },
+          onBundleAdded: (lines, rule) {
+            for (final line in lines) {
+              bloc.add(
+                SaleLineItemAdded(
+                  product: line.product,
+                  variant: line.variant,
+                  quantity: line.quantity,
+                  unitPriceCents: line.unitPriceCents,
+                ),
+              );
+            }
+            Navigator.pop(sc);
+            ScaffoldMessenger.of(ctx).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'promotions.sales.bundle_added'.tr(
+                    namedArgs: {'name': rule.name},
+                  ),
+                ),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
           },
         ),
       ),
@@ -1624,7 +1746,12 @@ class _SaleFormView extends StatelessWidget {
                 );
                 Navigator.pop(sc);
               },
-          onRemoved: () {
+          onRemoved: () async {
+            final confirmed = await confirmInvoiceLineRemoval(
+              sc,
+              itemName: item.product.name,
+            );
+            if (!confirmed || !sc.mounted) return;
             bloc.add(SaleLineItemRemoved(item.tempId));
             Navigator.pop(sc);
           },
@@ -1968,8 +2095,8 @@ class _SaleFormView extends StatelessWidget {
         child: _CheckoutSheet(
           currencyService: curr,
           notesCtrl: notesCtrl,
-          onConfirm: () {
-            bloc.add(const SaleFormSubmitted());
+          onConfirm: (settlement) {
+            bloc.add(SaleFormSubmitted(settlement: settlement));
             Navigator.pop(sc);
           },
         ),

@@ -16,6 +16,7 @@ import '../../../../core/pricing/discount.dart';
 import '../../../../core/pricing/invoice_pricing_engine.dart';
 import '../../../../core/pricing/line_item_pricing_engine.dart';
 import '../../../../core/services/lan/lan_network_service.dart';
+import '../../../../core/widgets/action_confirmation_dialog.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 
 class LanRemoteSaleScreen extends StatefulWidget {
@@ -1036,7 +1037,12 @@ class _LanRemoteSaleScreenState extends State<LanRemoteSaleScreen> {
                         trailing: IconButton(
                           tooltip: 'common.delete'.tr(),
                           icon: const Icon(LucideIcons.trash2),
-                          onPressed: () {
+                          onPressed: () async {
+                            final confirmed = await confirmInvoiceLineRemoval(
+                              context,
+                              itemName: line.product.name,
+                            );
+                            if (!confirmed || !mounted) return;
                             setState(() {
                               _cart.removeAt(index);
                               _invalidatePendingRequest();

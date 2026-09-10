@@ -85,10 +85,11 @@ enum RefundChannel {
   /// Physical cash drawer — debit/credit 1000 Cash.
   cash,
 
-  /// Bank transfer / card / wire / cheque — debit/credit 1010 Bank.
+  /// Bank transfer / card / wire — debit/credit 1010 Bank.
   bank,
 
-  /// Cheque (treated like bank for routing).
+  /// Physical cheque — the base return first records AR/AP, then cheque
+  /// registration immediately reclassifies it through 1020/2020.
   cheque,
 
   /// On-account: customer/supplier balance.
@@ -161,10 +162,7 @@ class ReturnLink {
     required int sourceInvoiceId,
     required String sourceTable,
   }) =>
-      ReturnLink._(
-        sourceInvoiceId: sourceInvoiceId,
-        sourceTable: sourceTable,
-      );
+      ReturnLink._(sourceInvoiceId: sourceInvoiceId, sourceTable: sourceTable);
 
   /// Adjustment / unlinked return (no original invoice).
   static const ReturnLink adjustment = ReturnLink._();
@@ -291,12 +289,10 @@ class PostedReturn {
   });
 
   /// Convenience: total monetary impact (sum of all lines).
-  int get totalCents =>
-      lines.fold(0, (sum, l) => sum + l.totalCents);
+  int get totalCents => lines.fold(0, (sum, l) => sum + l.totalCents);
 
   /// Convenience: aggregate tax across all lines.
-  int get taxCents =>
-      lines.fold(0, (sum, l) => sum + l.taxCents);
+  int get taxCents => lines.fold(0, (sum, l) => sum + l.taxCents);
 
   /// Convenience: aggregate net (pre-tax) revenue/cost across all lines.
   int get netCents => totalCents - taxCents;
@@ -307,24 +303,23 @@ class PostedReturn {
       lines.fold(0, (sum, l) => sum + l.inventoryCostCents);
 
   /// Inventory cost going back to **resaleable** stock (1200).
-  int get restockableInventoryCostCents =>
-      lines
-          .where((l) => l.disposition == ReturnDisposition.restock)
-          .fold(0, (sum, l) => sum + l.inventoryCostCents);
+  int get restockableInventoryCostCents => lines
+      .where((l) => l.disposition == ReturnDisposition.restock)
+      .fold(0, (sum, l) => sum + l.inventoryCostCents);
 
   /// Inventory cost going to **shrinkage** (5800) — sale-side only.
-  int get shrinkageInventoryCostCents =>
-      lines
-          .where((l) =>
-              l.disposition == ReturnDisposition.damaged ||
-              l.disposition == ReturnDisposition.scrap)
-          .fold(0, (sum, l) => sum + l.inventoryCostCents);
+  int get shrinkageInventoryCostCents => lines
+      .where(
+        (l) =>
+            l.disposition == ReturnDisposition.damaged ||
+            l.disposition == ReturnDisposition.scrap,
+      )
+      .fold(0, (sum, l) => sum + l.inventoryCostCents);
 
   /// Inventory cost parked in **Returns in Transit** (1290) — purchase-side
   /// only. Used when the supplier has not yet settled the credit note so
   /// 1200 must not yet be reduced.
-  int get sendBackInventoryCostCents =>
-      lines
-          .where((l) => l.disposition == ReturnDisposition.sendBack)
-          .fold(0, (sum, l) => sum + l.inventoryCostCents);
+  int get sendBackInventoryCostCents => lines
+      .where((l) => l.disposition == ReturnDisposition.sendBack)
+      .fold(0, (sum, l) => sum + l.inventoryCostCents);
 }

@@ -8,6 +8,7 @@ import 'tables/settings.dart';
 import 'tables/users.dart';
 import 'tables/products.dart';
 import 'tables/pharmacy.dart';
+import 'tables/promotions.dart';
 import 'tables/parties.dart';
 import 'tables/loyalty.dart';
 import 'tables/people.dart';
@@ -39,6 +40,7 @@ import 'daos/supplier_dao.dart';
 import 'daos/adjustment_return_dao.dart';
 import 'daos/inventory_adjustment_dao.dart';
 import 'daos/cheque_confirmation_dao.dart';
+import 'daos/cheque_instrument_dao.dart';
 
 // Phase 1.5 (May 2026): the supplier opening-balance repair migration
 // (10032) now delegates to JournalEntryService instead of hand-rolling
@@ -52,7 +54,7 @@ import 'database_native.dart' if (dart.library.html) 'database_web.dart';
 
 part 'app_database.g.dart';
 
-const _currentDatabaseSchemaVersion = 10070;
+const _currentDatabaseSchemaVersion = 10081;
 
 @DriftDatabase(
   tables: [
@@ -74,6 +76,11 @@ const _currentDatabaseSchemaVersion = 10070;
     ActiveIngredientAliases,
     MedicineProfiles,
     MedicineActiveIngredients,
+    Promotions,
+    PromotionConditions,
+    PromotionScopes,
+    PromotionRewards,
+    PromotionSchedules,
     Customers,
     CustomerTransactions,
     LoyaltyTiers,
@@ -97,6 +104,8 @@ const _currentDatabaseSchemaVersion = 10070;
     CashierShifts,
     Sales,
     SaleItems,
+    SalePromotionApplications,
+    SaleItemPromotionAllocations,
     SaleTaxBands,
     SaleReturns,
     SaleReturnItems,
@@ -132,6 +141,8 @@ const _currentDatabaseSchemaVersion = 10070;
     ReturnReasonCodes,
     // Phase 4 — e-invoice artifacts (ZATCA / ETA / PEPPOL)
     EInvoiceDocuments,
+    // Phase 16 — one row per physical cheque, with clearing-account links.
+    ChequeInstruments,
     // Phase 14.0 — cheque lifecycle sidecar (pending/cleared/bounced/cancelled)
     ChequeConfirmations,
   ],
@@ -151,6 +162,7 @@ const _currentDatabaseSchemaVersion = 10070;
     SupplierDao,
     AdjustmentReturnDao,
     InventoryAdjustmentDao,
+    ChequeInstrumentDao,
     ChequeConfirmationDao,
   ],
 )
@@ -1700,6 +1712,1262 @@ CREATE TABLE IF NOT EXISTS sale_payments (
 
     developer.log(
       'Migration 10068 reconciled $repaired split simple-product rows.',
+      name: 'DB_MIGRATION',
+    );
+  }
+
+  /// Repairs the v10071 sale-posting defect where repeated cart lines that
+  /// targeted the same standard/WAC inventory row received overlapping
+  /// carrying-value snapshots. The first line was measured from its own
+  /// pre-movement boundary all the way to the final stock after later lines,
+  /// while those later lines were then counted again.
+  ///
+  /// Detection is deliberately narrow: only completed, inventory-tracked,
+  /// non-batch WAC sales are considered, and a group is repaired only when
+  /// every stored value has the exact cumulative shape produced by the bug.
+  /// Correct per-line snapshots do not match that shape and are untouched.
+  /// Posted journals remain immutable; the overstatement is reversed with a
+  /// new Dr Inventory / Cr COGS entry linked to the original sale, so a future
+  /// sale void reverses the correction through the normal source workflow.
+  Future<void> _repairOverlappingSaleValuations10072() async {
+    final candidates = await customSelect('''
+      SELECT
+        si.id AS item_id,
+        si.sale_id,
+        si.product_id,
+        CASE
+          WHEN si.variant_id IS NOT NULL THEN si.variant_id
+          WHEN p.has_variants = 0 THEN COALESCE((
+            SELECT v.id FROM product_variants v
+            WHERE v.product_id = p.id AND v.is_active = 1
+            ORDER BY v.id LIMIT 1
+          ), -p.id)
+          ELSE -p.id
+        END AS inventory_identity,
+        si.quantity,
+        si.quantity_scale,
+        si.cost_cents,
+        si.inventory_value_at_post_cents AS stored_value,
+        s.currency_id
+      FROM sale_items si
+      INNER JOIN sales s ON s.id = si.sale_id
+      INNER JOIN products p ON p.id = si.product_id
+      WHERE s.status = 'completed'
+        AND p.track_inventory = 1
+        AND p.costing_method = 'wac'
+        AND p.inventory_tracking_type NOT IN ('batch', 'batch_expiry')
+        AND si.cost_cents IS NOT NULL
+        AND si.inventory_value_at_post_cents IS NOT NULL
+      ORDER BY si.sale_id, si.product_id, inventory_identity, si.id
+    ''').get();
+
+    final groups = <String, List<QueryRow>>{};
+    for (final row in candidates) {
+      final saleId = row.read<int>('sale_id');
+      final productId = row.read<int>('product_id');
+      final inventoryIdentity = row.read<int>('inventory_identity');
+      groups
+          .putIfAbsent(
+            '$saleId:$productId:$inventoryIdentity',
+            () => <QueryRow>[],
+          )
+          .add(row);
+    }
+
+    final correctedByItem = <int, int>{};
+    final correctionBySale = <int, int>{};
+    final currencyBySale = <int, int>{};
+    final oldTotalBySale = <int, int>{};
+    final newTotalBySale = <int, int>{};
+
+    for (final group in groups.values) {
+      if (group.length < 2) continue;
+      final isolated = <int>[];
+      for (final row in group) {
+        final quantityScale = row.read<int>('quantity_scale');
+        isolated.add(
+          ((row.read<int>('cost_cents') * row.read<int>('quantity')) +
+                  (quantityScale ~/ 2)) ~/
+              quantityScale,
+        );
+      }
+      final cumulative = List<int>.filled(group.length, 0);
+      var running = 0;
+      for (var index = group.length - 1; index >= 0; index--) {
+        running += isolated[index];
+        cumulative[index] = running;
+      }
+
+      // Rounded pool boundaries can differ from summing individually rounded
+      // lines by at most a few cents. Keep a group-sized tolerance while still
+      // requiring the unmistakable cumulative-overlap shape.
+      final tolerance = group.length;
+      var hasOverlap = false;
+      var hasCumulativeShape = true;
+      for (var index = 0; index < group.length; index++) {
+        final stored = group[index].read<int>('stored_value');
+        if ((stored - cumulative[index]).abs() > tolerance) {
+          hasCumulativeShape = false;
+          break;
+        }
+        if (index < group.length - 1 && stored - isolated[index] > tolerance) {
+          hasOverlap = true;
+        }
+      }
+      if (!hasCumulativeShape || !hasOverlap) continue;
+
+      final corrected = List<int>.filled(group.length, 0);
+      for (var index = 0; index < group.length - 1; index++) {
+        corrected[index] =
+            group[index].read<int>('stored_value') -
+            group[index + 1].read<int>('stored_value');
+      }
+      corrected[group.length - 1] = group.last.read<int>('stored_value');
+      final correctedShapeIsSafe = List.generate(group.length, (index) => index)
+          .every(
+            (index) =>
+                corrected[index] > 0 &&
+                (corrected[index] - isolated[index]).abs() <= tolerance,
+          );
+      if (!correctedShapeIsSafe) continue;
+
+      final oldTotal = group.fold<int>(
+        0,
+        (sum, row) => sum + row.read<int>('stored_value'),
+      );
+      final newTotal = corrected.fold<int>(0, (sum, value) => sum + value);
+      final overstatement = oldTotal - newTotal;
+      if (overstatement <= 0) continue;
+
+      for (var index = 0; index < group.length; index++) {
+        correctedByItem[group[index].read<int>('item_id')] = corrected[index];
+      }
+      final saleId = group.first.read<int>('sale_id');
+      correctionBySale.update(
+        saleId,
+        (value) => value + overstatement,
+        ifAbsent: () => overstatement,
+      );
+      oldTotalBySale.update(
+        saleId,
+        (value) => value + oldTotal,
+        ifAbsent: () => oldTotal,
+      );
+      newTotalBySale.update(
+        saleId,
+        (value) => value + newTotal,
+        ifAbsent: () => newTotal,
+      );
+      currencyBySale[saleId] = group.first.read<int>('currency_id');
+    }
+
+    if (correctionBySale.isEmpty) {
+      developer.log(
+        'Migration 10072: no overlapping sale valuations found.',
+        name: 'DB_MIGRATION',
+      );
+      return;
+    }
+
+    for (final entry in correctedByItem.entries) {
+      await customStatement(
+        'UPDATE sale_items SET inventory_value_at_post_cents = ? WHERE id = ?',
+        [entry.value, entry.key],
+      );
+    }
+
+    final closedPeriods = await (select(
+      accountingPeriods,
+    )..where((period) => period.isClosed.equals(true))).get();
+    var correctionDate = DateTime.now();
+    var moved = true;
+    while (moved) {
+      moved = false;
+      for (final period in closedPeriods) {
+        if (!correctionDate.isBefore(period.startDate) &&
+            !correctionDate.isAfter(period.endDate)) {
+          correctionDate = period.endDate.add(const Duration(seconds: 1));
+          moved = true;
+        }
+      }
+    }
+
+    final journalService = JournalEntryService(AccountingRepository(this));
+    for (final entry in correctionBySale.entries) {
+      final saleId = entry.key;
+      final amount = entry.value;
+      await journalService.recordSaleCogsValuationCorrection(
+        saleId: saleId,
+        amountCents: amount,
+        currencyId: currencyBySale[saleId]!,
+        entryDate: correctionDate,
+        reason: 'migration 10072 repeated-line overlap repair',
+      );
+      await into(auditLogs).insert(
+        AuditLogsCompanion.insert(
+          targetTable: 'sales',
+          recordId: saleId,
+          action: 'repair_inventory_valuation',
+          changes: {
+            'migration': 10072,
+            'oldOverlappingValueCents': oldTotalBySale[saleId],
+            'correctedValueCents': newTotalBySale[saleId],
+            'correctionCents': amount,
+          },
+        ),
+      );
+    }
+
+    developer.log(
+      'Migration 10072 repaired ${correctionBySale.length} sale(s), '
+      '${correctedByItem.length} line snapshot(s).',
+      name: 'DB_MIGRATION',
+    );
+  }
+
+  /// Migration 10073: preserve every legacy cheque-bearing document as one
+  /// physical instrument. No historical journal is rewritten here; rows
+  /// which had already posted Bank directly are marked `legacy_direct_bank`
+  /// so the new lifecycle never double-posts them.
+  Future<void> _backfillChequeInstruments10073() async {
+    const commonStatusIncoming =
+        "CASE COALESCE(cc.status, 'pending') "
+        "WHEN 'cleared' THEN 'cleared' WHEN 'bounced' THEN 'bounced' "
+        "WHEN 'cancelled' THEN 'cancelled' ELSE 'received' END";
+    const commonStatusOutgoing =
+        "CASE COALESCE(cc.status, 'pending') "
+        "WHEN 'cleared' THEN 'cleared' WHEN 'bounced' THEN 'bounced' "
+        "WHEN 'cancelled' THEN 'cancelled' ELSE 'issued' END";
+
+    await customStatement('''
+INSERT INTO cheque_instruments (
+  direction, source_table, source_id, party_type, party_id,
+  amount_cents, currency_id, issue_date, due_date, status,
+  cleared_at, bounced_at, cancelled_at, bounce_reason, note,
+  settlement_payment_id, legacy_direct_bank, created_by, updated_by,
+  created_at, updated_at
+)
+SELECT
+  'incoming', 'sale', s.id, 'customer', s.customer_id,
+  s.total_cents, s.currency_id, s.sale_date, s.due_date,
+  $commonStatusIncoming,
+  CASE WHEN cc.status = 'cleared' THEN cc.confirmed_at END,
+  CASE WHEN cc.status = 'bounced' THEN cc.confirmed_at END,
+  CASE WHEN cc.status = 'cancelled' THEN cc.confirmed_at END,
+  cc.bounce_reason, cc.note,
+  COALESCE(cc.cleared_payment_id, (
+    SELECT sp.id FROM sale_payments sp
+    WHERE sp.sale_id = s.id AND sp.payment_method IN ('cheque','check')
+    ORDER BY sp.id LIMIT 1
+  )),
+  CASE WHEN s.paid_amount_cents > 0 OR cc.status = 'cleared' THEN 1 ELSE 0 END,
+  cc.confirmed_by, cc.confirmed_by, s.sale_date, s.sale_date
+FROM sales s
+LEFT JOIN cheque_confirmations cc
+  ON cc.source_table = 'sale' AND cc.source_id = s.id
+WHERE s.payment_method IN ('cheque','check') AND s.due_date IS NOT NULL
+  AND s.status NOT IN ('voided','draft')
+  AND NOT EXISTS (
+    SELECT 1 FROM cheque_instruments ci
+    WHERE ci.source_table = 'sale' AND ci.source_id = s.id
+  )
+''');
+
+    await customStatement('''
+INSERT INTO cheque_instruments (
+  direction, source_table, source_id, party_type, party_id,
+  amount_cents, currency_id, issue_date, due_date, status,
+  cleared_at, bounced_at, cancelled_at, bounce_reason, note,
+  settlement_payment_id, legacy_direct_bank, created_by, updated_by,
+  created_at, updated_at
+)
+SELECT
+  'outgoing', 'purchase', p.id, 'supplier', p.supplier_id,
+  p.total_cents, p.currency_id, p.purchase_date, p.due_date,
+  $commonStatusOutgoing,
+  CASE WHEN cc.status = 'cleared' THEN cc.confirmed_at END,
+  CASE WHEN cc.status = 'bounced' THEN cc.confirmed_at END,
+  CASE WHEN cc.status = 'cancelled' THEN cc.confirmed_at END,
+  cc.bounce_reason, cc.note,
+  COALESCE(cc.cleared_payment_id, (
+    SELECT pp.id FROM purchase_payments pp
+    WHERE pp.purchase_id = p.id AND pp.payment_method IN ('cheque','check')
+    ORDER BY pp.id LIMIT 1
+  )),
+  CASE WHEN p.paid_amount_cents > 0 OR cc.status = 'cleared' THEN 1 ELSE 0 END,
+  cc.confirmed_by, cc.confirmed_by, p.purchase_date, p.purchase_date
+FROM purchases p
+LEFT JOIN cheque_confirmations cc
+  ON cc.source_table = 'purchase' AND cc.source_id = p.id
+WHERE p.payment_method IN ('cheque','check') AND p.due_date IS NOT NULL
+  AND p.status NOT IN ('voided','draft')
+  AND NOT EXISTS (
+    SELECT 1 FROM cheque_instruments ci
+    WHERE ci.source_table = 'purchase' AND ci.source_id = p.id
+  )
+''');
+
+    await customStatement('''
+INSERT INTO cheque_instruments (
+  direction, source_table, source_id, party_type, party_id,
+  amount_cents, currency_id, issue_date, due_date, status,
+  cleared_at, bounced_at, cancelled_at, bounce_reason, note,
+  legacy_direct_bank, created_by, updated_by, created_at, updated_at
+)
+SELECT
+  'outgoing', 'sale_return', r.id, 'customer', s.customer_id,
+  r.total_cents, r.currency_id, r.return_date, r.due_date,
+  $commonStatusOutgoing,
+  CASE WHEN cc.status = 'cleared' THEN cc.confirmed_at END,
+  CASE WHEN cc.status = 'bounced' THEN cc.confirmed_at END,
+  CASE WHEN cc.status = 'cancelled' THEN cc.confirmed_at END,
+  cc.bounce_reason, cc.note, 1, cc.confirmed_by, cc.confirmed_by,
+  r.return_date, r.return_date
+FROM sale_returns r
+JOIN sales s ON s.id = r.sale_id
+LEFT JOIN cheque_confirmations cc
+  ON cc.source_table = 'sale_return' AND cc.source_id = r.id
+WHERE r.refund_method IN ('cheque','check') AND r.due_date IS NOT NULL
+  AND r.status NOT IN ('voided','draft')
+  AND NOT EXISTS (SELECT 1 FROM cheque_instruments ci
+    WHERE ci.source_table = 'sale_return' AND ci.source_id = r.id)
+''');
+
+    await customStatement('''
+INSERT INTO cheque_instruments (
+  direction, source_table, source_id, party_type, party_id,
+  amount_cents, currency_id, issue_date, due_date, status,
+  cleared_at, bounced_at, cancelled_at, bounce_reason, note,
+  legacy_direct_bank, created_by, updated_by, created_at, updated_at
+)
+SELECT
+  'incoming', 'purchase_return', r.id, 'supplier', p.supplier_id,
+  r.total_cents, r.currency_id, r.return_date, r.due_date,
+  $commonStatusIncoming,
+  CASE WHEN cc.status = 'cleared' THEN cc.confirmed_at END,
+  CASE WHEN cc.status = 'bounced' THEN cc.confirmed_at END,
+  CASE WHEN cc.status = 'cancelled' THEN cc.confirmed_at END,
+  cc.bounce_reason, cc.note, 1, cc.confirmed_by, cc.confirmed_by,
+  r.return_date, r.return_date
+FROM purchase_returns r
+JOIN purchases p ON p.id = r.purchase_id
+LEFT JOIN cheque_confirmations cc
+  ON cc.source_table = 'purchase_return' AND cc.source_id = r.id
+WHERE r.refund_method IN ('cheque','check') AND r.due_date IS NOT NULL
+  AND r.status NOT IN ('voided','draft')
+  AND NOT EXISTS (SELECT 1 FROM cheque_instruments ci
+    WHERE ci.source_table = 'purchase_return' AND ci.source_id = r.id)
+''');
+
+    await customStatement('''
+INSERT INTO cheque_instruments (
+  direction, source_table, source_id, party_type, party_id,
+  amount_cents, currency_id, issue_date, due_date, status,
+  cleared_at, bounced_at, cancelled_at, bounce_reason, note,
+  legacy_direct_bank, created_by, updated_by, created_at, updated_at
+)
+SELECT
+  'outgoing', 'sale_return_adjustment', r.id, 'customer', r.customer_id,
+  r.total_cents, r.currency_id, r.return_date, r.due_date,
+  $commonStatusOutgoing,
+  CASE WHEN cc.status = 'cleared' THEN cc.confirmed_at END,
+  CASE WHEN cc.status = 'bounced' THEN cc.confirmed_at END,
+  CASE WHEN cc.status = 'cancelled' THEN cc.confirmed_at END,
+  cc.bounce_reason, cc.note, 1, cc.confirmed_by, cc.confirmed_by,
+  r.return_date, r.return_date
+FROM sale_return_adjustments r
+LEFT JOIN cheque_confirmations cc
+  ON cc.source_table = 'sale_return_adjustment' AND cc.source_id = r.id
+WHERE r.refund_method IN ('cheque','check') AND r.due_date IS NOT NULL
+  AND r.status NOT IN ('voided','draft')
+  AND NOT EXISTS (SELECT 1 FROM cheque_instruments ci
+    WHERE ci.source_table = 'sale_return_adjustment' AND ci.source_id = r.id)
+''');
+
+    await customStatement('''
+INSERT INTO cheque_instruments (
+  direction, source_table, source_id, party_type, party_id,
+  amount_cents, currency_id, issue_date, due_date, status,
+  cleared_at, bounced_at, cancelled_at, bounce_reason, note,
+  legacy_direct_bank, created_by, updated_by, created_at, updated_at
+)
+SELECT
+  'incoming', 'purchase_return_adjustment', r.id, 'supplier', r.supplier_id,
+  r.total_cents, r.currency_id, r.return_date, r.due_date,
+  $commonStatusIncoming,
+  CASE WHEN cc.status = 'cleared' THEN cc.confirmed_at END,
+  CASE WHEN cc.status = 'bounced' THEN cc.confirmed_at END,
+  CASE WHEN cc.status = 'cancelled' THEN cc.confirmed_at END,
+  cc.bounce_reason, cc.note, 1, cc.confirmed_by, cc.confirmed_by,
+  r.return_date, r.return_date
+FROM purchase_return_adjustments r
+LEFT JOIN cheque_confirmations cc
+  ON cc.source_table = 'purchase_return_adjustment' AND cc.source_id = r.id
+WHERE r.refund_method IN ('cheque','check') AND r.due_date IS NOT NULL
+  AND r.status NOT IN ('voided','draft')
+  AND NOT EXISTS (SELECT 1 FROM cheque_instruments ci
+    WHERE ci.source_table = 'purchase_return_adjustment' AND ci.source_id = r.id)
+''');
+  }
+
+  // Migration 10074: link already-paid legacy cheque documents to their
+  // original payment row so a later dishonour restores both GL and party ledger.
+  Future<void> _repairChequeSettlementLinks10074() async {
+    await customStatement('''
+UPDATE cheque_instruments
+SET settlement_payment_id = (
+  SELECT sp.id FROM sale_payments sp
+  WHERE sp.sale_id = cheque_instruments.source_id
+    AND sp.payment_method IN ('cheque','check')
+  ORDER BY sp.id LIMIT 1
+)
+WHERE source_table = 'sale' AND settlement_payment_id IS NULL
+  AND EXISTS (SELECT 1 FROM sale_payments sp
+    WHERE sp.sale_id = cheque_instruments.source_id
+      AND sp.payment_method IN ('cheque','check'))
+''');
+    await customStatement('''
+UPDATE cheque_instruments
+SET settlement_payment_id = (
+  SELECT pp.id FROM purchase_payments pp
+  WHERE pp.purchase_id = cheque_instruments.source_id
+    AND pp.payment_method IN ('cheque','check')
+  ORDER BY pp.id LIMIT 1
+)
+WHERE source_table = 'purchase' AND settlement_payment_id IS NULL
+  AND EXISTS (SELECT 1 FROM purchase_payments pp
+    WHERE pp.purchase_id = cheque_instruments.source_id
+      AND pp.payment_method IN ('cheque','check'))
+''');
+  }
+
+  /// Migration 10075: a short-lived checkout implementation recorded an
+  /// open cheque as a real sale/purchase payment immediately. Only rows with
+  /// their own posted payment journal are repaired here; this deliberately
+  /// excludes older legacy documents whose original invoice journal may have
+  /// posted directly to Bank and cannot be reclassified automatically.
+  Future<void> _deferOpenChequeSettlements10075() async {
+    final rows = await customSelect('''
+SELECT ci.id AS instrument_id, ci.source_table, ci.settlement_payment_id,
+       ci.status, ci.updated_by
+  FROM cheque_instruments ci
+ WHERE ci.source_table IN ('sale','purchase')
+   AND ci.status IN ('received','issued','deposited')
+   AND ci.settlement_payment_id IS NOT NULL
+   AND EXISTS (
+     SELECT 1 FROM journal_entries je
+      WHERE je.source_table = CASE ci.source_table
+        WHEN 'sale' THEN 'sale_payments' ELSE 'purchase_payments' END
+        AND je.source_id = ci.settlement_payment_id
+        AND je.status = 'posted' AND je.is_reversed = 0
+   )
+''').get();
+    if (rows.isEmpty) return;
+
+    final journal = JournalEntryService(AccountingRepository(this));
+    final salePaymentsDao = SaleDao(this);
+    final purchasePaymentsDao = PurchaseDao(this);
+    for (final row in rows) {
+      final instrumentId = row.read<int>('instrument_id');
+      final source = row.read<String>('source_table');
+      final paymentId = row.read<int>('settlement_payment_id');
+      final userId = row.readNullable<int>('updated_by');
+      final paymentTable = source == 'sale'
+          ? 'sale_payments'
+          : 'purchase_payments';
+
+      await journal.voidJournalEntriesForSource(
+        sourceTable: paymentTable,
+        sourceId: paymentId,
+        reason: 'Migration 10075: defer open cheque until bank clearance',
+        userId: userId,
+      );
+      if (source == 'sale') {
+        await salePaymentsDao.deletePayment(paymentId);
+        await customStatement(
+          "DELETE FROM customer_transactions WHERE reference_type = 'sale_payment' AND reference_id = ?",
+          [paymentId],
+        );
+      } else {
+        await purchasePaymentsDao.deletePayment(paymentId);
+        await customStatement(
+          "DELETE FROM supplier_transactions WHERE reference_type = 'purchase_payment' AND reference_id = ?",
+          [paymentId],
+        );
+      }
+      await customStatement(
+        'UPDATE cheque_instruments SET settlement_payment_id = NULL, '
+        'legacy_direct_bank = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [instrumentId],
+      );
+      await into(auditLogs).insert(
+        AuditLogsCompanion.insert(
+          targetTable: 'cheque_instruments',
+          recordId: instrumentId,
+          action: 'defer_open_cheque_settlement',
+          changes: {
+            'migration': 10075,
+            'sourceTable': source,
+            'removedPaymentId': paymentId,
+          },
+          userId: Value(userId),
+        ),
+      );
+    }
+    developer.log(
+      'Migration 10075 deferred ${rows.length} open cheque settlement(s).',
+      name: 'DB_MIGRATION',
+    );
+  }
+
+  /// Migration 10076: return cheques created by the immediately preceding
+  /// implementation posted to 1020/2020 as soon as the return was posted.
+  /// Reclassify only non-legacy instruments that still lack a settlement
+  /// link, so the party obligation remains open until actual clearance.
+  Future<void> _deferReturnChequeSettlements10076() async {
+    // A return without a party cannot participate in an AR/AP lifecycle.
+    // Preserve its historical direct-bank behaviour instead of fabricating
+    // a customer or supplier obligation.
+    await customStatement('''
+UPDATE cheque_instruments
+   SET legacy_direct_bank = 1, updated_at = CURRENT_TIMESTAMP
+ WHERE source_table IN (
+   'sale_return', 'purchase_return',
+   'sale_return_adjustment', 'purchase_return_adjustment'
+ ) AND legacy_direct_bank = 0 AND party_id IS NULL
+''');
+
+    final rows = await customSelect('''
+SELECT id, source_table, source_id, party_id, amount_cents, currency_id,
+       direction, status, updated_by
+  FROM cheque_instruments
+ WHERE source_table IN (
+   'sale_return', 'purchase_return',
+   'sale_return_adjustment', 'purchase_return_adjustment'
+ )
+   AND legacy_direct_bank = 0
+   AND party_id IS NOT NULL
+   AND settlement_payment_id IS NULL
+   AND status IN ('received', 'issued', 'deposited', 'cleared')
+''').get();
+    if (rows.isEmpty) return;
+
+    final journal = JournalEntryService(AccountingRepository(this));
+    final customerDao = CustomerDao(this);
+    final supplierDao = SupplierDao(this);
+    var migrated = 0;
+
+    for (final row in rows) {
+      final instrumentId = row.read<int>('id');
+      final source = row.read<String>('source_table');
+      final sourceId = row.read<int>('source_id');
+      final partyId = row.read<int>('party_id');
+      final amount = row.read<int>('amount_cents');
+      final currencyId = row.read<int>('currency_id');
+      final incoming = row.read<String>('direction') == 'incoming';
+      final status = row.read<String>('status');
+      final userId = row.readNullable<int>('updated_by');
+      final saleSide =
+          source == 'sale_return' || source == 'sale_return_adjustment';
+      final transactionTable = saleSide
+          ? 'customer_transactions'
+          : 'supplier_transactions';
+      final partyColumn = saleSide ? 'customer_id' : 'supplier_id';
+
+      // A pending row proves this document was already posted by the new
+      // policy while the app still carried schema 10075 (for example during
+      // a staged rollout). Do not reclassify or alter its balance again.
+      final alreadyDeferred = await customSelect(
+        'SELECT 1 FROM $transactionTable '
+        'WHERE $partyColumn = ? AND reference_type = ? AND reference_id = ? '
+        "AND transaction_type = 'cheque_return_pending' LIMIT 1",
+        variables: [
+          Variable.withInt(partyId),
+          Variable.withString(source),
+          Variable.withInt(sourceId),
+        ],
+      ).getSingleOrNull();
+      if (alreadyDeferred != null) continue;
+
+      final deferralJournalId = await journal
+          .recordReturnChequeDeferralJournalEntry(
+            chequeId: instrumentId,
+            incoming: incoming,
+            amountCents: amount,
+            currencyId: currencyId,
+            obligationAccountCode: saleSide ? '1100' : '2000',
+            userId: userId,
+          );
+
+      final converted = await customUpdate(
+        'UPDATE $transactionTable '
+        "SET transaction_type = 'cheque_return_pending' "
+        'WHERE $partyColumn = ? AND reference_type = ? AND reference_id = ? '
+        "AND transaction_type = 'refund'",
+        variables: [
+          Variable.withInt(partyId),
+          Variable.withString(source),
+          Variable.withInt(sourceId),
+        ],
+      );
+      if (converted == 0) {
+        if (saleSide) {
+          await into(customerTransactions).insert(
+            CustomerTransactionsCompanion.insert(
+              customerId: partyId,
+              transactionType: 'cheque_return_pending',
+              amountCents: Decimal.fromInt(-amount),
+              currencyId: currencyId,
+              description: Value('Pending return cheque #$instrumentId'),
+              referenceId: Value(sourceId),
+              referenceType: Value(source),
+            ),
+          );
+        } else {
+          await into(supplierTransactions).insert(
+            SupplierTransactionsCompanion.insert(
+              supplierId: partyId,
+              transactionType: 'cheque_return_pending',
+              amountCents: Decimal.fromInt(-amount),
+              currencyId: currencyId,
+              description: Value('Pending return cheque #$instrumentId'),
+              referenceId: Value(sourceId),
+              referenceType: Value(source),
+            ),
+          );
+        }
+      }
+
+      int? settlementJournalId;
+      if (status == 'cleared') {
+        settlementJournalId = await journal
+            .recordReturnChequeSettlementJournalEntry(
+              chequeId: instrumentId,
+              incoming: incoming,
+              amountCents: amount,
+              currencyId: currencyId,
+              obligationAccountCode: saleSide ? '1100' : '2000',
+              userId: userId,
+            );
+        if (saleSide) {
+          await into(customerTransactions).insert(
+            CustomerTransactionsCompanion.insert(
+              customerId: partyId,
+              transactionType: 'cheque_return_settlement',
+              amountCents: Decimal.fromInt(amount),
+              currencyId: currencyId,
+              description: Value(
+                'Outgoing return cheque #$instrumentId cleared',
+              ),
+              referenceId: Value(instrumentId),
+              referenceType: const Value('cheque_instrument'),
+            ),
+          );
+        } else {
+          await into(supplierTransactions).insert(
+            SupplierTransactionsCompanion.insert(
+              supplierId: partyId,
+              transactionType: 'cheque_return_settlement',
+              amountCents: Decimal.fromInt(amount),
+              currencyId: currencyId,
+              description: Value(
+                'Incoming return cheque #$instrumentId cleared',
+              ),
+              referenceId: Value(instrumentId),
+              referenceType: const Value('cheque_instrument'),
+            ),
+          );
+        }
+        await customStatement(
+          'UPDATE cheque_instruments SET settlement_payment_id = ?, '
+          'updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+          [settlementJournalId, instrumentId],
+        );
+        await customStatement(
+          'UPDATE cheque_confirmations SET cleared_payment_id = ?, '
+          'updated_at = CURRENT_TIMESTAMP '
+          'WHERE source_table = ? AND source_id = ?',
+          [settlementJournalId, source, sourceId],
+        );
+      }
+
+      // Rebuild from the transaction ledger rather than applying a blind
+      // delta. That is idempotent even if a user ran balance reconciliation
+      // while the old refund audit row was present.
+      if (saleSide) {
+        await customerDao.recalculateBalance(partyId);
+      } else {
+        await supplierDao.recalculateBalance(partyId);
+      }
+
+      await into(auditLogs).insert(
+        AuditLogsCompanion.insert(
+          targetTable: 'cheque_instruments',
+          recordId: instrumentId,
+          action: 'defer_return_cheque_settlement',
+          changes: {
+            'migration': 10076,
+            'sourceTable': source,
+            'sourceId': sourceId,
+            'deferralJournalId': deferralJournalId,
+            'settlementJournalId': settlementJournalId,
+          },
+          userId: Value(userId),
+        ),
+      );
+      migrated++;
+    }
+
+    developer.log(
+      'Migration 10076 deferred $migrated return cheque settlement(s).',
+      name: 'DB_MIGRATION',
+    );
+  }
+
+  /// Migration 10077: recognize open return cheques when they are physically
+  /// received/issued. Schema 10076 deferred them in the party obligation until
+  /// bank clearance; this migration restores the standard two-step flow:
+  /// obligation -> 1020/2020 on receipt/issue, then 1020/2020 -> Bank on clear.
+  Future<void> _recognizeOpenReturnCheques10077() async {
+    final rows = await customSelect('''
+SELECT id, source_table, source_id, party_id, amount_cents, currency_id,
+       direction, status, updated_by, cheque_number
+  FROM cheque_instruments
+ WHERE source_table IN (
+   'sale_return', 'purchase_return',
+   'sale_return_adjustment', 'purchase_return_adjustment'
+ )
+   AND legacy_direct_bank = 0
+   AND party_id IS NOT NULL
+   AND settlement_payment_id IS NULL
+   AND status IN ('received', 'issued', 'deposited')
+''').get();
+    if (rows.isEmpty) return;
+
+    final journal = JournalEntryService(AccountingRepository(this));
+    final customerDao = CustomerDao(this);
+    final supplierDao = SupplierDao(this);
+    var migrated = 0;
+
+    for (final row in rows) {
+      final instrumentId = row.read<int>('id');
+      final source = row.read<String>('source_table');
+      final sourceId = row.read<int>('source_id');
+      final partyId = row.read<int>('party_id');
+      final amount = row.read<int>('amount_cents');
+      final currencyId = row.read<int>('currency_id');
+      final incoming = row.read<String>('direction') == 'incoming';
+      final userId = row.readNullable<int>('updated_by');
+      final chequeNumber = row.readNullable<String>('cheque_number');
+      final saleSide =
+          source == 'sale_return' || source == 'sale_return_adjustment';
+      final transactionTable = saleSide
+          ? 'customer_transactions'
+          : 'supplier_transactions';
+      final partyColumn = saleSide ? 'customer_id' : 'supplier_id';
+
+      final recognitionJournalId = await journal
+          .recordReturnChequeSettlementJournalEntry(
+            chequeId: instrumentId,
+            incoming: incoming,
+            amountCents: amount,
+            currencyId: currencyId,
+            obligationAccountCode: saleSide ? '1100' : '2000',
+            userId: userId,
+          );
+
+      final existingTransaction = await customSelect(
+        'SELECT 1 FROM $transactionTable '
+        'WHERE $partyColumn = ? AND reference_type = ? AND reference_id = ? '
+        "AND transaction_type = 'cheque_return_settlement' LIMIT 1",
+        variables: [
+          Variable.withInt(partyId),
+          Variable.withString('cheque_instrument'),
+          Variable.withInt(instrumentId),
+        ],
+      ).getSingleOrNull();
+      if (existingTransaction == null) {
+        final label = chequeNumber == null || chequeNumber.trim().isEmpty
+            ? '#$instrumentId'
+            : chequeNumber.trim();
+        final description = incoming
+            ? 'Incoming return cheque $label received'
+            : 'Outgoing return cheque $label issued';
+        if (saleSide) {
+          await into(customerTransactions).insert(
+            CustomerTransactionsCompanion.insert(
+              customerId: partyId,
+              transactionType: 'cheque_return_settlement',
+              transactionNumber: Value(chequeNumber),
+              amountCents: Decimal.fromInt(amount),
+              currencyId: currencyId,
+              description: Value(description),
+              referenceId: Value(instrumentId),
+              referenceType: const Value('cheque_instrument'),
+            ),
+          );
+        } else {
+          await into(supplierTransactions).insert(
+            SupplierTransactionsCompanion.insert(
+              supplierId: partyId,
+              transactionType: 'cheque_return_settlement',
+              transactionNumber: Value(chequeNumber),
+              amountCents: Decimal.fromInt(amount),
+              currencyId: currencyId,
+              description: Value(description),
+              referenceId: Value(instrumentId),
+              referenceType: const Value('cheque_instrument'),
+            ),
+          );
+        }
+      }
+
+      await customStatement(
+        'UPDATE cheque_instruments SET settlement_payment_id = ?, '
+        'updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [recognitionJournalId, instrumentId],
+      );
+
+      if (saleSide) {
+        await customerDao.recalculateBalance(partyId);
+      } else {
+        await supplierDao.recalculateBalance(partyId);
+      }
+
+      await into(auditLogs).insert(
+        AuditLogsCompanion.insert(
+          targetTable: 'cheque_instruments',
+          recordId: instrumentId,
+          action: 'recognize_open_return_cheque',
+          changes: {
+            'migration': 10077,
+            'sourceTable': source,
+            'sourceId': sourceId,
+            'recognitionJournalId': recognitionJournalId,
+          },
+          userId: Value(userId),
+        ),
+      );
+      migrated++;
+    }
+
+    developer.log(
+      'Migration 10077 recognized $migrated open return cheque(s).',
+      name: 'DB_MIGRATION',
+    );
+  }
+
+  /// Migration 10078: recognize open invoice cheques at receipt/issue time.
+  ///
+  /// Sales cheques settle AR through 1020 and purchase cheques settle AP
+  /// through 2020. A later clearance only transfers the clearing balance
+  /// to/from bank. Closed, failed and legacy-direct-bank instruments are left
+  /// untouched.
+  Future<void> _recognizeOpenInvoiceCheques10078() async {
+    final rows = await customSelect('''
+SELECT id, source_table, source_id, amount_cents, currency_id,
+       status, updated_by, cheque_number, issue_date
+  FROM cheque_instruments
+ WHERE source_table IN ('sale', 'purchase')
+   AND legacy_direct_bank = 0
+   AND party_id IS NOT NULL
+   AND settlement_payment_id IS NULL
+   AND status IN ('received', 'issued', 'deposited')
+ ORDER BY id
+''').get();
+    if (rows.isEmpty) return;
+
+    final journal = JournalEntryService(AccountingRepository(this));
+    final salePaymentsDao = SaleDao(this);
+    final purchasePaymentsDao = PurchaseDao(this);
+    var migrated = 0;
+
+    for (final row in rows) {
+      final instrumentId = row.read<int>('id');
+      final source = row.read<String>('source_table');
+      final sourceId = row.read<int>('source_id');
+      final amount = row.read<int>('amount_cents');
+      final currencyId = row.read<int>('currency_id');
+      final status = row.read<String>('status');
+      final userId = row.readNullable<int>('updated_by');
+      final chequeNumber = row.readNullable<String>('cheque_number');
+      final issueDate = row.readNullable<DateTime>('issue_date');
+      final saleSide = source == 'sale';
+      final paymentTable = saleSide ? 'sale_payments' : 'purchase_payments';
+      final invoiceColumn = saleSide ? 'sale_id' : 'purchase_id';
+      final paymentSource = saleSide ? 'sale_payments' : 'purchase_payments';
+
+      final existingPayment = await customSelect(
+        'SELECT p.id FROM $paymentTable p '
+        'WHERE p.$invoiceColumn = ? '
+        "AND p.payment_method IN ('cheque', 'check') "
+        'AND p.amount_cents = ? '
+        'AND NOT EXISTS (SELECT 1 FROM cheque_instruments linked '
+        'WHERE linked.settlement_payment_id = p.id AND linked.id <> ?) '
+        'ORDER BY p.id LIMIT 1',
+        variables: [
+          Variable.withInt(sourceId),
+          Variable.withInt(amount),
+          Variable.withInt(instrumentId),
+        ],
+      ).getSingleOrNull();
+
+      late final int paymentId;
+      if (existingPayment != null) {
+        paymentId = existingPayment.read<int>('id');
+      } else if (saleSide) {
+        paymentId = await salePaymentsDao.recordPayment(
+          SalePaymentsCompanion.insert(
+            saleId: sourceId,
+            amountCents: Decimal.fromInt(amount),
+            currencyId: currencyId,
+            paymentMethod: 'cheque',
+            reference: Value(chequeNumber),
+            notes: const Value('Incoming cheque received'),
+            paymentDate: Value(issueDate ?? DateTime.now()),
+          ),
+        );
+      } else {
+        paymentId = await purchasePaymentsDao.recordPayment(
+          PurchasePaymentsCompanion.insert(
+            purchaseId: sourceId,
+            amountCents: Decimal.fromInt(amount),
+            currencyId: currencyId,
+            paymentMethod: 'cheque',
+            reference: Value(chequeNumber),
+            notes: const Value('Outgoing cheque issued'),
+            paymentDate: Value(issueDate ?? DateTime.now()),
+          ),
+        );
+      }
+
+      final existingJournal = await customSelect(
+        'SELECT id FROM journal_entries '
+        "WHERE source_table = ? AND source_id = ? AND status = 'posted' "
+        'AND is_reversed = 0 '
+        'LIMIT 1',
+        variables: [
+          Variable.withString(paymentSource),
+          Variable.withInt(paymentId),
+        ],
+      ).getSingleOrNull();
+      if (existingJournal == null) {
+        if (saleSide) {
+          await journal.recordCustomerPaymentJournalEntry(
+            paymentId: paymentId,
+            amountCents: amount,
+            currencyId: currencyId,
+            paymentMethod: 'cheque',
+            userId: userId,
+          );
+        } else {
+          await journal.recordSupplierPaymentJournalEntry(
+            paymentId: paymentId,
+            amountCents: amount,
+            currencyId: currencyId,
+            paymentMethod: 'cheque',
+            userId: userId,
+          );
+        }
+      }
+
+      await customStatement(
+        'UPDATE cheque_instruments SET settlement_payment_id = ?, '
+        'updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [paymentId, instrumentId],
+      );
+
+      await into(auditLogs).insert(
+        AuditLogsCompanion.insert(
+          targetTable: 'cheque_instruments',
+          recordId: instrumentId,
+          action: 'recognize_open_invoice_cheque',
+          changes: {
+            'migration': 10078,
+            'sourceTable': source,
+            'sourceId': sourceId,
+            'paymentId': paymentId,
+            'status': status,
+          },
+          userId: Value(userId),
+        ),
+      );
+      migrated++;
+    }
+
+    developer.log(
+      'Migration 10078 recognized $migrated open invoice cheque(s).',
+      name: 'DB_MIGRATION',
+    );
+  }
+
+  /// Migration 10079: move historical incoming dishonoured cheques from the
+  /// original party control account into 1030 (Dishonoured Cheques).
+  ///
+  /// Earlier lifecycle code reopened AR/AP and removed the settlement link,
+  /// leaving no balance in 1030. The party sub-ledger already contains the
+  /// outstanding amount, so this migration only reclassifies the GL and does
+  /// not change customer or supplier balances.
+  Future<void> _reclassifyIncomingDishonouredCheques10079() async {
+    final rows = await customSelect('''
+SELECT ci.id, ci.source_table, ci.amount_cents, ci.currency_id,
+       ci.updated_by, ci.bounce_reason
+  FROM cheque_instruments ci
+ WHERE ci.direction = 'incoming'
+   AND ci.status = 'bounced'
+   AND ci.party_id IS NOT NULL
+   AND ci.settlement_payment_id IS NULL
+   AND ci.source_table IN (
+         'sale', 'purchase_return', 'purchase_return_adjustment'
+       )
+   AND NOT EXISTS (
+         SELECT 1
+           FROM journal_entries je
+           JOIN journal_entry_lines jel ON jel.journal_entry_id = je.id
+           JOIN accounts a ON a.id = jel.account_id
+          WHERE je.source_table = 'cheque_instruments'
+            AND je.source_id = ci.id
+            AND je.entry_type = 'cheque_dishonour'
+            AND je.status = 'posted'
+            AND je.is_reversed = 0
+            AND a.account_code = '1030'
+       )
+ ORDER BY ci.id
+''').get();
+    if (rows.isEmpty) return;
+
+    final journal = JournalEntryService(AccountingRepository(this));
+    var migrated = 0;
+    for (final row in rows) {
+      final instrumentId = row.read<int>('id');
+      final source = row.read<String>('source_table');
+      final amount = row.read<int>('amount_cents');
+      final currencyId = row.read<int>('currency_id');
+      final userId = row.readNullable<int>('updated_by');
+      final reason =
+          row.readNullable<String>('bounce_reason') ??
+          'Historical dishonoured cheque reclassification';
+      final obligationAccount = source == 'sale' ? '1100' : '2000';
+
+      final journalId = await journal
+          .recordChequeObligationRestorationJournalEntry(
+            chequeId: instrumentId,
+            amountCents: amount,
+            currencyId: currencyId,
+            debitAccountCode: '1030',
+            creditAccountCode: obligationAccount,
+            cancelled: false,
+            reason: reason,
+            userId: userId,
+          );
+      await customStatement(
+        'UPDATE cheque_instruments '
+        'SET dishonour_journal_entry_id = ?, updated_at = CURRENT_TIMESTAMP '
+        'WHERE id = ?',
+        [journalId, instrumentId],
+      );
+      await into(auditLogs).insert(
+        AuditLogsCompanion.insert(
+          targetTable: 'cheque_instruments',
+          recordId: instrumentId,
+          action: 'reclassify_incoming_dishonoured_cheque',
+          changes: {
+            'migration': 10079,
+            'sourceTable': source,
+            'journalId': journalId,
+            'debitAccount': '1030',
+            'creditAccount': obligationAccount,
+          },
+          userId: Value(userId),
+        ),
+      );
+      migrated++;
+    }
+
+    developer.log(
+      'Migration 10079 reclassified $migrated incoming dishonoured cheque(s).',
+      name: 'DB_MIGRATION',
+    );
+  }
+
+  /// Migration 10081: restore the agreed deferred-cheque contract.
+  ///
+  /// Versions 10077/10078 recognized open cheques as payments immediately.
+  /// Open instruments must instead remain off-payment until clearance. This
+  /// repair removes only settlement rows linked from non-legacy open cheque
+  /// instruments, reverses their posted journals, restores party balances,
+  /// and leaves the physical cheque instrument intact for monitoring.
+  Future<void> _deferOpenChequePayments10081() async {
+    final journal = JournalEntryService(AccountingRepository(this));
+    final salePaymentsDao = SaleDao(this);
+    final purchasePaymentsDao = PurchaseDao(this);
+    final customerDao = CustomerDao(this);
+    final supplierDao = SupplierDao(this);
+
+    final invoiceRows = await customSelect('''
+SELECT id AS instrument_id, source_table, source_id,
+       settlement_payment_id, updated_by
+  FROM cheque_instruments
+ WHERE source_table IN ('sale', 'purchase')
+   AND status IN ('received', 'issued', 'deposited')
+   AND legacy_direct_bank = 0
+   AND settlement_payment_id IS NOT NULL
+ ORDER BY id
+''').get();
+
+    var deferredInvoices = 0;
+    for (final row in invoiceRows) {
+      final instrumentId = row.read<int>('instrument_id');
+      final source = row.read<String>('source_table');
+      final sourceId = row.read<int>('source_id');
+      final paymentId = row.read<int>('settlement_payment_id');
+      final userId = row.readNullable<int>('updated_by');
+      final paymentTable = source == 'sale'
+          ? 'sale_payments'
+          : 'purchase_payments';
+      final paymentExists = await customSelect(
+        'SELECT 1 FROM $paymentTable WHERE id = ? LIMIT 1',
+        variables: [Variable.withInt(paymentId)],
+      ).getSingleOrNull();
+
+      if (paymentExists != null) {
+        await journal.voidJournalEntriesForSource(
+          sourceTable: paymentTable,
+          sourceId: paymentId,
+          reason: 'Migration 10081: defer cheque until bank clearance',
+          userId: userId,
+        );
+        if (source == 'sale') {
+          await salePaymentsDao.deletePayment(paymentId);
+        } else {
+          await purchasePaymentsDao.deletePayment(paymentId);
+        }
+      }
+
+      await customStatement(
+        'UPDATE cheque_instruments '
+        'SET settlement_payment_id = NULL, legacy_direct_bank = 0, '
+        'updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [instrumentId],
+      );
+      await customStatement(
+        'UPDATE cheque_confirmations SET cleared_payment_id = NULL, '
+        'updated_at = CURRENT_TIMESTAMP '
+        'WHERE source_table = ? AND source_id = ?',
+        [source, sourceId],
+      );
+      await into(auditLogs).insert(
+        AuditLogsCompanion.insert(
+          targetTable: 'cheque_instruments',
+          recordId: instrumentId,
+          action: 'defer_open_cheque_payment',
+          changes: {
+            'migration': 10081,
+            'sourceTable': source,
+            'sourceId': sourceId,
+            'removedPaymentId': paymentId,
+          },
+          userId: Value(userId),
+        ),
+      );
+      deferredInvoices++;
+    }
+
+    final returnRows = await customSelect('''
+SELECT ci.id AS instrument_id, ci.source_table, ci.source_id, ci.party_id,
+       ci.amount_cents, ci.currency_id, ci.settlement_payment_id, ci.updated_by
+  FROM cheque_instruments ci
+ WHERE ci.source_table IN (
+   'sale_return', 'purchase_return',
+   'sale_return_adjustment', 'purchase_return_adjustment'
+ )
+   AND ci.status IN ('received', 'issued', 'deposited')
+   AND ci.legacy_direct_bank = 0
+   AND ci.party_id IS NOT NULL
+   AND ci.settlement_payment_id IS NOT NULL
+   AND EXISTS (
+     SELECT 1 FROM journal_entries je
+      WHERE je.id = ci.settlement_payment_id
+        AND je.source_table = 'cheque_instruments'
+        AND je.source_id = ci.id
+   )
+ ORDER BY ci.id
+''').get();
+
+    var deferredReturns = 0;
+    for (final row in returnRows) {
+      final instrumentId = row.read<int>('instrument_id');
+      final source = row.read<String>('source_table');
+      final partyId = row.read<int>('party_id');
+      final amount = row.read<int>('amount_cents');
+      final currencyId = row.read<int>('currency_id');
+      final settlementJournalId = row.read<int>('settlement_payment_id');
+      final userId = row.readNullable<int>('updated_by');
+      final saleSide =
+          source == 'sale_return' || source == 'sale_return_adjustment';
+
+      await journal.voidChequeJournalEntry(
+        chequeId: instrumentId,
+        journalEntryId: settlementJournalId,
+        reason: 'Migration 10081: defer return cheque until bank clearance',
+        userId: userId,
+      );
+      if (saleSide) {
+        await into(customerTransactions).insert(
+          CustomerTransactionsCompanion.insert(
+            customerId: partyId,
+            transactionType: 'cheque_return_settlement_reversal',
+            amountCents: Decimal.fromInt(-amount),
+            currencyId: currencyId,
+            description: Value(
+              'Pending return cheque #$instrumentId restored to customer obligation',
+            ),
+            referenceId: Value(instrumentId),
+            referenceType: const Value('cheque_instrument'),
+          ),
+        );
+        await customerDao.recalculateBalance(partyId);
+      } else {
+        await into(supplierTransactions).insert(
+          SupplierTransactionsCompanion.insert(
+            supplierId: partyId,
+            transactionType: 'cheque_return_settlement_reversal',
+            amountCents: Decimal.fromInt(-amount),
+            currencyId: currencyId,
+            description: Value(
+              'Pending return cheque #$instrumentId restored to supplier obligation',
+            ),
+            referenceId: Value(instrumentId),
+            referenceType: const Value('cheque_instrument'),
+          ),
+        );
+        await supplierDao.recalculateBalance(partyId);
+      }
+      await customStatement(
+        'UPDATE cheque_instruments SET settlement_payment_id = NULL, '
+        'updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        [instrumentId],
+      );
+      await into(auditLogs).insert(
+        AuditLogsCompanion.insert(
+          targetTable: 'cheque_instruments',
+          recordId: instrumentId,
+          action: 'defer_open_return_cheque_payment',
+          changes: {
+            'migration': 10081,
+            'sourceTable': source,
+            'sourceId': row.read<int>('source_id'),
+            'voidedJournalId': settlementJournalId,
+          },
+          userId: Value(userId),
+        ),
+      );
+      deferredReturns++;
+    }
+
+    developer.log(
+      'Migration 10081 deferred $deferredInvoices invoice cheque payment(s) '
+      'and $deferredReturns return cheque payment(s).',
       name: 'DB_MIGRATION',
     );
   }
@@ -3635,6 +4903,96 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
           );
         }
 
+        if (from < 10071) {
+          await m.createTable(promotions);
+          await m.createTable(promotionConditions);
+          await m.createTable(promotionScopes);
+          await m.createTable(promotionRewards);
+          await m.createTable(promotionSchedules);
+          await m.createTable(salePromotionApplications);
+          await m.createTable(saleItemPromotionAllocations);
+          developer.log(
+            'Migration 10071: added versioned promotion rules, schedules, '
+            'sale snapshots, and exact line discount allocations.',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        if (from < 10072) {
+          await _repairOverlappingSaleValuations10072();
+        }
+
+        if (from < 10073) {
+          await m.createTable(chequeInstruments);
+          await customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_cheque_instruments_source '
+            'ON cheque_instruments(source_table, source_id)',
+          );
+          await customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_cheque_instruments_status_due '
+            'ON cheque_instruments(status, due_date)',
+          );
+          await customStatement(
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_cheque_identity '
+            'ON cheque_instruments(direction, COALESCE(bank_name, \'\'), '
+            'COALESCE(account_number, \'\'), cheque_number) '
+            "WHERE cheque_number IS NOT NULL AND TRIM(cheque_number) != ''",
+          );
+          await _backfillChequeInstruments10073();
+          developer.log(
+            'Migration 10073: added per-instrument cheque register and '
+            'backfilled all six cheque-bearing document types.',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        if (from < 10074) {
+          await _repairChequeSettlementLinks10074();
+          developer.log(
+            'Migration 10074: repaired legacy cheque-to-payment links.',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        if (from < 10075) {
+          await _deferOpenChequeSettlements10075();
+        }
+
+        if (from < 10076) {
+          await _deferReturnChequeSettlements10076();
+        }
+
+        if (from < 10077) {
+          await _recognizeOpenReturnCheques10077();
+        }
+
+        if (from < 10078) {
+          await _recognizeOpenInvoiceCheques10078();
+        }
+
+        if (from < 10079) {
+          await _reclassifyIncomingDishonouredCheques10079();
+        }
+
+        if (from < 10080) {
+          await _safeAddColumn('cheque_instruments', 'resolution_type', 'TEXT');
+          await _safeAddColumn(
+            'cheque_instruments',
+            'resolution_journal_entry_id',
+            'INTEGER',
+          );
+          await _safeAddColumn('cheque_instruments', 'resolved_at', 'TEXT');
+          await _safeAddColumn('cheque_instruments', 'resolution_note', 'TEXT');
+          developer.log(
+            'Migration 10080: added explicit bounced-cheque resolution data.',
+            name: 'DB_MIGRATION',
+          );
+        }
+
+        if (from < 10081) {
+          await _deferOpenChequePayments10081();
+        }
+
         await _createIndexes();
         await _seedInitialData();
       },
@@ -3692,6 +5050,20 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
 
   Future<void> _createIndexes() async {
     await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_cheque_instruments_source '
+      'ON cheque_instruments(source_table, source_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_cheque_instruments_status_due '
+      'ON cheque_instruments(status, due_date)',
+    );
+    await customStatement(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_cheque_identity '
+      'ON cheque_instruments(direction, COALESCE(bank_name, \'\'), '
+      'COALESCE(account_number, \'\'), cheque_number) '
+      "WHERE cheque_number IS NOT NULL AND TRIM(cheque_number) != ''",
+    );
+    await customStatement(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_cashier_shifts_one_open '
       "ON cashier_shifts(cashier_user_id) WHERE status = 'open'",
     );
@@ -3739,6 +5111,34 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
     );
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_sale_items_sale ON sale_items(sale_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_promotions_active_window '
+      'ON promotions(status, starts_at, ends_at, priority)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_promotion_conditions_promotion '
+      'ON promotion_conditions(promotion_id, condition_group)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_promotion_scopes_lookup '
+      'ON promotion_scopes(promotion_id, scope_role, target_type)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_promotion_rewards_promotion '
+      'ON promotion_rewards(promotion_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_promotion_schedules_promotion '
+      'ON promotion_schedules(promotion_id, weekday)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sale_promotion_applications_sale '
+      'ON sale_promotion_applications(sale_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sale_item_promotion_allocations_item '
+      'ON sale_item_promotion_allocations(sale_item_id)',
     );
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_journal_entry_date ON journal_entries(entry_date)',
@@ -4322,6 +5722,17 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
         value: '0',
         description: const Value(
           'Enables medicine profiles and active-ingredient alternatives.',
+        ),
+      ),
+      mode: InsertMode.insertOrIgnore,
+    );
+
+    await into(appSettings).insert(
+      AppSettingsCompanion.insert(
+        key: 'promotions_enabled',
+        value: '0',
+        description: const Value(
+          'Enables promotion management and automatic evaluation.',
         ),
       ),
       mode: InsertMode.insertOrIgnore,
@@ -4939,6 +6350,20 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
         'order': 2,
       },
       {
+        'code': '1020',
+        'name': 'Cheques in Hand',
+        'type': 'asset',
+        'system': true,
+        'order': 3,
+      },
+      {
+        'code': '1030',
+        'name': 'Dishonoured Cheques Receivable',
+        'type': 'asset',
+        'system': true,
+        'order': 4,
+      },
+      {
         'code': '1100',
         'name': 'Accounts Receivable',
         'type': 'asset',
@@ -5005,6 +6430,13 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
         'type': 'liability',
         'system': true,
         'order': 10,
+      },
+      {
+        'code': '2020',
+        'name': 'Cheques Issued',
+        'type': 'liability',
+        'system': true,
+        'order': 11,
       },
       {
         'code': '2100',
@@ -5167,6 +6599,13 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
         'type': 'expense',
         'system': true,
         'order': 49,
+      },
+      {
+        'code': '6200',
+        'name': 'Bad Debt Expense',
+        'type': 'expense',
+        'system': true,
+        'order': 50,
       },
     ];
 

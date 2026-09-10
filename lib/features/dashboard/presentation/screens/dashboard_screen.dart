@@ -23,6 +23,7 @@ import '../widgets/daily_sales_summary_section.dart';
 import '../widgets/payment_reminders_section.dart';
 import '../widgets/cheque_reminders_section.dart';
 import '../../../inventory/presentation/widgets/expiry_alerts_section.dart';
+import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 
 /// Represents a single dashboard shortcut item.
 class DashboardItemData {
@@ -78,6 +79,13 @@ const _kAllDefaultItems = [
     titleKey: 'dashboard.products',
     color: Color(0xFF625B71),
     route: '/products',
+  ),
+  DashboardItemData(
+    id: 'promotions',
+    icon: LucideIcons.badgePercent,
+    titleKey: 'promotions.title',
+    color: Color(0xFFE65100),
+    route: '/promotions',
   ),
   DashboardItemData(
     id: 'customers',
@@ -150,6 +158,13 @@ const _kAllDefaultItems = [
     color: Color(0xFF1565C0),
     route: '/financial-management',
     ownerOnly: true,
+  ),
+  DashboardItemData(
+    id: 'cheques',
+    icon: LucideIcons.fileCheck2,
+    titleKey: 'cheques.title',
+    color: Color(0xFF2E7D32),
+    route: '/cheques',
   ),
 ];
 
@@ -252,6 +267,10 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   List<DashboardItemData> _visibleItems(UserEntity user) {
     final allowed = _items.where((item) {
+      if (item.id == 'promotions' &&
+          !context.read<AppSettingsBloc>().state.settings.enablePromotions) {
+        return false;
+      }
       final roles = RoutePermissions.rolesForPath(item.route);
       return roles == null || roles.contains(user.role);
     });
@@ -290,6 +309,9 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Rebuild shortcuts immediately when the owner enables or disables the
+    // optional promotions module in settings.
+    context.watch<AppSettingsBloc>();
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final screenWidth = MediaQuery.of(context).size.width;

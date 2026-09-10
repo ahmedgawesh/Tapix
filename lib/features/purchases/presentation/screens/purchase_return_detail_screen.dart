@@ -354,7 +354,7 @@ class _PurchaseReturnDetailScreenState
             _infoRow(
               theme,
               'purchases.return_date'.tr(),
-              DateFormat.yMMMd().format(ret.returnDate),
+              DateFormat('dd/MM/yyyy').format(ret.returnDate),
             ),
             const SizedBox(height: 8),
             if (ret.reason != null && ret.reason!.isNotEmpty) ...[
@@ -901,9 +901,10 @@ class _PurchaseReturnDetailScreenState
     final tax = ret.taxCents.toBigInt().toInt();
     final total = ret.totalCents.toBigInt().toInt();
     final totalItems = _returnItems.length;
-    final totalPieces = _returnItems.fold<int>(
-      0,
-      (sum, item) => sum + item.quantity,
+    final quantitySummary = localizedQuantitySummary(
+      _returnItems,
+      quantityOf: (item) => item.quantity,
+      measurementTypeOf: (item) => item.measurementType,
     );
 
     return Card(
@@ -923,8 +924,8 @@ class _PurchaseReturnDetailScreenState
             _totalRow(theme, 'purchases.total_items_count'.tr(), '$totalItems'),
             _totalRow(
               theme,
-              'purchases.total_pieces_count'.tr(),
-              '$totalPieces',
+              'measurement.total_quantity'.tr(),
+              quantitySummary,
             ),
             if (subtotal != 0 || discount != 0 || tax != 0) ...[
               Divider(

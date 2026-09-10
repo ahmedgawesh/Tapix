@@ -513,7 +513,7 @@ void main() {
       expect(fakeDatasource.createAccountCallCount, 0);
     });
 
-    test('should seed 31 default accounts when none exist', () async {
+    test('should seed 34 default accounts when none exist', () async {
       fakeDatasource.setFindByCodeResult(null);
       fakeDatasource.setAccountLookup(
         (id) => Account(
@@ -543,7 +543,9 @@ void main() {
       // (23 → 24).
       // Phase 10061 added seven owner-finance/fixed-asset accounts:
       // 1500, 1510, 1520, 1590, 2200, 3200, and 6100 (24 → 31).
-      expect(fakeDatasource.createAccountCallCount, 31);
+      // Cheque accounting adds 1020 Cheques in Hand, 1030 Dishonoured
+      // Cheques Receivable, and 2020 Cheques Issued (31 → 34).
+      expect(fakeDatasource.createAccountCallCount, 34);
     });
   });
 }

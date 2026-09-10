@@ -35,7 +35,8 @@ class ProfitReportsPdfService {
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'ProfitOverall_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      filename:
+          'ProfitOverall_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
   }
 
@@ -60,7 +61,8 @@ class ProfitReportsPdfService {
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'ProfitByProduct_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      filename:
+          'ProfitByProduct_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
   }
 
@@ -85,7 +87,8 @@ class ProfitReportsPdfService {
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'ProfitByCategory_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      filename:
+          'ProfitByCategory_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
   }
 
@@ -110,7 +113,8 @@ class ProfitReportsPdfService {
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'ProfitByCustomer_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      filename:
+          'ProfitByCustomer_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
   }
 
@@ -135,7 +139,8 @@ class ProfitReportsPdfService {
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'ProfitByInvoice_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      filename:
+          'ProfitByInvoice_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
   }
 
@@ -175,8 +180,14 @@ class ProfitReportsPdfService {
               [_t('revenue', lang), cs.formatCents(s.totalRevenueCents)],
               [_t('cost', lang), cs.formatCents(s.totalCostCents)],
               [_t('gross_profit', lang), cs.formatCents(s.totalProfitCents)],
-              [_t('profit_margin', lang), '${s.profitMarginPercent.toStringAsFixed(1)}%'],
-              [_t('total_discount', lang), cs.formatCents(s.totalDiscountCents)],
+              [
+                _t('profit_margin', lang),
+                '${s.profitMarginPercent.toStringAsFixed(1)}%',
+              ],
+              [
+                _t('total_discount', lang),
+                cs.formatCents(s.totalDiscountCents),
+              ],
               [_t('total_tax', lang), cs.formatCents(s.totalTaxCents)],
               [_t('invoices', lang), '${s.invoiceCount}'],
               [_t('products', lang), '${s.productCount}'],
@@ -218,7 +229,16 @@ class ProfitReportsPdfService {
             headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 9),
             cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
             headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-            headers: ['#', _t('product', lang), _t('category', lang), _t('quantity', lang), _t('revenue', lang), _t('cost', lang), _t('profit', lang), _t('margin', lang)],
+            headers: [
+              '#',
+              _t('product', lang),
+              _t('category', lang),
+              _t('quantity', lang),
+              _t('revenue', lang),
+              _t('cost', lang),
+              _t('profit', lang),
+              _t('margin', lang),
+            ],
             data: items.asMap().entries.map((e) {
               final i = e.value;
               return [
@@ -269,7 +289,16 @@ class ProfitReportsPdfService {
             headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 9),
             cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
             headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-            headers: ['#', _t('category', lang), _t('products', lang), _t('quantity', lang), _t('revenue', lang), _t('cost', lang), _t('profit', lang), _t('margin', lang)],
+            headers: [
+              '#',
+              _t('category', lang),
+              _t('products', lang),
+              _t('quantity', lang),
+              _t('revenue', lang),
+              _t('cost', lang),
+              _t('profit', lang),
+              _t('margin', lang),
+            ],
             data: items.asMap().entries.map((e) {
               final i = e.value;
               return [
@@ -320,7 +349,15 @@ class ProfitReportsPdfService {
             headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 9),
             cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
             headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-            headers: ['#', _t('customer', lang), _t('revenue', lang), _t('cost', lang), _t('profit', lang), _t('margin', lang), _t('invoices', lang)],
+            headers: [
+              '#',
+              _t('customer', lang),
+              _t('revenue', lang),
+              _t('cost', lang),
+              _t('profit', lang),
+              _t('margin', lang),
+              _t('invoices', lang),
+            ],
             data: items.asMap().entries.map((e) {
               final i = e.value;
               return [
@@ -370,7 +407,16 @@ class ProfitReportsPdfService {
             headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 9),
             cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
             headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-            headers: ['#', _t('invoice_number', lang), _t('customer', lang), _t('revenue', lang), _t('cost', lang), _t('profit', lang), _t('margin', lang), _t('date', lang)],
+            headers: [
+              '#',
+              _t('invoice_number', lang),
+              _t('customer', lang),
+              _t('revenue', lang),
+              _t('cost', lang),
+              _t('profit', lang),
+              _t('margin', lang),
+              _t('date', lang),
+            ],
             data: items.asMap().entries.map((e) {
               final i = e.value;
               return [
@@ -381,7 +427,7 @@ class ProfitReportsPdfService {
                 cs.formatCents(i.costCents),
                 cs.formatCents(i.profitCents),
                 '${i.profitMarginPercent.toStringAsFixed(1)}%',
-                DateFormat.yMd().format(i.saleDate),
+                DateFormat('dd/MM/yyyy').format(i.saleDate),
               ];
             }).toList(),
           ),
@@ -406,49 +452,93 @@ class ProfitReportsPdfService {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(company.name, style: pw.TextStyle(font: fonts.bold, fontSize: 16)),
+        pw.Text(
+          company.name,
+          style: pw.TextStyle(font: fonts.bold, fontSize: 16),
+        ),
         if (company.address != null && company.address!.isNotEmpty)
-          pw.Text(company.address!, style: pw.TextStyle(font: fonts.regular, fontSize: 9, color: PdfColors.grey600)),
+          pw.Text(
+            company.address!,
+            style: pw.TextStyle(
+              font: fonts.regular,
+              fontSize: 9,
+              color: PdfColors.grey600,
+            ),
+          ),
         pw.SizedBox(height: 8),
         pw.Divider(),
         pw.SizedBox(height: 4),
-        pw.Center(child: pw.Text(title, style: pw.TextStyle(font: fonts.bold, fontSize: 14))),
+        pw.Center(
+          child: pw.Text(
+            title,
+            style: pw.TextStyle(font: fonts.bold, fontSize: 14),
+          ),
+        ),
       ],
     );
   }
 
-  static pw.Widget _buildPeriodLine(ProfitReportsData data, _PdfFonts fonts, String lang) {
+  static pw.Widget _buildPeriodLine(
+    ProfitReportsData data,
+    _PdfFonts fonts,
+    String lang,
+  ) {
     return pw.Text(
-      '${_t('period', lang)}: ${DateFormat.yMMMd().format(data.dateRange.startDate)} — ${DateFormat.yMMMd().format(data.dateRange.endDate)}',
+      '${_t('period', lang)}: ${DateFormat('dd/MM/yyyy').format(data.dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(data.dateRange.endDate)}',
       style: pw.TextStyle(font: fonts.regular, fontSize: 10),
     );
   }
 
-  static pw.Widget _buildSummaryLine(ProfitReportsData data, CurrencyService cs, _PdfFonts fonts, String lang) {
+  static pw.Widget _buildSummaryLine(
+    ProfitReportsData data,
+    CurrencyService cs,
+    _PdfFonts fonts,
+    String lang,
+  ) {
     final s = data.summary;
     return pw.Text(
       '${_t('revenue', lang)}: ${cs.formatCents(s.totalRevenueCents)}  |  ${_t('cost', lang)}: ${cs.formatCents(s.totalCostCents)}  |  ${_t('profit', lang)}: ${cs.formatCents(s.totalProfitCents)}  |  ${_t('margin', lang)}: ${s.profitMarginPercent.toStringAsFixed(1)}%',
-      style: pw.TextStyle(font: fonts.regular, fontSize: 9, color: PdfColors.grey700),
+      style: pw.TextStyle(
+        font: fonts.regular,
+        fontSize: 9,
+        color: PdfColors.grey700,
+      ),
     );
   }
 
   static pw.Widget _buildFooter(_PdfFonts fonts, String lang) {
-    return pw.Column(children: [
-      pw.Divider(),
-      pw.Text(
-        '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
-        style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
-      ),
-    ]);
+    return pw.Column(
+      children: [
+        pw.Divider(),
+        pw.Text(
+          '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
+          style: pw.TextStyle(
+            font: fonts.regular,
+            fontSize: 8,
+            color: PdfColors.grey600,
+          ),
+        ),
+      ],
+    );
   }
 
   static Future<_PdfFonts> _loadFonts() async {
     try {
-      final regularData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-      final boldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
-      return _PdfFonts(regular: pw.Font.ttf(regularData), bold: pw.Font.ttf(boldData));
+      final regularData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+      );
+      final boldData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+      );
+      return _PdfFonts(
+        regular: pw.Font.ttf(regularData),
+        bold: pw.Font.ttf(boldData),
+      );
     } catch (_) {
-      return _PdfFonts(regular: pw.Font.helvetica(), bold: pw.Font.helveticaBold());
+      return _PdfFonts(
+        regular: pw.Font.helvetica(),
+        bold: pw.Font.helveticaBold(),
+      );
     }
   }
 
@@ -460,28 +550,72 @@ class ProfitReportsPdfService {
     'period': {'en': 'Period', 'ar': 'الفترة', 'fr': 'Période'},
     'metric': {'en': 'Metric', 'ar': 'المقياس', 'fr': 'Métrique'},
     'value': {'en': 'Value', 'ar': 'القيمة', 'fr': 'Valeur'},
-    'revenue': {'en': 'Revenue', 'ar': 'الإيرادات', 'fr': 'Chiffre d\'Affaires'},
+    'revenue': {
+      'en': 'Revenue',
+      'ar': 'الإيرادات',
+      'fr': 'Chiffre d\'Affaires',
+    },
     'cost': {'en': 'Cost (COGS)', 'ar': 'التكلفة', 'fr': 'Coût (CMV)'},
-    'gross_profit': {'en': 'Gross Profit', 'ar': 'الربح الإجمالي', 'fr': 'Bénéfice Brut'},
+    'gross_profit': {
+      'en': 'Gross Profit',
+      'ar': 'الربح الإجمالي',
+      'fr': 'Bénéfice Brut',
+    },
     'profit': {'en': 'Profit', 'ar': 'الربح', 'fr': 'Bénéfice'},
-    'profit_margin': {'en': 'Profit Margin', 'ar': 'هامش الربح', 'fr': 'Marge Bénéficiaire'},
+    'profit_margin': {
+      'en': 'Profit Margin',
+      'ar': 'هامش الربح',
+      'fr': 'Marge Bénéficiaire',
+    },
     'margin': {'en': 'Margin %', 'ar': 'الهامش %', 'fr': 'Marge %'},
-    'total_discount': {'en': 'Total Discount', 'ar': 'إجمالي الخصم', 'fr': 'Remise Totale'},
-    'total_tax': {'en': 'Total Tax', 'ar': 'إجمالي الضريبة', 'fr': 'Taxe Totale'},
+    'total_discount': {
+      'en': 'Total Discount',
+      'ar': 'إجمالي الخصم',
+      'fr': 'Remise Totale',
+    },
+    'total_tax': {
+      'en': 'Total Tax',
+      'ar': 'إجمالي الضريبة',
+      'fr': 'Taxe Totale',
+    },
     'invoices': {'en': 'Invoices', 'ar': 'الفواتير', 'fr': 'Factures'},
     'products': {'en': 'Products', 'ar': 'المنتجات', 'fr': 'Produits'},
-    'invoice_number': {'en': 'Invoice #', 'ar': 'رقم الفاتورة', 'fr': 'Facture #'},
+    'invoice_number': {
+      'en': 'Invoice #',
+      'ar': 'رقم الفاتورة',
+      'fr': 'Facture #',
+    },
     'customer': {'en': 'Customer', 'ar': 'العميل', 'fr': 'Client'},
     'date': {'en': 'Date', 'ar': 'التاريخ', 'fr': 'Date'},
     'product': {'en': 'Product', 'ar': 'المنتج', 'fr': 'Produit'},
     'category': {'en': 'Category', 'ar': 'التصنيف', 'fr': 'Catégorie'},
     'quantity': {'en': 'Qty', 'ar': 'الكمية', 'fr': 'Qté'},
     'printed_on': {'en': 'Printed on', 'ar': 'طُبع في', 'fr': 'Imprimé le'},
-    'profit_overall': {'en': 'Sales & Profit Report', 'ar': 'تقرير المبيعات والأرباح', 'fr': 'Rapport Ventes & Bénéfices'},
-    'profit_by_product': {'en': 'Profit by Product', 'ar': 'الأرباح حسب الصنف', 'fr': 'Bénéfice par Produit'},
-    'profit_by_category': {'en': 'Profit by Category', 'ar': 'الأرباح حسب التصنيف', 'fr': 'Bénéfice par Catégorie'},
-    'profit_by_customer': {'en': 'Profit by Customer', 'ar': 'الأرباح حسب العميل', 'fr': 'Bénéfice par Client'},
-    'profit_by_invoice': {'en': 'Profit by Invoice', 'ar': 'الأرباح حسب الفاتورة', 'fr': 'Bénéfice par Facture'},
+    'profit_overall': {
+      'en': 'Sales & Profit Report',
+      'ar': 'تقرير المبيعات والأرباح',
+      'fr': 'Rapport Ventes & Bénéfices',
+    },
+    'profit_by_product': {
+      'en': 'Profit by Product',
+      'ar': 'الأرباح حسب الصنف',
+      'fr': 'Bénéfice par Produit',
+    },
+    'profit_by_category': {
+      'en': 'Profit by Category',
+      'ar': 'الأرباح حسب التصنيف',
+      'fr': 'Bénéfice par Catégorie',
+    },
+    'profit_by_customer': {
+      'en': 'Profit by Customer',
+      'ar': 'الأرباح حسب العميل',
+      'fr': 'Bénéfice par Client',
+    },
+    'profit_by_invoice': {
+      'en': 'Profit by Invoice',
+      'ar': 'الأرباح حسب الفاتورة',
+      'fr': 'Bénéfice par Facture',
+    },
   };
 
   static String _t(String key, String lang) {

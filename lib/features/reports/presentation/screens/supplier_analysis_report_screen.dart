@@ -34,8 +34,10 @@ class _SupplierAnalysisReportView extends StatelessWidget {
       appBar: AppBar(
         title: Text('reports.supplier_analysis'.tr()),
         actions: [
-          BlocBuilder<SupplierAnalysisReportBloc,
-              RealtimeState<SupplierAnalysisReportData>>(
+          BlocBuilder<
+            SupplierAnalysisReportBloc,
+            RealtimeState<SupplierAnalysisReportData>
+          >(
             builder: (context, state) {
               if (state is! RealtimeSuccess<SupplierAnalysisReportData>) {
                 return const SizedBox.shrink();
@@ -59,67 +61,75 @@ class _SupplierAnalysisReportView extends StatelessWidget {
           ),
         ],
       ),
-      body: BlocBuilder<SupplierAnalysisReportBloc,
-          RealtimeState<SupplierAnalysisReportData>>(
-        builder: (context, state) {
-          if (state is RealtimeLoading<SupplierAnalysisReportData>) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body:
+          BlocBuilder<
+            SupplierAnalysisReportBloc,
+            RealtimeState<SupplierAnalysisReportData>
+          >(
+            builder: (context, state) {
+              if (state is RealtimeLoading<SupplierAnalysisReportData>) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (state is RealtimeError<SupplierAnalysisReportData>) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline,
-                      size: 48, color: colorScheme.error),
-                  const SizedBox(height: 16),
-                  Text(state.error.toString(),
-                      style: theme.textTheme.bodyLarge),
-                ],
-              ),
-            );
-          }
-
-          if (state is RealtimeSuccess<SupplierAnalysisReportData>) {
-            return Column(
-              children: [
-                // Date range selector
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: DateRangeSelector(
-                    dateRange: state.data.dateRange,
-                    onChanged: (range) => context
-                        .read<SupplierAnalysisReportBloc>()
-                        .add(SupplierAnalysisReportDateRangeChanged(range)),
+              if (state is RealtimeError<SupplierAnalysisReportData>) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        state.error.toString(),
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
+                );
+              }
 
-                // Summary cards
-                _buildSummaryCards(context, state.data),
-                const SizedBox(height: 8),
+              if (state is RealtimeSuccess<SupplierAnalysisReportData>) {
+                return Column(
+                  children: [
+                    // Date range selector
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: DateRangeSelector(
+                        dateRange: state.data.dateRange,
+                        onChanged: (range) => context
+                            .read<SupplierAnalysisReportBloc>()
+                            .add(SupplierAnalysisReportDateRangeChanged(range)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
 
-                // Sort selector
-                _buildSortSelector(context, state.data),
-                const SizedBox(height: 8),
+                    // Summary cards
+                    _buildSummaryCards(context, state.data),
+                    const SizedBox(height: 8),
 
-                // Content
-                Expanded(
-                  child: _SupplierAnalysisContent(data: state.data),
-                ),
-              ],
-            );
-          }
+                    // Sort selector
+                    _buildSortSelector(context, state.data),
+                    const SizedBox(height: 8),
 
-          return const SizedBox.shrink();
-        },
-      ),
+                    // Content
+                    Expanded(child: _SupplierAnalysisContent(data: state.data)),
+                  ],
+                );
+              }
+
+              return const SizedBox.shrink();
+            },
+          ),
     );
   }
 
   Widget _buildSummaryCards(
-      BuildContext context, SupplierAnalysisReportData data) {
+    BuildContext context,
+    SupplierAnalysisReportData data,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final cs = sl<CurrencyService>();
@@ -154,7 +164,8 @@ class _SupplierAnalysisReportView extends StatelessWidget {
             ),
             _SummaryCard(
               label: 'reports.avg_payment_days'.tr(),
-              value: '${data.avgPaymentDays.toStringAsFixed(0)} ${'reports.days'.tr()}',
+              value:
+                  '${data.avgPaymentDays.toStringAsFixed(0)} ${'reports.days'.tr()}',
               icon: LucideIcons.clock,
               color: data.avgPaymentDays > 30
                   ? colorScheme.error
@@ -165,11 +176,14 @@ class _SupplierAnalysisReportView extends StatelessWidget {
           if (isWide) {
             return Row(
               children: cards
-                  .map((c) => Expanded(
-                          child: Padding(
+                  .map(
+                    (c) => Expanded(
+                      child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: c,
-                      )))
+                      ),
+                    ),
+                  )
                   .toList(),
             );
           }
@@ -179,30 +193,34 @@ class _SupplierAnalysisReportView extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: cards[0],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: cards[0],
+                    ),
+                  ),
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: cards[1],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: cards[1],
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: cards[2],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: cards[2],
+                    ),
+                  ),
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: cards[3],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: cards[3],
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -213,17 +231,16 @@ class _SupplierAnalysisReportView extends StatelessWidget {
   }
 
   Widget _buildSortSelector(
-      BuildContext context, SupplierAnalysisReportData data) {
+    BuildContext context,
+    SupplierAnalysisReportData data,
+  ) {
     final theme = Theme.of(context);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          Text(
-            'reports.sort_by'.tr(),
-            style: theme.textTheme.bodySmall,
-          ),
+          Text('reports.sort_by'.tr(), style: theme.textTheme.bodySmall),
           const SizedBox(width: 8),
           Expanded(
             child: SingleChildScrollView(
@@ -232,68 +249,73 @@ class _SupplierAnalysisReportView extends StatelessWidget {
                 children: [
                   _SortChip(
                     label: 'reports.sort_volume'.tr(),
-                    selected: data.sort ==
-                            SupplierAnalysisSortType.purchaseVolumeDesc ||
+                    selected:
                         data.sort ==
-                            SupplierAnalysisSortType.purchaseVolumeAsc,
+                            SupplierAnalysisSortType.purchaseVolumeDesc ||
+                        data.sort == SupplierAnalysisSortType.purchaseVolumeAsc,
                     onTap: () {
-                      final next = data.sort ==
+                      final next =
+                          data.sort ==
                               SupplierAnalysisSortType.purchaseVolumeDesc
                           ? SupplierAnalysisSortType.purchaseVolumeAsc
                           : SupplierAnalysisSortType.purchaseVolumeDesc;
-                      context
-                          .read<SupplierAnalysisReportBloc>()
-                          .add(SupplierAnalysisReportSortChanged(next));
+                      context.read<SupplierAnalysisReportBloc>().add(
+                        SupplierAnalysisReportSortChanged(next),
+                      );
                     },
-                    ascending: data.sort ==
-                        SupplierAnalysisSortType.purchaseVolumeAsc,
+                    ascending:
+                        data.sort == SupplierAnalysisSortType.purchaseVolumeAsc,
                   ),
                   _SortChip(
                     label: 'reports.sort_name'.tr(),
                     selected:
                         data.sort == SupplierAnalysisSortType.nameAsc ||
-                            data.sort == SupplierAnalysisSortType.nameDesc,
+                        data.sort == SupplierAnalysisSortType.nameDesc,
                     onTap: () {
-                      final next =
-                          data.sort == SupplierAnalysisSortType.nameAsc
-                              ? SupplierAnalysisSortType.nameDesc
-                              : SupplierAnalysisSortType.nameAsc;
-                      context
-                          .read<SupplierAnalysisReportBloc>()
-                          .add(SupplierAnalysisReportSortChanged(next));
+                      final next = data.sort == SupplierAnalysisSortType.nameAsc
+                          ? SupplierAnalysisSortType.nameDesc
+                          : SupplierAnalysisSortType.nameAsc;
+                      context.read<SupplierAnalysisReportBloc>().add(
+                        SupplierAnalysisReportSortChanged(next),
+                      );
                     },
-                    ascending:
-                        data.sort == SupplierAnalysisSortType.nameAsc,
+                    ascending: data.sort == SupplierAnalysisSortType.nameAsc,
                   ),
                   _SortChip(
                     label: 'reports.sort_return_rate'.tr(),
-                    selected: data.sort ==
-                        SupplierAnalysisSortType.returnRateDesc,
+                    selected:
+                        data.sort == SupplierAnalysisSortType.returnRateDesc,
                     onTap: () {
                       context.read<SupplierAnalysisReportBloc>().add(
-                          const SupplierAnalysisReportSortChanged(
-                              SupplierAnalysisSortType.returnRateDesc));
+                        const SupplierAnalysisReportSortChanged(
+                          SupplierAnalysisSortType.returnRateDesc,
+                        ),
+                      );
                     },
                   ),
                   _SortChip(
                     label: 'reports.sort_payment_days'.tr(),
-                    selected: data.sort ==
-                        SupplierAnalysisSortType.avgPaymentDaysAsc,
+                    selected:
+                        data.sort == SupplierAnalysisSortType.avgPaymentDaysAsc,
                     onTap: () {
                       context.read<SupplierAnalysisReportBloc>().add(
-                          const SupplierAnalysisReportSortChanged(
-                              SupplierAnalysisSortType.avgPaymentDaysAsc));
+                        const SupplierAnalysisReportSortChanged(
+                          SupplierAnalysisSortType.avgPaymentDaysAsc,
+                        ),
+                      );
                     },
                   ),
                   _SortChip(
                     label: 'reports.sort_settlement'.tr(),
-                    selected: data.sort ==
+                    selected:
+                        data.sort ==
                         SupplierAnalysisSortType.settlementRatioDesc,
                     onTap: () {
                       context.read<SupplierAnalysisReportBloc>().add(
-                          const SupplierAnalysisReportSortChanged(
-                              SupplierAnalysisSortType
-                                  .settlementRatioDesc));
+                        const SupplierAnalysisReportSortChanged(
+                          SupplierAnalysisSortType.settlementRatioDesc,
+                        ),
+                      );
                     },
                   ),
                 ],
@@ -306,7 +328,9 @@ class _SupplierAnalysisReportView extends StatelessWidget {
   }
 
   Future<void> _printReport(
-      BuildContext context, SupplierAnalysisReportData data) async {
+    BuildContext context,
+    SupplierAnalysisReportData data,
+  ) async {
     await SupplierAnalysisPdfService.printSupplierAnalysisReport(
       context: context,
       data: data,
@@ -319,7 +343,9 @@ class _SupplierAnalysisReportView extends StatelessWidget {
   }
 
   Future<void> _shareReport(
-      BuildContext context, SupplierAnalysisReportData data) async {
+    BuildContext context,
+    SupplierAnalysisReportData data,
+  ) async {
     await SupplierAnalysisPdfService.shareSupplierAnalysisReport(
       context: context,
       data: data,
@@ -453,16 +479,23 @@ class _SupplierAnalysisContent extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.truck, size: 48,
-                color: theme.colorScheme.onSurfaceVariant),
+            Icon(
+              LucideIcons.truck,
+              size: 48,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 16),
-            Text('reports.no_supplier_analysis'.tr(),
-                style: theme.textTheme.bodyLarge),
+            Text(
+              'reports.no_supplier_analysis'.tr(),
+              style: theme.textTheme.bodyLarge,
+            ),
             const SizedBox(height: 8),
-            Text('reports.no_supplier_analysis_desc'.tr(),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                )),
+            Text(
+              'reports.no_supplier_analysis_desc'.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       );
@@ -473,11 +506,7 @@ class _SupplierAnalysisContent extends StatelessWidget {
       itemCount: data.suppliers.length,
       itemBuilder: (context, index) {
         final item = data.suppliers[index];
-        return _SupplierAnalysisCard(
-          item: item,
-          cs: cs,
-          rank: index + 1,
-        );
+        return _SupplierAnalysisCard(item: item, cs: cs, rank: index + 1);
       },
     );
   }
@@ -507,8 +536,8 @@ class _SupplierAnalysisCard extends StatelessWidget {
     final settlementColor = item.settlementRatioPercent >= 80
         ? colorScheme.primary
         : item.settlementRatioPercent >= 50
-            ? colorScheme.tertiary
-            : colorScheme.error;
+        ? colorScheme.tertiary
+        : colorScheme.error;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -544,8 +573,9 @@ class _SupplierAnalysisCard extends StatelessWidget {
                     children: [
                       Text(
                         item.supplierName,
-                        style: theme.textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.bold),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -589,8 +619,7 @@ class _SupplierAnalysisCard extends StatelessWidget {
                   _MetricItem(
                     label: 'reports.return_rate'.tr(),
                     value: '${item.returnRatePercent.toStringAsFixed(1)}%',
-                    subtitle:
-                        cs.formatCents(item.totalReturnsCents),
+                    subtitle: cs.formatCents(item.totalReturnsCents),
                     valueColor: item.returnRatePercent > 10
                         ? colorScheme.error
                         : null,
@@ -599,8 +628,7 @@ class _SupplierAnalysisCard extends StatelessWidget {
                     label: 'reports.payment_days'.tr(),
                     value:
                         '${item.avgPaymentDays.toStringAsFixed(0)} ${'reports.days'.tr()}',
-                    subtitle:
-                        cs.formatCents(item.totalPaymentsCents),
+                    subtitle: cs.formatCents(item.totalPaymentsCents),
                     valueColor: item.avgPaymentDays > 30
                         ? colorScheme.error
                         : null,
@@ -614,21 +642,24 @@ class _SupplierAnalysisCard extends StatelessWidget {
 
                 if (isWide) {
                   return Row(
-                    children:
-                        metrics.map((m) => Expanded(child: m)).toList(),
+                    children: metrics.map((m) => Expanded(child: m)).toList(),
                   );
                 }
                 return Column(
                   children: [
-                    Row(children: [
-                      Expanded(child: metrics[0]),
-                      Expanded(child: metrics[1]),
-                    ]),
+                    Row(
+                      children: [
+                        Expanded(child: metrics[0]),
+                        Expanded(child: metrics[1]),
+                      ],
+                    ),
                     const SizedBox(height: 4),
-                    Row(children: [
-                      Expanded(child: metrics[2]),
-                      Expanded(child: metrics[3]),
-                    ]),
+                    Row(
+                      children: [
+                        Expanded(child: metrics[2]),
+                        Expanded(child: metrics[3]),
+                      ],
+                    ),
                   ],
                 );
               },
@@ -637,7 +668,7 @@ class _SupplierAnalysisCard extends StatelessWidget {
             if (item.lastTransactionAt != null) ...[
               const SizedBox(height: 4),
               Text(
-                '${'reports.last_transaction'.tr()}: ${DateFormat.yMMMd().format(item.lastTransactionAt!)}',
+                '${'reports.last_transaction'.tr()}: ${DateFormat('dd/MM/yyyy').format(item.lastTransactionAt!)}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
@@ -673,20 +704,26 @@ class _MetricItem extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            )),
-        Text(value,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: valueColor,
-            )),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        Text(
+          value,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: valueColor,
+          ),
+        ),
         if (subtitle != null)
-          Text(subtitle!,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              )),
+          Text(
+            subtitle!,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
       ],
     );
   }

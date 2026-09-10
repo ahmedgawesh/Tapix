@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/services/return_calculation_service.dart';
+import '../../../../core/payments/checkout_settlement.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../../domain/repositories/purchase_repository.dart';
 
@@ -348,10 +349,14 @@ class PurchaseReturnFormSubmitted extends PurchaseReturnFormEvent {
   /// Carries the current inventory policy from the UI layer so the bloc
   /// doesn't need a direct dependency on the app settings bloc.
   final bool allowNegativeStock;
-  const PurchaseReturnFormSubmitted({this.allowNegativeStock = false});
+  final List<CheckoutPaymentAllocation> settlementAllocations;
+  const PurchaseReturnFormSubmitted({
+    this.allowNegativeStock = false,
+    this.settlementAllocations = const [],
+  });
 
   @override
-  List<Object?> get props => [allowNegativeStock];
+  List<Object?> get props => [allowNegativeStock, settlementAllocations];
 }
 
 // ==================== BLOC ====================
@@ -583,6 +588,7 @@ class PurchaseReturnFormBloc
         allowNegativeStock: event.allowNegativeStock,
         idempotencyKey: idempotencyKey,
         taxInclusiveAtPost: state.purchase?.taxInclusiveAtPost ?? false,
+        settlementAllocations: event.settlementAllocations,
       );
 
       emit(

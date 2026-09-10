@@ -1,6 +1,8 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:tapix/core/database/app_database.dart' hide Product;
+import 'package:tapix/core/database/app_database.dart'
+    hide Product, PromotionScope;
+import 'package:tapix/core/promotions/promotion_engine.dart';
 import 'package:tapix/features/products/domain/entities/product_entity.dart';
 import 'package:tapix/features/sales/presentation/bloc/sale_form_bloc.dart';
 
@@ -57,6 +59,72 @@ void main() {
       expect(state.isSubmitting, isFalse);
       expect(state.isSuccess, isFalse);
       expect(state.error, isNull);
+    });
+
+    test('automatic promotion is included once in authoritative pricing', () {
+      final state = SaleFormState(
+        currencyId: 1,
+        saleDate: DateTime(2026, 8, 31, 12),
+        enablePromotions: true,
+        promotionRules: const [
+          PromotionRule(
+            id: 1,
+            code: 'SAVE10',
+            name: 'Save 10%',
+            type: PromotionType.simple,
+            qualifierScopes: [PromotionScope.product(1)],
+            rewardScopes: [PromotionScope.product(1)],
+            rewardType: PromotionRewardType.percentageOff,
+            percentBps: 1000,
+          ),
+        ],
+        items: [
+          SaleLineItem(
+            tempId: 'line-1',
+            product: testProduct,
+            quantity: 1,
+            unitPriceCents: Decimal.fromInt(10000),
+          ),
+        ],
+      );
+
+      expect(state.promotionDiscountCents, 1000);
+      expect(state.totalDiscountCents, Decimal.fromInt(1000));
+      expect(state.pricing.lines.single.totalLineDiscount.cents, 1000);
+    });
+
+    test('promotion respects manual discount combination policy', () {
+      SaleFormState build(bool combine) => SaleFormState(
+        currencyId: 1,
+        saleDate: DateTime(2026, 8, 31, 12),
+        enablePromotions: true,
+        promotionRules: [
+          PromotionRule(
+            id: 1,
+            code: 'SAVE10',
+            name: 'Save 10%',
+            type: PromotionType.simple,
+            qualifierScopes: const [PromotionScope.product(1)],
+            rewardScopes: const [PromotionScope.product(1)],
+            rewardType: PromotionRewardType.percentageOff,
+            percentBps: 1000,
+            allowManualDiscountCombination: combine,
+          ),
+        ],
+        items: [
+          SaleLineItem(
+            tempId: 'line-1',
+            product: testProduct,
+            quantity: 1,
+            unitPriceCents: Decimal.fromInt(10000),
+            discountCents: Decimal.fromInt(500),
+          ),
+        ],
+      );
+
+      expect(build(false).promotionDiscountCents, 0);
+      expect(build(true).promotionDiscountCents, 950);
+      expect(build(true).totalDiscountCents, Decimal.fromInt(1450));
     });
 
     test('eligible customer can redeem even when legacy sales flag is off', () {

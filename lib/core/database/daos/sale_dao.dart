@@ -433,19 +433,24 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
 
       // 2. Deduct stock (validated above) — skipped for non-tracked products.
       final affectedProductIds = <int>{};
-      final valuationSnapshotByItem = <int, InventoryValuationSnapshot?>{};
+      // Freeze each standard/WAC line's exact rounded-pool delta immediately
+      // after that line moves stock. Do not defer this calculation until all
+      // sale lines have been deducted: two cart lines can legitimately point
+      // at the same variant (for example offer/bundle allocations). A deferred
+      // `after` boundary would make the first snapshot include every later
+      // deduction from that variant and double-count COGS/Inventory.
+      final standardValuationByItem = <int, int>{};
       // I4 (Invariant I1): products whose batch ledger was actually mutated.
       // Populated inside the cost-snapshot loop below under `consumeFromBatches`.
       final batchedProductIds = <int>{};
       for (final item in items) {
         if (trackedProductIds[item.productId] == false) continue;
         affectedProductIds.add(item.productId);
-        valuationSnapshotByItem[item.id] =
-            await InventoryValuationDeltaService.capture(
-              this,
-              productId: item.productId,
-              variantId: item.variantId,
-            );
+        final valuationSnapshot = await InventoryValuationDeltaService.capture(
+          this,
+          productId: item.productId,
+          variantId: item.variantId,
+        );
         await StockService.adjustStock(
           this,
           productId: item.productId,
@@ -453,6 +458,13 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           quantity: item.quantity,
           direction: StockDirection.decrease,
         );
+        if (valuationSnapshot != null) {
+          standardValuationByItem[item.id] =
+              -(await InventoryValuationDeltaService.signedDeltaAfter(
+                this,
+                valuationSnapshot,
+              ));
+        }
       }
 
       // 2b. Sync products.stock_quantity from variants
@@ -557,17 +569,14 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             ).getSingleOrNull();
             unitCost = row?.read<int>('cost_cents') ?? 0;
           }
-          final valuationSnapshot = valuationSnapshotByItem[item.id];
-          totalCogsCents = valuationSnapshot != null
-              ? -(await InventoryValuationDeltaService.signedDeltaAfter(
-                  this,
-                  valuationSnapshot,
-                ))
-              : MeasuredAmount.cents(
-                  unitCents: unitCost,
-                  quantity: item.quantity,
-                  quantityScale: item.quantityScale,
-                );
+          final frozenPoolDelta = standardValuationByItem[item.id];
+          totalCogsCents =
+              frozenPoolDelta ??
+              MeasuredAmount.cents(
+                unitCents: unitCost,
+                quantity: item.quantity,
+                quantityScale: item.quantityScale,
+              );
         }
 
         await customUpdate(
@@ -694,7 +703,11 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
               transactionNumber: Value(paymentNumber),
               amountCents: Decimal.fromInt(-invoicePayment),
               currencyId: sale.currencyId,
-              description: Value('Payment for ${sale.invoiceNumber}'),
+              description: Value(
+                paymentMethod == 'cheque' || paymentMethod == 'check'
+                    ? 'Incoming cheque for ${sale.invoiceNumber}'
+                    : 'Payment for ${sale.invoiceNumber}',
+              ),
               referenceId: Value(backfilledPaymentId),
               referenceType: const Value('sale_payment'),
             ),
@@ -1286,7 +1299,8 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   /// Post sale return - restore variant stock and handle customer accounting.
   ///
   /// Customer accounting rules by refund method:
-  /// - cash / cheque: Customer already received money back → no balance change.
+  /// - cash: Customer already received money back → no balance change.
+  /// - cheque: Refund is reclassified to issued cheques when registered.
   /// - credit: Refund applied as credit note → reduces customer balance (they owe less).
   Future<void> postSaleReturn(int returnId) {
     return transaction(() async {
@@ -1466,9 +1480,21 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
 
         // Determine transaction type based on refund method:
         // - credit: customer gets credit note → reduces what they owe
-        // - cash/cheque: customer already got money back → no balance change
-        final isCreditRefund = refundMethod == 'credit';
-        final txType = isCreditRefund ? 'credit_note' : 'refund';
+        // - cash: customer already got money back → no balance change
+        // - cheque: create the obligation before cheque recognition offsets it
+        final isChequeRefund =
+            refundMethod == 'cheque' || refundMethod == 'check';
+        final isDeferredRefund =
+            refundMethod == 'credit' ||
+            refundMethod == 'mixed' ||
+            isChequeRefund;
+        final txType = refundMethod == 'mixed'
+            ? 'return_settlement_pending'
+            : refundMethod == 'credit'
+            ? 'credit_note'
+            : isChequeRefund
+            ? 'cheque_return_pending'
+            : 'refund';
 
         // Record customer transaction for audit trail (always)
         await into(db.customerTransactions).insert(
@@ -1486,10 +1512,9 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           ),
         );
 
-        // Only adjust customer balance for credit refunds.
-        // Cash/cheque means we already gave the customer money back,
-        // so the balance (what they owe us) doesn't change.
-        if (isCreditRefund) {
+        // Credit remains in the party ledger; cheque recognition offsets this
+        // temporary obligation immediately after the instrument is created.
+        if (isDeferredRefund) {
           await BalanceService.adjustCustomerBalance(
             this,
             customerId: customerId,
@@ -1660,11 +1685,21 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         if (sale != null && sale.customerId != null) {
           final customerId = sale.customerId!;
           final refundCents = returnData.totalCents.toBigInt().toInt();
-          final isCreditRefund = returnData.refundMethod == 'credit';
+          final isChequeRefund =
+              returnData.refundMethod == 'cheque' ||
+              returnData.refundMethod == 'check';
+          final isDeferredRefund =
+              returnData.refundMethod == 'credit' ||
+              returnData.refundMethod == 'mixed' ||
+              isChequeRefund;
 
           // Record reversal transaction for audit trail (always)
-          final reversalType = isCreditRefund
+          final reversalType = returnData.refundMethod == 'mixed'
+              ? 'return_settlement_pending_reversal'
+              : returnData.refundMethod == 'credit'
               ? 'credit_note_reversal'
+              : isChequeRefund
+              ? 'cheque_return_pending_reversal'
               : 'refund_reversal';
           await into(db.customerTransactions).insert(
             CustomerTransactionsCompanion.insert(
@@ -1680,10 +1715,8 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             ),
           );
 
-          // Only restore customer balance for credit refunds.
-          // Cash/cheque refunds did not change the balance on posting,
-          // so voiding them should not change it either.
-          if (isCreditRefund) {
+          // Restore a credit or pending-cheque obligation on source void.
+          if (isDeferredRefund) {
             await BalanceService.adjustCustomerBalance(
               this,
               customerId: customerId,
@@ -1743,11 +1776,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         ),
       );
 
-      final isOnAccount =
-          sale.paymentMethod == 'credit' || sale.paymentMethod == 'cheque';
-      if (sale.customerId != null &&
-          sale.status == 'completed' &&
-          isOnAccount) {
+      if (sale.customerId != null && sale.status == 'completed') {
         final amountCents = payment.amountCents.value.toBigInt().toInt();
         final paymentNumber = await DocumentNumberService(
           attachedDatabase,
@@ -1760,7 +1789,12 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             transactionNumber: Value(paymentNumber),
             amountCents: Decimal.fromInt(-amountCents),
             currencyId: sale.currencyId,
-            description: Value('Payment for ${sale.invoiceNumber}'),
+            description: Value(
+              payment.paymentMethod.value == 'cheque' ||
+                      payment.paymentMethod.value == 'check'
+                  ? 'Payment for ${sale.invoiceNumber} (received cheque ${payment.reference.value ?? ''})'
+                  : 'Payment for ${sale.invoiceNumber}',
+            ),
             referenceId: Value(paymentId),
             referenceType: const Value('sale_payment'),
           ),
@@ -1803,7 +1837,10 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       );
 
       final isOnAccount =
-          sale?.paymentMethod == 'credit' || sale?.paymentMethod == 'cheque';
+          sale?.paymentMethod == 'credit' ||
+          sale?.paymentMethod == 'cheque' ||
+          sale?.paymentMethod == 'check' ||
+          sale?.paymentMethod == 'mixed';
       if (sale != null &&
           sale.customerId != null &&
           sale.status == 'completed' &&

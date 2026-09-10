@@ -22,19 +22,21 @@ class SupplierReturnsPdfService {
 
   static List<InvoicePdfItem> _mapReturns(SupplierReturnsData data) {
     return data.returns
-        .map((r) => InvoicePdfItem(
-              invoiceNumber: r.returnNumber,
-              referenceLabel: _referenceLabel(r),
-              date: r.date,
-              items: r.items,
-              subtotalCents: r.subtotalCents,
-              discountCents: r.discountCents,
-              taxCents: r.taxCents,
-              totalCents: r.totalCents,
-              // Returns are settled in full against the supplier balance.
-              paidAmountCents: r.totalCents,
-              paymentMethod: r.refundMethod,
-            ))
+        .map(
+          (r) => InvoicePdfItem(
+            invoiceNumber: r.returnNumber,
+            referenceLabel: _referenceLabel(r),
+            date: r.date,
+            items: r.items,
+            subtotalCents: r.subtotalCents,
+            discountCents: r.discountCents,
+            taxCents: r.taxCents,
+            totalCents: r.totalCents,
+            // Returns are settled in full against the supplier balance.
+            paidAmountCents: r.totalCents,
+            paymentMethod: r.refundMethod,
+          ),
+        )
         .toList();
   }
 
@@ -58,7 +60,6 @@ class SupplierReturnsPdfService {
       totalAmountCents: data.totalAmountCents,
       totalDiscountCents: data.totalDiscountCents,
       totalPaidCents: data.totalAmountCents,
-      totalQuantity: data.totalQuantity,
       cs: cs,
       locale: locale,
       isRtl: locale.languageCode == 'ar',
@@ -92,7 +93,6 @@ class SupplierReturnsPdfService {
       totalAmountCents: data.totalAmountCents,
       totalDiscountCents: data.totalDiscountCents,
       totalPaidCents: data.totalAmountCents,
-      totalQuantity: data.totalQuantity,
       cs: cs,
       locale: locale,
       isRtl: locale.languageCode == 'ar',

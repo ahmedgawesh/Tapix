@@ -48,7 +48,7 @@ class PurchaseReportsExcelService {
         TextCellValue(cs.formatCents(p.paidAmountCents)),
         TextCellValue(_paymentLabel(p.paymentMethod, lang)),
         TextCellValue(p.status),
-        TextCellValue(DateFormat.yMd().format(p.purchaseDate)),
+        TextCellValue(DateFormat('dd/MM/yyyy').format(p.purchaseDate)),
       ]);
     }
 
@@ -56,7 +56,13 @@ class PurchaseReportsExcelService {
     sheet.appendRow([
       TextCellValue(_t('total', lang)),
       TextCellValue(''),
-      TextCellValue(cs.formatCents(data.summary.totalPurchasesCents - data.summary.totalDiscountCents - data.summary.totalTaxCents)),
+      TextCellValue(
+        cs.formatCents(
+          data.summary.totalPurchasesCents -
+              data.summary.totalDiscountCents -
+              data.summary.totalTaxCents,
+        ),
+      ),
       TextCellValue(cs.formatCents(data.summary.totalDiscountCents)),
       TextCellValue(cs.formatCents(data.summary.totalTaxCents)),
       TextCellValue(cs.formatCents(data.summary.totalPurchasesCents)),
@@ -66,7 +72,10 @@ class PurchaseReportsExcelService {
       TextCellValue('${_t('invoices', lang)}: ${data.summary.invoiceCount}'),
     ]);
 
-    await _saveAndShare(excel, 'Purchases_${DateFormat('yyyyMMdd').format(DateTime.now())}');
+    await _saveAndShare(
+      excel,
+      'Purchases_${DateFormat('yyyyMMdd').format(DateTime.now())}',
+    );
   }
 
   /// Export purchases with product details to Excel and share
@@ -104,7 +113,7 @@ class PurchaseReportsExcelService {
         TextCellValue(cs.formatCents(p.totalCents)),
         TextCellValue(cs.formatCents(p.paidAmountCents)),
         TextCellValue(_paymentLabel(p.paymentMethod, lang)),
-        TextCellValue(DateFormat.yMd().format(p.purchaseDate)),
+        TextCellValue(DateFormat('dd/MM/yyyy').format(p.purchaseDate)),
       ]);
     }
 
@@ -176,11 +185,18 @@ class PurchaseReportsExcelService {
         TextCellValue(cs.formatCents(s.totalTaxCents)),
         IntCellValue(s.invoiceCount),
         IntCellValue(s.totalQuantity),
-        TextCellValue(s.lastPurchaseDate != null ? DateFormat.yMd().format(s.lastPurchaseDate!) : '-'),
+        TextCellValue(
+          s.lastPurchaseDate != null
+              ? DateFormat('dd/MM/yyyy').format(s.lastPurchaseDate!)
+              : '-',
+        ),
       ]);
     }
 
-    await _saveAndShare(excel, 'PurchasesWithProducts_${DateFormat('yyyyMMdd').format(DateTime.now())}');
+    await _saveAndShare(
+      excel,
+      'PurchasesWithProducts_${DateFormat('yyyyMMdd').format(DateTime.now())}',
+    );
   }
 
   // ═══════════════════════════════════════════════════════
@@ -218,7 +234,11 @@ class PurchaseReportsExcelService {
   }
 
   static const _translations = {
-    'purchase_number': {'en': 'Purchase #', 'ar': 'رقم الفاتورة', 'fr': 'Achat #'},
+    'purchase_number': {
+      'en': 'Purchase #',
+      'ar': 'رقم الفاتورة',
+      'fr': 'Achat #',
+    },
     'supplier': {'en': 'Supplier', 'ar': 'المورد', 'fr': 'Fournisseur'},
     'subtotal': {'en': 'Subtotal', 'ar': 'المجموع الفرعي', 'fr': 'Sous-total'},
     'discount': {'en': 'Discount', 'ar': 'الخصم', 'fr': 'Remise'},
@@ -233,12 +253,21 @@ class PurchaseReportsExcelService {
     'category': {'en': 'Category', 'ar': 'التصنيف', 'fr': 'Catégorie'},
     'products': {'en': 'Products', 'ar': 'المنتجات', 'fr': 'Produits'},
     'quantity': {'en': 'Qty', 'ar': 'الكمية', 'fr': 'Qté'},
-    'total_purchases': {'en': 'Total Purchases', 'ar': 'إجمالي المشتريات', 'fr': 'Total Achats'},
-    'last_purchase': {'en': 'Last Purchase', 'ar': 'آخر شراء', 'fr': 'Dernier Achat'},
+    'total_purchases': {
+      'en': 'Total Purchases',
+      'ar': 'إجمالي المشتريات',
+      'fr': 'Total Achats',
+    },
+    'last_purchase': {
+      'en': 'Last Purchase',
+      'ar': 'آخر شراء',
+      'fr': 'Dernier Achat',
+    },
     'payment_cash': {'en': 'Cash', 'ar': 'نقد', 'fr': 'Espèces'},
     'payment_credit': {'en': 'Credit', 'ar': 'آجل', 'fr': 'Crédit'},
     'payment_card': {'en': 'Card', 'ar': 'بطاقة', 'fr': 'Carte'},
     'payment_cheque': {'en': 'Cheque', 'ar': 'شيك', 'fr': 'Chèque'},
+    'payment_mixed': {'en': 'Mixed', 'ar': 'مختلط', 'fr': 'Mixte'},
   };
 
   static String _t(String key, String lang) {

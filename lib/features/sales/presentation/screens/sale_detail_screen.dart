@@ -9,6 +9,8 @@ import 'package:decimal/decimal.dart';
 
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/measurement/measurement_localization.dart';
+import '../../../../core/promotions/promotion_repository.dart';
+import '../../../../core/promotions/promotion_sale_snapshot.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/currency_service.dart'
     as currency_model
@@ -39,6 +41,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
   SaleEntity? _sale;
   List<SaleItemEntity> _items = [];
   List<SaleReturnEntity> _returns = [];
+  List<SalePromotionSnapshot> _promotionApplications = [];
   CashierShiftView? _cashierShift;
   LanSaleDetails? _remoteDetails;
   Object? _loadError;
@@ -71,6 +74,8 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
     final repo = sl<SaleRepository>();
     final sale = await repo.getSaleById(widget.saleId);
     final items = await repo.getSaleItems(widget.saleId);
+    final promotionApplications = await sl<PromotionRepository>()
+        .loadSaleApplications(widget.saleId);
     final cashierShift = await sl<CashierShiftService>().getSaleShift(
       widget.saleId,
     );
@@ -84,6 +89,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
       setState(() {
         _sale = sale;
         _items = items;
+        _promotionApplications = promotionApplications;
         _cashierShift = cashierShift;
         _loading = false;
       });
@@ -152,6 +158,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
         _remoteDetails = details;
         _sale = sale;
         _items = items;
+        _promotionApplications = details.promotionApplications;
         _returns = const [];
         _cashierShift = null;
         _loading = false;
@@ -162,6 +169,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
         _loadError = error;
         _sale = null;
         _items = const [];
+        _promotionApplications = const [];
         _loading = false;
       });
     }
@@ -380,6 +388,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
               context: context,
               sale: _sale!,
               items: _items,
+              promotionApplications: _promotionApplications,
               cashierName: _cashierName,
               cashierShiftNumber: _cashierShiftNumber,
             );
@@ -402,6 +411,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
               context: context,
               sale: _sale!,
               items: _items,
+              promotionApplications: _promotionApplications,
               cashierName: _cashierName,
               cashierShiftNumber: _cashierShiftNumber,
             );
@@ -558,6 +568,10 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               _buildItemsCard(context, cs),
+              if (_promotionApplications.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                _buildPromotionsCard(context, cs),
+              ],
               if (_returns.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 _buildReturnsCard(context, cs),
@@ -584,6 +598,10 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
         _buildInfoCard(context, sale, cs),
         const SizedBox(height: 16),
         _buildItemsCard(context, cs),
+        if (_promotionApplications.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          _buildPromotionsCard(context, cs),
+        ],
         if (_returns.isNotEmpty) ...[
           const SizedBox(height: 16),
           _buildReturnsCard(context, cs),
@@ -809,7 +827,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
               theme,
               LucideIcons.calendar,
               'sales.date'.tr(),
-              DateFormat.yMMMd().format(sale.saleDate),
+              DateFormat('dd/MM/yyyy').format(sale.saleDate),
             ),
             if (sale.dueDate != null) ...[
               const SizedBox(height: 10),
@@ -817,7 +835,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                 theme,
                 LucideIcons.calendarClock,
                 'sales.due_date'.tr(),
-                DateFormat.yMMMd().format(sale.dueDate!),
+                DateFormat('dd/MM/yyyy').format(sale.dueDate!),
                 valueColor: sale.isOverdue ? colorScheme.error : null,
               ),
             ],
@@ -858,7 +876,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
               theme,
               LucideIcons.clock,
               'sales.created_at'.tr(),
-              DateFormat.yMMMd().add_jm().format(sale.createdAt),
+              DateFormat('dd/MM/yyyy').add_jm().format(sale.createdAt),
             ),
             if (sale.isOverdue) ...[
               const SizedBox(height: 12),
@@ -1092,6 +1110,18 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
               itemCount: _items.length,
               itemBuilder: (context, index) {
                 final item = _items[index];
+                final itemOffers = _promotionApplications
+                    .expand(
+                      (promotion) => promotion.allocations
+                          .where(
+                            (allocation) => allocation.saleItemId == item.id,
+                          )
+                          .map(
+                            (allocation) =>
+                                (promotion: promotion, allocation: allocation),
+                          ),
+                    )
+                    .toList(growable: false);
                 final isEven = index % 2 == 0;
 
                 return Container(
@@ -1212,6 +1242,42 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                                   ],
                                 ),
                               ),
+                            if (itemOffers.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Wrap(
+                                  spacing: 4,
+                                  runSpacing: 4,
+                                  children: itemOffers
+                                      .map(
+                                        (offer) => Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: colorScheme.primaryContainer,
+                                            borderRadius: BorderRadius.circular(
+                                              6,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            '${'promotions.sales.offer'.tr()}: '
+                                            '${offer.promotion.name} '
+                                            '(-${cs.format(offer.allocation.discountCents)})',
+                                            style: theme.textTheme.labelSmall
+                                                ?.copyWith(
+                                                  color: colorScheme
+                                                      .onPrimaryContainer,
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                          ),
+                                        ),
+                                      )
+                                      .toList(growable: false),
+                                ),
+                              ),
                             Text(
                               cs.format(item.unitPriceCents.toBigInt().toInt()),
                               style: theme.textTheme.bodySmall?.copyWith(
@@ -1273,6 +1339,80 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
     );
   }
 
+  Widget _buildPromotionsCard(BuildContext context, CurrencyService cs) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final totalDiscount = _promotionApplications.fold<int>(
+      0,
+      (sum, application) => sum + application.discountCents,
+    );
+    return Card(
+      elevation: 0,
+      color: colorScheme.primaryContainer.withValues(alpha: 0.25),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: colorScheme.primary.withValues(alpha: 0.25)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(LucideIcons.badgePercent, color: colorScheme.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'promotions.invoice.applied_title'.tr(),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Text(
+                  '-${cs.format(totalDiscount)}',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: colorScheme.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ..._promotionApplications.map(
+              (application) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${application.name} (${application.code})',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                    Text(
+                      '-${cs.format(application.discountCents)}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Text(
+              'promotions.invoice.historical_note'.tr(),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildTotalsCard(
     BuildContext context,
     SaleEntity sale,
@@ -1281,10 +1421,11 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final totalItems = _items.length;
-    final allPieceItems = _items.every(
-      (item) => item.measurementType == 'piece',
+    final quantitySummary = localizedQuantitySummary(
+      _items,
+      quantityOf: (item) => item.quantity,
+      measurementTypeOf: (item) => item.measurementType,
     );
-    final totalPieces = _items.fold<int>(0, (sum, item) => sum + item.quantity);
 
     return Card(
       elevation: 0,
@@ -1301,14 +1442,12 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
             child: Column(
               children: [
                 _totalRow(theme, 'sales.total_items_count'.tr(), '$totalItems'),
-                if (allPieceItems) ...[
-                  const SizedBox(height: 8),
-                  _totalRow(
-                    theme,
-                    'sales.total_pieces_count'.tr(),
-                    '$totalPieces',
-                  ),
-                ],
+                const SizedBox(height: 8),
+                _totalRow(
+                  theme,
+                  'measurement.total_quantity'.tr(),
+                  quantitySummary,
+                ),
                 const SizedBox(height: 8),
                 _totalRow(
                   theme,
@@ -1628,7 +1767,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
                   subtitle: Row(
                     children: [
                       Text(
-                        DateFormat.yMMMd().format(ret.returnDate),
+                        DateFormat('dd/MM/yyyy').format(ret.returnDate),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                           fontSize: 11,

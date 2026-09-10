@@ -8,6 +8,8 @@ import 'package:easy_localization/easy_localization.dart';
 
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/measurement/measurement_localization.dart';
+import '../../../../core/promotions/promotion_repository.dart';
+import '../../../../core/promotions/promotion_sale_snapshot.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/cashier_shift_service.dart';
 import '../../../../core/widgets/pin_verification_dialog.dart';
@@ -30,6 +32,7 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
   SaleReturnEntity? _returnEntity;
   SaleEntity? _sale;
   List<SaleReturnItemEntity> _returnItems = [];
+  List<SalePromotionSnapshot> _promotionApplications = const [];
   CashierShiftView? _cashierShift;
   bool _loading = true;
   StreamSubscription<List<SaleReturnItemEntity>>? _itemsSub;
@@ -54,6 +57,8 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
       return;
     }
     final sale = await repo.getSaleById(ret.saleId);
+    final promotionApplications = await sl<PromotionRepository>()
+        .loadSaleApplications(ret.saleId);
     final cashierShift = await sl<CashierShiftService>().getSaleReturnShift(
       widget.returnId,
     );
@@ -74,6 +79,7 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
         _returnEntity = ret;
         _sale = sale;
         _cashierShift = cashierShift;
+        _promotionApplications = promotionApplications;
         _loading = false;
       });
     }
@@ -357,7 +363,7 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
             _infoRow(
               theme,
               'sales.date'.tr(),
-              DateFormat.yMMMd().format(ret.returnDate),
+              DateFormat('dd/MM/yyyy').format(ret.returnDate),
             ),
             if (_cashierShift != null) ...[
               const SizedBox(height: 8),
@@ -793,6 +799,14 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
                   final variantLine = variantParts.isNotEmpty
                       ? variantParts.join(' · ')
                       : null;
+                  final offers = _promotionApplications
+                      .where(
+                        (offer) => offer.allocations.any(
+                          (allocation) =>
+                              allocation.saleItemId == item.saleItemId,
+                        ),
+                      )
+                      .toList(growable: false);
 
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 10),
@@ -867,6 +881,31 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
                                     fontSize: 11,
                                   ),
                                 ),
+                              if (offers.isNotEmpty)
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  children: offers
+                                      .map((offer) {
+                                        final allocation = offer.allocations
+                                            .firstWhere(
+                                              (row) =>
+                                                  row.saleItemId ==
+                                                  item.saleItemId,
+                                            );
+                                        return Chip(
+                                          visualDensity: VisualDensity.compact,
+                                          avatar: const Icon(
+                                            LucideIcons.badgePercent,
+                                            size: 14,
+                                          ),
+                                          label: Text(
+                                            '${offer.name}  -${cs.format(allocation.discountCents)}',
+                                          ),
+                                        );
+                                      })
+                                      .toList(growable: false),
+                                ),
                               Text(
                                 '${'sales.return_qty'.tr()}: ${localizedQuantity(item.quantity, item.measurementType)}',
                                 style: theme.textTheme.bodySmall?.copyWith(
@@ -921,9 +960,10 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
     final tax = ret.taxCents.toBigInt().toInt();
     final total = ret.totalCents.toBigInt().toInt();
     final totalItems = _returnItems.length;
-    final totalPieces = _returnItems.fold<int>(
-      0,
-      (sum, item) => sum + item.quantity,
+    final quantitySummary = localizedQuantitySummary(
+      _returnItems,
+      quantityOf: (item) => item.quantity,
+      measurementTypeOf: (item) => item.measurementType,
     );
 
     return Card(
@@ -941,7 +981,11 @@ class _SaleReturnDetailScreenState extends State<SaleReturnDetailScreen> {
         child: Column(
           children: [
             _totalRow(theme, 'sales.total_items_count'.tr(), '$totalItems'),
-            _totalRow(theme, 'sales.total_pieces_count'.tr(), '$totalPieces'),
+            _totalRow(
+              theme,
+              'measurement.total_quantity'.tr(),
+              quantitySummary,
+            ),
             if (subtotal != 0 || discount != 0 || tax != 0) ...[
               Divider(
                 height: 16,

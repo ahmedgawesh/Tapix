@@ -1,12 +1,17 @@
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../measurement/measurement.dart';
+import '../../payments/checkout_settlement.dart';
+import '../../payments/return_settlement_service.dart';
 import '../app_database.dart';
+import 'cheque_confirmation_dao.dart';
+import 'cheque_instrument_dao.dart';
 import '../tables/transactions.dart';
 import '../tables/parties.dart';
 import '../tables/products.dart';
 import '../../services/stock_service.dart';
 import '../../services/balance_service.dart';
+import '../../services/cheque_source_void_service.dart';
 import '../../services/batch_service.dart';
 import '../../services/inventory/wac_movement_service.dart';
 import '../../services/inventory/inventory_valuation_delta_service.dart';
@@ -757,13 +762,19 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       if (returnData.status == 'voided') {
         throw Exception('Cannot post a voided adjustment return');
       }
+      if ((returnData.refundMethod == 'cheque' ||
+              returnData.refundMethod == 'check') &&
+          returnData.dueDate == null) {
+        throw StateError('cheque_due_date_required');
+      }
 
       // Defense-in-depth: AP/Bank refunds require a real supplier — orphan
       // ledger entries make AP aging meaningless. The bloc already prevents
       // this in the UI; we re-assert here so any non-UI caller (test, batch
       // import, future API) cannot bypass it.
       if (returnData.refundMethod == 'credit' ||
-          returnData.refundMethod == 'cheque') {
+          returnData.refundMethod == 'cheque' ||
+          returnData.refundMethod == 'mixed') {
         // supplierId on PurchaseReturnAdjustments is non-nullable but we
         // still defend against an upstream zero / negative slipping in.
         if (returnData.supplierId <= 0) {
@@ -1004,24 +1015,32 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       // The JE policy routes the financial leg as follows:
       //   credit → Dr 2000 AP    (we owe the supplier less)
       //   cash   → Dr 1000 Cash  (supplier physically refunded us)
-      //   cheque → Dr 1010 Bank  (supplier issued us a cheque)
+      //   cheque → Dr 2000 AP, then Dr 1020 / Cr 2000 on receipt
       //
-      // Only the `credit` path reduces what we owe the supplier (= AP).
-      // Cash / cheque refunds settle physically and leave AP unchanged.
+      // Credit and cheque reduce what we owe the supplier (= AP). A cheque
+      // transfers through 1020 only when it actually clears.
       // Inserting a `supplier_transactions` row with -refundCents AND
       // calling `adjustSupplierBalance` for non-credit refunds would
       // (a) double-count the refund against AP and (b) drift on every
       // `SupplierDao.recalculateBalance` rebuild (which sums
       // supplier_transactions.amount_cents back into suppliers.balance_cents).
-      // So we gate BOTH writes on `refundMethod == 'credit'`, mirroring
+      // So we gate BOTH writes on a deferred refund, mirroring
       // the linked-return logic in `purchase_dao.postPurchaseReturn`.
       final refundCents = returnData.totalCents.toBigInt().toInt();
-      final isCreditRefund = returnData.refundMethod == 'credit';
-      if (isCreditRefund) {
+      final isChequeRefund =
+          returnData.refundMethod == 'cheque' ||
+          returnData.refundMethod == 'check';
+      final isDeferredRefund =
+          returnData.refundMethod == 'credit' ||
+          returnData.refundMethod == 'mixed' ||
+          isChequeRefund;
+      if (isDeferredRefund) {
         await into(supplierTransactions).insert(
           SupplierTransactionsCompanion.insert(
             supplierId: returnData.supplierId,
-            transactionType: 'adjustment_return',
+            transactionType: isChequeRefund
+                ? 'cheque_return_pending'
+                : 'adjustment_return',
             transactionNumber: Value(returnData.returnNumber),
             amountCents: Decimal.fromInt(-refundCents),
             currencyId: returnData.currencyId,
@@ -1118,7 +1137,9 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         taxCents: totalTaxCents,
         inventoryCostCents: totalInventoryCostCents,
         currencyId: returnData.currencyId,
-        refundMethod: returnData.refundMethod,
+        refundMethod: returnData.refundMethod == 'mixed'
+            ? 'credit'
+            : returnData.refundMethod,
         userId: userId,
         postingDate: returnData.returnDate,
         explicitLines: explicitLines,
@@ -1126,6 +1147,22 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         approvalReason: returnData.approvalReason,
         supplierId: returnData.supplierId,
       );
+
+      if ((returnData.refundMethod == 'cheque' ||
+              returnData.refundMethod == 'check') &&
+          returnData.dueDate != null) {
+        await ChequeInstrumentDao(attachedDatabase).ensurePrimary(
+          direction: ChequeDirectionValue.incoming,
+          sourceTable: ChequeSourceTables.purchaseReturnAdjustment,
+          sourceId: returnId,
+          amountCents: refundCents,
+          currencyId: returnData.currencyId,
+          dueDate: returnData.dueDate!,
+          partyType: 'supplier',
+          partyId: returnData.supplierId,
+          userId: userId,
+        );
+      }
 
       // ── Atomic counters: bump qty_returned_adjustment on FIFO-oldest
       //    purchase_items matching this (supplier, product, variant). The
@@ -1174,6 +1211,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     bool allowNegativeStock = false,
     bool allowOverHistory = false,
     ReturnApprovalService? approvalService,
+    List<CheckoutPaymentAllocation> settlementAllocations = const [],
   }) {
     return transaction(() async {
       // Generate number atomically inside the transaction
@@ -1192,6 +1230,23 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         allowNegativeStock: allowNegativeStock,
         allowOverHistory: allowOverHistory,
       );
+      if (settlementAllocations.isNotEmpty) {
+        final posted = await getPurchaseAdjReturnById(returnId);
+        if (posted == null) throw StateError('Adjustment return not found');
+        await ReturnSettlementService.apply(
+          db: attachedDatabase,
+          journalService: journalEntryService,
+          side: ReturnSettlementSide.purchase,
+          sourceTable: ChequeSourceTables.purchaseReturnAdjustment,
+          sourceId: returnId,
+          partyId: posted.supplierId,
+          totalCents: posted.totalCents.toBigInt().toInt(),
+          currencyId: posted.currencyId,
+          allocations: settlementAllocations,
+          documentDate: posted.returnDate,
+          userId: userId,
+        );
+      }
       return returnId;
     });
   }
@@ -1212,6 +1267,25 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       }
 
       if (returnData.status == 'posted') {
+        await ChequeSourceVoidService.voidForSource(
+          db: attachedDatabase,
+          journalService: journalEntryService,
+          sourceTable: ChequeSourceTables.purchaseReturnAdjustment,
+          sourceId: returnId,
+          reason:
+              voidReason ??
+              'Purchase adjustment return voided — cheque cancelled',
+          userId: voidedBy,
+        );
+        await ReturnSettlementService.voidImmediate(
+          db: attachedDatabase,
+          journalService: journalEntryService,
+          side: ReturnSettlementSide.purchase,
+          sourceTable: ChequeSourceTables.purchaseReturnAdjustment,
+          sourceId: returnId,
+          reason: voidReason ?? 'Purchase adjustment return settlement voided',
+          userId: voidedBy,
+        );
         final items = await getPurchaseAdjReturnItems(returnId);
         final affectedProductIds = <int>{};
         // I4: see post path — track which products had batch mutations so
@@ -1302,12 +1376,20 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         // double-count for cash / cheque refunds (suppliers.balance
         // gains back amounts that were never deducted at post time).
         final refundCents = returnData.totalCents.toBigInt().toInt();
-        final wasCreditRefund = returnData.refundMethod == 'credit';
-        if (wasCreditRefund) {
+        final wasChequeRefund =
+            returnData.refundMethod == 'cheque' ||
+            returnData.refundMethod == 'check';
+        final wasDeferredRefund =
+            returnData.refundMethod == 'credit' ||
+            returnData.refundMethod == 'mixed' ||
+            wasChequeRefund;
+        if (wasDeferredRefund) {
           await into(supplierTransactions).insert(
             SupplierTransactionsCompanion.insert(
               supplierId: returnData.supplierId,
-              transactionType: 'adjustment_return_reversal',
+              transactionType: wasChequeRefund
+                  ? 'cheque_return_pending_reversal'
+                  : 'adjustment_return_reversal',
               amountCents: Decimal.fromInt(refundCents),
               currencyId: returnData.currencyId,
               description: Value(
@@ -1592,6 +1674,11 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       if (returnData.status == 'voided') {
         throw Exception('Cannot post a voided adjustment return');
       }
+      if ((returnData.refundMethod == 'cheque' ||
+              returnData.refundMethod == 'check') &&
+          returnData.dueDate == null) {
+        throw StateError('cheque_due_date_required');
+      }
 
       // Attribute the posted adjustment return to the operator's currently
       // open till session. Drafts are intentionally not linked: the cashier
@@ -1623,7 +1710,8 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       // this in the UI; we re-assert here so any non-UI caller cannot
       // bypass it.
       if (returnData.refundMethod == 'credit' ||
-          returnData.refundMethod == 'cheque') {
+          returnData.refundMethod == 'cheque' ||
+          returnData.refundMethod == 'mixed') {
         if (returnData.customerId == null) {
           throw StateError(
             'Sale adjustment return #$returnId uses '
@@ -1821,17 +1909,26 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       // 1100 via `creditToReceivable`). The reconciliation invariant
       // Σ(customers.balance_cents) == GL(1100) therefore holds.
       //
-      // CASH / CHEQUE refunds are intentionally NOT recorded here: the money
-      // physically left the till/bank (Cr 1000/1010), never touching AR, so
-      // touching `customers.balance_cents` would drift it from GL 1100. Those
-      // refunds are audited via the `sale_return_adjustments` row + the JE.
+      // CASH refunds settle immediately and do not touch this party ledger.
+      // A CHEQUE first creates the AR obligation; registration immediately
+      // offsets it into 2020 Cheques Issued.
       final refundCents = returnData.totalCents.toBigInt().toInt();
-      final isCreditRefund = returnData.refundMethod == 'credit';
-      if (isCreditRefund && returnData.customerId != null && refundCents > 0) {
+      final isChequeRefund =
+          returnData.refundMethod == 'cheque' ||
+          returnData.refundMethod == 'check';
+      final isDeferredRefund =
+          returnData.refundMethod == 'credit' ||
+          returnData.refundMethod == 'mixed' ||
+          isChequeRefund;
+      if (isDeferredRefund &&
+          returnData.customerId != null &&
+          refundCents > 0) {
         await into(customerTransactions).insert(
           CustomerTransactionsCompanion.insert(
             customerId: returnData.customerId!,
-            transactionType: 'adjustment_return',
+            transactionType: isChequeRefund
+                ? 'cheque_return_pending'
+                : 'adjustment_return',
             transactionNumber: Value(returnData.returnNumber),
             amountCents: Decimal.fromInt(-refundCents),
             currencyId: returnData.currencyId,
@@ -1922,15 +2019,33 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         taxCents: totalTaxCents,
         inventoryCostCents: totalInventoryCostCents,
         currencyId: returnData.currencyId,
-        refundMethod: returnData.refundMethod,
+        refundMethod: returnData.refundMethod == 'mixed'
+            ? 'credit'
+            : returnData.refundMethod,
         partyId: returnData.customerId,
         userId: userId,
         postingDate: returnData.returnDate,
         explicitLines: explicitLines,
         approvalStatus: returnData.approvalStatus,
         approvalReason: returnData.approvalReason,
-        creditToReceivable: isCreditRefund,
+        creditToReceivable: isDeferredRefund,
       );
+
+      if ((returnData.refundMethod == 'cheque' ||
+              returnData.refundMethod == 'check') &&
+          returnData.dueDate != null) {
+        await ChequeInstrumentDao(attachedDatabase).ensurePrimary(
+          direction: ChequeDirectionValue.outgoing,
+          sourceTable: ChequeSourceTables.saleReturnAdjustment,
+          sourceId: returnId,
+          amountCents: refundCents,
+          currencyId: returnData.currencyId,
+          dueDate: returnData.dueDate!,
+          partyType: returnData.customerId == null ? null : 'customer',
+          partyId: returnData.customerId!,
+          userId: userId,
+        );
+      }
 
       // ── Atomic counters: bump qty_returned_adjustment on FIFO-oldest
       //    sale_items rows for this (customer, product, variant). Skipped
@@ -2028,6 +2143,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     ReturnApprovalService? approvalService,
     CommissionService? commissionService,
     LoyaltyPointsService? loyaltyPointsService,
+    List<CheckoutPaymentAllocation> settlementAllocations = const [],
   }) {
     return transaction(() async {
       // Generate number atomically inside the transaction
@@ -2047,6 +2163,27 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         commissionService: commissionService,
         loyaltyPointsService: loyaltyPointsService,
       );
+      if (settlementAllocations.isNotEmpty) {
+        final posted = await getSaleAdjReturnById(returnId);
+        if (posted == null) throw StateError('Adjustment return not found');
+        final customerId = posted.customerId;
+        if (customerId == null) {
+          throw ArgumentError('customer_required_for_deferred_settlement');
+        }
+        await ReturnSettlementService.apply(
+          db: attachedDatabase,
+          journalService: journalEntryService,
+          side: ReturnSettlementSide.sale,
+          sourceTable: ChequeSourceTables.saleReturnAdjustment,
+          sourceId: returnId,
+          partyId: customerId,
+          totalCents: posted.totalCents.toBigInt().toInt(),
+          currencyId: posted.currencyId,
+          allocations: settlementAllocations,
+          documentDate: posted.returnDate,
+          userId: userId,
+        );
+      }
       return returnId;
     });
   }
@@ -2074,6 +2211,24 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       }
 
       if (returnData.status == 'posted') {
+        await ChequeSourceVoidService.voidForSource(
+          db: attachedDatabase,
+          journalService: journalEntryService,
+          sourceTable: ChequeSourceTables.saleReturnAdjustment,
+          sourceId: returnId,
+          reason:
+              voidReason ?? 'Sale adjustment return voided — cheque cancelled',
+          userId: voidedBy,
+        );
+        await ReturnSettlementService.voidImmediate(
+          db: attachedDatabase,
+          journalService: journalEntryService,
+          side: ReturnSettlementSide.sale,
+          sourceTable: ChequeSourceTables.saleReturnAdjustment,
+          sourceId: returnId,
+          reason: voidReason ?? 'Sale adjustment return settlement voided',
+          userId: voidedBy,
+        );
         final items = await getSaleAdjReturnItems(returnId);
         final affectedProductIds = <int>{};
         // I4: see post path.
@@ -2204,14 +2359,22 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         // with a linked-return void in `sale_dao`. Cash/bank refunds never
         // touched the customer sub-ledger, so nothing is reversed for them.
         final voidRefundCents = returnData.totalCents.toBigInt().toInt();
-        final wasCreditRefund = returnData.refundMethod == 'credit';
-        if (wasCreditRefund &&
+        final wasChequeRefund =
+            returnData.refundMethod == 'cheque' ||
+            returnData.refundMethod == 'check';
+        final wasDeferredRefund =
+            returnData.refundMethod == 'credit' ||
+            returnData.refundMethod == 'mixed' ||
+            wasChequeRefund;
+        if (wasDeferredRefund &&
             returnData.customerId != null &&
             voidRefundCents > 0) {
           await into(customerTransactions).insert(
             CustomerTransactionsCompanion.insert(
               customerId: returnData.customerId!,
-              transactionType: 'adjustment_return_reversal',
+              transactionType: wasChequeRefund
+                  ? 'cheque_return_pending_reversal'
+                  : 'adjustment_return_reversal',
               amountCents: Decimal.fromInt(voidRefundCents),
               currencyId: returnData.currencyId,
               description: Value(

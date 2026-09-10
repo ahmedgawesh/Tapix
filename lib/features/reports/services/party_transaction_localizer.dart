@@ -26,6 +26,16 @@ String localizedPartyTransactionType(
     'adjustment_return_reversal': 'adjustment_return_reversal',
     'credit_note': 'credit_note',
     'credit_note_reversal': 'credit_note_reversal',
+    'cheque_return_pending': 'cheque_return_pending',
+    'cheque_return_pending_reversal': 'cheque_return_pending_reversal',
+    'cheque_return_settlement': 'cheque_return_settlement',
+    'cheque_return_settlement_reversal': 'cheque_return_settlement_reversal',
+    'cheque_return_settlement_void': 'cheque_return_settlement_reversal',
+    'return_settlement_cash': 'return_settlement_cash',
+    'return_settlement_card': 'return_settlement_card',
+    'return_settlement_bank_transfer': 'return_settlement_bank_transfer',
+    'return_settlement_mobile': 'return_settlement_mobile',
+    'return_settlement_void': 'return_settlement_void',
     'opening_balance': 'opening_balance',
     'earn': 'loyalty_earn',
     'redeem': 'loyalty_redeem',
@@ -60,6 +70,8 @@ String localizedPartyTransactionDescription(
       'cheque': 'cheque',
       'check': 'cheque',
       'bank': 'bank',
+      'bank_transfer': 'bank',
+      'mobile': 'mobile',
     };
     final suffix = methods[normalized];
     return suffix == null
@@ -76,7 +88,20 @@ String localizedPartyTransactionDescription(
     ]);
   }
 
-  return match(
+  String? matchReturnSettlement() {
+    final result = RegExp(
+      r'^(?:sale|purchase) return settlement \(([^)]+)\) for ([^#]+)#(\d+)(?: ·.*)?$',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (result == null) return null;
+    return resolve('reports.txn_desc_return_settlement', [
+      '${result.group(2)}#${result.group(3)}',
+      localizedMethod(result.group(1) ?? ''),
+    ]);
+  }
+
+  return matchReturnSettlement() ??
+      match(
         r'^Reversed payments for voided sale (.+)$',
         'reversed_payments_voided_sale',
       ) ??
@@ -86,6 +111,45 @@ String localizedPartyTransactionDescription(
       ) ??
       match(r'^Deleted payment for (.+)$', 'deleted_payment') ??
       match(r'^Payment for (.+?) \(backfilled\)$', 'payment_backfilled') ??
+      match(
+        r'^Payment for (.+?) \(cleared cheque (.*)\)$',
+        'payment_cleared_cheque',
+        groups: 2,
+      ) ??
+      match(
+        r'^Payment for (.+?) \(received cheque (.*)\)$',
+        'payment_received_cheque',
+        groups: 2,
+      ) ??
+      match(
+        r'^Payment for (.+?) \(issued cheque (.*)\)$',
+        'payment_issued_cheque',
+        groups: 2,
+      ) ??
+      match(
+        r'^Outgoing return cheque (.+?) issued$',
+        'outgoing_return_cheque_issued',
+      ) ??
+      match(
+        r'^Incoming return cheque (.+?) received$',
+        'incoming_return_cheque_received',
+      ) ??
+      match(
+        r'^Outgoing return cheque (.+?) cleared(?: — .*)?$',
+        'outgoing_return_cheque_cleared',
+      ) ??
+      match(
+        r'^Incoming return cheque (.+?) cleared(?: — .*)?$',
+        'incoming_return_cheque_cleared',
+      ) ??
+      match(
+        r'^Return cheque #(.+?) settlement reversed(?: — .*)?$',
+        'return_cheque_settlement_reversed',
+      ) ??
+      match(
+        r'^Voided return cheque #(.+?) settlement$',
+        'return_cheque_settlement_voided',
+      ) ??
       match(r'^Payment for (.+)$', 'payment') ??
       match(r'^Voided sale return (.+)$', 'voided_sale_return') ??
       match(r'^Voided purchase return (.+)$', 'voided_purchase_return') ??

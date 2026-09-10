@@ -228,7 +228,9 @@ class _LedgerContent extends StatelessWidget {
                       (row) => DataRow(
                         cells: [
                           DataCell(
-                            Text(DateFormat.yMd().format(row.entryDate)),
+                            Text(
+                              DateFormat('dd/MM/yyyy').format(row.entryDate),
+                            ),
                           ),
                           DataCell(Text(row.entryNumber)),
                           DataCell(

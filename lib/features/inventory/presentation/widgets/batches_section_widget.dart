@@ -259,7 +259,7 @@ class _BatchTileState extends State<_BatchTile> {
               ),
               _Chip(
                 label: 'product_form.batches_received_on'.tr(
-                  args: [DateFormat.yMMMd().format(batch.receivedDate)],
+                  args: [DateFormat('dd/MM/yyyy').format(batch.receivedDate)],
                 ),
                 icon: LucideIcons.truck,
                 color: cs.onSurfaceVariant,
@@ -267,7 +267,7 @@ class _BatchTileState extends State<_BatchTile> {
               if (batch.expiryDate != null)
                 _Chip(
                   label: 'product_form.batches_expiry_on'.tr(
-                    args: [DateFormat.yMMMd().format(batch.expiryDate!)],
+                    args: [DateFormat('dd/MM/yyyy').format(batch.expiryDate!)],
                   ),
                   icon: LucideIcons.calendarClock,
                   color: expiryStatus.color ?? cs.onSurfaceVariant,

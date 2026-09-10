@@ -20,8 +20,9 @@ class EmployeeDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) => EmployeeDetailBloc(sl<EmployeeRepository>(), sl<EmployeeDao>())
-        ..add(EmployeeDetailInitialized(employeeId)),
+      create: (context) =>
+          EmployeeDetailBloc(sl<EmployeeRepository>(), sl<EmployeeDao>())
+            ..add(EmployeeDetailInitialized(employeeId)),
       child: const _EmployeeDetailContent(),
     );
   }
@@ -63,95 +64,96 @@ class _EmployeeDetailContent extends StatelessWidget {
           body: state.isLoading && employee == null
               ? const Center(child: CircularProgressIndicator())
               : employee == null
-                  ? Center(child: Text('employees.not_found'.tr()))
-                  : RefreshIndicator(
-                      onRefresh: () async {
-                        context.read<EmployeeDetailBloc>().add(
-                              EmployeeDetailInitialized(state.employeeId),
-                            );
-                      },
-                      child: ListView(
-                        padding: const EdgeInsets.all(16),
-                        children: [
-                          // Employee Header Card
-                          _EmployeeHeaderCard(
-                            employee: employee,
-                            role: state.role,
-                          ),
-                          const SizedBox(height: 16),
+              ? Center(child: Text('employees.not_found'.tr()))
+              : RefreshIndicator(
+                  onRefresh: () async {
+                    context.read<EmployeeDetailBloc>().add(
+                      EmployeeDetailInitialized(state.employeeId),
+                    );
+                  },
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      // Employee Header Card
+                      _EmployeeHeaderCard(employee: employee, role: state.role),
+                      const SizedBox(height: 16),
 
-                          // Period Selector
-                          _PeriodSelector(
-                            period: state.period,
-                            onChanged: (period) {
-                              context.read<EmployeeDetailBloc>().add(
-                                    EmployeeDetailPeriodChanged(period),
-                                  );
-                            },
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Salary & Compensation Card
-                          _SalaryCard(employee: employee, state: state),
-                          const SizedBox(height: 16),
-
-                          // Sales & Commission Summary Card
-                          _SalesCommissionCard(state: state),
-                          const SizedBox(height: 16),
-
-                          // Attendance Summary Card
-                          _AttendanceSummaryCard(state: state),
-                          const SizedBox(height: 16),
-
-                          // Leave Summary Card
-                          _LeaveSummaryCard(state: state),
-                          const SizedBox(height: 16),
-
-                          // Net Pay Card
-                          _NetPayCard(state: state),
-                          const SizedBox(height: 16),
-
-                          // Settle Account Button
-                          SizedBox(
-                            width: double.infinity,
-                            child: state.isPeriodSettled
-                                ? FilledButton.icon(
-                                    onPressed: null,
-                                    icon: const Icon(Icons.check_circle),
-                                    label: Text('employees.already_settled'.tr()),
-                                    style: FilledButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(vertical: 14),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                  )
-                                : FilledButton.icon(
-                                    onPressed: state.isLoading
-                                        ? null
-                                        : () => _showSettleDialog(context),
-                                    icon: const Icon(Icons.check_circle_outline),
-                                    label: Text('employees.settle_account'.tr()),
-                                    style: FilledButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(vertical: 14),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                  ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Recent Attendance List
-                          _RecentAttendanceSection(state: state),
-                          const SizedBox(height: 16),
-
-                          // Delete Employee Button (only if net pay is zero)
-                          _DeleteEmployeeButton(state: state),
-                          const SizedBox(height: 80),
-                        ],
+                      // Period Selector
+                      _PeriodSelector(
+                        period: state.period,
+                        onChanged: (period) {
+                          context.read<EmployeeDetailBloc>().add(
+                            EmployeeDetailPeriodChanged(period),
+                          );
+                        },
                       ),
-                    ),
+                      const SizedBox(height: 16),
+
+                      // Salary & Compensation Card
+                      _SalaryCard(employee: employee, state: state),
+                      const SizedBox(height: 16),
+
+                      // Sales & Commission Summary Card
+                      _SalesCommissionCard(state: state),
+                      const SizedBox(height: 16),
+
+                      // Attendance Summary Card
+                      _AttendanceSummaryCard(state: state),
+                      const SizedBox(height: 16),
+
+                      // Leave Summary Card
+                      _LeaveSummaryCard(state: state),
+                      const SizedBox(height: 16),
+
+                      // Net Pay Card
+                      _NetPayCard(state: state),
+                      const SizedBox(height: 16),
+
+                      // Settle Account Button
+                      SizedBox(
+                        width: double.infinity,
+                        child: state.isPeriodSettled
+                            ? FilledButton.icon(
+                                onPressed: null,
+                                icon: const Icon(Icons.check_circle),
+                                label: Text('employees.already_settled'.tr()),
+                                style: FilledButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              )
+                            : FilledButton.icon(
+                                onPressed: state.isLoading
+                                    ? null
+                                    : () => _showSettleDialog(context),
+                                icon: const Icon(Icons.check_circle_outline),
+                                label: Text('employees.settle_account'.tr()),
+                                style: FilledButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Recent Attendance List
+                      _RecentAttendanceSection(state: state),
+                      const SizedBox(height: 16),
+
+                      // Delete Employee Button (only if net pay is zero)
+                      _DeleteEmployeeButton(state: state),
+                      const SizedBox(height: 80),
+                    ],
+                  ),
+                ),
         );
       },
     );
@@ -184,9 +186,9 @@ class _EmployeeDetailContent extends StatelessWidget {
       );
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -218,9 +220,9 @@ class _EmployeeDetailContent extends StatelessWidget {
       );
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -240,8 +242,8 @@ class _EmployeeDetailContent extends StatelessWidget {
             onPressed: () {
               Navigator.pop(dialogContext);
               context.read<EmployeeDetailBloc>().add(
-                    const EmployeeDetailSettleAccount(),
-                  );
+                const EmployeeDetailSettleAccount(),
+              );
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('employees.settled_success'.tr())),
               );
@@ -271,7 +273,9 @@ class _EmployeeHeaderCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -303,8 +307,11 @@ class _EmployeeHeaderCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Icon(Icons.work_outline, size: 16,
-                            color: colorScheme.onSurfaceVariant),
+                        Icon(
+                          Icons.work_outline,
+                          size: 16,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           employee.position!,
@@ -319,8 +326,11 @@ class _EmployeeHeaderCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Row(
                       children: [
-                        Icon(Icons.business_outlined, size: 16,
-                            color: colorScheme.onSurfaceVariant),
+                        Icon(
+                          Icons.business_outlined,
+                          size: 16,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           employee.department!,
@@ -335,7 +345,9 @@ class _EmployeeHeaderCard extends StatelessWidget {
                     const SizedBox(height: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: colorScheme.tertiaryContainer,
                         borderRadius: BorderRadius.circular(12),
@@ -353,8 +365,11 @@ class _EmployeeHeaderCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Icon(Icons.tag, size: 14,
-                            color: colorScheme.onSurfaceVariant),
+                        Icon(
+                          Icons.tag,
+                          size: 14,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           employee.employeeCode!,
@@ -369,11 +384,14 @@ class _EmployeeHeaderCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        Icon(Icons.calendar_today_outlined, size: 14,
-                            color: colorScheme.onSurfaceVariant),
+                        Icon(
+                          Icons.calendar_today_outlined,
+                          size: 14,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                         const SizedBox(width: 4),
                         Text(
-                          '${'employees.hire_date'.tr()}: ${DateFormat('yyyy-MM-dd').format(employee.hireDate!)}',
+                          '${'employees.hire_date'.tr()}: ${DateFormat('dd/MM/yyyy').format(employee.hireDate!)}',
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: colorScheme.onSurfaceVariant,
                           ),
@@ -471,8 +489,11 @@ class _PeriodSelector extends StatelessWidget {
           ),
           Row(
             children: [
-              Icon(Icons.calendar_month_outlined,
-                  size: 18, color: colorScheme.primary),
+              Icon(
+                Icons.calendar_month_outlined,
+                size: 18,
+                color: colorScheme.primary,
+              ),
               const SizedBox(width: 8),
               Text(
                 dateFormat.format(displayDate),
@@ -486,8 +507,7 @@ class _PeriodSelector extends StatelessWidget {
             icon: const Icon(Icons.chevron_right),
             onPressed: () {
               final now = DateTime.now();
-              if (year < now.year ||
-                  (year == now.year && month < now.month)) {
+              if (year < now.year || (year == now.year && month < now.month)) {
                 final next = month == 12
                     ? '${year + 1}-01'
                     : '$year-${(month + 1).toString().padLeft(2, '0')}';
@@ -532,7 +552,9 @@ class _SalaryCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -541,8 +563,11 @@ class _SalaryCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.payments_outlined,
-                    color: colorScheme.primary, size: 22),
+                Icon(
+                  Icons.payments_outlined,
+                  color: colorScheme.primary,
+                  size: 22,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'employees.salary_compensation'.tr(),
@@ -563,7 +588,8 @@ class _SalaryCard extends StatelessWidget {
             _DetailRow(
               icon: Icons.schedule_outlined,
               label: 'employees.pay_period_type'.tr(),
-              value: '$periodLabel · ${employee.workingDaysPerPeriod} ${'employees.working_days'.tr()} · ${employee.workingHoursPerDay}h',
+              value:
+                  '$periodLabel · ${employee.workingDaysPerPeriod} ${'employees.working_days'.tr()} · ${employee.workingHoursPerDay}h',
               valueColor: colorScheme.onSurfaceVariant,
             ),
             const SizedBox(height: 10),
@@ -593,7 +619,8 @@ class _SalaryCard extends StatelessWidget {
                 icon: Icons.card_giftcard_outlined,
                 label: 'employees.bonus'.tr(),
                 value: cs.format(
-                    state.latestPayroll!.bonusCents.toBigInt().toInt()),
+                  state.latestPayroll!.bonusCents.toBigInt().toInt(),
+                ),
                 valueColor: Colors.green,
               ),
               const SizedBox(height: 10),
@@ -601,7 +628,8 @@ class _SalaryCard extends StatelessWidget {
                 icon: Icons.more_time_outlined,
                 label: 'employees.overtime_pay'.tr(),
                 value: cs.format(
-                    state.latestPayroll!.overtimeCents.toBigInt().toInt()),
+                  state.latestPayroll!.overtimeCents.toBigInt().toInt(),
+                ),
                 valueColor: Colors.blue,
               ),
             ],
@@ -629,7 +657,9 @@ class _SalesCommissionCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -638,8 +668,11 @@ class _SalesCommissionCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.point_of_sale_outlined,
-                    color: colorScheme.primary, size: 22),
+                Icon(
+                  Icons.point_of_sale_outlined,
+                  color: colorScheme.primary,
+                  size: 22,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'employees.sales_commission_summary'.tr(),
@@ -805,7 +838,11 @@ class _CommissionStatTile extends StatelessWidget {
             ),
           ),
           if (onTap != null)
-            Icon(Icons.chevron_right, color: color.withValues(alpha: 0.7), size: 18),
+            Icon(
+              Icons.chevron_right,
+              color: color.withValues(alpha: 0.7),
+              size: 18,
+            ),
         ],
       ),
     );
@@ -844,7 +881,9 @@ class _AttendanceSummaryCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -853,8 +892,11 @@ class _AttendanceSummaryCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.assignment_outlined,
-                    color: colorScheme.primary, size: 22),
+                Icon(
+                  Icons.assignment_outlined,
+                  color: colorScheme.primary,
+                  size: 22,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'employees.attendance_summary'.tr(),
@@ -982,10 +1024,12 @@ class _LeaveSummaryCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    final approved =
-        state.leaveRequests.where((l) => l.status == 'approved').length;
-    final pending =
-        state.leaveRequests.where((l) => l.status == 'pending').length;
+    final approved = state.leaveRequests
+        .where((l) => l.status == 'approved')
+        .length;
+    final pending = state.leaveRequests
+        .where((l) => l.status == 'pending')
+        .length;
     final totalDays = state.leaveRequests
         .where((l) => l.status == 'approved')
         .fold<int>(0, (sum, l) => sum + l.daysCount);
@@ -996,7 +1040,9 @@ class _LeaveSummaryCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -1005,8 +1051,11 @@ class _LeaveSummaryCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.event_note_outlined,
-                    color: colorScheme.primary, size: 22),
+                Icon(
+                  Icons.event_note_outlined,
+                  color: colorScheme.primary,
+                  size: 22,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'employees.leave_summary'.tr(),
@@ -1127,7 +1176,7 @@ class _NetPayCard extends StatelessWidget {
 
     final payroll = state.latestPayroll;
     final manualBonus = payroll?.bonusCents.toBigInt().toInt() ?? 0;
-    
+
     // Auto-calculate overtime pay from attendance overtime minutes
     final overtimeMinutes = state.attendanceCounts['overtimeMinutes'] ?? 0;
     int overtimeCents;
@@ -1179,8 +1228,11 @@ class _NetPayCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.account_balance_outlined,
-                    color: colorScheme.primary, size: 22),
+                Icon(
+                  Icons.account_balance_outlined,
+                  color: colorScheme.primary,
+                  size: 22,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'employees.payslip_summary'.tr(),
@@ -1208,8 +1260,11 @@ class _NetPayCard extends StatelessWidget {
                 label: targetBonusResult.achieved
                     ? 'employees.target_achieved'.tr()
                     : 'employees.target_not_achieved'.tr(),
-                value: '${cs.format(targetBonusResult.actualSalesCents)} / ${cs.format(targetBonusResult.salesTargetCents)}',
-                valueColor: targetBonusResult.achieved ? Colors.green.shade700 : Colors.orange,
+                value:
+                    '${cs.format(targetBonusResult.actualSalesCents)} / ${cs.format(targetBonusResult.salesTargetCents)}',
+                valueColor: targetBonusResult.achieved
+                    ? Colors.green.shade700
+                    : Colors.orange,
               ),
             _PayslipRow(
               label: 'employees.overtime_pay'.tr(),
@@ -1287,22 +1342,22 @@ class _PayslipRow extends StatelessWidget {
         children: [
           Text(
             label,
-            style: (isLarge
-                    ? theme.textTheme.titleMedium
-                    : theme.textTheme.bodyMedium)
-                ?.copyWith(
-              fontWeight: isBold ? FontWeight.bold : null,
-            ),
+            style:
+                (isLarge
+                        ? theme.textTheme.titleMedium
+                        : theme.textTheme.bodyMedium)
+                    ?.copyWith(fontWeight: isBold ? FontWeight.bold : null),
           ),
           Text(
             value,
-            style: (isLarge
-                    ? theme.textTheme.titleLarge
-                    : theme.textTheme.bodyMedium)
-                ?.copyWith(
-              fontWeight: isBold ? FontWeight.bold : null,
-              color: valueColor,
-            ),
+            style:
+                (isLarge
+                        ? theme.textTheme.titleLarge
+                        : theme.textTheme.bodyMedium)
+                    ?.copyWith(
+                      fontWeight: isBold ? FontWeight.bold : null,
+                      color: valueColor,
+                    ),
           ),
         ],
       ),
@@ -1373,8 +1428,7 @@ class _RecentAttendanceSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(Icons.history_outlined,
-                color: colorScheme.primary, size: 22),
+            Icon(Icons.history_outlined, color: colorScheme.primary, size: 22),
             const SizedBox(width: 8),
             Text(
               'employees.recent_attendance'.tr(),
@@ -1386,8 +1440,10 @@ class _RecentAttendanceSection extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         ...state.attendances.take(10).map((a) {
-          final dateFormat =
-              DateFormat('EEE, MMM d', context.locale.toString());
+          final dateFormat = DateFormat(
+            'EEE, MMM d',
+            context.locale.toString(),
+          );
           final timeFormat = DateFormat('hh:mm a');
           final statusColor = _statusColor(a.status);
 
@@ -1397,15 +1453,19 @@ class _RecentAttendanceSection extends StatelessWidget {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
               side: BorderSide(
-                  color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+              ),
             ),
             child: ListTile(
               dense: true,
               leading: CircleAvatar(
                 radius: 16,
                 backgroundColor: statusColor.withValues(alpha: 0.1),
-                child: Icon(_statusIcon(a.status),
-                    color: statusColor, size: 16),
+                child: Icon(
+                  _statusIcon(a.status),
+                  color: statusColor,
+                  size: 16,
+                ),
               ),
               title: Text(dateFormat.format(a.attendanceDate)),
               subtitle: a.checkInTime != null
@@ -1415,8 +1475,7 @@ class _RecentAttendanceSection extends StatelessWidget {
                     )
                   : null,
               trailing: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
@@ -1503,7 +1562,7 @@ class _DeleteEmployeeButton extends StatelessWidget {
     // Calculate net pay to check if balance is zero
     final payroll = state.latestPayroll;
     final manualBonus = payroll?.bonusCents.toBigInt().toInt() ?? 0;
-    
+
     // Auto-calculate overtime pay from attendance overtime minutes
     final overtimeMinutes = state.attendanceCounts['overtimeMinutes'] ?? 0;
     int overtimeCents;
@@ -1519,7 +1578,7 @@ class _DeleteEmployeeButton extends StatelessWidget {
         overtimeRateBps: employee.overtimeRateBps,
       );
     }
-    
+
     final netSalesCents = state.salesTotalCents - state.returnsTotalCents;
     final periodParts = state.period.split('-');
     final targetBonus = PayrollCalculationService.checkSalesTargetBonus(
@@ -1538,8 +1597,7 @@ class _DeleteEmployeeButton extends StatelessWidget {
     );
 
     // Check if there's an unpaid payroll for this period
-    final hasUnpaidPayroll = state.payrolls.any((p) =>
-        p.status != 'paid');
+    final hasUnpaidPayroll = state.payrolls.any((p) => p.status != 'paid');
     final canDelete = calc.netPayCents == 0 && !hasUnpaidPayroll;
 
     return SizedBox(
@@ -1554,8 +1612,10 @@ class _DeleteEmployeeButton extends StatelessWidget {
                   ),
                 );
               },
-        icon: Icon(Icons.delete_outline,
-            color: canDelete ? Colors.red : Colors.grey),
+        icon: Icon(
+          Icons.delete_outline,
+          color: canDelete ? Colors.red : Colors.grey,
+        ),
         label: Text(
           'employees.delete'.tr(),
           style: TextStyle(color: canDelete ? Colors.red : Colors.grey),
@@ -1592,8 +1652,8 @@ class _DeleteEmployeeButton extends StatelessWidget {
             onPressed: () {
               Navigator.pop(dialogContext);
               context.read<EmployeeDetailBloc>().add(
-                    const EmployeeDetailDeleteEmployee(),
-                  );
+                const EmployeeDetailDeleteEmployee(),
+              );
               context.pop(); // Navigate back
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(content: Text('employees.deleted_success'.tr())),
@@ -1607,4 +1667,3 @@ class _DeleteEmployeeButton extends StatelessWidget {
     );
   }
 }
-

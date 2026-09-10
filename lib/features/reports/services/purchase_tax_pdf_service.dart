@@ -22,12 +22,17 @@ class PurchaseTaxPdfService {
     final company = await sl<CompanyProfileService>().getProfile();
 
     final pdf = await _buildPdf(
-      data: data, cs: cs, locale: locale, isRtl: isRtl, company: company,
+      data: data,
+      cs: cs,
+      locale: locale,
+      isRtl: isRtl,
+      company: company,
     );
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'PurchaseTaxReport_${DateFormat('yyyyMMdd').format(DateTime.now())}',
+      name:
+          'PurchaseTaxReport_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
   }
 
@@ -41,13 +46,18 @@ class PurchaseTaxPdfService {
     final company = await sl<CompanyProfileService>().getProfile();
 
     final pdf = await _buildPdf(
-      data: data, cs: cs, locale: locale, isRtl: isRtl, company: company,
+      data: data,
+      cs: cs,
+      locale: locale,
+      isRtl: isRtl,
+      company: company,
     );
 
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'PurchaseTaxReport_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      filename:
+          'PurchaseTaxReport_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
   }
 
@@ -72,7 +82,7 @@ class PurchaseTaxPdfService {
             _buildHeader(company, _t('purchase_tax_report', lang), fonts, dir),
             pw.SizedBox(height: 8),
             pw.Text(
-              '${_t('period', lang)}: ${DateFormat.yMMMd().format(data.dateRange.startDate)} — ${DateFormat.yMMMd().format(data.dateRange.endDate)}',
+              '${_t('period', lang)}: ${DateFormat('dd/MM/yyyy').format(data.dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(data.dateRange.endDate)}',
               style: pw.TextStyle(font: fonts.regular, fontSize: 10),
             ),
             pw.SizedBox(height: 12),
@@ -87,12 +97,37 @@ class PurchaseTaxPdfService {
               child: pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  _summaryCol(_t('total_taxable', lang), cs.formatCents(data.totalTaxableCents), fonts),
-                  _summaryCol(_t('tax_paid', lang), cs.formatCents(data.totalTaxPaidCents), fonts),
-                  _summaryCol(_t('tax_returns', lang), '- ${cs.formatCents(data.returnTaxCents)}', fonts),
-                  _summaryCol(_t('net_tax', lang), cs.formatCents(data.netTaxCents), fonts, bold: true),
-                  _summaryCol(_t('invoices', lang), '${data.invoiceCount}', fonts),
-                  _summaryCol(_t('returns', lang), '${data.returnCount}', fonts),
+                  _summaryCol(
+                    _t('total_taxable', lang),
+                    cs.formatCents(data.totalTaxableCents),
+                    fonts,
+                  ),
+                  _summaryCol(
+                    _t('tax_paid', lang),
+                    cs.formatCents(data.totalTaxPaidCents),
+                    fonts,
+                  ),
+                  _summaryCol(
+                    _t('tax_returns', lang),
+                    '- ${cs.formatCents(data.returnTaxCents)}',
+                    fonts,
+                  ),
+                  _summaryCol(
+                    _t('net_tax', lang),
+                    cs.formatCents(data.netTaxCents),
+                    fonts,
+                    bold: true,
+                  ),
+                  _summaryCol(
+                    _t('invoices', lang),
+                    '${data.invoiceCount}',
+                    fonts,
+                  ),
+                  _summaryCol(
+                    _t('returns', lang),
+                    '${data.returnCount}',
+                    fonts,
+                  ),
                 ],
               ),
             ),
@@ -100,13 +135,17 @@ class PurchaseTaxPdfService {
 
             // Purchase invoices table
             if (data.invoices.isNotEmpty) ...[
-              pw.Text(_t('purchase_invoices', lang),
-                  style: pw.TextStyle(font: fonts.bold, fontSize: 12)),
+              pw.Text(
+                _t('purchase_invoices', lang),
+                style: pw.TextStyle(font: fonts.bold, fontSize: 12),
+              ),
               pw.SizedBox(height: 6),
               pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 8),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.grey200,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.center,
                   1: pw.Alignment.centerLeft,
@@ -134,7 +173,7 @@ class PurchaseTaxPdfService {
                     '$idx',
                     inv.purchaseNumber,
                     inv.supplierName ?? '-',
-                    DateFormat.yMd().format(inv.purchaseDate),
+                    DateFormat('dd/MM/yyyy').format(inv.purchaseDate),
                     cs.formatCents(inv.subtotalCents),
                     cs.formatCents(inv.taxableCents),
                     cs.formatCents(inv.taxCents),
@@ -151,8 +190,10 @@ class PurchaseTaxPdfService {
                 child: pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('${_t('total', lang)}:',
-                        style: pw.TextStyle(font: fonts.bold, fontSize: 10)),
+                    pw.Text(
+                      '${_t('total', lang)}:',
+                      style: pw.TextStyle(font: fonts.bold, fontSize: 10),
+                    ),
                     pw.Text(
                       '${_t('taxable', lang)}: ${cs.formatCents(data.totalTaxableCents)}  |  '
                       '${_t('tax', lang)}: ${cs.formatCents(data.totalTaxPaidCents)}  |  '
@@ -167,13 +208,17 @@ class PurchaseTaxPdfService {
             // Returns table
             if (data.returns.isNotEmpty) ...[
               pw.SizedBox(height: 16),
-              pw.Text(_t('purchase_returns', lang),
-                  style: pw.TextStyle(font: fonts.bold, fontSize: 12)),
+              pw.Text(
+                _t('purchase_returns', lang),
+                style: pw.TextStyle(font: fonts.bold, fontSize: 12),
+              ),
               pw.SizedBox(height: 6),
               pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 8),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.red50),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.red50,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.center,
                   1: pw.Alignment.centerLeft,
@@ -197,7 +242,7 @@ class PurchaseTaxPdfService {
                     '$idx',
                     ret.returnNumber,
                     ret.supplierName ?? '-',
-                    DateFormat.yMd().format(ret.returnDate),
+                    DateFormat('dd/MM/yyyy').format(ret.returnDate),
                     cs.formatCents(ret.taxCents),
                     cs.formatCents(ret.totalCents),
                   ];
@@ -208,9 +253,12 @@ class PurchaseTaxPdfService {
             pw.SizedBox(height: 16),
             pw.Divider(),
             pw.Text(
-              '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+              '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
               style: pw.TextStyle(
-                  font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                font: fonts.regular,
+                fontSize: 8,
+                color: PdfColors.grey600,
+              ),
             ),
           ];
         },
@@ -246,11 +294,7 @@ class PurchaseTaxPdfService {
       'ar': 'ضريبة المرتجعات',
       'fr': 'Taxe Retours',
     },
-    'net_tax': {
-      'en': 'Net Tax',
-      'ar': 'صافي الضريبة',
-      'fr': 'Taxe Nette',
-    },
+    'net_tax': {'en': 'Net Tax', 'ar': 'صافي الضريبة', 'fr': 'Taxe Nette'},
     'invoices': {'en': 'Invoices', 'ar': 'الفواتير', 'fr': 'Factures'},
     'returns': {'en': 'Returns', 'ar': 'المرتجعات', 'fr': 'Retours'},
     'purchase_invoices': {
@@ -270,21 +314,13 @@ class PurchaseTaxPdfService {
     'taxable': {'en': 'Taxable', 'ar': 'خاضع للضريبة', 'fr': 'Imposable'},
     'tax': {'en': 'Tax', 'ar': 'الضريبة', 'fr': 'Taxe'},
     'total': {'en': 'Total', 'ar': 'الإجمالي', 'fr': 'Total'},
-    'return_number': {
-      'en': 'Return #',
-      'ar': 'رقم المرتجع',
-      'fr': 'N° Retour',
-    },
+    'return_number': {'en': 'Return #', 'ar': 'رقم المرتجع', 'fr': 'N° Retour'},
     'tax_refunded': {
       'en': 'Tax Refunded',
       'ar': 'ضريبة مستردة',
       'fr': 'Taxe Remboursée',
     },
-    'printed_on': {
-      'en': 'Printed on',
-      'ar': 'طُبع في',
-      'fr': 'Imprimé le',
-    },
+    'printed_on': {'en': 'Printed on', 'ar': 'طُبع في', 'fr': 'Imprimé le'},
   };
 
   static String _t(String key, String lang) {
@@ -292,17 +328,30 @@ class PurchaseTaxPdfService {
   }
 
   static pw.Widget _summaryCol(
-      String label, String value, _PdfFonts fonts, {bool bold = false}) {
+    String label,
+    String value,
+    _PdfFonts fonts, {
+    bool bold = false,
+  }) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
-        pw.Text(label,
-            style: pw.TextStyle(font: fonts.regular, fontSize: 8,
-                color: PdfColors.grey600)),
+        pw.Text(
+          label,
+          style: pw.TextStyle(
+            font: fonts.regular,
+            fontSize: 8,
+            color: PdfColors.grey600,
+          ),
+        ),
         pw.SizedBox(height: 2),
-        pw.Text(value,
-            style: pw.TextStyle(
-                font: bold ? fonts.bold : fonts.regular, fontSize: 10)),
+        pw.Text(
+          value,
+          style: pw.TextStyle(
+            font: bold ? fonts.bold : fonts.regular,
+            fontSize: 10,
+          ),
+        ),
       ],
     );
   }
@@ -316,18 +365,27 @@ class PurchaseTaxPdfService {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(company.name,
-            style: pw.TextStyle(font: fonts.bold, fontSize: 16)),
+        pw.Text(
+          company.name,
+          style: pw.TextStyle(font: fonts.bold, fontSize: 16),
+        ),
         if (company.address != null && company.address!.isNotEmpty)
-          pw.Text(company.address!,
-              style: pw.TextStyle(
-                  font: fonts.regular, fontSize: 9, color: PdfColors.grey600)),
+          pw.Text(
+            company.address!,
+            style: pw.TextStyle(
+              font: fonts.regular,
+              fontSize: 9,
+              color: PdfColors.grey600,
+            ),
+          ),
         pw.SizedBox(height: 8),
         pw.Divider(),
         pw.SizedBox(height: 4),
         pw.Center(
-          child: pw.Text(title,
-              style: pw.TextStyle(font: fonts.bold, fontSize: 14)),
+          child: pw.Text(
+            title,
+            style: pw.TextStyle(font: fonts.bold, fontSize: 14),
+          ),
         ),
       ],
     );
@@ -335,10 +393,12 @@ class PurchaseTaxPdfService {
 
   static Future<_PdfFonts> _loadFonts() async {
     try {
-      final regularData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-      final boldData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+      final regularData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+      );
+      final boldData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+      );
       return _PdfFonts(
         regular: pw.Font.ttf(regularData),
         bold: pw.Font.ttf(boldData),

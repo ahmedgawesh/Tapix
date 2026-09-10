@@ -1254,7 +1254,8 @@ String _money(int cents, String symbol) {
   return '$symbol${NumberFormat('#,##0.00').format(value)}';
 }
 
-String _dateTime(DateTime date) => DateFormat.yMMMd().add_jm().format(date);
+String _dateTime(DateTime date) =>
+    DateFormat('dd/MM/yyyy').add_jm().format(date);
 
 String _duration(DateTime start, DateTime end) {
   final value = end.difference(start);

@@ -10,13 +10,7 @@ import '../../../../core/bloc/realtime_bloc.dart';
 import '../widgets/date_range_selector.dart';
 import '../../services/profit_reports_pdf_service.dart';
 
-enum ProfitReportType {
-  overall,
-  byProduct,
-  byCategory,
-  byCustomer,
-  byInvoice,
-}
+enum ProfitReportType { overall, byProduct, byCategory, byCustomer, byInvoice }
 
 class ProfitReportScreen extends StatelessWidget {
   final ProfitReportType reportType;
@@ -66,19 +60,23 @@ class _ProfitReportViewState extends State<_ProfitReportView> {
         actions: [
           BlocBuilder<ProfitReportsBloc, RealtimeState<ProfitReportsData>>(
             builder: (context, state) {
-              if (state is! RealtimeSuccess<ProfitReportsData>) return const SizedBox.shrink();
-              return Row(children: [
-                IconButton(
-                  icon: const Icon(LucideIcons.printer),
-                  tooltip: 'reports.print'.tr(),
-                  onPressed: () => _onPrint(context, state.data),
-                ),
-                IconButton(
-                  icon: const Icon(LucideIcons.share2),
-                  tooltip: 'reports.share'.tr(),
-                  onPressed: () => _onShare(context, state.data),
-                ),
-              ]);
+              if (state is! RealtimeSuccess<ProfitReportsData>) {
+                return const SizedBox.shrink();
+              }
+              return Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(LucideIcons.printer),
+                    tooltip: 'reports.print'.tr(),
+                    onPressed: () => _onPrint(context, state.data),
+                  ),
+                  IconButton(
+                    icon: const Icon(LucideIcons.share2),
+                    tooltip: 'reports.share'.tr(),
+                    onPressed: () => _onShare(context, state.data),
+                  ),
+                ],
+              );
             },
           ),
         ],
@@ -91,7 +89,8 @@ class _ProfitReportViewState extends State<_ProfitReportView> {
               final bloc = context.read<ProfitReportsBloc>();
               return DateRangeSelector(
                 dateRange: bloc.dateRange,
-                onChanged: (range) => bloc.add(ProfitReportsDateRangeChanged(range)),
+                onChanged: (range) =>
+                    bloc.add(ProfitReportsDateRangeChanged(range)),
               );
             },
           ),
@@ -106,26 +105,51 @@ class _ProfitReportViewState extends State<_ProfitReportView> {
                   border: const OutlineInputBorder(),
                   isDense: true,
                 ),
-                onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+                onChanged: (v) =>
+                    setState(() => _searchQuery = v.toLowerCase()),
               ),
             ),
           // Summary cards
           BlocBuilder<ProfitReportsBloc, RealtimeState<ProfitReportsData>>(
             builder: (context, state) {
-              if (state is! RealtimeSuccess<ProfitReportsData>) return const SizedBox.shrink();
+              if (state is! RealtimeSuccess<ProfitReportsData>) {
+                return const SizedBox.shrink();
+              }
               final s = state.data.summary;
-              final profitColor = s.totalProfitCents >= 0 ? Colors.green : Colors.red;
+              final profitColor = s.totalProfitCents >= 0
+                  ? Colors.green
+                  : Colors.red;
               return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
                 child: Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    _SummaryChip(label: 'reports.revenue'.tr(), value: cs.formatCents(s.totalRevenueCents)),
-                    _SummaryChip(label: 'reports.cost'.tr(), value: cs.formatCents(s.totalCostCents)),
-                    _SummaryChip(label: 'reports.profit'.tr(), value: cs.formatCents(s.totalProfitCents), color: profitColor),
-                    _SummaryChip(label: 'reports.margin'.tr(), value: '${s.profitMarginPercent.toStringAsFixed(1)}%', color: profitColor),
-                    _SummaryChip(label: 'reports.invoices'.tr(), value: '${s.invoiceCount}'),
+                    _SummaryChip(
+                      label: 'reports.revenue'.tr(),
+                      value: cs.formatCents(s.totalRevenueCents),
+                    ),
+                    _SummaryChip(
+                      label: 'reports.cost'.tr(),
+                      value: cs.formatCents(s.totalCostCents),
+                    ),
+                    _SummaryChip(
+                      label: 'reports.profit'.tr(),
+                      value: cs.formatCents(s.totalProfitCents),
+                      color: profitColor,
+                    ),
+                    _SummaryChip(
+                      label: 'reports.margin'.tr(),
+                      value: '${s.profitMarginPercent.toStringAsFixed(1)}%',
+                      color: profitColor,
+                    ),
+                    _SummaryChip(
+                      label: 'reports.invoices'.tr(),
+                      value: '${s.invoiceCount}',
+                    ),
                   ],
                 ),
               );
@@ -134,32 +158,38 @@ class _ProfitReportViewState extends State<_ProfitReportView> {
           const SizedBox(height: 8),
           // Data
           Expanded(
-            child: BlocBuilder<ProfitReportsBloc, RealtimeState<ProfitReportsData>>(
-              builder: (context, state) {
-                if (state is RealtimeLoading) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (state is RealtimeError) {
-                  return Center(child: Text('${(state as RealtimeError).error}'));
-                }
-                if (state is! RealtimeSuccess<ProfitReportsData>) {
-                  return const SizedBox.shrink();
-                }
-                final data = state.data;
-                switch (widget.reportType) {
-                  case ProfitReportType.overall:
-                    return _buildOverallView(data, cs);
-                  case ProfitReportType.byProduct:
-                    return _buildByProductTable(data, cs);
-                  case ProfitReportType.byCategory:
-                    return _buildByCategoryTable(data, cs);
-                  case ProfitReportType.byCustomer:
-                    return _buildByCustomerTable(data, cs);
-                  case ProfitReportType.byInvoice:
-                    return _buildByInvoiceTable(data, cs);
-                }
-              },
-            ),
+            child:
+                BlocBuilder<
+                  ProfitReportsBloc,
+                  RealtimeState<ProfitReportsData>
+                >(
+                  builder: (context, state) {
+                    if (state is RealtimeLoading) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (state is RealtimeError) {
+                      return Center(
+                        child: Text('${(state as RealtimeError).error}'),
+                      );
+                    }
+                    if (state is! RealtimeSuccess<ProfitReportsData>) {
+                      return const SizedBox.shrink();
+                    }
+                    final data = state.data;
+                    switch (widget.reportType) {
+                      case ProfitReportType.overall:
+                        return _buildOverallView(data, cs);
+                      case ProfitReportType.byProduct:
+                        return _buildByProductTable(data, cs);
+                      case ProfitReportType.byCategory:
+                        return _buildByCategoryTable(data, cs);
+                      case ProfitReportType.byCustomer:
+                        return _buildByCustomerTable(data, cs);
+                      case ProfitReportType.byInvoice:
+                        return _buildByInvoiceTable(data, cs);
+                    }
+                  },
+                ),
           ),
         ],
       ),
@@ -216,48 +246,66 @@ class _ProfitReportViewState extends State<_ProfitReportView> {
             color: s.profitMarginPercent >= 0 ? Colors.green : Colors.red,
           ),
           const SizedBox(height: 12),
-          Row(children: [
-            Expanded(child: _OverviewCard(
-              title: 'reports.total_discount'.tr(),
-              value: cs.formatCents(s.totalDiscountCents),
-              icon: LucideIcons.tag,
-              color: Colors.purple,
-            )),
-            const SizedBox(width: 12),
-            Expanded(child: _OverviewCard(
-              title: 'reports.total_tax'.tr(),
-              value: cs.formatCents(s.totalTaxCents),
-              icon: LucideIcons.receipt,
-              color: Colors.teal,
-            )),
-          ]),
+          Row(
+            children: [
+              Expanded(
+                child: _OverviewCard(
+                  title: 'reports.total_discount'.tr(),
+                  value: cs.formatCents(s.totalDiscountCents),
+                  icon: LucideIcons.tag,
+                  color: Colors.purple,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _OverviewCard(
+                  title: 'reports.total_tax'.tr(),
+                  value: cs.formatCents(s.totalTaxCents),
+                  icon: LucideIcons.receipt,
+                  color: Colors.teal,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
-          Row(children: [
-            Expanded(child: _OverviewCard(
-              title: 'reports.invoices'.tr(),
-              value: '${s.invoiceCount}',
-              icon: LucideIcons.fileText,
-              color: Colors.indigo,
-            )),
-            const SizedBox(width: 12),
-            Expanded(child: _OverviewCard(
-              title: 'reports.products'.tr(),
-              value: '${s.productCount}',
-              icon: LucideIcons.package2,
-              color: Colors.brown,
-            )),
-          ]),
+          Row(
+            children: [
+              Expanded(
+                child: _OverviewCard(
+                  title: 'reports.invoices'.tr(),
+                  value: '${s.invoiceCount}',
+                  icon: LucideIcons.fileText,
+                  color: Colors.indigo,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _OverviewCard(
+                  title: 'reports.products'.tr(),
+                  value: '${s.productCount}',
+                  icon: LucideIcons.package2,
+                  color: Colors.brown,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
   Widget _buildByProductTable(ProfitReportsData data, CurrencyService cs) {
-    final items = data.byProduct.where((i) =>
-        _searchQuery.isEmpty ||
-        i.productName.toLowerCase().contains(_searchQuery) ||
-        (i.categoryName?.toLowerCase().contains(_searchQuery) ?? false)).toList();
-    if (items.isEmpty) return Center(child: Text('reports.no_profit_data'.tr()));
+    final items = data.byProduct
+        .where(
+          (i) =>
+              _searchQuery.isEmpty ||
+              i.productName.toLowerCase().contains(_searchQuery) ||
+              (i.categoryName?.toLowerCase().contains(_searchQuery) ?? false),
+        )
+        .toList();
+    if (items.isEmpty) {
+      return Center(child: Text('reports.no_profit_data'.tr()));
+    }
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: SingleChildScrollView(
@@ -275,17 +323,31 @@ class _ProfitReportViewState extends State<_ProfitReportView> {
           ],
           rows: items.asMap().entries.map((e) {
             final i = e.value;
-            final profitColor = i.totalProfitCents >= 0 ? Colors.green : Colors.red;
-            return DataRow(cells: [
-              DataCell(Text('${e.key + 1}')),
-              DataCell(Text(i.productName)),
-              DataCell(Text(i.categoryName ?? '-')),
-              DataCell(Text('${i.totalQuantity}')),
-              DataCell(Text(cs.formatCents(i.totalRevenueCents))),
-              DataCell(Text(cs.formatCents(i.totalCostCents))),
-              DataCell(Text(cs.formatCents(i.totalProfitCents), style: TextStyle(color: profitColor))),
-              DataCell(Text('${i.profitMarginPercent.toStringAsFixed(1)}%', style: TextStyle(color: profitColor))),
-            ]);
+            final profitColor = i.totalProfitCents >= 0
+                ? Colors.green
+                : Colors.red;
+            return DataRow(
+              cells: [
+                DataCell(Text('${e.key + 1}')),
+                DataCell(Text(i.productName)),
+                DataCell(Text(i.categoryName ?? '-')),
+                DataCell(Text('${i.totalQuantity}')),
+                DataCell(Text(cs.formatCents(i.totalRevenueCents))),
+                DataCell(Text(cs.formatCents(i.totalCostCents))),
+                DataCell(
+                  Text(
+                    cs.formatCents(i.totalProfitCents),
+                    style: TextStyle(color: profitColor),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    '${i.profitMarginPercent.toStringAsFixed(1)}%',
+                    style: TextStyle(color: profitColor),
+                  ),
+                ),
+              ],
+            );
           }).toList(),
         ),
       ),
@@ -293,10 +355,16 @@ class _ProfitReportViewState extends State<_ProfitReportView> {
   }
 
   Widget _buildByCategoryTable(ProfitReportsData data, CurrencyService cs) {
-    final items = data.byCategory.where((i) =>
-        _searchQuery.isEmpty ||
-        i.categoryName.toLowerCase().contains(_searchQuery)).toList();
-    if (items.isEmpty) return Center(child: Text('reports.no_profit_data'.tr()));
+    final items = data.byCategory
+        .where(
+          (i) =>
+              _searchQuery.isEmpty ||
+              i.categoryName.toLowerCase().contains(_searchQuery),
+        )
+        .toList();
+    if (items.isEmpty) {
+      return Center(child: Text('reports.no_profit_data'.tr()));
+    }
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: SingleChildScrollView(
@@ -314,17 +382,31 @@ class _ProfitReportViewState extends State<_ProfitReportView> {
           ],
           rows: items.asMap().entries.map((e) {
             final i = e.value;
-            final profitColor = i.totalProfitCents >= 0 ? Colors.green : Colors.red;
-            return DataRow(cells: [
-              DataCell(Text('${e.key + 1}')),
-              DataCell(Text(i.categoryName)),
-              DataCell(Text('${i.productCount}')),
-              DataCell(Text('${i.totalQuantity}')),
-              DataCell(Text(cs.formatCents(i.totalRevenueCents))),
-              DataCell(Text(cs.formatCents(i.totalCostCents))),
-              DataCell(Text(cs.formatCents(i.totalProfitCents), style: TextStyle(color: profitColor))),
-              DataCell(Text('${i.profitMarginPercent.toStringAsFixed(1)}%', style: TextStyle(color: profitColor))),
-            ]);
+            final profitColor = i.totalProfitCents >= 0
+                ? Colors.green
+                : Colors.red;
+            return DataRow(
+              cells: [
+                DataCell(Text('${e.key + 1}')),
+                DataCell(Text(i.categoryName)),
+                DataCell(Text('${i.productCount}')),
+                DataCell(Text('${i.totalQuantity}')),
+                DataCell(Text(cs.formatCents(i.totalRevenueCents))),
+                DataCell(Text(cs.formatCents(i.totalCostCents))),
+                DataCell(
+                  Text(
+                    cs.formatCents(i.totalProfitCents),
+                    style: TextStyle(color: profitColor),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    '${i.profitMarginPercent.toStringAsFixed(1)}%',
+                    style: TextStyle(color: profitColor),
+                  ),
+                ),
+              ],
+            );
           }).toList(),
         ),
       ),
@@ -332,10 +414,16 @@ class _ProfitReportViewState extends State<_ProfitReportView> {
   }
 
   Widget _buildByCustomerTable(ProfitReportsData data, CurrencyService cs) {
-    final items = data.byCustomer.where((i) =>
-        _searchQuery.isEmpty ||
-        i.customerName.toLowerCase().contains(_searchQuery)).toList();
-    if (items.isEmpty) return Center(child: Text('reports.no_profit_data'.tr()));
+    final items = data.byCustomer
+        .where(
+          (i) =>
+              _searchQuery.isEmpty ||
+              i.customerName.toLowerCase().contains(_searchQuery),
+        )
+        .toList();
+    if (items.isEmpty) {
+      return Center(child: Text('reports.no_profit_data'.tr()));
+    }
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: SingleChildScrollView(
@@ -352,16 +440,30 @@ class _ProfitReportViewState extends State<_ProfitReportView> {
           ],
           rows: items.asMap().entries.map((e) {
             final i = e.value;
-            final profitColor = i.totalProfitCents >= 0 ? Colors.green : Colors.red;
-            return DataRow(cells: [
-              DataCell(Text('${e.key + 1}')),
-              DataCell(Text(i.customerName)),
-              DataCell(Text(cs.formatCents(i.totalRevenueCents))),
-              DataCell(Text(cs.formatCents(i.totalCostCents))),
-              DataCell(Text(cs.formatCents(i.totalProfitCents), style: TextStyle(color: profitColor))),
-              DataCell(Text('${i.profitMarginPercent.toStringAsFixed(1)}%', style: TextStyle(color: profitColor))),
-              DataCell(Text('${i.invoiceCount}')),
-            ]);
+            final profitColor = i.totalProfitCents >= 0
+                ? Colors.green
+                : Colors.red;
+            return DataRow(
+              cells: [
+                DataCell(Text('${e.key + 1}')),
+                DataCell(Text(i.customerName)),
+                DataCell(Text(cs.formatCents(i.totalRevenueCents))),
+                DataCell(Text(cs.formatCents(i.totalCostCents))),
+                DataCell(
+                  Text(
+                    cs.formatCents(i.totalProfitCents),
+                    style: TextStyle(color: profitColor),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    '${i.profitMarginPercent.toStringAsFixed(1)}%',
+                    style: TextStyle(color: profitColor),
+                  ),
+                ),
+                DataCell(Text('${i.invoiceCount}')),
+              ],
+            );
           }).toList(),
         ),
       ),
@@ -369,11 +471,17 @@ class _ProfitReportViewState extends State<_ProfitReportView> {
   }
 
   Widget _buildByInvoiceTable(ProfitReportsData data, CurrencyService cs) {
-    final items = data.byInvoice.where((i) =>
-        _searchQuery.isEmpty ||
-        i.invoiceNumber.toLowerCase().contains(_searchQuery) ||
-        (i.customerName?.toLowerCase().contains(_searchQuery) ?? false)).toList();
-    if (items.isEmpty) return Center(child: Text('reports.no_profit_data'.tr()));
+    final items = data.byInvoice
+        .where(
+          (i) =>
+              _searchQuery.isEmpty ||
+              i.invoiceNumber.toLowerCase().contains(_searchQuery) ||
+              (i.customerName?.toLowerCase().contains(_searchQuery) ?? false),
+        )
+        .toList();
+    if (items.isEmpty) {
+      return Center(child: Text('reports.no_profit_data'.tr()));
+    }
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: SingleChildScrollView(
@@ -392,16 +500,28 @@ class _ProfitReportViewState extends State<_ProfitReportView> {
           rows: items.asMap().entries.map((e) {
             final i = e.value;
             final profitColor = i.profitCents >= 0 ? Colors.green : Colors.red;
-            return DataRow(cells: [
-              DataCell(Text('${e.key + 1}')),
-              DataCell(Text(i.invoiceNumber)),
-              DataCell(Text(i.customerName ?? '-')),
-              DataCell(Text(cs.formatCents(i.revenueCents))),
-              DataCell(Text(cs.formatCents(i.costCents))),
-              DataCell(Text(cs.formatCents(i.profitCents), style: TextStyle(color: profitColor))),
-              DataCell(Text('${i.profitMarginPercent.toStringAsFixed(1)}%', style: TextStyle(color: profitColor))),
-              DataCell(Text(DateFormat.yMd().format(i.saleDate))),
-            ]);
+            return DataRow(
+              cells: [
+                DataCell(Text('${e.key + 1}')),
+                DataCell(Text(i.invoiceNumber)),
+                DataCell(Text(i.customerName ?? '-')),
+                DataCell(Text(cs.formatCents(i.revenueCents))),
+                DataCell(Text(cs.formatCents(i.costCents))),
+                DataCell(
+                  Text(
+                    cs.formatCents(i.profitCents),
+                    style: TextStyle(color: profitColor),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    '${i.profitMarginPercent.toStringAsFixed(1)}%',
+                    style: TextStyle(color: profitColor),
+                  ),
+                ),
+                DataCell(Text(DateFormat('dd/MM/yyyy').format(i.saleDate))),
+              ],
+            );
           }).toList(),
         ),
       ),
@@ -414,16 +534,32 @@ class _ProfitReportViewState extends State<_ProfitReportView> {
         ProfitReportsPdfService.printOverall(context: context, data: data);
         break;
       case ProfitReportType.byProduct:
-        ProfitReportsPdfService.printByProduct(context: context, items: data.byProduct, data: data);
+        ProfitReportsPdfService.printByProduct(
+          context: context,
+          items: data.byProduct,
+          data: data,
+        );
         break;
       case ProfitReportType.byCategory:
-        ProfitReportsPdfService.printByCategory(context: context, items: data.byCategory, data: data);
+        ProfitReportsPdfService.printByCategory(
+          context: context,
+          items: data.byCategory,
+          data: data,
+        );
         break;
       case ProfitReportType.byCustomer:
-        ProfitReportsPdfService.printByCustomer(context: context, items: data.byCustomer, data: data);
+        ProfitReportsPdfService.printByCustomer(
+          context: context,
+          items: data.byCustomer,
+          data: data,
+        );
         break;
       case ProfitReportType.byInvoice:
-        ProfitReportsPdfService.printByInvoice(context: context, items: data.byInvoice, data: data);
+        ProfitReportsPdfService.printByInvoice(
+          context: context,
+          items: data.byInvoice,
+          data: data,
+        );
         break;
     }
   }
@@ -434,16 +570,32 @@ class _ProfitReportViewState extends State<_ProfitReportView> {
         ProfitReportsPdfService.shareOverall(context: context, data: data);
         break;
       case ProfitReportType.byProduct:
-        ProfitReportsPdfService.shareByProduct(context: context, items: data.byProduct, data: data);
+        ProfitReportsPdfService.shareByProduct(
+          context: context,
+          items: data.byProduct,
+          data: data,
+        );
         break;
       case ProfitReportType.byCategory:
-        ProfitReportsPdfService.shareByCategory(context: context, items: data.byCategory, data: data);
+        ProfitReportsPdfService.shareByCategory(
+          context: context,
+          items: data.byCategory,
+          data: data,
+        );
         break;
       case ProfitReportType.byCustomer:
-        ProfitReportsPdfService.shareByCustomer(context: context, items: data.byCustomer, data: data);
+        ProfitReportsPdfService.shareByCustomer(
+          context: context,
+          items: data.byCustomer,
+          data: data,
+        );
         break;
       case ProfitReportType.byInvoice:
-        ProfitReportsPdfService.shareByInvoice(context: context, items: data.byInvoice, data: data);
+        ProfitReportsPdfService.shareByInvoice(
+          context: context,
+          items: data.byInvoice,
+          data: data,
+        );
         break;
     }
   }
@@ -458,7 +610,10 @@ class _SummaryChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Chip(
-      label: Text('$label: $value', style: TextStyle(fontSize: 12, color: color)),
+      label: Text(
+        '$label: $value',
+        style: TextStyle(fontSize: 12, color: color),
+      ),
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
     );
   }
@@ -497,12 +652,20 @@ class _OverviewCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey)),
+                  Text(
+                    title,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: Colors.grey),
+                  ),
                   const SizedBox(height: 4),
-                  Text(value, style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                  )),
+                  Text(
+                    value,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
+                  ),
                 ],
               ),
             ),

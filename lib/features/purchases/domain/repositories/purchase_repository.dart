@@ -1,4 +1,5 @@
 import 'package:decimal/decimal.dart';
+import '../../../../core/payments/checkout_settlement.dart';
 import '../../../../core/services/return_calculation_service.dart';
 import '../entities/purchase_entity.dart';
 
@@ -48,6 +49,10 @@ abstract class PurchaseRepository {
     /// Phase 11.2 — tax-inclusive flag the engine used to produce the
     /// totals being persisted. Stamped on `purchases.tax_inclusive_at_post`.
     bool taxInclusiveAtPost = false,
+
+    /// Payments already handed over at checkout. They stay attached to the
+    /// draft and are journaled when the purchase is posted.
+    List<CheckoutPaymentAllocation> initialPayments = const [],
   });
 
   /// Update an existing purchase and replace its items
@@ -171,6 +176,10 @@ abstract class PurchaseRepository {
     /// totals being persisted. Stamped on
     /// `purchase_returns.tax_inclusive_at_post`.
     bool taxInclusiveAtPost = false,
+
+    /// Optional structured refund legs. Pending cheques are allocations, not
+    /// settled cash; an unallocated remainder stays on the supplier account.
+    List<CheckoutPaymentAllocation> settlementAllocations = const [],
   });
 
   /// Post purchase return (update variant stock).

@@ -9,6 +9,7 @@ import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../settings/data/services/company_profile_service.dart';
+import '../../../reports/services/party_transaction_localizer.dart';
 import '../../../settings/domain/entities/company_profile.dart';
 import '../../domain/repositories/customer_repository.dart';
 
@@ -70,7 +71,8 @@ class CustomerTransactionPdfService {
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: '${transaction.transactionNumber ?? 'TXN-${transaction.id}'}.pdf',
+      filename:
+          '${transaction.transactionNumber ?? 'TXN-${transaction.id}'}.pdf',
     );
   }
 
@@ -157,12 +159,17 @@ class CustomerTransactionPdfService {
     final pdf = pw.Document();
 
     final isPayment = transaction.transactionType == 'payment';
+    final isReturnChequeSettlement =
+        transaction.transactionType == 'cheque_return_settlement';
     final isDiscount = transaction.transactionType == 'discount';
     final amountCents = transaction.amountCents.toDouble().round().abs();
 
     final String title;
     final PdfColor headerColor;
-    if (isPayment) {
+    if (isReturnChequeSettlement) {
+      title = 'customers.return_cheque_settlement_receipt'.tr();
+      headerColor = PdfColors.blue800;
+    } else if (isPayment) {
       title = 'customers.payment_receipt'.tr();
       headerColor = PdfColors.blue800;
     } else if (isDiscount) {
@@ -218,9 +225,9 @@ class CustomerTransactionPdfService {
                     pw.Divider(color: PdfColors.grey200),
                     _pdfInfoRow(
                       'customers.receipt_date'.tr(),
-                      DateFormat.yMMMd(locale.toString())
-                          .add_jm()
-                          .format(transaction.transactionDate),
+                      DateFormat(
+                        'dd/MM/yyyy',
+                      ).add_jm().format(transaction.transactionDate),
                       fonts.regular,
                     ),
                     _pdfInfoRow(
@@ -230,7 +237,7 @@ class CustomerTransactionPdfService {
                     ),
                     _pdfInfoRow(
                       'customers.receipt_type'.tr(),
-                      _localizedTransactionType(transaction.transactionType),
+                      _localizedTransactionType(transaction),
                       fonts.regular,
                     ),
                     if (isDiscount && transaction.discountType != null)
@@ -243,7 +250,9 @@ class CustomerTransactionPdfService {
                         transaction.description!.isNotEmpty)
                       _pdfInfoRow(
                         'customers.receipt_description'.tr(),
-                        transaction.description!,
+                        localizedPartyTransactionDescription(
+                          transaction.description,
+                        ),
                         fonts.regular,
                       ),
                   ],
@@ -254,20 +263,22 @@ class CustomerTransactionPdfService {
               // Amount box
               pw.Container(
                 padding: const pw.EdgeInsets.symmetric(
-                    horizontal: 24, vertical: 20),
+                  horizontal: 24,
+                  vertical: 20,
+                ),
                 decoration: pw.BoxDecoration(
                   color: isPayment
                       ? PdfColors.blue50
                       : isDiscount
-                          ? PdfColors.purple50
-                          : PdfColors.grey100,
+                      ? PdfColors.purple50
+                      : PdfColors.grey100,
                   borderRadius: pw.BorderRadius.circular(8),
                   border: pw.Border.all(
                     color: isPayment
                         ? PdfColors.blue200
                         : isDiscount
-                            ? PdfColors.purple200
-                            : PdfColors.grey300,
+                        ? PdfColors.purple200
+                        : PdfColors.grey300,
                   ),
                 ),
                 child: pw.Row(
@@ -310,7 +321,13 @@ class CustomerTransactionPdfService {
   // HELPERS
   // ═══════════════════════════════════════════════════════
 
-  static String _localizedTransactionType(String type) {
+  static String _localizedTransactionType(CustomerTransaction transaction) {
+    final type = transaction.transactionType;
+    if (type == 'payment' &&
+        transaction.referenceType == 'sale_payment' &&
+        (transaction.description?.startsWith('Incoming cheque') ?? false)) {
+      return 'cheques.direction_incoming'.tr();
+    }
     switch (type) {
       case 'payment':
         return 'customers.transaction_payment'.tr();
@@ -347,10 +364,12 @@ class CustomerTransactionPdfService {
   }
 
   static Future<_PdfFonts> _loadFonts() async {
-    final fontData =
-        await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-    final fontBoldData =
-        await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+    final fontData = await rootBundle.load(
+      'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+    );
+    final fontBoldData = await rootBundle.load(
+      'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+    );
     return _PdfFonts(
       regular: pw.Font.ttf(fontData),
       bold: pw.Font.ttf(fontBoldData),
@@ -379,17 +398,33 @@ class CustomerTransactionPdfService {
               if (company.name.isNotEmpty)
                 _bidiText(company.name, fonts.bold, fontSize: 16),
               if (company.address != null && company.address!.isNotEmpty)
-                _bidiText(company.address!, fonts.regular,
-                    fontSize: 8, color: PdfColors.grey600),
+                _bidiText(
+                  company.address!,
+                  fonts.regular,
+                  fontSize: 8,
+                  color: PdfColors.grey600,
+                ),
               if (company.phone != null && company.phone!.isNotEmpty)
-                _bidiText(company.phone!, fonts.regular,
-                    fontSize: 8, color: PdfColors.grey600),
+                _bidiText(
+                  company.phone!,
+                  fonts.regular,
+                  fontSize: 8,
+                  color: PdfColors.grey600,
+                ),
               if (company.email != null && company.email!.isNotEmpty)
-                _bidiText(company.email!, fonts.regular,
-                    fontSize: 8, color: PdfColors.grey600),
+                _bidiText(
+                  company.email!,
+                  fonts.regular,
+                  fontSize: 8,
+                  color: PdfColors.grey600,
+                ),
               if (company.taxNumber != null && company.taxNumber!.isNotEmpty)
-                _bidiText('Tax: ${company.taxNumber}', fonts.regular,
-                    fontSize: 8, color: PdfColors.grey600),
+                _bidiText(
+                  'Tax: ${company.taxNumber}',
+                  fonts.regular,
+                  fontSize: 8,
+                  color: PdfColors.grey600,
+                ),
             ],
           ),
           _bidiText(title, fonts.bold, fontSize: 18, color: headerColor),
@@ -414,14 +449,30 @@ class CustomerTransactionPdfService {
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          _bidiText('customers.customer_info_label'.tr(), fonts.bold,
-              fontSize: 11, color: PdfColors.grey700),
+          _bidiText(
+            'customers.customer_info_label'.tr(),
+            fonts.bold,
+            fontSize: 11,
+            color: PdfColors.grey700,
+          ),
           pw.SizedBox(height: 6),
-          _pdfInfoRow('customers.receipt_customer'.tr(), customerName, fonts.regular),
+          _pdfInfoRow(
+            'customers.receipt_customer'.tr(),
+            customerName,
+            fonts.regular,
+          ),
           if (customerPhone != null && customerPhone.isNotEmpty)
-            _pdfInfoRow('customers.phone_label'.tr(), customerPhone, fonts.regular),
+            _pdfInfoRow(
+              'customers.phone_label'.tr(),
+              customerPhone,
+              fonts.regular,
+            ),
           if (customerAddress != null && customerAddress.isNotEmpty)
-            _pdfInfoRow('customers.address_label'.tr(), customerAddress, fonts.regular),
+            _pdfInfoRow(
+              'customers.address_label'.tr(),
+              customerAddress,
+              fonts.regular,
+            ),
         ],
       ),
     );
@@ -438,13 +489,19 @@ class CustomerTransactionPdfService {
               pw.Container(
                 width: 150,
                 decoration: const pw.BoxDecoration(
-                  border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey400)),
+                  border: pw.Border(
+                    bottom: pw.BorderSide(color: PdfColors.grey400),
+                  ),
                 ),
                 child: pw.SizedBox(height: 50),
               ),
               pw.SizedBox(height: 4),
-              _bidiText('customers.company_signature'.tr(), fonts.regular,
-                  fontSize: 9, color: PdfColors.grey600),
+              _bidiText(
+                'customers.company_signature'.tr(),
+                fonts.regular,
+                fontSize: 9,
+                color: PdfColors.grey600,
+              ),
             ],
           ),
           pw.Column(
@@ -452,13 +509,19 @@ class CustomerTransactionPdfService {
               pw.Container(
                 width: 150,
                 decoration: const pw.BoxDecoration(
-                  border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey400)),
+                  border: pw.Border(
+                    bottom: pw.BorderSide(color: PdfColors.grey400),
+                  ),
                 ),
                 child: pw.SizedBox(height: 50),
               ),
               pw.SizedBox(height: 4),
-              _bidiText('customers.customer_signature'.tr(), fonts.regular,
-                  fontSize: 9, color: PdfColors.grey600),
+              _bidiText(
+                'customers.customer_signature'.tr(),
+                fonts.regular,
+                fontSize: 9,
+                color: PdfColors.grey600,
+              ),
             ],
           ),
         ],
@@ -470,27 +533,40 @@ class CustomerTransactionPdfService {
     required _PdfFonts fonts,
     required Locale locale,
   }) {
-    final footerText =
-        DateFormat('yyyy-MM-dd HH:mm', locale.toString()).format(DateTime.now());
+    final footerText = DateFormat(
+      'yyyy-MM-dd HH:mm',
+      locale.toString(),
+    ).format(DateTime.now());
     return pw.Container(
       alignment: pw.Alignment.center,
-      child: _bidiText(footerText, fonts.regular,
-          fontSize: 8, color: PdfColors.grey500),
+      child: _bidiText(
+        footerText,
+        fonts.regular,
+        fontSize: 8,
+        color: PdfColors.grey500,
+      ),
     );
   }
 
   static bool _hasArabic(String text) {
     return RegExp(
-            r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0590-\u05FF]')
-        .hasMatch(text);
+      r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0590-\u05FF]',
+    ).hasMatch(text);
   }
 
-  static pw.Text _bidiText(String text, pw.Font font,
-      {double fontSize = 8, PdfColor? color}) {
-    return pw.Text(text,
-        textDirection:
-            _hasArabic(text) ? pw.TextDirection.rtl : pw.TextDirection.ltr,
-        style: pw.TextStyle(font: font, fontSize: fontSize, color: color));
+  static pw.Text _bidiText(
+    String text,
+    pw.Font font, {
+    double fontSize = 8,
+    PdfColor? color,
+  }) {
+    return pw.Text(
+      text,
+      textDirection: _hasArabic(text)
+          ? pw.TextDirection.rtl
+          : pw.TextDirection.ltr,
+      style: pw.TextStyle(font: font, fontSize: fontSize, color: color),
+    );
   }
 
   static pw.Widget _pdfInfoRow(String label, String value, pw.Font font) {

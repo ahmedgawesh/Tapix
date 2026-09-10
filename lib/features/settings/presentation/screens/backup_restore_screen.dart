@@ -39,7 +39,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     if (ms != null) {
       final dt = DateTime.fromMillisecondsSinceEpoch(ms);
       setState(() {
-        _lastBackupLabel = DateFormat.yMMMd().add_jm().format(dt);
+        _lastBackupLabel = DateFormat('dd/MM/yyyy').add_jm().format(dt);
       });
     }
   }
@@ -331,7 +331,7 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     await prefs.setInt(_kLastBackupKey, now.millisecondsSinceEpoch);
     if (mounted) {
       setState(() {
-        _lastBackupLabel = DateFormat.yMMMd().add_jm().format(now);
+        _lastBackupLabel = DateFormat('dd/MM/yyyy').add_jm().format(now);
       });
     }
   }

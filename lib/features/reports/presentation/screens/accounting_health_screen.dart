@@ -12,13 +12,12 @@ class AccountingHealthScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => sl<ReportsBloc>()
-        ..add(const ReportsReconciliationRequested()),
+      create: (_) =>
+          sl<ReportsBloc>()..add(const ReportsReconciliationRequested()),
       child: const _AccountingHealthView(),
     );
   }
 }
-
 
 class _AccountingHealthView extends StatelessWidget {
   const _AccountingHealthView();
@@ -30,9 +29,7 @@ class _AccountingHealthView extends StatelessWidget {
     final cs = sl<CurrencyService>();
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('reports.reconciliation'.tr()),
-      ),
+      appBar: AppBar(title: Text('reports.reconciliation'.tr())),
       body: BlocBuilder<ReportsBloc, RealtimeState<ReportsData>>(
         builder: (context, state) {
           if (state is RealtimeLoading<ReportsData>) {
@@ -46,7 +43,10 @@ class _AccountingHealthView extends StatelessWidget {
                 children: [
                   Icon(Icons.error_outline, size: 48, color: colorScheme.error),
                   const SizedBox(height: 16),
-                  Text(state.error.toString(), style: theme.textTheme.bodyLarge),
+                  Text(
+                    state.error.toString(),
+                    style: theme.textTheme.bodyLarge,
+                  ),
                 ],
               ),
             );
@@ -84,7 +84,9 @@ class _AccountingHealthView extends StatelessWidget {
                               ? Icons.check_circle_outline
                               : Icons.warning_amber_rounded,
                           size: 64,
-                          color: healthy ? colorScheme.primary : colorScheme.error,
+                          color: healthy
+                              ? colorScheme.primary
+                              : colorScheme.error,
                         ),
                         const SizedBox(height: 12),
                         Text(
@@ -98,9 +100,11 @@ class _AccountingHealthView extends StatelessWidget {
                         if (reconciliation != null) ...[
                           const SizedBox(height: 4),
                           Text(
-                            'reports.last_checked'.tr(args: [
-                              _formatTimestamp(reconciliation.timestamp),
-                            ]),
+                            'reports.last_checked'.tr(
+                              args: [
+                                _formatTimestamp(reconciliation.timestamp),
+                              ],
+                            ),
                             style: theme.textTheme.bodySmall,
                           ),
                         ],
@@ -115,13 +119,15 @@ class _AccountingHealthView extends StatelessWidget {
                   title: 'reports.trial_balance_check'.tr(),
                   passed: tb.isBalanced,
                   details: tb.isBalanced
-                      ? 'reports.debits_equal_credits'.tr(args: [
-                          cs.formatCents(tb.totalDebitCents),
-                        ])
-                      : 'reports.debits_not_equal_credits'.tr(args: [
-                          cs.formatCents(tb.totalDebitCents),
-                          cs.formatCents(tb.totalCreditCents),
-                        ]),
+                      ? 'reports.debits_equal_credits'.tr(
+                          args: [cs.formatCents(tb.totalDebitCents)],
+                        )
+                      : 'reports.debits_not_equal_credits'.tr(
+                          args: [
+                            cs.formatCents(tb.totalDebitCents),
+                            cs.formatCents(tb.totalCreditCents),
+                          ],
+                        ),
                 ),
 
                 // Journal Entries Check
@@ -131,17 +137,19 @@ class _AccountingHealthView extends StatelessWidget {
                     passed: reconciliation.issues
                         .where((i) => i.contains('Unbalanced'))
                         .isEmpty,
-                    details: reconciliation.issues
+                    details:
+                        reconciliation.issues
                             .where((i) => i.contains('Unbalanced'))
                             .isEmpty
                         ? 'reports.all_entries_balanced'.tr()
                         : reconciliation.issues
-                            .where((i) => i.contains('Unbalanced'))
-                            .join('\n'),
+                              .where((i) => i.contains('Unbalanced'))
+                              .join('\n'),
                   ),
 
                 // Issues list
-                if (reconciliation != null && reconciliation.issues.isNotEmpty) ...[
+                if (reconciliation != null &&
+                    reconciliation.issues.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   Text(
                     'reports.issue_details'.tr(),
@@ -150,14 +158,16 @@ class _AccountingHealthView extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  ...reconciliation.issues.map((issue) => Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        color: colorScheme.errorContainer,
-                        child: ListTile(
-                          leading: Icon(Icons.error, color: colorScheme.error),
-                          title: Text(issue),
-                        ),
-                      )),
+                  ...reconciliation.issues.map(
+                    (issue) => Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      color: colorScheme.errorContainer,
+                      child: ListTile(
+                        leading: Icon(Icons.error, color: colorScheme.error),
+                        title: Text(issue),
+                      ),
+                    ),
+                  ),
                 ],
               ],
             );
@@ -176,10 +186,9 @@ class _AccountingHealthView extends StatelessWidget {
     if (diff.inMinutes < 60) {
       return 'reports.minutes_ago'.tr(args: ['${diff.inMinutes}']);
     }
-    return DateFormat.yMMMd().add_jm().format(ts);
+    return DateFormat('dd/MM/yyyy').add_jm().format(ts);
   }
 }
-
 
 class _CheckCard extends StatelessWidget {
   final String title;

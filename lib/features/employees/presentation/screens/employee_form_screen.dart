@@ -14,6 +14,7 @@ import '../bloc/roles_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 
 enum CommissionType { percentage, fixed }
+
 enum TargetPeriod { monthly, quarterly, yearly }
 
 class EmployeeFormScreen extends StatefulWidget {
@@ -57,7 +58,9 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
   TargetPeriod _targetPeriod = TargetPeriod.monthly;
   String _payPeriodType = 'monthly';
   String _overtimeCalcType = 'hourly_rate';
-  final TextEditingController _overtimeRateController = TextEditingController(text: '150');
+  final TextEditingController _overtimeRateController = TextEditingController(
+    text: '150',
+  );
   List<Employee> _managers = [];
   DateTime? _hireDate;
   Set<int> _weeklyOffDays = {5, 6}; // Default: Friday + Saturday
@@ -89,15 +92,16 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
   Future<int> _getCurrentCurrencyId() async {
     final db = sl<AppDatabase>();
     final currencyCode = sl<CurrencyService>().currencyCode;
-    final row = await (db.select(db.currencies)
-          ..where((c) => c.code.equals(currencyCode)))
-        .getSingleOrNull();
+    final row = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals(currencyCode))).getSingleOrNull();
     if (row != null) {
       return row.id;
     }
 
-    final usd = await (db.select(db.currencies)..where((c) => c.code.equals('USD')))
-        .getSingleOrNull();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingleOrNull();
     return usd?.id ?? 1;
   }
 
@@ -173,12 +177,15 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
     _payPeriodType = employee.payPeriodType;
     _workingDaysController.text = employee.workingDaysPerPeriod.toString();
     _workingHoursController.text = employee.workingHoursPerDay.toString();
-    _absenceRateController.text = (employee.absenceDeductionRateBps / 100).toStringAsFixed(0);
-    _lateRateController.text = (employee.lateDeductionRateBps / 100).toStringAsFixed(0);
-    
+    _absenceRateController.text = (employee.absenceDeductionRateBps / 100)
+        .toStringAsFixed(0);
+    _lateRateController.text = (employee.lateDeductionRateBps / 100)
+        .toStringAsFixed(0);
+
     // Overtime settings
     _overtimeCalcType = employee.overtimeCalcType;
-    _overtimeRateController.text = (employee.overtimeRateBps / 100).toStringAsFixed(0);
+    _overtimeRateController.text = (employee.overtimeRateBps / 100)
+        .toStringAsFixed(0);
 
     // Hire date
     _hireDate = employee.hireDate;
@@ -231,7 +238,8 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
     return MultiBlocProvider(
       providers: [
         BlocProvider(
-          create: (context) => RolesBloc(_repository)..add(const RolesInitialized()),
+          create: (context) =>
+              RolesBloc(_repository)..add(const RolesInitialized()),
         ),
       ],
       child: Scaffold(
@@ -382,9 +390,13 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
                       controller: _salaryController,
                       label: 'employees.salary'.tr(),
                       prefixIcon: Icons.attach_money,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*\.?\d{0,2}'),
+                        ),
                       ],
                     ),
 
@@ -405,9 +417,13 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
                       prefixIcon: _commissionType == CommissionType.percentage
                           ? Icons.percent
                           : Icons.attach_money,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*\.?\d{0,2}'),
+                        ),
                       ],
                     ),
 
@@ -436,9 +452,13 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
                             controller: _targetAmountController,
                             label: 'employees.target_amount'.tr(),
                             prefixIcon: Icons.track_changes,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
                             inputFormatters: [
-                              FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'^\d*\.?\d{0,2}'),
+                              ),
                             ],
                           ),
                         ),
@@ -451,9 +471,14 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
                                 controller: _targetBonusController,
                                 label: 'employees.target_bonus'.tr(),
                                 prefixIcon: Icons.card_giftcard,
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
                                 inputFormatters: [
-                                  FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'^\d*\.?\d{0,2}'),
+                                  ),
                                 ],
                               ),
                               const SizedBox(height: 4),
@@ -583,21 +608,25 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
                       runSpacing: 8,
                       children: [
                         _buildPeriodChip(
-                          label: 'employees.overtime_calc_type_hourly_rate'.tr(),
+                          label: 'employees.overtime_calc_type_hourly_rate'
+                              .tr(),
                           isSelected: _overtimeCalcType == 'hourly_rate',
-                          onTap: () => setState(() => _overtimeCalcType = 'hourly_rate'),
+                          onTap: () =>
+                              setState(() => _overtimeCalcType = 'hourly_rate'),
                           colorScheme: colorScheme,
                         ),
                         _buildPeriodChip(
                           label: 'employees.overtime_calc_type_percentage'.tr(),
                           isSelected: _overtimeCalcType == 'percentage',
-                          onTap: () => setState(() => _overtimeCalcType = 'percentage'),
+                          onTap: () =>
+                              setState(() => _overtimeCalcType = 'percentage'),
                           colorScheme: colorScheme,
                         ),
                         _buildPeriodChip(
                           label: 'employees.overtime_calc_type_fixed'.tr(),
                           isSelected: _overtimeCalcType == 'fixed',
-                          onTap: () => setState(() => _overtimeCalcType = 'fixed'),
+                          onTap: () =>
+                              setState(() => _overtimeCalcType = 'fixed'),
                           colorScheme: colorScheme,
                         ),
                       ],
@@ -608,9 +637,7 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
                       label: 'employees.overtime_rate'.tr(),
                       prefixIcon: Icons.percent,
                       keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                      ],
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       hint: _overtimeCalcType == 'fixed' ? '500' : '150',
                     ),
                     const SizedBox(height: 4),
@@ -618,8 +645,8 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
                       _overtimeCalcType == 'hourly_rate'
                           ? 'employees.overtime_rate_hint_hourly'.tr()
                           : _overtimeCalcType == 'percentage'
-                              ? 'employees.overtime_rate_hint_percentage'.tr()
-                              : 'employees.overtime_rate_hint_fixed'.tr(),
+                          ? 'employees.overtime_rate_hint_percentage'.tr()
+                          : 'employees.overtime_rate_hint_fixed'.tr(),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: colorScheme.onSurfaceVariant,
                         fontSize: 10,
@@ -642,7 +669,9 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
                           context: context,
                           initialDate: _hireDate ?? DateTime.now(),
                           firstDate: DateTime(2000),
-                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                          lastDate: DateTime.now().add(
+                            const Duration(days: 365),
+                          ),
                         );
                         if (picked != null) {
                           setState(() => _hireDate = picked);
@@ -656,7 +685,8 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
                           suffixIcon: _hireDate != null
                               ? IconButton(
                                   icon: const Icon(Icons.clear, size: 18),
-                                  onPressed: () => setState(() => _hireDate = null),
+                                  onPressed: () =>
+                                      setState(() => _hireDate = null),
                                 )
                               : null,
                           border: OutlineInputBorder(
@@ -665,7 +695,7 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
                         ),
                         child: Text(
                           _hireDate != null
-                              ? DateFormat('yyyy-MM-dd').format(_hireDate!)
+                              ? DateFormat('dd/MM/yyyy').format(_hireDate!)
                               : 'employees.select_hire_date'.tr(),
                           style: TextStyle(
                             color: _hireDate != null
@@ -677,8 +707,17 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
                     ),
                     // Warning: hire date is before today
                     if (_hireDate != null &&
-                        DateTime(_hireDate!.year, _hireDate!.month, _hireDate!.day)
-                            .isBefore(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day))) ...[
+                        DateTime(
+                          _hireDate!.year,
+                          _hireDate!.month,
+                          _hireDate!.day,
+                        ).isBefore(
+                          DateTime(
+                            DateTime.now().year,
+                            DateTime.now().month,
+                            DateTime.now().day,
+                          ),
+                        )) ...[
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.all(12),
@@ -690,7 +729,11 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.warning_amber_rounded, color: Colors.amber.shade700, size: 20),
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              color: Colors.amber.shade700,
+                              size: 20,
+                            ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -711,9 +754,7 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
                       label: 'employees.annual_leave_days'.tr(),
                       prefixIcon: Icons.beach_access_outlined,
                       keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                      ],
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       hint: '21',
                     ),
                     const SizedBox(height: 16),
@@ -802,7 +843,8 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
   }) {
     // Auto-enable select-all-on-focus for numeric fields so users can
     // overwrite previous price/amount/qty values with a single tap.
-    final isNumeric = keyboardType == TextInputType.number ||
+    final isNumeric =
+        keyboardType == TextInputType.number ||
         keyboardType == const TextInputType.numberWithOptions(decimal: true);
     return TextFormField(
       controller: controller,
@@ -815,9 +857,7 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
         labelText: label,
         hintText: hint,
         prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -834,9 +874,7 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
       hint: Text(hint),
       decoration: InputDecoration(
         prefixIcon: Icon(prefixIcon),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       ),
       items: items,
       onChanged: onChanged,
@@ -851,7 +889,8 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
             label: 'employees.commission_percentage'.tr(),
             icon: Icons.percent,
             isSelected: _commissionType == CommissionType.percentage,
-            onTap: () => setState(() => _commissionType = CommissionType.percentage),
+            onTap: () =>
+                setState(() => _commissionType = CommissionType.percentage),
             colorScheme: colorScheme,
           ),
         ),
@@ -951,7 +990,9 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
         decoration: BoxDecoration(
-          color: isSelected ? colorScheme.primaryContainer : colorScheme.surfaceContainerHighest,
+          color: isSelected
+              ? colorScheme.primaryContainer
+              : colorScheme.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected ? colorScheme.primary : colorScheme.outline,
@@ -964,14 +1005,18 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
             Icon(
               icon,
               size: 18,
-              color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+              color: isSelected
+                  ? colorScheme.primary
+                  : colorScheme.onSurfaceVariant,
             ),
             const SizedBox(width: 8),
             Flexible(
               child: Text(
                 label,
                 style: TextStyle(
-                  color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                  color: isSelected
+                      ? colorScheme.primary
+                      : colorScheme.onSurfaceVariant,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                 ),
                 overflow: TextOverflow.ellipsis,
@@ -1007,16 +1052,14 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
             if (isSelected)
               Padding(
                 padding: const EdgeInsets.only(right: 4),
-                child: Icon(
-                  Icons.check,
-                  size: 16,
-                  color: colorScheme.primary,
-                ),
+                child: Icon(Icons.check, size: 16, color: colorScheme.primary),
               ),
             Text(
               label,
               style: TextStyle(
-                color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                color: isSelected
+                    ? colorScheme.primary
+                    : colorScheme.onSurfaceVariant,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
@@ -1059,7 +1102,9 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
           selectedColor: colorScheme.errorContainer,
           checkmarkColor: colorScheme.error,
           labelStyle: TextStyle(
-            color: isSelected ? colorScheme.error : colorScheme.onSurfaceVariant,
+            color: isSelected
+                ? colorScheme.error
+                : colorScheme.onSurfaceVariant,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
           ),
         );
@@ -1076,9 +1121,11 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
       // Check for duplicate name
       final name = _nameController.text.trim();
       final existing = await _repository.searchEmployees(name);
-      final duplicate = existing.any((e) =>
-          e.name.trim().toLowerCase() == name.toLowerCase() &&
-          e.id != widget.employeeId);
+      final duplicate = existing.any(
+        (e) =>
+            e.name.trim().toLowerCase() == name.toLowerCase() &&
+            e.id != widget.employeeId,
+      );
       if (duplicate) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1105,9 +1152,11 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
       if (_commissionValueController.text.isNotEmpty) {
         final value = double.tryParse(_commissionValueController.text) ?? 0;
         if (_commissionType == CommissionType.percentage) {
-          commissionRateBps = (value * 100).round(); // Convert percentage to basis points
+          commissionRateBps = (value * 100)
+              .round(); // Convert percentage to basis points
         } else {
-          fixedCommissionCents = (value * 100).round(); // Convert amount to cents
+          fixedCommissionCents = (value * 100)
+              .round(); // Convert amount to cents
         }
       }
 
@@ -1126,7 +1175,8 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
 
       final workingDays = int.tryParse(_workingDaysController.text) ?? 26;
       final workingHours = int.tryParse(_workingHoursController.text) ?? 8;
-      final absenceRate = (int.tryParse(_absenceRateController.text) ?? 100) * 100;
+      final absenceRate =
+          (int.tryParse(_absenceRateController.text) ?? 100) * 100;
       final lateRate = (int.tryParse(_lateRateController.text) ?? 25) * 100;
       final annualLeave = int.tryParse(_annualLeaveController.text) ?? 21;
       final sortedOffDays = _weeklyOffDays.toList()..sort();
@@ -1139,20 +1189,34 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
           name: _nameController.text,
           nameAr: _employee!.nameAr,
           nameFr: _employee!.nameFr,
-          employeeCode: _employeeCodeController.text.isEmpty ? null : _employeeCodeController.text,
+          employeeCode: _employeeCodeController.text.isEmpty
+              ? null
+              : _employeeCodeController.text,
           userId: _employee!.userId,
           email: _emailController.text.isEmpty ? null : _emailController.text,
           phone: _phoneController.text.isEmpty ? null : _phoneController.text,
-          position: _positionController.text.isEmpty ? null : _positionController.text,
-          department: _departmentController.text.isEmpty ? null : _departmentController.text,
+          position: _positionController.text.isEmpty
+              ? null
+              : _positionController.text,
+          department: _departmentController.text.isEmpty
+              ? null
+              : _departmentController.text,
           roleId: _selectedRoleId,
           managerId: _selectedManagerId,
-          salaryCents: salaryCents != null ? Decimal.fromInt(salaryCents) : null,
+          salaryCents: salaryCents != null
+              ? Decimal.fromInt(salaryCents)
+              : null,
           defaultCommissionRateBps: commissionRateBps,
-          fixedCommissionCents: fixedCommissionCents != null ? Decimal.fromInt(fixedCommissionCents) : null,
+          fixedCommissionCents: fixedCommissionCents != null
+              ? Decimal.fromInt(fixedCommissionCents)
+              : null,
           commissionType: commissionTypeStr,
-          salesTargetCents: salesTargetCents != null ? Decimal.fromInt(salesTargetCents) : null,
-          targetBonusCents: targetBonusCents != null ? Decimal.fromInt(targetBonusCents) : null,
+          salesTargetCents: salesTargetCents != null
+              ? Decimal.fromInt(salesTargetCents)
+              : null,
+          targetBonusCents: targetBonusCents != null
+              ? Decimal.fromInt(targetBonusCents)
+              : null,
           targetPeriod: targetPeriodStr,
           payPeriodType: _payPeriodType,
           workingDaysPerPeriod: workingDays,
@@ -1160,7 +1224,8 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
           absenceDeductionRateBps: absenceRate,
           lateDeductionRateBps: lateRate,
           overtimeCalcType: _overtimeCalcType,
-          overtimeRateBps: (int.tryParse(_overtimeRateController.text) ?? 150) * 100,
+          overtimeRateBps:
+              (int.tryParse(_overtimeRateController.text) ?? 150) * 100,
           currencyId: _employee!.currencyId,
           isActive: _employee!.isActive,
           hireDate: _hireDate,
@@ -1184,11 +1249,17 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
         // Create new employee
         await _repository.createEmployee(
           name: _nameController.text,
-          employeeCode: _employeeCodeController.text.isEmpty ? null : _employeeCodeController.text,
+          employeeCode: _employeeCodeController.text.isEmpty
+              ? null
+              : _employeeCodeController.text,
           email: _emailController.text.isEmpty ? null : _emailController.text,
           phone: _phoneController.text.isEmpty ? null : _phoneController.text,
-          position: _positionController.text.isEmpty ? null : _positionController.text,
-          department: _departmentController.text.isEmpty ? null : _departmentController.text,
+          position: _positionController.text.isEmpty
+              ? null
+              : _positionController.text,
+          department: _departmentController.text.isEmpty
+              ? null
+              : _departmentController.text,
           roleId: _selectedRoleId,
           managerId: _selectedManagerId,
           salaryCents: salaryCents,
@@ -1204,7 +1275,8 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
           absenceDeductionRateBps: absenceRate,
           lateDeductionRateBps: lateRate,
           overtimeCalcType: _overtimeCalcType,
-          overtimeRateBps: (int.tryParse(_overtimeRateController.text) ?? 150) * 100,
+          overtimeRateBps:
+              (int.tryParse(_overtimeRateController.text) ?? 150) * 100,
           currencyId: await _getCurrentCurrencyId(),
           hireDate: _hireDate,
           weeklyOffDays: weeklyOffDaysJson,
@@ -1221,9 +1293,9 @@ class _EmployeeFormScreenState extends State<EmployeeFormScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) {

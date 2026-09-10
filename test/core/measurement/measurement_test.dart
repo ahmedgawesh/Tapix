@@ -1,6 +1,7 @@
 import 'package:decimal/decimal.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tapix/core/measurement/measurement.dart';
+import 'package:tapix/core/measurement/measurement_localization.dart';
 import 'package:tapix/core/money/money.dart';
 import 'package:tapix/core/pricing/discount.dart';
 import 'package:tapix/core/pricing/line_item_pricing_engine.dart';
@@ -59,6 +60,34 @@ void main() {
         expect(MeasuredQuantity.majorValue(12, MeasurementType.piece), '12');
       },
     );
+  });
+
+  group('quantity summaries', () {
+    test('never adds stored milli-units to piece counts', () {
+      final items = <({int quantity, String type})>[
+        (quantity: 2, type: 'piece'),
+        (quantity: 2000, type: 'length'),
+        (quantity: 1500, type: 'weight'),
+        (quantity: 750, type: 'volume'),
+      ];
+
+      final totals = aggregateQuantityTotals(
+        items,
+        quantityOf: (item) => item.quantity,
+        measurementTypeOf: (item) => item.type,
+      );
+
+      expect(totals, {
+        'piece': 2,
+        'length': 2000,
+        'weight': 1500,
+        'volume': 750,
+      });
+      expect(
+        MeasuredQuantity.majorValue(totals['length']!, MeasurementType.length),
+        '2',
+      );
+    });
   });
 
   group('measured accounting', () {

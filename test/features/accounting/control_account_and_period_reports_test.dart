@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tapix/core/bloc/realtime_bloc.dart';
 import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/database/daos/accounting_dao.dart';
+import 'package:tapix/core/database/daos/cheque_confirmation_dao.dart';
+import 'package:tapix/core/database/daos/cheque_instrument_dao.dart';
 import 'package:tapix/core/services/party_control_account_balance_service.dart';
 import 'package:tapix/features/accounting/data/datasources/journal_local_datasource.dart';
 import 'package:tapix/features/accounting/data/repositories/accounting_repository.dart';
@@ -18,6 +20,9 @@ Future<void> _insertPostedEntry(
   required DateTime date,
   required int currencyId,
   required List<({int accountId, int debit, int credit})> lines,
+  String entryType = 'opening_balance',
+  String? sourceTable,
+  int? sourceId,
 }) async {
   final debits = lines.fold<int>(0, (sum, line) => sum + line.debit);
   final credits = lines.fold<int>(0, (sum, line) => sum + line.credit);
@@ -29,7 +34,9 @@ Future<void> _insertPostedEntry(
           description: number,
           entryDate: Value(date),
           status: const Value('posted'),
-          entryType: const Value('opening_balance'),
+          entryType: Value(entryType),
+          sourceTable: Value(sourceTable),
+          sourceId: Value(sourceId),
           totalDebitCents: Value(Decimal.fromInt(debits)),
           totalCreditCents: Value(Decimal.fromInt(credits)),
           postedAt: Value(date),
@@ -209,6 +216,186 @@ void main() {
           'Accounts receivable mismatch: GL(journal_lines)=1200, Customers=1201',
         ),
       );
+    },
+  );
+
+  test(
+    'reconciliation assigns account 1030 to the correct party sub-ledger',
+    () async {
+      final now = DateTime.now();
+      final date = now.subtract(const Duration(hours: 1));
+      final customerId = await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(
+              name: 'Dishonoured customer',
+              currencyId: currencyId,
+              openingBalanceCents: Value(Decimal.fromInt(1200)),
+              createdAt: Value(now.subtract(const Duration(days: 1))),
+            ),
+          );
+      final supplierId = await db
+          .into(db.suppliers)
+          .insert(
+            SuppliersCompanion.insert(
+              name: 'Dishonoured supplier',
+              currencyId: currencyId,
+              openingBalanceCents: Value(Decimal.fromInt(1000)),
+              createdAt: Value(now.subtract(const Duration(days: 1))),
+            ),
+          );
+
+      for (final movement in [
+        (type: 'payment', amount: -500),
+        (type: 'cheque_dishonour', amount: 500),
+      ]) {
+        await db
+            .into(db.customerTransactions)
+            .insert(
+              CustomerTransactionsCompanion.insert(
+                customerId: customerId,
+                transactionType: movement.type,
+                amountCents: Decimal.fromInt(movement.amount),
+                currencyId: currencyId,
+                transactionDate: Value(date),
+              ),
+            );
+      }
+      for (final movement in [
+        (type: 'purchase_return', amount: -400),
+        (type: 'cheque_return_settlement', amount: 400),
+        (type: 'cheque_dishonour', amount: -400),
+      ]) {
+        await db
+            .into(db.supplierTransactions)
+            .insert(
+              SupplierTransactionsCompanion.insert(
+                supplierId: supplierId,
+                transactionType: movement.type,
+                amountCents: Decimal.fromInt(movement.amount),
+                currencyId: currencyId,
+                transactionDate: Value(date),
+              ),
+            );
+      }
+
+      final chequeDao = ChequeInstrumentDao(db);
+      final customerChequeId = await chequeDao.create(
+        direction: ChequeDirectionValue.incoming,
+        sourceTable: ChequeSourceTables.sale,
+        sourceId: 201,
+        amountCents: 500,
+        currencyId: currencyId,
+        dueDate: date,
+        partyType: 'customer',
+        partyId: customerId,
+      );
+      final supplierChequeId = await chequeDao.create(
+        direction: ChequeDirectionValue.incoming,
+        sourceTable: ChequeSourceTables.purchaseReturn,
+        sourceId: 202,
+        amountCents: 400,
+        currencyId: currencyId,
+        dueDate: date,
+        partyType: 'supplier',
+        partyId: supplierId,
+      );
+      await chequeDao.writeLifecycle(
+        id: customerChequeId,
+        status: ChequeInstrumentStatus.bounced,
+        bounceReason: 'Rejected',
+      );
+      await chequeDao.writeLifecycle(
+        id: supplierChequeId,
+        status: ChequeInstrumentStatus.bounced,
+        bounceReason: 'Rejected',
+      );
+
+      final ar = await _account(db, '1100');
+      final ap = await _account(db, '2000');
+      final equity = await _account(db, '3000');
+      final clearing = await _account(db, '1020');
+      final dishonoured = await _account(db, '1030');
+      final inventory = await _account(db, '1200');
+      await _insertPostedEntry(
+        db,
+        number: 'JE-OPEN-CUSTOMER',
+        date: date,
+        currencyId: currencyId,
+        lines: [
+          (accountId: ar.id, debit: 1200, credit: 0),
+          (accountId: equity.id, debit: 0, credit: 1200),
+        ],
+      );
+      await _insertPostedEntry(
+        db,
+        number: 'JE-CUSTOMER-CHEQUE',
+        date: date,
+        currencyId: currencyId,
+        lines: [
+          (accountId: clearing.id, debit: 500, credit: 0),
+          (accountId: ar.id, debit: 0, credit: 500),
+        ],
+      );
+      await _insertPostedEntry(
+        db,
+        number: 'JE-CUSTOMER-BOUNCE',
+        date: date,
+        currencyId: currencyId,
+        entryType: 'cheque_dishonour',
+        sourceTable: 'cheque_instruments',
+        sourceId: customerChequeId,
+        lines: [
+          (accountId: dishonoured.id, debit: 500, credit: 0),
+          (accountId: clearing.id, debit: 0, credit: 500),
+        ],
+      );
+      await _insertPostedEntry(
+        db,
+        number: 'JE-OPEN-SUPPLIER',
+        date: date,
+        currencyId: currencyId,
+        lines: [
+          (accountId: equity.id, debit: 1000, credit: 0),
+          (accountId: ap.id, debit: 0, credit: 1000),
+        ],
+      );
+      await _insertPostedEntry(
+        db,
+        number: 'JE-PURCHASE-RETURN',
+        date: date,
+        currencyId: currencyId,
+        lines: [
+          (accountId: ap.id, debit: 400, credit: 0),
+          (accountId: inventory.id, debit: 0, credit: 400),
+        ],
+      );
+      await _insertPostedEntry(
+        db,
+        number: 'JE-SUPPLIER-CHEQUE',
+        date: date,
+        currencyId: currencyId,
+        lines: [
+          (accountId: clearing.id, debit: 400, credit: 0),
+          (accountId: ap.id, debit: 0, credit: 400),
+        ],
+      );
+      await _insertPostedEntry(
+        db,
+        number: 'JE-SUPPLIER-BOUNCE',
+        date: date,
+        currencyId: currencyId,
+        entryType: 'cheque_dishonour',
+        sourceTable: 'cheque_instruments',
+        sourceId: supplierChequeId,
+        lines: [
+          (accountId: dishonoured.id, debit: 400, credit: 0),
+          (accountId: clearing.id, debit: 0, credit: 400),
+        ],
+      );
+
+      final result = await AccountingRepository(db).reconcileBalances();
+      expect(result.isHealthy, isTrue, reason: result.issues.join('\n'));
     },
   );
 

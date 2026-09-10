@@ -36,16 +36,24 @@ class DateRangeSelector extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(LucideIcons.calendar, size: 16, color: colorScheme.primary),
+                Icon(
+                  LucideIcons.calendar,
+                  size: 16,
+                  color: colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
                 Text(
-                  '${DateFormat.yMMMd().format(dateRange.startDate)} — ${DateFormat.yMMMd().format(dateRange.endDate)}',
+                  '${DateFormat('dd/MM/yyyy').format(dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(dateRange.endDate)}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(width: 4),
-                Icon(LucideIcons.chevronDown, size: 14, color: colorScheme.onSurfaceVariant),
+                Icon(
+                  LucideIcons.chevronDown,
+                  size: 14,
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ],
             ),
           ),
@@ -134,8 +142,8 @@ class DateRangeSelector extends StatelessWidget {
       initialDate: dateRange.endDate.isBefore(start)
           ? start
           : dateRange.endDate.isAfter(lastDate)
-              ? lastDate
-              : dateRange.endDate,
+          ? lastDate
+          : dateRange.endDate,
       helpText: 'sales.date_pick_end'.tr(),
       cancelText: 'common.cancel'.tr(),
       confirmText: 'common.save'.tr(),
@@ -143,11 +151,13 @@ class DateRangeSelector extends StatelessWidget {
     );
     if (end == null) return;
 
-    onChanged(ReportDateRange(
-      startDate: start,
-      endDate: ReportDateRange.endOfDay(end),
-      preset: ReportPeriodPreset.custom,
-    ));
+    onChanged(
+      ReportDateRange(
+        startDate: start,
+        endDate: ReportDateRange.endOfDay(end),
+        preset: ReportPeriodPreset.custom,
+      ),
+    );
   }
 }
 

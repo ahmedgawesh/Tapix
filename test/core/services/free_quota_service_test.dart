@@ -17,6 +17,10 @@ class _FakeFeatureGateService extends ChangeNotifier
   bool get isInitialized => true;
 
   @override
+  bool isEnabled(AppFeature feature, {required bool settingEnabled}) =>
+      settingEnabled && canAccess(feature).granted;
+
+  @override
   FeatureAccess canAccess(AppFeature feature) {
     if (!FeatureGateService.requiresPro(feature)) {
       return const FeatureAccess.granted();

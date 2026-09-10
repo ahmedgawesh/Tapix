@@ -48,8 +48,11 @@ void main() {
 
     for (final path in freeFeaturePaths) {
       test('$path is free', () {
-        expect(ProRoutePolicy.requiresPro(path), isFalse,
-            reason: '$path should be reachable on the free tier');
+        expect(
+          ProRoutePolicy.requiresPro(path),
+          isFalse,
+          reason: '$path should be reachable on the free tier',
+        );
       });
     }
   });
@@ -66,8 +69,11 @@ void main() {
 
     for (final path in proNestedPaths) {
       test('$path requires Pro', () {
-        expect(ProRoutePolicy.requiresPro(path), isTrue,
-            reason: '$path is a Pro-only nested route');
+        expect(
+          ProRoutePolicy.requiresPro(path),
+          isTrue,
+          reason: '$path is a Pro-only nested route',
+        );
       });
     }
   });
@@ -94,10 +100,12 @@ void main() {
       '/client-session',
       '/financial-management',
       '/financial-management/chart-of-accounts',
+      '/cheques',
       '/accounting',
       '/accounting/journal-entries',
       '/audit',
       '/barcode-designer',
+      '/promotions',
     ];
 
     for (final path in proPaths) {
@@ -109,12 +117,18 @@ void main() {
 
   group('ProRoutePolicy — featureFor mapping', () {
     test('barcode scan vs print asymmetry', () {
-      expect(ProRoutePolicy.featureFor('/barcode-scanner'),
-          AppFeature.barcodeScan);
-      expect(ProRoutePolicy.featureFor('/barcode-designer'),
-          AppFeature.barcodePrint);
-      expect(ProRoutePolicy.featureFor('/products/barcode-design'),
-          AppFeature.barcodePrint);
+      expect(
+        ProRoutePolicy.featureFor('/barcode-scanner'),
+        AppFeature.barcodeScan,
+      );
+      expect(
+        ProRoutePolicy.featureFor('/barcode-designer'),
+        AppFeature.barcodePrint,
+      );
+      expect(
+        ProRoutePolicy.featureFor('/products/barcode-design'),
+        AppFeature.barcodePrint,
+      );
     });
 
     test('sales returns override beats sales free prefix', () {
@@ -124,8 +138,10 @@ void main() {
 
     test('settings sub-route overrides', () {
       expect(ProRoutePolicy.featureFor('/settings'), AppFeature.basicSettings);
-      expect(ProRoutePolicy.featureFor('/settings/backup'),
-          AppFeature.backupRestore);
+      expect(
+        ProRoutePolicy.featureFor('/settings/backup'),
+        AppFeature.backupRestore,
+      );
     });
 
     test('manager and cashier shift routes use the same Pro feature', () {

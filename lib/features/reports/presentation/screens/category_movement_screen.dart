@@ -1034,7 +1034,7 @@ class _CatMovementCard extends StatelessWidget {
                       ),
                       const Spacer(),
                       Text(
-                        DateFormat.yMMMd().format(entry.date),
+                        DateFormat('dd/MM/yyyy').format(entry.date),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),

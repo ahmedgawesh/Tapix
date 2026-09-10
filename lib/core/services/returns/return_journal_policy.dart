@@ -28,7 +28,8 @@ import 'posted_return.dart';
 ///     Dr  2100 VAT Payable                    taxCents       (if tax > 0)
 ///       Cr  routing-account                   totalCents
 ///         - cash                              → 1000 Cash
-///         - bank / cheque / card / transfer   → 1010 Bank
+///         - bank / card / transfer            → 1010 Bank
+///         - cheque                            → 1100 AR (pending refund)
 ///         - credit + linked invoice           → 1100 AR
 ///         - credit + unlinked + party present → 2400 Customer Credit Liab.
 ///         - credit + no party                 → REJECTED (defense-in-depth)
@@ -46,7 +47,8 @@ import 'posted_return.dart';
 ///   Lines (financial):
 ///     Dr  routing-account                     totalCents
 ///       - cash                                → 1000 Cash
-///       - bank / cheque / card / transfer     → 1010 Bank
+///       - bank / card / transfer              → 1010 Bank
+///       - cheque                              → 2000 AP (pending collection)
 ///       - credit                              → 2000 Accounts Payable
 ///       Cr  1300 VAT Receivable               taxCents       (if tax > 0)
 ///       Cr  4100 Purchase Return Adjustment   netCents       (contra-COGS)
@@ -115,12 +117,14 @@ class ReturnJournalPolicy {
   // ── Sale-side ─────────────────────────────────────────────────────────
 
   Future<JournalEntryData> _buildSaleReturn(PostedReturn ret) async {
-    // Defense-in-depth: a credit-refund sale return MUST have a customer.
+    // Defense-in-depth: a deferred sale return MUST have a customer.
     // Without a party we have no way to track who is owed (1100 AR or 2400
     // Customer Credit Liability would become an orphaned balance).
-    if (ret.refund == RefundChannel.credit && ret.partyId == null) {
+    if ((ret.refund == RefundChannel.credit ||
+            ret.refund == RefundChannel.cheque) &&
+        ret.partyId == null) {
       throw AccountingException(
-        'Sale Return #${ret.returnId}: refund=credit requires a customer; '
+        'Sale Return #${ret.returnId}: deferred refund requires a customer; '
         'no partyId was provided.',
       );
     }
@@ -138,77 +142,90 @@ class ReturnJournalPolicy {
       final tax = ret.taxCents;
 
       if (net > 0) {
-        lines.add(JournalEntryLineData(
-          accountId: salesRACode,
-          debitCents: net,
-          creditCents: 0,
-          currencyId: ret.currencyId,
-          description:
-              'Sales return (contra-revenue) — Sale Return #${ret.returnId}',
-        ));
+        lines.add(
+          JournalEntryLineData(
+            accountId: salesRACode,
+            debitCents: net,
+            creditCents: 0,
+            currencyId: ret.currencyId,
+            description:
+                'Sales return (contra-revenue) — Sale Return #${ret.returnId}',
+          ),
+        );
       }
 
       if (tax > 0) {
         final vatPayableId = await _requireAccountId(_vatPayableCode);
-        lines.add(JournalEntryLineData(
-          accountId: vatPayableId,
-          debitCents: tax,
-          creditCents: 0,
-          currencyId: ret.currencyId,
-          description:
-              'Output VAT reversed — Sale Return #${ret.returnId}',
-        ));
+        lines.add(
+          JournalEntryLineData(
+            accountId: vatPayableId,
+            debitCents: tax,
+            creditCents: 0,
+            currencyId: ret.currencyId,
+            description: 'Output VAT reversed — Sale Return #${ret.returnId}',
+          ),
+        );
       }
 
-      lines.add(JournalEntryLineData(
-        accountId: settlementId,
-        debitCents: 0,
-        creditCents: ret.totalCents,
-        currencyId: ret.currencyId,
-        description: _saleSettlementDescription(ret),
-      ));
+      lines.add(
+        JournalEntryLineData(
+          accountId: settlementId,
+          debitCents: 0,
+          creditCents: ret.totalCents,
+          currencyId: ret.currencyId,
+          description: _saleSettlementDescription(ret),
+        ),
+      );
     }
 
     // ── Inventory leg: restock → 1200 ──
     final restockCost = ret.restockableInventoryCostCents;
     if (restockCost > 0) {
       final inventoryId = await _requireAccountId(_inventoryCode);
-      lines.add(JournalEntryLineData(
-        accountId: inventoryId,
-        debitCents: restockCost,
-        creditCents: 0,
-        currencyId: ret.currencyId,
-        description: 'Inventory restored — Sale Return #${ret.returnId}',
-      ));
-      lines.add(JournalEntryLineData(
-        accountId: cogsId,
-        debitCents: 0,
-        creditCents: restockCost,
-        currencyId: ret.currencyId,
-        description: 'COGS reversed — Sale Return #${ret.returnId}',
-      ));
+      lines.add(
+        JournalEntryLineData(
+          accountId: inventoryId,
+          debitCents: restockCost,
+          creditCents: 0,
+          currencyId: ret.currencyId,
+          description: 'Inventory restored — Sale Return #${ret.returnId}',
+        ),
+      );
+      lines.add(
+        JournalEntryLineData(
+          accountId: cogsId,
+          debitCents: 0,
+          creditCents: restockCost,
+          currencyId: ret.currencyId,
+          description: 'COGS reversed — Sale Return #${ret.returnId}',
+        ),
+      );
     }
 
     // ── Inventory leg: shrinkage → 5800 ──
     final shrinkageCost = ret.shrinkageInventoryCostCents;
     if (shrinkageCost > 0) {
       final shrinkageId = await _requireAccountId(_shrinkageCode);
-      lines.add(JournalEntryLineData(
-        accountId: shrinkageId,
-        debitCents: shrinkageCost,
-        creditCents: 0,
-        currencyId: ret.currencyId,
-        description:
-            'Inventory shrinkage (damaged/scrap) — Sale Return #${ret.returnId}',
-      ));
-      lines.add(JournalEntryLineData(
-        accountId: cogsId,
-        debitCents: 0,
-        creditCents: shrinkageCost,
-        currencyId: ret.currencyId,
-        description:
-            'COGS reversed (write-off) — Sale Return #${ret.returnId}',
-      ));
+      lines.add(
+        JournalEntryLineData(
+          accountId: shrinkageId,
+          debitCents: shrinkageCost,
+          creditCents: 0,
+          currencyId: ret.currencyId,
+          description:
+              'Inventory shrinkage (damaged/scrap) — Sale Return #${ret.returnId}',
+        ),
+      );
+      lines.add(
+        JournalEntryLineData(
+          accountId: cogsId,
+          debitCents: 0,
+          creditCents: shrinkageCost,
+          currencyId: ret.currencyId,
+          description:
+              'COGS reversed (write-off) — Sale Return #${ret.returnId}',
+        ),
+      );
     }
 
     return JournalEntryData(
@@ -236,35 +253,41 @@ class ReturnJournalPolicy {
       final net = ret.netCents;
       final tax = ret.taxCents;
 
-      lines.add(JournalEntryLineData(
-        accountId: settlementId,
-        debitCents: ret.totalCents,
-        creditCents: 0,
-        currencyId: ret.currencyId,
-        description: _purchaseSettlementDescription(ret),
-      ));
+      lines.add(
+        JournalEntryLineData(
+          accountId: settlementId,
+          debitCents: ret.totalCents,
+          creditCents: 0,
+          currencyId: ret.currencyId,
+          description: _purchaseSettlementDescription(ret),
+        ),
+      );
 
       if (tax > 0) {
         final vatReceivableId = await _requireAccountId(_vatReceivableCode);
-        lines.add(JournalEntryLineData(
-          accountId: vatReceivableId,
-          debitCents: 0,
-          creditCents: tax,
-          currencyId: ret.currencyId,
-          description:
-              'Input VAT reversed — Purchase Return #${ret.returnId}',
-        ));
+        lines.add(
+          JournalEntryLineData(
+            accountId: vatReceivableId,
+            debitCents: 0,
+            creditCents: tax,
+            currencyId: ret.currencyId,
+            description:
+                'Input VAT reversed — Purchase Return #${ret.returnId}',
+          ),
+        );
       }
 
       if (net > 0) {
-        lines.add(JournalEntryLineData(
-          accountId: purchaseRAId,
-          debitCents: 0,
-          creditCents: net,
-          currencyId: ret.currencyId,
-          description:
-              'Purchase return (contra-COGS) — Purchase Return #${ret.returnId}',
-        ));
+        lines.add(
+          JournalEntryLineData(
+            accountId: purchaseRAId,
+            debitCents: 0,
+            creditCents: net,
+            currencyId: ret.currencyId,
+            description:
+                'Purchase return (contra-COGS) — Purchase Return #${ret.returnId}',
+          ),
+        );
       }
     }
 
@@ -298,44 +321,52 @@ class ReturnJournalPolicy {
     final sendBackCost = ret.sendBackInventoryCostCents;
 
     if (restockCost > 0) {
-      lines.add(JournalEntryLineData(
-        accountId: purchaseRAId,
-        debitCents: restockCost,
-        creditCents: 0,
-        currencyId: ret.currencyId,
-        description:
-            'Inventory cost removed (offsets purchase return) — '
-            'Purchase Return #${ret.returnId}',
-      ));
-      lines.add(JournalEntryLineData(
-        accountId: inventoryId,
-        debitCents: 0,
-        creditCents: restockCost,
-        currencyId: ret.currencyId,
-        description: 'Inventory decreased — Purchase Return #${ret.returnId}',
-      ));
+      lines.add(
+        JournalEntryLineData(
+          accountId: purchaseRAId,
+          debitCents: restockCost,
+          creditCents: 0,
+          currencyId: ret.currencyId,
+          description:
+              'Inventory cost removed (offsets purchase return) — '
+              'Purchase Return #${ret.returnId}',
+        ),
+      );
+      lines.add(
+        JournalEntryLineData(
+          accountId: inventoryId,
+          debitCents: 0,
+          creditCents: restockCost,
+          currencyId: ret.currencyId,
+          description: 'Inventory decreased — Purchase Return #${ret.returnId}',
+        ),
+      );
     }
 
     if (sendBackCost > 0) {
       final ritId = await _requireAccountId(_returnsInTransitCode);
-      lines.add(JournalEntryLineData(
-        accountId: ritId,
-        debitCents: sendBackCost,
-        creditCents: 0,
-        currencyId: ret.currencyId,
-        description:
-            'Goods in transit (supplier has not yet issued credit) — '
-            'Purchase Return #${ret.returnId}',
-      ));
-      lines.add(JournalEntryLineData(
-        accountId: inventoryId,
-        debitCents: 0,
-        creditCents: sendBackCost,
-        currencyId: ret.currencyId,
-        description:
-            'Inventory decreased (goods left premises) — '
-            'Purchase Return #${ret.returnId}',
-      ));
+      lines.add(
+        JournalEntryLineData(
+          accountId: ritId,
+          debitCents: sendBackCost,
+          creditCents: 0,
+          currencyId: ret.currencyId,
+          description:
+              'Goods in transit (supplier has not yet issued credit) — '
+              'Purchase Return #${ret.returnId}',
+        ),
+      );
+      lines.add(
+        JournalEntryLineData(
+          accountId: inventoryId,
+          debitCents: 0,
+          creditCents: sendBackCost,
+          currencyId: ret.currencyId,
+          description:
+              'Inventory decreased (goods left premises) — '
+              'Purchase Return #${ret.returnId}',
+        ),
+      );
     }
 
     return JournalEntryData(
@@ -355,8 +386,11 @@ class ReturnJournalPolicy {
       case RefundChannel.cash:
         return _requireAccountId(_cashCode);
       case RefundChannel.bank:
-      case RefundChannel.cheque:
         return _requireAccountId(_bankCode);
+      case RefundChannel.cheque:
+        // Build the base return against AR. Registering the physical cheque
+        // immediately reclassifies that obligation to 2020.
+        return _requireAccountId(_arCode);
       case RefundChannel.credit:
         // Linked → reduce existing AR. Unlinked → by default park in 2400
         // Customer Credit Liability so AR isn't created out of thin air
@@ -376,8 +410,10 @@ class ReturnJournalPolicy {
       case RefundChannel.cash:
         return _requireAccountId(_cashCode);
       case RefundChannel.bank:
-      case RefundChannel.cheque:
         return _requireAccountId(_bankCode);
+      case RefundChannel.cheque:
+        // Keep the supplier refund receivable in AP until collection.
+        return _requireAccountId(_apCode);
       case RefundChannel.credit:
         return _requireAccountId(_apCode);
     }
@@ -399,14 +435,22 @@ class ReturnJournalPolicy {
   String _saleDescription(PostedReturn ret) {
     final base = ret.referenceCode ?? 'Sale Return #${ret.returnId}';
     final method = _refundMethodLabel(
-        ret.refund, ReturnSide.sale, ret.link, ret.creditToReceivable);
+      ret.refund,
+      ReturnSide.sale,
+      ret.link,
+      ret.creditToReceivable,
+    );
     return '$base — $method';
   }
 
   String _purchaseDescription(PostedReturn ret) {
     final base = ret.referenceCode ?? 'Purchase Return #${ret.returnId}';
     final method = _refundMethodLabel(
-        ret.refund, ReturnSide.purchase, ret.link, ret.creditToReceivable);
+      ret.refund,
+      ReturnSide.purchase,
+      ret.link,
+      ret.creditToReceivable,
+    );
     return '$base — $method';
   }
 
@@ -417,7 +461,7 @@ class ReturnJournalPolicy {
       case RefundChannel.bank:
         return 'Bank refund — Sale Return #${ret.returnId}';
       case RefundChannel.cheque:
-        return 'Cheque refund — Sale Return #${ret.returnId}';
+        return 'Pending outgoing cheque — Sale Return #${ret.returnId}';
       case RefundChannel.credit:
         if (ret.link.isLinked || ret.creditToReceivable) {
           return 'AR reduced — Sale Return #${ret.returnId}';
@@ -433,7 +477,7 @@ class ReturnJournalPolicy {
       case RefundChannel.bank:
         return 'Bank refund received — Purchase Return #${ret.returnId}';
       case RefundChannel.cheque:
-        return 'Cheque refund received — Purchase Return #${ret.returnId}';
+        return 'Pending incoming cheque — Purchase Return #${ret.returnId}';
       case RefundChannel.credit:
         return 'AP reduced — Purchase Return #${ret.returnId}';
     }

@@ -74,7 +74,9 @@ class _ExpenseFormContentState extends State<_ExpenseFormContent> {
     _isEditing = true;
     _descriptionController.text = expense.description;
     final cs = sl<CurrencyService>();
-    _amountController.text = cs.centsToDecimalString(expense.amountCents.toBigInt().toInt());
+    _amountController.text = cs.centsToDecimalString(
+      expense.amountCents.toBigInt().toInt(),
+    );
     _selectedCategoryId = expense.categoryId;
     _selectedDate = expense.expenseDate;
     setState(() {});
@@ -92,19 +94,20 @@ class _ExpenseFormContentState extends State<_ExpenseFormContent> {
     // Phase 8 — MoneyInputParser is the SoT for text→cents conversion;
     // currency-aware (e.g. 3-digit JOD/KWD) and Decimal-based (no
     // IEEE-754 cent-drop on edges like `99999.99 * 100`).
-    final amountCentsInt =
-        sl<MoneyInputParser>().parseOrZero(_amountController.text);
+    final amountCentsInt = sl<MoneyInputParser>().parseOrZero(
+      _amountController.text,
+    );
     final amountCents = Decimal.fromInt(amountCentsInt);
 
     context.read<ExpenseFormBloc>().add(
-          ExpenseFormSubmitRequested(
-            categoryId: _selectedCategoryId!,
-            description: _descriptionController.text.trim(),
-            amountCents: amountCents,
-            currencyId: 1, // Default currency
-            expenseDate: _selectedDate,
-          ),
-        );
+      ExpenseFormSubmitRequested(
+        categoryId: _selectedCategoryId!,
+        description: _descriptionController.text.trim(),
+        amountCents: amountCents,
+        currencyId: 1, // Default currency
+        expenseDate: _selectedDate,
+      ),
+    );
   }
 
   Future<void> _pickDate() async {
@@ -165,9 +168,7 @@ class _ExpenseFormContentState extends State<_ExpenseFormContent> {
               }
             },
           ),
-          title: Text(
-            isEdit ? 'expenses.edit'.tr() : 'expenses.add'.tr(),
-          ),
+          title: Text(isEdit ? 'expenses.edit'.tr() : 'expenses.add'.tr()),
         ),
         body: BlocBuilder<ExpenseFormBloc, RealtimeState<ExpenseFormData>>(
           builder: (context, formState) {
@@ -175,7 +176,8 @@ class _ExpenseFormContentState extends State<_ExpenseFormContent> {
               return const Center(child: CircularProgressIndicator());
             }
 
-            final isSubmitting = formState is RealtimeSuccess<ExpenseFormData> &&
+            final isSubmitting =
+                formState is RealtimeSuccess<ExpenseFormData> &&
                 formState.data.isSubmitting;
 
             return SingleChildScrollView(
@@ -190,10 +192,13 @@ class _ExpenseFormContentState extends State<_ExpenseFormContent> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         // Category selector
-                        BlocBuilder<ExpenseCategoriesBloc,
-                            RealtimeState<List<ExpenseCategory>>>(
+                        BlocBuilder<
+                          ExpenseCategoriesBloc,
+                          RealtimeState<List<ExpenseCategory>>
+                        >(
                           builder: (context, catState) {
-                            final categories = catState
+                            final categories =
+                                catState
                                     is RealtimeSuccess<List<ExpenseCategory>>
                                 ? catState.data
                                 : <ExpenseCategory>[];
@@ -209,10 +214,12 @@ class _ExpenseFormContentState extends State<_ExpenseFormContent> {
                                 ),
                               ),
                               items: categories
-                                  .map((cat) => DropdownMenuItem(
-                                        value: cat.id,
-                                        child: Text(cat.name),
-                                      ))
+                                  .map(
+                                    (cat) => DropdownMenuItem(
+                                      value: cat.id,
+                                      child: Text(cat.name),
+                                    ),
+                                  )
                                   .toList(),
                               onChanged: (value) {
                                 setState(() => _selectedCategoryId = value);
@@ -276,13 +283,11 @@ class _ExpenseFormContentState extends State<_ExpenseFormContent> {
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : Icon(isEdit
-                                  ? LucideIcons.save
-                                  : LucideIcons.plus),
+                              : Icon(
+                                  isEdit ? LucideIcons.save : LucideIcons.plus,
+                                ),
                           label: Text(
-                            isEdit
-                                ? 'common.save'.tr()
-                                : 'expenses.add'.tr(),
+                            isEdit ? 'common.save'.tr() : 'expenses.add'.tr(),
                           ),
                           style: FilledButton.styleFrom(
                             minimumSize: const ui.Size(double.infinity, 52),
@@ -312,9 +317,7 @@ class _ExpenseFormContentState extends State<_ExpenseFormContent> {
         labelText: 'expenses.amount'.tr(),
         prefixIcon: const Icon(LucideIcons.banknote),
         suffixText: cs.currencySymbol,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       ),
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       onTap: () => selectAllText(_amountController),
@@ -336,7 +339,7 @@ class _ExpenseFormContentState extends State<_ExpenseFormContent> {
 
   Widget _buildDateField() {
     final dateStr =
-        '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
+        '${_selectedDate.day.toString().padLeft(2, '0')}/${_selectedDate.month.toString().padLeft(2, '0')}/${_selectedDate.year}';
 
     return InkWell(
       onTap: _pickDate,
@@ -345,9 +348,7 @@ class _ExpenseFormContentState extends State<_ExpenseFormContent> {
         decoration: InputDecoration(
           labelText: 'expenses.date'.tr(),
           prefixIcon: const Icon(LucideIcons.calendar),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         ),
         child: Text(dateStr),
       ),

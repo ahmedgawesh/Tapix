@@ -3,8 +3,13 @@ import 'dart:developer' as developer;
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart' as db;
+import '../../../../core/database/daos/cheque_confirmation_dao.dart';
+import '../../../../core/database/daos/cheque_instrument_dao.dart';
+import '../../../../core/payments/checkout_settlement.dart';
+import '../../../../core/payments/return_settlement_service.dart';
 import '../../../../core/pricing/pricing_snapshot.dart';
 import '../../../../core/services/audit_log_service.dart';
+import '../../../../core/services/cheque_source_void_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
 import '../../../../core/services/return_calculation_service.dart';
 import '../../../../core/services/void_impact_analyzer.dart';
@@ -89,7 +94,21 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     DateTime? purchaseDate,
     DateTime? dueDate,
     bool taxInclusiveAtPost = false,
+    List<CheckoutPaymentAllocation> initialPayments = const [],
   }) async {
+    final settlement = CheckoutSettlement(initialPayments);
+    final isPureCheque =
+        initialPayments.isEmpty &&
+        (paymentMethod == 'cheque' || paymentMethod == 'check');
+    if (initialPayments.isNotEmpty) {
+      settlement.validate(invoiceTotalCents: totalCents.toBigInt().toInt());
+      if (settlement.totalSettledCents != paidAmountCents.toBigInt().toInt()) {
+        throw ArgumentError('settlement_total_mismatch');
+      }
+    }
+    if (isPureCheque && dueDate == null) {
+      throw ArgumentError('cheque_due_date_required');
+    }
     // Purchase number is generated INSIDE the transaction (see below)
     // to prevent race conditions when two purchases are created concurrently.
 
@@ -101,7 +120,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       discountCents: Value(discountCents),
       taxCents: Value(taxCents),
       totalCents: Value(totalCents),
-      paidAmountCents: Value(paidAmountCents),
+      paidAmountCents: Value(isPureCheque ? Decimal.zero : paidAmountCents),
       status: const Value('draft'),
       paymentMethod: Value(paymentMethod),
       supplierInvoiceRef: Value(supplierInvoiceRef),
@@ -153,6 +172,43 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
             companionWithNumber,
             itemCompanions,
           );
+          for (final allocation in initialPayments) {
+            if (allocation.isCheque) {
+              await ChequeInstrumentDao(_db).create(
+                direction: ChequeDirectionValue.outgoing,
+                sourceTable: ChequeSourceTables.purchase,
+                sourceId: id,
+                amountCents: allocation.amountCents,
+                currencyId: currencyId,
+                dueDate: allocation.dueDate!,
+                partyType: 'supplier',
+                partyId: supplierId,
+                chequeNumber: allocation.reference,
+                bankName: allocation.bankName,
+                issueDate: allocation.issueDate ?? purchaseDate,
+                userId: userId,
+                note: allocation.note,
+              );
+              continue;
+            }
+            await _db
+                .into(_db.purchasePayments)
+                .insert(
+                  db.PurchasePaymentsCompanion.insert(
+                    purchaseId: id,
+                    amountCents: Decimal.fromInt(allocation.amountCents),
+                    currencyId: currencyId,
+                    paymentMethod: allocation.method,
+                    reference: Value(allocation.reference),
+                    notes: Value(
+                      allocation.note ?? 'Initial invoice settlement',
+                    ),
+                    paymentDate: Value(
+                      allocation.issueDate ?? purchaseDate ?? DateTime.now(),
+                    ),
+                  ),
+                );
+          }
           return id;
         });
         break; // success
@@ -300,6 +356,11 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     // Read purchase data BEFORE posting (need totalCents, paidAmountCents, etc.)
     final purchase = await _datasource.getPurchaseById(purchaseId);
     if (purchase == null) throw Exception('Purchase not found');
+    if ((purchase.paymentMethod == 'cheque' ||
+            purchase.paymentMethod == 'check') &&
+        purchase.dueDate == null) {
+      throw StateError('cheque_due_date_required');
+    }
 
     // Post purchase (updates stock, supplier balance, supplier transactions)
     await _datasource.postPurchase(purchaseId);
@@ -315,16 +376,60 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
 
     final inventoryNetCents = await _db.purchaseDao
         .computePurchaseInventoryNetCents(purchaseId);
+    final payments = await _datasource.getPurchasePayments(purchaseId);
+    final useStructuredSettlement =
+        purchase.paymentMethod == 'mixed' ||
+        purchase.paymentMethod == 'cheque' ||
+        purchase.paymentMethod == 'check';
     await _journalService.recordPurchaseJournalEntry(
       purchaseId: purchaseId,
       totalCents: purchase.totalCents.toBigInt().toInt(),
-      paidAmountCents: purchase.paidAmountCents.toBigInt().toInt(),
+      paidAmountCents: useStructuredSettlement
+          ? 0
+          : purchase.paidAmountCents.toBigInt().toInt(),
       currencyId: purchase.currencyId,
       taxCents: purchase.taxCents.toBigInt().toInt(),
       inventoryNetCents: inventoryNetCents,
-      paymentMethod: purchase.paymentMethod,
+      paymentMethod: useStructuredSettlement
+          ? 'credit'
+          : purchase.paymentMethod,
       userId: userId,
     );
+
+    if (useStructuredSettlement) {
+      for (final payment in payments) {
+        await _journalService.recordSupplierPaymentJournalEntry(
+          paymentId: payment.id,
+          amountCents: payment.amountCents.toBigInt().toInt(),
+          currencyId: payment.currencyId,
+          paymentMethod: payment.paymentMethod,
+          userId: userId,
+        );
+      }
+    }
+
+    if ((purchase.paymentMethod == 'cheque' ||
+            purchase.paymentMethod == 'check') &&
+        purchase.dueDate != null) {
+      final instrumentDao = ChequeInstrumentDao(_db);
+      final existingInstruments = await instrumentDao.getBySource(
+        sourceTable: ChequeSourceTables.purchase,
+        sourceId: purchaseId,
+      );
+      if (existingInstruments.isEmpty) {
+        await instrumentDao.ensurePrimary(
+          direction: ChequeDirectionValue.outgoing,
+          sourceTable: ChequeSourceTables.purchase,
+          sourceId: purchaseId,
+          amountCents: purchase.totalCents.toBigInt().toInt(),
+          currencyId: purchase.currencyId,
+          dueDate: purchase.dueDate!,
+          partyType: 'supplier',
+          partyId: purchase.supplierId,
+          userId: userId,
+        );
+      }
+    }
 
     final actualInventoryValue = await _db.purchaseDao
         .computePurchaseInventoryValueAtPostCents(purchaseId);
@@ -365,6 +470,33 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     if (report.hasBlockers) {
       throw VoidBlockedByImpactException(report);
     }
+
+    final userId = await _currentUserId();
+    final linkedReturns =
+        await (_db.select(_db.purchaseReturns)..where(
+              (row) =>
+                  row.purchaseId.equals(purchaseId) &
+                  row.status.isNotValue('voided'),
+            ))
+            .get();
+    for (final purchaseReturn in linkedReturns) {
+      await ChequeSourceVoidService.voidForSource(
+        db: _db,
+        journalService: _journalService,
+        sourceTable: ChequeSourceTables.purchaseReturn,
+        sourceId: purchaseReturn.id,
+        reason: 'Purchase voided — linked return cheque cancelled',
+        userId: userId,
+      );
+    }
+    await ChequeSourceVoidService.voidForSource(
+      db: _db,
+      journalService: _journalService,
+      sourceTable: ChequeSourceTables.purchase,
+      sourceId: purchaseId,
+      reason: 'Purchase voided — cheque cancelled',
+      userId: userId,
+    );
 
     // Void journal entries BEFORE voiding the purchase.
     // This MUST succeed — if it fails the entire void is aborted to prevent GL drift.
@@ -615,11 +747,20 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     bool allowNegativeStock = false,
     String? idempotencyKey,
     bool taxInclusiveAtPost = false,
+    List<CheckoutPaymentAllocation> settlementAllocations = const [],
   }) async {
+    final structuredSettlement = settlementAllocations.isNotEmpty;
+    final effectiveRefundMethod = structuredSettlement ? 'mixed' : refundMethod;
+    final isChequeRefund =
+        !structuredSettlement &&
+        (effectiveRefundMethod == 'cheque' || effectiveRefundMethod == 'check');
+    if (isChequeRefund && dueDate == null) {
+      throw ArgumentError('cheque_due_date_required');
+    }
     final returnNumber = await generateReturnNumber();
 
     // Phase 14.0 — only persist dueDate when refund method is cheque.
-    final effectiveDueDate = refundMethod == 'cheque' ? dueDate : null;
+    final effectiveDueDate = isChequeRefund ? dueDate : null;
 
     // ATOMIC: Wrap return creation, stock deduction, and journal entries
     // in a single transaction.
@@ -698,7 +839,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
         currencyId: Value(currencyId),
         status: const Value('draft'),
         dispositionType: Value(dispositionType),
-        refundMethod: Value(refundMethod),
+        refundMethod: Value(effectiveRefundMethod),
         reason: Value(reason),
         returnDate: Value(returnDate ?? DateTime.now()),
         dueDate: Value(effectiveDueDate),
@@ -756,10 +897,40 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
         taxCents: postedTaxCents,
         inventoryCostCents: inventoryCostCents,
         currencyId: currencyId,
-        refundMethod: refundMethod,
+        refundMethod: structuredSettlement ? 'credit' : effectiveRefundMethod,
         userId: userId,
         postingDate: returnDate ?? DateTime.now(),
       );
+
+      if (structuredSettlement) {
+        await ReturnSettlementService.apply(
+          db: _db,
+          journalService: _journalService,
+          side: ReturnSettlementSide.purchase,
+          sourceTable: ChequeSourceTables.purchaseReturn,
+          sourceId: id,
+          partyId: originalPurchase.supplierId,
+          totalCents: postedTotalCents,
+          currencyId: currencyId,
+          allocations: settlementAllocations,
+          documentDate: returnDate ?? DateTime.now(),
+          userId: userId,
+        );
+      } else if (effectiveDueDate != null &&
+          (effectiveRefundMethod == 'cheque' ||
+              effectiveRefundMethod == 'check')) {
+        await ChequeInstrumentDao(_db).ensurePrimary(
+          direction: ChequeDirectionValue.incoming,
+          sourceTable: ChequeSourceTables.purchaseReturn,
+          sourceId: id,
+          amountCents: postedTotalCents,
+          currencyId: currencyId,
+          dueDate: effectiveDueDate,
+          partyType: 'supplier',
+          partyId: originalPurchase.supplierId,
+          userId: userId,
+        );
+      }
 
       return id;
     });
@@ -803,16 +974,33 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
 
   @override
   Future<void> voidPurchaseReturn(int returnId) async {
-    // Void journal entries BEFORE voiding the return.
-    // This MUST succeed — if it fails the entire void is aborted to prevent GL drift.
-    await _journalService.voidJournalEntriesForSource(
-      sourceTable: 'purchase_returns',
-      sourceId: returnId,
-      reason: 'Purchase return voided',
-      userId: await _currentUserId(),
-    );
-
-    await _datasource.voidPurchaseReturn(returnId);
+    final userId = await _currentUserId();
+    await _db.transaction(() async {
+      await ChequeSourceVoidService.voidForSource(
+        db: _db,
+        journalService: _journalService,
+        sourceTable: ChequeSourceTables.purchaseReturn,
+        sourceId: returnId,
+        reason: 'Purchase return voided — cheque cancelled',
+        userId: userId,
+      );
+      await ReturnSettlementService.voidImmediate(
+        db: _db,
+        journalService: _journalService,
+        side: ReturnSettlementSide.purchase,
+        sourceTable: ChequeSourceTables.purchaseReturn,
+        sourceId: returnId,
+        reason: 'Purchase return settlement voided',
+        userId: userId,
+      );
+      await _journalService.voidJournalEntriesForSource(
+        sourceTable: 'purchase_returns',
+        sourceId: returnId,
+        reason: 'Purchase return voided',
+        userId: userId,
+      );
+      await _datasource.voidPurchaseReturn(returnId);
+    });
 
     await _auditService.logVoid(
       entityType: 'purchase_return',

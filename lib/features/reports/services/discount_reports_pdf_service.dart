@@ -24,7 +24,8 @@ class DiscountReportsPdfService {
     final pdf = await _buildByProductPdf(context, items, data);
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'DiscountByProduct_${DateFormat('yyyyMMdd').format(DateTime.now())}',
+      name:
+          'DiscountByProduct_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
   }
 
@@ -37,7 +38,8 @@ class DiscountReportsPdfService {
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'DiscountByProduct_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      filename:
+          'DiscountByProduct_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
   }
 
@@ -49,7 +51,8 @@ class DiscountReportsPdfService {
     final pdf = await _buildByCategoryPdf(context, items, data);
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'DiscountByCategory_${DateFormat('yyyyMMdd').format(DateTime.now())}',
+      name:
+          'DiscountByCategory_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
   }
 
@@ -62,7 +65,8 @@ class DiscountReportsPdfService {
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'DiscountByCategory_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      filename:
+          'DiscountByCategory_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
   }
 
@@ -74,7 +78,8 @@ class DiscountReportsPdfService {
     final pdf = await _buildByCustomerPdf(context, items, data);
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'DiscountByCustomer_${DateFormat('yyyyMMdd').format(DateTime.now())}',
+      name:
+          'DiscountByCustomer_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
   }
 
@@ -87,7 +92,8 @@ class DiscountReportsPdfService {
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'DiscountByCustomer_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      filename:
+          'DiscountByCustomer_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
   }
 
@@ -99,7 +105,8 @@ class DiscountReportsPdfService {
     final pdf = await _buildByInvoicePdf(context, items, data);
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'DiscountByInvoice_${DateFormat('yyyyMMdd').format(DateTime.now())}',
+      name:
+          'DiscountByInvoice_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
   }
 
@@ -112,7 +119,8 @@ class DiscountReportsPdfService {
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'DiscountByInvoice_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      filename:
+          'DiscountByInvoice_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
   }
 
@@ -158,7 +166,16 @@ class DiscountReportsPdfService {
               6: pw.Alignment.centerRight,
               7: pw.Alignment.centerRight,
             },
-            headers: ['#', _t('product', lang), _t('category', lang), _t('quantity', lang), _t('total_sales', lang), _t('discount', lang), _t('discount_pct', lang), _t('invoices', lang)],
+            headers: [
+              '#',
+              _t('product', lang),
+              _t('category', lang),
+              _t('quantity', lang),
+              _t('total_sales', lang),
+              _t('discount', lang),
+              _t('discount_pct', lang),
+              _t('invoices', lang),
+            ],
             data: items.asMap().entries.map((e) {
               final i = e.value;
               return [
@@ -209,7 +226,16 @@ class DiscountReportsPdfService {
             headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 9),
             cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
             headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-            headers: ['#', _t('category', lang), _t('products', lang), _t('quantity', lang), _t('total_sales', lang), _t('discount', lang), _t('discount_pct', lang), _t('invoices', lang)],
+            headers: [
+              '#',
+              _t('category', lang),
+              _t('products', lang),
+              _t('quantity', lang),
+              _t('total_sales', lang),
+              _t('discount', lang),
+              _t('discount_pct', lang),
+              _t('invoices', lang),
+            ],
             data: items.asMap().entries.map((e) {
               final i = e.value;
               return [
@@ -260,7 +286,14 @@ class DiscountReportsPdfService {
             headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 9),
             cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
             headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-            headers: ['#', _t('customer', lang), _t('total_sales', lang), _t('discount', lang), _t('discount_pct', lang), _t('invoices', lang)],
+            headers: [
+              '#',
+              _t('customer', lang),
+              _t('total_sales', lang),
+              _t('discount', lang),
+              _t('discount_pct', lang),
+              _t('invoices', lang),
+            ],
             data: items.asMap().entries.map((e) {
               final i = e.value;
               return [
@@ -309,7 +342,16 @@ class DiscountReportsPdfService {
             headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 9),
             cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
             headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-            headers: ['#', _t('invoice_number', lang), _t('customer', lang), _t('subtotal', lang), _t('discount', lang), _t('discount_pct', lang), _t('total', lang), _t('date', lang)],
+            headers: [
+              '#',
+              _t('invoice_number', lang),
+              _t('customer', lang),
+              _t('subtotal', lang),
+              _t('discount', lang),
+              _t('discount_pct', lang),
+              _t('total', lang),
+              _t('date', lang),
+            ],
             data: items.asMap().entries.map((e) {
               final i = e.value;
               return [
@@ -320,7 +362,7 @@ class DiscountReportsPdfService {
                 cs.formatCents(i.discountCents),
                 '${i.discountPercent.toStringAsFixed(1)}%',
                 cs.formatCents(i.totalCents),
-                DateFormat.yMd().format(i.saleDate),
+                DateFormat('dd/MM/yyyy').format(i.saleDate),
               ];
             }).toList(),
           ),
@@ -345,49 +387,93 @@ class DiscountReportsPdfService {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(company.name, style: pw.TextStyle(font: fonts.bold, fontSize: 16)),
+        pw.Text(
+          company.name,
+          style: pw.TextStyle(font: fonts.bold, fontSize: 16),
+        ),
         if (company.address != null && company.address!.isNotEmpty)
-          pw.Text(company.address!, style: pw.TextStyle(font: fonts.regular, fontSize: 9, color: PdfColors.grey600)),
+          pw.Text(
+            company.address!,
+            style: pw.TextStyle(
+              font: fonts.regular,
+              fontSize: 9,
+              color: PdfColors.grey600,
+            ),
+          ),
         pw.SizedBox(height: 8),
         pw.Divider(),
         pw.SizedBox(height: 4),
-        pw.Center(child: pw.Text(title, style: pw.TextStyle(font: fonts.bold, fontSize: 14))),
+        pw.Center(
+          child: pw.Text(
+            title,
+            style: pw.TextStyle(font: fonts.bold, fontSize: 14),
+          ),
+        ),
       ],
     );
   }
 
-  static pw.Widget _buildPeriodLine(DiscountReportsData data, _PdfFonts fonts, String lang) {
+  static pw.Widget _buildPeriodLine(
+    DiscountReportsData data,
+    _PdfFonts fonts,
+    String lang,
+  ) {
     return pw.Text(
-      '${_t('period', lang)}: ${DateFormat.yMMMd().format(data.dateRange.startDate)} — ${DateFormat.yMMMd().format(data.dateRange.endDate)}',
+      '${_t('period', lang)}: ${DateFormat('dd/MM/yyyy').format(data.dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(data.dateRange.endDate)}',
       style: pw.TextStyle(font: fonts.regular, fontSize: 10),
     );
   }
 
-  static pw.Widget _buildSummaryLine(DiscountReportsData data, CurrencyService cs, _PdfFonts fonts, String lang) {
+  static pw.Widget _buildSummaryLine(
+    DiscountReportsData data,
+    CurrencyService cs,
+    _PdfFonts fonts,
+    String lang,
+  ) {
     final s = data.summary;
     return pw.Text(
       '${_t('total_discount', lang)}: ${cs.formatCents(s.totalDiscountCents)}  |  ${_t('discounted_invoices', lang)}: ${s.discountedInvoiceCount}  |  ${_t('avg_discount', lang)}: ${s.averageDiscountPercent.toStringAsFixed(1)}%',
-      style: pw.TextStyle(font: fonts.regular, fontSize: 9, color: PdfColors.grey700),
+      style: pw.TextStyle(
+        font: fonts.regular,
+        fontSize: 9,
+        color: PdfColors.grey700,
+      ),
     );
   }
 
   static pw.Widget _buildFooter(_PdfFonts fonts, String lang) {
-    return pw.Column(children: [
-      pw.Divider(),
-      pw.Text(
-        '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
-        style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
-      ),
-    ]);
+    return pw.Column(
+      children: [
+        pw.Divider(),
+        pw.Text(
+          '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
+          style: pw.TextStyle(
+            font: fonts.regular,
+            fontSize: 8,
+            color: PdfColors.grey600,
+          ),
+        ),
+      ],
+    );
   }
 
   static Future<_PdfFonts> _loadFonts() async {
     try {
-      final regularData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-      final boldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
-      return _PdfFonts(regular: pw.Font.ttf(regularData), bold: pw.Font.ttf(boldData));
+      final regularData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+      );
+      final boldData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+      );
+      return _PdfFonts(
+        regular: pw.Font.ttf(regularData),
+        bold: pw.Font.ttf(boldData),
+      );
     } catch (_) {
-      return _PdfFonts(regular: pw.Font.helvetica(), bold: pw.Font.helveticaBold());
+      return _PdfFonts(
+        regular: pw.Font.helvetica(),
+        bold: pw.Font.helveticaBold(),
+      );
     }
   }
 
@@ -397,16 +483,36 @@ class DiscountReportsPdfService {
 
   static const _translations = {
     'period': {'en': 'Period', 'ar': 'الفترة', 'fr': 'Période'},
-    'total_sales': {'en': 'Total Sales', 'ar': 'إجمالي المبيعات', 'fr': 'Total des Ventes'},
-    'total_discount': {'en': 'Total Discount', 'ar': 'إجمالي الخصم', 'fr': 'Remise Totale'},
+    'total_sales': {
+      'en': 'Total Sales',
+      'ar': 'إجمالي المبيعات',
+      'fr': 'Total des Ventes',
+    },
+    'total_discount': {
+      'en': 'Total Discount',
+      'ar': 'إجمالي الخصم',
+      'fr': 'Remise Totale',
+    },
     'discount': {'en': 'Discount', 'ar': 'الخصم', 'fr': 'Remise'},
     'discount_pct': {'en': 'Discount %', 'ar': 'نسبة الخصم', 'fr': 'Remise %'},
-    'discounted_invoices': {'en': 'Discounted Invoices', 'ar': 'فواتير بخصم', 'fr': 'Factures avec Remise'},
-    'avg_discount': {'en': 'Avg Discount', 'ar': 'متوسط الخصم', 'fr': 'Remise Moy.'},
+    'discounted_invoices': {
+      'en': 'Discounted Invoices',
+      'ar': 'فواتير بخصم',
+      'fr': 'Factures avec Remise',
+    },
+    'avg_discount': {
+      'en': 'Avg Discount',
+      'ar': 'متوسط الخصم',
+      'fr': 'Remise Moy.',
+    },
     'total': {'en': 'Total', 'ar': 'الإجمالي', 'fr': 'Total'},
     'invoices': {'en': 'Invoices', 'ar': 'الفواتير', 'fr': 'Factures'},
     'products': {'en': 'Products', 'ar': 'المنتجات', 'fr': 'Produits'},
-    'invoice_number': {'en': 'Invoice #', 'ar': 'رقم الفاتورة', 'fr': 'Facture #'},
+    'invoice_number': {
+      'en': 'Invoice #',
+      'ar': 'رقم الفاتورة',
+      'fr': 'Facture #',
+    },
     'customer': {'en': 'Customer', 'ar': 'العميل', 'fr': 'Client'},
     'subtotal': {'en': 'Subtotal', 'ar': 'المجموع الفرعي', 'fr': 'Sous-total'},
     'date': {'en': 'Date', 'ar': 'التاريخ', 'fr': 'Date'},
@@ -414,10 +520,26 @@ class DiscountReportsPdfService {
     'category': {'en': 'Category', 'ar': 'التصنيف', 'fr': 'Catégorie'},
     'quantity': {'en': 'Qty', 'ar': 'الكمية', 'fr': 'Qté'},
     'printed_on': {'en': 'Printed on', 'ar': 'طُبع في', 'fr': 'Imprimé le'},
-    'discount_by_product': {'en': 'Discounts by Product', 'ar': 'الخصومات حسب الصنف', 'fr': 'Remises par Produit'},
-    'discount_by_category': {'en': 'Discounts by Category', 'ar': 'الخصومات حسب التصنيف', 'fr': 'Remises par Catégorie'},
-    'discount_by_customer': {'en': 'Discounts by Customer', 'ar': 'الخصومات حسب العميل', 'fr': 'Remises par Client'},
-    'discount_by_invoice': {'en': 'Discounts by Invoice', 'ar': 'الخصومات حسب الفاتورة', 'fr': 'Remises par Facture'},
+    'discount_by_product': {
+      'en': 'Discounts by Product',
+      'ar': 'الخصومات حسب الصنف',
+      'fr': 'Remises par Produit',
+    },
+    'discount_by_category': {
+      'en': 'Discounts by Category',
+      'ar': 'الخصومات حسب التصنيف',
+      'fr': 'Remises par Catégorie',
+    },
+    'discount_by_customer': {
+      'en': 'Discounts by Customer',
+      'ar': 'الخصومات حسب العميل',
+      'fr': 'Remises par Client',
+    },
+    'discount_by_invoice': {
+      'en': 'Discounts by Invoice',
+      'ar': 'الخصومات حسب الفاتورة',
+      'fr': 'Remises par Facture',
+    },
   };
 
   static String _t(String key, String lang) {

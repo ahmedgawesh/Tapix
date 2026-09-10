@@ -11,20 +11,22 @@ import 'invoices_pdf_builder.dart';
 class SupplierInvoicesPdfService {
   static List<InvoicePdfItem> _mapInvoices(SupplierInvoicesData data) {
     return data.invoices
-        .map((inv) => InvoicePdfItem(
-              invoiceNumber: inv.invoiceNumber,
-              referenceLabel: inv.supplierInvoiceRef == null
-                  ? null
-                  : '${'reports.supplier_invoice_ref'.tr()}: ${inv.supplierInvoiceRef}',
-              date: inv.date,
-              items: inv.items,
-              subtotalCents: inv.subtotalCents,
-              discountCents: inv.discountCents,
-              taxCents: inv.taxCents,
-              totalCents: inv.totalCents,
-              paidAmountCents: inv.paidAmountCents,
-              paymentMethod: inv.paymentMethod,
-            ))
+        .map(
+          (inv) => InvoicePdfItem(
+            invoiceNumber: inv.invoiceNumber,
+            referenceLabel: inv.supplierInvoiceRef == null
+                ? null
+                : '${'reports.supplier_invoice_ref'.tr()}: ${inv.supplierInvoiceRef}',
+            date: inv.date,
+            items: inv.items,
+            subtotalCents: inv.subtotalCents,
+            discountCents: inv.discountCents,
+            taxCents: inv.taxCents,
+            totalCents: inv.totalCents,
+            paidAmountCents: inv.paidAmountCents,
+            paymentMethod: inv.paymentMethod,
+          ),
+        )
         .toList();
   }
 
@@ -48,7 +50,6 @@ class SupplierInvoicesPdfService {
       totalAmountCents: data.totalAmountCents,
       totalDiscountCents: data.totalDiscountCents,
       totalPaidCents: data.totalPaidCents,
-      totalQuantity: data.totalQuantity,
       cs: cs,
       locale: locale,
       isRtl: locale.languageCode == 'ar',
@@ -82,7 +83,6 @@ class SupplierInvoicesPdfService {
       totalAmountCents: data.totalAmountCents,
       totalDiscountCents: data.totalDiscountCents,
       totalPaidCents: data.totalPaidCents,
-      totalQuantity: data.totalQuantity,
       cs: cs,
       locale: locale,
       isRtl: locale.languageCode == 'ar',

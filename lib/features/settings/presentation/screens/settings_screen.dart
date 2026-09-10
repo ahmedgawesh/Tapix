@@ -15,6 +15,7 @@ import '../widgets/barcode_label_settings_section.dart';
 import '../widgets/tax_settings_section.dart';
 import '../widgets/inventory_settings_section.dart';
 import '../widgets/pharmacy_settings_section.dart';
+import '../widgets/promotions_settings_section.dart';
 import '../widgets/sales_settings_section.dart';
 import '../widgets/security_settings_section.dart';
 import '../widgets/reports_settings_section.dart';
@@ -317,6 +318,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const TaxSettingsSection(),
           const SizedBox(height: 8),
           const SalesSettingsSection(),
+          const SizedBox(height: 8),
+          const PromotionsSettingsSection(),
           const SizedBox(height: 8),
           const InventorySettingsSection(),
           const SizedBox(height: 8),

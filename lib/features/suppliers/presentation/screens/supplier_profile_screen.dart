@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/database/daos/cheque_instrument_dao.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/parties/party_balance_classifier.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
@@ -16,6 +17,7 @@ import '../services/supplier_transaction_pdf_service.dart';
 import '../../../customers/presentation/widgets/edit_transaction_dialog.dart';
 import '../../../shared/widgets/unified_return_search_sheet.dart';
 import '../../../../core/services/unified_return_service.dart';
+import '../../../cheques/presentation/widgets/party_cheque_alerts_section.dart';
 
 /// Supplier profile screen with balance, actions, and transactions
 class SupplierProfileScreen extends StatefulWidget {
@@ -35,17 +37,21 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
     _didBackfillAccounting = true;
 
     final db = sl<AppDatabase>();
-    final rows = await db.customSelect(
-      'SELECT id FROM purchases WHERE supplier_id = ? AND status = ?',
-      variables: [
-        Variable.withInt(widget.supplierId),
-        const Variable<String>('posted'),
-      ],
-    ).get();
+    final rows = await db
+        .customSelect(
+          'SELECT id FROM purchases WHERE supplier_id = ? AND status = ?',
+          variables: [
+            Variable.withInt(widget.supplierId),
+            const Variable<String>('posted'),
+          ],
+        )
+        .get();
 
     for (final r in rows) {
       final purchaseId = r.read<int>('id');
-      await db.purchaseDao.ensureSupplierAccountingForPostedPurchase(purchaseId);
+      await db.purchaseDao.ensureSupplierAccountingForPostedPurchase(
+        purchaseId,
+      );
     }
   }
 
@@ -54,8 +60,9 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
     final currencyService = sl<CurrencyService>();
 
     return BlocProvider(
-      create: (context) => SupplierProfileBloc(sl<SupplierRepository>())
-        ..add(SupplierProfileLoadRequested(widget.supplierId)),
+      create: (context) =>
+          SupplierProfileBloc(sl<SupplierRepository>())
+            ..add(SupplierProfileLoadRequested(widget.supplierId)),
       child: BlocConsumer<SupplierProfileBloc, RealtimeState<Supplier?>>(
         listener: (context, state) async {
           if (state is RealtimeSuccess<Supplier?> && state.data != null) {
@@ -85,7 +92,9 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
             );
           }
 
-          final supplier = state is RealtimeSuccess<Supplier?> ? state.data : null;
+          final supplier = state is RealtimeSuccess<Supplier?>
+              ? state.data
+              : null;
           if (supplier == null) {
             return Scaffold(
               appBar: AppBar(),
@@ -101,7 +110,8 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
               actions: [
                 IconButton(
                   icon: const Icon(LucideIcons.pencil),
-                  onPressed: () => context.push('/suppliers/${widget.supplierId}/edit'),
+                  onPressed: () =>
+                      context.push('/suppliers/${widget.supplierId}/edit'),
                 ),
                 PopupMenuButton<String>(
                   onSelected: (value) {
@@ -166,8 +176,15 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                     const SizedBox(height: 16),
                     _QuickActionsSection(
                       supplier: supplier,
-                      onPaymentPressed: () => _showPaymentDialog(context, supplier),
-                      onSeasonalDiscountPressed: () => _showSeasonalDiscountDialog(context, supplier),
+                      onPaymentPressed: () =>
+                          _showPaymentDialog(context, supplier),
+                      onSeasonalDiscountPressed: () =>
+                          _showSeasonalDiscountDialog(context, supplier),
+                    ),
+                    const SizedBox(height: 16),
+                    PartyChequeAlertsSection(
+                      partyType: 'supplier',
+                      partyId: widget.supplierId,
                     ),
                     const SizedBox(height: 16),
                     _UpcomingDueDatesSection(
@@ -177,7 +194,10 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                     const SizedBox(height: 16),
                     _ContactInformationSection(supplier: supplier),
                     const SizedBox(height: 16),
-                    _RecentTransactionsSection(supplierId: widget.supplierId, supplierName: supplier.name),
+                    _RecentTransactionsSection(
+                      supplierId: widget.supplierId,
+                      supplierName: supplier.name,
+                    ),
                   ],
                 ),
               ),
@@ -212,7 +232,9 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('suppliers.delete_confirm_title'.tr()),
-        content: Text('suppliers.delete_confirm_message'.tr(args: [supplier.name])),
+        content: Text(
+          'suppliers.delete_confirm_message'.tr(args: [supplier.name]),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -264,18 +286,26 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
           final colorScheme = theme.colorScheme;
 
           return Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(LucideIcons.banknote, size: 40, color: colorScheme.primary),
+                    Icon(
+                      LucideIcons.banknote,
+                      size: 40,
+                      color: colorScheme.primary,
+                    ),
                     const SizedBox(height: 12),
                     Text(
                       'suppliers.make_payment'.tr(),
-                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 24),
                     TextField(
@@ -283,10 +313,14 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                       decoration: InputDecoration(
                         labelText: 'suppliers.payment_amount'.tr(),
                         prefixIcon: const Icon(LucideIcons.badgeDollarSign),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         filled: true,
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       autofocus: true,
                       onTap: () => selectAllText(amountController),
                     ),
@@ -308,7 +342,9 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                         decoration: InputDecoration(
                           labelText: 'suppliers.payment_date'.tr(),
                           prefixIcon: const Icon(LucideIcons.calendarDays),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           filled: true,
                         ),
                         child: Text(
@@ -324,7 +360,9 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                         labelText: 'suppliers.description'.tr(),
                         hintText: 'suppliers.payment_description_hint'.tr(),
                         prefixIcon: const Icon(LucideIcons.fileText),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         filled: true,
                       ),
                     ),
@@ -336,7 +374,9 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                             onPressed: () => Navigator.of(dialogContext).pop(),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             child: Text('common.cancel'.tr()),
                           ),
@@ -345,12 +385,20 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                         Expanded(
                           child: FilledButton(
                             onPressed: () async {
-                              final scaffoldMessenger = ScaffoldMessenger.of(dialogContext);
+                              final scaffoldMessenger = ScaffoldMessenger.of(
+                                dialogContext,
+                              );
                               final navigator = Navigator.of(dialogContext);
-                              final amount = double.tryParse(amountController.text);
+                              final amount = double.tryParse(
+                                amountController.text,
+                              );
                               if (amount == null || amount <= 0) {
                                 scaffoldMessenger.showSnackBar(
-                                  SnackBar(content: Text('suppliers.amount_invalid'.tr())),
+                                  SnackBar(
+                                    content: Text(
+                                      'suppliers.amount_invalid'.tr(),
+                                    ),
+                                  ),
                                 );
                                 return;
                               }
@@ -360,28 +408,40 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                               // Phase 3.5.3 — sign-flip lives in
                               // SupplierRepository.recordPayment.
                               final amountCents = (amount * 100).round();
-                              final txId = await sl<SupplierRepository>().recordPayment(
-                                supplierId: supplier.id,
-                                amountCents: amountCents,
-                                currencyId: supplier.currencyId,
-                                description: descriptionController.text.isEmpty
-                                    ? null
-                                    : descriptionController.text,
-                                transactionDate: selectedDate,
-                              );
+                              final txId = await sl<SupplierRepository>()
+                                  .recordPayment(
+                                    supplierId: supplier.id,
+                                    amountCents: amountCents,
+                                    currencyId: supplier.currencyId,
+                                    description:
+                                        descriptionController.text.isEmpty
+                                        ? null
+                                        : descriptionController.text,
+                                    transactionDate: selectedDate,
+                                  );
 
                               profileBloc.refresh();
 
                               if (mounted) {
                                 scaffoldMessenger.showSnackBar(
-                                  SnackBar(content: Text('suppliers.payment_success'.tr())),
+                                  SnackBar(
+                                    content: Text(
+                                      'suppliers.payment_success'.tr(),
+                                    ),
+                                  ),
                                 );
-                                _showReceiptDialog(this.context, txId, supplier.name);
+                                _showReceiptDialog(
+                                  this.context,
+                                  txId,
+                                  supplier.name,
+                                );
                               }
                             },
                             style: FilledButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             child: Text('suppliers.confirm_payment'.tr()),
                           ),
@@ -398,7 +458,11 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
     );
   }
 
-  void _showReceiptDialog(BuildContext context, int transactionId, String supplierName) {
+  void _showReceiptDialog(
+    BuildContext context,
+    int transactionId,
+    String supplierName,
+  ) {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => Dialog(
@@ -408,7 +472,11 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(LucideIcons.checkCircle, color: Colors.green, size: 48),
+              const Icon(
+                LucideIcons.checkCircle,
+                color: Colors.green,
+                size: 48,
+              ),
               const SizedBox(height: 20),
               Row(
                 children: [
@@ -502,18 +570,26 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
           final colorScheme = theme.colorScheme;
 
           return Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(LucideIcons.badgePercent, size: 40, color: colorScheme.primary),
+                    Icon(
+                      LucideIcons.badgePercent,
+                      size: 40,
+                      color: colorScheme.primary,
+                    ),
                     const SizedBox(height: 12),
                     Text(
                       'suppliers.seasonal_discount_title'.tr(),
-                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 24),
                     DropdownButtonFormField<String>(
@@ -521,7 +597,9 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                       decoration: InputDecoration(
                         labelText: 'suppliers.discount_type'.tr(),
                         prefixIcon: const Icon(LucideIcons.tag),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         filled: true,
                       ),
                       items: discountTypes.map((type) {
@@ -542,10 +620,14 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                       decoration: InputDecoration(
                         labelText: 'suppliers.discount_amount'.tr(),
                         prefixIcon: const Icon(LucideIcons.badgeDollarSign),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         filled: true,
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       autofocus: true,
                       onTap: () => selectAllText(amountController),
                     ),
@@ -567,7 +649,9 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                         decoration: InputDecoration(
                           labelText: 'suppliers.discount_date'.tr(),
                           prefixIcon: const Icon(LucideIcons.calendarDays),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           filled: true,
                         ),
                         child: Text(
@@ -583,7 +667,9 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                         labelText: 'suppliers.description'.tr(),
                         hintText: 'suppliers.seasonal_discount_hint'.tr(),
                         prefixIcon: const Icon(LucideIcons.fileText),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         filled: true,
                       ),
                     ),
@@ -595,7 +681,9 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                             onPressed: () => Navigator.of(dialogContext).pop(),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             child: Text('common.cancel'.tr()),
                           ),
@@ -604,13 +692,21 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                         Expanded(
                           child: FilledButton(
                             onPressed: () async {
-                              final scaffoldMessenger = ScaffoldMessenger.of(dialogContext);
+                              final scaffoldMessenger = ScaffoldMessenger.of(
+                                dialogContext,
+                              );
                               final navigator = Navigator.of(dialogContext);
 
-                              final amount = double.tryParse(amountController.text);
+                              final amount = double.tryParse(
+                                amountController.text,
+                              );
                               if (amount == null || amount <= 0) {
                                 scaffoldMessenger.showSnackBar(
-                                  SnackBar(content: Text('suppliers.amount_invalid'.tr())),
+                                  SnackBar(
+                                    content: Text(
+                                      'suppliers.amount_invalid'.tr(),
+                                    ),
+                                  ),
                                 );
                                 return;
                               }
@@ -621,29 +717,43 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
 
                               // Phase 3.5.3 — discount uses repository
                               // helper so the negation rule is centralised.
-                              final txId = await sl<SupplierRepository>().recordDiscount(
-                                supplierId: supplier.id,
-                                amountCents: amountCents,
-                                currencyId: supplier.currencyId,
-                                description: descriptionController.text.isEmpty
-                                    ? 'suppliers.discount_type_$selectedDiscountType'.tr()
-                                    : descriptionController.text,
-                                discountType: selectedDiscountType,
-                                transactionDate: selectedDate,
-                              );
+                              final txId = await sl<SupplierRepository>()
+                                  .recordDiscount(
+                                    supplierId: supplier.id,
+                                    amountCents: amountCents,
+                                    currencyId: supplier.currencyId,
+                                    description:
+                                        descriptionController.text.isEmpty
+                                        ? 'suppliers.discount_type_$selectedDiscountType'
+                                              .tr()
+                                        : descriptionController.text,
+                                    discountType: selectedDiscountType,
+                                    transactionDate: selectedDate,
+                                  );
 
                               profileBloc.refresh();
 
                               if (mounted) {
                                 scaffoldMessenger.showSnackBar(
-                                  SnackBar(content: Text('suppliers.seasonal_discount_recorded'.tr())),
+                                  SnackBar(
+                                    content: Text(
+                                      'suppliers.seasonal_discount_recorded'
+                                          .tr(),
+                                    ),
+                                  ),
                                 );
-                                _showReceiptDialog(this.context, txId, supplier.name);
+                                _showReceiptDialog(
+                                  this.context,
+                                  txId,
+                                  supplier.name,
+                                );
                               }
                             },
                             style: FilledButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             child: Text('suppliers.record_discount'.tr()),
                           ),
@@ -760,8 +870,8 @@ class _ProfileHeaderCard extends StatelessWidget {
                       color: isZero
                           ? (isDark ? const Color(0xFF64B5F6) : Colors.blue)
                           : isPayable
-                              ? (isDark ? const Color(0xFFEF9A9A) : Colors.red)
-                              : (isDark ? const Color(0xFFA5D6A7) : Colors.green),
+                          ? (isDark ? const Color(0xFFEF9A9A) : Colors.red)
+                          : (isDark ? const Color(0xFFA5D6A7) : Colors.green),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -769,8 +879,8 @@ class _ProfileHeaderCard extends StatelessWidget {
                     isZero
                         ? 'suppliers.balance_settled'.tr()
                         : isPayable
-                            ? 'suppliers.balance_payable'.tr()
-                            : 'suppliers.balance_credit'.tr(),
+                        ? 'suppliers.balance_payable'.tr()
+                        : 'suppliers.balance_credit'.tr(),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),
@@ -778,7 +888,9 @@ class _ProfileHeaderCard extends StatelessWidget {
                   // Show opening balance if it exists
                   if (openingBalanceCents != 0) ...[
                     const SizedBox(height: 12),
-                    Divider(color: colorScheme.outlineVariant.withValues(alpha: 0.3)),
+                    Divider(
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+                    ),
                     const SizedBox(height: 8),
                     Column(
                       children: [
@@ -797,8 +909,12 @@ class _ProfileHeaderCard extends StatelessWidget {
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 fontWeight: FontWeight.w600,
                                 color: openingBalanceCents > 0
-                                    ? (isDark ? const Color(0xFFEF9A9A) : Colors.red)
-                                    : (isDark ? const Color(0xFFA5D6A7) : Colors.green),
+                                    ? (isDark
+                                          ? const Color(0xFFEF9A9A)
+                                          : Colors.red)
+                                    : (isDark
+                                          ? const Color(0xFFA5D6A7)
+                                          : Colors.green),
                               ),
                             ),
                           ],
@@ -988,177 +1104,249 @@ class _UpcomingDueDatesSection extends StatelessWidget {
         final purchases = snapshot.data ?? [];
         if (purchases.isEmpty) return const SizedBox.shrink();
 
-        final now = DateTime.now();
-        final today = DateTime(now.year, now.month, now.day);
+        return StreamBuilder<List<ChequeInstrument>>(
+          stream: ChequeInstrumentDao(db).watchAll(),
+          builder: (context, chequeSnapshot) {
+            if (!chequeSnapshot.hasData) return const SizedBox.shrink();
 
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Row(
-                  children: [
-                    Icon(LucideIcons.calendarClock, size: 18, color: cs.primary),
-                    const SizedBox(width: 8),
-                    Text(
-                      'suppliers.upcoming_due_dates'.tr(),
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: cs.primaryContainer.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        '${purchases.length}',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: cs.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
+            final openChequeCentsByPurchase = <int, int>{};
+            for (final cheque in chequeSnapshot.data!) {
+              if (cheque.sourceTable != 'purchase' ||
+                  !ChequeInstrumentStatus.open.contains(cheque.status)) {
+                continue;
+              }
+              openChequeCentsByPurchase.update(
+                cheque.sourceId,
+                (amount) => amount + cheque.amountCents.toBigInt().toInt(),
+                ifAbsent: () => cheque.amountCents.toBigInt().toInt(),
+              );
+            }
+
+            final dueItems = <({Purchase purchase, int remainingCents})>[];
+            for (final purchase in purchases) {
+              final invoiceRemaining =
+                  purchase.totalCents.toBigInt().toInt() -
+                  purchase.paidAmountCents.toBigInt().toInt();
+              final openChequeCents =
+                  openChequeCentsByPurchase[purchase.id] ?? 0;
+              final uncoveredRemaining = invoiceRemaining > openChequeCents
+                  ? invoiceRemaining - openChequeCents
+                  : 0;
+              if (uncoveredRemaining > 0) {
+                dueItems.add((
+                  purchase: purchase,
+                  remainingCents: uncoveredRemaining,
+                ));
+              }
+            }
+            if (dueItems.isEmpty) return const SizedBox.shrink();
+
+            final now = DateTime.now();
+            final today = DateTime(now.year, now.month, now.day);
+
+            return Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: cs.outlineVariant.withValues(alpha: 0.3),
                 ),
               ),
-              const Divider(height: 1),
-              ...purchases.map((p) {
-                final dueDate = p.dueDate!;
-                final dueDateOnly = DateTime(dueDate.year, dueDate.month, dueDate.day);
-                final daysUntilDue = dueDateOnly.difference(today).inDays;
-                final isOverdue = daysUntilDue < 0;
-                final isDueToday = daysUntilDue == 0;
-                final isDueSoon = daysUntilDue > 0 && daysUntilDue <= 7;
-
-                final totalCents = p.totalCents.toBigInt().toInt();
-                final paidCents = p.paidAmountCents.toBigInt().toInt();
-                final remainingCents = totalCents - paidCents;
-
-                final isCheque = p.paymentMethod == 'cheque';
-
-                final Color statusColor;
-                final String statusText;
-                final IconData statusIcon;
-
-                if (isOverdue) {
-                  statusColor = cs.error;
-                  statusText = 'suppliers.overdue_days'.tr(args: ['${-daysUntilDue}']);
-                  statusIcon = LucideIcons.alertTriangle;
-                } else if (isDueToday) {
-                  statusColor = const Color(0xFFFF9800);
-                  statusText = 'suppliers.due_today'.tr();
-                  statusIcon = LucideIcons.clock;
-                } else if (isDueSoon) {
-                  statusColor = const Color(0xFFFF9800);
-                  statusText = 'suppliers.due_in_days'.tr(args: ['$daysUntilDue']);
-                  statusIcon = LucideIcons.clock;
-                } else {
-                  statusColor = cs.onSurfaceVariant;
-                  statusText = 'suppliers.due_in_days'.tr(args: ['$daysUntilDue']);
-                  statusIcon = LucideIcons.calendar;
-                }
-
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: isOverdue
-                          ? cs.errorContainer.withValues(alpha: 0.15)
-                          : isDueSoon || isDueToday
-                              ? const Color(0xFFFF9800).withValues(alpha: 0.08)
-                              : cs.surfaceContainerHighest.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: isOverdue
-                            ? cs.error.withValues(alpha: 0.3)
-                            : isDueSoon || isDueToday
-                                ? const Color(0xFFFF9800).withValues(alpha: 0.3)
-                                : cs.outlineVariant.withValues(alpha: 0.2),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: Row(
                       children: [
-                        Row(
-                          children: [
-                            Icon(
-                              isCheque ? LucideIcons.fileText : LucideIcons.receipt,
-                              size: 14,
-                              color: cs.primary,
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                p.purchaseNumber,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            if (isCheque)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: cs.secondaryContainer.withValues(alpha: 0.5),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  'suppliers.cheque'.tr(),
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: cs.secondary,
-                                    fontSize: 10,
-                                  ),
-                                ),
-                              ),
-                          ],
+                        Icon(
+                          LucideIcons.calendarClock,
+                          size: 18,
+                          color: cs.primary,
                         ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Icon(statusIcon, size: 12, color: statusColor),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${dueDate.year}-${dueDate.month.toString().padLeft(2, '0')}-${dueDate.day.toString().padLeft(2, '0')}',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: statusColor,
-                                fontWeight: FontWeight.w500,
-                              ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'suppliers.upcoming_due_dates'.tr(),
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: cs.primaryContainer.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            '${dueItems.length}',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: cs.primary,
+                              fontWeight: FontWeight.bold,
                             ),
-                            const SizedBox(width: 6),
-                            Text(
-                              statusText,
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: statusColor,
-                                fontWeight: isOverdue ? FontWeight.bold : FontWeight.normal,
-                              ),
-                            ),
-                            const Spacer(),
-                            Text(
-                              currencyService.format(remainingCents),
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: isOverdue ? cs.error : cs.primary,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ],
                     ),
                   ),
-                );
-              }),
-              const SizedBox(height: 8),
-            ],
-          ),
+                  const Divider(height: 1),
+                  ...dueItems.map((item) {
+                    final p = item.purchase;
+                    final dueDate = p.dueDate!;
+                    final dueDateOnly = DateTime(
+                      dueDate.year,
+                      dueDate.month,
+                      dueDate.day,
+                    );
+                    final daysUntilDue = dueDateOnly.difference(today).inDays;
+                    final isOverdue = daysUntilDue < 0;
+                    final isDueToday = daysUntilDue == 0;
+                    final isDueSoon = daysUntilDue > 0 && daysUntilDue <= 7;
+
+                    final remainingCents = item.remainingCents;
+
+                    final isCheque = p.paymentMethod == 'cheque';
+
+                    final Color statusColor;
+                    final String statusText;
+                    final IconData statusIcon;
+
+                    if (isOverdue) {
+                      statusColor = cs.error;
+                      statusText = 'suppliers.overdue_days'.tr(
+                        args: ['${-daysUntilDue}'],
+                      );
+                      statusIcon = LucideIcons.alertTriangle;
+                    } else if (isDueToday) {
+                      statusColor = const Color(0xFFFF9800);
+                      statusText = 'suppliers.due_today'.tr();
+                      statusIcon = LucideIcons.clock;
+                    } else if (isDueSoon) {
+                      statusColor = const Color(0xFFFF9800);
+                      statusText = 'suppliers.due_in_days'.tr(
+                        args: ['$daysUntilDue'],
+                      );
+                      statusIcon = LucideIcons.clock;
+                    } else {
+                      statusColor = cs.onSurfaceVariant;
+                      statusText = 'suppliers.due_in_days'.tr(
+                        args: ['$daysUntilDue'],
+                      );
+                      statusIcon = LucideIcons.calendar;
+                    }
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isOverdue
+                              ? cs.errorContainer.withValues(alpha: 0.15)
+                              : isDueSoon || isDueToday
+                              ? const Color(0xFFFF9800).withValues(alpha: 0.08)
+                              : cs.surfaceContainerHighest.withValues(
+                                  alpha: 0.3,
+                                ),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: isOverdue
+                                ? cs.error.withValues(alpha: 0.3)
+                                : isDueSoon || isDueToday
+                                ? const Color(0xFFFF9800).withValues(alpha: 0.3)
+                                : cs.outlineVariant.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  isCheque
+                                      ? LucideIcons.fileText
+                                      : LucideIcons.receipt,
+                                  size: 14,
+                                  color: cs.primary,
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    p.purchaseNumber,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                if (isCheque)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: cs.secondaryContainer.withValues(
+                                        alpha: 0.5,
+                                      ),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      'suppliers.cheque'.tr(),
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(
+                                            color: cs.secondary,
+                                            fontSize: 10,
+                                          ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Icon(statusIcon, size: 12, color: statusColor),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${dueDate.day.toString().padLeft(2, '0')}/${dueDate.month.toString().padLeft(2, '0')}/${dueDate.year}',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: statusColor,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  statusText,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: statusColor,
+                                    fontWeight: isOverdue
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  currencyService.format(remainingCents),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: isOverdue ? cs.error : cs.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            );
+          },
         );
       },
     );
@@ -1175,7 +1363,9 @@ class _ContactInformationSection extends StatelessWidget {
     final theme = Theme.of(context);
 
     // Hide section if all contact info is null
-    if (supplier.email == null && supplier.phone == null && supplier.address == null) {
+    if (supplier.email == null &&
+        supplier.phone == null &&
+        supplier.address == null) {
       return const SizedBox.shrink();
     }
 
@@ -1279,13 +1469,18 @@ class _RecentTransactionsSection extends StatefulWidget {
   final int supplierId;
   final String supplierName;
 
-  const _RecentTransactionsSection({required this.supplierId, required this.supplierName});
+  const _RecentTransactionsSection({
+    required this.supplierId,
+    required this.supplierName,
+  });
 
   @override
-  State<_RecentTransactionsSection> createState() => _RecentTransactionsSectionState();
+  State<_RecentTransactionsSection> createState() =>
+      _RecentTransactionsSectionState();
 }
 
-class _RecentTransactionsSectionState extends State<_RecentTransactionsSection> {
+class _RecentTransactionsSectionState
+    extends State<_RecentTransactionsSection> {
   bool _showAll = false;
 
   @override
@@ -1294,7 +1489,9 @@ class _RecentTransactionsSectionState extends State<_RecentTransactionsSection> 
     final currencyService = sl<CurrencyService>();
 
     return StreamBuilder<List<SupplierTransaction>>(
-      stream: sl<SupplierRepository>().watchSupplierTransactions(widget.supplierId),
+      stream: sl<SupplierRepository>().watchSupplierTransactions(
+        widget.supplierId,
+      ),
       builder: (context, snapshot) {
         final transactions = snapshot.data ?? [];
 
@@ -1326,7 +1523,11 @@ class _RecentTransactionsSectionState extends State<_RecentTransactionsSection> 
                           _showAll = !_showAll;
                         });
                       },
-                      child: Text(_showAll ? 'common.show_less'.tr() : 'suppliers.view_all'.tr()),
+                      child: Text(
+                        _showAll
+                            ? 'common.show_less'.tr()
+                            : 'suppliers.view_all'.tr(),
+                      ),
                     ),
                   ],
                 ),
@@ -1340,7 +1541,9 @@ class _RecentTransactionsSectionState extends State<_RecentTransactionsSection> 
                           Icon(
                             LucideIcons.fileText,
                             size: 48,
-                            color: theme.colorScheme.outline.withValues(alpha: 0.5),
+                            color: theme.colorScheme.outline.withValues(
+                              alpha: 0.5,
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Text(
@@ -1354,11 +1557,13 @@ class _RecentTransactionsSectionState extends State<_RecentTransactionsSection> 
                     ),
                   )
                 else
-                  ...((_showAll ? transactions : transactions.take(5)).map((tx) => _TransactionTile(
-                    transaction: tx,
-                    currencyService: currencyService,
-                    supplierName: widget.supplierName,
-                  ))),
+                  ...((_showAll ? transactions : transactions.take(5)).map(
+                    (tx) => _TransactionTile(
+                      transaction: tx,
+                      currencyService: currencyService,
+                      supplierName: widget.supplierName,
+                    ),
+                  )),
               ],
             ),
           ),
@@ -1388,11 +1593,16 @@ class _TransactionTile extends StatelessWidget {
     IconData icon;
     Color color;
     String typeLabel;
+    final isIssuedCheque =
+        transaction.referenceType == 'purchase_payment' &&
+        (transaction.description?.startsWith('Issued cheque') ?? false);
     switch (transaction.transactionType) {
       case 'payment':
-        icon = LucideIcons.banknote;
-        color = Colors.blue;
-        typeLabel = 'suppliers.transaction_payment'.tr();
+        icon = isIssuedCheque ? LucideIcons.fileText : LucideIcons.banknote;
+        color = isIssuedCheque ? Colors.amber.shade700 : Colors.blue;
+        typeLabel = isIssuedCheque
+            ? 'cheques.direction_outgoing'.tr()
+            : 'suppliers.transaction_payment'.tr();
         break;
       case 'discount':
         icon = LucideIcons.badgePercent;
@@ -1429,6 +1639,57 @@ class _TransactionTile extends StatelessWidget {
         color = Colors.red;
         typeLabel = 'suppliers.transaction_refund_reversal'.tr();
         break;
+      case 'cheque_return_pending':
+        icon = LucideIcons.fileClock;
+        color = Colors.amber.shade700;
+        typeLabel = 'suppliers.transaction_cheque_return_pending'.tr();
+        break;
+      case 'cheque_return_pending_reversal':
+        icon = LucideIcons.fileX;
+        color = Colors.red;
+        typeLabel = 'suppliers.transaction_cheque_return_pending_reversal'.tr();
+        break;
+      case 'cheque_return_settlement':
+        icon = LucideIcons.badgeCheck;
+        color = Colors.blue;
+        typeLabel = 'suppliers.transaction_cheque_return_settlement'.tr();
+        break;
+      case 'cheque_return_settlement_reversal':
+      case 'cheque_return_settlement_void':
+        icon = LucideIcons.undo2;
+        color = Colors.red;
+        typeLabel = 'suppliers.transaction_cheque_return_settlement_reversal'
+            .tr();
+        break;
+      case 'cheque_dishonour':
+        icon = LucideIcons.fileWarning;
+        color = Colors.red;
+        typeLabel = 'suppliers.transaction_cheque_dishonour'.tr();
+        break;
+      case 'cheque_dishonour_resolution':
+        icon = LucideIcons.badgeCheck;
+        color = Colors.green;
+        typeLabel = 'suppliers.transaction_cheque_dishonour_resolution'.tr();
+        break;
+      case 'cheque_dishonour_reversal':
+      case 'cheque_dishonour_resolution_reversal':
+        icon = LucideIcons.undo2;
+        color = Colors.red;
+        typeLabel = 'suppliers.transaction_cheque_dishonour_reversal'.tr();
+        break;
+      case 'return_settlement_cash':
+      case 'return_settlement_card':
+      case 'return_settlement_bank_transfer':
+      case 'return_settlement_mobile':
+        icon = LucideIcons.banknote;
+        color = Colors.blue;
+        typeLabel = 'suppliers.transaction_${transaction.transactionType}'.tr();
+        break;
+      case 'return_settlement_void':
+        icon = LucideIcons.undo2;
+        color = Colors.red;
+        typeLabel = 'suppliers.transaction_return_settlement_void'.tr();
+        break;
       case 'adjustment_return':
         icon = LucideIcons.unlink;
         color = Colors.teal;
@@ -1445,8 +1706,12 @@ class _TransactionTile extends StatelessWidget {
         typeLabel = transaction.transactionType.toUpperCase();
     }
 
-    final canPrint = transaction.transactionType == 'payment' ||
-        transaction.transactionType == 'discount';
+    final canPrint =
+        transaction.transactionType == 'payment' ||
+        transaction.transactionType == 'discount' ||
+        transaction.transactionType == 'cheque_return_settlement' ||
+        (transaction.transactionType.startsWith('return_settlement_') &&
+            transaction.transactionType != 'return_settlement_void');
 
     return InkWell(
       onTap: canPrint && supplierName != null
@@ -1480,13 +1745,17 @@ class _TransactionTile extends StatelessWidget {
                           transaction.discountType != null) ...[
                         const SizedBox(width: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.purple.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            'suppliers.discount_type_${transaction.discountType}'.tr(),
+                            'suppliers.discount_type_${transaction.discountType}'
+                                .tr(),
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: Colors.purple,
                               fontSize: 9,
@@ -1539,7 +1808,11 @@ class _TransactionTile extends StatelessWidget {
             ),
             if (canPrint) ...[
               const SizedBox(width: 4),
-              Icon(LucideIcons.chevronRight, size: 14, color: theme.colorScheme.outline),
+              Icon(
+                LucideIcons.chevronRight,
+                size: 14,
+                color: theme.colorScheme.outline,
+              ),
             ],
           ],
         ),

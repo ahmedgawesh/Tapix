@@ -1,10 +1,15 @@
 import 'package:decimal/decimal.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/services/return_calculation_service.dart';
+import '../../../../core/payments/checkout_settlement.dart';
 import '../../../../core/services/lan/lan_network_service.dart';
+import '../../../../core/promotions/promotion_repository.dart';
+import '../../../../core/promotions/promotion_return_policy.dart';
+import '../../../../core/promotions/promotion_sale_snapshot.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../domain/repositories/sale_repository.dart';
 
@@ -114,6 +119,7 @@ class SaleReturnFormState extends Equatable {
   final bool isSuccess;
   final Map<int, int> alreadyReturnedQty;
   final Map<int, LinkedReturnHistory> linkedReturnHistory;
+  final List<SalePromotionSnapshot> promotionApplications;
 
   SaleReturnFormState({
     this.saleId,
@@ -131,7 +137,17 @@ class SaleReturnFormState extends Equatable {
     this.isSuccess = false,
     this.alreadyReturnedQty = const {},
     this.linkedReturnHistory = const {},
+    this.promotionApplications = const [],
   });
+
+  List<SalePromotionSnapshot> promotionsForSaleItem(int saleItemId) =>
+      promotionApplications
+          .where(
+            (application) => application.allocations.any(
+              (allocation) => allocation.saleItemId == saleItemId,
+            ),
+          )
+          .toList(growable: false);
 
   /// True when refund-method = cheque but the operator has not yet picked
   /// a due date. The form's confirm button reads this directly.
@@ -191,6 +207,7 @@ class SaleReturnFormState extends Equatable {
     bool? isSuccess,
     Map<int, int>? alreadyReturnedQty,
     Map<int, LinkedReturnHistory>? linkedReturnHistory,
+    List<SalePromotionSnapshot>? promotionApplications,
   }) {
     return SaleReturnFormState(
       saleId: saleId ?? this.saleId,
@@ -210,6 +227,8 @@ class SaleReturnFormState extends Equatable {
       isSuccess: isSuccess ?? this.isSuccess,
       alreadyReturnedQty: alreadyReturnedQty ?? this.alreadyReturnedQty,
       linkedReturnHistory: linkedReturnHistory ?? this.linkedReturnHistory,
+      promotionApplications:
+          promotionApplications ?? this.promotionApplications,
     );
   }
 
@@ -230,6 +249,7 @@ class SaleReturnFormState extends Equatable {
     isSuccess,
     alreadyReturnedQty,
     linkedReturnHistory,
+    promotionApplications,
   ];
 }
 
@@ -313,7 +333,11 @@ class SaleReturnDueDateChanged extends SaleReturnFormEvent {
 }
 
 class SaleReturnFormSubmitted extends SaleReturnFormEvent {
-  const SaleReturnFormSubmitted();
+  final List<CheckoutPaymentAllocation> settlementAllocations;
+  const SaleReturnFormSubmitted({this.settlementAllocations = const []});
+
+  @override
+  List<Object?> get props => [settlementAllocations];
 }
 
 // ==================== BLOC ====================
@@ -323,9 +347,15 @@ class SaleReturnFormBloc
   final SaleRepository _repository;
   final LanNetworkService? _lan;
 
-  SaleReturnFormBloc(this._repository, {LanNetworkService? lan})
-    : _lan = lan,
-      super(SaleReturnFormState()) {
+  final PromotionRepository _promotions;
+
+  SaleReturnFormBloc(
+    this._repository, {
+    required PromotionRepository promotionRepository,
+    LanNetworkService? lan,
+  }) : _promotions = promotionRepository,
+       _lan = lan,
+       super(SaleReturnFormState()) {
     on<SaleReturnFormInitialized>(_onInitialized);
     on<SaleReturnItemToggled>(_onItemToggled);
     on<SaleReturnItemQuantityChanged>(_onQuantityChanged);
@@ -348,6 +378,7 @@ class SaleReturnFormBloc
     final sale = SaleEntity(
       id: summary.saleId,
       invoiceNumber: summary.invoiceNumber,
+      customerId: summary.customerId,
       customerName: summary.customerName,
       subtotalCents: Decimal.fromInt(summary.totalCents),
       taxCents: Decimal.zero,
@@ -408,6 +439,7 @@ class SaleReturnFormBloc
       isLoading: false,
       alreadyReturnedQty: returned,
       linkedReturnHistory: histories,
+      promotionApplications: details.promotionApplications,
     );
   }
 
@@ -424,6 +456,9 @@ class SaleReturnFormBloc
       }
       final sale = await _repository.getSaleById(event.saleId);
       final items = await _repository.getSaleItems(event.saleId);
+      final promotionApplications = await _promotions.loadSaleApplications(
+        event.saleId,
+      );
 
       // Fetch already-returned quantities for each item
       final alreadyReturned = <int, int>{};
@@ -449,6 +484,7 @@ class SaleReturnFormBloc
           isLoading: false,
           alreadyReturnedQty: alreadyReturned,
           linkedReturnHistory: linkedHistory,
+          promotionApplications: promotionApplications,
         ),
       );
     } catch (e) {
@@ -572,6 +608,21 @@ class SaleReturnFormBloc
       emit(state.copyWith(error: 'Please select at least one item to return'));
       return;
     }
+    final bundleViolation = PromotionReturnPolicy.validateLinkedReturn(
+      promotionApplications: state.promotionApplications,
+      previouslyReturnedQuantityBySaleItemId: {
+        for (final entry in state.linkedReturnHistory.entries)
+          entry.key: entry.value.quantity,
+      },
+      requestedQuantityBySaleItemId: {
+        for (final item in state.returnItems)
+          item.originalItem.id: item.returnQuantity,
+      },
+    );
+    if (bundleViolation != null) {
+      emit(state.copyWith(error: PromotionBundleReturnException.messageKey));
+      return;
+    }
     // Phase 14.0 — cheque must always carry a due date so it surfaces
     // on the dashboard reminder. Caught here defensively even though
     // the UI also disables the confirm button.
@@ -581,6 +632,10 @@ class SaleReturnFormBloc
           error: 'Please select a due date for the cheque refund.',
         ),
       );
+      return;
+    }
+    if (state.refundMethod == 'cheque' && state.sale?.customerId == null) {
+      emit(state.copyWith(error: 'sales.customer_required_for_credit'.tr()));
       return;
     }
 
@@ -596,6 +651,19 @@ class SaleReturnFormBloc
             refundMethod: state.refundMethod,
             reason: state.reason,
             dueDate: state.dueDate,
+            payments: event.settlementAllocations
+                .map(
+                  (payment) => LanCheckoutPaymentRequest(
+                    method: payment.method,
+                    amountCents: payment.amountCents,
+                    reference: payment.reference,
+                    bankName: payment.bankName,
+                    issueDate: payment.issueDate,
+                    dueDate: payment.dueDate,
+                    note: payment.note,
+                  ),
+                )
+                .toList(growable: false),
             lines: state.returnItems
                 .map(
                   (item) => LanSaleReturnLineRequest(
@@ -647,6 +715,7 @@ class SaleReturnFormBloc
         dueDate: state.dueDate,
         idempotencyKey: idempotencyKey,
         taxInclusiveAtPost: state.sale?.taxInclusiveAtPost ?? false,
+        settlementAllocations: event.settlementAllocations,
       );
 
       emit(state.copyWith(isSubmitting: false, isSuccess: true));

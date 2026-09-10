@@ -307,7 +307,7 @@ class _AlertTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = _colorForBucket(item.bucket, theme);
-    final dateFormat = DateFormat.yMMMd(context.locale.toString());
+    final dateFormat = DateFormat('dd/MM/yyyy');
 
     return ListTile(
       leading: CircleAvatar(

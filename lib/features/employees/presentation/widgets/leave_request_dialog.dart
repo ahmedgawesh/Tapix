@@ -32,13 +32,11 @@ class _LeaveRequestDialogState extends State<LeaveRequestDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final dateFormat = DateFormat('yyyy-MM-dd');
+    final dateFormat = DateFormat('dd/MM/yyyy');
 
     return Dialog(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(
-          maxWidth: 400,
-        ),
+        constraints: const BoxConstraints(maxWidth: 400),
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -199,18 +197,15 @@ class _LeaveRequestDialogState extends State<LeaveRequestDialog> {
     );
   }
 
-  Widget _buildField({
-    required String label,
-    required Widget child,
-  }) {
+  Widget _buildField({required String label, required Widget child}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 8),
         child,

@@ -55,19 +55,23 @@ void main() {
       "VALUES (0, 'system', 'no-pin', 'owner', 1, $now, $now)",
     );
 
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     currencyId = usd.id;
 
-    customerId = await db.into(db.customers).insert(
+    customerId = await db
+        .into(db.customers)
+        .insert(
           CustomersCompanion.insert(
             name: 'Report Customer',
             currencyId: currencyId,
             balanceCents: Value(Decimal.zero),
           ),
         );
-    supplierId = await db.into(db.suppliers).insert(
+    supplierId = await db
+        .into(db.suppliers)
+        .insert(
           SuppliersCompanion.insert(
             name: 'Report Supplier',
             currencyId: currencyId,
@@ -75,7 +79,9 @@ void main() {
           ),
         );
 
-    productId = await db.into(db.products).insert(
+    productId = await db
+        .into(db.products)
+        .insert(
           ProductsCompanion.insert(
             sku: const Value('RPT-1'),
             name: 'Report Product',
@@ -86,7 +92,9 @@ void main() {
             hasVariants: const Value(true),
           ),
         );
-    variantId = await db.into(db.productVariants).insert(
+    variantId = await db
+        .into(db.productVariants)
+        .insert(
           ProductVariantsCompanion.insert(
             productId: productId,
             stockQuantity: const Value(0),
@@ -96,7 +104,9 @@ void main() {
         );
 
     // ── Purchase 20 @ 1000 = 20000 ──
-    final purchaseId = await db.into(db.purchases).insert(
+    final purchaseId = await db
+        .into(db.purchases)
+        .insert(
           PurchasesCompanion.insert(
             purchaseNumber: 'PO-1',
             supplierId: supplierId,
@@ -109,7 +119,9 @@ void main() {
             paymentMethod: const Value('credit'),
           ),
         );
-    await db.into(db.purchaseItems).insert(
+    await db
+        .into(db.purchaseItems)
+        .insert(
           PurchaseItemsCompanion.insert(
             purchaseId: purchaseId,
             productId: productId,
@@ -123,7 +135,9 @@ void main() {
     await db.purchaseDao.postPurchase(purchaseId);
 
     // ── Sale 10 @ 2000 = 20000 ──
-    final saleId = await db.into(db.sales).insert(
+    final saleId = await db
+        .into(db.sales)
+        .insert(
           SalesCompanion.insert(
             invoiceNumber: 'INV-1',
             customerId: Value(customerId),
@@ -136,7 +150,9 @@ void main() {
             status: const Value('draft'),
           ),
         );
-    await db.into(db.saleItems).insert(
+    await db
+        .into(db.saleItems)
+        .insert(
           SaleItemsCompanion.insert(
             saleId: saleId,
             productId: productId,
@@ -149,12 +165,12 @@ void main() {
         );
     await db.saleDao.postSale(saleId);
 
-    final saleItem = await (db.select(db.saleItems)
-          ..where((i) => i.saleId.equals(saleId)))
-        .getSingle();
-    final purchaseItem = await (db.select(db.purchaseItems)
-          ..where((i) => i.purchaseId.equals(purchaseId)))
-        .getSingle();
+    final saleItem = await (db.select(
+      db.saleItems,
+    )..where((i) => i.saleId.equals(saleId))).getSingle();
+    final purchaseItem = await (db.select(
+      db.purchaseItems,
+    )..where((i) => i.purchaseId.equals(purchaseId))).getSingle();
 
     // ── Linked sale return: qty 3 @ 2000 = 6000 ──
     final linkedSaleRet = await db.saleDao.createSaleReturn(
@@ -240,8 +256,10 @@ void main() {
         ),
       ],
     );
-    await adjDao.postPurchaseAdjReturn(purchAdjRet,
-        journalEntryService: journal);
+    await adjDao.postPurchaseAdjReturn(
+      purchAdjRet,
+      journalEntryService: journal,
+    );
   });
 
   tearDown(() async => db.close());
@@ -257,6 +275,55 @@ void main() {
     expect(data.summary.totalReturnsCents, 10000); // 6000 linked + 4000 adj
     expect(data.summary.returnCount, 2);
     expect(data.summary.netSalesCents, 10000);
+  });
+
+  test('sales report carries the cashier employee and shift for PDF', () async {
+    final now = DateTime.now();
+    final cashierUserId = await db
+        .into(db.users)
+        .insert(
+          UsersCompanion.insert(
+            username: 'report-cashier',
+            passwordHash: 'test-only',
+            role: 'cashier',
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+    final cashierEmployeeId = await db
+        .into(db.employees)
+        .insert(
+          EmployeesCompanion.insert(
+            name: 'Report Cashier',
+            userId: Value(cashierUserId),
+            currencyId: currencyId,
+          ),
+        );
+    await (db.update(db.users)..where((row) => row.id.equals(cashierUserId)))
+        .write(UsersCompanion(employeeId: Value(cashierEmployeeId)));
+    final shiftId = await db
+        .into(db.cashierShifts)
+        .insert(
+          CashierShiftsCompanion.insert(
+            shiftNumber: 'SHIFT-REPORT-1',
+            cashierUserId: cashierUserId,
+            currencyId: currencyId,
+          ),
+        );
+    await (db.update(db.sales)
+          ..where((row) => row.invoiceNumber.equals('INV-1')))
+        .write(SalesCompanion(cashierShiftId: Value(shiftId)));
+
+    final bloc = SalesReportsBloc(db);
+    addTearDown(bloc.close);
+    bloc.add(SalesReportsDateRangeChanged(ReportDateRange.allTime()));
+
+    final data = await firstSuccess<SalesReportsData>(bloc.stream);
+    final invoice = data.allSales.singleWhere(
+      (item) => item.invoiceNumber == 'INV-1',
+    );
+    expect(invoice.cashierName, 'Report Cashier');
+    expect(invoice.cashierShiftNumber, 'SHIFT-REPORT-1');
   });
 
   test('purchase report net deducts linked AND adjustment returns', () async {
@@ -296,8 +363,9 @@ void main() {
 
     final data = await firstSuccess<InventoryReportsData>(bloc.stream);
 
-    final movement =
-        data.productMovement.firstWhere((m) => m.productId == productId);
+    final movement = data.productMovement.firstWhere(
+      (m) => m.productId == productId,
+    );
     expect(movement.purchasedQty, 20);
     expect(movement.soldQty, 10);
     expect(movement.saleReturnedQty, 5); // 3 linked + 2 adjustment

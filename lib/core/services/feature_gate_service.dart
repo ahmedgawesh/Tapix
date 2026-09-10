@@ -74,6 +74,12 @@ enum AppFeature {
 
   /// Multi-user / RBAC / permissions.
   multiUser,
+
+  /// Promotion definitions, automatic pricing and promotion analytics.
+  promotions,
+
+  /// Pharmacy catalogue, active ingredients and medicine alternatives.
+  pharmacy,
 }
 
 /// Result of a feature-access check.
@@ -84,9 +90,7 @@ class FeatureAccess {
   /// Reason for denial when [granted] is `false`. `null` when granted.
   final FeatureDenyReason? denyReason;
 
-  const FeatureAccess.granted()
-      : granted = true,
-        denyReason = null;
+  const FeatureAccess.granted() : granted = true, denyReason = null;
 
   const FeatureAccess.denied(this.denyReason) : granted = false;
 
@@ -131,13 +135,13 @@ class FeatureGateService extends ChangeNotifier {
   FeatureGateService({
     required RevenueCatService revenueCatService,
     DesktopLicenseService? desktopLicenseService,
-  })  : _revenueCatService = revenueCatService,
-        _desktopLicenseService = desktopLicenseService {
+  }) : _revenueCatService = revenueCatService,
+       _desktopLicenseService = desktopLicenseService {
     if (PlatformUtils.isWindows || PlatformUtils.isLinux) {
       final desktop = _desktopLicenseService;
       _isPro = desktop?.status == DesktopLicenseStatus.valid;
-      _initialized = desktop == null ||
-          desktop.status != DesktopLicenseStatus.checking;
+      _initialized =
+          desktop == null || desktop.status != DesktopLicenseStatus.checking;
       desktop?.addListener(() {
         _setPro(desktop.status == DesktopLicenseStatus.valid);
       });
@@ -147,9 +151,10 @@ class FeatureGateService extends ChangeNotifier {
       return;
     }
 
-    // Web/macOS are not currently sold through either entitlement source.
+    // Unsupported entitlement platforms must fail closed. In particular,
+    // web must never receive Pro merely because RevenueCat is unavailable.
     if (!RevenueCatConfig.isSupported) {
-      _isPro = true;
+      _isPro = false;
       _initialized = true;
       return;
     }
@@ -165,8 +170,7 @@ class FeatureGateService extends ChangeNotifier {
 
   /// Whether the user currently has Pro entitlement (sync, cached).
   bool get isPro {
-    if (PlatformUtils.isWindows || PlatformUtils.isLinux) return _isPro;
-    return !RevenueCatConfig.isSupported || _isPro;
+    return _isPro;
   }
 
   /// Update the cached state and notify listeners only when it actually
@@ -189,7 +193,7 @@ class FeatureGateService extends ChangeNotifier {
       return;
     }
     if (!RevenueCatConfig.isSupported) {
-      _setPro(true);
+      _setPro(false);
       return;
     }
     final status = await _revenueCatService.checkSubscription();
@@ -235,6 +239,8 @@ class FeatureGateService extends ChangeNotifier {
       case AppFeature.accounting:
       case AppFeature.reconciliation:
       case AppFeature.multiUser:
+      case AppFeature.promotions:
+      case AppFeature.pharmacy:
         return true;
     }
   }
@@ -253,4 +259,10 @@ class FeatureGateService extends ChangeNotifier {
     }
     return const FeatureAccess.denied(FeatureDenyReason.requiresPro);
   }
+
+  /// Combines a store's opt-in setting with its live subscription entitlement.
+  /// The raw setting remains stored across expiry/renewal, while execution is
+  /// disabled immediately whenever Pro is unavailable.
+  bool isEnabled(AppFeature feature, {required bool settingEnabled}) =>
+      settingEnabled && canAccess(feature).granted;
 }

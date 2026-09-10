@@ -116,6 +116,7 @@ import '../../features/employees/presentation/bloc/roles_bloc.dart';
 import '../database/daos/accounting_dao.dart';
 import '../database/daos/adjustment_return_dao.dart';
 import '../database/daos/cheque_confirmation_dao.dart';
+import '../database/daos/cheque_instrument_dao.dart';
 import '../database/daos/inventory_adjustment_dao.dart';
 import '../database/daos/batch_audit_dao.dart';
 import '../services/inventory/inventory_adjustment_service.dart';
@@ -135,12 +136,14 @@ import '../../features/accounting/data/repositories/journal_repository_impl.dart
 import '../../features/accounting/data/repositories/accounting_repository.dart';
 import '../../features/accounting/domain/services/accounting_close_service.dart';
 import '../services/cheque_lifecycle_service.dart';
+import '../services/cheque_management_service.dart';
 import '../services/journal_entry_service.dart';
 import '../services/owner_finance_service.dart';
 import '../services/fixed_asset_service.dart';
 import '../services/commissions/commission_service.dart';
 import '../services/loyalty/loyalty_points_service.dart';
 import '../services/pharmacy/medicine_normalization_service.dart';
+import '../promotions/promotion_repository.dart';
 import '../services/returns/return_approval_service.dart';
 import '../services/returns/return_journal_policy.dart';
 import '../services/returns/return_posting_service.dart';
@@ -221,6 +224,13 @@ Future<void> init() async {
   sl.registerLazySingleton(() => CategoryDao(sl()));
   sl.registerLazySingleton(() => SizeDao(sl()));
   sl.registerLazySingleton(() => SettingsDao(sl()));
+  sl.registerLazySingleton(
+    () => PromotionRepository(
+      sl<AppDatabase>(),
+      sl<AuditLogService>(),
+      featureGate: sl<FeatureGateService>(),
+    ),
+  );
   sl.registerLazySingleton(() => BarcodeTemplateDao(sl()));
   sl.registerLazySingleton(() => PurchaseDao(sl()));
   sl.registerLazySingleton(() => SaleDao(sl()));
@@ -234,6 +244,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => const MedicineNormalizationService());
   // Phase 14.0 — cheque confirmation lifecycle (DB-backed).
   sl.registerLazySingleton(() => ChequeConfirmationDao(sl()));
+  sl.registerLazySingleton(() => ChequeInstrumentDao(sl()));
 
   // Auth Services
   sl.registerLazySingleton(() => PasswordService());
@@ -493,15 +504,28 @@ Future<void> init() async {
 
   // Phase 15.0 — cheque lifecycle JE wiring. Orchestrates `cleared` /
   // `bounced` / `cancelled` transitions across the cheque_confirmations
-  // DAO + the matching Purchase / Sale payment SoT, so a confirmed
-  // cheque actually settles the AP/AR balance + posts the Dr/Cr Bank
-  // journal entry.
+  // DAO + the matching Purchase / Sale payment SoT. Posting settles the
+  // AP/AR balance through the cheque clearing account; clearance later
+  // transfers that amount between the clearing account and the bank.
   sl.registerLazySingleton(
     () => ChequeLifecycleService(
       db: sl<AppDatabase>(),
       confirmationDao: sl<ChequeConfirmationDao>(),
+      instrumentDao: sl<ChequeInstrumentDao>(),
       purchaseRepository: sl<PurchaseRepository>(),
       saleRepository: sl<SaleRepository>(),
+      journalEntryService: sl<JournalEntryService>(),
+      auditLogService: sl<AuditLogService>(),
+    ),
+  );
+
+  sl.registerLazySingleton(
+    () => ChequeManagementService(
+      db: sl<AppDatabase>(),
+      instrumentDao: sl<ChequeInstrumentDao>(),
+      saleRepository: sl<SaleRepository>(),
+      purchaseRepository: sl<PurchaseRepository>(),
+      auditLogService: sl<AuditLogService>(),
     ),
   );
 
@@ -644,6 +668,7 @@ Future<void> init() async {
       sl<AuditLogService>(),
       belowCostService: sl<BelowCostSaleService>(),
       loyaltyRepository: sl<LoyaltyRepository>(),
+      promotionRepository: sl<PromotionRepository>(),
       lan: sl<LanNetworkService>(),
     ),
   );
@@ -651,8 +676,11 @@ Future<void> init() async {
     () => SaleReturnsBloc(sl<SaleRepository>(), lan: sl<LanNetworkService>()),
   );
   sl.registerFactory(
-    () =>
-        SaleReturnFormBloc(sl<SaleRepository>(), lan: sl<LanNetworkService>()),
+    () => SaleReturnFormBloc(
+      sl<SaleRepository>(),
+      promotionRepository: sl<PromotionRepository>(),
+      lan: sl<LanNetworkService>(),
+    ),
   );
 
   // Customers Blocs
@@ -1058,6 +1086,8 @@ Future<void> init() async {
       commissions: sl<CommissionService>(),
       loyaltyPoints: sl<LoyaltyPointsService>(),
       pharmacy: sl<PharmacyDao>(),
+      promotions: sl<PromotionRepository>(),
+      featureGate: sl<FeatureGateService>(),
     ),
   );
   sl.registerLazySingleton(

@@ -1,5 +1,4 @@
 import 'package:easy_localization/easy_localization.dart';
-import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -7,13 +6,14 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/theme/colors.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/database/daos/cheque_confirmation_dao.dart';
+import '../../../../core/database/daos/cheque_instrument_dao.dart';
+import '../../../../core/services/cheque_management_service.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/compliance/customer_credit_note_service.dart';
 import '../../../../core/services/parties/party_balance_classifier.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../../core/di/injection_container.dart';
-import '../../../sales/domain/repositories/sale_repository.dart';
-import '../../../sales/domain/entities/sale_entity.dart';
 import '../../domain/repositories/customer_repository.dart';
 import '../../domain/repositories/loyalty_repository.dart';
 import '../bloc/customer_loyalty_bloc.dart';
@@ -22,6 +22,7 @@ import '../services/customer_transaction_pdf_service.dart';
 import '../widgets/edit_transaction_dialog.dart';
 import '../../../shared/widgets/unified_return_search_sheet.dart';
 import '../../../../core/services/unified_return_service.dart';
+import '../../../cheques/presentation/widgets/party_cheque_alerts_section.dart';
 
 /// Customer profile screen with 360° view
 class CustomerProfileScreen extends StatefulWidget {
@@ -33,6 +34,9 @@ class CustomerProfileScreen extends StatefulWidget {
   State<CustomerProfileScreen> createState() => _CustomerProfileScreenState();
 }
 
+// Kept temporarily for backwards-compatible layout references; the profile
+// now renders PartyChequeAlertsSection, which covers every cheque source.
+// ignore: unused_element
 class _OutstandingChequesSection extends StatelessWidget {
   final int customerId;
 
@@ -44,17 +48,20 @@ class _OutstandingChequesSection extends StatelessWidget {
     final cs = theme.colorScheme;
     final currencyService = sl<CurrencyService>();
 
-    return StreamBuilder<List<SaleEntity>>(
-      stream: sl<SaleRepository>().watchCustomerSales(customerId),
+    return StreamBuilder<List<ChequeRegisterEntry>>(
+      stream: sl<ChequeManagementService>().watchRegister().map(
+        (entries) => entries
+            .where(
+              (entry) =>
+                  entry.instrument.sourceTable == ChequeSourceTables.sale &&
+                  entry.instrument.partyType == 'customer' &&
+                  entry.instrument.partyId == customerId &&
+                  ChequeInstrumentStatus.open.contains(entry.instrument.status),
+            )
+            .toList(growable: false),
+      ),
       builder: (context, snapshot) {
-        final sales = snapshot.data ?? const <SaleEntity>[];
-        final chequeSales = sales
-            .where((s) =>
-                s.isCompleted &&
-                s.paymentMethod == 'cheque' &&
-                s.dueDate != null &&
-                s.remainingCents > Decimal.zero)
-            .toList();
+        final cheques = snapshot.data ?? const <ChequeRegisterEntry>[];
 
         return Card(
           elevation: 0,
@@ -73,36 +80,43 @@ class _OutstandingChequesSection extends StatelessWidget {
                     const SizedBox(width: 8),
                     Text(
                       'customers.outstanding_cheques'.tr(),
-                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 if (snapshot.connectionState == ConnectionState.waiting)
                   const Center(child: CircularProgressIndicator())
-                else if (chequeSales.isEmpty)
+                else if (cheques.isEmpty)
                   Text(
                     'customers.no_outstanding_cheques'.tr(),
-                    style: theme.textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
                   )
                 else
-                  ...chequeSales.take(5).map((s) {
-                    final dueDate = s.dueDate;
-                    final isOverdue = dueDate != null && DateTime.now().isAfter(dueDate);
-                    final remainingCents = s.remainingCents.toBigInt().toInt();
+                  ...cheques.take(5).map((entry) {
+                    final cheque = entry.instrument;
+                    final dueDate = cheque.dueDate;
+                    final isOverdue = DateTime.now().isAfter(dueDate);
+                    final amountCents = cheque.amountCents.toBigInt().toInt();
 
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 10),
                       child: InkWell(
-                        onTap: () => context.push('/sales/${s.id}'),
+                        onTap: () => context.push('/sales/${cheque.sourceId}'),
                         borderRadius: BorderRadius.circular(12),
                         child: Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: (isOverdue ? cs.error : cs.primary).withValues(alpha: 0.06),
+                            color: (isOverdue ? cs.error : cs.primary)
+                                .withValues(alpha: 0.06),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: (isOverdue ? cs.error : cs.primary).withValues(alpha: 0.25),
+                              color: (isOverdue ? cs.error : cs.primary)
+                                  .withValues(alpha: 0.25),
                             ),
                           ),
                           child: Row(
@@ -117,16 +131,27 @@ class _OutstandingChequesSection extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'customers.cheque_for_invoice'.tr(args: [s.invoiceNumber]),
-                                      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-                                    ),
-                                    if (dueDate != null)
-                                      Text(
-                                        'customers.cheque_due_on'.tr(args: [DateFormat.yMMMd().format(dueDate)]),
-                                        style: theme.textTheme.bodySmall?.copyWith(
-                                          color: cs.onSurfaceVariant,
-                                        ),
+                                      'customers.cheque_for_invoice'.tr(
+                                        args: [entry.referenceNumber],
                                       ),
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+                                    Text(
+                                      'customers.cheque_due_on'.tr(
+                                        args: [
+                                          DateFormat(
+                                            'dd/MM/yyyy',
+                                          ).format(dueDate),
+                                        ],
+                                      ),
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: cs.onSurfaceVariant,
+                                          ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -135,8 +160,10 @@ class _OutstandingChequesSection extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(
-                                    currencyService.format(remainingCents),
-                                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                                    currencyService.format(amountCents),
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
                                   Text(
                                     (isOverdue
@@ -225,7 +252,11 @@ class _StoreCreditSection extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      const Icon(LucideIcons.wallet, size: 18, color: Colors.teal),
+                      const Icon(
+                        LucideIcons.wallet,
+                        size: 18,
+                        color: Colors.teal,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -254,7 +285,9 @@ class _StoreCreditSection extends StatelessWidget {
                   const SizedBox(height: 12),
                   ...notes.map((note) {
                     final balance = note.balanceCents.toBigInt().toInt();
-                    final original = note.originalAmountCents.toBigInt().toInt();
+                    final original = note.originalAmountCents
+                        .toBigInt()
+                        .toInt();
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 6),
                       child: Row(
@@ -262,8 +295,11 @@ class _StoreCreditSection extends StatelessWidget {
                           CircleAvatar(
                             radius: 18,
                             backgroundColor: Colors.teal.withValues(alpha: 0.1),
-                            child: const Icon(LucideIcons.ticket,
-                                size: 18, color: Colors.teal),
+                            child: const Icon(
+                              LucideIcons.ticket,
+                              size: 18,
+                              color: Colors.teal,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -339,12 +375,14 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     return MultiBlocProvider(
       providers: [
         BlocProvider(
-          create: (context) => CustomerProfileBloc(sl<CustomerRepository>())
-            ..add(CustomerProfileLoadRequested(widget.customerId)),
+          create: (context) =>
+              CustomerProfileBloc(sl<CustomerRepository>())
+                ..add(CustomerProfileLoadRequested(widget.customerId)),
         ),
         BlocProvider(
-          create: (context) => CustomerLoyaltyBloc(sl<LoyaltyRepository>())
-            ..add(CustomerLoyaltyLoadRequested(widget.customerId)),
+          create: (context) =>
+              CustomerLoyaltyBloc(sl<LoyaltyRepository>())
+                ..add(CustomerLoyaltyLoadRequested(widget.customerId)),
         ),
       ],
       child: BlocBuilder<CustomerProfileBloc, RealtimeState<Customer?>>(
@@ -362,19 +400,17 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
           if (state is RealtimeError<Customer?>) {
             return Scaffold(
               appBar: AppBar(),
-              body: Center(
-                child: Text('common.error'.tr()),
-              ),
+              body: Center(child: Text('common.error'.tr())),
             );
           }
 
-          final customer = state is RealtimeSuccess<Customer?> ? state.data : null;
+          final customer = state is RealtimeSuccess<Customer?>
+              ? state.data
+              : null;
           if (customer == null) {
             return Scaffold(
               appBar: AppBar(),
-              body: Center(
-                child: Text('customers.empty'.tr()),
-              ),
+              body: Center(child: Text('customers.empty'.tr())),
             );
           }
 
@@ -386,7 +422,8 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
               actions: [
                 IconButton(
                   icon: const Icon(Icons.edit_outlined),
-                  onPressed: () => context.push('/customers/${widget.customerId}/edit'),
+                  onPressed: () =>
+                      context.push('/customers/${widget.customerId}/edit'),
                 ),
                 PopupMenuButton<String>(
                   onSelected: (value) {
@@ -448,7 +485,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                     const SizedBox(height: 16),
                     _BalanceCard(
                       balanceCents: balanceCents,
-                      openingBalanceCents: customer.openingBalanceCents.toBigInt().toInt(),
+                      openingBalanceCents: customer.openingBalanceCents
+                          .toBigInt()
+                          .toInt(),
                       currencyService: currencyService,
                     ),
                     const SizedBox(height: 16),
@@ -464,16 +503,25 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                     ],
                     _QuickActionsSection(
                       customer: customer,
-                      onPaymentPressed: () => _showPaymentDialog(context, customer),
-                      onDiscountPressed: () => _showDiscountDialog(context, customer),
-                      onReturnPressed: () => _openUnifiedReturn(context, customer),
+                      onPaymentPressed: () =>
+                          _showPaymentDialog(context, customer),
+                      onDiscountPressed: () =>
+                          _showDiscountDialog(context, customer),
+                      onReturnPressed: () =>
+                          _openUnifiedReturn(context, customer),
                     ),
                     const SizedBox(height: 16),
-                    _OutstandingChequesSection(customerId: widget.customerId),
+                    PartyChequeAlertsSection(
+                      partyType: 'customer',
+                      partyId: widget.customerId,
+                    ),
                     const SizedBox(height: 16),
                     _ContactInformationSection(customer: customer),
                     const SizedBox(height: 16),
-                    _RecentTransactionsSection(customerId: widget.customerId, customer: customer),
+                    _RecentTransactionsSection(
+                      customerId: widget.customerId,
+                      customer: customer,
+                    ),
                   ],
                 ),
               ),
@@ -486,7 +534,7 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
 
   void _showDeleteConfirmation(BuildContext context, Customer customer) {
     final balanceCents = customer.balanceCents.toBigInt().toInt();
-    
+
     if (balanceCents != 0) {
       showDialog<void>(
         context: context,
@@ -508,7 +556,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('customers.delete_confirm_title'.tr()),
-        content: Text('customers.delete_confirm_message'.tr(args: [customer.name])),
+        content: Text(
+          'customers.delete_confirm_message'.tr(args: [customer.name]),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -593,18 +643,26 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
           final colorScheme = theme.colorScheme;
 
           return Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(LucideIcons.banknote, size: 40, color: colorScheme.primary),
+                    Icon(
+                      LucideIcons.banknote,
+                      size: 40,
+                      color: colorScheme.primary,
+                    ),
                     const SizedBox(height: 12),
                     Text(
                       'customers.receive_payment'.tr(),
-                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 24),
                     TextField(
@@ -612,10 +670,14 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                       decoration: InputDecoration(
                         labelText: 'customers.payment_amount'.tr(),
                         prefixIcon: const Icon(LucideIcons.badgeDollarSign),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         filled: true,
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       autofocus: true,
                       onTap: () => selectAllText(amountController),
                     ),
@@ -637,7 +699,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                         decoration: InputDecoration(
                           labelText: 'customers.payment_date'.tr(),
                           prefixIcon: const Icon(LucideIcons.calendarDays),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           filled: true,
                         ),
                         child: Text(
@@ -653,7 +717,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                         labelText: 'customers.description'.tr(),
                         hintText: 'customers.payment_description_hint'.tr(),
                         prefixIcon: const Icon(LucideIcons.fileText),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         filled: true,
                       ),
                     ),
@@ -665,7 +731,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                             onPressed: () => Navigator.of(dialogContext).pop(),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             child: Text('common.cancel'.tr()),
                           ),
@@ -674,12 +742,20 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                         Expanded(
                           child: FilledButton(
                             onPressed: () async {
-                              final scaffoldMessenger = ScaffoldMessenger.of(dialogContext);
+                              final scaffoldMessenger = ScaffoldMessenger.of(
+                                dialogContext,
+                              );
                               final navigator = Navigator.of(dialogContext);
-                              final amount = double.tryParse(amountController.text);
+                              final amount = double.tryParse(
+                                amountController.text,
+                              );
                               if (amount == null || amount <= 0) {
                                 scaffoldMessenger.showSnackBar(
-                                  SnackBar(content: Text('customers.amount_invalid'.tr())),
+                                  SnackBar(
+                                    content: Text(
+                                      'customers.amount_invalid'.tr(),
+                                    ),
+                                  ),
                                 );
                                 return;
                               }
@@ -691,24 +767,34 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                                 // the repository (see CustomerRepository.
                                 // recordPayment), not by the widget.
                                 final amountCents = (amount * 100).round();
-                                final txId = await sl<CustomerRepository>().recordPayment(
-                                  customerId: customer.id,
-                                  amountCents: amountCents,
-                                  currencyId: customer.currencyId,
-                                  description: descriptionController.text.isEmpty
-                                      ? null
-                                      : descriptionController.text,
-                                  transactionDate: selectedDate,
-                                );
+                                final txId = await sl<CustomerRepository>()
+                                    .recordPayment(
+                                      customerId: customer.id,
+                                      amountCents: amountCents,
+                                      currencyId: customer.currencyId,
+                                      description:
+                                          descriptionController.text.isEmpty
+                                          ? null
+                                          : descriptionController.text,
+                                      transactionDate: selectedDate,
+                                    );
 
                                 profileBloc.refresh();
                                 loyaltyBloc.refresh();
 
                                 if (mounted) {
                                   scaffoldMessenger.showSnackBar(
-                                    SnackBar(content: Text('customers.payment_recorded'.tr())),
+                                    SnackBar(
+                                      content: Text(
+                                        'customers.payment_recorded'.tr(),
+                                      ),
+                                    ),
                                   );
-                                  _showReceiptDialog(this.context, txId, customer);
+                                  _showReceiptDialog(
+                                    this.context,
+                                    txId,
+                                    customer,
+                                  );
                                 }
                               } catch (e) {
                                 if (mounted) {
@@ -723,7 +809,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                             },
                             style: FilledButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             child: Text('customers.confirm_payment'.tr()),
                           ),
@@ -740,7 +828,11 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
     );
   }
 
-  void _showReceiptDialog(BuildContext context, int transactionId, Customer customer) {
+  void _showReceiptDialog(
+    BuildContext context,
+    int transactionId,
+    Customer customer,
+  ) {
     showDialog<void>(
       context: context,
       builder: (dialogContext) => Dialog(
@@ -750,7 +842,11 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(LucideIcons.checkCircle, color: Colors.green, size: 48),
+              const Icon(
+                LucideIcons.checkCircle,
+                color: Colors.green,
+                size: 48,
+              ),
               const SizedBox(height: 20),
               Row(
                 children: [
@@ -834,18 +930,26 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
           final colorScheme = theme.colorScheme;
 
           return Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(LucideIcons.badgePercent, size: 40, color: colorScheme.primary),
+                    Icon(
+                      LucideIcons.badgePercent,
+                      size: 40,
+                      color: colorScheme.primary,
+                    ),
                     const SizedBox(height: 12),
                     Text(
                       'customers.add_discount'.tr(),
-                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 24),
                     DropdownButtonFormField<String>(
@@ -853,7 +957,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                       decoration: InputDecoration(
                         labelText: 'customers.discount_type'.tr(),
                         prefixIcon: const Icon(LucideIcons.tag),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         filled: true,
                       ),
                       items: discountTypes.map((type) {
@@ -874,10 +980,14 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                       decoration: InputDecoration(
                         labelText: 'customers.discount_amount'.tr(),
                         prefixIcon: const Icon(LucideIcons.badgeDollarSign),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         filled: true,
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       autofocus: true,
                       onTap: () => selectAllText(amountController),
                     ),
@@ -899,7 +1009,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                         decoration: InputDecoration(
                           labelText: 'customers.discount_date'.tr(),
                           prefixIcon: const Icon(LucideIcons.calendarDays),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           filled: true,
                         ),
                         child: Text(
@@ -915,7 +1027,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                         labelText: 'customers.description'.tr(),
                         hintText: 'customers.discount_description_hint'.tr(),
                         prefixIcon: const Icon(LucideIcons.fileText),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         filled: true,
                       ),
                     ),
@@ -927,7 +1041,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                             onPressed: () => Navigator.of(dialogContext).pop(),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             child: Text('common.cancel'.tr()),
                           ),
@@ -936,13 +1052,21 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                         Expanded(
                           child: FilledButton(
                             onPressed: () async {
-                              final scaffoldMessenger = ScaffoldMessenger.of(dialogContext);
+                              final scaffoldMessenger = ScaffoldMessenger.of(
+                                dialogContext,
+                              );
                               final navigator = Navigator.of(dialogContext);
 
-                              final amount = double.tryParse(amountController.text);
+                              final amount = double.tryParse(
+                                amountController.text,
+                              );
                               if (amount == null || amount <= 0) {
                                 scaffoldMessenger.showSnackBar(
-                                  SnackBar(content: Text('customers.amount_invalid'.tr())),
+                                  SnackBar(
+                                    content: Text(
+                                      'customers.amount_invalid'.tr(),
+                                    ),
+                                  ),
                                 );
                                 return;
                               }
@@ -955,25 +1079,36 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                                 // Phase 3.5.3 — discount is a positive
                                 // operator-facing amount; the repository
                                 // negates it before persisting.
-                                final txId = await sl<CustomerRepository>().recordDiscount(
-                                  customerId: customer.id,
-                                  amountCents: amountCents,
-                                  currencyId: customer.currencyId,
-                                  description: descriptionController.text.isEmpty
-                                      ? 'customers.discount_type_$selectedDiscountType'.tr()
-                                      : descriptionController.text,
-                                  discountType: selectedDiscountType,
-                                  transactionDate: selectedDate,
-                                );
+                                final txId = await sl<CustomerRepository>()
+                                    .recordDiscount(
+                                      customerId: customer.id,
+                                      amountCents: amountCents,
+                                      currencyId: customer.currencyId,
+                                      description:
+                                          descriptionController.text.isEmpty
+                                          ? 'customers.discount_type_$selectedDiscountType'
+                                                .tr()
+                                          : descriptionController.text,
+                                      discountType: selectedDiscountType,
+                                      transactionDate: selectedDate,
+                                    );
 
                                 profileBloc.refresh();
                                 loyaltyBloc.refresh();
 
                                 if (mounted) {
                                   scaffoldMessenger.showSnackBar(
-                                    SnackBar(content: Text('customers.discount_applied'.tr())),
+                                    SnackBar(
+                                      content: Text(
+                                        'customers.discount_applied'.tr(),
+                                      ),
+                                    ),
                                   );
-                                  _showReceiptDialog(this.context, txId, customer);
+                                  _showReceiptDialog(
+                                    this.context,
+                                    txId,
+                                    customer,
+                                  );
                                 }
                               } catch (e) {
                                 if (mounted) {
@@ -988,7 +1123,9 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                             },
                             style: FilledButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             child: Text('customers.apply_discount'.tr()),
                           ),
@@ -1021,8 +1158,12 @@ class _ProfileHeaderCard extends StatelessWidget {
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
       colors: [
-        (isDark ? AppColors.primaryDark : AppColors.primary).withValues(alpha: 0.95),
-        (isDark ? AppColors.primary : AppColors.primaryContainer).withValues(alpha: 0.85),
+        (isDark ? AppColors.primaryDark : AppColors.primary).withValues(
+          alpha: 0.95,
+        ),
+        (isDark ? AppColors.primary : AppColors.primaryContainer).withValues(
+          alpha: 0.85,
+        ),
       ],
     );
 
@@ -1031,7 +1172,9 @@ class _ProfileHeaderCard extends StatelessWidget {
         gradient: headerGradient,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: isDark ? 0.25 : 0.35),
+          color: colorScheme.outlineVariant.withValues(
+            alpha: isDark ? 0.25 : 0.35,
+          ),
         ),
         boxShadow: isDark
             ? null
@@ -1049,7 +1192,9 @@ class _ProfileHeaderCard extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 44,
-              backgroundColor: Colors.white.withValues(alpha: isDark ? 0.18 : 0.22),
+              backgroundColor: Colors.white.withValues(
+                alpha: isDark ? 0.18 : 0.22,
+              ),
               child: Text(
                 customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?',
                 style: theme.textTheme.headlineLarge?.copyWith(
@@ -1131,7 +1276,7 @@ class _SegmentBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    
+
     Color color;
     IconData icon;
     String label;
@@ -1156,9 +1301,13 @@ class _SegmentBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: (isDark ? Colors.black : Colors.white).withValues(alpha: isDark ? 0.25 : 0.18),
+        color: (isDark ? Colors.black : Colors.white).withValues(
+          alpha: isDark ? 0.25 : 0.18,
+        ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: isDark ? 0.18 : 0.22)),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: isDark ? 0.18 : 0.22),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1236,8 +1385,8 @@ class _BalanceCard extends StatelessWidget {
                 color: isZero
                     ? (isDark ? const Color(0xFF64B5F6) : Colors.blue)
                     : isReceivable
-                        ? (isDark ? const Color(0xFFA5D6A7) : Colors.green)
-                        : (isDark ? const Color(0xFFEF9A9A) : Colors.red),
+                    ? (isDark ? const Color(0xFFA5D6A7) : Colors.green)
+                    : (isDark ? const Color(0xFFEF9A9A) : Colors.red),
               ),
             ),
             const SizedBox(height: 4),
@@ -1245,8 +1394,8 @@ class _BalanceCard extends StatelessWidget {
               isZero
                   ? 'customers.balance_settled'.tr()
                   : isReceivable
-                      ? 'customers.balance_receivable'.tr()
-                      : 'customers.balance_credit'.tr(),
+                  ? 'customers.balance_receivable'.tr()
+                  : 'customers.balance_credit'.tr(),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: isDark
                     ? Colors.white.withValues(alpha: 0.65)
@@ -1277,7 +1426,9 @@ class _BalanceCard extends StatelessWidget {
                         style: theme.textTheme.bodyMedium?.copyWith(
                           fontWeight: FontWeight.w600,
                           color: openingBalanceCents > 0
-                              ? (isDark ? const Color(0xFFA5D6A7) : Colors.green)
+                              ? (isDark
+                                    ? const Color(0xFFA5D6A7)
+                                    : Colors.green)
                               : (isDark ? const Color(0xFFEF9A9A) : Colors.red),
                         ),
                       ),
@@ -1315,7 +1466,10 @@ class _LoyaltySection extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final colorScheme = theme.colorScheme;
 
-    return BlocBuilder<CustomerLoyaltyBloc, RealtimeState<CustomerLoyaltySummary?>>(
+    return BlocBuilder<
+      CustomerLoyaltyBloc,
+      RealtimeState<CustomerLoyaltySummary?>
+    >(
       builder: (context, state) {
         if (state is RealtimeLoading) {
           return const Card(
@@ -1357,7 +1511,9 @@ class _LoyaltySection extends StatelessWidget {
                     children: [
                       Icon(
                         Icons.card_giftcard,
-                        color: isDark ? const Color(0xFF90CAF9) : theme.colorScheme.tertiary,
+                        color: isDark
+                            ? const Color(0xFF90CAF9)
+                            : theme.colorScheme.tertiary,
                       ),
                       const SizedBox(width: 8),
                       Text(
@@ -1369,12 +1525,19 @@ class _LoyaltySection extends StatelessWidget {
                       ),
                       const Spacer(),
                       InkWell(
-                        onTap: () => _showChangeTierDialog(context, customerId, summary.currentTier),
+                        onTap: () => _showChangeTierDialog(
+                          context,
+                          customerId,
+                          summary.currentTier,
+                        ),
                         borderRadius: BorderRadius.circular(12),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
-                            color: summary.currentTier != null 
+                            color: summary.currentTier != null
                                 ? _parseColor(summary.currentTier!.color)
                                 : colorScheme.surfaceContainerHighest,
                             borderRadius: BorderRadius.circular(12),
@@ -1383,9 +1546,12 @@ class _LoyaltySection extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                summary.currentTier?.name ?? 'customers.no_tier'.tr(),
+                                summary.currentTier?.name ??
+                                    'customers.no_tier'.tr(),
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                  color: summary.currentTier != null ? Colors.white : null,
+                                  color: summary.currentTier != null
+                                      ? Colors.white
+                                      : null,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -1393,7 +1559,9 @@ class _LoyaltySection extends StatelessWidget {
                               Icon(
                                 LucideIcons.chevronDown,
                                 size: 14,
-                                color: summary.currentTier != null ? Colors.white : null,
+                                color: summary.currentTier != null
+                                    ? Colors.white
+                                    : null,
                               ),
                             ],
                           ),
@@ -1502,7 +1670,8 @@ class _LoyaltySection extends StatelessWidget {
                       value: summary.nextTier!.minPoints > 0
                           ? summary.pointsBalance / summary.nextTier!.minPoints
                           : 0,
-                      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                      backgroundColor:
+                          theme.colorScheme.surfaceContainerHighest,
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -1530,7 +1699,8 @@ class _LoyaltySection extends StatelessWidget {
                             '${benefit.labelKey.tr()}: ${benefit.value}',
                             style: theme.textTheme.bodySmall,
                           ),
-                          backgroundColor: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
+                          backgroundColor: theme.colorScheme.primaryContainer
+                              .withValues(alpha: 0.5),
                         );
                       }).toList(),
                     ),
@@ -1540,7 +1710,8 @@ class _LoyaltySection extends StatelessWidget {
                   if (summary.nextTier != null) ...[
                     const SizedBox(height: 16),
                     OutlinedButton.icon(
-                      onPressed: () => _showNextTierBenefits(context, summary.nextTier!),
+                      onPressed: () =>
+                          _showNextTierBenefits(context, summary.nextTier!),
                       icon: const Icon(Icons.lock_open_outlined, size: 18),
                       label: Text('customers.next_tier_benefits'.tr()),
                     ),
@@ -1572,37 +1743,39 @@ class _LoyaltySection extends StatelessWidget {
     }
   }
 
-  Future<void> _showChangeTierDialog(BuildContext context, int customerId, LoyaltyTier? currentTier) async {
+  Future<void> _showChangeTierDialog(
+    BuildContext context,
+    int customerId,
+    LoyaltyTier? currentTier,
+  ) async {
     final loyaltyRepo = sl<LoyaltyRepository>();
     final tiers = await loyaltyRepo.getAllTiers();
-    
+
     if (!context.mounted) return;
-    
+
     final selectedTierId = await showDialog<int?>(
       context: context,
-      builder: (ctx) => _ChangeTierDialog(
-        tiers: tiers,
-        currentTierId: currentTier?.id,
-      ),
+      builder: (ctx) =>
+          _ChangeTierDialog(tiers: tiers, currentTierId: currentTier?.id),
     );
-    
+
     if (selectedTierId == null) return; // User cancelled or no change
-    
+
     // -1 means "remove tier"
     final newTierId = selectedTierId == -1 ? null : selectedTierId;
-    
+
     try {
       await loyaltyRepo.assignTierToCustomer(customerId, newTierId);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('customers.tier_updated'.tr())),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('customers.tier_updated'.tr())));
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
@@ -1622,10 +1795,7 @@ class _LoyaltySection extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(
-                  Icons.star,
-                  color: _parseColor(nextTier.color),
-                ),
+                Icon(Icons.star, color: _parseColor(nextTier.color)),
                 const SizedBox(width: 8),
                 Text(
                   nextTier.name,
@@ -1641,16 +1811,22 @@ class _LoyaltySection extends StatelessWidget {
               style: theme.textTheme.titleMedium,
             ),
             const SizedBox(height: 12),
-            ...benefitsSummary.benefits.map((benefit) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  const Icon(Icons.check_circle, color: Colors.green, size: 20),
-                  const SizedBox(width: 8),
-                  Text('${benefit.labelKey.tr()}: ${benefit.value}'),
-                ],
+            ...benefitsSummary.benefits.map(
+              (benefit) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.check_circle,
+                      color: Colors.green,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Text('${benefit.labelKey.tr()}: ${benefit.value}'),
+                  ],
+                ),
               ),
-            )),
+            ),
             const SizedBox(height: 20),
           ],
         ),
@@ -1661,11 +1837,11 @@ class _LoyaltySection extends StatelessWidget {
   Future<void> _showPointsHistory(BuildContext context, int customerId) async {
     final loyaltyRepo = sl<LoyaltyRepository>();
     final transactions = await loyaltyRepo.getPointsTransactions(customerId);
-    
+
     if (!context.mounted) return;
-    
+
     final theme = Theme.of(context);
-    
+
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1703,7 +1879,11 @@ class _LoyaltySection extends StatelessWidget {
                     padding: const EdgeInsets.all(32),
                     child: Column(
                       children: [
-                        Icon(Icons.history, size: 48, color: theme.colorScheme.outline),
+                        Icon(
+                          Icons.history,
+                          size: 48,
+                          color: theme.colorScheme.outline,
+                        ),
                         const SizedBox(height: 8),
                         Text(
                           'customers.no_points_history'.tr(),
@@ -1720,17 +1900,18 @@ class _LoyaltySection extends StatelessWidget {
                   child: ListView.separated(
                     controller: scrollController,
                     itemCount: transactions.length,
-                    separatorBuilder: (context, index) => const Divider(height: 1),
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final tx = transactions[index];
                       final isEarn = tx.transactionType == 'earn';
                       final isRedeem = tx.transactionType == 'redeem';
                       final isReturn = tx.referenceType == 'sale_return';
-                      
+
                       IconData icon;
                       Color color;
                       String typeLabel;
-                      
+
                       if (isReturn) {
                         icon = Icons.undo;
                         color = Colors.orange;
@@ -1744,9 +1925,11 @@ class _LoyaltySection extends StatelessWidget {
                         color = Colors.green;
                         typeLabel = 'customers.points_earned'.tr();
                       }
-                      
-                      final pointsText = isEarn ? '+${tx.points}' : '-${tx.points}';
-                      
+
+                      final pointsText = isEarn
+                          ? '+${tx.points}'
+                          : '-${tx.points}';
+
                       return ListTile(
                         leading: CircleAvatar(
                           backgroundColor: color.withValues(alpha: 0.1),
@@ -1789,7 +1972,9 @@ class _LoyaltySection extends StatelessWidget {
                           ],
                         ),
                         trailing: Text(
-                          'customers.balance_after'.tr(args: [tx.balanceAfter.toString()]),
+                          'customers.balance_after'.tr(
+                            args: [tx.balanceAfter.toString()],
+                          ),
                           style: theme.textTheme.bodySmall,
                         ),
                       );
@@ -1879,8 +2064,12 @@ class _QuickActionsSection extends StatelessWidget {
       icon: Icons.payment,
       label: 'customers.payment'.tr(),
       color: isDark ? const Color(0xFF90CAF9) : colorScheme.primary,
-      backgroundColor: isDark ? const Color(0xFF0D1B2A) : colorScheme.primaryContainer.withValues(alpha: 0.4),
-      borderColor: isDark ? const Color(0xFF1E3A5F) : colorScheme.primary.withValues(alpha: 0.2),
+      backgroundColor: isDark
+          ? const Color(0xFF0D1B2A)
+          : colorScheme.primaryContainer.withValues(alpha: 0.4),
+      borderColor: isDark
+          ? const Color(0xFF1E3A5F)
+          : colorScheme.primary.withValues(alpha: 0.2),
       onTap: onPaymentPressed,
     );
 
@@ -1888,8 +2077,12 @@ class _QuickActionsSection extends StatelessWidget {
       icon: Icons.discount_outlined,
       label: 'customers.discount'.tr(),
       color: isDark ? const Color(0xFFFFB74D) : colorScheme.secondary,
-      backgroundColor: isDark ? const Color(0xFF1A1408) : colorScheme.secondaryContainer.withValues(alpha: 0.4),
-      borderColor: isDark ? const Color(0xFF3D2E10) : colorScheme.secondary.withValues(alpha: 0.2),
+      backgroundColor: isDark
+          ? const Color(0xFF1A1408)
+          : colorScheme.secondaryContainer.withValues(alpha: 0.4),
+      borderColor: isDark
+          ? const Color(0xFF3D2E10)
+          : colorScheme.secondary.withValues(alpha: 0.2),
       onTap: onDiscountPressed,
     );
 
@@ -1897,8 +2090,12 @@ class _QuickActionsSection extends StatelessWidget {
       icon: Icons.assignment_return,
       label: 'customers.return'.tr(),
       color: isDark ? const Color(0xFF80CBC4) : colorScheme.tertiary,
-      backgroundColor: isDark ? const Color(0xFF0B1A18) : colorScheme.tertiaryContainer.withValues(alpha: 0.4),
-      borderColor: isDark ? const Color(0xFF1A3330) : colorScheme.tertiary.withValues(alpha: 0.2),
+      backgroundColor: isDark
+          ? const Color(0xFF0B1A18)
+          : colorScheme.tertiaryContainer.withValues(alpha: 0.4),
+      borderColor: isDark
+          ? const Color(0xFF1A3330)
+          : colorScheme.tertiary.withValues(alpha: 0.2),
       onTap: onReturnPressed,
     );
 
@@ -1940,13 +2137,18 @@ class _RecentTransactionsSection extends StatefulWidget {
   final int customerId;
   final Customer customer;
 
-  const _RecentTransactionsSection({required this.customerId, required this.customer});
+  const _RecentTransactionsSection({
+    required this.customerId,
+    required this.customer,
+  });
 
   @override
-  State<_RecentTransactionsSection> createState() => _RecentTransactionsSectionState();
+  State<_RecentTransactionsSection> createState() =>
+      _RecentTransactionsSectionState();
 }
 
-class _RecentTransactionsSectionState extends State<_RecentTransactionsSection> {
+class _RecentTransactionsSectionState
+    extends State<_RecentTransactionsSection> {
   bool _showAll = false;
 
   @override
@@ -1955,7 +2157,9 @@ class _RecentTransactionsSectionState extends State<_RecentTransactionsSection> 
     final currencyService = sl<CurrencyService>();
 
     return StreamBuilder<List<CustomerTransaction>>(
-      stream: sl<CustomerRepository>().watchCustomerTransactions(widget.customerId),
+      stream: sl<CustomerRepository>().watchCustomerTransactions(
+        widget.customerId,
+      ),
       builder: (context, snapshot) {
         final transactions = snapshot.data ?? [];
 
@@ -1987,7 +2191,11 @@ class _RecentTransactionsSectionState extends State<_RecentTransactionsSection> 
                           _showAll = !_showAll;
                         });
                       },
-                      child: Text(_showAll ? 'common.show_less'.tr() : 'customers.view_all'.tr()),
+                      child: Text(
+                        _showAll
+                            ? 'common.show_less'.tr()
+                            : 'customers.view_all'.tr(),
+                      ),
                     ),
                   ],
                 ),
@@ -1998,7 +2206,13 @@ class _RecentTransactionsSectionState extends State<_RecentTransactionsSection> 
                       padding: const EdgeInsets.all(20),
                       child: Column(
                         children: [
-                          Icon(LucideIcons.receipt, size: 40, color: theme.colorScheme.outline.withValues(alpha: 0.5)),
+                          Icon(
+                            LucideIcons.receipt,
+                            size: 40,
+                            color: theme.colorScheme.outline.withValues(
+                              alpha: 0.5,
+                            ),
+                          ),
                           const SizedBox(height: 8),
                           Text(
                             'customers.no_transactions'.tr(),
@@ -2011,11 +2225,13 @@ class _RecentTransactionsSectionState extends State<_RecentTransactionsSection> 
                     ),
                   )
                 else
-                  ...((_showAll ? transactions : transactions.take(5)).map((tx) => _TransactionTile(
-                    transaction: tx,
-                    currencyService: currencyService,
-                    customer: widget.customer,
-                  ))),
+                  ...((_showAll ? transactions : transactions.take(5)).map(
+                    (tx) => _TransactionTile(
+                      transaction: tx,
+                      currencyService: currencyService,
+                      customer: widget.customer,
+                    ),
+                  )),
               ],
             ),
           ),
@@ -2045,12 +2261,17 @@ class _TransactionTile extends StatelessWidget {
     IconData icon;
     Color color;
     String typeLabel;
+    final isIncomingCheque =
+        transaction.referenceType == 'sale_payment' &&
+        (transaction.description?.startsWith('Incoming cheque') ?? false);
 
     switch (transaction.transactionType) {
       case 'payment':
-        icon = LucideIcons.banknote;
-        color = Colors.blue;
-        typeLabel = 'customers.transaction_payment'.tr();
+        icon = isIncomingCheque ? LucideIcons.fileText : LucideIcons.banknote;
+        color = isIncomingCheque ? Colors.amber.shade700 : Colors.blue;
+        typeLabel = isIncomingCheque
+            ? 'cheques.direction_incoming'.tr()
+            : 'customers.transaction_payment'.tr();
         break;
       case 'discount':
         icon = LucideIcons.badgePercent;
@@ -2082,6 +2303,57 @@ class _TransactionTile extends StatelessWidget {
         color = Colors.red;
         typeLabel = 'customers.transaction_refund_reversal'.tr();
         break;
+      case 'cheque_return_pending':
+        icon = LucideIcons.fileClock;
+        color = Colors.amber.shade700;
+        typeLabel = 'customers.transaction_cheque_return_pending'.tr();
+        break;
+      case 'cheque_return_pending_reversal':
+        icon = LucideIcons.fileX;
+        color = Colors.red;
+        typeLabel = 'customers.transaction_cheque_return_pending_reversal'.tr();
+        break;
+      case 'cheque_return_settlement':
+        icon = LucideIcons.badgeCheck;
+        color = Colors.blue;
+        typeLabel = 'customers.transaction_cheque_return_settlement'.tr();
+        break;
+      case 'cheque_return_settlement_reversal':
+      case 'cheque_return_settlement_void':
+        icon = LucideIcons.undo2;
+        color = Colors.red;
+        typeLabel = 'customers.transaction_cheque_return_settlement_reversal'
+            .tr();
+        break;
+      case 'cheque_dishonour':
+        icon = LucideIcons.fileWarning;
+        color = Colors.red;
+        typeLabel = 'customers.transaction_cheque_dishonour'.tr();
+        break;
+      case 'cheque_dishonour_resolution':
+        icon = LucideIcons.badgeCheck;
+        color = Colors.green;
+        typeLabel = 'customers.transaction_cheque_dishonour_resolution'.tr();
+        break;
+      case 'cheque_dishonour_reversal':
+      case 'cheque_dishonour_resolution_reversal':
+        icon = LucideIcons.undo2;
+        color = Colors.red;
+        typeLabel = 'customers.transaction_cheque_dishonour_reversal'.tr();
+        break;
+      case 'return_settlement_cash':
+      case 'return_settlement_card':
+      case 'return_settlement_bank_transfer':
+      case 'return_settlement_mobile':
+        icon = LucideIcons.banknote;
+        color = Colors.blue;
+        typeLabel = 'customers.transaction_${transaction.transactionType}'.tr();
+        break;
+      case 'return_settlement_void':
+        icon = LucideIcons.undo2;
+        color = Colors.red;
+        typeLabel = 'customers.transaction_return_settlement_void'.tr();
+        break;
       case 'sale':
         icon = LucideIcons.shoppingCart;
         color = Colors.orange;
@@ -2108,8 +2380,12 @@ class _TransactionTile extends StatelessWidget {
         typeLabel = transaction.transactionType.toUpperCase();
     }
 
-    final canPrint = transaction.transactionType == 'payment' ||
-        transaction.transactionType == 'discount';
+    final canPrint =
+        transaction.transactionType == 'payment' ||
+        transaction.transactionType == 'discount' ||
+        transaction.transactionType == 'cheque_return_settlement' ||
+        (transaction.transactionType.startsWith('return_settlement_') &&
+            transaction.transactionType != 'return_settlement_void');
 
     return InkWell(
       onTap: canPrint && customer != null
@@ -2143,13 +2419,17 @@ class _TransactionTile extends StatelessWidget {
                           transaction.discountType != null) ...[
                         const SizedBox(width: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.purple.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            'customers.discount_type_${transaction.discountType}'.tr(),
+                            'customers.discount_type_${transaction.discountType}'
+                                .tr(),
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: Colors.purple,
                               fontSize: 9,
@@ -2202,7 +2482,11 @@ class _TransactionTile extends StatelessWidget {
             ),
             if (canPrint) ...[
               const SizedBox(width: 4),
-              Icon(LucideIcons.chevronRight, size: 14, color: theme.colorScheme.outline),
+              Icon(
+                LucideIcons.chevronRight,
+                size: 14,
+                color: theme.colorScheme.outline,
+              ),
             ],
           ],
         ),
@@ -2306,16 +2590,16 @@ class _LoyaltyToggleCard extends StatelessWidget {
           color: colorScheme.outlineVariant.withValues(alpha: 0.5),
         ),
       ),
-      color: isDark
-          ? const Color(0xFF0B0F14)
-          : colorScheme.primaryContainer,
+      color: isDark ? const Color(0xFF0B0F14) : colorScheme.primaryContainer,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
             Icon(
               Icons.card_giftcard,
-              color: isDark ? const Color(0xFF90CAF9) : colorScheme.onPrimaryContainer,
+              color: isDark
+                  ? const Color(0xFF90CAF9)
+                  : colorScheme.onPrimaryContainer,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -2326,7 +2610,9 @@ class _LoyaltyToggleCard extends StatelessWidget {
                     'customers.loyalty'.tr(),
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.white : colorScheme.onPrimaryContainer,
+                      color: isDark
+                          ? Colors.white
+                          : colorScheme.onPrimaryContainer,
                     ),
                   ),
                   Text(
@@ -2336,7 +2622,9 @@ class _LoyaltyToggleCard extends StatelessWidget {
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: isDark
                           ? Colors.white.withValues(alpha: 0.7)
-                          : colorScheme.onPrimaryContainer.withValues(alpha: 0.8),
+                          : colorScheme.onPrimaryContainer.withValues(
+                              alpha: 0.8,
+                            ),
                     ),
                   ),
                 ],
@@ -2373,7 +2661,9 @@ class _ContactInformationSection extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    if (customer.email == null && customer.phone == null && customer.address == null) {
+    if (customer.email == null &&
+        customer.phone == null &&
+        customer.address == null) {
       return const SizedBox.shrink();
     }
 
@@ -2400,7 +2690,11 @@ class _ContactInformationSection extends StatelessWidget {
             if (customer.email != null) ...[
               Row(
                 children: [
-                  Icon(Icons.email_outlined, size: 20, color: colorScheme.primary),
+                  Icon(
+                    Icons.email_outlined,
+                    size: 20,
+                    color: colorScheme.primary,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -2415,7 +2709,11 @@ class _ContactInformationSection extends StatelessWidget {
             if (customer.phone != null) ...[
               Row(
                 children: [
-                  Icon(Icons.phone_outlined, size: 20, color: colorScheme.primary),
+                  Icon(
+                    Icons.phone_outlined,
+                    size: 20,
+                    color: colorScheme.primary,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -2430,7 +2728,11 @@ class _ContactInformationSection extends StatelessWidget {
             if (customer.address != null)
               Row(
                 children: [
-                  Icon(Icons.location_on_outlined, size: 20, color: colorScheme.primary),
+                  Icon(
+                    Icons.location_on_outlined,
+                    size: 20,
+                    color: colorScheme.primary,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -2452,10 +2754,7 @@ class _ChangeTierDialog extends StatefulWidget {
   final List<LoyaltyTier> tiers;
   final int? currentTierId;
 
-  const _ChangeTierDialog({
-    required this.tiers,
-    this.currentTierId,
-  });
+  const _ChangeTierDialog({required this.tiers, this.currentTierId});
 
   @override
   State<_ChangeTierDialog> createState() => _ChangeTierDialogState();
@@ -2482,7 +2781,7 @@ class _ChangeTierDialogState extends State<_ChangeTierDialog> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    
+
     return AlertDialog(
       title: Text('customers.change_tier'.tr()),
       content: SizedBox(
@@ -2496,8 +2795,8 @@ class _ChangeTierDialogState extends State<_ChangeTierDialog> {
               title: Text('customers.no_tier'.tr()),
               subtitle: Text('customers.no_tier_hint'.tr()),
               trailing: Icon(
-                _selectedTierId == null 
-                    ? Icons.radio_button_checked 
+                _selectedTierId == null
+                    ? Icons.radio_button_checked
                     : Icons.radio_button_unchecked,
                 color: _selectedTierId == null ? cs.primary : cs.outline,
               ),
@@ -2521,14 +2820,16 @@ class _ChangeTierDialogState extends State<_ChangeTierDialog> {
                   ),
                 ),
                 subtitle: Text(
-                  'customers.loyalty_tier_points_range'.tr(args: [
-                    tier.minPoints.toString(),
-                    tier.maxPoints?.toString() ?? '∞',
-                  ]),
+                  'customers.loyalty_tier_points_range'.tr(
+                    args: [
+                      tier.minPoints.toString(),
+                      tier.maxPoints?.toString() ?? '∞',
+                    ],
+                  ),
                 ),
                 trailing: Icon(
-                  isSelected 
-                      ? Icons.radio_button_checked 
+                  isSelected
+                      ? Icons.radio_button_checked
                       : Icons.radio_button_unchecked,
                   color: isSelected ? cs.primary : cs.outline,
                 ),

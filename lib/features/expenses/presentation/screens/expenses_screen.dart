@@ -95,8 +95,8 @@ class _ExpensesContentState extends State<_ExpensesContent> {
                         onPressed: () {
                           _searchController.clear();
                           context.read<ExpensesBloc>().add(
-                                const ExpensesSearchRequested(''),
-                              );
+                            const ExpensesSearchRequested(''),
+                          );
                         },
                       )
                     : null,
@@ -104,17 +104,24 @@ class _ExpensesContentState extends State<_ExpensesContent> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 filled: true,
-                fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                fillColor: colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.3,
+                ),
               ),
               onChanged: (query) {
-                context.read<ExpensesBloc>().add(ExpensesSearchRequested(query));
+                context.read<ExpensesBloc>().add(
+                  ExpensesSearchRequested(query),
+                );
                 setState(() {});
               },
             ),
           ),
 
           // Category filter chips
-          BlocBuilder<ExpenseCategoriesBloc, RealtimeState<List<ExpenseCategory>>>(
+          BlocBuilder<
+            ExpenseCategoriesBloc,
+            RealtimeState<List<ExpenseCategory>>
+          >(
             builder: (context, state) {
               if (state is! RealtimeSuccess<List<ExpenseCategory>>) {
                 return const SizedBox.shrink();
@@ -134,27 +141,31 @@ class _ExpensesContentState extends State<_ExpensesContent> {
                       onSelected: (_) {
                         setState(() => _selectedCategoryId = null);
                         context.read<ExpensesBloc>().add(
-                              const ExpensesFilterByCategoryRequested(null),
-                            );
+                          const ExpensesFilterByCategoryRequested(null),
+                        );
                       },
                     ),
                     const SizedBox(width: 8),
-                    ...categories.map((cat) => Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: FilterChip(
-                            label: Text(cat.name),
-                            selected: _selectedCategoryId == cat.id,
-                            onSelected: (_) {
-                              setState(() => _selectedCategoryId =
-                                  _selectedCategoryId == cat.id ? null : cat.id);
-                              context.read<ExpensesBloc>().add(
-                                    ExpensesFilterByCategoryRequested(
-                                      _selectedCategoryId,
-                                    ),
-                                  );
-                            },
-                          ),
-                        )),
+                    ...categories.map(
+                      (cat) => Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: FilterChip(
+                          label: Text(cat.name),
+                          selected: _selectedCategoryId == cat.id,
+                          onSelected: (_) {
+                            setState(
+                              () => _selectedCategoryId =
+                                  _selectedCategoryId == cat.id ? null : cat.id,
+                            );
+                            context.read<ExpensesBloc>().add(
+                              ExpensesFilterByCategoryRequested(
+                                _selectedCategoryId,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               );
@@ -176,8 +187,11 @@ class _ExpensesContentState extends State<_ExpensesContent> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(LucideIcons.alertTriangle,
-                            size: 48, color: colorScheme.error),
+                        Icon(
+                          LucideIcons.alertTriangle,
+                          size: 48,
+                          color: colorScheme.error,
+                        ),
                         const SizedBox(height: 16),
                         Text(
                           'common.error'.tr(),
@@ -185,9 +199,9 @@ class _ExpensesContentState extends State<_ExpensesContent> {
                         ),
                         const SizedBox(height: 8),
                         TextButton(
-                          onPressed: () => context
-                              .read<ExpensesBloc>()
-                              .add(const RealtimeRefreshRequested()),
+                          onPressed: () => context.read<ExpensesBloc>().add(
+                            const RealtimeRefreshRequested(),
+                          ),
                           child: Text('common.retry'.tr()),
                         ),
                       ],
@@ -204,16 +218,17 @@ class _ExpensesContentState extends State<_ExpensesContent> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(LucideIcons.receipt,
-                                size: 64,
-                                color: colorScheme.onSurfaceVariant
-                                    .withValues(alpha: 0.4)),
+                            Icon(
+                              LucideIcons.receipt,
+                              size: 64,
+                              color: colorScheme.onSurfaceVariant.withValues(
+                                alpha: 0.4,
+                              ),
+                            ),
                             const SizedBox(height: 16),
                             Text(
                               'expenses.empty'.tr(),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
+                              style: Theme.of(context).textTheme.titleMedium
                                   ?.copyWith(
                                     color: colorScheme.onSurfaceVariant,
                                   ),
@@ -221,9 +236,7 @@ class _ExpensesContentState extends State<_ExpensesContent> {
                             const SizedBox(height: 8),
                             Text(
                               'expenses.empty_hint'.tr(),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
+                              style: Theme.of(context).textTheme.bodyMedium
                                   ?.copyWith(
                                     color: colorScheme.onSurfaceVariant
                                         .withValues(alpha: 0.7),
@@ -235,15 +248,17 @@ class _ExpensesContentState extends State<_ExpensesContent> {
                     );
                   }
 
-                  return BlocBuilder<ExpenseCategoriesBloc,
-                      RealtimeState<List<ExpenseCategory>>>(
+                  return BlocBuilder<
+                    ExpenseCategoriesBloc,
+                    RealtimeState<List<ExpenseCategory>>
+                  >(
                     builder: (context, catState) {
                       final categories =
                           catState is RealtimeSuccess<List<ExpenseCategory>>
-                              ? catState.data
-                              : <ExpenseCategory>[];
+                          ? catState.data
+                          : <ExpenseCategory>[];
                       final categoryMap = {
-                        for (final c in categories) c.id: c.name
+                        for (final c in categories) c.id: c.name,
                       };
 
                       return ListView.separated(
@@ -254,15 +269,16 @@ class _ExpensesContentState extends State<_ExpensesContent> {
                           final expense = expenses[index];
                           return _ExpenseCard(
                             expense: expense,
-                            categoryName: categoryMap[expense.categoryId] ??
+                            categoryName:
+                                categoryMap[expense.categoryId] ??
                                 'expenses.unknown_category'.tr(),
                             currencyService: cs,
                             onTap: () =>
                                 context.push('/expenses/${expense.id}/edit'),
                             onDelete: () {
                               context.read<ExpensesBloc>().add(
-                                    ExpenseDeleteRequested(expense.id),
-                                  );
+                                ExpenseDeleteRequested(expense.id),
+                              );
                             },
                           );
                         },
@@ -299,7 +315,9 @@ class _ExpenseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final amountDisplay = currencyService.formatCents(expense.amountCents.toBigInt().toInt());
+    final amountDisplay = currencyService.formatCents(
+      expense.amountCents.toBigInt().toInt(),
+    );
     final dateStr = _formatDate(expense.expenseDate);
 
     return Card(
@@ -307,7 +325,9 @@ class _ExpenseCard extends StatelessWidget {
       color: colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: InkWell(
         onTap: onTap,
@@ -339,8 +359,8 @@ class _ExpenseCard extends StatelessWidget {
                     Text(
                       expense.description,
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: colorScheme.onSurface,
-                          ),
+                        color: colorScheme.onSurface,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -349,16 +369,16 @@ class _ExpenseCard extends StatelessWidget {
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: colorScheme.secondaryContainer,
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
                             categoryName,
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelSmall
+                            style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(
                                   color: colorScheme.onSecondaryContainer,
                                 ),
@@ -368,10 +388,8 @@ class _ExpenseCard extends StatelessWidget {
                         Flexible(
                           child: Text(
                             dateStr,
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.onSurfaceVariant,
-                                    ),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: colorScheme.onSurfaceVariant),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -386,9 +404,9 @@ class _ExpenseCard extends StatelessWidget {
               Text(
                 amountDisplay,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: colorScheme.error,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  color: colorScheme.error,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               // Delete menu
               PopupMenuButton<String>(
@@ -402,7 +420,11 @@ class _ExpenseCard extends StatelessWidget {
                     value: 'delete',
                     child: Row(
                       children: [
-                        Icon(LucideIcons.trash2, size: 18, color: colorScheme.error),
+                        Icon(
+                          LucideIcons.trash2,
+                          size: 18,
+                          color: colorScheme.error,
+                        ),
                         const SizedBox(width: 8),
                         Text('common.delete'.tr()),
                       ],
@@ -444,6 +466,6 @@ class _ExpenseCard extends StatelessWidget {
   }
 
   String _formatDate(DateTime date) {
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 }

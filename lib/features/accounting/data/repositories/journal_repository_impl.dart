@@ -338,7 +338,8 @@ class JournalRepositoryImpl implements JournalRepository {
     // Every account code here MUST match what JournalEntryService
     // and AccountingRepository reference via getAccountByCode().
     //
-    // DO NOT add temporary, clearing, suspense, or smart accounts.
+    // Keep this list restricted to accounts used by the accounting policies.
+    // The two cheque-clearing accounts are intentional system accounts.
     final defaultAccounts = <Map<String, dynamic>>[
       // ── Assets (1xxx) ──
       {
@@ -354,6 +355,20 @@ class JournalRepositoryImpl implements JournalRepository {
         'type': 'asset',
         'system': true,
         'order': 2,
+      },
+      {
+        'code': '1020',
+        'name': 'Cheques in Hand',
+        'type': 'asset',
+        'system': true,
+        'order': 3,
+      },
+      {
+        'code': '1030',
+        'name': 'Dishonoured Cheques Receivable',
+        'type': 'asset',
+        'system': true,
+        'order': 4,
       },
       {
         'code': '1100',
@@ -426,6 +441,13 @@ class JournalRepositoryImpl implements JournalRepository {
         'system': true,
         'order': 10,
       }, // Suppliers
+      {
+        'code': '2020',
+        'name': 'Cheques Issued',
+        'type': 'liability',
+        'system': true,
+        'order': 11,
+      },
       {
         'code': '2100',
         'name': 'VAT Payable',

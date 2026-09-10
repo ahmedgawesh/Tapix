@@ -90,35 +90,72 @@ class SupplierBalancePdfService {
                 padding: const pw.EdgeInsets.all(12),
                 decoration: pw.BoxDecoration(
                   border: pw.Border.all(color: PdfColors.grey400),
-                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                  borderRadius: const pw.BorderRadius.all(
+                    pw.Radius.circular(4),
+                  ),
                 ),
                 child: pw.Column(
                   children: [
-                    pw.Text(_t('net_balance', lang),
-                        style: pw.TextStyle(font: fonts.regular, fontSize: 10)),
+                    pw.Text(
+                      _t('net_balance', lang),
+                      style: pw.TextStyle(font: fonts.regular, fontSize: 10),
+                    ),
                     pw.SizedBox(height: 4),
-                    pw.Text(cs.formatCents(item.netBalanceCents),
-                        style: pw.TextStyle(font: fonts.bold, fontSize: 18)),
+                    pw.Text(
+                      cs.formatCents(item.netBalanceCents),
+                      style: pw.TextStyle(font: fonts.bold, fontSize: 18),
+                    ),
                   ],
                 ),
               ),
               pw.SizedBox(height: 16),
               // Breakdown
-              pw.Text(_t('supplier_balance_details', lang),
-                  style: pw.TextStyle(font: fonts.bold, fontSize: 12)),
+              pw.Text(
+                _t('supplier_balance_details', lang),
+                style: pw.TextStyle(font: fonts.bold, fontSize: 12),
+              ),
               pw.SizedBox(height: 8),
-              _buildDetailRow(_t('opening_debit', lang), cs.formatCents(item.openingBalanceCents), fonts),
-              _buildDetailRow(_t('total_purchases', lang), '+ ${cs.formatCents(item.totalPurchasesCents)}', fonts),
-              _buildDetailRow(_t('total_payments', lang), '- ${cs.formatCents(item.totalPaymentsCents)}', fonts),
-              _buildDetailRow(_t('total_returns', lang), '- ${cs.formatCents(item.totalReturnsCents)}', fonts),
-              _buildDetailRow(_t('total_discounts', lang), '- ${cs.formatCents(item.totalDiscountsCents)}', fonts),
+              _buildDetailRow(
+                _t('opening_debit', lang),
+                cs.formatCents(item.openingBalanceCents),
+                fonts,
+              ),
+              _buildDetailRow(
+                _t('total_purchases', lang),
+                '+ ${cs.formatCents(item.totalPurchasesCents)}',
+                fonts,
+              ),
+              _buildDetailRow(
+                _t('total_payments', lang),
+                '- ${cs.formatCents(item.totalPaymentsCents)}',
+                fonts,
+              ),
+              _buildDetailRow(
+                _t('total_returns', lang),
+                '- ${cs.formatCents(item.totalReturnsCents)}',
+                fonts,
+              ),
+              _buildDetailRow(
+                _t('total_discounts', lang),
+                '- ${cs.formatCents(item.totalDiscountsCents)}',
+                fonts,
+              ),
               pw.Divider(),
-              _buildDetailRow(_t('net_balance', lang), cs.formatCents(item.netBalanceCents), fonts, bold: true),
+              _buildDetailRow(
+                _t('net_balance', lang),
+                cs.formatCents(item.netBalanceCents),
+                fonts,
+                bold: true,
+              ),
               pw.SizedBox(height: 24),
               pw.Divider(),
               pw.Text(
-                '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
-                style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
+                style: pw.TextStyle(
+                  font: fonts.regular,
+                  fontSize: 8,
+                  color: PdfColors.grey600,
+                ),
               ),
             ],
           );
@@ -128,18 +165,36 @@ class SupplierBalancePdfService {
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'SupplierBalance_${item.supplierName}_${DateFormat('yyyyMMdd').format(DateTime.now())}',
+      name:
+          'SupplierBalance_${item.supplierName}_${DateFormat('yyyyMMdd').format(DateTime.now())}',
     );
   }
 
-  static pw.Widget _buildDetailRow(String label, String value, _PdfFonts fonts, {bool bold = false}) {
+  static pw.Widget _buildDetailRow(
+    String label,
+    String value,
+    _PdfFonts fonts, {
+    bool bold = false,
+  }) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 3),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text(label, style: pw.TextStyle(font: bold ? fonts.bold : fonts.regular, fontSize: 10)),
-          pw.Text(value, style: pw.TextStyle(font: bold ? fonts.bold : fonts.regular, fontSize: 10)),
+          pw.Text(
+            label,
+            style: pw.TextStyle(
+              font: bold ? fonts.bold : fonts.regular,
+              fontSize: 10,
+            ),
+          ),
+          pw.Text(
+            value,
+            style: pw.TextStyle(
+              font: bold ? fonts.bold : fonts.regular,
+              fontSize: 10,
+            ),
+          ),
         ],
       ),
     );
@@ -164,10 +219,14 @@ class SupplierBalancePdfService {
         build: (pw.Context context) {
           return [
             _buildHeader(
-                company, _t('supplier_balance_report', lang), fonts, dir),
+              company,
+              _t('supplier_balance_report', lang),
+              fonts,
+              dir,
+            ),
             pw.SizedBox(height: 8),
             pw.Text(
-              '${_t('period', lang)}: ${DateFormat.yMMMd().format(data.dateRange.startDate)} — ${DateFormat.yMMMd().format(data.dateRange.endDate)}',
+              '${_t('period', lang)}: ${DateFormat('dd/MM/yyyy').format(data.dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(data.dateRange.endDate)}',
               style: pw.TextStyle(font: fonts.regular, fontSize: 10),
             ),
             pw.SizedBox(height: 4),
@@ -185,8 +244,9 @@ class SupplierBalancePdfService {
               pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 8),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
-                headerDecoration:
-                    const pw.BoxDecoration(color: PdfColors.grey200),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.grey200,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.center,
                   1: pw.Alignment.centerLeft,
@@ -216,7 +276,9 @@ class SupplierBalancePdfService {
                     cs.formatCents(item.netBalanceCents),
                     '${item.transactionCount}',
                     item.lastTransactionAt != null
-                        ? DateFormat.yMd().format(item.lastTransactionAt!)
+                        ? DateFormat(
+                            'dd/MM/yyyy',
+                          ).format(item.lastTransactionAt!)
                         : '-',
                   ];
                 }).toList(),
@@ -239,14 +301,12 @@ class SupplierBalancePdfService {
                       children: [
                         pw.Text(
                           '${_t('debits', lang)}: ${cs.formatCents(data.grandTotalDebitCents)}',
-                          style:
-                              pw.TextStyle(font: fonts.regular, fontSize: 9),
+                          style: pw.TextStyle(font: fonts.regular, fontSize: 9),
                         ),
                         pw.SizedBox(width: 16),
                         pw.Text(
                           '${_t('credits', lang)}: ${cs.formatCents(data.grandTotalCreditCents)}',
-                          style:
-                              pw.TextStyle(font: fonts.regular, fontSize: 9),
+                          style: pw.TextStyle(font: fonts.regular, fontSize: 9),
                         ),
                         pw.SizedBox(width: 16),
                         pw.Text(
@@ -263,11 +323,12 @@ class SupplierBalancePdfService {
             pw.SizedBox(height: 16),
             pw.Divider(),
             pw.Text(
-              '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+              '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
               style: pw.TextStyle(
-                  font: fonts.regular,
-                  fontSize: 8,
-                  color: PdfColors.grey600),
+                font: fonts.regular,
+                fontSize: 8,
+                color: PdfColors.grey600,
+              ),
             ),
           ];
         },
@@ -301,11 +362,19 @@ class SupplierBalancePdfService {
                 children: [
                   pw.Text(
                     _t('total_payables', lang),
-                    style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                    style: pw.TextStyle(
+                      font: fonts.regular,
+                      fontSize: 8,
+                      color: PdfColors.grey600,
+                    ),
                   ),
                   pw.Text(
                     cs.formatCents(summary.totalPayablesCents),
-                    style: pw.TextStyle(font: fonts.bold, fontSize: 12, color: PdfColors.red700),
+                    style: pw.TextStyle(
+                      font: fonts.bold,
+                      fontSize: 12,
+                      color: PdfColors.red700,
+                    ),
                   ),
                 ],
               ),
@@ -314,11 +383,19 @@ class SupplierBalancePdfService {
                 children: [
                   pw.Text(
                     _t('total_receivables', lang),
-                    style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                    style: pw.TextStyle(
+                      font: fonts.regular,
+                      fontSize: 8,
+                      color: PdfColors.grey600,
+                    ),
                   ),
                   pw.Text(
                     cs.formatCents(summary.totalReceivablesCents),
-                    style: pw.TextStyle(font: fonts.bold, fontSize: 12, color: PdfColors.green700),
+                    style: pw.TextStyle(
+                      font: fonts.bold,
+                      fontSize: 12,
+                      color: PdfColors.green700,
+                    ),
                   ),
                 ],
               ),
@@ -327,7 +404,11 @@ class SupplierBalancePdfService {
                 children: [
                   pw.Text(
                     _t('net_balance', lang),
-                    style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                    style: pw.TextStyle(
+                      font: fonts.regular,
+                      fontSize: 8,
+                      color: PdfColors.grey600,
+                    ),
                   ),
                   pw.Text(
                     cs.formatCents(summary.netBalanceCents),
@@ -344,18 +425,42 @@ class SupplierBalancePdfService {
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              _buildMiniStat(_t('opening_debit', lang), cs.formatCents(summary.openingDebitCents), fonts),
-              _buildMiniStat(_t('opening_credit', lang), cs.formatCents(summary.openingCreditCents), fonts),
-              _buildMiniStat(_t('total_purchases', lang), cs.formatCents(summary.totalPurchasesCents), fonts),
+              _buildMiniStat(
+                _t('opening_debit', lang),
+                cs.formatCents(summary.openingDebitCents),
+                fonts,
+              ),
+              _buildMiniStat(
+                _t('opening_credit', lang),
+                cs.formatCents(summary.openingCreditCents),
+                fonts,
+              ),
+              _buildMiniStat(
+                _t('total_purchases', lang),
+                cs.formatCents(summary.totalPurchasesCents),
+                fonts,
+              ),
             ],
           ),
           pw.SizedBox(height: 4),
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
-              _buildMiniStat(_t('total_payments', lang), cs.formatCents(summary.totalPaymentsCents), fonts),
-              _buildMiniStat(_t('total_returns', lang), cs.formatCents(summary.totalReturnsCents), fonts),
-              _buildMiniStat(_t('total_discounts', lang), cs.formatCents(summary.totalDiscountsCents), fonts),
+              _buildMiniStat(
+                _t('total_payments', lang),
+                cs.formatCents(summary.totalPaymentsCents),
+                fonts,
+              ),
+              _buildMiniStat(
+                _t('total_returns', lang),
+                cs.formatCents(summary.totalReturnsCents),
+                fonts,
+              ),
+              _buildMiniStat(
+                _t('total_discounts', lang),
+                cs.formatCents(summary.totalDiscountsCents),
+                fonts,
+              ),
             ],
           ),
         ],
@@ -369,12 +474,13 @@ class SupplierBalancePdfService {
       children: [
         pw.Text(
           label,
-          style: pw.TextStyle(font: fonts.regular, fontSize: 7, color: PdfColors.grey600),
+          style: pw.TextStyle(
+            font: fonts.regular,
+            fontSize: 7,
+            color: PdfColors.grey600,
+          ),
         ),
-        pw.Text(
-          value,
-          style: pw.TextStyle(font: fonts.bold, fontSize: 9),
-        ),
+        pw.Text(value, style: pw.TextStyle(font: fonts.bold, fontSize: 9)),
       ],
     );
   }
@@ -434,11 +540,7 @@ class SupplierBalancePdfService {
       'ar': 'المجموع الكلي',
       'fr': 'Total Général',
     },
-    'printed_on': {
-      'en': 'Printed on',
-      'ar': 'طُبع في',
-      'fr': 'Imprimé le',
-    },
+    'printed_on': {'en': 'Printed on', 'ar': 'طُبع في', 'fr': 'Imprimé le'},
     'opening_debit': {
       'en': 'Opening Debit',
       'ar': 'رصيد افتتاحي مدين',
@@ -496,9 +598,10 @@ class SupplierBalancePdfService {
           pw.Text(
             company.address!,
             style: pw.TextStyle(
-                font: fonts.regular,
-                fontSize: 9,
-                color: PdfColors.grey600),
+              font: fonts.regular,
+              fontSize: 9,
+              color: PdfColors.grey600,
+            ),
           ),
         pw.SizedBox(height: 8),
         pw.Divider(),
@@ -515,10 +618,12 @@ class SupplierBalancePdfService {
 
   static Future<_PdfFonts> _loadFonts() async {
     try {
-      final regularData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-      final boldData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+      final regularData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+      );
+      final boldData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+      );
       return _PdfFonts(
         regular: pw.Font.ttf(regularData),
         bold: pw.Font.ttf(boldData),

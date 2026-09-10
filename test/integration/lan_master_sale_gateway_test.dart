@@ -1,35 +1,46 @@
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/database/daos/adjustment_return_dao.dart';
 import 'package:tapix/core/database/daos/pharmacy_dao.dart';
+import 'package:tapix/core/promotions/promotion_repository.dart';
+import 'package:tapix/core/promotions/promotion_return_policy.dart';
+import 'package:tapix/core/promotions/promotion_engine.dart';
 import 'package:tapix/core/services/audit_log_service.dart';
 import 'package:tapix/core/services/cashier_shift_service.dart';
 import 'package:tapix/core/services/commissions/commission_service.dart';
 import 'package:tapix/core/services/currency_service.dart' show CurrencyService;
+import 'package:tapix/core/services/feature_gate_service.dart';
 import 'package:tapix/core/services/journal_entry_service.dart';
 import 'package:tapix/core/services/lan/lan_network_service.dart';
 import 'package:tapix/core/services/loyalty/loyalty_points_service.dart';
+import 'package:tapix/features/accounting/data/datasources/journal_local_datasource.dart';
 import 'package:tapix/features/accounting/data/repositories/accounting_repository.dart';
+import 'package:tapix/features/accounting/domain/models/trial_balance.dart';
 import 'package:tapix/features/auth/data/services/session_service.dart';
 import 'package:tapix/features/customers/data/repositories/loyalty_repository_impl.dart';
 import 'package:tapix/features/sales/data/datasources/sale_local_datasource.dart';
 import 'package:tapix/features/sales/data/repositories/sale_repository_impl.dart';
 import 'package:tapix/features/sales/data/services/lan_master_business_gateway.dart';
+import 'package:tapix/features/sales/domain/repositories/sale_repository.dart';
 import 'package:tapix/features/settings/data/services/app_settings_service.dart';
 
 void main() {
   late AppDatabase db;
   late AppSettingsService settings;
   late LanMasterBusinessGatewayImpl gateway;
+  late SaleRepositoryImpl repository;
   late CashierShiftService shiftService;
   late int productId;
+  late int variantId;
   late int actorId;
   late int employeeId;
+  late int currencyId;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -45,7 +56,7 @@ void main() {
     final commissions = CommissionService(db.employeeDao);
     final loyaltyRepository = LoyaltyRepositoryImpl(db, journal);
     final loyaltyPoints = LoyaltyPointsService(loyaltyRepository, journal, db);
-    final repository = SaleRepositoryImpl(
+    repository = SaleRepositoryImpl(
       SaleLocalDatasourceImpl(db.saleDao, adjustmentReturns),
       db.saleDao,
       journal,
@@ -67,11 +78,14 @@ void main() {
       commissions: commissions,
       loyaltyPoints: loyaltyPoints,
       pharmacy: PharmacyDao(db),
+      promotions: PromotionRepository(db, AuditLogService(db)),
+      featureGate: _ProFeatureGate(),
     );
 
     final currency = await (db.select(
       db.currencies,
     )..where((row) => row.isBase.equals(true))).getSingle();
+    currencyId = currency.id;
     actorId = await db
         .into(db.users)
         .insert(
@@ -111,7 +125,7 @@ void main() {
             measurementType: const Value('length'),
           ),
         );
-    await db
+    variantId = await db
         .into(db.productVariants)
         .insert(
           ProductVariantsCompanion.insert(
@@ -160,6 +174,591 @@ void main() {
       expect(product.quantityScale, 1000);
       expect(product.stockQuantity, 5000);
       expect(product.toJson(), isNot(contains('costCents')));
+    },
+  );
+
+  test(
+    'remote split cheque settlement is posted atomically on the master',
+    () async {
+      await settings.patch(
+        (current) => current.copyWith(allowPartialPayments: true),
+      );
+      final currency = await (db.select(
+        db.currencies,
+      )..where((row) => row.isBase.equals(true))).getSingle();
+      final customerId = await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(
+              name: 'LAN cheque customer',
+              currencyId: currency.id,
+            ),
+          );
+      final request = LanSaleRequest(
+        idempotencyKey: 'lan-split-cheque-sale-001',
+        customerId: customerId,
+        paymentMethod: 'mixed',
+        paidAmountCents: 300,
+        lines: [
+          LanSaleLineRequest(
+            productId: productId,
+            variantId: variantId,
+            quantity: 1000,
+          ),
+        ],
+        payments: [
+          LanCheckoutPaymentRequest(
+            method: 'cheque',
+            amountCents: 400,
+            reference: 'LAN-CHK-400',
+            bankName: 'LAN Bank',
+            issueDate: DateTime(2026, 9, 7),
+            dueDate: DateTime(2026, 10, 7),
+          ),
+          const LanCheckoutPaymentRequest(method: 'cash', amountCents: 300),
+        ],
+      );
+
+      final transported = LanSaleRequest.fromJson(request.toJson());
+      expect(transported.payments, hasLength(2));
+      expect(transported.payments.first.reference, 'LAN-CHK-400');
+      expect(transported.payments.first.dueDate, DateTime(2026, 10, 7));
+
+      final created = await gateway.createSale(
+        actor: actor(),
+        request: transported,
+      );
+      final sale = await (db.select(
+        db.sales,
+      )..where((row) => row.id.equals(created.saleId))).getSingle();
+      final customer = await (db.select(
+        db.customers,
+      )..where((row) => row.id.equals(customerId))).getSingle();
+      final payments = await (db.select(
+        db.salePayments,
+      )..where((row) => row.saleId.equals(created.saleId))).get();
+      final cheques =
+          await (db.select(db.chequeInstruments)..where(
+                (row) =>
+                    row.sourceTable.equals('sale') &
+                    row.sourceId.equals(created.saleId),
+              ))
+              .get();
+
+      expect(sale.totalCents, Decimal.fromInt(1200));
+      expect(sale.paidAmountCents, Decimal.fromInt(300));
+      expect(customer.balanceCents, Decimal.fromInt(900));
+      expect(payments.map((payment) => payment.paymentMethod), ['cash']);
+      expect(cheques, hasLength(1));
+      expect(cheques.single.amountCents, Decimal.fromInt(400));
+      expect(cheques.single.chequeNumber, 'LAN-CHK-400');
+      expect(cheques.single.bankName, 'LAN Bank');
+      expect(cheques.single.settlementPaymentId, isNull);
+    },
+  );
+
+  test('catalog carries composed bundle products to remote cashiers', () async {
+    await settings.patch((current) => current.copyWith(enablePromotions: true));
+    final pieceProductId = await db
+        .into(db.products)
+        .insert(
+          ProductsCompanion.insert(
+            sku: const Value('LAN-PIECE-1'),
+            name: 'Piece item',
+            costCents: Decimal.fromInt(100),
+            priceCents: Decimal.fromInt(200),
+            stockQuantity: const Value(10),
+          ),
+        );
+    final promotions = PromotionRepository(db, AuditLogService(db));
+    final promotionId = await promotions.create(
+      PromotionDraft(
+        code: 'LAN-COMPOSED',
+        name: 'Remote composed bundle',
+        type: PromotionType.quantity,
+        rewardType: PromotionRewardType.percentageOff,
+        productIds: [productId, pieceProductId],
+        requireEachSelectedItem: true,
+        minimumQuantity: 2,
+        percentBps: 1000,
+      ),
+    );
+    await promotions.setActive(promotionId, true);
+
+    final catalog = await gateway.fetchCatalog(
+      query: 'no-normal-product-match',
+      offset: 0,
+      limit: 20,
+    );
+    final transportedRule = PromotionRule.fromTransportMap(
+      catalog.promotionRules.single,
+    );
+
+    expect(catalog.products, isEmpty);
+    expect(
+      catalog.promotionProducts.map((product) => product.id),
+      containsAll([productId, pieceProductId]),
+    );
+    expect(
+      transportedRule.qualifierScopes.map((scope) => scope.requiredQuantity),
+      containsAll([1000, 1]),
+    );
+    expect(
+      catalog.promotionProducts.every(
+        (product) => !product.toJson().containsKey('costCents'),
+      ),
+      isTrue,
+    );
+  });
+
+  test(
+    'master re-evaluates retail promotion and persists exact snapshot',
+    () async {
+      await settings.patch(
+        (current) => current.copyWith(enablePromotions: true),
+      );
+      final promotions = PromotionRepository(db, AuditLogService(db));
+      final promotionId = await promotions.create(
+        PromotionDraft(
+          code: 'LAN10',
+          name: 'LAN retail ten',
+          type: PromotionType.simple,
+          rewardType: PromotionRewardType.percentageOff,
+          variantIds: [variantId],
+          percentBps: 1000,
+        ),
+      );
+      await promotions.setActive(promotionId, true);
+
+      final catalog = await gateway.fetchCatalog(
+        query: 'fabric',
+        offset: 0,
+        limit: 20,
+      );
+      expect(catalog.enablePromotions, isTrue);
+      expect(catalog.promotionRules, hasLength(1));
+
+      final created = await gateway.createSale(
+        actor: actor(),
+        request: LanSaleRequest(
+          idempotencyKey: 'lan-promoted-retail-sale-001',
+          paymentMethod: 'cash',
+          paidAmountCents: 540,
+          lines: [
+            LanSaleLineRequest(
+              productId: productId,
+              variantId: variantId,
+              quantity: 500,
+              priceTier: 'retail',
+            ),
+          ],
+        ),
+      );
+
+      expect(created.totalCents, 540);
+      final sale = await (db.select(
+        db.sales,
+      )..where((row) => row.id.equals(created.saleId))).getSingle();
+      final item = await (db.select(
+        db.saleItems,
+      )..where((row) => row.saleId.equals(created.saleId))).getSingle();
+      final application = await db
+          .select(db.salePromotionApplications)
+          .getSingle();
+      final allocation = await db
+          .select(db.saleItemPromotionAllocations)
+          .getSingle();
+      expect(sale.discountCents.toBigInt().toInt(), 60);
+      expect(item.discountCents.toBigInt().toInt(), 60);
+      expect(application.promotionId, promotionId);
+      expect(application.discountCents.toBigInt().toInt(), 60);
+      expect(allocation.saleItemId, item.id);
+      expect(allocation.discountCents.toBigInt().toInt(), 60);
+      expect(allocation.appliedQuantity, 500);
+      expect(allocation.quantityScale, 1000);
+
+      final snapshots = await promotions.loadSaleApplications(created.saleId);
+      expect(snapshots, hasLength(1));
+      expect(snapshots.single.name, 'LAN retail ten');
+      expect(snapshots.single.discountCents, 60);
+      expect(snapshots.single.allocations, hasLength(1));
+      expect(snapshots.single.allocations.single.saleItemId, item.id);
+
+      final details = await gateway.fetchSaleDetails(saleId: created.saleId);
+      expect(details?.promotionApplications, hasLength(1));
+      final transported = LanSaleDetails.fromJson(details!.toJson());
+      expect(transported.promotionApplications.single.discountCents, 60);
+      expect(
+        transported.promotionApplications.single.allocations.single.saleItemId,
+        item.id,
+      );
+
+      final returnable = await gateway.fetchReturnableSale(
+        saleId: created.saleId,
+      );
+      expect(returnable?.promotionApplications, hasLength(1));
+      final transportedReturnable = LanReturnableSaleDetails.fromJson(
+        returnable!.toJson(),
+      );
+      expect(
+        transportedReturnable.promotionApplications.single.name,
+        'LAN retail ten',
+      );
+      expect(
+        transportedReturnable
+            .promotionApplications
+            .single
+            .allocations
+            .single
+            .saleItemId,
+        item.id,
+      );
+
+      final performance = await promotions.loadPerformance(promotionId);
+      expect(performance, hasLength(1));
+      expect(performance.single.transactionCount, 1);
+      expect(performance.single.applicationCount, 1);
+      expect(performance.single.discountCents, 60);
+      expect(performance.single.netSalesCents, 540);
+      expect(performance.single.revenueCents, 540);
+      expect(performance.single.costCents, 400);
+      expect(performance.single.grossProfitCents, 140);
+
+      // The return must consume the frozen sale-line discount even after the
+      // live campaign is no longer active.
+      await promotions.archive(promotionId);
+
+      final returned = await gateway.createSaleReturn(
+        actor: actor(),
+        request: LanSaleReturnRequest(
+          idempotencyKey: 'lan-promoted-return-001',
+          saleId: created.saleId,
+          dispositionType: 'restock',
+          refundMethod: 'cash',
+          lines: [LanSaleReturnLineRequest(saleItemId: item.id, quantity: 200)],
+        ),
+      );
+      expect(returned.totalCents, 216);
+      final returnItem = await (db.select(
+        db.saleReturnItems,
+      )..where((row) => row.returnId.equals(returned.returnId))).getSingle();
+      expect(returnItem.subtotalCents.toBigInt().toInt(), 240);
+      expect(returnItem.discountCents.toBigInt().toInt(), 24);
+      expect(returnItem.refundCents.toBigInt().toInt(), 216);
+      final returnDetails = await gateway.fetchSaleReturnDetails(
+        returnId: returned.returnId,
+        adjustment: false,
+      );
+      expect(returnDetails?.promotionApplications, hasLength(1));
+      final transportedReturn = LanSaleReturnDetails.fromJson(
+        returnDetails!.toJson(),
+      );
+      expect(
+        transportedReturn.promotionApplications.single.name,
+        'LAN retail ten',
+      );
+      expect(
+        transportedReturn
+            .promotionApplications
+            .single
+            .allocations
+            .single
+            .saleItemId,
+        item.id,
+      );
+
+      final siblingColorId = await db
+          .into(db.productColors)
+          .insert(
+            ProductColorsCompanion.insert(
+              name: 'Sibling blue',
+              hexCode: const Value('#0000FF'),
+            ),
+          );
+      final siblingVariantId = await db
+          .into(db.productVariants)
+          .insert(
+            ProductVariantsCompanion.insert(
+              productId: productId,
+              sku: const Value('LAN-LENGTH-SIBLING'),
+              colorId: Value(siblingColorId),
+              stockQuantity: const Value(1000),
+              costCents: Decimal.fromInt(800),
+              priceCents: Decimal.fromInt(1200),
+            ),
+          );
+      final siblingSale = await gateway.createSale(
+        actor: actor(),
+        request: LanSaleRequest(
+          idempotencyKey: 'lan-sibling-variant-not-promoted-001',
+          paymentMethod: 'cash',
+          paidAmountCents: 600,
+          lines: [
+            LanSaleLineRequest(
+              productId: productId,
+              variantId: siblingVariantId,
+              quantity: 500,
+              priceTier: 'retail',
+            ),
+          ],
+        ),
+      );
+      expect(siblingSale.totalCents, 600);
+
+      final wholesale = await gateway.createSale(
+        actor: actor(),
+        request: LanSaleRequest(
+          idempotencyKey: 'lan-non-promoted-wholesale-sale-001',
+          paymentMethod: 'cash',
+          paidAmountCents: 500,
+          lines: [
+            LanSaleLineRequest(
+              productId: productId,
+              variantId: variantId,
+              quantity: 500,
+              priceTier: 'wholesale',
+            ),
+          ],
+        ),
+      );
+      expect(wholesale.totalCents, 500);
+    },
+  );
+
+  test(
+    'profitable free gift posts, returns, and voids without inventory drift',
+    () async {
+      await settings.patch(
+        (current) => current.copyWith(enablePromotions: true),
+      );
+      final currency = await (db.select(
+        db.currencies,
+      )..where((row) => row.isBase.equals(true))).getSingle();
+      final paidProductId = await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              sku: const Value('LAN-BOGO-PAID'),
+              name: 'Paid promotion item',
+              costCents: Decimal.fromInt(12000),
+              priceCents: Decimal.fromInt(15000),
+              currencyId: Value(currency.id),
+              stockQuantity: const Value(10),
+            ),
+          );
+      final giftProductId = await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              sku: const Value('LAN-BOGO-GIFT'),
+              name: 'Gift promotion item',
+              costCents: Decimal.fromInt(3000),
+              priceCents: Decimal.fromInt(3000),
+              currencyId: Value(currency.id),
+              stockQuantity: const Value(10),
+            ),
+          );
+      await db
+          .into(db.productVariants)
+          .insert(
+            ProductVariantsCompanion.insert(
+              productId: paidProductId,
+              stockQuantity: const Value(10),
+              costCents: Decimal.fromInt(12000),
+              priceCents: Decimal.fromInt(15000),
+            ),
+          );
+      await db
+          .into(db.productVariants)
+          .insert(
+            ProductVariantsCompanion.insert(
+              productId: giftProductId,
+              stockQuantity: const Value(10),
+              costCents: Decimal.fromInt(3000),
+              priceCents: Decimal.fromInt(3000),
+            ),
+          );
+      final promotions = PromotionRepository(db, AuditLogService(db));
+      final promotionId = await promotions.create(
+        PromotionDraft(
+          code: 'LAN-BUY1-GET1',
+          name: 'Profitable free gift',
+          type: PromotionType.buyXGetY,
+          rewardType: PromotionRewardType.freeQuantity,
+          productIds: [paidProductId, giftProductId],
+          minimumQuantity: 1,
+          rewardQuantity: 1,
+        ),
+      );
+      await promotions.setActive(promotionId, true);
+
+      final accounting = AccountingRepository(db);
+      final inventory = JournalLocalDatasourceImpl(db.accountingDao);
+      Future<int> inventoryGap() async {
+        final trialBalance = await accounting.getTrialBalance();
+        final inventoryAccount = await accounting.getAccountByCode('1200');
+        final matches = inventoryAccount == null
+            ? const <TrialBalanceItem>[]
+            : trialBalance.items
+                  .where((item) => item.accountId == inventoryAccount.id)
+                  .toList(growable: false);
+        final glValue = matches.isEmpty
+            ? 0
+            : matches.single.naturalBalanceCents;
+        return glValue - await inventory.getTotalInventoryValueCents();
+      }
+
+      final initialGap = await inventoryGap();
+      final created = await gateway.createSale(
+        actor: actor(),
+        request: LanSaleRequest(
+          idempotencyKey: 'lan-profitable-free-gift-001',
+          paymentMethod: 'cash',
+          paidAmountCents: 15000,
+          lines: [
+            LanSaleLineRequest(productId: paidProductId, quantity: 1),
+            LanSaleLineRequest(productId: giftProductId, quantity: 1),
+          ],
+        ),
+      );
+
+      expect(created.subtotalCents, 18000);
+      expect(created.discountCents, 3000);
+      expect(created.totalCents, 15000);
+      expect(await inventoryGap(), initialGap);
+      final soldItems = await (db.select(
+        db.saleItems,
+      )..where((row) => row.saleId.equals(created.saleId))).get();
+      final soldByProduct = {
+        for (final item in soldItems) item.productId: item,
+      };
+      expect(
+        soldByProduct[paidProductId]!.discountCents.toBigInt().toInt(),
+        2500,
+      );
+      expect(
+        soldByProduct[giftProductId]!.discountCents.toBigInt().toInt(),
+        500,
+      );
+
+      await expectLater(
+        repository.createSaleReturn(
+          saleId: created.saleId,
+          currencyId: 1,
+          subtotalCents: Decimal.zero,
+          discountCents: Decimal.zero,
+          taxCents: Decimal.zero,
+          totalCents: Decimal.zero,
+          dispositionType: 'restock',
+          refundMethod: 'cash',
+          idempotencyKey: 'local-profitable-free-gift-partial-return-001',
+          actorUserId: actorId,
+          items: [
+            SaleReturnItemInput(
+              saleItemId: soldByProduct[paidProductId]!.id,
+              quantity: 1,
+              subtotalCents: Decimal.zero,
+              discountCents: Decimal.zero,
+              taxCents: Decimal.zero,
+              refundCents: Decimal.zero,
+            ),
+          ],
+        ),
+        throwsA(isA<PromotionBundleReturnException>()),
+      );
+
+      await expectLater(
+        gateway.createSaleReturn(
+          actor: actor(),
+          request: LanSaleReturnRequest(
+            idempotencyKey: 'lan-profitable-free-gift-partial-return-001',
+            saleId: created.saleId,
+            dispositionType: 'restock',
+            refundMethod: 'cash',
+            lines: [
+              LanSaleReturnLineRequest(
+                saleItemId: soldByProduct[paidProductId]!.id,
+                quantity: 1,
+              ),
+            ],
+          ),
+        ),
+        throwsA(
+          isA<LanBusinessException>().having(
+            (error) => error.code,
+            'code',
+            'promotion_bundle_return_required',
+          ),
+        ),
+      );
+      expect(
+        await (db.select(
+          db.saleReturns,
+        )..where((row) => row.saleId.equals(created.saleId))).get(),
+        isEmpty,
+      );
+
+      final returned = await gateway.createSaleReturn(
+        actor: actor(),
+        request: LanSaleReturnRequest(
+          idempotencyKey: 'lan-profitable-free-gift-return-001',
+          saleId: created.saleId,
+          dispositionType: 'restock',
+          refundMethod: 'cash',
+          lines: soldItems
+              .map(
+                (item) =>
+                    LanSaleReturnLineRequest(saleItemId: item.id, quantity: 1),
+              )
+              .toList(growable: false),
+        ),
+      );
+      expect(returned.totalCents, 15000);
+      expect(await inventoryGap(), initialGap);
+
+      final voidable = await gateway.createSale(
+        actor: actor(),
+        request: LanSaleRequest(
+          idempotencyKey: 'lan-profitable-free-gift-void-001',
+          paymentMethod: 'cash',
+          paidAmountCents: 15000,
+          lines: [
+            LanSaleLineRequest(productId: paidProductId, quantity: 1),
+            LanSaleLineRequest(productId: giftProductId, quantity: 1),
+          ],
+        ),
+      );
+      expect(await inventoryGap(), initialGap);
+      await gateway.voidSale(actor: actor(), saleId: voidable.saleId);
+      expect(await inventoryGap(), initialGap);
+
+      // Raising the paid item's recorded cost makes the exact same bundle
+      // loss-making; the narrow exemption must disappear and the master must
+      // retain the normal below-cost rejection.
+      await (db.update(db.products)
+            ..where((row) => row.id.equals(paidProductId)))
+          .write(ProductsCompanion(costCents: Value(Decimal.fromInt(12500))));
+      await expectLater(
+        gateway.createSale(
+          actor: actor(),
+          request: LanSaleRequest(
+            idempotencyKey: 'lan-unprofitable-free-gift-001',
+            paymentMethod: 'cash',
+            paidAmountCents: 15000,
+            lines: [
+              LanSaleLineRequest(productId: paidProductId, quantity: 1),
+              LanSaleLineRequest(productId: giftProductId, quantity: 1),
+            ],
+          ),
+        ),
+        throwsA(
+          isA<LanBusinessException>().having(
+            (error) => error.code,
+            'code',
+            'sale_below_cost',
+          ),
+        ),
+      );
     },
   );
 
@@ -448,6 +1047,76 @@ void main() {
       expect(stored.single.cashierShiftId, isNotNull);
     },
   );
+
+  test('remote adjustment return preserves split cheque lifecycle', () async {
+    final customerId = await db
+        .into(db.customers)
+        .insert(
+          CustomersCompanion.insert(
+            name: 'Return split customer',
+            currencyId: currencyId,
+          ),
+        );
+    await gateway.createSale(
+      actor: actor(),
+      request: LanSaleRequest(
+        idempotencyKey: 'lan-adjustment-return-split-source-sale-001',
+        customerId: customerId,
+        paymentMethod: 'cash',
+        paidAmountCents: 600,
+        lines: [LanSaleLineRequest(productId: productId, quantity: 500)],
+      ),
+    );
+    final created = await gateway.createSaleAdjustmentReturn(
+      actor: actor(),
+      request: LanSaleAdjustmentReturnRequest(
+        idempotencyKey: 'lan-adjustment-return-split-cheque-001',
+        customerId: customerId,
+        refundMethod: 'cheque',
+        dueDate: DateTime(2026, 9, 25),
+        returnDate: DateTime(2026, 8, 25),
+        reasonCode: 'noReceipt',
+        payments: [
+          LanCheckoutPaymentRequest(
+            method: 'cheque',
+            amountCents: 300,
+            reference: 'LAN-ADJ-CHK-300',
+            dueDate: DateTime(2026, 9, 25),
+          ),
+          const LanCheckoutPaymentRequest(method: 'cash', amountCents: 200),
+        ],
+        lines: [
+          LanSaleAdjustmentReturnLineRequest(
+            productId: productId,
+            quantity: 500,
+            unitPriceCents: 1200,
+          ),
+        ],
+      ),
+    );
+
+    final header = await (db.select(
+      db.saleReturnAdjustments,
+    )..where((row) => row.id.equals(created.returnId))).getSingle();
+    expect(header.totalCents, Decimal.fromInt(600));
+    expect(header.refundMethod, 'mixed');
+    expect(header.dueDate, isNull);
+    final cheque =
+        await (db.select(db.chequeInstruments)..where(
+              (row) =>
+                  row.sourceTable.equals('sale_return_adjustment') &
+                  row.sourceId.equals(created.returnId),
+            ))
+            .getSingle();
+    expect(cheque.amountCents, Decimal.fromInt(300));
+    expect(cheque.chequeNumber, 'LAN-ADJ-CHK-300');
+    expect(cheque.status, 'issued');
+    expect(cheque.settlementPaymentId, isNull);
+    final customer = await (db.select(
+      db.customers,
+    )..where((row) => row.id.equals(customerId))).getSingle();
+    expect(customer.balanceCents, Decimal.fromInt(-400));
+  });
 
   test(
     'returnable sales use both return counters and never expose cost',
@@ -970,4 +1639,22 @@ void main() {
       expect(journalCountAfterFirst, greaterThan(0));
     },
   );
+}
+
+class _ProFeatureGate extends ChangeNotifier implements FeatureGateService {
+  @override
+  bool get isInitialized => true;
+
+  @override
+  bool get isPro => true;
+
+  @override
+  FeatureAccess canAccess(AppFeature feature) => const FeatureAccess.granted();
+
+  @override
+  bool isEnabled(AppFeature feature, {required bool settingEnabled}) =>
+      settingEnabled;
+
+  @override
+  Future<void> refresh() async {}
 }

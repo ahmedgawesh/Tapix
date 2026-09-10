@@ -12,8 +12,11 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/pricing/discount_converter.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
+import '../../../../core/widgets/action_confirmation_dialog.dart';
 import '../../../../core/measurement/measurement.dart';
 import '../../../../core/measurement/measurement_localization.dart';
+import '../../../../core/payments/checkout_settlement.dart';
+import '../../../../core/utils/app_date_formatter.dart';
 import '../../../../core/database/app_database.dart' show Supplier;
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../products/domain/entities/product_variant_entity.dart';
@@ -459,7 +462,7 @@ class _PurchaseFormView extends StatelessWidget {
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            DateFormat.yMd().format(state.purchaseDate),
+                            AppDateFormatter.date(state.purchaseDate),
                             style: theme.textTheme.bodyMedium?.copyWith(
                               fontWeight: FontWeight.w500,
                             ),
@@ -697,6 +700,7 @@ class _PurchaseFormView extends StatelessWidget {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -796,7 +800,7 @@ class _PurchaseFormView extends StatelessWidget {
                             ),
                           ),
                           subtitle: Text(
-                            '${DateFormat.yMMMd().format(purchase.purchaseDate)} • ${cs.format(purchase.totalCents.toBigInt().toInt())}',
+                            '${AppDateFormatter.date(purchase.purchaseDate)} • ${cs.format(purchase.totalCents.toBigInt().toInt())}',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: colorScheme.onSurfaceVariant,
                             ),
@@ -1125,7 +1129,7 @@ class _PurchaseFormView extends StatelessWidget {
                     ),
                     Text(
                       state.dueDate != null
-                          ? DateFormat.yMMMd().format(state.dueDate!)
+                          ? AppDateFormatter.date(state.dueDate!)
                           : 'purchases.set_due_date'.tr(),
                       style: theme.textTheme.bodyLarge?.copyWith(
                         fontWeight: state.dueDate != null
@@ -1446,9 +1450,16 @@ class _PurchaseFormView extends StatelessWidget {
                     showItemDiscount:
                         state.discountMode == DiscountMode.perItem,
                     onTap: () => _showEditItemDialog(context, item),
-                    onRemove: () => context.read<PurchaseFormBloc>().add(
-                      PurchaseLineItemRemoved(item.tempId),
-                    ),
+                    onRemove: () async {
+                      final confirmed = await confirmInvoiceLineRemoval(
+                        context,
+                        itemName: item.product.name,
+                      );
+                      if (!confirmed || !context.mounted) return;
+                      context.read<PurchaseFormBloc>().add(
+                        PurchaseLineItemRemoved(item.tempId),
+                      );
+                    },
                     onQuantityChanged: (qty) =>
                         context.read<PurchaseFormBloc>().add(
                           PurchaseLineItemUpdated(
@@ -1594,6 +1605,11 @@ class _PurchaseFormView extends StatelessWidget {
   ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final quantitySummary = localizedQuantitySummary(
+      state.items,
+      quantityOf: (item) => item.quantity,
+      measurementTypeOf: (item) => item.product.measurementType,
+    );
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1615,38 +1631,44 @@ class _PurchaseFormView extends StatelessWidget {
       child: SafeArea(
         child: Row(
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      LucideIcons.shoppingCart,
-                      size: 12,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${state.items.length} ${'purchases.items_count'.tr()}  •  ${state.totalQuantity} ${'purchases.pieces_count'.tr()}',
-                      style: theme.textTheme.bodySmall?.copyWith(
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        LucideIcons.shoppingCart,
+                        size: 12,
                         color: colorScheme.onSurfaceVariant,
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  cs.format(state.totalCents.toBigInt().toInt()),
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.primary,
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          '${state.items.length} ${'purchases.items_count'.tr()}  •  $quantitySummary',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  Text(
+                    cs.format(state.totalCents.toBigInt().toInt()),
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const Spacer(),
+            const SizedBox(width: 12),
             OutlinedButton(
               onPressed: state.isSubmitting
                   ? null
@@ -1769,9 +1791,11 @@ class _PurchaseFormView extends StatelessWidget {
         child: _CheckoutSheet(
           suppliers: suppliers,
           currencyService: sl<CurrencyService>(),
-          onConfirm: () {
+          onConfirm: (settlement) {
             Navigator.pop(sheetCtx);
-            context.read<PurchaseFormBloc>().add(const PurchaseFormSubmitted());
+            context.read<PurchaseFormBloc>().add(
+              PurchaseFormSubmitted(settlement: settlement),
+            );
           },
         ),
       ),
@@ -2038,7 +2062,7 @@ class _PurchaseItemTile extends StatelessWidget {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            DateFormat.yMMMd().format(item.expiryDate!),
+                            AppDateFormatter.date(item.expiryDate!),
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: Colors.orange,
                               fontSize: 11,
@@ -2936,7 +2960,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                                     Expanded(
                                       child: Text(
                                         _expiryDate != null
-                                            ? '${'purchases.expiry'.tr()}: ${DateFormat.yMMMd().format(_expiryDate!)}'
+                                            ? '${'purchases.expiry'.tr()}: ${AppDateFormatter.date(_expiryDate!)}'
                                             : (requiresExpiry
                                                   ? 'purchases.expiry_required'
                                                         .tr()
@@ -3259,7 +3283,7 @@ class _InfoCell extends StatelessWidget {
 class _CheckoutSheet extends StatefulWidget {
   final List<Supplier> suppliers;
   final CurrencyService currencyService;
-  final VoidCallback onConfirm;
+  final ValueChanged<CheckoutSettlement?> onConfirm;
 
   const _CheckoutSheet({
     required this.suppliers,
@@ -3276,6 +3300,17 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   late final TextEditingController _notesCtrl;
   late final TextEditingController _discountPercentCtrl;
   late final TextEditingController _discountFixedCtrl;
+  late final TextEditingController _chequeAmountCtrl;
+  late final TextEditingController _chequeNumberCtrl;
+  late final TextEditingController _chequeBankCtrl;
+  late final TextEditingController _remainderChequeNumberCtrl;
+  late final TextEditingController _remainderChequeBankCtrl;
+  DateTime? _chequeIssueDate;
+  DateTime? _remainderChequeIssueDate;
+  DateTime? _remainderChequeDueDate;
+  String _chequeRemainderMethod = 'credit';
+  bool _chequeAmountEdited = false;
+  int? _lastChequeTotalCents;
   bool _updatingDiscount = false;
   bool _hasHydratedFromBloc = false;
 
@@ -3288,6 +3323,17 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
           ? (state.paidAmountCents.toBigInt().toInt() / 100).toStringAsFixed(2)
           : '',
     );
+    final totalCents = state.totalCents.toBigInt().toInt();
+    _lastChequeTotalCents = totalCents;
+    _chequeAmountCtrl = TextEditingController(
+      text: (totalCents / 100).toStringAsFixed(2),
+    );
+    _chequeNumberCtrl = TextEditingController();
+    _chequeBankCtrl = TextEditingController();
+    _remainderChequeNumberCtrl = TextEditingController();
+    _remainderChequeBankCtrl = TextEditingController();
+    _chequeIssueDate = DateUtils.dateOnly(state.purchaseDate);
+    _remainderChequeIssueDate = DateUtils.dateOnly(state.purchaseDate);
     _notesCtrl = TextEditingController(text: state.notes ?? '');
 
     final discCents = state.invoiceDiscountCents.toBigInt().toInt();
@@ -3405,11 +3451,263 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   @override
   void dispose() {
     _paidCtrl.dispose();
+    _chequeAmountCtrl.dispose();
+    _chequeNumberCtrl.dispose();
+    _chequeBankCtrl.dispose();
+    _remainderChequeNumberCtrl.dispose();
+    _remainderChequeBankCtrl.dispose();
     _notesCtrl.dispose();
     _discountPercentCtrl.dispose();
     _discountFixedCtrl.dispose();
     super.dispose();
   }
+
+  int _moneyInputCents(String value) {
+    final amount = Decimal.tryParse(value.trim());
+    if (amount == null) return 0;
+    return (amount * Decimal.fromInt(100)).round().toBigInt().toInt();
+  }
+
+  CheckoutSettlement? _checkoutSettlement(PurchaseFormState state) {
+    if (state.paymentMethod != PurchasePaymentMethod.cheque) return null;
+    final total = state.totalCents.toBigInt().toInt();
+    final chequeAmount = _moneyInputCents(_chequeAmountCtrl.text);
+    final remainder = total - chequeAmount;
+    final payments = <CheckoutPaymentAllocation>[
+      CheckoutPaymentAllocation(
+        method: 'cheque',
+        amountCents: chequeAmount,
+        reference: _chequeNumberCtrl.text.trim(),
+        bankName: _chequeBankCtrl.text.trim(),
+        issueDate: _chequeIssueDate ?? state.purchaseDate,
+        dueDate: state.dueDate,
+      ),
+    ];
+    if (remainder > 0 && _chequeRemainderMethod != 'credit') {
+      payments.add(
+        CheckoutPaymentAllocation(
+          method: _chequeRemainderMethod,
+          amountCents: remainder,
+          reference: _chequeRemainderMethod == 'cheque'
+              ? _remainderChequeNumberCtrl.text.trim()
+              : null,
+          bankName: _chequeRemainderMethod == 'cheque'
+              ? _remainderChequeBankCtrl.text.trim()
+              : null,
+          issueDate: _remainderChequeIssueDate ?? state.purchaseDate,
+          dueDate: _chequeRemainderMethod == 'cheque'
+              ? _remainderChequeDueDate
+              : null,
+        ),
+      );
+    }
+    return CheckoutSettlement(payments);
+  }
+
+  Widget _chequeSettlementFields(
+    ThemeData theme,
+    ColorScheme cs,
+    PurchaseFormState state,
+  ) {
+    final total = state.totalCents.toBigInt().toInt();
+    final chequeAmount = _moneyInputCents(_chequeAmountCtrl.text);
+    final remainder = total - chequeAmount;
+    return _buildCheckoutSection(
+      theme: theme,
+      cs: cs,
+      icon: LucideIcons.fileText,
+      title: 'cheques.details'.tr(),
+      child: Column(
+        children: [
+          TextField(
+            controller: _chequeAmountCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+            ],
+            decoration: InputDecoration(
+              labelText: 'cheques.amount'.tr(),
+              prefixIcon: const Icon(LucideIcons.coins),
+            ),
+            onChanged: (_) => setState(() => _chequeAmountEdited = true),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _chequeNumberCtrl,
+            decoration: InputDecoration(
+              labelText: 'cheques.number'.tr(),
+              prefixIcon: const Icon(LucideIcons.hash),
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _chequeBankCtrl,
+            decoration: InputDecoration(
+              labelText: 'cheques.bank'.tr(),
+              prefixIcon: const Icon(LucideIcons.landmark),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _checkoutDateField(
+            label: 'cheques.issue_date'.tr(),
+            date: _chequeIssueDate ?? state.purchaseDate,
+            onTap: () async {
+              final current = DateUtils.dateOnly(
+                _chequeIssueDate ?? state.purchaseDate,
+              );
+              final due = state.dueDate == null
+                  ? null
+                  : DateUtils.dateOnly(state.dueDate!);
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: current,
+                firstDate: DateTime(2000),
+                lastDate: due != null && due.isAfter(current) ? due : current,
+              );
+              if (picked != null && mounted) {
+                setState(() => _chequeIssueDate = picked);
+              }
+            },
+          ),
+          const SizedBox(height: 14),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              'cheques.remainder_amount'.tr(
+                args: [
+                  widget.currencyService.format(remainder < 0 ? 0 : remainder),
+                ],
+              ),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (remainder > 0) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Text('cheques.remainder_method'.tr()),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children:
+                  [
+                    ('credit', PurchasePaymentMethod.credit),
+                    ('cash', PurchasePaymentMethod.cash),
+                    ('card', PurchasePaymentMethod.card),
+                    ('cheque', PurchasePaymentMethod.cheque),
+                  ].map((option) {
+                    return ChoiceChip(
+                      label: Text(_paymentMethodLabel(option.$2)),
+                      selected: _chequeRemainderMethod == option.$1,
+                      onSelected: (_) =>
+                          setState(() => _chequeRemainderMethod = option.$1),
+                    );
+                  }).toList(),
+            ),
+            if (_chequeRemainderMethod == 'cheque') ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _remainderChequeNumberCtrl,
+                decoration: InputDecoration(
+                  labelText: 'cheques.remainder_cheque_number'.tr(),
+                  prefixIcon: const Icon(LucideIcons.hash),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _remainderChequeBankCtrl,
+                decoration: InputDecoration(
+                  labelText: 'cheques.remainder_cheque_bank'.tr(),
+                  prefixIcon: const Icon(LucideIcons.landmark),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _checkoutDateField(
+                label: 'cheques.remainder_cheque_issue_date'.tr(),
+                date: _remainderChequeIssueDate ?? state.purchaseDate,
+                onTap: () async {
+                  final current = DateUtils.dateOnly(
+                    _remainderChequeIssueDate ?? state.purchaseDate,
+                  );
+                  final due = _remainderChequeDueDate == null
+                      ? null
+                      : DateUtils.dateOnly(_remainderChequeDueDate!);
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: current,
+                    firstDate: DateTime(2000),
+                    lastDate: due != null && due.isAfter(current)
+                        ? due
+                        : current,
+                  );
+                  if (picked != null && mounted) {
+                    setState(() => _remainderChequeIssueDate = picked);
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () async {
+                  final today = DateUtils.dateOnly(DateTime.now());
+                  final issueDate = DateUtils.dateOnly(
+                    _remainderChequeIssueDate ?? state.purchaseDate,
+                  );
+                  final firstDate = issueDate.isAfter(today)
+                      ? issueDate
+                      : today;
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate:
+                        _remainderChequeDueDate ??
+                        firstDate.add(const Duration(days: 30)),
+                    firstDate: firstDate,
+                    lastDate: firstDate.add(const Duration(days: 3650)),
+                  );
+                  if (picked != null && mounted) {
+                    setState(() => _remainderChequeDueDate = picked);
+                  }
+                },
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'cheques.remainder_cheque_due_date'.tr(),
+                    prefixIcon: const Icon(LucideIcons.calendar),
+                  ),
+                  child: Text(
+                    _remainderChequeDueDate == null
+                        ? 'purchases.select_due_date'.tr()
+                        : AppDateFormatter.date(_remainderChequeDueDate!),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _checkoutDateField({
+    required String label,
+    required DateTime date,
+    required VoidCallback onTap,
+  }) => InkWell(
+    borderRadius: BorderRadius.circular(10),
+    onTap: onTap,
+    child: InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: const Icon(LucideIcons.calendar),
+      ),
+      child: Text(AppDateFormatter.date(date)),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -3419,6 +3717,11 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     return BlocBuilder<PurchaseFormBloc, PurchaseFormState>(
       builder: (context, state) {
         _hydrateControllersIfNeeded(state);
+        final currentTotal = state.totalCents.toBigInt().toInt();
+        if (!_chequeAmountEdited && _lastChequeTotalCents != currentTotal) {
+          _lastChequeTotalCents = currentTotal;
+          _chequeAmountCtrl.text = (currentTotal / 100).toStringAsFixed(2);
+        }
         return DraggableScrollableSheet(
           initialChildSize: 0.85,
           minChildSize: 0.5,
@@ -3469,10 +3772,14 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                             ),
                           ),
                           const SizedBox(width: 10),
-                          Text(
-                            'purchases.checkout_title'.tr(),
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
+                          Expanded(
+                            child: Text(
+                              'purchases.checkout_title'.tr(),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ],
@@ -3489,7 +3796,14 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                 Expanded(
                   child: ListView(
                     controller: scrollController,
-                    padding: const EdgeInsets.all(20),
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      20,
+                      16,
+                      24 + MediaQuery.viewInsetsOf(context).bottom,
+                    ),
                     children: [
                       // ── Supplier Selection ──
                       _buildCheckoutSection(
@@ -3598,6 +3912,8 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                       // ── Cheque due date (only for cheque) ──
                       if (state.paymentMethod ==
                           PurchasePaymentMethod.cheque) ...[
+                        _chequeSettlementFields(theme, cs, state),
+                        const SizedBox(height: 16),
                         _buildCheckoutSection(
                           theme: theme,
                           cs: cs,
@@ -3606,16 +3922,21 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                           child: InkWell(
                             borderRadius: BorderRadius.circular(10),
                             onTap: () async {
+                              final today = DateUtils.dateOnly(DateTime.now());
+                              final issueDate = DateUtils.dateOnly(
+                                _chequeIssueDate ?? state.purchaseDate,
+                              );
+                              final firstDate = issueDate.isAfter(today)
+                                  ? issueDate
+                                  : today;
                               final picked = await showDatePicker(
                                 context: context,
                                 initialDate:
                                     state.dueDate ??
-                                    DateTime.now().add(
-                                      const Duration(days: 30),
-                                    ),
-                                firstDate: DateTime.now(),
-                                lastDate: DateTime.now().add(
-                                  const Duration(days: 365),
+                                    firstDate.add(const Duration(days: 30)),
+                                firstDate: firstDate,
+                                lastDate: firstDate.add(
+                                  const Duration(days: 3650),
                                 ),
                               );
                               if (picked != null && context.mounted) {
@@ -3644,7 +3965,9 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                                   Expanded(
                                     child: Text(
                                       state.dueDate != null
-                                          ? '${state.dueDate!.year}-${state.dueDate!.month.toString().padLeft(2, '0')}-${state.dueDate!.day.toString().padLeft(2, '0')}'
+                                          ? AppDateFormatter.date(
+                                              state.dueDate!,
+                                            )
                                           : 'purchases.select_due_date'.tr(),
                                       style: theme.textTheme.bodyLarge
                                           ?.copyWith(
@@ -4209,13 +4532,41 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                                   state.paymentMethod ==
                                       PurchasePaymentMethod.cheque &&
                                   state.dueDate == null;
+                              final chequeAmount = _moneyInputCents(
+                                _chequeAmountCtrl.text,
+                              );
+                              final chequeDetailsInvalid =
+                                  state.paymentMethod ==
+                                      PurchasePaymentMethod.cheque &&
+                                  (chequeAmount <= 0 ||
+                                      chequeAmount >
+                                          state.totalCents.toBigInt().toInt() ||
+                                      _chequeNumberCtrl.text.trim().isEmpty);
+                              final remainder =
+                                  state.totalCents.toBigInt().toInt() -
+                                  chequeAmount;
+                              final remainderChequeInvalid =
+                                  state.paymentMethod ==
+                                      PurchasePaymentMethod.cheque &&
+                                  remainder > 0 &&
+                                  _chequeRemainderMethod == 'cheque' &&
+                                  (_remainderChequeNumberCtrl.text
+                                          .trim()
+                                          .isEmpty ||
+                                      _remainderChequeDueDate == null);
                               final canConfirm =
                                   state.supplierId != null &&
                                   !state.isSubmitting &&
                                   !cashInsufficient &&
-                                  !chequeNoDueDate;
+                                  !chequeNoDueDate &&
+                                  !chequeDetailsInvalid &&
+                                  !remainderChequeInvalid;
                               return FilledButton.icon(
-                                onPressed: canConfirm ? widget.onConfirm : null,
+                                onPressed: canConfirm
+                                    ? () => widget.onConfirm(
+                                        _checkoutSettlement(state),
+                                      )
+                                    : null,
                                 icon: state.isSubmitting
                                     ? const SizedBox(
                                         width: 18,

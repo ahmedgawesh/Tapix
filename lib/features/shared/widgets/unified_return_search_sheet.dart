@@ -507,7 +507,7 @@ class _InvoiceTile extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '${DateFormat.yMMMd().format(invoice.date)} · ${currencyService.formatCents(invoice.totalCents)}',
+                        '${DateFormat('dd/MM/yyyy').format(invoice.date)} · ${currencyService.formatCents(invoice.totalCents)}',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: cs.onSurfaceVariant,
                         ),

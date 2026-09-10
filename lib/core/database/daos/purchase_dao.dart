@@ -1060,7 +1060,12 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
               transactionNumber: Value(paymentNumber),
               amountCents: Decimal.fromInt(-invoicePayment),
               currencyId: purchase.currencyId,
-              description: Value('Payment for ${purchase.purchaseNumber}'),
+              description: Value(
+                purchase.paymentMethod == 'cheque' ||
+                        purchase.paymentMethod == 'check'
+                    ? 'Issued cheque for ${purchase.purchaseNumber}'
+                    : 'Payment for ${purchase.purchaseNumber}',
+              ),
               referenceId: Value(backfilledInitialPaymentId),
               referenceType: const Value('purchase_payment'),
             ),
@@ -1085,6 +1090,47 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
               'Excess cash added to balance — ${purchase.purchaseNumber}',
             ),
             referenceId: Value(excessPaymentId),
+            referenceType: const Value('purchase_payment'),
+          ),
+        );
+      }
+
+      // Structured checkout payments already exist before posting. Create a
+      // supplier-ledger settlement row for every leg that does not yet have
+      // one. Keeping transaction_type=payment preserves balance/reporting
+      // semantics while the description identifies physical cheques.
+      final postedPayments = await getPurchasePayments(purchaseId);
+      for (final payment in postedPayments) {
+        final existingPaymentTransaction =
+            await (select(supplierTransactions)..where(
+                  (row) =>
+                      row.referenceType.equals('purchase_payment') &
+                      row.referenceId.equals(payment.id) &
+                      row.transactionType.equals('payment'),
+                ))
+                .getSingleOrNull();
+        if (existingPaymentTransaction != null) continue;
+        final paymentNumber = await DocumentNumberService(
+          attachedDatabase,
+        ).nextSupplierTransaction('CPS');
+        final isCheque =
+            payment.paymentMethod == 'cheque' ||
+            payment.paymentMethod == 'check';
+        await into(supplierTransactions).insert(
+          SupplierTransactionsCompanion.insert(
+            supplierId: purchase.supplierId,
+            transactionType: 'payment',
+            transactionNumber: Value(paymentNumber),
+            amountCents: Decimal.fromInt(
+              -payment.amountCents.toBigInt().toInt(),
+            ),
+            currencyId: purchase.currencyId,
+            description: Value(
+              isCheque
+                  ? 'Issued cheque ${payment.reference ?? ''} for ${purchase.purchaseNumber}'
+                  : 'Payment for ${purchase.purchaseNumber}',
+            ),
+            referenceId: Value(payment.id),
             referenceType: const Value('purchase_payment'),
           ),
         );
@@ -1533,24 +1579,40 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
-  /// Watch upcoming due purchases for a supplier (posted, not fully paid, with due date)
+  /// Watch upcoming due purchases for a supplier.
+  ///
+  /// Cheque invoices remain visible only while at least one physical cheque
+  /// is open. A cleared, bounced, cancelled or replaced cheque must never
+  /// continue to appear as "due tomorrow" merely because the invoice keeps
+  /// its historical due date.
   Stream<List<Purchase>> watchUpcomingDuePurchases(int supplierId) {
-    return (select(purchases)
-          ..where(
-            (p) =>
-                p.supplierId.equals(supplierId) &
-                p.status.equals('posted') &
-                p.dueDate.isNotNull(),
-          )
-          ..orderBy([(p) => OrderingTerm.asc(p.dueDate)]))
-        .watch()
-        .map(
-          (list) => list.where((p) {
-            final total = p.totalCents.toBigInt().toInt();
-            final paid = p.paidAmountCents.toBigInt().toInt();
-            return paid < total;
-          }).toList(),
-        );
+    final query = customSelect(
+      '''
+      SELECT p.*
+        FROM purchases p
+       WHERE p.supplier_id = ?
+         AND p.status = 'posted'
+         AND p.due_date IS NOT NULL
+         AND p.paid_amount_cents < p.total_cents
+         AND (
+           LOWER(COALESCE(p.payment_method, '')) NOT IN ('cheque','check')
+           OR EXISTS (
+             SELECT 1 FROM cheque_instruments ci
+              WHERE ci.source_table = 'purchase'
+                AND ci.source_id = p.id
+                AND ci.status IN ('received','issued','deposited')
+           )
+         )
+       ORDER BY p.due_date ASC
+      ''',
+      variables: [Variable.withInt(supplierId)],
+      readsFrom: {purchases, attachedDatabase.chequeInstruments},
+    );
+    return query.watch().map(
+      (rows) => rows
+          .map((row) => attachedDatabase.purchases.map(row.data))
+          .toList(growable: false),
+    );
   }
 
   /// Search purchases by number, supplier name, or supplier phone
@@ -2116,9 +2178,21 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
 
         // Determine transaction type based on refund method
         // - credit: supplier owes us → deduct from balance (credit note)
-        // - cash/cheque: supplier already paid us back → no balance change
-        final isCreditRefund = refundMethod == 'credit';
-        final txType = isCreditRefund ? 'credit_note' : 'refund';
+        // - cash: supplier already paid us back → no balance change
+        // - cheque: create the receivable before cheque recognition offsets it
+        final isChequeRefund =
+            refundMethod == 'cheque' || refundMethod == 'check';
+        final isDeferredRefund =
+            refundMethod == 'credit' ||
+            refundMethod == 'mixed' ||
+            isChequeRefund;
+        final txType = refundMethod == 'mixed'
+            ? 'return_settlement_pending'
+            : refundMethod == 'credit'
+            ? 'credit_note'
+            : isChequeRefund
+            ? 'cheque_return_pending'
+            : 'refund';
 
         // Record supplier transaction for audit trail
         await into(supplierTransactions).insert(
@@ -2136,10 +2210,9 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
           ),
         );
 
-        // Only adjust supplier balance for credit refunds.
-        // Cash/cheque means the supplier already gave us the money back,
-        // so the balance (what we owe them) doesn't change.
-        if (isCreditRefund) {
+        // Credit remains in the party ledger; cheque recognition offsets this
+        // temporary receivable immediately after the instrument is created.
+        if (isDeferredRefund) {
           await BalanceService.adjustSupplierBalance(
             this,
             supplierId: purchase.supplierId,
@@ -2331,11 +2404,21 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
         final purchase = await getPurchaseById(returnData.purchaseId);
         if (purchase != null) {
           final refundCents = returnData.totalCents.toBigInt().toInt();
-          final isCreditRefund = returnData.refundMethod == 'credit';
+          final isChequeRefund =
+              returnData.refundMethod == 'cheque' ||
+              returnData.refundMethod == 'check';
+          final isDeferredRefund =
+              returnData.refundMethod == 'credit' ||
+              returnData.refundMethod == 'mixed' ||
+              isChequeRefund;
 
           // Record reversal transaction for audit trail (always)
-          final reversalType = isCreditRefund
+          final reversalType = returnData.refundMethod == 'mixed'
+              ? 'return_settlement_pending_reversal'
+              : returnData.refundMethod == 'credit'
               ? 'credit_note_reversal'
+              : isChequeRefund
+              ? 'cheque_return_pending_reversal'
               : 'refund_reversal';
           await into(supplierTransactions).insert(
             SupplierTransactionsCompanion.insert(
@@ -2351,10 +2434,8 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
             ),
           );
 
-          // Only restore supplier balance for credit refunds.
-          // Cash/cheque refunds did not change the balance on posting,
-          // so voiding them should not change it either.
-          if (isCreditRefund) {
+          // Restore a credit or pending-cheque obligation on source void.
+          if (isDeferredRefund) {
             await BalanceService.adjustSupplierBalance(
               this,
               supplierId: purchase.supplierId,
@@ -2427,7 +2508,12 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
             transactionNumber: Value(paymentNumber),
             amountCents: Decimal.fromInt(-amountCents),
             currencyId: purchase.currencyId,
-            description: Value('Payment for ${purchase.purchaseNumber}'),
+            description: Value(
+              payment.paymentMethod.value == 'cheque' ||
+                      payment.paymentMethod.value == 'check'
+                  ? 'Payment for ${purchase.purchaseNumber} (issued cheque ${payment.reference.value ?? ''})'
+                  : 'Payment for ${purchase.purchaseNumber}',
+            ),
             referenceId: Value(paymentId),
             referenceType: const Value('purchase_payment'),
           ),

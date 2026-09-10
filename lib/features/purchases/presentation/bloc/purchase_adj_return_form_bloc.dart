@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/database/daos/adjustment_return_dao.dart';
 import '../../../../core/money/money.dart';
+import '../../../../core/payments/checkout_settlement.dart';
 import '../../../../core/pricing/discount.dart';
 import '../../../../core/pricing/invoice_pricing_engine.dart';
 import '../../../../core/pricing/line_item_pricing_engine.dart';
@@ -542,10 +543,15 @@ class PurchaseAdjReturnSubmitted extends PurchaseAdjReturnFormEvent {
   /// Carries the current inventory policy from the UI layer so the bloc
   /// doesn't need a direct dependency on the app settings bloc.
   final bool allowNegativeStock;
-  const PurchaseAdjReturnSubmitted({this.allowNegativeStock = false});
+  final List<CheckoutPaymentAllocation> settlementAllocations;
+
+  const PurchaseAdjReturnSubmitted({
+    this.allowNegativeStock = false,
+    this.settlementAllocations = const [],
+  });
 
   @override
-  List<Object?> get props => [allowNegativeStock];
+  List<Object?> get props => [allowNegativeStock, settlementAllocations];
 }
 
 // ==================== BLOC ====================
@@ -797,8 +803,14 @@ class PurchaseAdjReturnFormBloc
           ),
         ),
         returnDate: Value(state.returnDate),
-        refundMethod: Value(state.paymentMethod.name),
-        dueDate: Value(state.dueDate),
+        refundMethod: Value(
+          event.settlementAllocations.isEmpty
+              ? state.paymentMethod.name
+              : 'mixed',
+        ),
+        dueDate: Value(
+          event.settlementAllocations.isEmpty ? state.dueDate : null,
+        ),
         idempotencyKey: Value(idempotencyKey),
       ).withPricingSnapshot(taxInclusive: false);
 
@@ -835,6 +847,7 @@ class PurchaseAdjReturnFormBloc
         itemCompanions,
         journalEntryService: _journalEntryService,
         allowNegativeStock: event.allowNegativeStock,
+        settlementAllocations: event.settlementAllocations,
       );
 
       emit(

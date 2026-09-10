@@ -42,6 +42,7 @@ class AppSettings {
   final bool enableWeightUnits;
   final bool enableVolumeUnits;
   final bool enablePharmacyFeatures;
+  final bool enablePromotions;
 
   // ── Sales ──
   final String defaultPaymentMethod; // 'cash', 'card', 'bank_transfer'
@@ -111,6 +112,7 @@ class AppSettings {
     this.enableWeightUnits = false,
     this.enableVolumeUnits = false,
     this.enablePharmacyFeatures = false,
+    this.enablePromotions = false,
     // Sales
     this.defaultPaymentMethod = 'cash',
     this.allowPartialPayments = false,
@@ -171,6 +173,7 @@ class AppSettings {
     bool? enableWeightUnits,
     bool? enableVolumeUnits,
     bool? enablePharmacyFeatures,
+    bool? enablePromotions,
     String? defaultPaymentMethod,
     bool? allowPartialPayments,
     bool? allowDiscounts,
@@ -232,6 +235,7 @@ class AppSettings {
       enableVolumeUnits: enableVolumeUnits ?? this.enableVolumeUnits,
       enablePharmacyFeatures:
           enablePharmacyFeatures ?? this.enablePharmacyFeatures,
+      enablePromotions: enablePromotions ?? this.enablePromotions,
       defaultPaymentMethod: defaultPaymentMethod ?? this.defaultPaymentMethod,
       allowPartialPayments: allowPartialPayments ?? this.allowPartialPayments,
       allowDiscounts: allowDiscounts ?? this.allowDiscounts,
@@ -297,6 +301,7 @@ class AppSettings {
     'enableWeightUnits': enableWeightUnits,
     'enableVolumeUnits': enableVolumeUnits,
     'enablePharmacyFeatures': enablePharmacyFeatures,
+    'enablePromotions': enablePromotions,
     'defaultPaymentMethod': defaultPaymentMethod,
     'allowPartialPayments': allowPartialPayments,
     'allowDiscounts': allowDiscounts,
@@ -358,6 +363,7 @@ class AppSettings {
       enableWeightUnits: (m['enableWeightUnits'] as bool?) ?? false,
       enableVolumeUnits: (m['enableVolumeUnits'] as bool?) ?? false,
       enablePharmacyFeatures: (m['enablePharmacyFeatures'] as bool?) ?? false,
+      enablePromotions: (m['enablePromotions'] as bool?) ?? false,
       defaultPaymentMethod: (m['defaultPaymentMethod'] as String?) ?? 'cash',
       allowPartialPayments: (m['allowPartialPayments'] as bool?) ?? false,
       allowDiscounts: (m['allowDiscounts'] as bool?) ?? true,

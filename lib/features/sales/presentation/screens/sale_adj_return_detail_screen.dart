@@ -472,7 +472,7 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
             _infoRow(
               theme,
               'sales.date'.tr(),
-              DateFormat.yMMMd().format(ret.returnDate),
+              DateFormat('dd/MM/yyyy').format(ret.returnDate),
             ),
             if (_cashierShift != null) ...[
               const SizedBox(height: 8),
@@ -969,9 +969,10 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
     final tax = ret.taxCents.toBigInt().toInt();
     final total = ret.totalCents.toBigInt().toInt();
     final totalItems = _returnItems.length;
-    final totalPieces = _returnItems.fold<int>(
-      0,
-      (sum, d) => sum + d.item.quantity,
+    final quantitySummary = localizedQuantitySummary(
+      _returnItems,
+      quantityOf: (entry) => entry.item.quantity,
+      measurementTypeOf: (entry) => entry.item.measurementType,
     );
 
     return Card(
@@ -989,7 +990,11 @@ class _SaleAdjReturnDetailScreenState extends State<SaleAdjReturnDetailScreen> {
         child: Column(
           children: [
             _totalRow(theme, 'sales.total_items_count'.tr(), '$totalItems'),
-            _totalRow(theme, 'sales.total_pieces_count'.tr(), '$totalPieces'),
+            _totalRow(
+              theme,
+              'measurement.total_quantity'.tr(),
+              quantitySummary,
+            ),
             Divider(
               height: 16,
               color: colorScheme.outlineVariant.withValues(alpha: 0.4),

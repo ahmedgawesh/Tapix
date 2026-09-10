@@ -13,6 +13,8 @@ import '../../../employees/domain/repositories/employee_repository.dart';
 import '../../../../core/database/daos/adjustment_return_dao.dart';
 import '../../../../core/measurement/measurement.dart';
 import '../../../../core/measurement/measurement_localization.dart';
+import '../../../../core/payments/checkout_settlement.dart';
+import '../../../../core/payments/return_cheque_settlement_dialog.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
 import '../../../../core/services/lan/lan_network_service.dart';
@@ -21,6 +23,7 @@ import '../../../../core/services/loyalty/loyalty_points_service.dart';
 import '../../../auth/data/services/session_service.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../../core/widgets/pin_verification_dialog.dart';
+import '../../../../core/widgets/action_confirmation_dialog.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../../purchases/presentation/bloc/purchase_adj_return_form_bloc.dart'
     show AdjReturnLineItem, AdjReturnPaymentMethod, AdjReturnReasonCode;
@@ -366,7 +369,9 @@ class _FormView extends StatelessWidget {
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            intl.DateFormat.yMd().format(state.returnDate),
+                            intl.DateFormat(
+                              'dd/MM/yyyy',
+                            ).format(state.returnDate),
                             style: theme.textTheme.bodyMedium?.copyWith(
                               fontWeight: FontWeight.w500,
                             ),
@@ -527,9 +532,16 @@ class _FormView extends StatelessWidget {
                               discountPercentBps: bps,
                             ),
                           ),
-                      onRemove: () => context.read<SaleAdjReturnFormBloc>().add(
-                        SaleAdjReturnItemRemoved(index),
-                      ),
+                      onRemove: () async {
+                        final confirmed = await confirmInvoiceLineRemoval(
+                          context,
+                          itemName: item.productName,
+                        );
+                        if (!confirmed || !context.mounted) return;
+                        context.read<SaleAdjReturnFormBloc>().add(
+                          SaleAdjReturnItemRemoved(index),
+                        );
+                      },
                     );
                   },
                 ),
@@ -636,6 +648,11 @@ class _FormView extends StatelessWidget {
   ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final quantitySummary = localizedQuantitySummary(
+      state.items,
+      quantityOf: (item) => item.quantity,
+      measurementTypeOf: (item) => item.measurementType,
+    );
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -676,7 +693,7 @@ class _FormView extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${state.items.length} ${'sales.items_count'.tr()}  •  ${state.totalQuantity} ${'sales.pieces'.tr().toLowerCase()}',
+                    '${state.items.length} ${'sales.items_count'.tr()}  •  $quantitySummary',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: colorScheme.onSurfaceVariant,
                     ),
@@ -743,6 +760,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   final TextEditingController _discountFixedCtrl = TextEditingController();
   final TextEditingController _discountPercentCtrl = TextEditingController();
   bool _updatingDiscount = false;
+  List<CheckoutPaymentAllocation> _settlementAllocations = const [];
 
   @override
   void initState() {
@@ -902,10 +920,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     }
 
     final repo = sl<EmployeeRepository>();
-    final employees = await repo.searchEmployees(
-      '',
-      isActive: true,
-    );
+    final employees = await repo.searchEmployees('', isActive: true);
 
     // Fetch roles to identify salesperson & manager role IDs.
     final allRoles = await repo.watchAllRoles(isActive: true).first;
@@ -971,6 +986,8 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   }
 
   Future<void> _onConfirm(BuildContext context) async {
+    final bloc = context.read<SaleAdjReturnFormBloc>();
+    final state = bloc.state;
     final requirePin = context
         .read<AppSettingsBloc>()
         .state
@@ -981,7 +998,65 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
       if (!pinOk || !context.mounted) return;
     }
     if (!context.mounted) return;
-    context.read<SaleAdjReturnFormBloc>().add(const SaleAdjReturnSubmitted());
+    var allocations = _settlementAllocations;
+    if (state.paymentMethod == AdjReturnPaymentMethod.cheque &&
+        !isReturnChequeSettlementValid(
+          allocations,
+          totalCents: state.totalCents,
+        )) {
+      await _configureChequeSettlement(context, state);
+      allocations = _settlementAllocations;
+      if (!isReturnChequeSettlementValid(
+        allocations,
+        totalCents: state.totalCents,
+      )) {
+        return;
+      }
+    }
+    if (!context.mounted) return;
+    bloc.add(
+      SaleAdjReturnSubmitted(
+        settlementAllocations:
+            state.paymentMethod == AdjReturnPaymentMethod.cheque
+            ? allocations
+            : const [],
+      ),
+    );
+  }
+
+  Future<void> _configureChequeSettlement(
+    BuildContext context,
+    SaleAdjReturnFormState state,
+  ) async {
+    if (state.totalCents <= 0) return;
+    final allocations = await showReturnChequeSettlementDialog(
+      context,
+      totalCents: state.totalCents,
+      formattedTotal: widget.currencyService.format(state.totalCents),
+      initialDueDate: state.dueDate,
+      documentDate: state.returnDate,
+      initialAllocations: _settlementAllocations,
+    );
+    if (allocations == null || !context.mounted) return;
+    setState(() => _settlementAllocations = allocations);
+    context.read<SaleAdjReturnFormBloc>().add(
+      SaleAdjReturnDueDateChanged(returnChequePrimaryDueDate(allocations)),
+    );
+  }
+
+  Future<void> _changePaymentMethod(
+    BuildContext context,
+    SaleAdjReturnFormState state,
+    AdjReturnPaymentMethod method,
+  ) async {
+    context.read<SaleAdjReturnFormBloc>().add(
+      SaleAdjReturnPaymentMethodChanged(method),
+    );
+    if (method == AdjReturnPaymentMethod.cheque) {
+      await _configureChequeSettlement(context, state);
+    } else if (mounted) {
+      setState(() => _settlementAllocations = const []);
+    }
   }
 
   @override
@@ -1286,9 +1361,8 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                           return ChoiceChip(
                             label: Text(_pmLabel(m)),
                             selected: sel,
-                            onSelected: (_) => context
-                                .read<SaleAdjReturnFormBloc>()
-                                .add(SaleAdjReturnPaymentMethodChanged(m)),
+                            onSelected: (_) =>
+                                _changePaymentMethod(context, state, m),
                             avatar: Icon(_pmIcon(m), size: 16),
                             selectedColor: cs.primaryContainer,
                             showCheckmark: false,
@@ -1297,76 +1371,15 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                       ),
                       const SizedBox(height: 16),
 
-                      // ── Cheque due date ──
+                      // ── Cheque details and partial settlement ──
                       if (state.paymentMethod ==
                           AdjReturnPaymentMethod.cheque) ...[
-                        _sectionHeader(
-                          theme,
-                          cs,
-                          LucideIcons.calendar,
-                          'sales.cheque_due_date'.tr(),
-                        ),
-                        const SizedBox(height: 8),
-                        InkWell(
-                          borderRadius: BorderRadius.circular(10),
-                          onTap: () async {
-                            final picked = await showDatePicker(
-                              context: context,
-                              initialDate:
-                                  state.dueDate ??
-                                  DateTime.now().add(const Duration(days: 30)),
-                              firstDate: DateTime.now(),
-                              lastDate: DateTime.now().add(
-                                const Duration(days: 365),
-                              ),
-                            );
-                            if (picked != null && context.mounted) {
-                              context.read<SaleAdjReturnFormBloc>().add(
-                                SaleAdjReturnDueDateChanged(picked),
-                              );
-                            }
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 12,
-                            ),
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: state.dueDate == null
-                                    ? cs.error.withValues(alpha: 0.5)
-                                    : cs.outlineVariant,
-                              ),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  LucideIcons.calendar,
-                                  size: 18,
-                                  color: cs.primary,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    state.dueDate != null
-                                        ? '${state.dueDate!.year}-${state.dueDate!.month.toString().padLeft(2, '0')}-${state.dueDate!.day.toString().padLeft(2, '0')}'
-                                        : 'sales.select_due_date'.tr(),
-                                    style: theme.textTheme.bodyLarge?.copyWith(
-                                      color: state.dueDate != null
-                                          ? null
-                                          : cs.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ),
-                                Icon(
-                                  LucideIcons.chevronDown,
-                                  size: 18,
-                                  color: cs.onSurfaceVariant,
-                                ),
-                              ],
-                            ),
-                          ),
+                        ReturnChequeSettlementSummary(
+                          allocations: _settlementAllocations,
+                          totalCents: state.totalCents,
+                          formatAmount: widget.currencyService.format,
+                          onEdit: () =>
+                              _configureChequeSettlement(context, state),
                         ),
                         const SizedBox(height: 16),
                       ],

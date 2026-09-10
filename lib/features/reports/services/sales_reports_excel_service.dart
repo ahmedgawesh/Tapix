@@ -51,7 +51,7 @@ class SalesReportsExcelService {
         TextCellValue(cs.formatCents(s.paidAmountCents)),
         TextCellValue(_paymentLabel(s.paymentMethod, lang)),
         TextCellValue(s.status),
-        TextCellValue(DateFormat.yMd().format(s.saleDate)),
+        TextCellValue(DateFormat('dd/MM/yyyy').format(s.saleDate)),
       ]);
     }
 
@@ -60,7 +60,13 @@ class SalesReportsExcelService {
     sheet.appendRow([
       TextCellValue(_t('total', lang)),
       TextCellValue(''),
-      TextCellValue(cs.formatCents(data.summary.totalSalesCents - data.summary.totalDiscountCents - data.summary.totalTaxCents)),
+      TextCellValue(
+        cs.formatCents(
+          data.summary.totalSalesCents -
+              data.summary.totalDiscountCents -
+              data.summary.totalTaxCents,
+        ),
+      ),
       TextCellValue(cs.formatCents(data.summary.totalDiscountCents)),
       TextCellValue(cs.formatCents(data.summary.totalTaxCents)),
       TextCellValue(cs.formatCents(data.summary.totalSalesCents)),
@@ -70,7 +76,10 @@ class SalesReportsExcelService {
       TextCellValue('${_t('invoices', lang)}: ${data.summary.invoiceCount}'),
     ]);
 
-    await _saveAndShare(excel, 'Sales_${DateFormat('yyyyMMdd').format(DateTime.now())}');
+    await _saveAndShare(
+      excel,
+      'Sales_${DateFormat('yyyyMMdd').format(DateTime.now())}',
+    );
   }
 
   /// Export sales with product details to Excel and share
@@ -108,7 +117,7 @@ class SalesReportsExcelService {
         TextCellValue(cs.formatCents(s.totalCents)),
         TextCellValue(cs.formatCents(s.paidAmountCents)),
         TextCellValue(_paymentLabel(s.paymentMethod, lang)),
-        TextCellValue(DateFormat.yMd().format(s.saleDate)),
+        TextCellValue(DateFormat('dd/MM/yyyy').format(s.saleDate)),
       ]);
     }
 
@@ -180,11 +189,18 @@ class SalesReportsExcelService {
         TextCellValue(cs.formatCents(c.totalTaxCents)),
         IntCellValue(c.invoiceCount),
         IntCellValue(c.totalQuantity),
-        TextCellValue(c.lastSaleDate != null ? DateFormat.yMd().format(c.lastSaleDate!) : '-'),
+        TextCellValue(
+          c.lastSaleDate != null
+              ? DateFormat('dd/MM/yyyy').format(c.lastSaleDate!)
+              : '-',
+        ),
       ]);
     }
 
-    await _saveAndShare(excel, 'SalesWithProducts_${DateFormat('yyyyMMdd').format(DateTime.now())}');
+    await _saveAndShare(
+      excel,
+      'SalesWithProducts_${DateFormat('yyyyMMdd').format(DateTime.now())}',
+    );
   }
 
   // ═══════════════════════════════════════════════════════
@@ -222,7 +238,11 @@ class SalesReportsExcelService {
   }
 
   static const _translations = {
-    'invoice_number': {'en': 'Invoice #', 'ar': 'رقم الفاتورة', 'fr': 'Facture #'},
+    'invoice_number': {
+      'en': 'Invoice #',
+      'ar': 'رقم الفاتورة',
+      'fr': 'Facture #',
+    },
     'customer': {'en': 'Customer', 'ar': 'العميل', 'fr': 'Client'},
     'subtotal': {'en': 'Subtotal', 'ar': 'المجموع الفرعي', 'fr': 'Sous-total'},
     'discount': {'en': 'Discount', 'ar': 'الخصم', 'fr': 'Remise'},
@@ -237,12 +257,17 @@ class SalesReportsExcelService {
     'category': {'en': 'Category', 'ar': 'التصنيف', 'fr': 'Catégorie'},
     'products': {'en': 'Products', 'ar': 'المنتجات', 'fr': 'Produits'},
     'quantity': {'en': 'Qty', 'ar': 'الكمية', 'fr': 'Qté'},
-    'total_sales': {'en': 'Total Sales', 'ar': 'إجمالي المبيعات', 'fr': 'Total Ventes'},
+    'total_sales': {
+      'en': 'Total Sales',
+      'ar': 'إجمالي المبيعات',
+      'fr': 'Total Ventes',
+    },
     'last_sale': {'en': 'Last Sale', 'ar': 'آخر بيع', 'fr': 'Dernière Vente'},
     'payment_cash': {'en': 'Cash', 'ar': 'نقد', 'fr': 'Espèces'},
     'payment_credit': {'en': 'Credit', 'ar': 'آجل', 'fr': 'Crédit'},
     'payment_card': {'en': 'Card', 'ar': 'بطاقة', 'fr': 'Carte'},
     'payment_cheque': {'en': 'Cheque', 'ar': 'شيك', 'fr': 'Chèque'},
+    'payment_mixed': {'en': 'Mixed', 'ar': 'مختلط', 'fr': 'Mixte'},
   };
 
   static String _t(String key, String lang) {

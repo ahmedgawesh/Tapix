@@ -34,8 +34,10 @@ class _CustomerAnalysisReportView extends StatelessWidget {
       appBar: AppBar(
         title: Text('reports.customer_analysis'.tr()),
         actions: [
-          BlocBuilder<CustomerAnalysisReportBloc,
-              RealtimeState<CustomerAnalysisReportData>>(
+          BlocBuilder<
+            CustomerAnalysisReportBloc,
+            RealtimeState<CustomerAnalysisReportData>
+          >(
             builder: (context, state) {
               if (state is! RealtimeSuccess<CustomerAnalysisReportData>) {
                 return const SizedBox.shrink();
@@ -59,63 +61,71 @@ class _CustomerAnalysisReportView extends StatelessWidget {
           ),
         ],
       ),
-      body: BlocBuilder<CustomerAnalysisReportBloc,
-          RealtimeState<CustomerAnalysisReportData>>(
-        builder: (context, state) {
-          if (state is RealtimeLoading<CustomerAnalysisReportData>) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body:
+          BlocBuilder<
+            CustomerAnalysisReportBloc,
+            RealtimeState<CustomerAnalysisReportData>
+          >(
+            builder: (context, state) {
+              if (state is RealtimeLoading<CustomerAnalysisReportData>) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (state is RealtimeError<CustomerAnalysisReportData>) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline,
-                      size: 48, color: colorScheme.error),
-                  const SizedBox(height: 16),
-                  Text(state.error.toString(),
-                      style: theme.textTheme.bodyLarge),
-                ],
-              ),
-            );
-          }
-
-          if (state is RealtimeSuccess<CustomerAnalysisReportData>) {
-            return Column(
-              children: [
-                // Date range selector
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: DateRangeSelector(
-                    dateRange: state.data.dateRange,
-                    onChanged: (range) => context
-                        .read<CustomerAnalysisReportBloc>()
-                        .add(CustomerAnalysisDateRangeChanged(range)),
+              if (state is RealtimeError<CustomerAnalysisReportData>) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        state.error.toString(),
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
+                );
+              }
 
-                // Summary cards
-                _buildSummaryCards(context, state.data),
-                const SizedBox(height: 8),
+              if (state is RealtimeSuccess<CustomerAnalysisReportData>) {
+                return Column(
+                  children: [
+                    // Date range selector
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: DateRangeSelector(
+                        dateRange: state.data.dateRange,
+                        onChanged: (range) => context
+                            .read<CustomerAnalysisReportBloc>()
+                            .add(CustomerAnalysisDateRangeChanged(range)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
 
-                // Content
-                Expanded(
-                  child: _CustomerAnalysisContent(data: state.data),
-                ),
-              ],
-            );
-          }
+                    // Summary cards
+                    _buildSummaryCards(context, state.data),
+                    const SizedBox(height: 8),
 
-          return const SizedBox.shrink();
-        },
-      ),
+                    // Content
+                    Expanded(child: _CustomerAnalysisContent(data: state.data)),
+                  ],
+                );
+              }
+
+              return const SizedBox.shrink();
+            },
+          ),
     );
   }
 
   Widget _buildSummaryCards(
-      BuildContext context, CustomerAnalysisReportData data) {
+    BuildContext context,
+    CustomerAnalysisReportData data,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final cs = sl<CurrencyService>();
@@ -155,11 +165,14 @@ class _CustomerAnalysisReportView extends StatelessWidget {
           if (isWide) {
             return Row(
               children: cards
-                  .map((c) => Expanded(
-                          child: Padding(
+                  .map(
+                    (c) => Expanded(
+                      child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: c,
-                      )))
+                      ),
+                    ),
+                  )
                   .toList(),
             );
           }
@@ -169,30 +182,34 @@ class _CustomerAnalysisReportView extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: cards[0],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: cards[0],
+                    ),
+                  ),
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: cards[1],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: cards[1],
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: cards[2],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: cards[2],
+                    ),
+                  ),
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: cards[3],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: cards[3],
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -203,7 +220,9 @@ class _CustomerAnalysisReportView extends StatelessWidget {
   }
 
   Future<void> _printReport(
-      BuildContext context, CustomerAnalysisReportData data) async {
+    BuildContext context,
+    CustomerAnalysisReportData data,
+  ) async {
     await CustomerAnalysisPdfService.printCustomerAnalysisReport(
       context: context,
       data: data,
@@ -216,7 +235,9 @@ class _CustomerAnalysisReportView extends StatelessWidget {
   }
 
   Future<void> _shareReport(
-      BuildContext context, CustomerAnalysisReportData data) async {
+    BuildContext context,
+    CustomerAnalysisReportData data,
+  ) async {
     await CustomerAnalysisPdfService.shareCustomerAnalysisReport(
       context: context,
       data: data,
@@ -306,16 +327,23 @@ class _CustomerAnalysisContent extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.barChart3,
-                size: 48, color: theme.colorScheme.onSurfaceVariant),
+            Icon(
+              LucideIcons.barChart3,
+              size: 48,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 16),
-            Text('reports.no_analysis_data'.tr(),
-                style: theme.textTheme.bodyLarge),
+            Text(
+              'reports.no_analysis_data'.tr(),
+              style: theme.textTheme.bodyLarge,
+            ),
             const SizedBox(height: 8),
-            Text('reports.no_analysis_data_desc'.tr(),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                )),
+            Text(
+              'reports.no_analysis_data_desc'.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       );
@@ -332,9 +360,12 @@ class _CustomerAnalysisContent extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('reports.customer_analysis_details'.tr(),
-                style: theme.textTheme.titleSmall
-                    ?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'reports.customer_analysis_details'.tr(),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             Text(
               'reports.customer_count'.tr(args: ['${data.customers.length}']),
               style: theme.textTheme.bodySmall?.copyWith(
@@ -346,10 +377,9 @@ class _CustomerAnalysisContent extends StatelessWidget {
         const SizedBox(height: 8),
 
         // Customer cards
-        ...data.customers.map((item) => _CustomerAnalysisCard(
-              item: item,
-              cs: cs,
-            )),
+        ...data.customers.map(
+          (item) => _CustomerAnalysisCard(item: item, cs: cs),
+        ),
 
         const SizedBox(height: 8),
 
@@ -362,8 +392,9 @@ class _CustomerAnalysisContent extends StatelessWidget {
               children: [
                 Text(
                   'reports.grand_total'.tr(),
-                  style: theme.textTheme.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.bold),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 Text(
                   cs.formatCents(data.grandTotalSpentCents),
@@ -381,7 +412,9 @@ class _CustomerAnalysisContent extends StatelessWidget {
   }
 
   Widget _buildRfmOverview(
-      BuildContext context, CustomerAnalysisReportData data) {
+    BuildContext context,
+    CustomerAnalysisReportData data,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -391,9 +424,12 @@ class _CustomerAnalysisContent extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('reports.rfm_segment_overview'.tr(),
-                style: theme.textTheme.titleSmall
-                    ?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'reports.rfm_segment_overview'.tr(),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
@@ -431,10 +467,7 @@ class _CustomerAnalysisCard extends StatelessWidget {
   final CustomerAnalysisItem item;
   final CurrencyService cs;
 
-  const _CustomerAnalysisCard({
-    required this.item,
-    required this.cs,
-  });
+  const _CustomerAnalysisCard({required this.item, required this.cs});
 
   @override
   Widget build(BuildContext context) {
@@ -454,23 +487,30 @@ class _CustomerAnalysisCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     item.customerName,
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
-                    color: _rfmColor(item.rfmSegment, colorScheme)
-                        .withValues(alpha: 0.15),
+                    color: _rfmColor(
+                      item.rfmSegment,
+                      colorScheme,
+                    ).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: _rfmColor(item.rfmSegment, colorScheme)
-                          .withValues(alpha: 0.4),
+                      color: _rfmColor(
+                        item.rfmSegment,
+                        colorScheme,
+                      ).withValues(alpha: 0.4),
                     ),
                   ),
                   child: Text(
@@ -524,29 +564,33 @@ class _CustomerAnalysisCard extends StatelessWidget {
                   _MetricItem(
                     label: 'reports.avg_frequency'.tr(),
                     value: item.avgDaysBetweenPurchases > 0
-                        ? 'reports.days_value'
-                            .tr(args: ['${item.avgDaysBetweenPurchases.round()}'])
+                        ? 'reports.days_value'.tr(
+                            args: ['${item.avgDaysBetweenPurchases.round()}'],
+                          )
                         : '-',
                   ),
                 ];
 
                 if (isWide) {
                   return Row(
-                    children:
-                        metrics.map((m) => Expanded(child: m)).toList(),
+                    children: metrics.map((m) => Expanded(child: m)).toList(),
                   );
                 }
                 return Column(
                   children: [
-                    Row(children: [
-                      Expanded(child: metrics[0]),
-                      Expanded(child: metrics[1]),
-                    ]),
+                    Row(
+                      children: [
+                        Expanded(child: metrics[0]),
+                        Expanded(child: metrics[1]),
+                      ],
+                    ),
                     const SizedBox(height: 4),
-                    Row(children: [
-                      Expanded(child: metrics[2]),
-                      Expanded(child: metrics[3]),
-                    ]),
+                    Row(
+                      children: [
+                        Expanded(child: metrics[2]),
+                        Expanded(child: metrics[3]),
+                      ],
+                    ),
                   ],
                 );
               },
@@ -554,7 +598,7 @@ class _CustomerAnalysisCard extends StatelessWidget {
             if (item.lastPurchaseDate != null) ...[
               const SizedBox(height: 4),
               Text(
-                '${'reports.last_purchase'.tr()}: ${DateFormat.yMMMd().format(item.lastPurchaseDate!)} (${item.daysSinceLastPurchase} ${'reports.days_ago'.tr()})',
+                '${'reports.last_purchase'.tr()}: ${DateFormat('dd/MM/yyyy').format(item.lastPurchaseDate!)} (${item.daysSinceLastPurchase} ${'reports.days_ago'.tr()})',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: colorScheme.onSurfaceVariant,
                 ),
@@ -583,14 +627,18 @@ class _MetricItem extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            )),
-        Text(value,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-            )),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        Text(
+          value,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ],
     );
   }

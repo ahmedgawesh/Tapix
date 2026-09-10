@@ -611,8 +611,14 @@ class _RemoteAddItemSheet extends StatefulWidget {
   final LanCatalogProduct? initialProduct;
   final void Function(LanCatalogProduct product, LanCatalogVariant? variant)
   onSelected;
+  final void Function(List<_PromotionBundleLine> lines, PromotionRule rule)
+  onBundleAdded;
 
-  const _RemoteAddItemSheet({this.initialProduct, required this.onSelected});
+  const _RemoteAddItemSheet({
+    this.initialProduct,
+    required this.onSelected,
+    required this.onBundleAdded,
+  });
 
   @override
   State<_RemoteAddItemSheet> createState() => _RemoteAddItemSheetState();
@@ -731,6 +737,133 @@ class _RemoteAddItemSheetState extends State<_RemoteAddItemSheet> {
     if (selected != null && mounted) await _selectRemoteProduct(selected);
   }
 
+  List<PromotionRule> get _bundleRules {
+    final page = _page;
+    if (page == null || !page.enablePromotions) return const [];
+    return page.promotionRules
+        .map(PromotionRule.fromTransportMap)
+        .where(
+          (rule) =>
+              rule.qualifierScopes.length >= 2 &&
+              rule.qualifierScopes.every((scope) => scope.isRequiredComponent),
+        )
+        .toList(growable: false);
+  }
+
+  LanCatalogProduct? _promotionProductForScope(PromotionScope scope) {
+    final page = _page;
+    if (page == null) return null;
+    for (final product in page.promotionProducts) {
+      if (scope.type == PromotionScopeType.product &&
+          product.id == scope.targetId) {
+        return product;
+      }
+      if (scope.type == PromotionScopeType.variant &&
+          product.variants.any((variant) => variant.id == scope.targetId)) {
+        return product;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _addRemoteBundle(PromotionRule rule) async {
+    final page = _page;
+    if (page == null) return;
+    final lines = <_PromotionBundleLine>[];
+    for (final scope in rule.qualifierScopes) {
+      final remoteProduct = _promotionProductForScope(scope);
+      if (remoteProduct == null) {
+        _showRemoteBundleUnavailable();
+        return;
+      }
+      LanCatalogVariant? remoteVariant;
+      if (scope.type == PromotionScopeType.variant) {
+        for (final variant in remoteProduct.variants) {
+          if (variant.id == scope.targetId) {
+            remoteVariant = variant;
+            break;
+          }
+        }
+        if (remoteVariant == null) {
+          _showRemoteBundleUnavailable();
+          return;
+        }
+      }
+      final required = scope.requiredQuantity ?? remoteProduct.quantityScale;
+      final stock = remoteVariant?.stockQuantity ?? remoteProduct.stockQuantity;
+      if (!page.allowNegativeStock && stock < required) {
+        _showRemoteBundleUnavailable();
+        return;
+      }
+      final retail = remoteVariant?.priceCents ?? remoteProduct.priceCents;
+      final wholesale =
+          remoteVariant?.wholesalePriceCents ??
+          remoteProduct.wholesalePriceCents;
+      lines.add(
+        _PromotionBundleLine(
+          product: _productFromLan(remoteProduct),
+          variant: remoteVariant == null
+              ? null
+              : _variantFromLan(remoteVariant),
+          quantity: required,
+          unitPriceCents: Decimal.fromInt(
+            rule.priceMode == 'wholesale' ? (wholesale ?? retail) : retail,
+          ),
+        ),
+      );
+    }
+    if (mounted && lines.isNotEmpty) widget.onBundleAdded(lines, rule);
+  }
+
+  void _showRemoteBundleUnavailable() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('promotions.sales.bundle_unavailable'.tr())),
+    );
+  }
+
+  Widget _remoteBundleSuggestions(ColorScheme cs) {
+    final rules = _bundleRules;
+    if (rules.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      height: 92,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+        itemCount: rules.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final rule = rules[index];
+          return ActionChip(
+            avatar: const Icon(LucideIcons.packagePlus, size: 18),
+            label: SizedBox(
+              width: 170,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    rule.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    'promotions.sales.add_bundle'.tr(
+                      namedArgs: {'count': '${rule.qualifierScopes.length}'},
+                    ),
+                    maxLines: 1,
+                    style: TextStyle(color: cs.onSurfaceVariant, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            onPressed: () => _addRemoteBundle(rule),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _productImage(LanCatalogProduct product, ColorScheme cs) {
     if (!product.hasImage) {
       return Icon(
@@ -818,6 +951,7 @@ class _RemoteAddItemSheetState extends State<_RemoteAddItemSheet> {
                 onChanged: _search,
               ),
             ),
+          if (_selected == null) _remoteBundleSuggestions(cs),
           const Divider(height: 1),
           Expanded(child: _buildBody(scrollController, cs)),
         ],
@@ -922,7 +1056,13 @@ class _AddItemSheet extends StatefulWidget {
     Decimal unitPrice,
   )
   onItemAdded;
-  const _AddItemSheet({this.initialProduct, required this.onItemAdded});
+  final void Function(List<_PromotionBundleLine> lines, PromotionRule rule)
+  onBundleAdded;
+  const _AddItemSheet({
+    this.initialProduct,
+    required this.onItemAdded,
+    required this.onBundleAdded,
+  });
 
   @override
   State<_AddItemSheet> createState() => _AddItemSheetState();
@@ -936,17 +1076,141 @@ class _AddItemSheetState extends State<_AddItemSheet> {
   Set<int> _medicineProductIds = const {};
   Set<int> _ingredientSearchProductIds = const {};
   Timer? _pharmacySearchDebounce;
+  List<PromotionRule> _bundleRules = const [];
 
   @override
   void initState() {
     super.initState();
     _selectedProduct = widget.initialProduct;
-    _pharmacyEnabled = context
+    final settings = context.read<AppSettingsBloc>().state.settings;
+    final gate = sl<FeatureGateService>();
+    _pharmacyEnabled = gate.isEnabled(
+      AppFeature.pharmacy,
+      settingEnabled: settings.enablePharmacyFeatures,
+    );
+    if (_pharmacyEnabled) unawaited(_loadMedicineProductIds());
+    if (gate.isEnabled(
+      AppFeature.promotions,
+      settingEnabled: settings.enablePromotions,
+    )) {
+      unawaited(_loadBundleRules());
+    }
+  }
+
+  Future<void> _loadBundleRules() async {
+    try {
+      final rules = await sl<PromotionRepository>().loadActiveRules();
+      if (!mounted) return;
+      setState(() {
+        _bundleRules = rules
+            .where(
+              (rule) =>
+                  rule.qualifierScopes.length >= 2 &&
+                  rule.qualifierScopes.every(
+                    (scope) => scope.isRequiredComponent,
+                  ),
+            )
+            .toList(growable: false);
+      });
+    } catch (_) {
+      // Product search remains available if promotion suggestions cannot load.
+    }
+  }
+
+  Future<void> _addBundle(PromotionRule rule) async {
+    final products = sl<ProductRepository>();
+    final variants = sl<ProductVariantRepository>();
+    final allowNegativeStock = context
         .read<AppSettingsBloc>()
         .state
         .settings
-        .enablePharmacyFeatures;
-    if (_pharmacyEnabled) unawaited(_loadMedicineProductIds());
+        .allowNegativeStock;
+    final lines = <_PromotionBundleLine>[];
+    for (final scope in rule.qualifierScopes) {
+      Product? product;
+      ProductVariant? variant;
+      if (scope.type == PromotionScopeType.product) {
+        product = await products.getProductById(scope.targetId!);
+      } else if (scope.type == PromotionScopeType.variant) {
+        variant = await variants.getVariantById(scope.targetId!);
+        if (variant != null) {
+          product = await products.getProductById(variant.productId);
+        }
+      }
+      if (product == null || !product.isActive) {
+        if (mounted) _showBundleUnavailable();
+        return;
+      }
+      final required = scope.requiredQuantity ?? product.quantityScale;
+      final stock = variant?.stockQuantity ?? product.stockQuantity;
+      if (stock < required && !allowNegativeStock) {
+        if (mounted) _showBundleUnavailable();
+        return;
+      }
+      final retail = variant?.priceCents ?? product.priceCents;
+      final wholesale =
+          variant?.wholesalePriceCents ?? product.wholesalePriceCents;
+      lines.add(
+        _PromotionBundleLine(
+          product: product,
+          variant: variant,
+          quantity: required,
+          unitPriceCents: rule.priceMode == 'wholesale'
+              ? (wholesale ?? retail)
+              : retail,
+        ),
+      );
+    }
+    if (mounted && lines.isNotEmpty) widget.onBundleAdded(lines, rule);
+  }
+
+  void _showBundleUnavailable() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('promotions.sales.bundle_unavailable'.tr())),
+    );
+  }
+
+  Widget _bundleSuggestions(ColorScheme cs) {
+    if (_bundleRules.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      height: 92,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+        itemCount: _bundleRules.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final rule = _bundleRules[index];
+          return ActionChip(
+            avatar: const Icon(LucideIcons.packagePlus, size: 18),
+            label: SizedBox(
+              width: 170,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    rule.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    'promotions.sales.add_bundle'.tr(
+                      namedArgs: {'count': '${rule.qualifierScopes.length}'},
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: cs.onSurfaceVariant, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            onPressed: () => _addBundle(rule),
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _loadMedicineProductIds() async {
@@ -1175,6 +1439,7 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                 },
               ),
               const SizedBox(height: 8),
+              _bundleSuggestions(cs),
             ] else
               Padding(
                 padding: const EdgeInsets.symmetric(
@@ -2489,7 +2754,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
 class _CheckoutSheet extends StatefulWidget {
   final CurrencyService currencyService;
   final TextEditingController notesCtrl;
-  final VoidCallback onConfirm;
+  final ValueChanged<CheckoutSettlement?> onConfirm;
 
   const _CheckoutSheet({
     required this.currencyService,
@@ -2505,6 +2770,17 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   late final TextEditingController _paidCtrl;
   late final TextEditingController _discountPercentCtrl;
   late final TextEditingController _discountFixedCtrl;
+  late final TextEditingController _chequeAmountCtrl;
+  late final TextEditingController _chequeNumberCtrl;
+  late final TextEditingController _chequeBankCtrl;
+  late final TextEditingController _remainderChequeNumberCtrl;
+  late final TextEditingController _remainderChequeBankCtrl;
+  DateTime? _chequeIssueDate;
+  DateTime? _remainderChequeIssueDate;
+  DateTime? _remainderChequeDueDate;
+  String _chequeRemainderMethod = 'credit';
+  bool _chequeAmountEdited = false;
+  int? _lastChequeTotalCents;
   bool _updatingDiscount = false;
   bool _hasHydratedFromBloc = false;
   bool _loyaltyLoadTriggered = false;
@@ -2518,6 +2794,17 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
           ? (state.paidAmountCents.toBigInt().toInt() / 100).toStringAsFixed(2)
           : '',
     );
+    final totalCents = state.totalCents.toBigInt().toInt();
+    _lastChequeTotalCents = totalCents;
+    _chequeAmountCtrl = TextEditingController(
+      text: (totalCents / 100).toStringAsFixed(2),
+    );
+    _chequeNumberCtrl = TextEditingController();
+    _chequeBankCtrl = TextEditingController();
+    _remainderChequeNumberCtrl = TextEditingController();
+    _remainderChequeBankCtrl = TextEditingController();
+    _chequeIssueDate = DateUtils.dateOnly(state.saleDate);
+    _remainderChequeIssueDate = DateUtils.dateOnly(state.saleDate);
 
     final discCents = state.invoiceDiscountCents.toBigInt().toInt();
     final subtotalCents = state.subtotalCents.toBigInt().toInt();
@@ -2622,10 +2909,262 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   @override
   void dispose() {
     _paidCtrl.dispose();
+    _chequeAmountCtrl.dispose();
+    _chequeNumberCtrl.dispose();
+    _chequeBankCtrl.dispose();
+    _remainderChequeNumberCtrl.dispose();
+    _remainderChequeBankCtrl.dispose();
     _discountPercentCtrl.dispose();
     _discountFixedCtrl.dispose();
     super.dispose();
   }
+
+  int _moneyInputCents(String value) {
+    final amount = Decimal.tryParse(value.trim());
+    if (amount == null) return 0;
+    return (amount * Decimal.fromInt(100)).round().toBigInt().toInt();
+  }
+
+  CheckoutSettlement? _checkoutSettlement(SaleFormState state) {
+    if (state.paymentMethod != SalePaymentMethod.cheque) return null;
+    final total = state.totalCents.toBigInt().toInt();
+    final chequeAmount = _moneyInputCents(_chequeAmountCtrl.text);
+    final remainder = total - chequeAmount;
+    final payments = <CheckoutPaymentAllocation>[
+      CheckoutPaymentAllocation(
+        method: 'cheque',
+        amountCents: chequeAmount,
+        reference: _chequeNumberCtrl.text.trim(),
+        bankName: _chequeBankCtrl.text.trim(),
+        issueDate: _chequeIssueDate ?? state.saleDate,
+        dueDate: state.dueDate,
+      ),
+    ];
+    if (remainder > 0 && _chequeRemainderMethod != 'credit') {
+      payments.add(
+        CheckoutPaymentAllocation(
+          method: _chequeRemainderMethod,
+          amountCents: remainder,
+          reference: _chequeRemainderMethod == 'cheque'
+              ? _remainderChequeNumberCtrl.text.trim()
+              : null,
+          bankName: _chequeRemainderMethod == 'cheque'
+              ? _remainderChequeBankCtrl.text.trim()
+              : null,
+          issueDate: _remainderChequeIssueDate ?? state.saleDate,
+          dueDate: _chequeRemainderMethod == 'cheque'
+              ? _remainderChequeDueDate
+              : null,
+        ),
+      );
+    }
+    return CheckoutSettlement(payments);
+  }
+
+  Widget _chequeSettlementFields(
+    ThemeData theme,
+    ColorScheme cs,
+    SaleFormState state,
+  ) {
+    final total = state.totalCents.toBigInt().toInt();
+    final chequeAmount = _moneyInputCents(_chequeAmountCtrl.text);
+    final remainder = total - chequeAmount;
+    return _section(
+      theme,
+      cs,
+      LucideIcons.fileText,
+      'cheques.details'.tr(),
+      child: Column(
+        children: [
+          TextField(
+            controller: _chequeAmountCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+            ],
+            decoration: InputDecoration(
+              labelText: 'cheques.amount'.tr(),
+              prefixIcon: const Icon(LucideIcons.coins),
+            ),
+            onChanged: (_) => setState(() => _chequeAmountEdited = true),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _chequeNumberCtrl,
+            decoration: InputDecoration(
+              labelText: 'cheques.number'.tr(),
+              prefixIcon: const Icon(LucideIcons.hash),
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _chequeBankCtrl,
+            decoration: InputDecoration(
+              labelText: 'cheques.bank'.tr(),
+              prefixIcon: const Icon(LucideIcons.landmark),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _checkoutDateField(
+            label: 'cheques.issue_date'.tr(),
+            date: _chequeIssueDate ?? state.saleDate,
+            onTap: () async {
+              final current = DateUtils.dateOnly(
+                _chequeIssueDate ?? state.saleDate,
+              );
+              final due = state.dueDate == null
+                  ? null
+                  : DateUtils.dateOnly(state.dueDate!);
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: current,
+                firstDate: DateTime(2000),
+                lastDate: due != null && due.isAfter(current) ? due : current,
+              );
+              if (picked != null && mounted) {
+                setState(() => _chequeIssueDate = picked);
+              }
+            },
+          ),
+          const SizedBox(height: 14),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              'cheques.remainder_amount'.tr(
+                args: [
+                  widget.currencyService.format(remainder < 0 ? 0 : remainder),
+                ],
+              ),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (remainder > 0) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Text('cheques.remainder_method'.tr()),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children:
+                  [
+                    ('credit', SalePaymentMethod.credit),
+                    ('cash', SalePaymentMethod.cash),
+                    ('card', SalePaymentMethod.card),
+                    ('cheque', SalePaymentMethod.cheque),
+                  ].map((option) {
+                    return ChoiceChip(
+                      label: Text(_pmLabel(option.$2)),
+                      selected: _chequeRemainderMethod == option.$1,
+                      onSelected: (_) =>
+                          setState(() => _chequeRemainderMethod = option.$1),
+                    );
+                  }).toList(),
+            ),
+            if (_chequeRemainderMethod == 'cheque') ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _remainderChequeNumberCtrl,
+                decoration: InputDecoration(
+                  labelText: 'cheques.remainder_cheque_number'.tr(),
+                  prefixIcon: const Icon(LucideIcons.hash),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _remainderChequeBankCtrl,
+                decoration: InputDecoration(
+                  labelText: 'cheques.remainder_cheque_bank'.tr(),
+                  prefixIcon: const Icon(LucideIcons.landmark),
+                ),
+              ),
+              const SizedBox(height: 12),
+              _checkoutDateField(
+                label: 'cheques.remainder_cheque_issue_date'.tr(),
+                date: _remainderChequeIssueDate ?? state.saleDate,
+                onTap: () async {
+                  final current = DateUtils.dateOnly(
+                    _remainderChequeIssueDate ?? state.saleDate,
+                  );
+                  final due = _remainderChequeDueDate == null
+                      ? null
+                      : DateUtils.dateOnly(_remainderChequeDueDate!);
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: current,
+                    firstDate: DateTime(2000),
+                    lastDate: due != null && due.isAfter(current)
+                        ? due
+                        : current,
+                  );
+                  if (picked != null && mounted) {
+                    setState(() => _remainderChequeIssueDate = picked);
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () async {
+                  final today = DateUtils.dateOnly(DateTime.now());
+                  final issueDate = DateUtils.dateOnly(
+                    _remainderChequeIssueDate ?? state.saleDate,
+                  );
+                  final firstDate = issueDate.isAfter(today)
+                      ? issueDate
+                      : today;
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate:
+                        _remainderChequeDueDate ??
+                        firstDate.add(const Duration(days: 30)),
+                    firstDate: firstDate,
+                    lastDate: firstDate.add(const Duration(days: 3650)),
+                  );
+                  if (picked != null && mounted) {
+                    setState(() => _remainderChequeDueDate = picked);
+                  }
+                },
+                child: InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'cheques.remainder_cheque_due_date'.tr(),
+                    prefixIcon: const Icon(LucideIcons.calendar),
+                  ),
+                  child: Text(
+                    _remainderChequeDueDate == null
+                        ? 'sales.select_due_date'.tr()
+                        : AppDateFormatter.date(_remainderChequeDueDate!),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _checkoutDateField({
+    required String label,
+    required DateTime date,
+    required VoidCallback onTap,
+  }) => InkWell(
+    borderRadius: BorderRadius.circular(10),
+    onTap: onTap,
+    child: InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: const Icon(LucideIcons.calendar),
+      ),
+      child: Text(AppDateFormatter.date(date)),
+    ),
+  );
 
   void _ensureLoyaltyDataLoaded(BuildContext context, SaleFormState state) {
     if (_loyaltyLoadTriggered) return;
@@ -2645,7 +3184,14 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     return BlocBuilder<SaleFormBloc, SaleFormState>(
       builder: (context, state) {
         _hydrateControllersIfNeeded(state);
+        final currentTotal = state.totalCents.toBigInt().toInt();
+        if (!_chequeAmountEdited && _lastChequeTotalCents != currentTotal) {
+          _lastChequeTotalCents = currentTotal;
+          _chequeAmountCtrl.text = (currentTotal / 100).toStringAsFixed(2);
+        }
         _ensureLoyaltyDataLoaded(context, state);
+        final promotionDiscount = Decimal.fromInt(state.promotionDiscountCents);
+        final manualDiscount = state.totalDiscountCents - promotionDiscount;
         return DraggableScrollableSheet(
           initialChildSize: 0.85,
           maxChildSize: 0.95,
@@ -2660,13 +3206,17 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                   children: [
                     Icon(LucideIcons.shoppingBag, size: 20, color: cs.primary),
                     const SizedBox(width: 8),
-                    Text(
-                      'sales.checkout'.tr(),
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: Text(
+                        'sales.checkout'.tr(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 8),
                     TextButton(
                       onPressed: () => Navigator.pop(context),
                       child: Text('common.cancel'.tr()),
@@ -2677,7 +3227,14 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
               Expanded(
                 child: ListView(
                   controller: scrollCtrl,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    0,
+                    16,
+                    24 + MediaQuery.viewInsetsOf(context).bottom,
+                  ),
                   children: [
                     // Customer Selection
                     _section(
@@ -2807,6 +3364,8 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
 
                     // Cheque due date (only for cheque)
                     if (state.paymentMethod == SalePaymentMethod.cheque) ...[
+                      _chequeSettlementFields(theme, cs, state),
+                      const SizedBox(height: 16),
                       _section(
                         theme,
                         cs,
@@ -2815,14 +3374,21 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                         child: InkWell(
                           borderRadius: BorderRadius.circular(10),
                           onTap: () async {
+                            final today = DateUtils.dateOnly(DateTime.now());
+                            final issueDate = DateUtils.dateOnly(
+                              _chequeIssueDate ?? state.saleDate,
+                            );
+                            final firstDate = issueDate.isAfter(today)
+                                ? issueDate
+                                : today;
                             final picked = await showDatePicker(
                               context: context,
                               initialDate:
                                   state.dueDate ??
-                                  DateTime.now().add(const Duration(days: 30)),
-                              firstDate: DateTime.now(),
-                              lastDate: DateTime.now().add(
-                                const Duration(days: 365),
+                                  firstDate.add(const Duration(days: 30)),
+                              firstDate: firstDate,
+                              lastDate: firstDate.add(
+                                const Duration(days: 3650),
                               ),
                             );
                             if (picked != null && context.mounted) {
@@ -2851,7 +3417,7 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                                 Expanded(
                                   child: Text(
                                     state.dueDate != null
-                                        ? '${state.dueDate!.year}-${state.dueDate!.month.toString().padLeft(2, '0')}-${state.dueDate!.day.toString().padLeft(2, '0')}'
+                                        ? AppDateFormatter.date(state.dueDate!)
                                         : 'sales.select_due_date'.tr(),
                                     style: theme.textTheme.bodyLarge?.copyWith(
                                       color: state.dueDate != null
@@ -2929,7 +3495,10 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      'sales.credit_balance_info'.tr(),
+                                      state.paymentMethod ==
+                                              SalePaymentMethod.cheque
+                                          ? 'sales.cheque_balance_info'.tr()
+                                          : 'sales.credit_balance_info'.tr(),
                                       style: theme.textTheme.bodySmall
                                           ?.copyWith(
                                             color: cs.onSurfaceVariant,
@@ -3314,13 +3883,42 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                               state.subtotalCents.toBigInt().toInt(),
                             ),
                           ),
-                          if (state.totalDiscountCents > Decimal.zero) ...[
+                          if (manualDiscount > Decimal.zero) ...[
                             const SizedBox(height: 8),
                             _cRow(
                               theme,
                               'sales.discount'.tr(),
-                              '- ${widget.currencyService.format(state.totalDiscountCents.toBigInt().toInt())}',
+                              '- ${widget.currencyService.format(manualDiscount.toBigInt().toInt())}',
                               valueColor: cs.tertiary,
+                            ),
+                          ],
+                          if (state.promotionDiscountCents > 0) ...[
+                            const SizedBox(height: 8),
+                            _cRow(
+                              theme,
+                              'promotions.applied_savings'.tr(),
+                              '- ${widget.currencyService.format(state.promotionDiscountCents)}',
+                              valueColor: Colors.green,
+                            ),
+                            const SizedBox(height: 6),
+                            Align(
+                              alignment: AlignmentDirectional.centerStart,
+                              child: Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                children: state.promotionEvaluation.applications
+                                    .map(
+                                      (offer) => Chip(
+                                        visualDensity: VisualDensity.compact,
+                                        avatar: const Icon(
+                                          LucideIcons.badgePercent,
+                                          size: 15,
+                                        ),
+                                        label: Text(offer.name),
+                                      ),
+                                    )
+                                    .toList(growable: false),
+                              ),
                             ),
                           ],
                           if (state.taxCents > Decimal.zero) ...[
@@ -3445,6 +4043,28 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                                 state.paymentMethod ==
                                     SalePaymentMethod.cheque &&
                                 state.dueDate == null;
+                            final chequeAmount = _moneyInputCents(
+                              _chequeAmountCtrl.text,
+                            );
+                            final chequeDetailsInvalid =
+                                state.paymentMethod ==
+                                    SalePaymentMethod.cheque &&
+                                (chequeAmount <= 0 ||
+                                    chequeAmount >
+                                        state.totalCents.toBigInt().toInt() ||
+                                    _chequeNumberCtrl.text.trim().isEmpty);
+                            final remainder =
+                                state.totalCents.toBigInt().toInt() -
+                                chequeAmount;
+                            final remainderChequeInvalid =
+                                state.paymentMethod ==
+                                    SalePaymentMethod.cheque &&
+                                remainder > 0 &&
+                                _chequeRemainderMethod == 'cheque' &&
+                                (_remainderChequeNumberCtrl.text
+                                        .trim()
+                                        .isEmpty ||
+                                    _remainderChequeDueDate == null);
                             final customerRequiredButMissing =
                                 (state.paymentMethod ==
                                         SalePaymentMethod.credit ||
@@ -3455,9 +4075,15 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                                 !state.isSubmitting &&
                                 !cashInsufficient &&
                                 !chequeNoDueDate &&
+                                !chequeDetailsInvalid &&
+                                !remainderChequeInvalid &&
                                 !customerRequiredButMissing;
                             return FilledButton.icon(
-                              onPressed: canConfirm ? widget.onConfirm : null,
+                              onPressed: canConfirm
+                                  ? () => widget.onConfirm(
+                                      _checkoutSettlement(state),
+                                    )
+                                  : null,
                               icon: state.isSubmitting
                                   ? const SizedBox(
                                       width: 18,

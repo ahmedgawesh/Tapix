@@ -660,7 +660,7 @@ class _StatementContent extends StatelessWidget {
             cells: [
               DataCell(
                 Text(
-                  DateFormat.yMd().format(data.dateRange.startDate),
+                  DateFormat('dd/MM/yyyy').format(data.dateRange.startDate),
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
@@ -712,7 +712,7 @@ class _StatementContent extends StatelessWidget {
               cells: [
                 DataCell(
                   Text(
-                    DateFormat.yMd().format(txn.date),
+                    DateFormat('dd/MM/yyyy').format(txn.date),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: isDisplayOnly
                           ? colorScheme.onSurfaceVariant
@@ -794,7 +794,7 @@ class _StatementContent extends StatelessWidget {
             cells: [
               DataCell(
                 Text(
-                  DateFormat.yMd().format(data.dateRange.endDate),
+                  DateFormat('dd/MM/yyyy').format(data.dateRange.endDate),
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),

@@ -449,7 +449,9 @@ class _CustomerSummaryTab extends StatelessWidget {
                     DataCell(
                       Text(
                         item.lastReturnDate != null
-                            ? DateFormat.yMd().format(item.lastReturnDate!)
+                            ? DateFormat(
+                                'dd/MM/yyyy',
+                              ).format(item.lastReturnDate!)
                             : '-',
                         style: theme.textTheme.bodySmall,
                       ),
@@ -624,7 +626,7 @@ class _ReturnDetailsTab extends StatelessWidget {
                     final metrics = [
                       _MetricItem(
                         label: 'reports.return_date_label'.tr(),
-                        value: DateFormat.yMd().format(item.returnDate),
+                        value: DateFormat('dd/MM/yyyy').format(item.returnDate),
                       ),
                       _MetricItem(
                         label: 'reports.refund_method'.tr(),

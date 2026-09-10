@@ -107,7 +107,7 @@ class ProductVariantMovementPdfService {
             ),
             pw.SizedBox(height: 4),
             pw.Text(
-              '${_t('period', lang)}: ${DateFormat.yMMMd().format(data.dateRange.startDate)} — ${DateFormat.yMMMd().format(data.dateRange.endDate)}',
+              '${_t('period', lang)}: ${DateFormat('dd/MM/yyyy').format(data.dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(data.dateRange.endDate)}',
               style: pw.TextStyle(font: fonts.regular, fontSize: 10),
             ),
             pw.SizedBox(height: 12),
@@ -211,7 +211,7 @@ class ProductVariantMovementPdfService {
                 data: data.movements.map((m) {
                   final (typeLabel, sign) = _movementTypeInfo(m.type, lang);
                   return [
-                    DateFormat.yMd().format(m.date),
+                    DateFormat('dd/MM/yyyy').format(m.date),
                     typeLabel,
                     m.reference,
                     m.counterpartyName ?? '-',
@@ -226,7 +226,7 @@ class ProductVariantMovementPdfService {
             pw.SizedBox(height: 16),
             pw.Divider(),
             pw.Text(
-              '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+              '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
               style: pw.TextStyle(
                 font: fonts.regular,
                 fontSize: 8,

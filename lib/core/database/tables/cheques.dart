@@ -1,18 +1,100 @@
 import 'package:drift/drift.dart';
 
+import '../converters/money_converter.dart';
+import 'settings.dart';
 import 'users.dart';
 
-/// ChequeConfirmations — Phase 14.0 minimal-risk SoT for cheque lifecycle.
+/// A real negotiable cheque instrument.
+///
+/// Unlike [ChequeConfirmations] (the legacy one-row-per-document sidecar),
+/// this table stores one row per physical cheque. Consequently a document
+/// can be settled by several partial cheques and every cheque keeps its own
+/// number, bank data, amount and lifecycle/accounting links.
+@DataClassName('ChequeInstrument')
+class ChequeInstruments extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get direction => text()();
+  TextColumn get sourceTable => text()();
+  IntColumn get sourceId => integer()();
+  TextColumn get partyType => text().nullable()();
+  IntColumn get partyId => integer().nullable()();
+  IntColumn get amountCents => integer().map(const MoneyConverter())();
+  IntColumn get currencyId =>
+      integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
+  TextColumn get chequeNumber => text().nullable()();
+  TextColumn get bankName => text().nullable()();
+  TextColumn get branchName => text().nullable()();
+  TextColumn get accountNumber => text().nullable()();
+  TextColumn get drawerName => text().nullable()();
+  DateTimeColumn get issueDate => dateTime().nullable()();
+  DateTimeColumn get dueDate => dateTime()();
+  TextColumn get status => text()();
+  DateTimeColumn get depositedAt => dateTime().nullable()();
+  DateTimeColumn get clearedAt => dateTime().nullable()();
+  DateTimeColumn get bouncedAt => dateTime().nullable()();
+  DateTimeColumn get cancelledAt => dateTime().nullable()();
+  TextColumn get bounceReason => text().nullable()();
+  TextColumn get note => text().nullable()();
+
+  /// Invoice payment id, or return-settlement journal id, which moved the
+  /// party obligation into the appropriate cheque clearing account.
+  IntColumn get settlementPaymentId => integer().nullable()();
+
+  /// Journal which moved the clearing account to Bank.
+  IntColumn get clearanceJournalEntryId => integer().nullable()();
+
+  /// Journal which restored the party obligation after dishonour/cancel.
+  IntColumn get dishonourJournalEntryId => integer().nullable()();
+
+  /// How a bounced cheque was finally resolved: cash, bank, card,
+  /// replacement, credit, or write_off. A bounced cheque with no value here
+  /// remains an actionable alert in the cheque register and party profile.
+  TextColumn get resolutionType => text().nullable()();
+  IntColumn get resolutionJournalEntryId => integer().nullable()();
+  DateTimeColumn get resolvedAt => dateTime().nullable()();
+  TextColumn get resolutionNote => text().nullable()();
+  IntColumn get replacementChequeId => integer().nullable()();
+
+  /// Old documents may already have posted directly to Bank.
+  BoolColumn get legacyDirectBank =>
+      boolean().withDefault(const Constant(false))();
+
+  @ReferenceName('chequeCreatedBy')
+  IntColumn get createdBy => integer().nullable().references(
+    Users,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+  @ReferenceName('chequeUpdatedBy')
+  IntColumn get updatedBy => integer().nullable().references(
+    Users,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (direction IN ('incoming','outgoing'))",
+    'CHECK (amount_cents > 0)',
+    "CHECK (status IN ('received','issued','deposited','cleared','bounced','cancelled','replaced'))",
+    "CHECK (party_type IS NULL OR party_type IN ('customer','supplier'))",
+  ];
+}
+
+/// Legacy one-row-per-document compatibility sidecar.
 ///
 /// This is a **dismissal / status sidecar** for cheque-bearing documents.
 /// It does NOT replace the source document's `payment_method` / `refund_method`
 /// or its `due_date`; those remain the canonical economic record.
 ///
-/// Pre-Phase-14 the dashboard reminder dismissal was stored in
+/// Before this table the dashboard reminder dismissal was stored in
 /// `SharedPreferences` under the key `confirmed_cheques_list` — surviving
 /// neither device migration nor app reinstall, and producing zero audit
 /// trail. This table moves that state into the DB without altering any
-/// existing journal-entry policy (deferred to a future full phase).
+/// existing documents. New operational code uses [ChequeInstruments], where
+/// each physical cheque has its own amount, identity and accounting links.
 ///
 /// One row per (source_table, source_id) — the natural key of every
 /// cheque-bearing document in the system. The six allowed source tables:
@@ -23,14 +105,13 @@ import 'users.dart';
 ///   • sale_return_adjustments            (outgoing cheque)
 ///   • purchase_return_adjustments        (incoming cheque)
 ///
-/// `status` lifecycle (kept minimal — no JE changes yet):
+/// `status` mirrors the physical-instrument lifecycle for legacy consumers:
 ///   • `pending`    — default; cheque still in motion. Surfaced as a
 ///                    reminder card on the dashboard.
 ///   • `cleared`    — user confirmed the cheque cleared (cash hit/left
 ///                    the bank). Hides the reminder.
-///   • `bounced`    — user confirmed the cheque bounced. Hides the
-///                    standard reminder; keeps an audit record. A future
-///                    phase will wire a JE reversal here.
+///   • `bounced`    — user confirmed the cheque bounced and the lifecycle
+///                    service restored the obligation where applicable.
 ///   • `cancelled`  — user voided / stopped the cheque. Hides reminder.
 @DataClassName('ChequeConfirmation')
 class ChequeConfirmations extends Table {
@@ -46,15 +127,17 @@ class ChequeConfirmations extends Table {
   IntColumn get sourceId => integer()();
 
   /// `pending` | `cleared` | `bounced` | `cancelled`.
-  TextColumn get status =>
-      text().withDefault(const Constant('pending'))();
+  TextColumn get status => text().withDefault(const Constant('pending'))();
 
   /// Set when status transitions away from `pending`.
   DateTimeColumn get confirmedAt => dateTime().nullable()();
 
   @ReferenceName('chequeConfirmedBy')
-  IntColumn get confirmedBy =>
-      integer().nullable().references(Users, #id, onDelete: KeyAction.setNull)();
+  IntColumn get confirmedBy => integer().nullable().references(
+    Users,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
 
   /// Free-text note (e.g. "deposited at branch", "represented Friday").
   TextColumn get note => text().nullable()();
@@ -64,8 +147,8 @@ class ChequeConfirmations extends Table {
 
   /// **Phase 15.0 — Cheque lifecycle JE wiring.**
   ///
-  /// When status transitions `pending → cleared` for `source_table ∈
-  /// {sale, purchase}`, the [`ChequeLifecycleService`] also calls
+  /// When status transitions `pending → cleared` for an invoice source, the
+  /// [`ChequeLifecycleService`] calls
   /// `SaleRepository.recordPayment` / `PurchaseRepository.recordPayment`
   /// for the outstanding `(total − paid)` amount. The resulting
   /// `sale_payments.id` / `purchase_payments.id` is stamped here so that
@@ -74,27 +157,22 @@ class ChequeConfirmations extends Table {
   /// existing `deletePayment` SoT (which itself voids the JE and restores
   /// the party balance).
   ///
-  /// Nullable because:
-  ///   - returns (the 4 non-sale/non-purchase source_table values) never
-  ///     record a settlement payment — their original return JE already
-  ///     debited/credited the cash leg at posting time;
-  ///   - a `pending → cleared` on a fully-paid sale/purchase
-  ///     (`outstanding == 0`) is a no-op payment-wise.
+  /// For return sources this field stores the return-settlement journal id;
+  /// the party obligation is not settled until the cheque actually clears.
+  /// It remains nullable while the physical cheque is pending.
   ///
-  /// The polymorphic interpretation (purchase_payments vs sale_payments)
-  /// is driven by [`sourceTable`] — no separate column needed. See
+  /// The polymorphic interpretation (purchase payment, sale payment, or
+  /// return settlement journal) is driven by [`sourceTable`]. See
   /// `docs/ACCOUNTING_INTEGRITY_GUIDELINES.md` §Phase-15.
   IntColumn get clearedPaymentId => integer().nullable()();
 
-  DateTimeColumn get createdAt =>
-      dateTime().withDefault(currentDateAndTime)();
-  DateTimeColumn get updatedAt =>
-      dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 
   /// Natural key — at most one confirmation row per cheque-bearing
   /// document. Upsert on (source_table, source_id) is the only write path.
   @override
   List<Set<Column>> get uniqueKeys => [
-        {sourceTable, sourceId},
-      ];
+    {sourceTable, sourceId},
+  ];
 }

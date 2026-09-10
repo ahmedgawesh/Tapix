@@ -13,8 +13,8 @@ class ReportsHubScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => sl<ReportsBloc>()
-        ..add(const ReportsReconciliationRequested()),
+      create: (_) =>
+          sl<ReportsBloc>()..add(const ReportsReconciliationRequested()),
       child: const _ReportsHubView(),
     );
   }
@@ -78,6 +78,12 @@ class _ReportsHubView extends StatelessWidget {
                 title: 'reports.discount_reports'.tr(),
                 subtitle: 'reports.discount_reports_desc'.tr(),
                 onTap: () => context.push('/reports/discounts'),
+              ),
+              _ReportTile(
+                icon: LucideIcons.badgePercent,
+                title: 'promotions.report.title'.tr(),
+                subtitle: 'promotions.report.subtitle'.tr(),
+                onTap: () => context.push('/reports/promotions'),
               ),
               const SizedBox(height: 24),
 
@@ -282,7 +288,8 @@ class _ReportsHubView extends StatelessWidget {
                 icon: LucideIcons.searchCode,
                 title: 'reports.supplier_balance_drilldown'.tr(),
                 subtitle: 'reports.supplier_balance_drilldown_desc'.tr(),
-                onTap: () => context.push('/reports/supplier-balance-drilldown'),
+                onTap: () =>
+                    context.push('/reports/supplier-balance-drilldown'),
               ),
               const SizedBox(height: 24),
 
@@ -354,7 +361,8 @@ class _ReportsHubView extends StatelessWidget {
           child: Row(
             children: [
               const SizedBox(
-                width: 20, height: 20,
+                width: 20,
+                height: 20,
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
               const SizedBox(width: 12),
@@ -392,7 +400,8 @@ class _ReportsHubView extends StatelessWidget {
                         healthy
                             ? 'reports.system_healthy'.tr()
                             : 'reports.issues_found'.tr(
-                                args: ['${data.issueCount}']),
+                                args: ['${data.issueCount}'],
+                              ),
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -424,9 +433,9 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title,
-      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
+      style: Theme.of(
+        context,
+      ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
     );
   }
 }

@@ -14,10 +14,13 @@ import 'returns/return_posting_service.dart';
 ///
 /// Account codes used here MUST match the STRICT Chart of Accounts
 /// seeded by JournalRepositoryImpl.seedDefaultAccounts:
-///   Assets:      1000 = Cash, 1010 = Bank, 1100 = Accounts Receivable,
+///   Assets:      1000 = Cash, 1010 = Bank, 1020 = Cheques in Hand,
+///                1030 = Dishonoured Cheques Receivable,
+///                1100 = Accounts Receivable,
 ///                1200 = Inventory, 1290 = Returns in Transit,
 ///                1300 = VAT Receivable
-///   Liabilities: 2000 = Accounts Payable, 2100 = VAT Payable,
+///   Liabilities: 2000 = Accounts Payable, 2020 = Cheques Issued,
+///                2100 = VAT Payable,
 ///                2300 = Loyalty Points Liability,
 ///                2400 = Customer Credit Liability
 ///   Equity:      3000 = Owner Capital, 3100 = Opening Balance Equity
@@ -64,8 +67,9 @@ class JournalEntryService {
     return account.id;
   }
 
-  /// Returns Cash (1000) or Bank (1010) account ID based on payment method.
-  /// Card, cheque, transfers, and digital wallets go to Bank; others default to Cash.
+  /// Generic Cash (1000) / Bank (1010) resolver for non-cheque-aware flows.
+  /// Cheque-aware document and payment flows must use the incoming/outgoing
+  /// settlement helpers below so physical cheques never hit Bank prematurely.
   Future<int> _cashOrBankAccountId(String? paymentMethod) async {
     final normalized = paymentMethod?.trim().toLowerCase();
     const bankMethods = {
@@ -84,6 +88,23 @@ class JournalEntryService {
       return _requireAccountId('1010');
     }
     return _requireAccountId('1000');
+  }
+
+  bool _isCheque(String? method) {
+    final value = method?.trim().toLowerCase();
+    return value == 'cheque' || value == 'check';
+  }
+
+  /// Incoming cheques are assets in hand, not bank cash, until cleared.
+  Future<int> _incomingSettlementAccountId(String? method) {
+    if (_isCheque(method)) return _requireAccountId('1020');
+    return _cashOrBankAccountId(method);
+  }
+
+  /// Issued cheques remain an outstanding liability until bank clearance.
+  Future<int> _outgoingSettlementAccountId(String? method) {
+    if (_isCheque(method)) return _requireAccountId('2020');
+    return _cashOrBankAccountId(method);
   }
 
   // ── Sale ────────────────────────────────────────────────────
@@ -106,7 +127,7 @@ class JournalEntryService {
     String? paymentMethod,
     int? userId,
   }) async {
-    final cashOrBankId = await _cashOrBankAccountId(paymentMethod);
+    final cashOrBankId = await _incomingSettlementAccountId(paymentMethod);
     final receivablesId = await _requireAccountId('1100');
     final revenueId = await _requireAccountId('4000');
 
@@ -304,6 +325,45 @@ class JournalEntryService {
     );
   }
 
+  /// Repairs a historical sale whose Inventory/COGS posting exceeded the
+  /// exact carrying value removed from stock.
+  ///
+  /// This is intentionally attached to the original `sales` source so the
+  /// normal sale-void workflow reverses both the original COGS entry and this
+  /// correction. Posted entries remain immutable: the correction is a new,
+  /// balanced and auditable Dr Inventory / Cr COGS entry.
+  Future<int> recordSaleCogsValuationCorrection({
+    required int saleId,
+    required int amountCents,
+    required int currencyId,
+    required String reason,
+    DateTime? entryDate,
+    int? userId,
+  }) async {
+    if (amountCents <= 0) {
+      throw AccountingException(
+        'Sale COGS valuation correction must be positive',
+      );
+    }
+    final inventoryId = await _requireAccountId('1200');
+    final cogsId = await _requireAccountId('5300');
+    return _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description: 'Sale #$saleId — Inventory/COGS correction: $reason',
+        debitAccountId: inventoryId,
+        creditAccountId: cogsId,
+        amountCents: amountCents,
+        currencyId: currencyId,
+        entryDate: entryDate,
+        entryType: 'sale_cogs_correction',
+        sourceTable: 'sales',
+        sourceId: saleId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
+  }
+
   /// Reverse COGS when a sale return is posted.
   ///
   /// STRICT RULES (unified policy):
@@ -398,7 +458,7 @@ class JournalEntryService {
     String? paymentMethod,
     int? userId,
   }) async {
-    final cashOrBankId = await _cashOrBankAccountId(paymentMethod);
+    final cashOrBankId = await _outgoingSettlementAccountId(paymentMethod);
     final payablesId = await _requireAccountId('2000');
     final inventoryId = await _requireAccountId('1200');
     final netTotal = (totalCents - taxCents).clamp(0, totalCents).toInt();
@@ -633,7 +693,8 @@ class JournalEntryService {
   ///   Dr  2100 VAT Payable                 taxCents    (if tax > 0)
   ///     Cr  routing-account                totalCents
   ///       - cash         → 1000
-  ///       - bank/cheque  → 1010
+  ///       - bank          → 1010
+  //       - cheque        → 2020
   ///       - credit       → 1100 AR (linked → reduce existing AR)
   ///
   /// The COGS leg is handled by [recordSaleReturnCOGSReversalJournalEntry].
@@ -687,7 +748,7 @@ class JournalEntryService {
 
     // ── Legacy fallback (tests that construct JournalEntryService
     //    without injecting ReturnPostingService) ────────────────────
-    final cashOrBankId = await _cashOrBankAccountId(refundMethod);
+    final cashOrBankId = await _outgoingSettlementAccountId(refundMethod);
     final receivablesId = await _requireAccountId('1100');
     final salesRAId = await _requireAccountId('5700');
 
@@ -824,7 +885,7 @@ class JournalEntryService {
     }
 
     // ── Legacy fallback (tests without ReturnPostingService) ──
-    final cashOrBankId = await _cashOrBankAccountId(refundMethod);
+    final cashOrBankId = await _incomingSettlementAccountId(refundMethod);
     final payablesId = await _requireAccountId('2000');
     final inventoryId = await _requireAccountId('1200');
     final isCreditRefund = refundMethod == 'credit';
@@ -1010,7 +1071,7 @@ class JournalEntryService {
     String? paymentMethod,
     int? userId,
   }) async {
-    final cashOrBankId = await _cashOrBankAccountId(paymentMethod);
+    final cashOrBankId = await _incomingSettlementAccountId(paymentMethod);
     final receivablesId = await _requireAccountId('1100');
 
     if (amountCents > 0) {
@@ -1048,7 +1109,7 @@ class JournalEntryService {
     int? userId,
   }) async {
     final payablesId = await _requireAccountId('2000');
-    final cashOrBankId = await _cashOrBankAccountId(paymentMethod);
+    final cashOrBankId = await _outgoingSettlementAccountId(paymentMethod);
 
     if (amountCents > 0) {
       await _accountingRepo.createJournalEntry(
@@ -1085,7 +1146,7 @@ class JournalEntryService {
     String? paymentMethod,
     int? userId,
   }) async {
-    final cashOrBankId = await _cashOrBankAccountId(paymentMethod);
+    final cashOrBankId = await _incomingSettlementAccountId(paymentMethod);
     final receivablesId = await _requireAccountId('1100');
 
     if (amountCents > 0) {
@@ -1184,6 +1245,64 @@ class JournalEntryService {
     developer.log(
       'Journal entry created for Direct Supplier Payment #$transactionId',
       name: 'JournalEntryService',
+    );
+  }
+
+  /// Immediate cash/card leg of a sale return.
+  /// The return itself is first posted to AR; paying the customer now settles
+  /// only this allocation: Dr Accounts Receivable, Cr Cash/Bank.
+  Future<void> recordSaleReturnSettlementJournalEntry({
+    required int transactionId,
+    required int amountCents,
+    required int currencyId,
+    required String paymentMethod,
+    int? userId,
+  }) async {
+    final receivablesId = await _requireAccountId('1100');
+    final cashOrBankId = await _outgoingSettlementAccountId(paymentMethod);
+    if (amountCents <= 0) return;
+    await _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description: 'Sale return settlement #$transactionId',
+        debitAccountId: receivablesId,
+        creditAccountId: cashOrBankId,
+        amountCents: amountCents,
+        currencyId: currencyId,
+        entryType: 'return_settlement',
+        sourceTable: 'customer_transactions',
+        sourceId: transactionId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
+  }
+
+  /// Immediate cash/card leg of a purchase return.
+  /// The return itself is first posted to AP; receipt from the supplier now
+  /// settles only this allocation: Dr Cash/Bank, Cr Accounts Payable.
+  Future<void> recordPurchaseReturnSettlementJournalEntry({
+    required int transactionId,
+    required int amountCents,
+    required int currencyId,
+    required String paymentMethod,
+    int? userId,
+  }) async {
+    final cashOrBankId = await _incomingSettlementAccountId(paymentMethod);
+    final payablesId = await _requireAccountId('2000');
+    if (amountCents <= 0) return;
+    await _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description: 'Purchase return settlement #$transactionId',
+        debitAccountId: cashOrBankId,
+        creditAccountId: payablesId,
+        amountCents: amountCents,
+        currencyId: currencyId,
+        entryType: 'return_settlement',
+        sourceTable: 'supplier_transactions',
+        sourceId: transactionId,
+        autoPost: true,
+      ),
+      userId: userId,
     );
   }
 
@@ -1371,7 +1490,7 @@ class JournalEntryService {
       case 'cash':
         debitAccountId = await _requireAccountId('1000');
       case 'cheque':
-        debitAccountId = await _requireAccountId('1010');
+        debitAccountId = await _requireAccountId('1020');
       case 'credit':
       default:
         debitAccountId = await _requireAccountId('2000');
@@ -1541,7 +1660,7 @@ class JournalEntryService {
       case 'credit':
         creditAccountId = await _requireAccountId('1100');
       case 'cheque':
-        creditAccountId = await _requireAccountId('1010');
+        creditAccountId = await _requireAccountId('2020');
       case 'cash':
       default:
         creditAccountId = await _requireAccountId('1000');
@@ -2289,6 +2408,203 @@ class JournalEntryService {
     developer.log(
       'Voided $voided of ${entries.length} journal entries for $sourceTable #$sourceId',
       name: 'JournalEntryService',
+    );
+  }
+  // ── Cheque clearing and dishonour ───────────────────────────
+
+  /// Moves one physical cheque between the cheque clearing account and Bank.
+  /// Incoming: Dr Bank / Cr Cheques in Hand.
+  /// Outgoing: Dr Cheques Issued / Cr Bank.
+  Future<int> recordChequeClearanceJournalEntry({
+    required int chequeId,
+    required bool incoming,
+    required int amountCents,
+    required int currencyId,
+    int? userId,
+  }) async {
+    if (amountCents <= 0) {
+      throw AccountingException('Cheque clearance amount must be positive');
+    }
+    final bankId = await _requireAccountId('1010');
+    final clearingId = await _requireAccountId(incoming ? '1020' : '2020');
+    return _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description: incoming
+            ? 'Incoming cheque #$chequeId cleared'
+            : 'Outgoing cheque #$chequeId cleared',
+        debitAccountId: incoming ? bankId : clearingId,
+        creditAccountId: incoming ? clearingId : bankId,
+        amountCents: amountCents,
+        currencyId: currencyId,
+        entryType: 'cheque_clearance',
+        sourceTable: 'cheque_instruments',
+        sourceId: chequeId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
+  }
+
+  /// Reclassifies a return cheque that was posted by an older build directly
+  /// to a cheque clearing account. The new lifecycle keeps the amount in the
+  /// customer/supplier obligation until the instrument actually clears.
+  Future<int> recordReturnChequeDeferralJournalEntry({
+    required int chequeId,
+    required bool incoming,
+    required int amountCents,
+    required int currencyId,
+    required String obligationAccountCode,
+    int? userId,
+  }) async {
+    if (amountCents <= 0) {
+      throw AccountingException(
+        'Return cheque deferral amount must be positive',
+      );
+    }
+    final obligationId = await _requireAccountId(obligationAccountCode);
+    final clearingId = await _requireAccountId(incoming ? '1020' : '2020');
+    return _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description: 'Return cheque #$chequeId deferred until clearance',
+        debitAccountId: incoming ? obligationId : clearingId,
+        creditAccountId: incoming ? clearingId : obligationId,
+        amountCents: amountCents,
+        currencyId: currencyId,
+        entryType: 'cheque_return_deferral',
+        sourceTable: 'cheque_instruments',
+        sourceId: chequeId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
+  }
+
+  /// Recognizes a return cheque against the party obligation when the
+  /// instrument is received or issued. Bank clearance is posted separately.
+  Future<int> recordReturnChequeSettlementJournalEntry({
+    required int chequeId,
+    required bool incoming,
+    required int amountCents,
+    required int currencyId,
+    required String obligationAccountCode,
+    int? userId,
+  }) async {
+    if (amountCents <= 0) {
+      throw AccountingException(
+        'Return cheque settlement amount must be positive',
+      );
+    }
+    final obligationId = await _requireAccountId(obligationAccountCode);
+    final clearingId = await _requireAccountId(incoming ? '1020' : '2020');
+    return _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description: incoming
+            ? 'Incoming return cheque #$chequeId received'
+            : 'Outgoing return cheque #$chequeId issued',
+        debitAccountId: incoming ? clearingId : obligationId,
+        creditAccountId: incoming ? obligationId : clearingId,
+        amountCents: amountCents,
+        currencyId: currencyId,
+        entryType: 'cheque_return_settlement',
+        sourceTable: 'cheque_instruments',
+        sourceId: chequeId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
+  }
+
+  /// Restores the economic obligation after a cheque is bounced or cancelled.
+  Future<int> recordChequeObligationRestorationJournalEntry({
+    required int chequeId,
+    required int amountCents,
+    required int currencyId,
+    required String debitAccountCode,
+    required String creditAccountCode,
+    required bool cancelled,
+    String? reason,
+    int? userId,
+  }) async {
+    if (amountCents <= 0) {
+      throw AccountingException('Cheque restoration amount must be positive');
+    }
+    final debitId = await _requireAccountId(debitAccountCode);
+    final creditId = await _requireAccountId(creditAccountCode);
+    return _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description: cancelled
+            ? 'Cheque #$chequeId cancelled${reason == null ? '' : ' — $reason'}'
+            : 'Cheque #$chequeId dishonoured${reason == null ? '' : ' — $reason'}',
+        debitAccountId: debitId,
+        creditAccountId: creditId,
+        amountCents: amountCents,
+        currencyId: currencyId,
+        entryType: cancelled ? 'cheque_reinstatement' : 'cheque_dishonour',
+        sourceTable: 'cheque_instruments',
+        sourceId: chequeId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
+  }
+
+  /// Closes an incoming dishonoured-cheque receivable in account 1030.
+  /// The debit account identifies the real resolution channel: cash, bank,
+  /// replacement cheque, normal party credit, or bad-debt expense.
+  Future<int> recordDishonouredChequeResolutionJournalEntry({
+    required int chequeId,
+    required int amountCents,
+    required int currencyId,
+    required String debitAccountCode,
+    required String resolutionType,
+    String? note,
+    int? userId,
+  }) async {
+    if (amountCents <= 0) {
+      throw AccountingException('Cheque resolution amount must be positive');
+    }
+    final debitId = await _requireAccountId(debitAccountCode);
+    final dishonouredId = await _requireAccountId('1030');
+    return _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description:
+            'Dishonoured cheque #$chequeId resolved by $resolutionType'
+            '${note == null || note.trim().isEmpty ? '' : ' — ${note.trim()}'}',
+        debitAccountId: debitId,
+        creditAccountId: dishonouredId,
+        amountCents: amountCents,
+        currencyId: currencyId,
+        entryType: 'cheque_dishonour_resolution',
+        sourceTable: 'cheque_instruments',
+        sourceId: chequeId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
+  }
+
+  /// Reverses one specific cheque lifecycle journal idempotently.
+  Future<void> voidChequeJournalEntry({
+    required int chequeId,
+    required int journalEntryId,
+    required String reason,
+    int? userId,
+  }) async {
+    final entries = await _accountingRepo.getJournalEntriesForSource(
+      'cheque_instruments',
+      chequeId,
+    );
+    final canVoid = entries.any(
+      (entry) =>
+          entry.id == journalEntryId &&
+          entry.status == 'posted' &&
+          !entry.isReversed,
+    );
+    if (!canVoid) return;
+    await _accountingRepo.voidJournalEntry(
+      entryId: journalEntryId,
+      reason: reason,
+      userId: userId,
     );
   }
 }

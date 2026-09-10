@@ -301,7 +301,7 @@ class _OwnerTransactionCard extends StatelessWidget {
             Text(row.description),
             Text(
               '${row.transactionNumber} • '
-              '${DateFormat.yMMMd(context.locale.toString()).format(row.transactionDate)}',
+              '${DateFormat('dd/MM/yyyy').format(row.transactionDate)}',
             ),
             if (row.status == 'voided')
               Text(
@@ -459,9 +459,7 @@ class _OwnerFinanceDialogState extends State<_OwnerFinanceDialog> {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text('financial_management.transaction_date'.tr()),
-                  subtitle: Text(
-                    DateFormat.yMMMd(context.locale.toString()).format(_date),
-                  ),
+                  subtitle: Text(DateFormat('dd/MM/yyyy').format(_date)),
                   trailing: const Icon(Icons.calendar_today_outlined),
                   onTap: _pickDate,
                 ),

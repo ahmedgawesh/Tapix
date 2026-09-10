@@ -290,7 +290,7 @@ class InvoiceCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      DateFormat.yMd().format(date),
+                      DateFormat('dd/MM/yyyy').format(date),
                       style: theme.textTheme.bodySmall,
                     ),
                     Container(

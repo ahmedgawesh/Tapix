@@ -69,11 +69,12 @@ class _TopCustomersView extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.error_outline,
-                      size: 48, color: colorScheme.error),
+                  Icon(Icons.error_outline, size: 48, color: colorScheme.error),
                   const SizedBox(height: 16),
-                  Text(state.error.toString(),
-                      style: theme.textTheme.bodyLarge),
+                  Text(
+                    state.error.toString(),
+                    style: theme.textTheme.bodyLarge,
+                  ),
                 ],
               ),
             );
@@ -87,9 +88,9 @@ class _TopCustomersView extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                   child: DateRangeSelector(
                     dateRange: state.data.dateRange,
-                    onChanged: (range) => context
-                        .read<TopCustomersBloc>()
-                        .add(TopCustomersDateRangeChanged(range)),
+                    onChanged: (range) => context.read<TopCustomersBloc>().add(
+                      TopCustomersDateRangeChanged(range),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -106,9 +107,7 @@ class _TopCustomersView extends StatelessWidget {
                 const SizedBox(height: 8),
 
                 // Customer rankings table
-                Expanded(
-                  child: _TopCustomersTable(data: state.data),
-                ),
+                Expanded(child: _TopCustomersTable(data: state.data)),
               ],
             );
           }
@@ -153,11 +152,14 @@ class _TopCustomersView extends StatelessWidget {
           if (isWide) {
             return Row(
               children: cards
-                  .map((c) => Expanded(
-                          child: Padding(
+                  .map(
+                    (c) => Expanded(
+                      child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: c,
-                      )))
+                      ),
+                    ),
+                  )
                   .toList(),
             );
           }
@@ -167,15 +169,17 @@ class _TopCustomersView extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: cards[0],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: cards[0],
+                    ),
+                  ),
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: cards[1],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: cards[1],
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -187,8 +191,7 @@ class _TopCustomersView extends StatelessWidget {
     );
   }
 
-  Future<void> _printReport(
-      BuildContext context, TopCustomersData data) async {
+  Future<void> _printReport(BuildContext context, TopCustomersData data) async {
     await TopCustomersPdfService.printTopCustomersReport(
       context: context,
       data: data,
@@ -200,8 +203,7 @@ class _TopCustomersView extends StatelessWidget {
     );
   }
 
-  Future<void> _shareReport(
-      BuildContext context, TopCustomersData data) async {
+  Future<void> _shareReport(BuildContext context, TopCustomersData data) async {
     await TopCustomersPdfService.shareTopCustomersReport(
       context: context,
       data: data,
@@ -239,9 +241,9 @@ class _ViewToggle extends StatelessWidget {
       ],
       selected: {view},
       onSelectionChanged: (selected) {
-        context
-            .read<TopCustomersBloc>()
-            .add(TopCustomersViewChanged(selected.first));
+        context.read<TopCustomersBloc>().add(
+          TopCustomersViewChanged(selected.first),
+        );
       },
     );
   }
@@ -324,16 +326,23 @@ class _TopCustomersTable extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.users,
-                size: 48, color: theme.colorScheme.onSurfaceVariant),
+            Icon(
+              LucideIcons.users,
+              size: 48,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 16),
-            Text('reports.no_top_customers'.tr(),
-                style: theme.textTheme.bodyLarge),
+            Text(
+              'reports.no_top_customers'.tr(),
+              style: theme.textTheme.bodyLarge,
+            ),
             const SizedBox(height: 8),
-            Text('reports.no_top_customers_desc'.tr(),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                )),
+            Text(
+              'reports.no_top_customers_desc'.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       );
@@ -348,8 +357,9 @@ class _TopCustomersTable extends StatelessWidget {
             data.view == TopCustomersViewType.byRevenue
                 ? 'reports.top_customers_by_revenue'.tr()
                 : 'reports.top_customers_by_volume'.tr(),
-            style: theme.textTheme.titleSmall
-                ?.copyWith(fontWeight: FontWeight.bold),
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 8),
           SingleChildScrollView(
@@ -362,54 +372,75 @@ class _TopCustomersTable extends StatelessWidget {
                 DataColumn(label: Text('reports.customer'.tr())),
                 DataColumn(label: Text('reports.segment_label'.tr())),
                 DataColumn(
-                    label: Text('reports.revenue_label'.tr()), numeric: true),
+                  label: Text('reports.revenue_label'.tr()),
+                  numeric: true,
+                ),
                 DataColumn(
-                    label: Text('reports.transactions_label'.tr()),
-                    numeric: true),
+                  label: Text('reports.transactions_label'.tr()),
+                  numeric: true,
+                ),
                 DataColumn(
-                    label: Text('reports.quantity_label'.tr()), numeric: true),
+                  label: Text('reports.quantity_label'.tr()),
+                  numeric: true,
+                ),
                 DataColumn(
-                    label: Text('reports.avg_order_label'.tr()),
-                    numeric: true),
+                  label: Text('reports.avg_order_label'.tr()),
+                  numeric: true,
+                ),
                 DataColumn(label: Text('reports.last_purchase_label'.tr())),
               ],
               rows: data.customers.asMap().entries.map((entry) {
                 final idx = entry.key + 1;
                 final item = entry.value;
                 final isTop3 = idx <= 3;
-                return DataRow(cells: [
-                  DataCell(Text(
-                    '$idx',
-                    style: isTop3
-                        ? TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: _rankColor(idx, theme),
-                          )
-                        : null,
-                  )),
-                  DataCell(ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 150),
-                    child: Text(item.customerName,
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                  )),
-                  DataCell(Text(_segmentLabel(item.segment))),
-                  DataCell(Text(
-                    cs.formatCents(item.totalRevenueCents),
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.primary,
+                return DataRow(
+                  cells: [
+                    DataCell(
+                      Text(
+                        '$idx',
+                        style: isTop3
+                            ? TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: _rankColor(idx, theme),
+                              )
+                            : null,
+                      ),
                     ),
-                  )),
-                  DataCell(Text(item.transactionCount.toString())),
-                  DataCell(Text(item.totalQuantity.toString())),
-                  DataCell(Text(cs.formatCents(item.averageOrderCents))),
-                  DataCell(Text(
-                    item.lastPurchaseDate != null
-                        ? DateFormat.yMd().format(item.lastPurchaseDate!)
-                        : '-',
-                    style: theme.textTheme.bodySmall,
-                  )),
-                ]);
+                    DataCell(
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 150),
+                        child: Text(
+                          item.customerName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                    DataCell(Text(_segmentLabel(item.segment))),
+                    DataCell(
+                      Text(
+                        cs.formatCents(item.totalRevenueCents),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                    DataCell(Text(item.transactionCount.toString())),
+                    DataCell(Text(item.totalQuantity.toString())),
+                    DataCell(Text(cs.formatCents(item.averageOrderCents))),
+                    DataCell(
+                      Text(
+                        item.lastPurchaseDate != null
+                            ? DateFormat(
+                                'dd/MM/yyyy',
+                              ).format(item.lastPurchaseDate!)
+                            : '-',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                );
               }).toList(),
             ),
           ),
@@ -449,10 +480,12 @@ class _TopCustomersTable extends StatelessWidget {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: items
-                      .map((i) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: i,
-                          ))
+                      .map(
+                        (i) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: i,
+                        ),
+                      )
                       .toList(),
                 );
               },
@@ -507,15 +540,19 @@ class _TotalItem extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            )),
-        Text(value,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: color,
-            )),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        Text(
+          value,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
       ],
     );
   }

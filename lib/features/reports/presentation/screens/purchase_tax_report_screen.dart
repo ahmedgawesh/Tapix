@@ -34,8 +34,10 @@ class _PurchaseTaxReportView extends StatelessWidget {
       appBar: AppBar(
         title: Text('reports.purchase_tax_report'.tr()),
         actions: [
-          BlocBuilder<PurchaseTaxReportBloc,
-              RealtimeState<PurchaseTaxReportData>>(
+          BlocBuilder<
+            PurchaseTaxReportBloc,
+            RealtimeState<PurchaseTaxReportData>
+          >(
             builder: (context, state) {
               if (state is! RealtimeSuccess<PurchaseTaxReportData>) {
                 return const SizedBox.shrink();
@@ -59,58 +61,63 @@ class _PurchaseTaxReportView extends StatelessWidget {
           ),
         ],
       ),
-      body: BlocBuilder<PurchaseTaxReportBloc,
-          RealtimeState<PurchaseTaxReportData>>(
-        builder: (context, state) {
-          if (state is RealtimeLoading<PurchaseTaxReportData>) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body:
+          BlocBuilder<
+            PurchaseTaxReportBloc,
+            RealtimeState<PurchaseTaxReportData>
+          >(
+            builder: (context, state) {
+              if (state is RealtimeLoading<PurchaseTaxReportData>) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (state is RealtimeError<PurchaseTaxReportData>) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline,
-                      size: 48, color: colorScheme.error),
-                  const SizedBox(height: 16),
-                  Text(state.error.toString(),
-                      style: theme.textTheme.bodyLarge),
-                ],
-              ),
-            );
-          }
-
-          if (state is RealtimeSuccess<PurchaseTaxReportData>) {
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: DateRangeSelector(
-                    dateRange: state.data.dateRange,
-                    onChanged: (range) => context
-                        .read<PurchaseTaxReportBloc>()
-                        .add(PurchaseTaxReportDateRangeChanged(range)),
+              if (state is RealtimeError<PurchaseTaxReportData>) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        state.error.toString(),
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
-                _buildSummaryCards(context, state.data),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: _PurchaseTaxContent(data: state.data),
-                ),
-              ],
-            );
-          }
+                );
+              }
 
-          return const SizedBox.shrink();
-        },
-      ),
+              if (state is RealtimeSuccess<PurchaseTaxReportData>) {
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: DateRangeSelector(
+                        dateRange: state.data.dateRange,
+                        onChanged: (range) => context
+                            .read<PurchaseTaxReportBloc>()
+                            .add(PurchaseTaxReportDateRangeChanged(range)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildSummaryCards(context, state.data),
+                    const SizedBox(height: 8),
+                    Expanded(child: _PurchaseTaxContent(data: state.data)),
+                  ],
+                );
+              }
+
+              return const SizedBox.shrink();
+            },
+          ),
     );
   }
 
-  Widget _buildSummaryCards(
-      BuildContext context, PurchaseTaxReportData data) {
+  Widget _buildSummaryCards(BuildContext context, PurchaseTaxReportData data) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final cs = sl<CurrencyService>();
@@ -150,30 +157,53 @@ class _PurchaseTaxReportView extends StatelessWidget {
           if (isWide) {
             return Row(
               children: cards
-                  .map((c) => Expanded(
-                          child: Padding(
+                  .map(
+                    (c) => Expanded(
+                      child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: c,
-                      )))
+                      ),
+                    ),
+                  )
                   .toList(),
             );
           }
 
           return Column(
             children: [
-              Row(children: [
-                Expanded(child: Padding(
-                    padding: const EdgeInsets.only(right: 4), child: cards[0])),
-                Expanded(child: Padding(
-                    padding: const EdgeInsets.only(left: 4), child: cards[1])),
-              ]),
+              Row(
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: cards[0],
+                    ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: cards[1],
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 8),
-              Row(children: [
-                Expanded(child: Padding(
-                    padding: const EdgeInsets.only(right: 4), child: cards[2])),
-                Expanded(child: Padding(
-                    padding: const EdgeInsets.only(left: 4), child: cards[3])),
-              ]),
+              Row(
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: cards[2],
+                    ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: cards[3],
+                    ),
+                  ),
+                ],
+              ),
             ],
           );
         },
@@ -182,7 +212,9 @@ class _PurchaseTaxReportView extends StatelessWidget {
   }
 
   Future<void> _printReport(
-      BuildContext context, PurchaseTaxReportData data) async {
+    BuildContext context,
+    PurchaseTaxReportData data,
+  ) async {
     await PurchaseTaxPdfService.printPurchaseTaxReport(
       context: context,
       data: data,
@@ -195,7 +227,9 @@ class _PurchaseTaxReportView extends StatelessWidget {
   }
 
   Future<void> _shareReport(
-      BuildContext context, PurchaseTaxReportData data) async {
+    BuildContext context,
+    PurchaseTaxReportData data,
+  ) async {
     await PurchaseTaxPdfService.sharePurchaseTaxReport(
       context: context,
       data: data,
@@ -227,12 +261,18 @@ class _PurchaseTaxContent extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.receipt, size: 48,
-                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4)),
+            Icon(
+              LucideIcons.receipt,
+              size: 48,
+              color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+            ),
             const SizedBox(height: 16),
-            Text('reports.no_tax_data'.tr(),
-                style: theme.textTheme.bodyLarge?.copyWith(
-                    color: colorScheme.onSurfaceVariant)),
+            Text(
+              'reports.no_tax_data'.tr(),
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       );
@@ -290,42 +330,60 @@ class _InvoicesTab extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(LucideIcons.fileText, size: 16,
-                        color: colorScheme.primary),
+                    Icon(
+                      LucideIcons.fileText,
+                      size: 16,
+                      color: colorScheme.primary,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(inv.purchaseNumber,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600)),
+                      child: Text(
+                        inv.purchaseNumber,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                    Text(DateFormat.yMMMd().format(inv.purchaseDate),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant)),
+                    Text(
+                      DateFormat('dd/MM/yyyy').format(inv.purchaseDate),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                 ),
                 if (inv.supplierName != null) ...[
                   const SizedBox(height: 4),
-                  Text(inv.supplierName!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant)),
+                  Text(
+                    inv.supplierName!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Expanded(child: _DetailCol(
-                      label: 'reports.taxable_amount'.tr(),
-                      value: cs.formatCents(inv.taxableCents),
-                    )),
-                    Expanded(child: _DetailCol(
-                      label: 'reports.tax_amount'.tr(),
-                      value: cs.formatCents(inv.taxCents),
-                      valueColor: colorScheme.error,
-                    )),
-                    Expanded(child: _DetailCol(
-                      label: 'reports.total'.tr(),
-                      value: cs.formatCents(inv.totalCents),
-                      valueColor: colorScheme.primary,
-                    )),
+                    Expanded(
+                      child: _DetailCol(
+                        label: 'reports.taxable_amount'.tr(),
+                        value: cs.formatCents(inv.taxableCents),
+                      ),
+                    ),
+                    Expanded(
+                      child: _DetailCol(
+                        label: 'reports.tax_amount'.tr(),
+                        value: cs.formatCents(inv.taxCents),
+                        valueColor: colorScheme.error,
+                      ),
+                    ),
+                    Expanded(
+                      child: _DetailCol(
+                        label: 'reports.total'.tr(),
+                        value: cs.formatCents(inv.totalCents),
+                        valueColor: colorScheme.primary,
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -365,37 +423,49 @@ class _ReturnsTab extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(LucideIcons.undo2, size: 16,
-                        color: colorScheme.error),
+                    Icon(LucideIcons.undo2, size: 16, color: colorScheme.error),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(ret.returnNumber,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600)),
+                      child: Text(
+                        ret.returnNumber,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                    Text(DateFormat.yMMMd().format(ret.returnDate),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant)),
+                    Text(
+                      DateFormat('dd/MM/yyyy').format(ret.returnDate),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ],
                 ),
                 if (ret.supplierName != null) ...[
                   const SizedBox(height: 4),
-                  Text(ret.supplierName!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant)),
+                  Text(
+                    ret.supplierName!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Expanded(child: _DetailCol(
-                      label: 'reports.tax_refunded'.tr(),
-                      value: cs.formatCents(ret.taxCents),
-                      valueColor: colorScheme.error,
-                    )),
-                    Expanded(child: _DetailCol(
-                      label: 'reports.total'.tr(),
-                      value: cs.formatCents(ret.totalCents),
-                    )),
+                    Expanded(
+                      child: _DetailCol(
+                        label: 'reports.tax_refunded'.tr(),
+                        value: cs.formatCents(ret.taxCents),
+                        valueColor: colorScheme.error,
+                      ),
+                    ),
+                    Expanded(
+                      child: _DetailCol(
+                        label: 'reports.total'.tr(),
+                        value: cs.formatCents(ret.totalCents),
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -438,17 +508,24 @@ class _SummaryCard extends StatelessWidget {
                 Icon(icon, size: 16, color: color),
                 const SizedBox(width: 6),
                 Expanded(
-                  child: Text(label,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant),
-                      overflow: TextOverflow.ellipsis),
+                  child: Text(
+                    label,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 6),
-            Text(value,
-                style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold, color: color)),
+            Text(
+              value,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
           ],
         ),
       ),
@@ -461,11 +538,7 @@ class _DetailCol extends StatelessWidget {
   final String value;
   final Color? valueColor;
 
-  const _DetailCol({
-    required this.label,
-    required this.value,
-    this.valueColor,
-  });
+  const _DetailCol({required this.label, required this.value, this.valueColor});
 
   @override
   Widget build(BuildContext context) {
@@ -473,14 +546,20 @@ class _DetailCol extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant)),
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
         const SizedBox(height: 2),
-        Text(value,
-            style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: valueColor)),
+        Text(
+          value,
+          style: theme.textTheme.bodySmall?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: valueColor,
+          ),
+        ),
       ],
     );
   }

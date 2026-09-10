@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/database/daos/adjustment_return_dao.dart';
 import '../../../../core/money/money.dart';
+import '../../../../core/payments/checkout_settlement.dart';
 import '../../../../core/pricing/discount.dart';
 import '../../../../core/pricing/invoice_pricing_engine.dart';
 import '../../../../core/pricing/pricing_snapshot.dart';
@@ -357,7 +358,12 @@ class SaleAdjReturnReasonChanged extends SaleAdjReturnFormEvent {
 }
 
 class SaleAdjReturnSubmitted extends SaleAdjReturnFormEvent {
-  const SaleAdjReturnSubmitted();
+  final List<CheckoutPaymentAllocation> settlementAllocations;
+
+  const SaleAdjReturnSubmitted({this.settlementAllocations = const []});
+
+  @override
+  List<Object?> get props => [settlementAllocations];
 }
 
 // ==================== BLOC ====================
@@ -656,7 +662,10 @@ class SaleAdjReturnFormBloc
     }
   }
 
-  Future<void> _submitRemote(Emitter<SaleAdjReturnFormState> emit) async {
+  Future<void> _submitRemote(
+    SaleAdjReturnSubmitted event,
+    Emitter<SaleAdjReturnFormState> emit,
+  ) async {
     try {
       final result = await _lan!.submitRemoteSaleAdjustmentReturn(
         LanSaleAdjustmentReturnRequest(
@@ -670,6 +679,19 @@ class SaleAdjReturnFormBloc
           notes: state.notes,
           overallDiscountCents: state.overallDiscountCents,
           overallDiscountIsPercent: state.overallDiscountIsPercent,
+          payments: event.settlementAllocations
+              .map(
+                (payment) => LanCheckoutPaymentRequest(
+                  method: payment.method,
+                  amountCents: payment.amountCents,
+                  reference: payment.reference,
+                  bankName: payment.bankName,
+                  issueDate: payment.issueDate,
+                  dueDate: payment.dueDate,
+                  note: payment.note,
+                ),
+              )
+              .toList(growable: false),
           lines: state.items
               .map(
                 (item) => LanSaleAdjustmentReturnLineRequest(
@@ -742,7 +764,7 @@ class SaleAdjReturnFormBloc
     emit(state.copyWith(isSubmitting: true, error: null));
 
     if (_isRemoteClient) {
-      await _submitRemote(emit);
+      await _submitRemote(event, emit);
       return;
     }
 
@@ -777,8 +799,14 @@ class SaleAdjReturnFormBloc
           ),
         ),
         returnDate: Value(state.returnDate),
-        refundMethod: Value(state.paymentMethod.name),
-        dueDate: Value(state.dueDate),
+        refundMethod: Value(
+          event.settlementAllocations.isEmpty
+              ? state.paymentMethod.name
+              : 'mixed',
+        ),
+        dueDate: Value(
+          event.settlementAllocations.isEmpty ? state.dueDate : null,
+        ),
         idempotencyKey: Value(idempotencyKey),
       ).withPricingSnapshot(taxInclusive: false);
 
@@ -817,6 +845,7 @@ class SaleAdjReturnFormBloc
         userId: await _sessionService.getCurrentUserId(),
         commissionService: _commissionService,
         loyaltyPointsService: _loyaltyPointsService,
+        settlementAllocations: event.settlementAllocations,
       );
 
       emit(

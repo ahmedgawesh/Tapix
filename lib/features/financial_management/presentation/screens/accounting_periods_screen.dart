@@ -40,70 +40,86 @@ class _PeriodsView extends StatelessWidget {
           ),
         ],
       ),
-      body: BlocConsumer<AccountingPeriodsBloc, RealtimeState<AccountingPeriodsData>>(
-        listener: (context, state) {
-          if (state is RealtimeError<AccountingPeriodsData>) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  state.error
-                      .toString()
-                      .replaceFirst('Bad state: ', '')
-                      .tr(),
-                ),
-                backgroundColor: colorScheme.error,
-              ),
-            );
-          }
-        },
-        builder: (context, state) {
-          if (state is RealtimeLoading<AccountingPeriodsData>) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (state is RealtimeSuccess<AccountingPeriodsData>) {
-            final periods = state.data.periods;
-            if (periods.isEmpty) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(LucideIcons.calendarX, size: 64, color: colorScheme.onSurfaceVariant.withValues(alpha: 0.4)),
-                    const SizedBox(height: 16),
-                    Text(
-                      'financial_management.no_periods'.tr(),
-                      style: theme.textTheme.titleMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+      body:
+          BlocConsumer<
+            AccountingPeriodsBloc,
+            RealtimeState<AccountingPeriodsData>
+          >(
+            listener: (context, state) {
+              if (state is RealtimeError<AccountingPeriodsData>) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      state.error
+                          .toString()
+                          .replaceFirst('Bad state: ', '')
+                          .tr(),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'financial_management.no_periods_hint'.tr(),
-                      style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 24),
-                    FilledButton.icon(
-                      onPressed: () => _showCreatePeriodDialog(context),
-                      icon: const Icon(LucideIcons.plus),
-                      label: Text('financial_management.create_period'.tr()),
-                    ),
-                  ],
-                ),
-              );
-            }
+                    backgroundColor: colorScheme.error,
+                  ),
+                );
+              }
+            },
+            builder: (context, state) {
+              if (state is RealtimeLoading<AccountingPeriodsData>) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-            return ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: periods.length,
-              itemBuilder: (context, index) {
-                final period = periods[index];
-                return _PeriodCard(period: period);
-              },
-            );
-          }
+              if (state is RealtimeSuccess<AccountingPeriodsData>) {
+                final periods = state.data.periods;
+                if (periods.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          LucideIcons.calendarX,
+                          size: 64,
+                          color: colorScheme.onSurfaceVariant.withValues(
+                            alpha: 0.4,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'financial_management.no_periods'.tr(),
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'financial_management.no_periods_hint'.tr(),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+                        FilledButton.icon(
+                          onPressed: () => _showCreatePeriodDialog(context),
+                          icon: const Icon(LucideIcons.plus),
+                          label: Text(
+                            'financial_management.create_period'.tr(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
 
-          return const SizedBox.shrink();
-        },
-      ),
+                return ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: periods.length,
+                  itemBuilder: (context, index) {
+                    final period = periods[index];
+                    return _PeriodCard(period: period);
+                  },
+                );
+              }
+
+              return const SizedBox.shrink();
+            },
+          ),
     );
   }
 
@@ -136,7 +152,9 @@ class _PeriodsView extends StatelessWidget {
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(LucideIcons.calendarRange),
                       title: Text('financial_management.start_date'.tr()),
-                      subtitle: Text(DateFormat.yMMMd().format(startDate)),
+                      subtitle: Text(
+                        DateFormat('dd/MM/yyyy').format(startDate),
+                      ),
                       onTap: () async {
                         final picked = await showDatePicker(
                           context: ctx,
@@ -158,7 +176,7 @@ class _PeriodsView extends StatelessWidget {
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(LucideIcons.calendarCheck),
                       title: Text('financial_management.end_date'.tr()),
-                      subtitle: Text(DateFormat.yMMMd().format(endDate)),
+                      subtitle: Text(DateFormat('dd/MM/yyyy').format(endDate)),
                       onTap: () async {
                         final picked = await showDatePicker(
                           context: ctx,
@@ -228,16 +246,25 @@ class _PeriodCard extends StatelessWidget {
             // Header row
             Row(
               children: [
-                Icon(LucideIcons.calendar, size: 20, color: colorScheme.primary),
+                Icon(
+                  LucideIcons.calendar,
+                  size: 20,
+                  color: colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     period.periodName,
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(16),
@@ -264,11 +291,17 @@ class _PeriodCard extends StatelessWidget {
             // Date range
             Row(
               children: [
-                Icon(LucideIcons.calendarRange, size: 14, color: colorScheme.onSurfaceVariant),
+                Icon(
+                  LucideIcons.calendarRange,
+                  size: 14,
+                  color: colorScheme.onSurfaceVariant,
+                ),
                 const SizedBox(width: 6),
                 Text(
-                  '${DateFormat.yMMMd().format(period.startDate)} — ${DateFormat.yMMMd().format(period.endDate)}',
-                  style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                  '${DateFormat('dd/MM/yyyy').format(period.startDate)} — ${DateFormat('dd/MM/yyyy').format(period.endDate)}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -277,13 +310,23 @@ class _PeriodCard extends StatelessWidget {
               const SizedBox(height: 4),
               Row(
                 children: [
-                  const Icon(LucideIcons.checkCircle, size: 14, color: Colors.green),
+                  const Icon(
+                    LucideIcons.checkCircle,
+                    size: 14,
+                    color: Colors.green,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     'financial_management.closed_on'.tr(
-                      args: [DateFormat.yMMMd().add_jm().format(period.closedAt!)],
+                      args: [
+                        DateFormat(
+                          'dd/MM/yyyy',
+                        ).add_jm().format(period.closedAt!),
+                      ],
                     ),
-                    style: theme.textTheme.bodySmall?.copyWith(color: Colors.green),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: Colors.green,
+                    ),
                   ),
                 ],
               ),
@@ -299,7 +342,11 @@ class _PeriodCard extends StatelessWidget {
                 children: [
                   TextButton.icon(
                     onPressed: () => _showCloseConfirmation(context, period),
-                    icon: Icon(LucideIcons.lock, size: 16, color: colorScheme.error),
+                    icon: Icon(
+                      LucideIcons.lock,
+                      size: 16,
+                      color: colorScheme.error,
+                    ),
                     label: Text(
                       'financial_management.close_period'.tr(),
                       style: TextStyle(color: colorScheme.error),
@@ -322,7 +369,11 @@ class _PeriodCard extends StatelessWidget {
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
-          icon: Icon(LucideIcons.alertTriangle, color: colorScheme.error, size: 32),
+          icon: Icon(
+            LucideIcons.alertTriangle,
+            color: colorScheme.error,
+            size: 32,
+          ),
           title: Text('financial_management.close_period_confirm_title'.tr()),
           content: Column(
             mainAxisSize: MainAxisSize.min,

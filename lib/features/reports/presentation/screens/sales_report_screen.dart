@@ -111,27 +111,76 @@ class _SalesReportViewState extends State<_SalesReportView> {
     switch (widget.reportType) {
       case SalesReportType.byPeriod:
       case SalesReportType.all:
-        SalesReportsPdfService.printInvoiceList(context: context, title: _title(), invoices: data.allSales, data: data);
+        SalesReportsPdfService.printInvoiceList(
+          context: context,
+          title: _title(),
+          invoices: data.allSales,
+          data: data,
+        );
       case SalesReportType.cash:
-        SalesReportsPdfService.printInvoiceList(context: context, title: _title(), invoices: data.cashSales, data: data);
+        SalesReportsPdfService.printInvoiceList(
+          context: context,
+          title: _title(),
+          invoices: data.cashSales,
+          data: data,
+        );
       case SalesReportType.credit:
-        SalesReportsPdfService.printInvoiceList(context: context, title: _title(), invoices: data.creditSales, data: data);
+        SalesReportsPdfService.printInvoiceList(
+          context: context,
+          title: _title(),
+          invoices: data.creditSales,
+          data: data,
+        );
       case SalesReportType.card:
-        SalesReportsPdfService.printInvoiceList(context: context, title: _title(), invoices: data.cardSales, data: data);
+        SalesReportsPdfService.printInvoiceList(
+          context: context,
+          title: _title(),
+          invoices: data.cardSales,
+          data: data,
+        );
       case SalesReportType.cheque:
-        SalesReportsPdfService.printInvoiceList(context: context, title: _title(), invoices: data.chequeSales, data: data);
+        SalesReportsPdfService.printInvoiceList(
+          context: context,
+          title: _title(),
+          invoices: data.chequeSales,
+          data: data,
+        );
       case SalesReportType.byProduct:
-        SalesReportsPdfService.printByProduct(context: context, items: data.byProduct, data: data);
+        SalesReportsPdfService.printByProduct(
+          context: context,
+          items: data.byProduct,
+          data: data,
+        );
       case SalesReportType.byCategory:
-        SalesReportsPdfService.printByCategory(context: context, items: data.byCategory, data: data);
+        SalesReportsPdfService.printByCategory(
+          context: context,
+          items: data.byCategory,
+          data: data,
+        );
       case SalesReportType.byCustomer:
-        SalesReportsPdfService.printByCustomer(context: context, items: data.byCustomer, data: data);
+        SalesReportsPdfService.printByCustomer(
+          context: context,
+          items: data.byCustomer,
+          data: data,
+        );
       case SalesReportType.cancelled:
-        SalesReportsPdfService.printCancelled(context: context, items: data.cancelledInvoices, data: data);
+        SalesReportsPdfService.printCancelled(
+          context: context,
+          items: data.cancelledInvoices,
+          data: data,
+        );
       case SalesReportType.taxByProduct:
-        SalesReportsPdfService.printTaxByProduct(context: context, items: data.taxByProduct, data: data);
+        SalesReportsPdfService.printTaxByProduct(
+          context: context,
+          items: data.taxByProduct,
+          data: data,
+        );
       case SalesReportType.taxByCustomer:
-        SalesReportsPdfService.printTaxByCustomer(context: context, items: data.taxByCustomer, data: data);
+        SalesReportsPdfService.printTaxByCustomer(
+          context: context,
+          items: data.taxByCustomer,
+          data: data,
+        );
       default:
         break;
     }
@@ -141,27 +190,76 @@ class _SalesReportViewState extends State<_SalesReportView> {
     switch (widget.reportType) {
       case SalesReportType.byPeriod:
       case SalesReportType.all:
-        SalesReportsPdfService.shareInvoiceList(context: context, title: _title(), invoices: data.allSales, data: data);
+        SalesReportsPdfService.shareInvoiceList(
+          context: context,
+          title: _title(),
+          invoices: data.allSales,
+          data: data,
+        );
       case SalesReportType.cash:
-        SalesReportsPdfService.shareInvoiceList(context: context, title: _title(), invoices: data.cashSales, data: data);
+        SalesReportsPdfService.shareInvoiceList(
+          context: context,
+          title: _title(),
+          invoices: data.cashSales,
+          data: data,
+        );
       case SalesReportType.credit:
-        SalesReportsPdfService.shareInvoiceList(context: context, title: _title(), invoices: data.creditSales, data: data);
+        SalesReportsPdfService.shareInvoiceList(
+          context: context,
+          title: _title(),
+          invoices: data.creditSales,
+          data: data,
+        );
       case SalesReportType.card:
-        SalesReportsPdfService.shareInvoiceList(context: context, title: _title(), invoices: data.cardSales, data: data);
+        SalesReportsPdfService.shareInvoiceList(
+          context: context,
+          title: _title(),
+          invoices: data.cardSales,
+          data: data,
+        );
       case SalesReportType.cheque:
-        SalesReportsPdfService.shareInvoiceList(context: context, title: _title(), invoices: data.chequeSales, data: data);
+        SalesReportsPdfService.shareInvoiceList(
+          context: context,
+          title: _title(),
+          invoices: data.chequeSales,
+          data: data,
+        );
       case SalesReportType.byProduct:
-        SalesReportsPdfService.shareByProduct(context: context, items: data.byProduct, data: data);
+        SalesReportsPdfService.shareByProduct(
+          context: context,
+          items: data.byProduct,
+          data: data,
+        );
       case SalesReportType.byCategory:
-        SalesReportsPdfService.shareByCategory(context: context, items: data.byCategory, data: data);
+        SalesReportsPdfService.shareByCategory(
+          context: context,
+          items: data.byCategory,
+          data: data,
+        );
       case SalesReportType.byCustomer:
-        SalesReportsPdfService.shareByCustomer(context: context, items: data.byCustomer, data: data);
+        SalesReportsPdfService.shareByCustomer(
+          context: context,
+          items: data.byCustomer,
+          data: data,
+        );
       case SalesReportType.cancelled:
-        SalesReportsPdfService.shareCancelled(context: context, items: data.cancelledInvoices, data: data);
+        SalesReportsPdfService.shareCancelled(
+          context: context,
+          items: data.cancelledInvoices,
+          data: data,
+        );
       case SalesReportType.taxByProduct:
-        SalesReportsPdfService.shareTaxByProduct(context: context, items: data.taxByProduct, data: data);
+        SalesReportsPdfService.shareTaxByProduct(
+          context: context,
+          items: data.taxByProduct,
+          data: data,
+        );
       case SalesReportType.taxByCustomer:
-        SalesReportsPdfService.shareTaxByCustomer(context: context, items: data.taxByCustomer, data: data);
+        SalesReportsPdfService.shareTaxByCustomer(
+          context: context,
+          items: data.taxByCustomer,
+          data: data,
+        );
       default:
         break;
     }
@@ -171,7 +269,9 @@ class _SalesReportViewState extends State<_SalesReportView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final isExcel = widget.reportType == SalesReportType.excel || widget.reportType == SalesReportType.excelProducts;
+    final isExcel =
+        widget.reportType == SalesReportType.excel ||
+        widget.reportType == SalesReportType.excelProducts;
 
     return Scaffold(
       appBar: AppBar(
@@ -180,7 +280,9 @@ class _SalesReportViewState extends State<_SalesReportView> {
           if (!isExcel)
             BlocBuilder<SalesReportsBloc, RealtimeState<SalesReportsData>>(
               builder: (context, state) {
-                if (state is! RealtimeSuccess<SalesReportsData>) return const SizedBox.shrink();
+                if (state is! RealtimeSuccess<SalesReportsData>) {
+                  return const SizedBox.shrink();
+                }
                 return Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -213,7 +315,10 @@ class _SalesReportViewState extends State<_SalesReportView> {
                 children: [
                   Icon(Icons.error_outline, size: 48, color: colorScheme.error),
                   const SizedBox(height: 16),
-                  Text(state.error.toString(), style: theme.textTheme.bodyLarge),
+                  Text(
+                    state.error.toString(),
+                    style: theme.textTheme.bodyLarge,
+                  ),
                 ],
               ),
             );
@@ -226,9 +331,9 @@ class _SalesReportViewState extends State<_SalesReportView> {
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                   child: DateRangeSelector(
                     dateRange: state.data.dateRange,
-                    onChanged: (range) => context
-                        .read<SalesReportsBloc>()
-                        .add(SalesReportsDateRangeChanged(range)),
+                    onChanged: (range) => context.read<SalesReportsBloc>().add(
+                      SalesReportsDateRangeChanged(range),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -244,14 +349,21 @@ class _SalesReportViewState extends State<_SalesReportView> {
                         suffixIcon: _searchQuery.isNotEmpty
                             ? IconButton(
                                 icon: const Icon(LucideIcons.x, size: 18),
-                                onPressed: () => setState(() => _searchQuery = ''),
+                                onPressed: () =>
+                                    setState(() => _searchQuery = ''),
                               )
                             : null,
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
-                      onChanged: (v) => setState(() => _searchQuery = v.trim().toLowerCase()),
+                      onChanged: (v) =>
+                          setState(() => _searchQuery = v.trim().toLowerCase()),
                     ),
                   ),
                 ],
@@ -306,15 +418,24 @@ class _SalesReportViewState extends State<_SalesReportView> {
         count = data.byCustomer.length;
         countLabel = 'reports.unique_customers'.tr();
       case SalesReportType.cancelled:
-        totalCents = data.cancelledInvoices.fold(0, (sum, i) => sum + i.totalCents);
+        totalCents = data.cancelledInvoices.fold(
+          0,
+          (sum, i) => sum + i.totalCents,
+        );
         count = data.cancelledInvoices.length;
         countLabel = 'reports.invoice_count'.tr();
       case SalesReportType.taxByProduct:
-        totalCents = data.taxByProduct.fold(0, (sum, i) => sum + i.totalTaxCents);
+        totalCents = data.taxByProduct.fold(
+          0,
+          (sum, i) => sum + i.totalTaxCents,
+        );
         count = data.taxByProduct.length;
         countLabel = 'reports.product_count'.tr();
       case SalesReportType.taxByCustomer:
-        totalCents = data.taxByCustomer.fold(0, (sum, i) => sum + i.totalTaxCents);
+        totalCents = data.taxByCustomer.fold(
+          0,
+          (sum, i) => sum + i.totalTaxCents,
+        );
         count = data.taxByCustomer.length;
         countLabel = 'reports.unique_customers'.tr();
       default:
@@ -323,7 +444,8 @@ class _SalesReportViewState extends State<_SalesReportView> {
         countLabel = 'reports.invoice_count'.tr();
     }
 
-    final showNet = widget.reportType == SalesReportType.byPeriod ||
+    final showNet =
+        widget.reportType == SalesReportType.byPeriod ||
         widget.reportType == SalesReportType.all;
 
     return Padding(
@@ -334,7 +456,8 @@ class _SalesReportViewState extends State<_SalesReportView> {
             children: [
               Expanded(
                 child: _SummaryCard(
-                  label: widget.reportType == SalesReportType.taxByProduct ||
+                  label:
+                      widget.reportType == SalesReportType.taxByProduct ||
                           widget.reportType == SalesReportType.taxByCustomer
                       ? 'reports.total_tax'.tr()
                       : 'reports.total_sales'.tr(),
@@ -406,7 +529,10 @@ class _SalesReportViewState extends State<_SalesReportView> {
       case SalesReportType.card:
         return _InvoiceListView(invoices: data.cardSales);
       case SalesReportType.cheque:
-        return _InvoiceListView(invoices: data.chequeSales);
+        return _InvoiceListView(
+          invoices: data.chequeSales,
+          showChequeStatus: true,
+        );
       case SalesReportType.byProduct:
         return _ProductListView(items: _filterProducts(data.byProduct));
       case SalesReportType.byCategory:
@@ -418,7 +544,9 @@ class _SalesReportViewState extends State<_SalesReportView> {
       case SalesReportType.taxByProduct:
         return _TaxByProductView(items: _filterTaxProducts(data.taxByProduct));
       case SalesReportType.taxByCustomer:
-        return _TaxByCustomerView(items: _filterTaxCustomers(data.taxByCustomer));
+        return _TaxByCustomerView(
+          items: _filterTaxCustomers(data.taxByCustomer),
+        );
       case SalesReportType.excel:
       case SalesReportType.excelProducts:
         return _ExcelExportView(
@@ -430,29 +558,41 @@ class _SalesReportViewState extends State<_SalesReportView> {
 
   List<SalesByProductItem> _filterProducts(List<SalesByProductItem> items) {
     if (_searchQuery.isEmpty) return items;
-    return items.where((p) =>
-        p.productName.toLowerCase().contains(_searchQuery) ||
-        (p.categoryName?.toLowerCase().contains(_searchQuery) ?? false)).toList();
+    return items
+        .where(
+          (p) =>
+              p.productName.toLowerCase().contains(_searchQuery) ||
+              (p.categoryName?.toLowerCase().contains(_searchQuery) ?? false),
+        )
+        .toList();
   }
 
   List<SalesByCategoryItem> _filterCategories(List<SalesByCategoryItem> items) {
     if (_searchQuery.isEmpty) return items;
-    return items.where((c) => c.categoryName.toLowerCase().contains(_searchQuery)).toList();
+    return items
+        .where((c) => c.categoryName.toLowerCase().contains(_searchQuery))
+        .toList();
   }
 
   List<SalesByCustomerItem> _filterCustomers(List<SalesByCustomerItem> items) {
     if (_searchQuery.isEmpty) return items;
-    return items.where((c) => c.customerName.toLowerCase().contains(_searchQuery)).toList();
+    return items
+        .where((c) => c.customerName.toLowerCase().contains(_searchQuery))
+        .toList();
   }
 
   List<TaxByProductItem> _filterTaxProducts(List<TaxByProductItem> items) {
     if (_searchQuery.isEmpty) return items;
-    return items.where((t) => t.productName.toLowerCase().contains(_searchQuery)).toList();
+    return items
+        .where((t) => t.productName.toLowerCase().contains(_searchQuery))
+        .toList();
   }
 
   List<TaxByCustomerItem> _filterTaxCustomers(List<TaxByCustomerItem> items) {
     if (_searchQuery.isEmpty) return items;
-    return items.where((t) => t.customerName.toLowerCase().contains(_searchQuery)).toList();
+    return items
+        .where((t) => t.customerName.toLowerCase().contains(_searchQuery))
+        .toList();
   }
 }
 
@@ -521,7 +661,12 @@ class _SummaryCard extends StatelessWidget {
 
 class _InvoiceListView extends StatelessWidget {
   final List<SaleInvoiceItem> invoices;
-  const _InvoiceListView({required this.invoices});
+  final bool showChequeStatus;
+
+  const _InvoiceListView({
+    required this.invoices,
+    this.showChequeStatus = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -537,45 +682,106 @@ class _InvoiceListView extends StatelessWidget {
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          columnSpacing: 16,
-          horizontalMargin: 8,
-          columns: [
-            const DataColumn(label: Text('#'), numeric: true),
-            DataColumn(label: Text('reports.invoice_number'.tr())),
-            DataColumn(label: Text('reports.customer'.tr())),
-            DataColumn(label: Text('reports.subtotal'.tr()), numeric: true),
-            DataColumn(label: Text('reports.discount'.tr()), numeric: true),
-            DataColumn(label: Text('reports.tax'.tr()), numeric: true),
-            DataColumn(label: Text('reports.total'.tr()), numeric: true),
-            DataColumn(label: Text('reports.paid'.tr()), numeric: true),
-            DataColumn(label: Text('reports.payment_method_col'.tr())),
-            DataColumn(label: Text('reports.date'.tr())),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (showChequeStatus) ...[
+            _buildChequeNotice(context, 'reports.cheque_sales_desc'),
+            const SizedBox(height: 10),
           ],
-          rows: invoices.asMap().entries.map((entry) {
-            final idx = entry.key + 1;
-            final s = entry.value;
-            return DataRow(cells: [
-              DataCell(Text('$idx')),
-              DataCell(Text(s.invoiceNumber)),
-              DataCell(Text(s.customerName ?? '-', maxLines: 1, overflow: TextOverflow.ellipsis)),
-              DataCell(Text(cs.formatCents(s.subtotalCents))),
-              DataCell(Text(cs.formatCents(s.discountCents))),
-              DataCell(Text(cs.formatCents(s.taxCents))),
-              DataCell(Text(
-                cs.formatCents(s.totalCents),
-                style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
-              )),
-              DataCell(Text(cs.formatCents(s.paidAmountCents))),
-              DataCell(Text(_paymentMethodLabel(s.paymentMethod))),
-              DataCell(Text(DateFormat.yMd().format(s.saleDate))),
-            ]);
-          }).toList(),
-        ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              columnSpacing: 16,
+              horizontalMargin: 8,
+              columns: [
+                const DataColumn(label: Text('#'), numeric: true),
+                DataColumn(label: Text('reports.invoice_number'.tr())),
+                DataColumn(label: Text('reports.customer'.tr())),
+                DataColumn(label: Text('reports.subtotal'.tr()), numeric: true),
+                DataColumn(label: Text('reports.discount'.tr()), numeric: true),
+                DataColumn(label: Text('reports.tax'.tr()), numeric: true),
+                DataColumn(label: Text('reports.total'.tr()), numeric: true),
+                DataColumn(label: Text('reports.paid'.tr()), numeric: true),
+                DataColumn(label: Text('reports.payment_method_col'.tr())),
+                if (showChequeStatus)
+                  DataColumn(label: Text('reports.cheque_status'.tr())),
+                DataColumn(label: Text('reports.date'.tr())),
+              ],
+              rows: invoices.asMap().entries.map((entry) {
+                final idx = entry.key + 1;
+                final s = entry.value;
+                return DataRow(
+                  cells: [
+                    DataCell(Text('$idx')),
+                    DataCell(Text(s.invoiceNumber)),
+                    DataCell(
+                      Text(
+                        s.customerName ?? '-',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    DataCell(Text(cs.formatCents(s.subtotalCents))),
+                    DataCell(Text(cs.formatCents(s.discountCents))),
+                    DataCell(Text(cs.formatCents(s.taxCents))),
+                    DataCell(
+                      Text(
+                        cs.formatCents(s.totalCents),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    DataCell(Text(cs.formatCents(s.paidAmountCents))),
+                    DataCell(Text(_paymentMethodLabel(s.paymentMethod))),
+                    if (showChequeStatus)
+                      DataCell(Text(_chequeStatusesLabel(s.chequeStatuses))),
+                    DataCell(Text(DateFormat('dd/MM/yyyy').format(s.saleDate))),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  Widget _buildChequeNotice(BuildContext context, String translationKey) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer.withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Icon(LucideIcons.info, size: 17, color: colorScheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              translationKey.tr(),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _chequeStatusesLabel(String? value) {
+    final statuses = value
+        ?.split(',')
+        .map((status) => status.trim())
+        .where((status) => status.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (statuses == null || statuses.isEmpty) {
+      return 'reports.cheque_status_not_recorded'.tr();
+    }
+    return statuses.map((status) => 'cheques.status_$status'.tr()).join(' / ');
   }
 
   String _paymentMethodLabel(String method) {
@@ -634,19 +840,31 @@ class _ProductListView extends StatelessWidget {
           rows: items.asMap().entries.map((entry) {
             final idx = entry.key + 1;
             final p = entry.value;
-            return DataRow(cells: [
-              DataCell(Text('$idx')),
-              DataCell(Text(p.productName, maxLines: 1, overflow: TextOverflow.ellipsis)),
-              DataCell(Text(p.categoryName ?? '-')),
-              DataCell(Text('${p.totalQuantity}')),
-              DataCell(Text(
-                cs.formatCents(p.totalSalesCents),
-                style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
-              )),
-              DataCell(Text(cs.formatCents(p.totalDiscountCents))),
-              DataCell(Text(cs.formatCents(p.totalTaxCents))),
-              DataCell(Text('${p.invoiceCount}')),
-            ]);
+            return DataRow(
+              cells: [
+                DataCell(Text('$idx')),
+                DataCell(
+                  Text(
+                    p.productName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DataCell(Text(p.categoryName ?? '-')),
+                DataCell(Text('${p.totalQuantity}')),
+                DataCell(
+                  Text(
+                    cs.formatCents(p.totalSalesCents),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                DataCell(Text(cs.formatCents(p.totalDiscountCents))),
+                DataCell(Text(cs.formatCents(p.totalTaxCents))),
+                DataCell(Text('${p.invoiceCount}')),
+              ],
+            );
           }).toList(),
         ),
       ),
@@ -684,7 +902,10 @@ class _CategoryListView extends StatelessWidget {
           columns: [
             const DataColumn(label: Text('#'), numeric: true),
             DataColumn(label: Text('reports.category'.tr())),
-            DataColumn(label: Text('reports.product_count'.tr()), numeric: true),
+            DataColumn(
+              label: Text('reports.product_count'.tr()),
+              numeric: true,
+            ),
             DataColumn(label: Text('reports.quantity'.tr()), numeric: true),
             DataColumn(label: Text('reports.total_sales'.tr()), numeric: true),
             DataColumn(label: Text('reports.discount'.tr()), numeric: true),
@@ -694,19 +915,31 @@ class _CategoryListView extends StatelessWidget {
           rows: items.asMap().entries.map((entry) {
             final idx = entry.key + 1;
             final c = entry.value;
-            return DataRow(cells: [
-              DataCell(Text('$idx')),
-              DataCell(Text(c.categoryName, maxLines: 1, overflow: TextOverflow.ellipsis)),
-              DataCell(Text('${c.productCount}')),
-              DataCell(Text('${c.totalQuantity}')),
-              DataCell(Text(
-                cs.formatCents(c.totalSalesCents),
-                style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
-              )),
-              DataCell(Text(cs.formatCents(c.totalDiscountCents))),
-              DataCell(Text(cs.formatCents(c.totalTaxCents))),
-              DataCell(Text('${c.invoiceCount}')),
-            ]);
+            return DataRow(
+              cells: [
+                DataCell(Text('$idx')),
+                DataCell(
+                  Text(
+                    c.categoryName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DataCell(Text('${c.productCount}')),
+                DataCell(Text('${c.totalQuantity}')),
+                DataCell(
+                  Text(
+                    cs.formatCents(c.totalSalesCents),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                DataCell(Text(cs.formatCents(c.totalDiscountCents))),
+                DataCell(Text(cs.formatCents(c.totalTaxCents))),
+                DataCell(Text('${c.invoiceCount}')),
+              ],
+            );
           }).toList(),
         ),
       ),
@@ -754,21 +987,37 @@ class _CustomerListView extends StatelessWidget {
           rows: items.asMap().entries.map((entry) {
             final idx = entry.key + 1;
             final c = entry.value;
-            return DataRow(cells: [
-              DataCell(Text('$idx')),
-              DataCell(Text(c.customerName, maxLines: 1, overflow: TextOverflow.ellipsis)),
-              DataCell(Text(
-                cs.formatCents(c.totalSalesCents),
-                style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
-              )),
-              DataCell(Text(cs.formatCents(c.totalDiscountCents))),
-              DataCell(Text(cs.formatCents(c.totalTaxCents))),
-              DataCell(Text('${c.invoiceCount}')),
-              DataCell(Text('${c.totalQuantity}')),
-              DataCell(Text(
-                c.lastSaleDate != null ? DateFormat.yMd().format(c.lastSaleDate!) : '-',
-              )),
-            ]);
+            return DataRow(
+              cells: [
+                DataCell(Text('$idx')),
+                DataCell(
+                  Text(
+                    c.customerName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    cs.formatCents(c.totalSalesCents),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                DataCell(Text(cs.formatCents(c.totalDiscountCents))),
+                DataCell(Text(cs.formatCents(c.totalTaxCents))),
+                DataCell(Text('${c.invoiceCount}')),
+                DataCell(Text('${c.totalQuantity}')),
+                DataCell(
+                  Text(
+                    c.lastSaleDate != null
+                        ? DateFormat('dd/MM/yyyy').format(c.lastSaleDate!)
+                        : '-',
+                  ),
+                ),
+              ],
+            );
           }).toList(),
         ),
       ),
@@ -814,20 +1063,30 @@ class _CancelledListView extends StatelessWidget {
           rows: items.asMap().entries.map((entry) {
             final idx = entry.key + 1;
             final i = entry.value;
-            return DataRow(cells: [
-              DataCell(Text('$idx')),
-              DataCell(Text(i.invoiceNumber)),
-              DataCell(Text(i.customerName ?? '-')),
-              DataCell(Text(
-                cs.formatCents(i.totalCents),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: theme.colorScheme.error,
+            return DataRow(
+              cells: [
+                DataCell(Text('$idx')),
+                DataCell(Text(i.invoiceNumber)),
+                DataCell(Text(i.customerName ?? '-')),
+                DataCell(
+                  Text(
+                    cs.formatCents(i.totalCents),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.error,
+                    ),
+                  ),
                 ),
-              )),
-              DataCell(Text(DateFormat.yMd().format(i.saleDate))),
-              DataCell(Text(i.notes ?? '-', maxLines: 1, overflow: TextOverflow.ellipsis)),
-            ]);
+                DataCell(Text(DateFormat('dd/MM/yyyy').format(i.saleDate))),
+                DataCell(
+                  Text(
+                    i.notes ?? '-',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            );
           }).toList(),
         ),
       ),
@@ -873,17 +1132,29 @@ class _TaxByProductView extends StatelessWidget {
           rows: items.asMap().entries.map((entry) {
             final idx = entry.key + 1;
             final t = entry.value;
-            return DataRow(cells: [
-              DataCell(Text('$idx')),
-              DataCell(Text(t.productName, maxLines: 1, overflow: TextOverflow.ellipsis)),
-              DataCell(Text(cs.formatCents(t.totalSalesCents))),
-              DataCell(Text('${(t.taxRateBps / 100).toStringAsFixed(1)}%')),
-              DataCell(Text(
-                cs.formatCents(t.totalTaxCents),
-                style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
-              )),
-              DataCell(Text('${t.totalQuantity}')),
-            ]);
+            return DataRow(
+              cells: [
+                DataCell(Text('$idx')),
+                DataCell(
+                  Text(
+                    t.productName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DataCell(Text(cs.formatCents(t.totalSalesCents))),
+                DataCell(Text('${(t.taxRateBps / 100).toStringAsFixed(1)}%')),
+                DataCell(
+                  Text(
+                    cs.formatCents(t.totalTaxCents),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                DataCell(Text('${t.totalQuantity}')),
+              ],
+            );
           }).toList(),
         ),
       ),
@@ -928,16 +1199,28 @@ class _TaxByCustomerView extends StatelessWidget {
           rows: items.asMap().entries.map((entry) {
             final idx = entry.key + 1;
             final t = entry.value;
-            return DataRow(cells: [
-              DataCell(Text('$idx')),
-              DataCell(Text(t.customerName, maxLines: 1, overflow: TextOverflow.ellipsis)),
-              DataCell(Text(cs.formatCents(t.totalSalesCents))),
-              DataCell(Text(
-                cs.formatCents(t.totalTaxCents),
-                style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
-              )),
-              DataCell(Text('${t.invoiceCount}')),
-            ]);
+            return DataRow(
+              cells: [
+                DataCell(Text('$idx')),
+                DataCell(
+                  Text(
+                    t.customerName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                DataCell(Text(cs.formatCents(t.totalSalesCents))),
+                DataCell(
+                  Text(
+                    cs.formatCents(t.totalTaxCents),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                DataCell(Text('${t.invoiceCount}')),
+              ],
+            );
           }).toList(),
         ),
       ),
@@ -991,13 +1274,19 @@ class _ExcelExportViewState extends State<_ExcelExportView> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.fileSpreadsheet, size: 64, color: Colors.green[700]),
+            Icon(
+              LucideIcons.fileSpreadsheet,
+              size: 64,
+              color: Colors.green[700],
+            ),
             const SizedBox(height: 16),
             Text(
               widget.includeProducts
                   ? 'reports.sales_excel_products'.tr()
                   : 'reports.sales_excel'.tr(),
-              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -1016,7 +1305,9 @@ class _ExcelExportViewState extends State<_ExcelExportView> {
                   children: [
                     _ExcelStat(
                       label: 'reports.total_sales'.tr(),
-                      value: cs.formatCents(widget.data.summary.totalSalesCents),
+                      value: cs.formatCents(
+                        widget.data.summary.totalSalesCents,
+                      ),
                     ),
                     _ExcelStat(
                       label: 'reports.invoice_count'.tr(),
@@ -1037,9 +1328,17 @@ class _ExcelExportViewState extends State<_ExcelExportView> {
               child: FilledButton.icon(
                 onPressed: _exporting ? null : _export,
                 icon: _exporting
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : const Icon(LucideIcons.download),
-                label: Text(_exporting ? 'reports.exporting'.tr() : 'reports.export_excel'.tr()),
+                label: Text(
+                  _exporting
+                      ? 'reports.exporting'.tr()
+                      : 'reports.export_excel'.tr(),
+                ),
               ),
             ),
           ],
@@ -1063,7 +1362,12 @@ class _ExcelStat extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: theme.textTheme.bodyMedium),
-          Text(value, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
+          Text(
+            value,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );

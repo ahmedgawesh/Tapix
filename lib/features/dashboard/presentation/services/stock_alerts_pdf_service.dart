@@ -98,7 +98,8 @@ class StockAlertsPdfService {
     final bytes = await pdf.save();
     await Printing.sharePdf(
       bytes: bytes,
-      filename: 'StockAlerts_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      filename:
+          'StockAlerts_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
     );
   }
 
@@ -127,13 +128,19 @@ class StockAlertsPdfService {
               pw.SizedBox(height: 8),
               pw.Text(
                 '${_t('total_products', lang)}: ${outOfStock.length}',
-                style: pw.TextStyle(font: fonts.bold, fontSize: 11, color: PdfColors.red700),
+                style: pw.TextStyle(
+                  font: fonts.bold,
+                  fontSize: 11,
+                  color: PdfColors.red700,
+                ),
               ),
               pw.SizedBox(height: 12),
               pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 8),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.red50),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.red50,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.centerLeft,
                   1: pw.Alignment.centerLeft,
@@ -152,21 +159,29 @@ class StockAlertsPdfService {
                   _t('cost', lang),
                   _t('price', lang),
                 ],
-                data: outOfStock.map((item) => [
-                  item.sku ?? '-',
-                  item.barcode ?? '-',
-                  item.productName,
-                  item.variantLabel.isNotEmpty ? item.variantLabel : '-',
-                  item.categoryName ?? '-',
-                  cs.formatCents(item.costCents),
-                  cs.formatCents(item.priceCents),
-                ]).toList(),
+                data: outOfStock
+                    .map(
+                      (item) => [
+                        item.sku ?? '-',
+                        item.barcode ?? '-',
+                        item.productName,
+                        item.variantLabel.isNotEmpty ? item.variantLabel : '-',
+                        item.categoryName ?? '-',
+                        cs.formatCents(item.costCents),
+                        cs.formatCents(item.priceCents),
+                      ],
+                    )
+                    .toList(),
               ),
               pw.SizedBox(height: 16),
               pw.Divider(),
               pw.Text(
-                '${_t('printed_on', lang)}: ${DateFormat.yMMMd(locale.toString()).add_jm().format(DateTime.now())}',
-                style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
+                style: pw.TextStyle(
+                  font: fonts.regular,
+                  fontSize: 8,
+                  color: PdfColors.grey600,
+                ),
               ),
             ];
           },
@@ -186,13 +201,19 @@ class StockAlertsPdfService {
               pw.SizedBox(height: 8),
               pw.Text(
                 '${_t('total_products', lang)}: ${lowStock.length}',
-                style: pw.TextStyle(font: fonts.bold, fontSize: 11, color: PdfColors.orange700),
+                style: pw.TextStyle(
+                  font: fonts.bold,
+                  fontSize: 11,
+                  color: PdfColors.orange700,
+                ),
               ),
               pw.SizedBox(height: 12),
               pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 8),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 8),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.orange50),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.orange50,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.centerLeft,
                   1: pw.Alignment.centerLeft,
@@ -213,22 +234,30 @@ class StockAlertsPdfService {
                   _t('reorder_level', lang),
                   _t('deficit', lang),
                 ],
-                data: lowStock.map((item) => [
-                  item.sku ?? '-',
-                  item.barcode ?? '-',
-                  item.productName,
-                  item.variantLabel.isNotEmpty ? item.variantLabel : '-',
-                  item.categoryName ?? '-',
-                  '${item.currentStock}',
-                  '${item.reorderLevel}',
-                  '${item.reorderLevel - item.currentStock}',
-                ]).toList(),
+                data: lowStock
+                    .map(
+                      (item) => [
+                        item.sku ?? '-',
+                        item.barcode ?? '-',
+                        item.productName,
+                        item.variantLabel.isNotEmpty ? item.variantLabel : '-',
+                        item.categoryName ?? '-',
+                        '${item.currentStock}',
+                        '${item.reorderLevel}',
+                        '${item.reorderLevel - item.currentStock}',
+                      ],
+                    )
+                    .toList(),
               ),
               pw.SizedBox(height: 16),
               pw.Divider(),
               pw.Text(
-                '${_t('printed_on', lang)}: ${DateFormat.yMMMd(locale.toString()).add_jm().format(DateTime.now())}',
-                style: pw.TextStyle(font: fonts.regular, fontSize: 8, color: PdfColors.grey600),
+                '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
+                style: pw.TextStyle(
+                  font: fonts.regular,
+                  fontSize: 8,
+                  color: PdfColors.grey600,
+                ),
               ),
             ];
           },
@@ -244,13 +273,29 @@ class StockAlertsPdfService {
   // ═══════════════════════════════════════════════════════
 
   static const _translations = {
-    'out_of_stock_title': {'en': 'Out of Stock Products', 'ar': 'منتجات نفذت من المخزون', 'fr': 'Produits en Rupture de Stock'},
-    'low_stock_title': {'en': 'Low Stock Products', 'ar': 'منتجات على وشك النفاذ', 'fr': 'Produits à Stock Bas'},
-    'total_products': {'en': 'Total Products', 'ar': 'إجمالي المنتجات', 'fr': 'Total Produits'},
+    'out_of_stock_title': {
+      'en': 'Out of Stock Products',
+      'ar': 'منتجات نفذت من المخزون',
+      'fr': 'Produits en Rupture de Stock',
+    },
+    'low_stock_title': {
+      'en': 'Low Stock Products',
+      'ar': 'منتجات على وشك النفاذ',
+      'fr': 'Produits à Stock Bas',
+    },
+    'total_products': {
+      'en': 'Total Products',
+      'ar': 'إجمالي المنتجات',
+      'fr': 'Total Produits',
+    },
     'sku': {'en': 'SKU', 'ar': 'رمز المنتج', 'fr': 'Réf.'},
     'barcode': {'en': 'Barcode', 'ar': 'الباركود', 'fr': 'Code-barres'},
     'product': {'en': 'Product', 'ar': 'المنتج', 'fr': 'Produit'},
-    'color_size': {'en': 'Color / Size', 'ar': 'اللون / المقاس', 'fr': 'Couleur / Taille'},
+    'color_size': {
+      'en': 'Color / Size',
+      'ar': 'اللون / المقاس',
+      'fr': 'Couleur / Taille',
+    },
     'category': {'en': 'Category', 'ar': 'الفئة', 'fr': 'Catégorie'},
     'cost': {'en': 'Cost', 'ar': 'التكلفة', 'fr': 'Coût'},
     'price': {'en': 'Price', 'ar': 'السعر', 'fr': 'Prix'},
@@ -284,7 +329,11 @@ class StockAlertsPdfService {
         if (company.address != null && company.address!.isNotEmpty)
           pw.Text(
             company.address!,
-            style: pw.TextStyle(font: fonts.regular, fontSize: 9, color: PdfColors.grey600),
+            style: pw.TextStyle(
+              font: fonts.regular,
+              fontSize: 9,
+              color: PdfColors.grey600,
+            ),
           ),
         pw.SizedBox(height: 8),
         pw.Divider(),
@@ -301,8 +350,12 @@ class StockAlertsPdfService {
 
   static Future<_PdfFonts> _loadFonts() async {
     try {
-      final regularData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-      final boldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+      final regularData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+      );
+      final boldData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+      );
       return _PdfFonts(
         regular: pw.Font.ttf(regularData),
         bold: pw.Font.ttf(boldData),

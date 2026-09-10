@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/measurement/measurement_localization.dart';
+import '../../../../core/promotions/promotion_sale_snapshot.dart';
 import '../../../../core/services/lan/lan_network_service.dart';
 
 /// Read-only sale-return details loaded from the authenticated LAN master.
@@ -202,8 +203,8 @@ class _LanSaleReturnDetailScreenState extends State<LanSaleReturnDetailScreen> {
           _infoRow(
             context,
             'sales.date'.tr(),
-            DateFormat.yMMMd(
-              context.locale.toString(),
+            DateFormat(
+              'dd/MM/yyyy',
             ).add_jm().format(summary.returnDate.toLocal()),
           ),
           if (cleanReason != null) ...[
@@ -349,6 +350,15 @@ class _LanSaleReturnDetailScreenState extends State<LanSaleReturnDetailScreen> {
       if ((line.variantSku ?? line.productSku)?.trim().isNotEmpty == true)
         'SKU: ${(line.variantSku ?? line.productSku)!.trim()}',
     ];
+    final offers = line.saleItemId == null
+        ? const <SalePromotionSnapshot>[]
+        : details.promotionApplications
+              .where(
+                (offer) => offer.allocations.any(
+                  (allocation) => allocation.saleItemId == line.saleItemId,
+                ),
+              )
+              .toList(growable: false);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -371,6 +381,28 @@ class _LanSaleReturnDetailScreenState extends State<LanSaleReturnDetailScreen> {
                     Text(
                       attributes.join(' • '),
                       style: theme.textTheme.bodySmall,
+                    ),
+                  if (offers.isNotEmpty)
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: offers
+                          .map((offer) {
+                            final allocation = offer.allocations.firstWhere(
+                              (row) => row.saleItemId == line.saleItemId,
+                            );
+                            return Chip(
+                              visualDensity: VisualDensity.compact,
+                              avatar: const Icon(
+                                LucideIcons.badgePercent,
+                                size: 14,
+                              ),
+                              label: Text(
+                                '${offer.name}  -${_money(context, details, allocation.discountCents)}',
+                              ),
+                            );
+                          })
+                          .toList(growable: false),
                     ),
                   const SizedBox(height: 4),
                   Text(

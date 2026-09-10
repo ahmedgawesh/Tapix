@@ -383,8 +383,8 @@ class _AssetCard extends StatelessWidget {
                               ? 'financial_management.depreciation_due'.tr()
                               : 'financial_management.depreciation_next'.tr(
                                   args: [
-                                    DateFormat.yMMMd(
-                                      context.locale.toString(),
+                                    DateFormat(
+                                      'dd/MM/yyyy',
                                     ).format(summary.nextDepreciationDate!),
                                   ],
                                 ),
@@ -764,7 +764,7 @@ class _DateField extends StatelessWidget {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: Text(label),
-      subtitle: Text(DateFormat.yMMMd(context.locale.toString()).format(date)),
+      subtitle: Text(DateFormat('dd/MM/yyyy').format(date)),
       trailing: const Icon(Icons.calendar_today_outlined),
       onTap: onTap,
     );

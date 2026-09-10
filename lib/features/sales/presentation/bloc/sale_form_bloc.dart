@@ -5,9 +5,13 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../core/database/app_database.dart' show LoyaltySettings;
 import '../../../../core/money/money.dart';
+import '../../../../core/payments/checkout_settlement.dart';
 import '../../../../core/pricing/discount.dart';
 import '../../../../core/pricing/invoice_pricing_engine.dart';
 import '../../../../core/pricing/line_item_pricing_engine.dart';
+import '../../../../core/promotions/promotion_engine.dart';
+import '../../../../core/promotions/promotion_margin_policy.dart';
+import '../../../../core/promotions/promotion_repository.dart';
 import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/below_cost_sale_service.dart';
 import '../../../../core/services/crashlytics_service.dart';
@@ -85,6 +89,8 @@ class SaleFormState extends Equatable {
   final double maxDiscountPercent;
   final bool requireCustomerForSales;
   final bool enableLoyaltyPoints;
+  final bool enablePromotions;
+  final List<PromotionRule> promotionRules;
   // Editing posted sale flag
   final bool isEditingPosted;
   // Tracks if user has made unsaved changes
@@ -128,6 +134,8 @@ class SaleFormState extends Equatable {
     this.maxDiscountPercent = 100.0,
     this.requireCustomerForSales = false,
     this.enableLoyaltyPoints = false,
+    this.enablePromotions = false,
+    this.promotionRules = const [],
     this.isEditingPosted = false,
     this.hasUnsavedChanges = false,
   }) : invoiceDiscountCents = invoiceDiscountCents ?? Decimal.zero,
@@ -156,9 +164,18 @@ class SaleFormState extends Equatable {
   /// has been removed after a full phase of green Phase-0 goldens and
   /// Phase-4 regression tests. The engine is now the unconditional SoT
   /// for every pricing figure; the tender layer below remains bloc-owned.
-  late final InvoicePricingResult pricing = _computePricing();
+  late final InvoicePricingResult manualPricing = _computePricing(
+    includePromotions: false,
+  );
 
-  InvoicePricingResult _computePricing() {
+  late final PromotionEvaluationResult promotionEvaluation =
+      _computePromotionEvaluation();
+
+  late final InvoicePricingResult pricing = _computePricing(
+    includePromotions: true,
+  );
+
+  InvoicePricingResult _computePricing({required bool includePromotions}) {
     // Discount-mode bridge (ADR 0002 §G7):
     //   * `perItem`  → per-line discount preserved, overall = none.
     //   * `invoice`  → per-line discount suppressed (Q3 mode-exclusivity),
@@ -168,12 +185,22 @@ class SaleFormState extends Equatable {
     // mode), so engine output stays identical to what the bloc previously
     // persisted — see Phase-0 goldens.
     final inInvoiceMode = discountMode == SaleDiscountMode.invoice;
+    final promotionByLine = includePromotions
+        ? promotionEvaluation.discountByLine
+        : const <String, Money>{};
     final lineInputs = items
-        .map(
-          (i) => i.toPricingInput(
-            overrideDiscount: inInvoiceMode ? Discount.none : null,
-          ),
-        )
+        .map((item) {
+          final manual = inInvoiceMode
+              ? Money.zero
+              : Money.fromDecimalCents(item.discountCents);
+          final promotion = promotionByLine[item.tempId] ?? Money.zero;
+          final combined = manual + promotion;
+          return item.toPricingInput(
+            overrideDiscount: combined.isPositive
+                ? Discount.fixed(combined)
+                : Discount.none,
+          );
+        })
         .toList(growable: false);
 
     return InvoicePricingEngine.compute(
@@ -186,6 +213,46 @@ class SaleFormState extends Equatable {
         defaultTaxRateBps: defaultSalesTaxRateBps,
         taxInclusivePricing: taxInclusivePricing,
       ),
+    );
+  }
+
+  PromotionEvaluationResult _computePromotionEvaluation() {
+    if (!enablePromotions || promotionRules.isEmpty || items.isEmpty) {
+      return const PromotionEvaluationResult(applications: []);
+    }
+    final cartLines = <PromotionCartLine>[];
+    for (var index = 0; index < items.length; index++) {
+      final item = items[index];
+      cartLines.add(
+        PromotionCartLine(
+          lineId: item.tempId,
+          productId: item.product.id,
+          variantId: item.variant?.id,
+          categoryId: item.product.categoryId,
+          measurementType: item.product.measurementType,
+          priceMode:
+              (item.variant?.wholesalePriceCents ??
+                          item.product.wholesalePriceCents) !=
+                      null &&
+                  item.unitPriceCents ==
+                      (item.variant?.wholesalePriceCents ??
+                          item.product.wholesalePriceCents)
+              ? 'wholesale'
+              : 'retail',
+          quantity: item.quantity,
+          quantityScale: item.product.quantityScale,
+          unitPrice: Money.fromDecimalCents(item.unitPriceCents),
+          existingDiscount: manualPricing.lines[index].totalLineDiscount,
+        ),
+      );
+    }
+    return PromotionEngine.evaluate(
+      cart: PromotionCart(
+        currencyId: currencyId,
+        evaluatedAt: saleDate,
+        lines: cartLines,
+      ),
+      promotions: promotionRules,
     );
   }
 
@@ -215,6 +282,8 @@ class SaleFormState extends Equatable {
   }
 
   Decimal get totalDiscountCents => pricing.totalDiscount.decimalCents;
+
+  int get promotionDiscountCents => promotionEvaluation.totalDiscount.cents;
 
   Decimal get itemTaxCents => pricing.tax.decimalCents;
 
@@ -312,6 +381,8 @@ class SaleFormState extends Equatable {
     double? maxDiscountPercent,
     bool? requireCustomerForSales,
     bool? enableLoyaltyPoints,
+    bool? enablePromotions,
+    List<PromotionRule>? promotionRules,
     bool? isEditingPosted,
     bool? hasUnsavedChanges,
   }) {
@@ -371,6 +442,8 @@ class SaleFormState extends Equatable {
       requireCustomerForSales:
           requireCustomerForSales ?? this.requireCustomerForSales,
       enableLoyaltyPoints: enableLoyaltyPoints ?? this.enableLoyaltyPoints,
+      enablePromotions: enablePromotions ?? this.enablePromotions,
+      promotionRules: promotionRules ?? this.promotionRules,
       isEditingPosted: isEditingPosted ?? this.isEditingPosted,
       hasUnsavedChanges: hasUnsavedChanges ?? this.hasUnsavedChanges,
     );
@@ -413,6 +486,9 @@ class SaleFormState extends Equatable {
     allowDiscounts,
     maxDiscountPercent,
     requireCustomerForSales,
+    enableLoyaltyPoints,
+    enablePromotions,
+    promotionRules,
     isEditingPosted,
     hasUnsavedChanges,
   ];
@@ -629,6 +705,7 @@ class SaleFormInitialized extends SaleFormEvent {
   final double maxDiscountPercent;
   final bool requireCustomerForSales;
   final bool enableLoyaltyPoints;
+  final bool enablePromotions;
   final String defaultPaymentMethodStr;
   final bool isEditingPosted;
   const SaleFormInitialized({
@@ -643,6 +720,7 @@ class SaleFormInitialized extends SaleFormEvent {
     this.maxDiscountPercent = 100.0,
     this.requireCustomerForSales = false,
     this.enableLoyaltyPoints = false,
+    this.enablePromotions = false,
     this.defaultPaymentMethodStr = 'cash',
     this.isEditingPosted = false,
   });
@@ -658,6 +736,8 @@ class SaleFormInitialized extends SaleFormEvent {
     allowDiscounts,
     maxDiscountPercent,
     requireCustomerForSales,
+    enableLoyaltyPoints,
+    enablePromotions,
     defaultPaymentMethodStr,
     isEditingPosted,
   ];
@@ -807,7 +887,12 @@ class SaleLineItemRemoved extends SaleFormEvent {
 }
 
 class SaleFormSubmitted extends SaleFormEvent {
-  const SaleFormSubmitted();
+  final CheckoutSettlement? settlement;
+
+  const SaleFormSubmitted({this.settlement});
+
+  @override
+  List<Object?> get props => [settlement];
 }
 
 class SalePaymentMethodChanged extends SaleFormEvent {
@@ -893,6 +978,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
   final BelowCostSaleService _belowCostService;
   final AuditLogService _auditService;
   final LoyaltyRepository? _loyaltyRepository;
+  final PromotionRepository? _promotionRepository;
   final LanNetworkService? _lan;
   UserRole currentUserRole;
   int? currentUserId;
@@ -914,11 +1000,13 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     this._auditService, {
     BelowCostSaleService? belowCostService,
     LoyaltyRepository? loyaltyRepository,
+    PromotionRepository? promotionRepository,
     LanNetworkService? lan,
     UserRole userRole = UserRole.cashier,
     int? userId,
   }) : _belowCostService = belowCostService ?? const BelowCostSaleService(),
        _loyaltyRepository = loyaltyRepository,
+       _promotionRepository = promotionRepository,
        _lan = lan,
        currentUserId = userId,
        currentUserRole = userRole,
@@ -991,6 +1079,12 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       }
       try {
         final catalog = await _lan!.fetchRemoteCatalog(limit: 1);
+        final remoteRules = catalog.enablePromotions
+            ? catalog.promotionRules
+                  .map(PromotionRule.fromTransportMap)
+                  .where((rule) => rule.validate().isEmpty)
+                  .toList(growable: false)
+            : const <PromotionRule>[];
         emit(
           state.copyWith(
             currencyId: catalog.currencyId,
@@ -1004,6 +1098,8 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
             maxDiscountPercent: catalog.maxDiscountPercent,
             requireCustomerForSales: catalog.requireCustomerForSales,
             enableLoyaltyPoints: false,
+            enablePromotions: catalog.enablePromotions,
+            promotionRules: remoteRules,
             paymentMethod: initialPaymentMethod,
           ),
         );
@@ -1017,6 +1113,10 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
 
     if (event.saleId == null) {
       // New sale: generate next invoice number
+      final promotionRules = event.enablePromotions
+          ? await _promotionRepository?.loadActiveRules() ??
+                const <PromotionRule>[]
+          : const <PromotionRule>[];
       try {
         final nextNumber = await _repository.generateInvoiceNumber();
         emit(
@@ -1031,6 +1131,8 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
             maxDiscountPercent: event.maxDiscountPercent,
             requireCustomerForSales: event.requireCustomerForSales,
             enableLoyaltyPoints: event.enableLoyaltyPoints,
+            enablePromotions: event.enablePromotions,
+            promotionRules: promotionRules,
             paymentMethod: initialPaymentMethod,
           ),
         );
@@ -1047,6 +1149,8 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
             maxDiscountPercent: event.maxDiscountPercent,
             requireCustomerForSales: event.requireCustomerForSales,
             enableLoyaltyPoints: event.enableLoyaltyPoints,
+            enablePromotions: event.enablePromotions,
+            promotionRules: promotionRules,
             paymentMethod: initialPaymentMethod,
           ),
         );
@@ -1420,6 +1524,37 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     SaleFormSubmitted event,
     Emitter<SaleFormState> emit,
   ) async {
+    if (!_isRemoteClient &&
+        state.saleId == null &&
+        state.enablePromotions &&
+        _promotionRepository != null) {
+      final before = state.promotionEvaluation;
+      final freshRules = await _promotionRepository.loadActiveRules();
+      final refreshed = state.copyWith(promotionRules: freshRules);
+      String signature(PromotionEvaluationResult value) {
+        final rows =
+            value.applications
+                .map(
+                  (row) =>
+                      '${row.promotionId}:${row.version}:${row.totalDiscount.cents}',
+                )
+                .toList()
+              ..sort();
+        return rows.join('|');
+      }
+
+      if (signature(before) != signature(refreshed.promotionEvaluation)) {
+        emit(
+          refreshed.copyWith(
+            error: 'promotions.errors.rules_updated',
+            isSubmitting: false,
+          ),
+        );
+        return;
+      }
+      emit(refreshed);
+    }
+
     if (state.items.isEmpty) {
       emit(state.copyWith(error: 'Please add at least one item'));
       return;
@@ -1455,6 +1590,24 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     final overriddenTempIds = state.belowCostOverrides
         .map((o) => o.tempId)
         .toSet();
+    final profitableFreeBundleLineIds =
+        PromotionMarginPolicy.profitableFreeBundleLineIds(
+          evaluation: state.promotionEvaluation,
+          lines: [
+            for (var index = 0; index < state.items.length; index++)
+              PromotionMarginLine(
+                lineId: state.items[index].tempId,
+                quantity: state.items[index].quantity,
+                quantityScale: state.items[index].product.quantityScale,
+                unitCost: Money.fromDecimalCents(
+                  state.items[index].variant?.costCents ??
+                      state.items[index].product.costCents,
+                ),
+                netBeforePromotions:
+                    state.manualPricing.lines[index].adjustedNet,
+              ),
+          ],
+        );
     for (var index = 0; index < state.items.length; index++) {
       final item = state.items[index];
       final costCents = item.variant?.costCents ?? item.product.costCents;
@@ -1465,7 +1618,8 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         costCents,
       ).multiplyRatio(item.quantity, item.product.quantityScale).round();
       if (lineNet.cents >= totalCost.cents ||
-          overriddenTempIds.contains(item.tempId)) {
+          overriddenTempIds.contains(item.tempId) ||
+          profitableFreeBundleLineIds.contains(item.tempId)) {
         continue;
       }
 
@@ -1484,9 +1638,16 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     }
 
     // 4. Payment / Partial Payment Validation
-    // Card is auto-settled in full (effectivePaidCents = totalCents).
-    // Cheque is deferred payment (same as credit — balance goes to customer account).
-    // Only cash needs the partial-payment / insufficient-funds check.
+    // A physical cheque must have a due date before it can enter the register.
+    if (event.settlement == null &&
+        state.paymentMethod == SalePaymentMethod.cheque &&
+        state.dueDate == null) {
+      emit(state.copyWith(error: 'sales.cheque_due_date_required'));
+      return;
+    }
+
+    // Card and cheque are settled in full; cheque uses the clearing account
+    // until bank clearance. Only cash needs the insufficient-funds check.
     if (state.remainingCents > Decimal.zero &&
         state.paymentMethod == SalePaymentMethod.cash) {
       if (!state.allowPartialPayments) {
@@ -1498,6 +1659,10 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     emit(state.copyWith(isSubmitting: true, error: null));
 
     try {
+      final settlement = event.settlement;
+      settlement?.validate(
+        invoiceTotalCents: state.totalCents.toBigInt().toInt(),
+      );
       // SoT for the per-line breakdown is the state-level pricing engine
       // result: it has already done subtotal → discount → net → invoice-
       // discount allocation (largest-remainder) → tax-on-adjusted-net.
@@ -1511,6 +1676,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         final line = pricing.lines[idx];
         items.add(
           SaleItemInput(
+            lineId: item.tempId,
             productId: item.product.id,
             variantId: item.variant?.id,
             quantity: item.quantity,
@@ -1529,29 +1695,33 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         );
       }
 
-      final paymentMethodStr = state.paymentMethod.name;
+      final paymentMethodStr =
+          settlement?.headerPaymentMethod ?? state.paymentMethod.name;
 
       // Determine effective paid amount:
       // - cash: depends on overpayment handling
       //   - returnChange: cap at totalCents (excess is returned as cash change)
       //   - addToBalance: use full paidAmountCents (excess goes to customer credit)
       // - card: auto-set to total (fully settled)
-      // - credit/cheque: 0 (full amount goes to balance)
-      final effectivePaidCents = switch (state.paymentMethod) {
-        SalePaymentMethod.cash => () {
-          // If overpaying and user chose to return change, cap at total
-          if (state.paidAmountCents > state.totalCents &&
-              state.overpaymentHandling ==
-                  SaleOverpaymentHandling.returnChange) {
-            return state.totalCents;
-          }
-          // Otherwise use full paid amount (either exact payment or add to balance)
-          return state.paidAmountCents;
-        }(),
-        SalePaymentMethod.card => state.totalCents,
-        SalePaymentMethod.credit => Decimal.zero,
-        SalePaymentMethod.cheque => Decimal.zero,
-      };
+      // - credit: 0 (full amount goes to customer balance)
+      // - cheque: 0 until bank clearance confirms the payment
+      final effectivePaidCents = settlement != null
+          ? Decimal.fromInt(settlement.totalSettledCents)
+          : switch (state.paymentMethod) {
+              SalePaymentMethod.cash => () {
+                // If overpaying and user chose to return change, cap at total
+                if (state.paidAmountCents > state.totalCents &&
+                    state.overpaymentHandling ==
+                        SaleOverpaymentHandling.returnChange) {
+                  return state.totalCents;
+                }
+                // Otherwise use full paid amount (either exact payment or add to balance)
+                return state.paidAmountCents;
+              }(),
+              SalePaymentMethod.card => state.totalCents,
+              SalePaymentMethod.credit => Decimal.zero,
+              SalePaymentMethod.cheque => Decimal.zero,
+            };
 
       if (_isRemoteClient) {
         if (state.saleId != null) {
@@ -1588,10 +1758,11 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
               priceTier: priceTier,
               salespersonId: item.employeeId,
               discountType:
-                  state.pricing.lines[index].totalLineDiscount.cents == 0
+                  state.manualPricing.lines[index].totalLineDiscount.cents == 0
                   ? 'none'
                   : 'fixed',
-              discountValue: state.pricing.lines[index].totalLineDiscount.cents,
+              discountValue:
+                  state.manualPricing.lines[index].totalLineDiscount.cents,
             ),
           );
         }
@@ -1604,6 +1775,21 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
             paidAmountCents: effectivePaidCents.toBigInt().toInt(),
             notes: state.notes,
             lines: remoteLines,
+            payments: settlement == null
+                ? const []
+                : settlement.payments
+                      .map(
+                        (payment) => LanCheckoutPaymentRequest(
+                          method: payment.method,
+                          amountCents: payment.amountCents,
+                          reference: payment.reference,
+                          bankName: payment.bankName,
+                          issueDate: payment.issueDate,
+                          dueDate: payment.dueDate,
+                          note: payment.note,
+                        ),
+                      )
+                      .toList(growable: false),
           ),
         );
         emit(
@@ -1635,6 +1821,8 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           dueDate: state.dueDate,
           allowNegativeStock: state.allowNegativeStock,
           taxInclusiveAtPost: state.taxInclusivePricing,
+          appliedPromotions: state.promotionEvaluation.applications,
+          initialPayments: settlement?.payments ?? const [],
         );
 
         // Redeem loyalty points if applicable (non-critical, outside transaction)

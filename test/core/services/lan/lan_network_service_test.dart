@@ -766,6 +766,14 @@ void main() {
       refundMethod: 'cash',
       returnDate: DateTime.utc(2026, 8, 25),
       reasonCode: 'noReceipt',
+      payments: [
+        LanCheckoutPaymentRequest(
+          method: 'cheque',
+          amountCents: 100,
+          reference: 'LAN-RETURN-CHK-1',
+          dueDate: DateTime.utc(2026, 9, 25),
+        ),
+      ],
       lines: const [
         LanSaleAdjustmentReturnLineRequest(
           productId: 7,
@@ -789,6 +797,10 @@ void main() {
     expect(
       businessGateway.lastAdjustmentReturnRequest?.lines.single.quantity,
       500,
+    );
+    expect(
+      businessGateway.lastAdjustmentReturnRequest?.payments.single.reference,
+      'LAN-RETURN-CHK-1',
     );
 
     final audit = await masterDb.select(masterDb.auditLogs).get();

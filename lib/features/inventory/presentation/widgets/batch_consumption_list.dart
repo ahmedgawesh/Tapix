@@ -141,7 +141,7 @@ class BatchConsumptionRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${DateFormat.yMMMd().add_Hm().format(record.createdAt)} • '
+                  '${DateFormat('dd/MM/yyyy').add_Hm().format(record.createdAt)} • '
                   '${currency.format(record.unitCostCents)}',
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: cs.onSurfaceVariant,

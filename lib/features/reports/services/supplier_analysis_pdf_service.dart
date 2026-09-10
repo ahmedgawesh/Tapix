@@ -80,10 +80,14 @@ class SupplierAnalysisPdfService {
         build: (pw.Context context) {
           return [
             _buildHeader(
-                company, _t('supplier_analysis_report', lang), fonts, dir),
+              company,
+              _t('supplier_analysis_report', lang),
+              fonts,
+              dir,
+            ),
             pw.SizedBox(height: 8),
             pw.Text(
-              '${_t('period', lang)}: ${DateFormat.yMMMd().format(data.dateRange.startDate)} — ${DateFormat.yMMMd().format(data.dateRange.endDate)}',
+              '${_t('period', lang)}: ${DateFormat('dd/MM/yyyy').format(data.dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(data.dateRange.endDate)}',
               style: pw.TextStyle(font: fonts.regular, fontSize: 10),
             ),
             pw.SizedBox(height: 4),
@@ -140,8 +144,9 @@ class SupplierAnalysisPdfService {
               pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 7),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 7),
-                headerDecoration:
-                    const pw.BoxDecoration(color: PdfColors.grey200),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.grey200,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.center,
                   1: pw.Alignment.centerLeft,
@@ -201,14 +206,12 @@ class SupplierAnalysisPdfService {
                       children: [
                         pw.Text(
                           '${_t('purchases', lang)}: ${cs.formatCents(data.grandTotalPurchasesCents)}',
-                          style:
-                              pw.TextStyle(font: fonts.regular, fontSize: 8),
+                          style: pw.TextStyle(font: fonts.regular, fontSize: 8),
                         ),
                         pw.SizedBox(width: 12),
                         pw.Text(
                           '${_t('returns', lang)}: ${cs.formatCents(data.grandTotalReturnsCents)}',
-                          style:
-                              pw.TextStyle(font: fonts.regular, fontSize: 8),
+                          style: pw.TextStyle(font: fonts.regular, fontSize: 8),
                         ),
                         pw.SizedBox(width: 12),
                         pw.Text(
@@ -225,11 +228,12 @@ class SupplierAnalysisPdfService {
             pw.SizedBox(height: 16),
             pw.Divider(),
             pw.Text(
-              '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+              '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
               style: pw.TextStyle(
-                  font: fonts.regular,
-                  fontSize: 8,
-                  color: PdfColors.grey600),
+                font: fonts.regular,
+                fontSize: 8,
+                color: PdfColors.grey600,
+              ),
             ),
           ];
         },
@@ -300,16 +304,8 @@ class SupplierAnalysisPdfService {
       'fr': 'Taux Retour',
     },
     'payments': {'en': 'Payments', 'ar': 'المدفوعات', 'fr': 'Paiements'},
-    'settlement': {
-      'en': 'Settlement',
-      'ar': 'التسوية',
-      'fr': 'Règlement',
-    },
-    'payment_days': {
-      'en': 'Pay Days',
-      'ar': 'أيام الدفع',
-      'fr': 'Jours Paie',
-    },
+    'settlement': {'en': 'Settlement', 'ar': 'التسوية', 'fr': 'Règlement'},
+    'payment_days': {'en': 'Pay Days', 'ar': 'أيام الدفع', 'fr': 'Jours Paie'},
     'avg_order': {
       'en': 'Avg Order',
       'ar': 'متوسط الطلب',
@@ -321,11 +317,7 @@ class SupplierAnalysisPdfService {
       'ar': 'المجموع الكلي',
       'fr': 'Total Général',
     },
-    'printed_on': {
-      'en': 'Printed on',
-      'ar': 'طُبع في',
-      'fr': 'Imprimé le',
-    },
+    'printed_on': {'en': 'Printed on', 'ar': 'طُبع في', 'fr': 'Imprimé le'},
   };
 
   static String _t(String key, String lang) {
@@ -353,9 +345,10 @@ class SupplierAnalysisPdfService {
           pw.Text(
             company.address!,
             style: pw.TextStyle(
-                font: fonts.regular,
-                fontSize: 9,
-                color: PdfColors.grey600),
+              font: fonts.regular,
+              fontSize: 9,
+              color: PdfColors.grey600,
+            ),
           ),
         pw.SizedBox(height: 8),
         pw.Divider(),
@@ -372,10 +365,12 @@ class SupplierAnalysisPdfService {
 
   static Future<_PdfFonts> _loadFonts() async {
     try {
-      final regularData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-      final boldData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+      final regularData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+      );
+      final boldData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+      );
       return _PdfFonts(
         regular: pw.Font.ttf(regularData),
         bold: pw.Font.ttf(boldData),

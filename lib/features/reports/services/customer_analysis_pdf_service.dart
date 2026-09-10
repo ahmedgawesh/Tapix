@@ -80,10 +80,14 @@ class CustomerAnalysisPdfService {
         build: (pw.Context context) {
           return [
             _buildHeader(
-                company, _t('customer_analysis_report', lang), fonts, dir),
+              company,
+              _t('customer_analysis_report', lang),
+              fonts,
+              dir,
+            ),
             pw.SizedBox(height: 8),
             pw.Text(
-              '${_t('period', lang)}: ${DateFormat.yMMMd().format(data.dateRange.startDate)} — ${DateFormat.yMMMd().format(data.dateRange.endDate)}',
+              '${_t('period', lang)}: ${DateFormat('dd/MM/yyyy').format(data.dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(data.dateRange.endDate)}',
               style: pw.TextStyle(font: fonts.regular, fontSize: 10),
             ),
             pw.SizedBox(height: 4),
@@ -130,7 +134,9 @@ class CustomerAnalysisPdfService {
                 children: data.segmentCounts.entries.map((e) {
                   return pw.Container(
                     padding: const pw.EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: pw.BoxDecoration(
                       border: pw.Border.all(color: PdfColors.grey400),
                       borderRadius: pw.BorderRadius.circular(4),
@@ -155,8 +161,9 @@ class CustomerAnalysisPdfService {
               pw.TableHelper.fromTextArray(
                 headerStyle: pw.TextStyle(font: fonts.bold, fontSize: 7),
                 cellStyle: pw.TextStyle(font: fonts.regular, fontSize: 7),
-                headerDecoration:
-                    const pw.BoxDecoration(color: PdfColors.grey200),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.grey200,
+                ),
                 cellAlignments: {
                   0: pw.Alignment.center,
                   1: pw.Alignment.centerLeft,
@@ -223,11 +230,12 @@ class CustomerAnalysisPdfService {
             pw.SizedBox(height: 16),
             pw.Divider(),
             pw.Text(
-              '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+              '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
               style: pw.TextStyle(
-                  font: fonts.regular,
-                  fontSize: 8,
-                  color: PdfColors.grey600),
+                font: fonts.regular,
+                fontSize: 8,
+                color: PdfColors.grey600,
+              ),
             ),
           ];
         },
@@ -281,11 +289,7 @@ class CustomerAnalysisPdfService {
       'ar': 'متوسط التكرار',
       'fr': 'Fréq. Moy.',
     },
-    'rfm_segment': {
-      'en': 'RFM Segment',
-      'ar': 'فئة RFM',
-      'fr': 'Segment RFM',
-    },
+    'rfm_segment': {'en': 'RFM Segment', 'ar': 'فئة RFM', 'fr': 'Segment RFM'},
     'rfm_segment_overview': {
       'en': 'RFM Segment Overview',
       'ar': 'نظرة عامة على فئات RFM',
@@ -297,51 +301,19 @@ class CustomerAnalysisPdfService {
       'ar': 'المجموع الكلي',
       'fr': 'Total Général',
     },
-    'printed_on': {
-      'en': 'Printed on',
-      'ar': 'طُبع في',
-      'fr': 'Imprimé le',
-    },
-    'segment_retail': {
-      'en': 'Retail',
-      'ar': 'تجزئة',
-      'fr': 'Détail',
-    },
-    'segment_wholesale': {
-      'en': 'Wholesale',
-      'ar': 'جملة',
-      'fr': 'Gros',
-    },
-    'segment_premium': {
-      'en': 'Premium',
-      'ar': 'مميز',
-      'fr': 'Premium',
-    },
-    'rfm_champions': {
-      'en': 'Champions',
-      'ar': 'أبطال',
-      'fr': 'Champions',
-    },
-    'rfm_loyal': {
-      'en': 'Loyal',
-      'ar': 'مخلصون',
-      'fr': 'Fidèles',
-    },
+    'printed_on': {'en': 'Printed on', 'ar': 'طُبع في', 'fr': 'Imprimé le'},
+    'segment_retail': {'en': 'Retail', 'ar': 'تجزئة', 'fr': 'Détail'},
+    'segment_wholesale': {'en': 'Wholesale', 'ar': 'جملة', 'fr': 'Gros'},
+    'segment_premium': {'en': 'Premium', 'ar': 'مميز', 'fr': 'Premium'},
+    'rfm_champions': {'en': 'Champions', 'ar': 'أبطال', 'fr': 'Champions'},
+    'rfm_loyal': {'en': 'Loyal', 'ar': 'مخلصون', 'fr': 'Fidèles'},
     'rfm_potential_loyal': {
       'en': 'Potential Loyal',
       'ar': 'محتمل الولاء',
       'fr': 'Potentiel Fidèle',
     },
-    'rfm_new': {
-      'en': 'New',
-      'ar': 'جديد',
-      'fr': 'Nouveau',
-    },
-    'rfm_promising': {
-      'en': 'Promising',
-      'ar': 'واعد',
-      'fr': 'Prometteur',
-    },
+    'rfm_new': {'en': 'New', 'ar': 'جديد', 'fr': 'Nouveau'},
+    'rfm_promising': {'en': 'Promising', 'ar': 'واعد', 'fr': 'Prometteur'},
     'rfm_needs_attention': {
       'en': 'Needs Attention',
       'ar': 'يحتاج اهتمام',
@@ -352,11 +324,7 @@ class CustomerAnalysisPdfService {
       'ar': 'على وشك النوم',
       'fr': 'Sur le Point de Dormir',
     },
-    'rfm_at_risk': {
-      'en': 'At Risk',
-      'ar': 'في خطر',
-      'fr': 'À Risque',
-    },
+    'rfm_at_risk': {'en': 'At Risk', 'ar': 'في خطر', 'fr': 'À Risque'},
     'rfm_cant_lose': {
       'en': 'Can\'t Lose',
       'ar': 'لا يمكن خسارته',
@@ -367,11 +335,7 @@ class CustomerAnalysisPdfService {
       'ar': 'خامل',
       'fr': 'En Hibernation',
     },
-    'rfm_lost': {
-      'en': 'Lost',
-      'ar': 'مفقود',
-      'fr': 'Perdu',
-    },
+    'rfm_lost': {'en': 'Lost', 'ar': 'مفقود', 'fr': 'Perdu'},
   };
 
   static String _t(String key, String lang) {
@@ -439,9 +403,10 @@ class CustomerAnalysisPdfService {
           pw.Text(
             company.address!,
             style: pw.TextStyle(
-                font: fonts.regular,
-                fontSize: 9,
-                color: PdfColors.grey600),
+              font: fonts.regular,
+              fontSize: 9,
+              color: PdfColors.grey600,
+            ),
           ),
         pw.SizedBox(height: 8),
         pw.Divider(),
@@ -458,10 +423,12 @@ class CustomerAnalysisPdfService {
 
   static Future<_PdfFonts> _loadFonts() async {
     try {
-      final regularData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-      final boldData =
-          await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+      final regularData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+      );
+      final boldData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+      );
       return _PdfFonts(
         regular: pw.Font.ttf(regularData),
         bold: pw.Font.ttf(boldData),

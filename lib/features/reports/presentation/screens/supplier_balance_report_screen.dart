@@ -60,9 +60,9 @@ class _SupplierBalanceReportViewState
                 ),
                 style: theme.textTheme.titleMedium,
                 onChanged: (value) {
-                  context
-                      .read<SupplierBalanceReportBloc>()
-                      .add(SupplierBalanceReportSearchChanged(value));
+                  context.read<SupplierBalanceReportBloc>().add(
+                    SupplierBalanceReportSearchChanged(value),
+                  );
                 },
               )
             : Text('reports.supplier_balance'.tr()),
@@ -75,15 +75,17 @@ class _SupplierBalanceReportViewState
                 _showSearch = !_showSearch;
                 if (!_showSearch) {
                   _searchController.clear();
-                  context
-                      .read<SupplierBalanceReportBloc>()
-                      .add(const SupplierBalanceReportSearchChanged(''));
+                  context.read<SupplierBalanceReportBloc>().add(
+                    const SupplierBalanceReportSearchChanged(''),
+                  );
                 }
               });
             },
           ),
-          BlocBuilder<SupplierBalanceReportBloc,
-              RealtimeState<SupplierBalanceReportData>>(
+          BlocBuilder<
+            SupplierBalanceReportBloc,
+            RealtimeState<SupplierBalanceReportData>
+          >(
             builder: (context, state) {
               if (state is! RealtimeSuccess<SupplierBalanceReportData>) {
                 return const SizedBox.shrink();
@@ -112,63 +114,71 @@ class _SupplierBalanceReportViewState
           ),
         ],
       ),
-      body: BlocBuilder<SupplierBalanceReportBloc,
-          RealtimeState<SupplierBalanceReportData>>(
-        builder: (context, state) {
-          if (state is RealtimeLoading<SupplierBalanceReportData>) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body:
+          BlocBuilder<
+            SupplierBalanceReportBloc,
+            RealtimeState<SupplierBalanceReportData>
+          >(
+            builder: (context, state) {
+              if (state is RealtimeLoading<SupplierBalanceReportData>) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (state is RealtimeError<SupplierBalanceReportData>) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline,
-                      size: 48, color: colorScheme.error),
-                  const SizedBox(height: 16),
-                  Text(state.error.toString(),
-                      style: theme.textTheme.bodyLarge),
-                ],
-              ),
-            );
-          }
-
-          if (state is RealtimeSuccess<SupplierBalanceReportData>) {
-            return Column(
-              children: [
-                // Date range selector
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: DateRangeSelector(
-                    dateRange: state.data.dateRange,
-                    onChanged: (range) => context
-                        .read<SupplierBalanceReportBloc>()
-                        .add(SupplierBalanceReportDateRangeChanged(range)),
+              if (state is RealtimeError<SupplierBalanceReportData>) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        state.error.toString(),
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 12),
+                );
+              }
 
-                // Summary cards
-                _buildSummarySection(context, state.data),
-                const SizedBox(height: 12),
+              if (state is RealtimeSuccess<SupplierBalanceReportData>) {
+                return Column(
+                  children: [
+                    // Date range selector
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: DateRangeSelector(
+                        dateRange: state.data.dateRange,
+                        onChanged: (range) => context
+                            .read<SupplierBalanceReportBloc>()
+                            .add(SupplierBalanceReportDateRangeChanged(range)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
 
-                // Supplier list
-                Expanded(
-                  child: _SupplierBalanceList(data: state.data),
-                ),
-              ],
-            );
-          }
+                    // Summary cards
+                    _buildSummarySection(context, state.data),
+                    const SizedBox(height: 12),
 
-          return const SizedBox.shrink();
-        },
-      ),
+                    // Supplier list
+                    Expanded(child: _SupplierBalanceList(data: state.data)),
+                  ],
+                );
+              }
+
+              return const SizedBox.shrink();
+            },
+          ),
     );
   }
 
   Widget _buildSummarySection(
-      BuildContext context, SupplierBalanceReportData data) {
+    BuildContext context,
+    SupplierBalanceReportData data,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final cs = sl<CurrencyService>();
@@ -185,8 +195,9 @@ class _SupplierBalanceReportViewState
                 child: _SummaryCard(
                   label: 'reports.total_payables'.tr(),
                   value: cs.formatCents(summary.totalPayablesCents),
-                  subtitle: 'reports.suppliers_count'
-                      .tr(args: ['${summary.suppliersWithPayable}']),
+                  subtitle: 'reports.suppliers_count'.tr(
+                    args: ['${summary.suppliersWithPayable}'],
+                  ),
                   icon: LucideIcons.arrowUpRight,
                   color: colorScheme.error,
                 ),
@@ -196,8 +207,9 @@ class _SupplierBalanceReportViewState
                 child: _SummaryCard(
                   label: 'reports.total_receivables'.tr(),
                   value: cs.formatCents(summary.totalReceivablesCents),
-                  subtitle: 'reports.suppliers_count'
-                      .tr(args: ['${summary.suppliersWithReceivable}']),
+                  subtitle: 'reports.suppliers_count'.tr(
+                    args: ['${summary.suppliersWithReceivable}'],
+                  ),
                   icon: LucideIcons.arrowDownLeft,
                   color: colorScheme.primary,
                 ),
@@ -213,14 +225,14 @@ class _SupplierBalanceReportViewState
             subtitle: summary.netBalanceCents > 0
                 ? 'reports.net_payable'.tr()
                 : summary.netBalanceCents < 0
-                    ? 'reports.net_receivable'.tr()
-                    : 'reports.balanced'.tr(),
+                ? 'reports.net_receivable'.tr()
+                : 'reports.balanced'.tr(),
             icon: LucideIcons.scale,
             color: summary.netBalanceCents > 0
                 ? colorScheme.error
                 : summary.netBalanceCents < 0
-                    ? colorScheme.primary
-                    : colorScheme.tertiary,
+                ? colorScheme.primary
+                : colorScheme.tertiary,
             isFullWidth: true,
           ),
           const SizedBox(height: 8),
@@ -280,7 +292,9 @@ class _SupplierBalanceReportViewState
   }
 
   Future<void> _printReport(
-      BuildContext context, SupplierBalanceReportData data) async {
+    BuildContext context,
+    SupplierBalanceReportData data,
+  ) async {
     await SupplierBalancePdfService.printSupplierBalanceReport(
       context: context,
       data: data,
@@ -293,7 +307,9 @@ class _SupplierBalanceReportViewState
   }
 
   Future<void> _shareReport(
-      BuildContext context, SupplierBalanceReportData data) async {
+    BuildContext context,
+    SupplierBalanceReportData data,
+  ) async {
     await SupplierBalancePdfService.shareSupplierBalanceReport(
       context: context,
       data: data,
@@ -306,7 +322,9 @@ class _SupplierBalanceReportViewState
   }
 
   Future<void> _exportReportExcel(
-      BuildContext context, SupplierBalanceReportData data) async {
+    BuildContext context,
+    SupplierBalanceReportData data,
+  ) async {
     try {
       await SupplierBalanceExcelService.shareSupplierBalanceReport(
         context: context,
@@ -319,9 +337,9 @@ class _SupplierBalanceReportViewState
       );
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('reports.export_error'.tr())),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('reports.export_error'.tr())));
       }
     }
   }
@@ -355,8 +373,9 @@ class _SummaryCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
-          crossAxisAlignment:
-              isFullWidth ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+          crossAxisAlignment: isFullWidth
+              ? CrossAxisAlignment.center
+              : CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisSize: isFullWidth ? MainAxisSize.min : MainAxisSize.max,
@@ -471,8 +490,11 @@ class _SupplierBalanceList extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.truck,
-                size: 48, color: theme.colorScheme.onSurfaceVariant),
+            Icon(
+              LucideIcons.truck,
+              size: 48,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 16),
             Text(
               data.searchQuery.isNotEmpty
@@ -524,13 +546,13 @@ class _SupplierBalanceCard extends StatelessWidget {
     final balanceColor = item.isPayable
         ? colorScheme.error
         : item.isReceivable
-            ? colorScheme.primary
-            : colorScheme.tertiary;
+        ? colorScheme.primary
+        : colorScheme.tertiary;
     final balanceLabel = item.isPayable
         ? 'reports.payable'.tr()
         : item.isReceivable
-            ? 'reports.receivable'.tr()
-            : 'reports.settled'.tr();
+        ? 'reports.receivable'.tr()
+        : 'reports.settled'.tr();
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -551,8 +573,9 @@ class _SupplierBalanceCard extends StatelessWidget {
                       children: [
                         Text(
                           item.supplierName,
-                          style: theme.textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.bold),
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -589,16 +612,18 @@ class _SupplierBalanceCard extends StatelessWidget {
                     child: _MetricItem(
                       label: 'reports.total_debits'.tr(),
                       value: cs.formatCents(item.totalDebitCents),
-                      valueColor:
-                          item.totalDebitCents > 0 ? colorScheme.error : null,
+                      valueColor: item.totalDebitCents > 0
+                          ? colorScheme.error
+                          : null,
                     ),
                   ),
                   Expanded(
                     child: _MetricItem(
                       label: 'reports.total_credits'.tr(),
                       value: cs.formatCents(item.totalCreditCents),
-                      valueColor:
-                          item.totalCreditCents > 0 ? colorScheme.primary : null,
+                      valueColor: item.totalCreditCents > 0
+                          ? colorScheme.primary
+                          : null,
                     ),
                   ),
                 ],
@@ -625,7 +650,7 @@ class _SupplierBalanceCard extends StatelessWidget {
               if (item.lastTransactionAt != null) ...[
                 const SizedBox(height: 4),
                 Text(
-                  '${'reports.last_transaction'.tr()}: ${DateFormat.yMMMd().format(item.lastTransactionAt!)}',
+                  '${'reports.last_transaction'.tr()}: ${DateFormat('dd/MM/yyyy').format(item.lastTransactionAt!)}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
@@ -665,7 +690,9 @@ class _SupplierBalanceCard extends StatelessWidget {
                       height: 4,
                       margin: const EdgeInsets.only(bottom: 16),
                       decoration: BoxDecoration(
-                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
+                        color: colorScheme.onSurfaceVariant.withValues(
+                          alpha: 0.3,
+                        ),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -674,28 +701,36 @@ class _SupplierBalanceCard extends StatelessWidget {
                   // Supplier name
                   Text(
                     item.supplierName,
-                    style: theme.textTheme.titleLarge
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   if (item.phone != null || item.email != null) ...[
                     const SizedBox(height: 4),
                     if (item.phone != null)
-                      Text(item.phone!,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          )),
+                      Text(
+                        item.phone!,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                     if (item.email != null)
-                      Text(item.email!,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          )),
+                      Text(
+                        item.email!,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                   ],
                   const SizedBox(height: 16),
 
                   // Net balance highlight
                   Card(
-                    color: (item.isPayable ? colorScheme.error : colorScheme.primary)
-                        .withValues(alpha: 0.1),
+                    color:
+                        (item.isPayable
+                                ? colorScheme.error
+                                : colorScheme.primary)
+                            .withValues(alpha: 0.1),
                     child: Padding(
                       padding: const EdgeInsets.all(16),
                       child: Column(
@@ -718,8 +753,8 @@ class _SupplierBalanceCard extends StatelessWidget {
                             item.isPayable
                                 ? 'reports.payable'.tr()
                                 : item.isReceivable
-                                    ? 'reports.receivable'.tr()
-                                    : 'reports.settled'.tr(),
+                                ? 'reports.receivable'.tr()
+                                : 'reports.settled'.tr(),
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: colorScheme.onSurfaceVariant,
                             ),
@@ -733,8 +768,9 @@ class _SupplierBalanceCard extends StatelessWidget {
                   // Detailed breakdown
                   Text(
                     'reports.balance_breakdown'.tr(),
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
 
@@ -744,8 +780,8 @@ class _SupplierBalanceCard extends StatelessWidget {
                     color: item.openingBalanceCents > 0
                         ? colorScheme.error
                         : item.openingBalanceCents < 0
-                            ? colorScheme.primary
-                            : null,
+                        ? colorScheme.primary
+                        : null,
                   ),
                   _DetailRow(
                     label: 'reports.total_purchases'.tr(),
@@ -774,8 +810,8 @@ class _SupplierBalanceCard extends StatelessWidget {
                     color: item.isPayable
                         ? colorScheme.error
                         : item.isReceivable
-                            ? colorScheme.primary
-                            : null,
+                        ? colorScheme.primary
+                        : null,
                     isBold: true,
                   ),
 
@@ -816,7 +852,10 @@ class _SupplierBalanceCard extends StatelessWidget {
     );
   }
 
-  Future<void> _exportSupplierPdf(BuildContext context, SupplierBalanceItem item) async {
+  Future<void> _exportSupplierPdf(
+    BuildContext context,
+    SupplierBalanceItem item,
+  ) async {
     try {
       await SupplierBalancePdfService.printSingleSupplierReport(
         context: context,
@@ -824,14 +863,17 @@ class _SupplierBalanceCard extends StatelessWidget {
       );
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('reports.export_error'.tr())),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('reports.export_error'.tr())));
       }
     }
   }
 
-  Future<void> _exportSupplierExcel(BuildContext context, SupplierBalanceItem item) async {
+  Future<void> _exportSupplierExcel(
+    BuildContext context,
+    SupplierBalanceItem item,
+  ) async {
     try {
       await SupplierBalanceExcelService.shareSupplierDetail(
         context: context,
@@ -839,9 +881,9 @@ class _SupplierBalanceCard extends StatelessWidget {
       );
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('reports.export_error'.tr())),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('reports.export_error'.tr())));
       }
     }
   }
@@ -875,8 +917,9 @@ class _DetailRow extends StatelessWidget {
           Text(
             label,
             style: isBold
-                ? theme.textTheme.bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.bold)
+                ? theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  )
                 : theme.textTheme.bodyMedium,
           ),
           Text(
@@ -913,15 +956,19 @@ class _MetricItem extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            )),
-        Text(value,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: valueColor,
-            )),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        Text(
+          value,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: valueColor,
+          ),
+        ),
       ],
     );
   }

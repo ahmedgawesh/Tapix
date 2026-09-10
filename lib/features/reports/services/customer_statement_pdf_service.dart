@@ -86,7 +86,7 @@ class CustomerStatementPdfService {
 
             // Period
             pw.Text(
-              '${_t('period', lang)}: ${DateFormat.yMMMd().format(data.dateRange.startDate)} — ${DateFormat.yMMMd().format(data.dateRange.endDate)}',
+              '${_t('period', lang)}: ${DateFormat('dd/MM/yyyy').format(data.dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(data.dateRange.endDate)}',
               style: pw.TextStyle(font: fonts.regular, fontSize: 10),
             ),
             pw.SizedBox(height: 12),
@@ -143,7 +143,7 @@ class CustomerStatementPdfService {
             pw.SizedBox(height: 16),
             pw.Divider(),
             pw.Text(
-              '${_t('printed_on', lang)}: ${DateFormat.yMMMd().add_jm().format(DateTime.now())}',
+              '${_t('printed_on', lang)}: ${DateFormat('dd/MM/yyyy').add_jm().format(DateTime.now())}',
               style: pw.TextStyle(
                 font: fonts.regular,
                 fontSize: 8,
@@ -239,7 +239,7 @@ class CustomerStatementPdfService {
 
     // Opening balance row
     rows.add([
-      DateFormat.yMd().format(data.dateRange.startDate),
+      DateFormat('dd/MM/yyyy').format(data.dateRange.startDate),
       _t('opening_balance', lang),
       '-',
       '-',
@@ -264,7 +264,7 @@ class CustomerStatementPdfService {
         );
       }
       rows.add([
-        DateFormat.yMd().format(txn.date),
+        DateFormat('dd/MM/yyyy').format(txn.date),
         localizedPartyTransactionType(txn.type),
         descParts.isNotEmpty ? descParts.join(' · ') : '-',
         isDisplayOnly ? '-' : (isDebit ? cs.formatCents(txn.amountCents) : '-'),
@@ -277,7 +277,7 @@ class CustomerStatementPdfService {
 
     // Closing balance row
     rows.add([
-      DateFormat.yMd().format(data.dateRange.endDate),
+      DateFormat('dd/MM/yyyy').format(data.dateRange.endDate),
       _t('closing_balance', lang),
       '-',
       cs.formatCents(data.totalDebitsCents),

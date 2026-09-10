@@ -67,6 +67,7 @@ class AccountingRepository {
     'payment',
     'sale_return',
     'purchase_return',
+    'return_settlement',
     'sale_return_cogs',
     'saleReturn',
     'purchaseReturn',
@@ -91,6 +92,12 @@ class AccountingRepository {
     'credit_note_issuance',
     'credit_note_application',
     'credit_note_void',
+    'cheque_clearance',
+    'cheque_return_deferral',
+    'cheque_return_settlement',
+    'cheque_dishonour',
+    'cheque_dishonour_resolution',
+    'cheque_reinstatement',
   };
 
   AccountingRepository(this._db) : _fiscalPeriodService = null;
@@ -677,6 +684,16 @@ class AccountingRepository {
     final partyBalances = await PartyControlAccountBalanceService(
       _db,
     ).load(asOf: trialBalance.asOfDate);
+    final customerDishonouredCheques =
+        await _dishonouredChequeReceivableForPartyType(
+          'customer',
+          trialBalance.asOfDate,
+        );
+    final supplierDishonouredCheques =
+        await _dishonouredChequeReceivableForPartyType(
+          'supplier',
+          trialBalance.asOfDate,
+        );
 
     final arAccount = await getAccountByCode('1100');
     if (arAccount != null) {
@@ -684,10 +701,14 @@ class AccountingRepository {
           .where((i) => i.accountId == arAccount.id)
           .firstOrNull;
       final arBalance = arItem?.naturalBalanceCents ?? 0;
+      final customerControlBalance = arBalance + customerDishonouredCheques;
       final customerTotal = partyBalances.customerBalanceCents;
-      if (arBalance != customerTotal) {
+      if (customerControlBalance != customerTotal) {
         issues.add(
-          'Accounts receivable mismatch: GL(journal_lines)=$arBalance, Customers=$customerTotal',
+          customerDishonouredCheques == 0
+              ? 'Accounts receivable mismatch: GL(journal_lines)=$arBalance, Customers=$customerTotal'
+              : 'Accounts receivable mismatch: GL(1100+customer 1030)='
+                    '$customerControlBalance, Customers=$customerTotal',
         );
       }
     }
@@ -698,10 +719,14 @@ class AccountingRepository {
           .where((i) => i.accountId == apAccount.id)
           .firstOrNull;
       final apBalance = apItem?.naturalBalanceCents ?? 0;
+      final supplierControlBalance = apBalance - supplierDishonouredCheques;
       final supplierTotal = partyBalances.supplierBalanceCents;
-      if (apBalance != supplierTotal) {
+      if (supplierControlBalance != supplierTotal) {
         issues.add(
-          'Accounts payable mismatch: GL(journal_lines)=$apBalance, Suppliers=$supplierTotal',
+          supplierDishonouredCheques == 0
+              ? 'Accounts payable mismatch: GL(journal_lines)=$apBalance, Suppliers=$supplierTotal'
+              : 'Accounts payable mismatch: GL(2000-supplier 1030)='
+                    '$supplierControlBalance, Suppliers=$supplierTotal',
         );
       }
     }
@@ -711,6 +736,44 @@ class AccountingRepository {
       issues: issues,
       timestamp: DateTime.now(),
     );
+  }
+
+  /// Portion of account 1030 attributable to one party sub-ledger.
+  ///
+  /// Customer and supplier dishonoured cheques share the same GL account,
+  /// while their sub-ledgers use opposite signs. Keeping the split by the
+  /// cheque's party type prevents valid 1030 balances from being reported as
+  /// false AR/AP reconciliation deficits.
+  Future<int> _dishonouredChequeReceivableForPartyType(
+    String partyType,
+    DateTime asOf,
+  ) async {
+    final row = await _db
+        .customSelect(
+          '''
+SELECT COALESCE(SUM(jel.debit_cents - jel.credit_cents), 0) AS balance
+  FROM journal_entries je
+  JOIN journal_entry_lines jel ON jel.journal_entry_id = je.id
+  JOIN accounts a ON a.id = jel.account_id
+  JOIN cheque_instruments ci
+    ON je.source_table = 'cheque_instruments' AND je.source_id = ci.id
+ WHERE je.entry_type = 'cheque_dishonour'
+   AND je.status = 'posted'
+   AND je.is_reversed = 0
+   AND je.entry_date <= ?
+   AND a.account_code = '1030'
+   AND ci.direction = 'incoming'
+   AND ci.status = 'bounced'
+   AND ci.resolved_at IS NULL
+   AND ci.party_type = ?
+''',
+          variables: [
+            Variable.withDateTime(asOf),
+            Variable.withString(partyType),
+          ],
+        )
+        .getSingle();
+    return row.read<int>('balance');
   }
 
   String _normalizeAccountType(String accountType) =>

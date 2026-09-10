@@ -11,6 +11,7 @@ import 'package:easy_localization/easy_localization.dart';
 
 import '../../../../core/database/daos/product_dao.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/feature_gate_service.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/widgets/theme_toggle_button.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
@@ -72,7 +73,10 @@ class ProductFormScreen extends StatelessWidget {
                 // of truth for the *default*, while `products.min_quantity`
                 // remains the per-product authoritative value once saved.
                 defaultMinQuantity: settings.lowStockThreshold,
-                enablePharmacyFeatures: settings.enablePharmacyFeatures,
+                enablePharmacyFeatures: sl<FeatureGateService>().isEnabled(
+                  AppFeature.pharmacy,
+                  settingEnabled: settings.enablePharmacyFeatures,
+                ),
               ),
             ),
         ),
@@ -2437,7 +2441,7 @@ class _ExpiryInfoWidget extends StatelessWidget {
                           'product_form.expiry_info'.tr(
                             args: [
                               '${item.quantity}',
-                              DateFormat.yMMMd().format(item.expiryDate),
+                              DateFormat('dd/MM/yyyy').format(item.expiryDate),
                             ],
                           ),
                           style: theme.textTheme.bodySmall?.copyWith(
@@ -2748,7 +2752,9 @@ class _PriceHistoryWidget extends StatelessWidget {
                         Row(
                           children: [
                             Text(
-                              DateFormat.yMMMd().add_Hm().format(h.createdAt),
+                              DateFormat(
+                                'dd/MM/yyyy',
+                              ).add_Hm().format(h.createdAt),
                               style: theme.textTheme.bodySmall?.copyWith(
                                 color: cs.onSurfaceVariant,
                               ),

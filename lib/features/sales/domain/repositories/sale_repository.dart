@@ -1,10 +1,13 @@
 import 'package:decimal/decimal.dart';
 
+import '../../../../core/payments/checkout_settlement.dart';
 import '../../../../core/services/return_calculation_service.dart';
+import '../../../../core/promotions/promotion_engine.dart';
 import '../entities/sale_entity.dart';
 
 /// Input class for sale line items
 class SaleItemInput {
+  final String lineId;
   final int productId;
   final int? variantId;
   final int quantity;
@@ -19,6 +22,7 @@ class SaleItemInput {
   final String? employeeName;
 
   const SaleItemInput({
+    required this.lineId,
     required this.productId,
     this.variantId,
     required this.quantity,
@@ -126,6 +130,14 @@ abstract class SaleRepository {
     /// Phase 11.2 — tax-inclusive flag the engine used to produce the
     /// totals being persisted. Stamped on `sales.tax_inclusive_at_post`.
     bool taxInclusiveAtPost = false,
+
+    /// Immutable engine results to persist with this sale. The repository
+    /// validates every line reference and amount again inside its transaction.
+    List<AppliedPromotion> appliedPromotions = const [],
+
+    /// Real settlement legs captured at checkout. When supplied, the invoice
+    /// is first posted to AR and each leg settles AR through its own account.
+    List<CheckoutPaymentAllocation> initialPayments = const [],
   });
 
   /// Update an existing sale
@@ -237,6 +249,10 @@ abstract class SaleRepository {
     /// totals being persisted. Stamped on
     /// `sale_returns.tax_inclusive_at_post`.
     bool taxInclusiveAtPost = false,
+
+    /// Optional structured refund legs. Pending cheques are allocations, not
+    /// settled cash; an unallocated remainder stays on the customer account.
+    List<CheckoutPaymentAllocation> settlementAllocations = const [],
   });
 
   /// Void a sale return.

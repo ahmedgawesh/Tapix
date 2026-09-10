@@ -82,7 +82,7 @@ class CustomerLedgerPdfService {
 
     // Opening balance
     rows.add([
-      DateFormat.yMd().format(data.dateRange.startDate),
+      DateFormat('dd/MM/yyyy').format(data.dateRange.startDate),
       _t('opening_balance', lang),
       '-',
       '-',
@@ -99,7 +99,7 @@ class CustomerLedgerPdfService {
     // Transaction rows
     for (final row in data.rows) {
       rows.add([
-        DateFormat.yMd().format(row.date),
+        DateFormat('dd/MM/yyyy').format(row.date),
         // Sale columns
         row.saleNumber ?? '-',
         row.saleItemCount > 0 ? row.saleItemCount.toString() : '-',
@@ -143,7 +143,7 @@ class CustomerLedgerPdfService {
 
     // Closing balance
     rows.add([
-      DateFormat.yMd().format(data.dateRange.endDate),
+      DateFormat('dd/MM/yyyy').format(data.dateRange.endDate),
       _t('closing_balance', lang),
       '-',
       '-',
@@ -396,7 +396,7 @@ class CustomerLedgerPdfService {
                   textDirection: dir,
                 ),
                 pw.Text(
-                  '${_t('period', lang)}: ${DateFormat.yMd().format(data.dateRange.startDate)} - ${DateFormat.yMd().format(data.dateRange.endDate)}',
+                  '${_t('period', lang)}: ${DateFormat('dd/MM/yyyy').format(data.dateRange.startDate)} - ${DateFormat('dd/MM/yyyy').format(data.dateRange.endDate)}',
                   style: pw.TextStyle(
                     font: fonts.regular,
                     fontSize: 8,

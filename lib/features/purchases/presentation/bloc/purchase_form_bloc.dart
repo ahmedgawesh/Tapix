@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 
 import '../../../../core/money/money.dart';
+import '../../../../core/payments/checkout_settlement.dart';
 import '../../../../core/pricing/discount.dart';
 import '../../../../core/pricing/invoice_pricing_engine.dart';
 import '../../../../core/pricing/line_item_pricing_engine.dart';
@@ -684,7 +685,12 @@ class PurchaseLineItemRemoved extends PurchaseFormEvent {
 }
 
 class PurchaseFormSubmitted extends PurchaseFormEvent {
-  const PurchaseFormSubmitted();
+  final CheckoutSettlement? settlement;
+
+  const PurchaseFormSubmitted({this.settlement});
+
+  @override
+  List<Object?> get props => [settlement];
 }
 
 class PurchaseFormPosted extends PurchaseFormEvent {
@@ -1214,6 +1220,13 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       return;
     }
 
+    if (event.settlement == null &&
+        state.paymentMethod == PurchasePaymentMethod.cheque &&
+        state.dueDate == null) {
+      emit(state.copyWith(error: 'purchases.cheque_due_date_required'));
+      return;
+    }
+
     // Cash validation: paid amount must be >= total
     if (state.paymentMethod == PurchasePaymentMethod.cash &&
         state.paidAmountCents < state.totalCents) {
@@ -1224,6 +1237,10 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     emit(state.copyWith(isSubmitting: true, error: null));
 
     try {
+      final settlement = event.settlement;
+      settlement?.validate(
+        invoiceTotalCents: state.totalCents.toBigInt().toInt(),
+      );
       // SoT for the per-line breakdown is the state-level pricing engine
       // result: it has already done subtotal → discount → net → invoice-
       // discount allocation (largest-remainder) → tax-on-adjusted-net.
@@ -1276,21 +1293,25 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       //   - returnChange: cap at totalCents (excess is returned as cash change)
       //   - addToBalance: use full paidAmountCents (excess goes to supplier credit)
       // - card: auto-set to total (fully settled)
-      // - credit/cheque: 0 (full amount goes to supplier balance)
+      // - credit: 0 (full amount goes to supplier balance)
+      // - cheque: 0 until bank clearance confirms the payment
       // - purchaseOrder: auto-set to total (no balance impact, just a reminder)
-      final effectivePaidCents = switch (state.paymentMethod) {
-        PurchasePaymentMethod.cash => () {
-          if (state.paidAmountCents > state.totalCents &&
-              state.overpaymentHandling == OverpaymentHandling.returnChange) {
-            return state.totalCents;
-          }
-          return state.paidAmountCents;
-        }(),
-        PurchasePaymentMethod.card => state.totalCents,
-        PurchasePaymentMethod.credit => Decimal.zero,
-        PurchasePaymentMethod.cheque => Decimal.zero,
-        PurchasePaymentMethod.purchaseOrder => state.totalCents,
-      };
+      final effectivePaidCents = settlement != null
+          ? Decimal.fromInt(settlement.totalSettledCents)
+          : switch (state.paymentMethod) {
+              PurchasePaymentMethod.cash => () {
+                if (state.paidAmountCents > state.totalCents &&
+                    state.overpaymentHandling ==
+                        OverpaymentHandling.returnChange) {
+                  return state.totalCents;
+                }
+                return state.paidAmountCents;
+              }(),
+              PurchasePaymentMethod.card => state.totalCents,
+              PurchasePaymentMethod.credit => Decimal.zero,
+              PurchasePaymentMethod.cheque => Decimal.zero,
+              PurchasePaymentMethod.purchaseOrder => state.totalCents,
+            };
 
       if (state.purchaseId == null) {
         final purchaseId = await _repository.createPurchase(
@@ -1302,12 +1323,14 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           totalCents: state.totalCents,
           paidAmountCents: effectivePaidCents,
           items: items,
-          paymentMethod: state.paymentMethod.name,
+          paymentMethod:
+              settlement?.headerPaymentMethod ?? state.paymentMethod.name,
           supplierInvoiceRef: state.supplierInvoiceRef,
           notes: state.notes,
           purchaseDate: state.purchaseDate,
           dueDate: state.dueDate,
           taxInclusiveAtPost: state.taxInclusivePricing,
+          initialPayments: settlement?.payments ?? const [],
         );
 
         CrashlyticsService.instance.logAction('purchase_created', {

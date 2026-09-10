@@ -67,6 +67,41 @@ void main() {
   });
 
   test('the three locales expose the same journal-description keys', () {
+    expect(
+      localizedJournalDescription(
+        'Incoming cheque #10 cleared',
+        resolver: resolve,
+      ),
+      'تحصيل شيك وارد #10',
+    );
+    expect(
+      localizedJournalDescription(
+        'REVERSAL: Outgoing cheque #8 cleared',
+        resolver: resolve,
+      ),
+      'عكس: صرف شيك صادر #8',
+    );
+    expect(
+      localizedJournalDescription(
+        'Incoming return cheque #14 received',
+        resolver: resolve,
+      ),
+      'استلام شيك مرتجع وارد #14',
+    );
+    expect(
+      localizedJournalDescription(
+        'Cheque #5 dishonoured — سبب خاص',
+        resolver: resolve,
+      ),
+      'ارتداد الشيك #5 — سبب خاص',
+    );
+    expect(
+      localizedJournalDescription(
+        'Dishonoured cheque #5 resolved by replacement — شيك بديل',
+        resolver: resolve,
+      ),
+      'تسوية الشيك المرتد #5 عن طريق شيك بديل — شيك بديل',
+    );
     Set<String> keys(String locale) {
       final json =
           jsonDecode(

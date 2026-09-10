@@ -113,13 +113,15 @@ void main() {
       final supplierTransactions = await db
           .select(db.supplierTransactions)
           .get();
+      final now = DateTime.now();
+      final yearMonth = '${now.year}${now.month.toString().padLeft(2, '0')}';
       expect(
         customerTransactions.map((tx) => tx.transactionNumber),
-        containsAll(<String?>['CPC-202608-000001', 'DC-202608-000001']),
+        containsAll(<String?>['CPC-$yearMonth-000001', 'DC-$yearMonth-000001']),
       );
       expect(
         supplierTransactions.map((tx) => tx.transactionNumber),
-        containsAll(<String?>['CPS-202608-000001', 'DS-202608-000001']),
+        containsAll(<String?>['CPS-$yearMonth-000001', 'DS-$yearMonth-000001']),
       );
     },
   );
