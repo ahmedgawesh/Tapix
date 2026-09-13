@@ -10,7 +10,9 @@ import '../../features/purchases/domain/repositories/purchase_repository.dart';
 import '../../features/sales/domain/repositories/sale_repository.dart';
 import 'audit_log_service.dart';
 import 'balance_service.dart';
+import 'document_number_service.dart';
 import 'journal_entry_service.dart';
+import 'party_account_payment_service.dart';
 
 /// Outcome of a [`ChequeLifecycleService`] transition. Useful for the UI
 /// to surface "settled $X" / "reversed $Y" snackbars.
@@ -85,6 +87,7 @@ class ChequeLifecycleService {
   final SaleRepository _saleRepo;
   final JournalEntryService _journalService;
   final AuditLogService _audit;
+  final PartyAccountPaymentService _accountPayments;
 
   ChequeLifecycleService({
     required AppDatabase db,
@@ -94,13 +97,17 @@ class ChequeLifecycleService {
     required SaleRepository saleRepository,
     required JournalEntryService journalEntryService,
     required AuditLogService auditLogService,
+    PartyAccountPaymentService? accountPaymentService,
   }) : _db = db,
        _confirmDao = confirmationDao,
        _instrumentDao = instrumentDao,
        _purchaseRepo = purchaseRepository,
        _saleRepo = saleRepository,
        _journalService = journalEntryService,
-       _audit = auditLogService;
+       _audit = auditLogService,
+       _accountPayments =
+           accountPaymentService ??
+           PartyAccountPaymentService(db: db, auditLogService: auditLogService);
   // ── public API ────────────────────────────────────────────────────────
 
   Future<ChequeTransitionResult> markDeposited({
@@ -203,14 +210,16 @@ class ChequeLifecycleService {
         clearanceJournalEntryId: journalId,
         userId: userId,
       );
-      await _confirmDao.confirm(
-        sourceTable: sourceTable,
-        sourceId: sourceId,
-        status: ChequeConfirmationStatus.cleared,
-        note: note,
-        userId: userId,
-        clearedPaymentId: paymentId,
-      );
+      if (!_isAccountSource(sourceTable)) {
+        await _confirmDao.confirm(
+          sourceTable: sourceTable,
+          sourceId: sourceId,
+          status: ChequeConfirmationStatus.cleared,
+          note: note,
+          userId: userId,
+          clearedPaymentId: paymentId,
+        );
+      }
       await _audit.log(
         entityType: 'cheque_instrument',
         entityId: c.id,
@@ -415,11 +424,17 @@ class ChequeLifecycleService {
 
     if (resolutionType != ChequeResolutionType.credit &&
         resolutionType != ChequeResolutionType.replacement) {
-      await _closeIncomingDishonourPartyBalance(
+      final transactionId = await _closeIncomingDishonourPartyBalance(
         cheque: cheque,
         resolutionType: resolutionType,
         note: note,
       );
+      if (_isAccountSource(cheque.sourceTable)) {
+        await _accountPayments.recognizeClearedCheque(
+          cheque: cheque,
+          settlementTransactionId: transactionId,
+        );
+      }
     }
     return ChequeResolutionResult(
       resolutionType: resolutionType,
@@ -451,6 +466,42 @@ class ChequeLifecycleService {
     };
 
     int? replacementId;
+    if (_isAccountSource(cheque.sourceTable)) {
+      if (resolutionType == ChequeResolutionType.replacement) {
+        replacementId = await _instrumentDao.create(
+          direction: ChequeDirectionValue.outgoing,
+          sourceTable: cheque.sourceTable,
+          sourceId: cheque.sourceId,
+          amountCents: amount,
+          currencyId: cheque.currencyId,
+          dueDate: replacementDueDate!,
+          issueDate: replacementIssueDate ?? DateTime.now(),
+          partyType: cheque.partyType,
+          partyId: cheque.partyId,
+          chequeNumber: replacementChequeNumber,
+          bankName: replacementBankName,
+          drawerName: cheque.drawerName,
+          note: note,
+          userId: userId,
+        );
+        return ChequeResolutionResult(
+          resolutionType: resolutionType,
+          replacementChequeId: replacementId,
+        );
+      }
+      final settlement = await _recordAccountPartySettlement(
+        cheque: cheque,
+        amount: amount,
+        note: note,
+        userId: userId,
+        throughChequeClearing: false,
+        paymentMethod: paymentMethod,
+      );
+      return ChequeResolutionResult(
+        resolutionType: resolutionType,
+        journalEntryId: settlement.journalEntryId,
+      );
+    }
     if (cheque.sourceTable == ChequeSourceTables.purchase) {
       if (resolutionType == ChequeResolutionType.replacement) {
         replacementId = await _instrumentDao.create(
@@ -555,7 +606,7 @@ class ChequeLifecycleService {
     return row.read<int>('net');
   }
 
-  Future<void> _closeIncomingDishonourPartyBalance({
+  Future<int> _closeIncomingDishonourPartyBalance({
     required ChequeInstrument cheque,
     required String resolutionType,
     required String? note,
@@ -565,7 +616,7 @@ class ChequeLifecycleService {
         'Dishonoured cheque #${cheque.id} resolved by $resolutionType'
         '${note == null || note.trim().isEmpty ? '' : ' — ${note.trim()}'}';
     if (cheque.partyType == 'customer') {
-      await _db
+      final transactionId = await _db
           .into(_db.customerTransactions)
           .insert(
             CustomerTransactionsCompanion.insert(
@@ -583,9 +634,9 @@ class ChequeLifecycleService {
         customerId: cheque.partyId!,
         deltaCents: -amount,
       );
-      return;
+      return transactionId;
     }
-    await _db
+    final transactionId = await _db
         .into(_db.supplierTransactions)
         .insert(
           SupplierTransactionsCompanion.insert(
@@ -603,6 +654,7 @@ class ChequeLifecycleService {
       supplierId: cheque.partyId!,
       deltaCents: amount,
     );
+    return transactionId;
   }
 
   Future<ChequeTransitionResult> _markFailed(
@@ -650,6 +702,9 @@ class ChequeLifecycleService {
           c.legacyDirectBank ||
           (_isReturnSource(sourceTable) &&
               c.status == ChequeInstrumentStatus.cleared);
+      if (_isAccountSource(sourceTable) && recognitionWasBooked) {
+        await _accountPayments.reverseCheque(chequeId: c.id, userId: userId);
+      }
       final isIncomingDishonour =
           !cancelled && c.direction == ChequeDirectionValue.incoming;
       var paymentHadJournal = false;
@@ -742,7 +797,9 @@ class ChequeLifecycleService {
       }
       if (!isIncomingDishonour &&
           restorationId != null &&
-          (paymentId == null || c.legacyDirectBank)) {
+          (paymentId == null ||
+              c.legacyDirectBank ||
+              _isAccountSource(sourceTable))) {
         await _restorePartySubledger(
           sourceTable: sourceTable,
           cheque: c,
@@ -758,17 +815,19 @@ class ChequeLifecycleService {
         clearClearanceJournalEntryId: c.clearanceJournalEntryId != null,
         userId: userId,
       );
-      await _confirmDao.confirm(
-        sourceTable: sourceTable,
-        sourceId: sourceId,
-        status: cancelled
-            ? ChequeConfirmationStatus.cancelled
-            : ChequeConfirmationStatus.bounced,
-        bounceReason: cancelled ? null : reason,
-        note: cancelled ? reason : null,
-        userId: userId,
-        clearClearedPaymentId: !isIncomingDishonour,
-      );
+      if (!_isAccountSource(sourceTable)) {
+        await _confirmDao.confirm(
+          sourceTable: sourceTable,
+          sourceId: sourceId,
+          status: cancelled
+              ? ChequeConfirmationStatus.cancelled
+              : ChequeConfirmationStatus.bounced,
+          bounceReason: cancelled ? null : reason,
+          note: cancelled ? reason : null,
+          userId: userId,
+          clearClearedPaymentId: !isIncomingDishonour,
+        );
+      }
       await _audit.log(
         entityType: 'cheque_instrument',
         entityId: c.id,
@@ -804,8 +863,13 @@ class ChequeLifecycleService {
       source == ChequeSourceTables.saleReturnAdjustment ||
       source == ChequeSourceTables.purchaseReturnAdjustment;
 
+  bool _isAccountSource(String source) =>
+      ChequeSourceTables.isAccountSource(source);
+
   bool _isSettleable(String source) =>
-      _isInvoiceSource(source) || _isReturnSource(source);
+      _isInvoiceSource(source) ||
+      _isReturnSource(source) ||
+      _isAccountSource(source);
 
   Future<bool> _isReplacementInstrument(int chequeId) async {
     final row = await _db
@@ -826,6 +890,15 @@ class ChequeLifecycleService {
     String? note,
     int? userId,
   ) async {
+    if (_isAccountSource(source)) {
+      final settlement = await _recordAccountPartySettlement(
+        cheque: cheque,
+        amount: amount,
+        note: note,
+        userId: userId,
+      );
+      return settlement.transactionId;
+    }
     if (source == ChequeSourceTables.purchase) {
       final p = await _purchaseRepo.getPurchaseById(id);
       if (p == null) throw ChequeSourceNotFoundException(source, id);
@@ -878,6 +951,115 @@ class ChequeLifecycleService {
     throw ChequeSourceNotFoundException(source, id);
   }
 
+  Future<({int transactionId, int journalEntryId})>
+  _recordAccountPartySettlement({
+    required ChequeInstrument cheque,
+    required int amount,
+    required String? note,
+    required int? userId,
+    bool throughChequeClearing = true,
+    String? paymentMethod,
+  }) async {
+    final partyId = cheque.partyId;
+    final partyType = cheque.partyType;
+    if (partyId == null ||
+        (partyType != 'customer' && partyType != 'supplier')) {
+      throw StateError('account_cheque_party_required');
+    }
+    final expectedSource = partyType == 'customer'
+        ? ChequeSourceTables.customerAccount
+        : ChequeSourceTables.supplierAccount;
+    if (cheque.sourceTable != expectedSource || cheque.sourceId != partyId) {
+      throw StateError('account_cheque_party_mismatch');
+    }
+
+    final incoming = cheque.direction == ChequeDirectionValue.incoming;
+    final delta = partyType == 'customer'
+        ? (incoming ? -amount : amount)
+        : (incoming ? amount : -amount);
+    final transactionType =
+        (partyType == 'customer' && incoming) ||
+            (partyType == 'supplier' && !incoming)
+        ? 'payment'
+        : 'refund';
+    final numberService = DocumentNumberService(_db);
+    final transactionNumber = partyType == 'customer'
+        ? await numberService.nextCustomerTransaction(
+            transactionType == 'payment' ? 'CAP' : 'CAR',
+          )
+        : await numberService.nextSupplierTransaction(
+            transactionType == 'payment' ? 'SAP' : 'SAR',
+          );
+    final description =
+        '${incoming ? 'Incoming' : 'Outgoing'} account cheque '
+        '${cheque.chequeNumber ?? '#${cheque.id}'}'
+        '${note == null || note.trim().isEmpty ? '' : ' — ${note.trim()}'}';
+
+    final int transactionId;
+    if (partyType == 'customer') {
+      transactionId = await _db
+          .into(_db.customerTransactions)
+          .insert(
+            CustomerTransactionsCompanion.insert(
+              customerId: partyId,
+              transactionType: transactionType,
+              transactionNumber: Value(transactionNumber),
+              amountCents: Decimal.fromInt(delta),
+              currencyId: cheque.currencyId,
+              description: Value(description),
+              referenceId: Value(cheque.id),
+              referenceType: const Value('cheque_instrument'),
+            ),
+          );
+    } else {
+      transactionId = await _db
+          .into(_db.supplierTransactions)
+          .insert(
+            SupplierTransactionsCompanion.insert(
+              supplierId: partyId,
+              transactionType: transactionType,
+              transactionNumber: Value(transactionNumber),
+              amountCents: Decimal.fromInt(delta),
+              currencyId: cheque.currencyId,
+              description: Value(description),
+              referenceId: Value(cheque.id),
+              referenceType: const Value('cheque_instrument'),
+            ),
+          );
+    }
+
+    final journalEntryId = await _journalService
+        .recordAccountChequeSettlementJournalEntry(
+          chequeId: cheque.id,
+          transactionId: transactionId,
+          partyType: partyType!,
+          incoming: incoming,
+          amountCents: amount,
+          currencyId: cheque.currencyId,
+          paymentMethod: paymentMethod,
+          throughChequeClearing: throughChequeClearing,
+          userId: userId,
+        );
+    if (partyType == 'customer') {
+      await BalanceService.adjustCustomerBalance(
+        _instrumentDao,
+        customerId: partyId,
+        deltaCents: delta,
+      );
+    } else {
+      await BalanceService.adjustSupplierBalance(
+        _instrumentDao,
+        supplierId: partyId,
+        deltaCents: delta,
+      );
+    }
+    await _accountPayments.recognizeClearedCheque(
+      cheque: cheque,
+      settlementTransactionId: transactionId,
+    );
+    return (transactionId: transactionId, journalEntryId: journalEntryId);
+  }
+
   String _returnObligationAccount(String source) {
     if (source == ChequeSourceTables.saleReturn ||
         source == ChequeSourceTables.saleReturnAdjustment) {
@@ -892,6 +1074,8 @@ class ChequeLifecycleService {
 
   String _incomingObligationAccount(String source) {
     if (source == ChequeSourceTables.sale) return '1100';
+    if (source == ChequeSourceTables.customerAccount) return '1100';
+    if (source == ChequeSourceTables.supplierAccount) return '2000';
     if (source == ChequeSourceTables.purchaseReturn ||
         source == ChequeSourceTables.purchaseReturnAdjustment) {
       return '2000';
@@ -1055,6 +1239,9 @@ class ChequeLifecycleService {
     int? instrumentId,
   ) async {
     if (instrumentId == null) {
+      if (_isAccountSource(source)) {
+        throw StateError('account_cheque_instrument_required');
+      }
       return _ensureInstrument(source, sourceId, userId);
     }
     final instrument = await _instrumentDao.getById(instrumentId);
@@ -1246,14 +1433,24 @@ class ChequeLifecycleService {
     final partyId = cheque.partyId;
     if (partyId == null) return;
     final amount = cheque.amountCents.toBigInt().toInt();
+    final isAccountSource = _isAccountSource(sourceTable);
     final isSaleSide =
         sourceTable == ChequeSourceTables.sale ||
         sourceTable == ChequeSourceTables.saleReturn ||
-        sourceTable == ChequeSourceTables.saleReturnAdjustment;
+        sourceTable == ChequeSourceTables.saleReturnAdjustment ||
+        sourceTable == ChequeSourceTables.customerAccount;
     final isInvoice =
         sourceTable == ChequeSourceTables.sale ||
         sourceTable == ChequeSourceTables.purchase;
-    final delta = isInvoice ? amount : -amount;
+    final delta = isAccountSource
+        ? (cheque.partyType == 'customer'
+              ? (cheque.direction == ChequeDirectionValue.incoming
+                    ? amount
+                    : -amount)
+              : (cheque.direction == ChequeDirectionValue.incoming
+                    ? -amount
+                    : amount))
+        : (isInvoice ? amount : -amount);
     final description = 'Cheque #${cheque.id} failed — $reason';
 
     if (isSaleSide) {
@@ -1316,6 +1513,14 @@ class ChequeLifecycleService {
       case ChequeSourceTables.purchaseReturn:
       case ChequeSourceTables.purchaseReturnAdjustment:
         return (debit: '2000', credit: clearing);
+      case ChequeSourceTables.customerAccount:
+        return c.direction == ChequeDirectionValue.incoming
+            ? (debit: '1100', credit: clearing)
+            : (debit: clearing, credit: '1100');
+      case ChequeSourceTables.supplierAccount:
+        return c.direction == ChequeDirectionValue.incoming
+            ? (debit: '2000', credit: clearing)
+            : (debit: clearing, credit: '2000');
       default:
         throw ArgumentError.value(source, 'sourceTable');
     }

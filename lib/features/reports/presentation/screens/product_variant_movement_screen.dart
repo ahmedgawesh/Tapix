@@ -10,6 +10,7 @@ import '../../../../core/services/currency_service.dart';
 import '../../services/product_variant_movement_pdf_service.dart';
 import '../bloc/product_variant_movement_bloc.dart';
 import '../widgets/date_range_selector.dart';
+import '../widgets/report_scrollable_center.dart';
 
 class ProductVariantMovementScreen extends StatelessWidget {
   const ProductVariantMovementScreen({super.key});
@@ -408,8 +409,8 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Center(
-      child: SingleChildScrollView(
+    return ReportScrollableCenter(
+      child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -450,7 +451,7 @@ class _VariantMovementViewState extends State<_VariantMovementView> {
     final cs = sl<CurrencyService>();
 
     if (data.movements.isEmpty) {
-      return Center(
+      return ReportScrollableCenter(
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Column(

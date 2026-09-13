@@ -283,6 +283,11 @@ class _DashboardScreenState extends State<DashboardScreen>
     // local-only repository on the client device.
     return allowed.where((item) {
       if (item.id == 'cashier_shifts') return user.role == UserRole.cashier;
+      if (item.id == 'purchases') {
+        final permissions = lan.remoteUser?.permissions ?? const <String>[];
+        return permissions.contains(Permissions.viewPurchases) ||
+            permissions.contains(Permissions.managePurchases);
+      }
       return item.id == 'new_sale' ||
           item.id == 'sales_returns' ||
           item.id == 'products' ||
@@ -302,6 +307,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           : '/sales';
     }
     if (item.id == 'cashier_shifts') return '/client-session';
+    if (item.id == 'purchases') return '/purchases/returns';
     return item.route;
   }
 
@@ -566,6 +572,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                             final effectiveRoute = _effectiveRoute(item);
                             final locked =
                                 !isPro &&
+                                !(isRemoteClient && item.id == 'purchases') &&
                                 ProRoutePolicy.requiresPro(effectiveRoute);
                             return _DashboardCard(
                               icon: item.icon,

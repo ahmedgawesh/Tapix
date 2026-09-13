@@ -459,7 +459,7 @@ void main() {
       // `commissions` so adjustment (unlinked) sale returns deduct commission.
       // v10060 re-prefixed legacy unlinked-sale-return batches from SR- to
       // SAR- so they remain distinguishable from linked return documents.
-      expect(db.schemaVersion, equals(10081));
+      expect(db.schemaVersion, equals(10082));
     });
 
     test('foreign keys are enabled', () async {

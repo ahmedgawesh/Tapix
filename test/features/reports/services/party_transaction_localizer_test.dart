@@ -59,6 +59,20 @@ void main() {
       );
       expect(
         localizedPartyTransactionDescription(
+          'Issued cheque for PO-202608-0004',
+          resolver: _resolve,
+        ),
+        'reports.txn_desc_issued_cheque_for[PO-202608-0004]',
+      );
+      expect(
+        localizedPartyTransactionDescription(
+          'Issued cheque CH-9 for PI-20',
+          resolver: _resolve,
+        ),
+        'reports.txn_desc_issued_cheque_number_for[CH-9|PI-20]',
+      );
+      expect(
+        localizedPartyTransactionDescription(
           'Reversed payments for voided sale SI-202608-000005',
           resolver: _resolve,
         ),
@@ -119,6 +133,23 @@ void main() {
         resolver: _resolve,
       ),
       'reports.txn_desc_return_cheque_settlement_reversed[17]',
+    );
+  });
+
+  test('localizes account cheques and preserves a user note', () {
+    expect(
+      localizedPartyTransactionDescription(
+        'Incoming account cheque C-14',
+        resolver: _resolve,
+      ),
+      'reports.txn_desc_incoming_account_cheque[C-14]',
+    );
+    expect(
+      localizedPartyTransactionDescription(
+        'Outgoing account cheque S-42 — supplier advance',
+        resolver: _resolve,
+      ),
+      'reports.txn_desc_outgoing_account_cheque[S-42] — supplier advance',
     );
   });
 

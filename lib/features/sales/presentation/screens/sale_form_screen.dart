@@ -22,6 +22,7 @@ import '../../../../core/services/pricing/discount_converter.dart';
 import '../../../../core/services/parties/party_balance_classifier.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../../core/widgets/action_confirmation_dialog.dart';
+import '../../../../core/widgets/theme_toggle_button.dart';
 import '../../../subscription/presentation/widgets/upgrade_prompt.dart';
 import '../../../../core/money/money.dart';
 import '../../../../core/payments/checkout_settlement.dart';
@@ -126,6 +127,7 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
   late final UserRole _userRole;
   late final int? _userId;
   late final bool _canViewProductCost;
+  final _belowCostDialogGuard = _BelowCostDialogGuard();
 
   @override
   void initState() {
@@ -166,6 +168,7 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
         allowPartialPayments: settings.allowPartialPayments,
         allowDiscounts: settings.allowDiscounts,
         maxDiscountPercent: settings.maxDiscountPercent,
+        allowBelowCostSales: settings.allowBelowCostSales,
         requireCustomerForSales: settings.requireCustomerForSales,
         enableLoyaltyPoints: settings.enableLoyaltyPoints,
         enablePromotions: sl<FeatureGateService>().isEnabled(
@@ -228,6 +231,7 @@ class _SaleFormScreenState extends State<SaleFormScreen> {
         onAddTab: _isEditMode ? null : () => _addTab(),
         onCloseTab: _isEditMode ? null : _closeTab,
         onSwitchTab: _switchTab,
+        belowCostDialogGuard: _belowCostDialogGuard,
       ),
     );
   }
@@ -243,6 +247,7 @@ class _SaleFormView extends StatelessWidget {
   final VoidCallback? onAddTab;
   final void Function(int)? onCloseTab;
   final void Function(int) onSwitchTab;
+  final _BelowCostDialogGuard belowCostDialogGuard;
 
   _SaleFormView({
     required this.notesCtrl,
@@ -253,6 +258,7 @@ class _SaleFormView extends StatelessWidget {
     this.onAddTab,
     this.onCloseTab,
     required this.onSwitchTab,
+    required this.belowCostDialogGuard,
   });
 
   Future<bool> _onWillPop(BuildContext context) async {
@@ -376,6 +382,8 @@ class _SaleFormView extends StatelessWidget {
                 state.saleId == null ? 'sales.new'.tr() : 'sales.edit'.tr(),
               ),
               actions: [
+                if (isRemoteClient)
+                  const ThemeToggleButton(lightDarkOnly: true),
                 if (!isEditMode)
                   _SaleTabBar(
                     tabCount: tabCount,
@@ -1763,206 +1771,226 @@ class _SaleFormView extends StatelessWidget {
   // ═══════════════════════════════════════════════════════
   // BELOW-COST WARNING DIALOG
   // ═══════════════════════════════════════════════════════
-  void _showBelowCostWarningDialog(
+  Future<void> _showBelowCostWarningDialog(
     BuildContext context,
     BelowCostCheckResult warning,
-  ) {
+  ) async {
+    if (belowCostDialogGuard.isOpen) return;
+    belowCostDialogGuard.isOpen = true;
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final curr = sl<CurrencyService>();
     final bloc = context.read<SaleFormBloc>();
     final reasonCtrl = TextEditingController();
 
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Row(
-            children: [
-              Icon(
-                warning.canOverride
-                    ? LucideIcons.alertTriangle
-                    : LucideIcons.ban,
-                color: warning.canOverride ? Colors.deepOrange : cs.error,
-                size: 24,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'sales.below_cost_title'.tr(),
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: warning.canOverride ? Colors.deepOrange : cs.error,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+    String? decision;
+    try {
+      decision = await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
               children: [
-                // Product info
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: (warning.canOverride ? Colors.deepOrange : cs.error)
-                        .withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        warning.productName,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      if (canViewProductCost) ...[
-                        const SizedBox(height: 8),
-                        _belowCostInfoRow(
-                          theme,
-                          'sales.below_cost_cost'.tr(),
-                          curr.formatCents(
-                            warning.costCents.toBigInt().toInt(),
-                          ),
-                        ),
-                        _belowCostInfoRow(
-                          theme,
-                          'sales.below_cost_price'.tr(),
-                          curr.formatCents(
-                            warning.sellingPriceCents.toBigInt().toInt(),
-                          ),
-                        ),
-                        const Divider(height: 16),
-                        _belowCostInfoRow(
-                          theme,
-                          'sales.below_cost_loss'.tr(),
-                          curr.formatCents(
-                            warning.lossCents.toBigInt().toInt(),
-                          ),
-                          valueColor: cs.error,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                // Threshold exceeded warning
-                if (canViewProductCost && warning.exceedsThreshold) ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: cs.error.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: cs.error.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          LucideIcons.shieldAlert,
-                          color: cs.error,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'sales.below_cost_threshold_exceeded'.tr(
-                              args: [warning.lossPercent.toStringAsFixed(1)],
-                            ),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: cs.error,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                // Message
-                Text(
+                Icon(
                   warning.canOverride
-                      ? 'sales.below_cost_override_hint'.tr()
-                      : 'sales.below_cost_blocked'.tr(),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: cs.onSurfaceVariant,
+                      ? LucideIcons.alertTriangle
+                      : LucideIcons.ban,
+                  color: warning.canOverride ? Colors.deepOrange : cs.error,
+                  size: 24,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'sales.below_cost_title'.tr(),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: warning.canOverride ? Colors.deepOrange : cs.error,
+                    ),
                   ),
                 ),
-                // Override reason input (only for Manager/Owner)
-                if (warning.canOverride) ...[
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: reasonCtrl,
-                    decoration: InputDecoration(
-                      labelText: 'sales.below_cost_reason'.tr(),
-                      hintText: 'sales.below_cost_reason_hint'.tr(),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      prefixIcon: const Icon(
-                        LucideIcons.messageSquare,
-                        size: 18,
-                      ),
-                    ),
-                    maxLines: 2,
-                    textInputAction: TextInputAction.done,
-                  ),
-                ],
               ],
             ),
-          ),
-          actions: [
-            // Cancel / Remove item
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                bloc.add(const SaleBelowCostWarningDismissed());
-              },
-              child: Text(
-                warning.canOverride
-                    ? 'sales.below_cost_remove'.tr()
-                    : 'common.ok'.tr(),
-                style: TextStyle(color: cs.error),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Product info
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color:
+                          (warning.canOverride ? Colors.deepOrange : cs.error)
+                              .withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          warning.productName,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        if (canViewProductCost) ...[
+                          const SizedBox(height: 8),
+                          _belowCostInfoRow(
+                            theme,
+                            'sales.below_cost_cost'.tr(),
+                            curr.formatCents(
+                              warning.costCents.toBigInt().toInt(),
+                            ),
+                          ),
+                          _belowCostInfoRow(
+                            theme,
+                            'sales.below_cost_price'.tr(),
+                            curr.formatCents(
+                              warning.sellingPriceCents.toBigInt().toInt(),
+                            ),
+                          ),
+                          const Divider(height: 16),
+                          _belowCostInfoRow(
+                            theme,
+                            'sales.below_cost_loss'.tr(),
+                            curr.formatCents(
+                              warning.lossCents.toBigInt().toInt(),
+                            ),
+                            valueColor: cs.error,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Threshold exceeded warning
+                  if (canViewProductCost && warning.exceedsThreshold) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: cs.error.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: cs.error.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            LucideIcons.shieldAlert,
+                            color: cs.error,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'sales.below_cost_threshold_exceeded'.tr(
+                                args: [warning.lossPercent.toStringAsFixed(1)],
+                              ),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: cs.error,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  // Message
+                  Text(
+                    warning.canOverride
+                        ? 'sales.below_cost_override_hint'.tr()
+                        : 'sales.below_cost_blocked'.tr(),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
+                  // Override reason input (only for Manager/Owner)
+                  if (warning.canOverride) ...[
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: reasonCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'sales.below_cost_reason'.tr(),
+                        hintText: 'sales.below_cost_reason_hint'.tr(),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        prefixIcon: const Icon(
+                          LucideIcons.messageSquare,
+                          size: 18,
+                        ),
+                      ),
+                      maxLines: 2,
+                      textInputAction: TextInputAction.done,
+                    ),
+                  ],
+                ],
               ),
             ),
-            // Override button (only for Manager/Owner)
-            if (warning.canOverride)
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.deepOrange,
-                ),
+            actions: [
+              // Cancel / Remove item
+              TextButton(
                 onPressed: () {
-                  final reason = reasonCtrl.text.trim();
-                  if (reason.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('sales.below_cost_reason_required'.tr()),
-                        backgroundColor: cs.error,
-                      ),
-                    );
-                    return;
-                  }
-                  Navigator.pop(ctx);
-                  bloc.add(SaleBelowCostOverrideApproved(reason));
+                  Navigator.pop(ctx, '');
                 },
-                child: Text('sales.below_cost_override'.tr()),
+                child: Text(
+                  warning.canOverride
+                      ? 'sales.below_cost_remove'.tr()
+                      : 'common.ok'.tr(),
+                  style: TextStyle(color: cs.error),
+                ),
               ),
-          ],
-        );
-      },
-    ).then((_) => reasonCtrl.dispose());
+              // Override button (only for Manager/Owner)
+              if (warning.canOverride)
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.deepOrange,
+                  ),
+                  onPressed: () {
+                    final reason = reasonCtrl.text.trim();
+                    if (reason.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'sales.below_cost_reason_required'.tr(),
+                          ),
+                          backgroundColor: cs.error,
+                        ),
+                      );
+                      return;
+                    }
+                    Navigator.pop(ctx, reason);
+                  },
+                  child: Text('sales.below_cost_override'.tr()),
+                ),
+            ],
+          );
+        },
+      );
+      // Navigator completes the dialog result before the reverse route
+      // animation is guaranteed to be detached. Waiting for that transition
+      // prevents a Bloc rebuild from dirtying widgets in the old route scope.
+      await Future<void>.delayed(kThemeAnimationDuration);
+    } finally {
+      reasonCtrl.dispose();
+      belowCostDialogGuard.isOpen = false;
+    }
+    if (bloc.isClosed) return;
+    final reason = decision?.trim() ?? '';
+    if (reason.isEmpty) {
+      bloc.add(const SaleBelowCostWarningDismissed());
+    } else {
+      bloc.add(SaleBelowCostOverrideApproved(reason));
+    }
   }
 
   Widget _belowCostInfoRow(
@@ -2103,6 +2131,10 @@ class _SaleFormView extends StatelessWidget {
       ),
     );
   }
+}
+
+class _BelowCostDialogGuard {
+  bool isOpen = false;
 }
 
 // ═══════════════════════════════════════════════════════

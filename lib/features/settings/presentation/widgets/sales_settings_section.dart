@@ -3,6 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/audit_log_service.dart';
+import '../../../../core/widgets/pin_verification_dialog.dart';
+import '../../../auth/domain/entities/user_entity.dart';
+import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../domain/entities/app_settings.dart';
 import '../bloc/app_settings_bloc.dart';
 import 'settings_widgets.dart';
@@ -56,6 +61,15 @@ class SalesSettingsSection extends StatelessWidget {
                     _patch(context, (c) => c.copyWith(maxDiscountPercent: v)),
               ),
             SwitchListTile(
+              secondary: const Icon(LucideIcons.shieldCheck),
+              title: Text('app_settings.sales.allow_below_cost_sales'.tr()),
+              subtitle: Text(
+                'app_settings.sales.allow_below_cost_sales_desc'.tr(),
+              ),
+              value: s.allowBelowCostSales,
+              onChanged: (value) => _setAllowBelowCostSales(context, value),
+            ),
+            SwitchListTile(
               title: Text('app_settings.sales.require_customer'.tr()),
               subtitle: Text('app_settings.sales.require_customer_desc'.tr()),
               value: s.requireCustomerForSales,
@@ -91,5 +105,45 @@ class SalesSettingsSection extends StatelessWidget {
 
   void _patch(BuildContext context, AppSettings Function(AppSettings) fn) {
     context.read<AppSettingsBloc>().add(AppSettingsPatched(fn));
+  }
+
+  Future<void> _setAllowBelowCostSales(BuildContext context, bool value) async {
+    final authState = context.read<AuthBloc>().state;
+    final user = authState is AuthAuthenticated ? authState.user : null;
+    if (user == null || user.role != UserRole.owner) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('app_settings.sales.below_cost_owner_only'.tr()),
+        ),
+      );
+      return;
+    }
+
+    final verified = await showPinVerificationDialog(context);
+    if (!verified || !context.mounted) return;
+
+    final previous = context
+        .read<AppSettingsBloc>()
+        .state
+        .settings
+        .allowBelowCostSales;
+    if (previous == value) return;
+
+    _patch(context, (current) => current.copyWith(allowBelowCostSales: value));
+    try {
+      await sl<AuditLogService>().log(
+        entityType: 'settings',
+        entityId: 0,
+        action: 'below_cost_sales_policy_changed',
+        oldValue: {'allowBelowCostSales': previous},
+        newValue: {'allowBelowCostSales': value},
+        userId: user.id,
+        userRole: user.role.name,
+        severity: AuditSeverity.critical,
+      );
+    } catch (_) {
+      // The persisted setting remains authoritative; audit storage failures
+      // are surfaced by the central diagnostics without undoing the choice.
+    }
   }
 }

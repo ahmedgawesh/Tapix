@@ -16,6 +16,7 @@ import '../../../../core/promotions/promotion_margin_policy.dart';
 import '../../../../core/promotions/promotion_repository.dart';
 import '../../../../core/promotions/promotion_return_policy.dart';
 import '../../../../core/services/cashier_shift_service.dart';
+import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/currency_service.dart'
     show CurrencyService, SymbolPosition;
 import '../../../../core/services/currency_service.dart'
@@ -28,12 +29,15 @@ import '../../../../core/services/loyalty/loyalty_points_service.dart';
 import '../../../../core/services/lan/lan_business_models.dart';
 import '../../../../core/services/lan/lan_models.dart';
 import '../../../settings/data/services/app_settings_service.dart';
+import '../../../purchases/domain/entities/purchase_entity.dart';
+import '../../../purchases/domain/repositories/purchase_repository.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../domain/repositories/sale_repository.dart';
 
 class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
   final AppDatabase _database;
   final SaleRepository _sales;
+  final PurchaseRepository _purchases;
   final AppSettingsService _settings;
   final CashierShiftService _shifts;
   final CurrencyService _currencyService;
@@ -44,10 +48,12 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
   final PharmacyDao _pharmacy;
   final PromotionRepository _promotions;
   final FeatureGateService _featureGate;
+  final AuditLogService _auditLog;
 
   const LanMasterBusinessGatewayImpl({
     required AppDatabase database,
     required SaleRepository sales,
+    required PurchaseRepository purchases,
     required AppSettingsService settings,
     required CashierShiftService shifts,
     required CurrencyService currencyService,
@@ -58,8 +64,10 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     required PharmacyDao pharmacy,
     required PromotionRepository promotions,
     required FeatureGateService featureGate,
+    required AuditLogService auditLog,
   }) : _database = database,
        _sales = sales,
+       _purchases = purchases,
        _settings = settings,
        _shifts = shifts,
        _currencyService = currencyService,
@@ -69,7 +77,8 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
        _loyaltyPoints = loyaltyPoints,
        _pharmacy = pharmacy,
        _promotions = promotions,
-       _featureGate = featureGate;
+       _featureGate = featureGate,
+       _auditLog = auditLog;
 
   bool _isEnabled(AppFeature feature, bool settingEnabled) =>
       _featureGate.isEnabled(feature, settingEnabled: settingEnabled);
@@ -163,6 +172,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     final currencyDefinition = configuredCurrency.code == currencyCode
         ? configuredCurrency
         : currency_model.Currency.fromCode(currencyCode);
+    final appSettings = _settings.current;
 
     return LanSaleDetails(
       sale: LanSaleSummary(
@@ -223,6 +233,8 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
           currencyDefinition.symbolPosition == SymbolPosition.after,
       cashierName: shift?.cashierName,
       cashierShiftNumber: shift?.shift.shiftNumber,
+      receiptHeaderText: appSettings.receiptHeaderText,
+      receiptFooterText: appSettings.receiptFooterText,
     );
   }
 
@@ -364,6 +376,9 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       requireCustomerForSales: appSettings.requireCustomerForSales,
       allowDiscounts: appSettings.allowDiscounts,
       maxDiscountPercent: appSettings.maxDiscountPercent,
+      allowBelowCostSales: appSettings.allowBelowCostSales,
+      receiptHeaderText: appSettings.receiptHeaderText,
+      receiptFooterText: appSettings.receiptFooterText,
       enablePharmacyFeatures: pharmacyEnabled,
       enablePromotions: promotionsEnabled,
       promotionRules: activePromotionRules
@@ -444,6 +459,10 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
               wholesalePriceCents: variant.wholesalePriceCents == null
                   ? null
                   : _cents(variant.wholesalePriceCents!),
+              costCents: _cents(variant.costCents),
+              lastPurchasePriceCents: variant.lastPurchasePriceCents == null
+                  ? null
+                  : _cents(variant.lastPurchasePriceCents!),
               stockQuantity: variant.stockQuantity,
             ),
           );
@@ -1191,7 +1210,6 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
         'A cheque due date is required.',
       );
     }
-
     if (actor.role == 'cashier') {
       _requireCashierEmployee(actor);
       final shift = await getOwnShift(actor: actor);
@@ -1691,6 +1709,802 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
   }
 
   @override
+  Future<List<LanSupplierSummary>> fetchSuppliers({
+    required String query,
+    required int limit,
+  }) async {
+    final normalized = query.trim();
+    final statement = _database.select(_database.suppliers)
+      ..where((row) {
+        var expression = row.isActive.equals(true);
+        if (normalized.isNotEmpty) {
+          final pattern = '%$normalized%';
+          expression =
+              expression & (row.name.like(pattern) | row.phone.like(pattern));
+        }
+        return expression;
+      })
+      ..orderBy([(row) => OrderingTerm.asc(row.name)])
+      ..limit(limit.clamp(1, 200));
+    final rows = await statement.get();
+    return rows
+        .map(
+          (row) =>
+              LanSupplierSummary(id: row.id, name: row.name, phone: row.phone),
+        )
+        .toList(growable: false);
+  }
+
+  @override
+  Future<LanReturnablePurchasesPage> fetchReturnablePurchases({
+    required String query,
+    required int offset,
+    required int limit,
+  }) async {
+    final safeOffset = offset.clamp(0, 1000000);
+    final safeLimit = limit.clamp(1, 200);
+    final normalized = query.trim().toLowerCase();
+    final all = await _purchases.watchAllPurchases().first;
+    final candidates = all.where(
+      (value) =>
+          value.isPosted &&
+          (normalized.isEmpty ||
+              value.purchaseNumber.toLowerCase().contains(normalized) ||
+              (value.supplierName?.toLowerCase().contains(normalized) ??
+                  false) ||
+              (value.supplierPhone?.toLowerCase().contains(normalized) ??
+                  false)),
+    );
+    final returnable = <LanReturnablePurchaseSummary>[];
+    for (final purchase in candidates) {
+      final items = await _purchases.getPurchaseItems(purchase.id);
+      var actualCount = 0;
+      for (final item in items) {
+        final returned = await _purchases.getReturnedQuantity(item.id);
+        if (returned < item.quantity) actualCount++;
+      }
+      if (actualCount == 0) continue;
+      returnable.add(
+        LanReturnablePurchaseSummary(
+          purchaseId: purchase.id,
+          purchaseNumber: purchase.purchaseNumber,
+          supplierId: purchase.supplierId,
+          supplierName: purchase.supplierName,
+          purchaseDate: purchase.purchaseDate,
+          totalCents: _cents(purchase.totalCents),
+          paymentMethod: purchase.paymentMethod ?? 'credit',
+          currencyId: purchase.currencyId,
+          taxInclusiveAtPost: purchase.taxInclusiveAtPost,
+          returnableLineCount: actualCount,
+        ),
+      );
+    }
+    final pageRows = returnable
+        .skip(safeOffset)
+        .take(safeLimit + 1)
+        .toList(growable: false);
+    return LanReturnablePurchasesPage(
+      purchases: pageRows.take(safeLimit).toList(growable: false),
+      offset: safeOffset,
+      limit: safeLimit,
+      hasMore: pageRows.length > safeLimit,
+    );
+  }
+
+  @override
+  Future<LanReturnablePurchaseDetails?> fetchReturnablePurchase({
+    required int purchaseId,
+  }) async {
+    final purchase = await _purchases.getPurchaseById(purchaseId);
+    if (purchase == null || !purchase.isPosted) return null;
+    final items = await _purchases.getPurchaseItems(purchaseId);
+    final lines = <LanReturnablePurchaseLine>[];
+    for (final item in items) {
+      final returned = await _purchases.getReturnedQuantity(item.id);
+      final available = item.quantity - returned;
+      if (available <= 0) continue;
+      final history = await _purchases.getLinkedReturnHistory(item.id);
+      lines.add(
+        LanReturnablePurchaseLine(
+          purchaseItemId: item.id,
+          productId: item.productId,
+          variantId: item.variantId,
+          productName: item.productName ?? 'Product #${item.productId}',
+          variantSku: item.variantSku,
+          colorName: item.colorName,
+          colorHex: item.colorHex,
+          sizeName: item.sizeName,
+          originalQuantity: item.quantity,
+          returnedQuantity: returned,
+          availableQuantity: available,
+          currentStockQuantity: item.currentStockQuantity,
+          tracksInventory: item.tracksInventory,
+          quantityScale: item.quantityScale,
+          measurementType: item.measurementType,
+          unitCostCents: _cents(item.unitCostCents),
+          subtotalCents: _cents(item.subtotalCents),
+          discountCents: _cents(item.discountCents),
+          taxCents: _cents(item.taxCents),
+          totalCents: _cents(item.totalCents),
+          linkedReturnedQuantity: history.quantity,
+          linkedReturnedSubtotalCents: history.subtotalCents,
+          linkedReturnedDiscountCents: history.discountCents,
+          linkedReturnedTaxCents: history.taxCents,
+          linkedReturnedRefundCents: history.refundCents,
+        ),
+      );
+    }
+    if (lines.isEmpty) return null;
+    return LanReturnablePurchaseDetails(
+      purchase: LanReturnablePurchaseSummary(
+        purchaseId: purchase.id,
+        purchaseNumber: purchase.purchaseNumber,
+        supplierId: purchase.supplierId,
+        supplierName: purchase.supplierName,
+        purchaseDate: purchase.purchaseDate,
+        totalCents: _cents(purchase.totalCents),
+        paymentMethod: purchase.paymentMethod ?? 'credit',
+        currencyId: purchase.currencyId,
+        taxInclusiveAtPost: purchase.taxInclusiveAtPost,
+        returnableLineCount: lines.length,
+      ),
+      lines: lines,
+    );
+  }
+
+  LanPurchaseReturnSummary _purchaseReturnSummary(PurchaseReturnEntity value) =>
+      LanPurchaseReturnSummary(
+        id: value.id,
+        purchaseId: value.purchaseId,
+        supplierId: value.supplierId,
+        supplierName: value.supplierName,
+        supplierPhone: value.supplierPhone,
+        returnNumber: value.returnNumber,
+        subtotalCents: _cents(value.subtotalCents),
+        discountCents: _cents(value.discountCents),
+        taxCents: _cents(value.taxCents),
+        totalCents: _cents(value.totalCents),
+        currencyId: value.currencyId,
+        status: value.status,
+        dispositionType: value.dispositionType,
+        refundMethod: value.refundMethod,
+        reason: value.reason,
+        returnDate: value.returnDate,
+        createdAt: value.createdAt,
+        isAdjustment: value.isAdjustment,
+        unifiedId: value.unifiedId,
+      );
+
+  @override
+  Future<LanPurchaseReturnsPage> fetchPurchaseReturns({
+    required String query,
+    required int offset,
+    required int limit,
+  }) async {
+    final safeOffset = offset.clamp(0, 1000000);
+    final safeLimit = limit.clamp(1, 200);
+    final normalized = query.trim().toLowerCase();
+    final all = await _purchases.watchAllPurchaseReturns().first;
+    final filtered = normalized.isEmpty
+        ? all
+        : all
+              .where(
+                (value) =>
+                    value.returnNumber.toLowerCase().contains(normalized) ||
+                    (value.supplierName?.toLowerCase().contains(normalized) ??
+                        false) ||
+                    (value.supplierPhone?.toLowerCase().contains(normalized) ??
+                        false),
+              )
+              .toList(growable: false);
+    final pageRows = filtered
+        .skip(safeOffset)
+        .take(safeLimit + 1)
+        .toList(growable: false);
+    final summaries = <LanPurchaseReturnSummary>[];
+    for (final value in pageRows.take(safeLimit)) {
+      final summary = _purchaseReturnSummary(value);
+      String? number;
+      if (!value.isAdjustment && value.purchaseId > 0) {
+        number = (await _purchases.getPurchaseById(
+          value.purchaseId,
+        ))?.purchaseNumber;
+      }
+      summaries.add(
+        LanPurchaseReturnSummary(
+          id: summary.id,
+          purchaseId: summary.purchaseId,
+          purchaseNumber: number,
+          supplierId: summary.supplierId,
+          supplierName: summary.supplierName,
+          supplierPhone: summary.supplierPhone,
+          returnNumber: summary.returnNumber,
+          subtotalCents: summary.subtotalCents,
+          discountCents: summary.discountCents,
+          taxCents: summary.taxCents,
+          totalCents: summary.totalCents,
+          currencyId: summary.currencyId,
+          status: summary.status,
+          dispositionType: summary.dispositionType,
+          refundMethod: summary.refundMethod,
+          reason: summary.reason,
+          returnDate: summary.returnDate,
+          createdAt: summary.createdAt,
+          isAdjustment: summary.isAdjustment,
+          unifiedId: summary.unifiedId,
+        ),
+      );
+    }
+    return LanPurchaseReturnsPage(
+      returns: summaries,
+      offset: safeOffset,
+      limit: safeLimit,
+      hasMore: pageRows.length > safeLimit,
+    );
+  }
+
+  @override
+  Future<LanPurchaseReturnDetails?> fetchPurchaseReturnDetails({
+    required int returnId,
+    required bool adjustment,
+  }) async {
+    if (!adjustment) {
+      final ret = await _purchases.getPurchaseReturnById(returnId);
+      if (ret == null || ret.isAdjustment) return null;
+      final purchase = await _purchases.getPurchaseById(ret.purchaseId);
+      final originals = await _purchases.getPurchaseItems(ret.purchaseId);
+      final byId = {for (final item in originals) item.id: item};
+      final items = await _purchases
+          .watchPurchaseReturnItemsWithDetails(returnId)
+          .first;
+      final base = _purchaseReturnSummary(ret);
+      return LanPurchaseReturnDetails(
+        summary: LanPurchaseReturnSummary(
+          id: base.id,
+          purchaseId: base.purchaseId,
+          purchaseNumber: purchase?.purchaseNumber,
+          supplierId: purchase?.supplierId ?? base.supplierId,
+          supplierName: purchase?.supplierName ?? base.supplierName,
+          supplierPhone: purchase?.supplierPhone ?? base.supplierPhone,
+          returnNumber: base.returnNumber,
+          subtotalCents: base.subtotalCents,
+          discountCents: base.discountCents,
+          taxCents: base.taxCents,
+          totalCents: base.totalCents,
+          currencyId: base.currencyId,
+          status: base.status,
+          dispositionType: base.dispositionType,
+          refundMethod: base.refundMethod,
+          reason: base.reason,
+          returnDate: base.returnDate,
+          createdAt: base.createdAt,
+          isAdjustment: false,
+          unifiedId: base.unifiedId,
+        ),
+        lines: items
+            .map((item) {
+              final original = byId[item.purchaseItemId];
+              return LanPurchaseReturnDetailLine(
+                id: item.id,
+                returnId: item.returnId,
+                purchaseItemId: item.purchaseItemId,
+                productId: original?.productId ?? 0,
+                variantId: original?.variantId,
+                productName: item.productName ?? original?.productName ?? '',
+                variantSku: item.variantSku ?? original?.variantSku,
+                variantBarcode: item.variantBarcode,
+                colorName: item.colorName ?? original?.colorName,
+                colorHex: item.colorHex ?? original?.colorHex,
+                sizeName: item.sizeName ?? original?.sizeName,
+                quantity: item.quantity,
+                quantityScale: item.quantityScale,
+                measurementType: item.measurementType,
+                unitPriceCents: original == null
+                    ? null
+                    : _cents(original.unitCostCents),
+                subtotalCents: _cents(item.subtotalCents),
+                discountCents: _cents(item.discountCents),
+                taxCents: _cents(item.taxCents),
+                totalCents: _cents(item.refundCents),
+                reason: item.reason,
+                dispositionType: ret.dispositionType,
+                createdAt: item.createdAt,
+              );
+            })
+            .toList(growable: false),
+        originalPurchase: purchase == null
+            ? null
+            : LanReturnablePurchaseSummary(
+                purchaseId: purchase.id,
+                purchaseNumber: purchase.purchaseNumber,
+                supplierId: purchase.supplierId,
+                supplierName: purchase.supplierName,
+                purchaseDate: purchase.purchaseDate,
+                totalCents: _cents(purchase.totalCents),
+                paymentMethod: purchase.paymentMethod ?? 'credit',
+                currencyId: purchase.currencyId,
+                taxInclusiveAtPost: purchase.taxInclusiveAtPost,
+                returnableLineCount: 0,
+              ),
+      );
+    }
+
+    final ret = await _adjustmentReturns.getPurchaseAdjReturnById(returnId);
+    if (ret == null) return null;
+    final supplier =
+        await (_database.select(_database.suppliers)
+              ..where((row) => row.id.equals(ret.supplierId))
+              ..limit(1))
+            .getSingleOrNull();
+    final rows = await _adjustmentReturns
+        .watchPurchaseAdjReturnItemsWithDetails(returnId)
+        .first;
+    final disposition = rows.isEmpty
+        ? 'restock'
+        : rows.first.item.dispositionType;
+    return LanPurchaseReturnDetails(
+      summary: LanPurchaseReturnSummary(
+        id: ret.id,
+        purchaseId: 0,
+        supplierId: ret.supplierId,
+        supplierName: supplier?.name,
+        supplierPhone: supplier?.phone,
+        returnNumber: ret.returnNumber,
+        subtotalCents: _cents(ret.subtotalCents),
+        discountCents: _cents(ret.discountCents),
+        taxCents: _cents(ret.taxCents),
+        totalCents: _cents(ret.totalCents),
+        currencyId: ret.currencyId,
+        status: ret.status,
+        dispositionType: disposition,
+        refundMethod: ret.refundMethod,
+        reason: ret.notes,
+        returnDate: ret.returnDate,
+        createdAt: ret.createdAt,
+        isAdjustment: true,
+        unifiedId: 'PRA-${ret.id}',
+      ),
+      lines: rows
+          .map((row) {
+            final item = row.item;
+            final total = _cents(item.totalCents);
+            final discount = _cents(item.discountCents);
+            final tax = _cents(item.taxCents);
+            return LanPurchaseReturnDetailLine(
+              id: item.id,
+              returnId: item.returnId,
+              productId: item.productId,
+              variantId: item.variantId,
+              productName: row.product.name,
+              variantSku: row.variant?.sku,
+              variantBarcode: row.variant?.barcode,
+              colorName: row.colorName,
+              colorHex: row.colorHex,
+              quantity: item.quantity,
+              quantityScale: item.quantityScale,
+              measurementType: item.measurementType,
+              unitPriceCents: _cents(item.unitPriceCents),
+              subtotalCents: total + discount - tax,
+              discountCents: discount,
+              taxCents: tax,
+              totalCents: total,
+              reason: item.reason,
+              dispositionType: item.dispositionType,
+              createdAt: item.createdAt,
+            );
+          })
+          .toList(growable: false),
+    );
+  }
+
+  List<CheckoutPaymentAllocation> _purchaseReturnAllocations(
+    List<LanCheckoutPaymentRequest> payments,
+  ) => payments
+      .map(
+        (payment) => CheckoutPaymentAllocation(
+          method: payment.method,
+          amountCents: payment.amountCents,
+          reference: payment.reference,
+          bankName: payment.bankName,
+          issueDate: payment.issueDate?.toLocal(),
+          dueDate: payment.dueDate?.toLocal(),
+          note: payment.note,
+        ),
+      )
+      .toList(growable: false);
+
+  @override
+  Future<LanPurchaseReturnResult> createPurchaseReturn({
+    required LanRemoteUser actor,
+    required LanPurchaseReturnRequest request,
+  }) async {
+    _guardRemotePinProtectedOperation();
+    final key = request.idempotencyKey.trim();
+    if (key.length < 8 || key.length > 128 || request.lines.isEmpty) {
+      throw const LanBusinessException(
+        'invalid_purchase_return',
+        'A valid purchase and at least one return line are required.',
+      );
+    }
+    const methods = {'cash', 'card', 'credit', 'cheque'};
+    if (!methods.contains(request.refundMethod)) {
+      throw const LanBusinessException(
+        'invalid_refund_method',
+        'Unsupported refund method.',
+      );
+    }
+    if (request.refundMethod == 'cheque' && request.dueDate == null) {
+      throw const LanBusinessException(
+        'cheque_due_date_required',
+        'A cheque due date is required.',
+      );
+    }
+    const dispositions = {'restock', 'write_off'};
+    if (!dispositions.contains(request.dispositionType)) {
+      throw const LanBusinessException(
+        'invalid_disposition',
+        'Unsupported purchase return disposition.',
+      );
+    }
+    final existing =
+        await (_database.select(_database.purchaseReturns)
+              ..where((row) => row.idempotencyKey.equals(key))
+              ..limit(1))
+            .getSingleOrNull();
+    if (existing != null) {
+      return LanPurchaseReturnResult(
+        returnId: existing.id,
+        returnNumber: existing.returnNumber,
+        totalCents: _cents(existing.totalCents),
+        duplicate: true,
+      );
+    }
+    final details = await fetchReturnablePurchase(
+      purchaseId: request.purchaseId,
+    );
+    if (details == null) {
+      throw const LanBusinessException(
+        'purchase_not_returnable',
+        'The purchase was not found or has no returnable items.',
+        statusCode: 409,
+      );
+    }
+    final byId = {for (final line in details.lines) line.purchaseItemId: line};
+    final seen = <int>{};
+    final items = <PurchaseReturnItemInput>[];
+    for (final requested in request.lines) {
+      final source = byId[requested.purchaseItemId];
+      if (source == null ||
+          requested.quantity <= 0 ||
+          requested.quantity > source.availableQuantity ||
+          !seen.add(requested.purchaseItemId)) {
+        throw const LanBusinessException(
+          'invalid_return_quantity',
+          'A return line is invalid or exceeds the available quantity.',
+          statusCode: 409,
+        );
+      }
+      items.add(
+        PurchaseReturnItemInput(
+          purchaseItemId: requested.purchaseItemId,
+          quantity: requested.quantity,
+          quantityScale: source.quantityScale,
+          measurementType: source.measurementType,
+          subtotalCents: Decimal.zero,
+          discountCents: Decimal.zero,
+          taxCents: Decimal.zero,
+          refundCents: Decimal.zero,
+          reason: requested.reason,
+        ),
+      );
+    }
+    try {
+      final returnId = await _purchases.createPurchaseReturn(
+        purchaseId: request.purchaseId,
+        currencyId: details.purchase.currencyId,
+        subtotalCents: Decimal.zero,
+        discountCents: Decimal.zero,
+        taxCents: Decimal.zero,
+        totalCents: Decimal.zero,
+        items: items,
+        dispositionType: request.dispositionType,
+        refundMethod: request.refundMethod,
+        reason: request.reason,
+        returnDate: DateTime.now(),
+        dueDate: request.dueDate?.toLocal(),
+        allowNegativeStock: _settings.current.allowNegativeStock,
+        idempotencyKey: key,
+        taxInclusiveAtPost: details.purchase.taxInclusiveAtPost,
+        settlementAllocations: _purchaseReturnAllocations(request.payments),
+      );
+      final created = await _purchases.getPurchaseReturnById(returnId);
+      if (created == null) throw StateError('Purchase return not found');
+      return LanPurchaseReturnResult(
+        returnId: created.id,
+        returnNumber: created.returnNumber,
+        totalCents: _cents(created.totalCents),
+      );
+    } catch (error) {
+      throw LanBusinessException(
+        'purchase_return_rejected',
+        error.toString().replaceFirst('Exception: ', ''),
+        statusCode: 409,
+      );
+    }
+  }
+
+  @override
+  Future<LanPurchaseReturnResult> createPurchaseAdjustmentReturn({
+    required LanRemoteUser actor,
+    required LanPurchaseAdjustmentReturnRequest request,
+  }) async {
+    _guardRemotePinProtectedOperation();
+    final key = request.idempotencyKey.trim();
+    if (key.length < 8 || key.length > 128 || request.lines.isEmpty) {
+      throw const LanBusinessException(
+        'invalid_purchase_return',
+        'A supplier and at least one return line are required.',
+      );
+    }
+    final supplier =
+        await (_database.select(_database.suppliers)
+              ..where(
+                (row) =>
+                    row.id.equals(request.supplierId) &
+                    row.isActive.equals(true),
+              )
+              ..limit(1))
+            .getSingleOrNull();
+    if (supplier == null) {
+      throw const LanBusinessException(
+        'supplier_unavailable',
+        'The selected supplier is unavailable.',
+        statusCode: 409,
+      );
+    }
+    const methods = {'cash', 'card', 'credit', 'cheque'};
+    if (!methods.contains(request.refundMethod)) {
+      throw const LanBusinessException(
+        'invalid_refund_method',
+        'Unsupported refund method.',
+      );
+    }
+    if (request.refundMethod == 'cheque' && request.dueDate == null) {
+      throw const LanBusinessException(
+        'cheque_due_date_required',
+        'A cheque due date is required.',
+      );
+    }
+    if (request.overallDiscountCents < 0 ||
+        (request.overallDiscountIsPercent &&
+            request.overallDiscountCents > 10000)) {
+      throw const LanBusinessException(
+        'invalid_discount',
+        'The overall discount is invalid.',
+      );
+    }
+    final existing =
+        await (_database.select(_database.purchaseReturnAdjustments)
+              ..where((row) => row.idempotencyKey.equals(key))
+              ..limit(1))
+            .getSingleOrNull();
+    if (existing != null) {
+      return LanPurchaseReturnResult(
+        returnId: existing.id,
+        returnNumber: existing.returnNumber,
+        totalCents: _cents(existing.totalCents),
+        duplicate: true,
+      );
+    }
+    final productIds = request.lines.map((line) => line.productId).toSet();
+    final products = await (_database.select(
+      _database.products,
+    )..where((row) => row.id.isIn(productIds))).get();
+    final productMap = {for (final value in products) value.id: value};
+    final variantIds = request.lines
+        .map((line) => line.variantId)
+        .whereType<int>()
+        .toSet();
+    final variants = variantIds.isEmpty
+        ? <ProductVariant>[]
+        : await (_database.select(
+            _database.productVariants,
+          )..where((row) => row.id.isIn(variantIds))).get();
+    final variantMap = {for (final value in variants) value.id: value};
+    final inputs = <LineItemPricingInput>[];
+    final resolved =
+        <
+          ({
+            LanPurchaseAdjustmentReturnLineRequest request,
+            Product product,
+            ProductVariant? variant,
+            int scale,
+            int taxRate,
+          })
+        >[];
+    for (final line in request.lines) {
+      final product = productMap[line.productId];
+      final variant = line.variantId == null
+          ? null
+          : variantMap[line.variantId];
+      if (product == null ||
+          !product.isActive ||
+          (product.hasVariants && line.variantId == null) ||
+          (line.variantId != null &&
+              (variant == null ||
+                  variant.productId != product.id ||
+                  !variant.isActive)) ||
+          line.quantity <= 0 ||
+          line.unitPriceCents < 0 ||
+          line.discountCents < 0 ||
+          line.discountPercentBps < 0 ||
+          line.discountPercentBps > 10000 ||
+          (line.discountCents > 0 && line.discountPercentBps > 0)) {
+        throw const LanBusinessException(
+          'invalid_return_line',
+          'A selected return line is invalid.',
+        );
+      }
+      final scale = MeasurementType.fromDb(
+        product.measurementType,
+      ).quantityScale;
+      final taxRate = product.isTaxable ? product.purchaseTaxRateBps : 0;
+      final discount = line.discountPercentBps > 0
+          ? Discount.percent(line.discountPercentBps)
+          : line.discountCents > 0
+          ? Discount.fixed(Money.fromCents(line.discountCents))
+          : Discount.none;
+      inputs.add(
+        LineItemPricingInput(
+          unitPrice: Money.fromCents(line.unitPriceCents),
+          quantity: line.quantity,
+          quantityScale: scale,
+          discount: discount,
+          isTaxable: product.isTaxable,
+          productTaxRateBps: taxRate,
+        ),
+      );
+      resolved.add((
+        request: line,
+        product: product,
+        variant: variant,
+        scale: scale,
+        taxRate: taxRate,
+      ));
+    }
+    final overall = request.overallDiscountIsPercent
+        ? Discount.percent(request.overallDiscountCents)
+        : request.overallDiscountCents > 0
+        ? Discount.fixed(Money.fromCents(request.overallDiscountCents))
+        : Discount.none;
+    final pricing = InvoicePricingEngine.compute(
+      InvoicePricingInput(
+        lines: inputs,
+        overallDiscount: overall,
+        enableTaxCalculations: true,
+        defaultTaxRateBps: 0,
+        taxInclusivePricing: false,
+      ),
+    );
+    final currency = await _selectedCurrency();
+    if (currency == null) {
+      throw const LanBusinessException(
+        'currency_unavailable',
+        'The master currency is unavailable.',
+      );
+    }
+    const reasons = {
+      'damaged',
+      'defective',
+      'wrongItem',
+      'gift',
+      'goodwill',
+      'noReceipt',
+      'other',
+    };
+    if (!reasons.contains(request.reasonCode)) {
+      throw const LanBusinessException(
+        'return_reason_required',
+        'A valid return reason is required.',
+      );
+    }
+    final cleanNotes = request.notes?.trim();
+    final notes =
+        '[REASON:${request.reasonCode}]${cleanNotes == null || cleanNotes.isEmpty ? '' : ' $cleanNotes'}';
+    final allocations = _purchaseReturnAllocations(request.payments);
+    final data = PurchaseReturnAdjustmentsCompanion.insert(
+      returnNumber: '',
+      supplierId: request.supplierId,
+      currencyId: currency.id,
+      subtotalCents: Value(Decimal.fromInt(pricing.subtotal.cents)),
+      discountCents: Value(Decimal.fromInt(pricing.totalDiscount.cents)),
+      taxCents: Value(Decimal.fromInt(pricing.tax.cents)),
+      totalCents: Decimal.fromInt(pricing.total.cents),
+      notes: Value(notes),
+      returnDate: Value(request.returnDate.toLocal()),
+      refundMethod: Value(allocations.isEmpty ? request.refundMethod : 'mixed'),
+      dueDate: Value(allocations.isEmpty ? request.dueDate?.toLocal() : null),
+      idempotencyKey: Value(key),
+      returnMode: const Value('auto_adjustment'),
+      modeReason: const Value('Remote unlinked purchase return'),
+    ).withPricingSnapshot(taxInclusive: false);
+    final itemRows = <PurchaseReturnAdjustmentItemsCompanion>[];
+    for (var index = 0; index < resolved.length; index++) {
+      final value = resolved[index];
+      final line = pricing.lines[index];
+      itemRows.add(
+        PurchaseReturnAdjustmentItemsCompanion.insert(
+          returnId: 0,
+          productId: value.product.id,
+          variantId: Value(value.variant?.id),
+          quantity: value.request.quantity,
+          quantityScale: Value(value.scale),
+          measurementType: Value(value.product.measurementType),
+          unitPriceCents: Decimal.fromInt(value.request.unitPriceCents),
+          discountCents: Value(Decimal.fromInt(line.totalLineDiscount.cents)),
+          taxCents: Value(Decimal.fromInt(line.tax.cents)),
+          totalCents: Decimal.fromInt(line.total.cents),
+          reason: Value(value.request.reason),
+          taxRateBpsAtPost: Value(value.taxRate),
+          dispositionType: const Value('restock'),
+        ),
+      );
+    }
+    try {
+      final returnId = await _adjustmentReturns.createAndPostPurchaseAdjReturn(
+        data,
+        itemRows,
+        journalEntryService: _journalEntries,
+        userId: actor.id,
+        allowNegativeStock: _settings.current.allowNegativeStock,
+        settlementAllocations: allocations,
+      );
+      final created = await _adjustmentReturns.getPurchaseAdjReturnById(
+        returnId,
+      );
+      if (created == null) throw StateError('Purchase return not found');
+      return LanPurchaseReturnResult(
+        returnId: created.id,
+        returnNumber: created.returnNumber,
+        totalCents: _cents(created.totalCents),
+      );
+    } catch (error) {
+      throw LanBusinessException(
+        'purchase_return_rejected',
+        error.toString().replaceFirst('Exception: ', ''),
+        statusCode: 409,
+      );
+    }
+  }
+
+  @override
+  Future<void> voidPurchaseReturn({
+    required LanRemoteUser actor,
+    required int returnId,
+    required bool adjustment,
+  }) async {
+    _guardRemotePinProtectedOperation();
+    try {
+      if (adjustment) {
+        await _adjustmentReturns.voidPurchaseAdjReturn(
+          returnId,
+          journalEntryService: _journalEntries,
+          voidedBy: actor.id,
+          voidReason: 'Remote user voided purchase adjustment return',
+        );
+      } else {
+        await _purchases.voidPurchaseReturn(returnId);
+      }
+    } catch (error) {
+      throw LanBusinessException(
+        'purchase_return_void_rejected',
+        error.toString().replaceFirst('Exception: ', ''),
+        statusCode: 409,
+      );
+    }
+  }
+
+  @override
   Future<LanSaleResult> createSale({
     required LanRemoteUser actor,
     required LanSaleRequest request,
@@ -2022,6 +2836,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
           ],
         );
 
+    final belowCostViolations = <_BelowCostViolation>[];
     for (var index = 0; index < resolved.length; index++) {
       final value = resolved[index];
       final variantCost = value.variant?.costCents;
@@ -2036,10 +2851,57 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       ).multiplyRatio(value.request.quantity, quantityScale).round().cents;
       if (pricing.lines[index].adjustedNet.cents < totalCostCents &&
           !profitableFreeBundleLineIds.contains('lan_$index')) {
-        throw const LanBusinessException(
+        final effectiveUnitPriceCents = pricing.lines[index].adjustedNet
+            .multiplyRatio(quantityScale, value.request.quantity)
+            .round()
+            .cents;
+        belowCostViolations.add(
+          _BelowCostViolation(
+            lineIndex: index,
+            productId: value.product.id,
+            productName: value.product.name,
+            costCents: unitCostCents,
+            sellingPriceCents: effectiveUnitPriceCents,
+            lossCents: unitCostCents - effectiveUnitPriceCents,
+          ),
+        );
+      }
+    }
+    if (belowCostViolations.isNotEmpty) {
+      final privileged = actor.role == 'owner' || actor.role == 'manager';
+      final canOverride = appSettings.allowBelowCostSales && privileged;
+      final violation = belowCostViolations.first;
+      final canViewCost = actor.permissions.contains('view_product_cost');
+      final lossPercent = violation.costCents <= 0
+          ? 0.0
+          : (violation.lossCents / violation.costCents) * 100;
+      final warningDetails = <String, dynamic>{
+        'lineIndex': violation.lineIndex,
+        'productId': violation.productId,
+        'productName': violation.productName,
+        'canOverride': canOverride,
+        if (canViewCost) ...{
+          'costCents': violation.costCents,
+          'sellingPriceCents': violation.sellingPriceCents,
+          'lossCents': violation.lossCents,
+          'lossPercent': lossPercent,
+          'exceedsThreshold': lossPercent > 50,
+        },
+      };
+      if (!canOverride) {
+        throw LanBusinessException(
           'sale_below_cost',
           'The discount would sell an item below its recorded cost.',
           statusCode: 409,
+          details: warningDetails,
+        );
+      }
+      if (request.belowCostOverrideReason?.trim().isEmpty != false) {
+        throw LanBusinessException(
+          'sale_below_cost_reason_required',
+          'A reason is required to approve a below-cost sale.',
+          statusCode: 409,
+          details: warningDetails,
         );
       }
     }
@@ -2217,6 +3079,24 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       initialPayments: initialPayments,
     );
 
+    for (final violation in belowCostViolations) {
+      try {
+        await _auditLog.logBelowCostOverride(
+          saleId: saleId,
+          productId: violation.productId,
+          productName: violation.productName,
+          costCents: violation.costCents,
+          sellingPriceCents: violation.sellingPriceCents,
+          lossCents: violation.lossCents,
+          reason: request.belowCostOverrideReason!.trim(),
+          userId: actor.id,
+          userRole: actor.role,
+        );
+      } catch (_) {
+        // The sale and its balanced journals are already authoritative.
+      }
+    }
+
     final sale = await (_database.select(
       _database.sales,
     )..where((row) => row.id.equals(saleId))).getSingle();
@@ -2299,6 +3179,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
   }
 
   LanSaleResult _resultFromSale(Sale sale, {bool duplicate = false}) {
+    final appSettings = _settings.current;
     return LanSaleResult(
       saleId: sale.id,
       invoiceNumber: sale.invoiceNumber,
@@ -2307,6 +3188,8 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       taxCents: _cents(sale.taxCents),
       totalCents: _cents(sale.totalCents),
       paidAmountCents: _cents(sale.paidAmountCents),
+      receiptHeaderText: appSettings.receiptHeaderText,
+      receiptFooterText: appSettings.receiptFooterText,
       duplicate: duplicate,
     );
   }
@@ -2346,6 +3229,24 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
   }
 
   int _cents(Decimal value) => value.toBigInt().toInt();
+}
+
+class _BelowCostViolation {
+  final int lineIndex;
+  final int productId;
+  final String productName;
+  final int costCents;
+  final int sellingPriceCents;
+  final int lossCents;
+
+  const _BelowCostViolation({
+    required this.lineIndex,
+    required this.productId,
+    required this.productName,
+    required this.costCents,
+    required this.sellingPriceCents,
+    required this.lossCents,
+  });
 }
 
 class _ResolvedLanLine {

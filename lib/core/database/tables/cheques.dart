@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import '../converters/money_converter.dart';
 import 'settings.dart';
+import 'transactions.dart';
 import 'users.dart';
 
 /// A real negotiable cheque instrument.
@@ -174,5 +175,94 @@ class ChequeConfirmations extends Table {
   @override
   List<Set<Column>> get uniqueKeys => [
     {sourceTable, sourceId},
+  ];
+}
+
+/// The accounting value recognized when a standalone party cheque clears.
+///
+/// This is a sub-ledger only: the cheque clearance has already posted the
+/// customer/supplier balance and bank journals. Applying this value to an
+/// invoice later is settlement matching and must not post cash or GL again.
+@DataClassName('PartyAccountPayment')
+class PartyAccountPayments extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get chequeInstrumentId => integer().references(
+    ChequeInstruments,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
+  TextColumn get partyType => text()();
+  IntColumn get partyId => integer()();
+  TextColumn get direction => text()();
+  IntColumn get amountCents => integer().map(const MoneyConverter())();
+  IntColumn get appliedCents =>
+      integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get currencyId =>
+      integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
+  TextColumn get status => text().withDefault(const Constant('open'))();
+
+  /// Customer/supplier transaction written when the cheque was cleared.
+  /// This is deliberately polymorphic and therefore has no SQL foreign key.
+  IntColumn get settlementTransactionId => integer().nullable()();
+  DateTimeColumn get recognizedAt => dateTime()();
+  DateTimeColumn get reversedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {chequeInstrumentId},
+  ];
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (party_type IN ('customer','supplier'))",
+    "CHECK (direction IN ('incoming','outgoing'))",
+    'CHECK (amount_cents > 0)',
+    'CHECK (applied_cents >= 0 AND applied_cents <= amount_cents)',
+    "CHECK (status IN ('open','partially_applied','applied','reversed'))",
+  ];
+}
+
+/// One reversible allocation of a cleared account cheque to an invoice.
+@DataClassName('PartyAccountPaymentApplication')
+class PartyAccountPaymentApplications extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get accountPaymentId => integer().references(
+    PartyAccountPayments,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
+  TextColumn get documentType => text()();
+  IntColumn get documentId => integer()();
+  IntColumn get amountCents => integer().map(const MoneyConverter())();
+  IntColumn get salePaymentId => integer().nullable().references(
+    SalePayments,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+  IntColumn get purchasePaymentId => integer().nullable().references(
+    PurchasePayments,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+  TextColumn get status => text().withDefault(const Constant('active'))();
+  DateTimeColumn get appliedAt => dateTime()();
+  DateTimeColumn get reversedAt => dateTime().nullable()();
+  @ReferenceName('accountPaymentApplicationCreatedBy')
+  IntColumn get createdBy => integer().nullable().references(
+    Users,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (document_type IN ('sale','purchase'))",
+    'CHECK (amount_cents > 0)',
+    "CHECK (status IN ('active','reversed'))",
+    "CHECK ((document_type = 'sale' AND purchase_payment_id IS NULL) OR (document_type = 'purchase' AND sale_payment_id IS NULL))",
   ];
 }

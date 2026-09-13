@@ -10,6 +10,7 @@ import '../../services/customer_statement_pdf_service.dart';
 import '../../services/party_transaction_localizer.dart';
 import '../bloc/customer_statement_report_bloc.dart';
 import '../widgets/date_range_selector.dart';
+import '../widgets/report_scrollable_center.dart';
 import '../widgets/searchable_party_selector.dart';
 
 class CustomerStatementReportScreen extends StatelessWidget {
@@ -143,7 +144,7 @@ class _CustomerStatementReportView extends StatelessWidget {
 
   Widget _buildSelectCustomerPrompt(BuildContext context) {
     final theme = Theme.of(context);
-    return Center(
+    return ReportScrollableCenter(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -614,7 +615,7 @@ class _StatementContent extends StatelessWidget {
 
   Widget _buildEmptyTransactions(BuildContext context) {
     final theme = Theme.of(context);
-    return Center(
+    return ReportScrollableCenter(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(

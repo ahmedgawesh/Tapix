@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/services/return_calculation_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../../core/payments/checkout_settlement.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../../domain/repositories/purchase_repository.dart';
@@ -364,8 +365,11 @@ class PurchaseReturnFormSubmitted extends PurchaseReturnFormEvent {
 class PurchaseReturnFormBloc
     extends Bloc<PurchaseReturnFormEvent, PurchaseReturnFormState> {
   final PurchaseRepository _repository;
+  final LanNetworkService? _lan;
 
-  PurchaseReturnFormBloc(this._repository) : super(PurchaseReturnFormState()) {
+  PurchaseReturnFormBloc(this._repository, {LanNetworkService? lan})
+    : _lan = lan,
+      super(PurchaseReturnFormState()) {
     on<PurchaseReturnFormInitialized>(_onInitialized);
     on<ReturnItemToggled>(_onItemToggled);
     on<ReturnItemQuantityChanged>(_onQuantityChanged);
@@ -377,6 +381,78 @@ class PurchaseReturnFormBloc
     on<PurchaseReturnFormSubmitted>(_onSubmitted);
   }
 
+  bool get _isRemoteClient =>
+      _lan?.snapshot.mode == LanMode.client &&
+      _lan?.hasRemoteUserSession == true;
+
+  Future<PurchaseReturnFormState> _loadRemoteState(int purchaseId) async {
+    final details = await _lan!.fetchRemoteReturnablePurchase(purchaseId);
+    final summary = details.purchase;
+    final now = DateTime.now();
+    final purchase = PurchaseEntity(
+      id: summary.purchaseId,
+      purchaseNumber: summary.purchaseNumber,
+      supplierId: summary.supplierId,
+      supplierName: summary.supplierName,
+      subtotalCents: Decimal.fromInt(summary.totalCents),
+      taxCents: Decimal.zero,
+      totalCents: Decimal.fromInt(summary.totalCents),
+      currencyId: summary.currencyId,
+      status: 'posted',
+      paymentMethod: summary.paymentMethod,
+      purchaseDate: summary.purchaseDate,
+      taxInclusiveAtPost: summary.taxInclusiveAtPost,
+      createdAt: summary.purchaseDate,
+      updatedAt: now,
+    );
+    final items = details.lines
+        .map(
+          (line) => PurchaseItemEntity(
+            id: line.purchaseItemId,
+            purchaseId: summary.purchaseId,
+            productId: line.productId,
+            variantId: line.variantId,
+            productName: line.productName,
+            variantSku: line.variantSku,
+            colorName: line.colorName,
+            colorHex: line.colorHex,
+            sizeName: line.sizeName,
+            currentStockQuantity: line.currentStockQuantity,
+            tracksInventory: line.tracksInventory,
+            quantity: line.originalQuantity,
+            quantityScale: line.quantityScale,
+            measurementType: line.measurementType,
+            unitCostCents: Decimal.fromInt(line.unitCostCents),
+            discountCents: Decimal.fromInt(line.discountCents),
+            subtotalCents: Decimal.fromInt(line.subtotalCents),
+            taxCents: Decimal.fromInt(line.taxCents),
+            totalCents: Decimal.fromInt(line.totalCents),
+            createdAt: now,
+          ),
+        )
+        .toList(growable: false);
+    return state.copyWith(
+      purchase: purchase,
+      availableItems: items,
+      alreadyReturnedQty: {
+        for (final line in details.lines)
+          line.purchaseItemId: line.returnedQuantity,
+      },
+      linkedReturnHistory: {
+        for (final line in details.lines)
+          line.purchaseItemId: LinkedReturnHistory(
+            quantity: line.linkedReturnedQuantity,
+            subtotalCents: line.linkedReturnedSubtotalCents,
+            discountCents: line.linkedReturnedDiscountCents,
+            taxCents: line.linkedReturnedTaxCents,
+            refundCents: line.linkedReturnedRefundCents,
+          ),
+      },
+      currencyId: summary.currencyId,
+      isLoading: false,
+    );
+  }
+
   Future<void> _onInitialized(
     PurchaseReturnFormInitialized event,
     Emitter<PurchaseReturnFormState> emit,
@@ -384,6 +460,10 @@ class PurchaseReturnFormBloc
     emit(state.copyWith(isLoading: true, purchaseId: event.purchaseId));
 
     try {
+      if (_isRemoteClient) {
+        emit(await _loadRemoteState(event.purchaseId));
+        return;
+      }
       final purchase = await _repository.getPurchaseById(event.purchaseId);
       final items = await _repository.getPurchaseItems(event.purchaseId);
 
@@ -551,6 +631,48 @@ class PurchaseReturnFormBloc
     emit(state.copyWith(isSubmitting: true, error: null));
 
     try {
+      if (_isRemoteClient) {
+        await _lan!.submitRemotePurchaseReturn(
+          LanPurchaseReturnRequest(
+            idempotencyKey: const Uuid().v4(),
+            purchaseId: state.purchaseId!,
+            dispositionType: state.dispositionType,
+            refundMethod: state.refundMethod,
+            reason: state.reason,
+            dueDate: state.dueDate,
+            lines: state.returnItems
+                .map(
+                  (item) => LanPurchaseReturnLineRequest(
+                    purchaseItemId: item.originalItem.id,
+                    quantity: item.returnQuantity,
+                    reason: item.reason,
+                  ),
+                )
+                .toList(growable: false),
+            payments: event.settlementAllocations
+                .map(
+                  (payment) => LanCheckoutPaymentRequest(
+                    method: payment.method,
+                    amountCents: payment.amountCents,
+                    reference: payment.reference,
+                    bankName: payment.bankName,
+                    issueDate: payment.issueDate,
+                    dueDate: payment.dueDate,
+                    note: payment.note,
+                  ),
+                )
+                .toList(growable: false),
+          ),
+        );
+        emit(
+          state.copyWith(
+            isSubmitting: false,
+            isSuccess: true,
+            hasUnsavedChanges: false,
+          ),
+        );
+        return;
+      }
       final items = state.returnItems
           .map(
             (item) => PurchaseReturnItemInput(

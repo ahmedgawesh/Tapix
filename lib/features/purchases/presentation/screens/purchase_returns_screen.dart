@@ -8,6 +8,7 @@ import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/unified_return_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../bloc/purchase_returns_bloc.dart';
 import '../../../shared/widgets/unified_return_search_sheet.dart';
@@ -58,6 +59,12 @@ class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final cs = sl<CurrencyService>();
+    final lan = sl<LanNetworkService>();
+    final isRemote =
+        lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession;
+    final canCreate =
+        !isRemote ||
+        (lan.remoteUser?.permissions.contains('manage_purchases') ?? false);
 
     return Scaffold(
       appBar: AppBar(
@@ -67,18 +74,22 @@ class _PurchaseReturnsViewState extends State<_PurchaseReturnsView> {
             if (context.canPop()) {
               context.pop();
             } else {
-              context.go('/purchases');
+              context.go(isRemote ? '/dashboard' : '/purchases');
             }
           },
         ),
         title: Text('purchases.returns'.tr()),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () =>
-            showUnifiedReturnSearchSheet(context, side: ReturnSide.purchase),
-        icon: const Icon(LucideIcons.plus),
-        label: Text('returns.create_purchase_return'.tr()),
-      ),
+      floatingActionButton: canCreate
+          ? FloatingActionButton.extended(
+              onPressed: () => showUnifiedReturnSearchSheet(
+                context,
+                side: ReturnSide.purchase,
+              ),
+              icon: const Icon(LucideIcons.plus),
+              label: Text('returns.create_purchase_return'.tr()),
+            )
+          : null,
       body: SafeArea(
         child:
             BlocBuilder<

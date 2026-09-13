@@ -10,6 +10,7 @@ import '../../../../core/services/currency_service.dart';
 import '../../services/stock_movement_pdf_service.dart';
 import '../bloc/stock_movement_report_bloc.dart';
 import '../widgets/date_range_selector.dart';
+import '../widgets/report_scrollable_center.dart';
 
 class StockMovementReportScreen extends StatelessWidget {
   const StockMovementReportScreen({super.key});
@@ -302,7 +303,7 @@ class _StockMovementReportViewState extends State<_StockMovementReportView> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Center(
+    return ReportScrollableCenter(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
@@ -345,7 +346,7 @@ class _StockMovementReportViewState extends State<_StockMovementReportView> {
     final filtered = data.filteredMovements;
 
     if (data.movements.isEmpty) {
-      return Center(
+      return ReportScrollableCenter(
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Column(

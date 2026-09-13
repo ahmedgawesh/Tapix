@@ -109,7 +109,9 @@ class _ChequeRemindersSectionState extends State<ChequeRemindersSection> {
               instrumentId: row.instrument.id,
               sourceTable: row.instrument.sourceTable,
               sourceId: row.instrument.sourceId,
-              referenceNumber: row.referenceNumber,
+              referenceNumber: row.referenceNumber.isNotEmpty
+                  ? row.referenceNumber
+                  : '${'cheques.account_source'.tr()} — ${row.partyName ?? 'cheques.no_party'.tr()}',
               chequeNumber: row.instrument.chequeNumber,
               dueDate: row.instrument.dueDate,
               amountCents: row.instrument.amountCents.toBigInt().toInt(),

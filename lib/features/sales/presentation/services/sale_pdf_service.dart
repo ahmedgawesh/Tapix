@@ -26,6 +26,18 @@ import '../../../purchases/presentation/bloc/purchase_adj_return_form_bloc.dart'
     show parseAdjReturnNotes, adjReturnReasonLabel;
 
 class SalePdfService {
+  static AppSettings _withReceiptMessageOverrides(
+    AppSettings settings, {
+    String? headerText,
+    String? footerText,
+  }) {
+    if (headerText == null && footerText == null) return settings;
+    return settings.copyWith(
+      receiptHeaderText: headerText ?? settings.receiptHeaderText,
+      receiptFooterText: footerText ?? settings.receiptFooterText,
+    );
+  }
+
   /// Generate and print a sale invoice PDF from current form state
   static Future<void> printFromFormState({
     required BuildContext context,
@@ -35,7 +47,11 @@ class SalePdfService {
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
     final company = await sl<CompanyProfileService>().getProfile();
-    final appSettings = sl<AppSettingsBloc>().state.settings;
+    final appSettings = _withReceiptMessageOverrides(
+      sl<AppSettingsBloc>().state.settings,
+      headerText: state.masterReceiptHeaderText,
+      footerText: state.masterReceiptFooterText,
+    );
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async {
@@ -62,7 +78,11 @@ class SalePdfService {
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
     final company = await sl<CompanyProfileService>().getProfile();
-    final appSettings = sl<AppSettingsBloc>().state.settings;
+    final appSettings = _withReceiptMessageOverrides(
+      sl<AppSettingsBloc>().state.settings,
+      headerText: state.masterReceiptHeaderText,
+      footerText: state.masterReceiptFooterText,
+    );
 
     final pdf = await _buildSaleInvoiceFromState(
       state: state,
@@ -88,12 +108,18 @@ class SalePdfService {
     List<SalePromotionSnapshot> promotionApplications = const [],
     String? cashierName,
     String? cashierShiftNumber,
+    String? receiptHeaderText,
+    String? receiptFooterText,
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
     final company = await sl<CompanyProfileService>().getProfile();
-    final appSettings = sl<AppSettingsBloc>().state.settings;
+    final appSettings = _withReceiptMessageOverrides(
+      sl<AppSettingsBloc>().state.settings,
+      headerText: receiptHeaderText,
+      footerText: receiptFooterText,
+    );
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async {
@@ -123,12 +149,18 @@ class SalePdfService {
     List<SalePromotionSnapshot> promotionApplications = const [],
     String? cashierName,
     String? cashierShiftNumber,
+    String? receiptHeaderText,
+    String? receiptFooterText,
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
     final company = await sl<CompanyProfileService>().getProfile();
-    final appSettings = sl<AppSettingsBloc>().state.settings;
+    final appSettings = _withReceiptMessageOverrides(
+      sl<AppSettingsBloc>().state.settings,
+      headerText: receiptHeaderText,
+      footerText: receiptFooterText,
+    );
 
     final pdf = await _buildSaleInvoiceFromEntity(
       sale: sale,

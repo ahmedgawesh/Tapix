@@ -52,6 +52,67 @@ class ChequeOutstandingDocument {
       : ChequeDirectionValue.outgoing;
 }
 
+class ChequeAccountParty {
+  final String partyType;
+  final int partyId;
+  final String partyName;
+  final int balanceCents;
+  final int currencyId;
+  final String currencyCode;
+  final String currencySymbol;
+  final int reservedCents;
+
+  const ChequeAccountParty({
+    required this.partyType,
+    required this.partyId,
+    required this.partyName,
+    required this.balanceCents,
+    required this.currencyId,
+    required this.currencyCode,
+    required this.currencySymbol,
+    this.reservedCents = 0,
+  });
+
+  int get availableBalanceCents {
+    final available = balanceCents.abs() - reservedCents;
+    return available > 0 ? available : 0;
+  }
+
+  String get sourceTable => partyType == 'customer'
+      ? ChequeSourceTables.customerAccount
+      : ChequeSourceTables.supplierAccount;
+
+  String get suggestedDirection {
+    if (partyType == 'customer') {
+      return balanceCents < 0
+          ? ChequeDirectionValue.outgoing
+          : ChequeDirectionValue.incoming;
+    }
+    return balanceCents < 0
+        ? ChequeDirectionValue.incoming
+        : ChequeDirectionValue.outgoing;
+  }
+
+  /// Normal payment directions support advances and therefore remain valid
+  /// even when the current party balance is zero. Reverse/refund directions
+  /// may only settle an existing credit balance.
+  bool canUseDirection(String direction) {
+    if (partyType == 'customer') {
+      if (direction == ChequeDirectionValue.incoming) return true;
+      return direction == ChequeDirectionValue.outgoing &&
+          balanceCents < 0 &&
+          availableBalanceCents > 0;
+    }
+    if (direction == ChequeDirectionValue.outgoing) return true;
+    return direction == ChequeDirectionValue.incoming &&
+        balanceCents < 0 &&
+        availableBalanceCents > 0;
+  }
+
+  int suggestedAmountFor(String direction) =>
+      direction == suggestedDirection ? availableBalanceCents : 0;
+}
+
 /// Application service behind the cheque register UI.
 ///
 /// Receiving or issuing a cheque creates a pending instrument only. The
@@ -89,6 +150,8 @@ class ChequeManagementService {
                WHEN 'purchase_return' THEN (SELECT return_number FROM purchase_returns WHERE id = ci.source_id)
                WHEN 'sale_return_adjustment' THEN (SELECT return_number FROM sale_return_adjustments WHERE id = ci.source_id)
                WHEN 'purchase_return_adjustment' THEN (SELECT return_number FROM purchase_return_adjustments WHERE id = ci.source_id)
+               WHEN 'customer_account' THEN NULL
+               WHEN 'supplier_account' THEN NULL
              END AS reference_number,
              CASE ci.party_type
                WHEN 'customer' THEN (SELECT name FROM customers WHERE id = ci.party_id)
@@ -118,7 +181,11 @@ class ChequeManagementService {
               instrument: _db.chequeInstruments.map(row.data),
               referenceNumber:
                   row.readNullable<String>('reference_number') ??
-                  '#${row.read<int>('id')}',
+                  (ChequeSourceTables.isAccountSource(
+                        row.read<String>('source_table'),
+                      )
+                      ? ''
+                      : '#${row.read<int>('id')}'),
               partyName: row.readNullable<String>('party_name'),
               currencyCode: row.read<String>('currency_code'),
               currencySymbol: row.read<String>('currency_symbol'),
@@ -126,6 +193,149 @@ class ChequeManagementService {
           )
           .toList(growable: false),
     );
+  }
+
+  Future<List<ChequeAccountParty>> getAccountParties() async {
+    final rows = await _db
+        .customSelect(
+          '''
+      SELECT 'customer' AS party_type, cu.id AS party_id, cu.name AS party_name,
+             cu.balance_cents, cu.currency_id, c.code AS currency_code,
+             c.symbol AS currency_symbol,
+             COALESCE((
+               SELECT SUM(ci.amount_cents) FROM cheque_instruments ci
+                WHERE ci.source_table = 'customer_account'
+                  AND ci.source_id = cu.id
+                  AND ci.direction = CASE WHEN cu.balance_cents < 0
+                    THEN 'outgoing' ELSE 'incoming' END
+                  AND ci.status IN ('received','issued','deposited')
+                  AND ci.settlement_payment_id IS NULL
+             ), 0) AS reserved_cents
+        FROM customers cu
+        JOIN currencies c ON c.id = cu.currency_id
+       WHERE cu.is_active = 1
+      UNION ALL
+      SELECT 'supplier', sp.id, sp.name, sp.balance_cents, sp.currency_id,
+             c.code, c.symbol,
+             COALESCE((
+               SELECT SUM(ci.amount_cents) FROM cheque_instruments ci
+                WHERE ci.source_table = 'supplier_account'
+                  AND ci.source_id = sp.id
+                  AND ci.direction = CASE WHEN sp.balance_cents < 0
+                    THEN 'incoming' ELSE 'outgoing' END
+                  AND ci.status IN ('received','issued','deposited')
+                  AND ci.settlement_payment_id IS NULL
+             ), 0)
+        FROM suppliers sp
+        JOIN currencies c ON c.id = sp.currency_id
+       WHERE sp.is_active = 1
+       ORDER BY party_name
+      ''',
+          readsFrom: {
+            _db.customers,
+            _db.suppliers,
+            _db.currencies,
+            _db.chequeInstruments,
+          },
+        )
+        .get();
+    return rows
+        .map(
+          (row) => ChequeAccountParty(
+            partyType: row.read<String>('party_type'),
+            partyId: row.read<int>('party_id'),
+            partyName: row.read<String>('party_name'),
+            balanceCents: row.read<int>('balance_cents'),
+            currencyId: row.read<int>('currency_id'),
+            currencyCode: row.read<String>('currency_code'),
+            currencySymbol: row.read<String>('currency_symbol'),
+            reservedCents: row.read<int>('reserved_cents'),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<int> createAccountCheque({
+    required ChequeAccountParty party,
+    required String direction,
+    required int amountCents,
+    required String chequeNumber,
+    required DateTime issueDate,
+    required DateTime dueDate,
+    String? bankName,
+    String? branchName,
+    String? accountNumber,
+    String? drawerName,
+    String? note,
+    int? userId,
+  }) async {
+    final number = chequeNumber.trim();
+    if (number.isEmpty) throw ArgumentError('cheque_number_required');
+    if (amountCents <= 0) throw ArgumentError('cheque_amount_invalid');
+    if (direction != ChequeDirectionValue.incoming &&
+        direction != ChequeDirectionValue.outgoing) {
+      throw ArgumentError.value(direction, 'direction');
+    }
+    if (dueDate.isBefore(
+      DateTime(issueDate.year, issueDate.month, issueDate.day),
+    )) {
+      throw ArgumentError('cheque_due_before_issue');
+    }
+
+    return _db.transaction(() async {
+      final liveParty = await _loadAccountParty(party.partyType, party.partyId);
+      if (liveParty == null || liveParty.currencyId != party.currencyId) {
+        throw StateError('cheque_party_not_found');
+      }
+      await _validateAccountChequeDirection(
+        party: liveParty,
+        direction: direction,
+        amountCents: amountCents,
+      );
+      await _ensureNumberAvailable(
+        direction: direction,
+        chequeNumber: number,
+        bankName: bankName,
+        accountNumber: accountNumber,
+      );
+
+      final id = await _instrumentDao.create(
+        direction: direction,
+        sourceTable: liveParty.sourceTable,
+        sourceId: liveParty.partyId,
+        amountCents: amountCents,
+        currencyId: liveParty.currencyId,
+        dueDate: dueDate,
+        issueDate: issueDate,
+        partyType: liveParty.partyType,
+        partyId: liveParty.partyId,
+        chequeNumber: number,
+        bankName: bankName,
+        branchName: branchName,
+        accountNumber: accountNumber,
+        drawerName: drawerName,
+        note: note,
+        userId: userId,
+      );
+      await _audit.log(
+        entityType: 'cheque_instrument',
+        entityId: id,
+        action: 'create_account_cheque',
+        newValue: {
+          'sourceTable': liveParty.sourceTable,
+          'partyType': liveParty.partyType,
+          'partyId': liveParty.partyId,
+          'direction': direction,
+          'amountCents': amountCents,
+          'settlementPaymentId': null,
+          'deferredUntilClearance': true,
+          'chequeNumber': number,
+        },
+        userId: userId,
+        severity: AuditSeverity.critical,
+      );
+      return id;
+    });
   }
 
   Stream<List<ChequeOutstandingDocument>> watchOutstandingDocuments() {
@@ -334,6 +544,96 @@ class ChequeManagementService {
         userId: userId,
       );
     });
+  }
+
+  Future<ChequeAccountParty?> _loadAccountParty(
+    String partyType,
+    int partyId,
+  ) async {
+    if (partyType != 'customer' && partyType != 'supplier') {
+      throw ArgumentError.value(partyType, 'partyType');
+    }
+    final table = partyType == 'customer' ? 'customers' : 'suppliers';
+    final row = await _db
+        .customSelect(
+          '''
+          SELECT p.id AS party_id, p.name AS party_name, p.balance_cents,
+                 p.currency_id, c.code AS currency_code,
+                 c.symbol AS currency_symbol
+            FROM $table p
+            JOIN currencies c ON c.id = p.currency_id
+           WHERE p.id = ? AND p.is_active = 1
+          ''',
+          variables: [Variable.withInt(partyId)],
+          readsFrom: partyType == 'customer'
+              ? {_db.customers, _db.currencies}
+              : {_db.suppliers, _db.currencies},
+        )
+        .getSingleOrNull();
+    if (row == null) return null;
+    return ChequeAccountParty(
+      partyType: partyType,
+      partyId: row.read<int>('party_id'),
+      partyName: row.read<String>('party_name'),
+      balanceCents: row.read<int>('balance_cents'),
+      currencyId: row.read<int>('currency_id'),
+      currencyCode: row.read<String>('currency_code'),
+      currencySymbol: row.read<String>('currency_symbol'),
+    );
+  }
+
+  Future<void> _validateAccountChequeDirection({
+    required ChequeAccountParty party,
+    required String direction,
+    required int amountCents,
+  }) async {
+    if (!party.canUseDirection(direction)) {
+      throw StateError('account_cheque_direction_mismatch');
+    }
+
+    // Customer receipts and supplier payments may be advances or exceed the
+    // current open balance. Their unapplied remainder is tracked only after
+    // bank clearance. Reverse/refund directions remain capped to the existing
+    // party credit so they can never create an unintended receivable/payable.
+    final allocatableAdvanceDirection =
+        (party.partyType == 'customer' &&
+            direction == ChequeDirectionValue.incoming) ||
+        (party.partyType == 'supplier' &&
+            direction == ChequeDirectionValue.outgoing);
+    if (allocatableAdvanceDirection) return;
+
+    final availableBalanceCents = party.balanceCents.abs();
+    final reserved = await _openAccountChequeTotal(
+      party: party,
+      direction: direction,
+    );
+    if (amountCents > availableBalanceCents - reserved) {
+      throw StateError('account_cheque_exceeds_balance');
+    }
+  }
+
+  Future<int> _openAccountChequeTotal({
+    required ChequeAccountParty party,
+    required String direction,
+  }) async {
+    final row = await _db
+        .customSelect(
+          '''
+          SELECT COALESCE(SUM(amount_cents), 0) AS amount_cents
+            FROM cheque_instruments
+           WHERE source_table = ? AND source_id = ? AND direction = ?
+             AND status IN ('received','issued','deposited')
+             AND settlement_payment_id IS NULL
+          ''',
+          variables: [
+            Variable.withString(party.sourceTable),
+            Variable.withInt(party.partyId),
+            Variable.withString(direction),
+          ],
+          readsFrom: {_db.chequeInstruments},
+        )
+        .getSingle();
+    return row.read<int>('amount_cents');
   }
 
   Future<int> _currentOutstanding(String sourceTable, int sourceId) async {

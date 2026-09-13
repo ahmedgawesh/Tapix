@@ -9,6 +9,7 @@ import 'package:printing/printing.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/lan/lan_business_models.dart';
 import '../../../settings/data/services/company_profile_service.dart';
 import '../../../settings/domain/entities/company_profile.dart';
 import '../../../settings/domain/entities/app_settings.dart';
@@ -140,6 +141,7 @@ class PurchasePdfService {
     required PurchaseEntity originalPurchase,
     required PurchaseReturnEntity returnEntity,
     required List<PurchaseReturnItemEntity> returnItems,
+    bool loadLocalSupplierBalance = true,
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
@@ -156,6 +158,7 @@ class PurchasePdfService {
       isRtl: isRtl,
       company: company,
       appSettings: appSettings,
+      loadLocalSupplierBalance: loadLocalSupplierBalance,
     );
 
     await Printing.layoutPdf(
@@ -170,6 +173,7 @@ class PurchasePdfService {
     required PurchaseEntity originalPurchase,
     required PurchaseReturnEntity returnEntity,
     required List<PurchaseReturnItemEntity> returnItems,
+    bool loadLocalSupplierBalance = true,
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
@@ -186,6 +190,7 @@ class PurchasePdfService {
       isRtl: isRtl,
       company: company,
       appSettings: appSettings,
+      loadLocalSupplierBalance: loadLocalSupplierBalance,
     );
 
     final bytes = await pdf.save();
@@ -480,26 +485,29 @@ class PurchasePdfService {
     required bool isRtl,
     required CompanyProfile company,
     required AppSettings appSettings,
+    required bool loadLocalSupplierBalance,
   }) async {
     final fonts = await _loadFonts();
     final pdf = pw.Document();
 
     // Fetch supplier balance for the PDF footer
     pw.Widget? supplierBalanceWidget;
-    try {
-      final supplierRepo = sl<SupplierRepository>();
-      final supplier = await supplierRepo.getSupplier(
-        originalPurchase.supplierId,
-      );
-      if (supplier != null) {
-        supplierBalanceWidget = _buildSupplierBalance(
-          supplierName: supplier.name,
-          balanceCents: supplier.balanceCents.toBigInt().toInt(),
-          cs: cs,
-          fonts: fonts,
+    if (loadLocalSupplierBalance) {
+      try {
+        final supplierRepo = sl<SupplierRepository>();
+        final supplier = await supplierRepo.getSupplier(
+          originalPurchase.supplierId,
         );
-      }
-    } catch (_) {}
+        if (supplier != null) {
+          supplierBalanceWidget = _buildSupplierBalance(
+            supplierName: supplier.name,
+            balanceCents: supplier.balanceCents.toBigInt().toInt(),
+            cs: cs,
+            fonts: fonts,
+          );
+        }
+      } catch (_) {}
+    }
 
     pdf.addPage(
       pw.Page(
@@ -1300,6 +1308,72 @@ class PurchasePdfService {
     );
   }
 
+  /// Print an unlinked purchase return received from the authenticated master.
+  /// LAN IDs deliberately never trigger lookups in the client's local DB.
+  static Future<void> printRemotePurchaseAdjReturn({
+    required BuildContext context,
+    required LanPurchaseReturnDetails details,
+  }) async {
+    final pdf = await _buildRemotePurchaseAdjReturnPdf(
+      context: context,
+      details: details,
+    );
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: 'PurchaseAdjReturn_${details.summary.returnNumber}',
+    );
+  }
+
+  static Future<void> shareRemotePurchaseAdjReturn({
+    required BuildContext context,
+    required LanPurchaseReturnDetails details,
+  }) async {
+    final pdf = await _buildRemotePurchaseAdjReturnPdf(
+      context: context,
+      details: details,
+    );
+    await Printing.sharePdf(
+      bytes: await pdf.save(),
+      filename: 'PurchaseAdjReturn_${details.summary.returnNumber}.pdf',
+    );
+  }
+
+  static Future<pw.Document> _buildRemotePurchaseAdjReturnPdf({
+    required BuildContext context,
+    required LanPurchaseReturnDetails details,
+  }) async {
+    final locale = context.locale;
+    final summary = details.summary;
+    return _buildPurchaseAdjReturnPdfData(
+      returnNumber: summary.returnNumber,
+      returnDate: summary.returnDate,
+      supplierName: summary.supplierName,
+      refundMethod: summary.refundMethod,
+      notes: summary.reason,
+      subtotalCents: summary.subtotalCents,
+      discountCents: summary.discountCents,
+      taxCents: summary.taxCents,
+      totalCents: summary.totalCents,
+      items: details.lines
+          .map(
+            (line) => _AdjReturnItemRow(
+              name: line.productName,
+              variantSku: line.variantSku,
+              quantity: line.quantity,
+              measurementType: line.measurementType,
+              unitPriceCents: line.unitPriceCents ?? 0,
+              totalCents: line.totalCents,
+            ),
+          )
+          .toList(growable: false),
+      cs: sl<CurrencyService>(),
+      locale: locale,
+      isRtl: locale.languageCode == 'ar',
+      company: await sl<CompanyProfileService>().getProfile(),
+      appSettings: sl<AppSettingsBloc>().state.settings,
+    );
+  }
+
   static Future<pw.Document> _buildPurchaseAdjReturnPdf({
     required PurchaseReturnAdjustment returnEntity,
     required List<PurchaseAdjReturnItemWithDetails> returnItems,
@@ -1520,6 +1594,185 @@ class PurchasePdfService {
       ),
     );
 
+    return pdf;
+  }
+
+  static Future<pw.Document> _buildPurchaseAdjReturnPdfData({
+    required String returnNumber,
+    required DateTime returnDate,
+    required String? supplierName,
+    required String refundMethod,
+    required String? notes,
+    required int subtotalCents,
+    required int discountCents,
+    required int taxCents,
+    required int totalCents,
+    required List<_AdjReturnItemRow> items,
+    required CurrencyService cs,
+    required Locale locale,
+    required bool isRtl,
+    required CompanyProfile company,
+    required AppSettings appSettings,
+  }) async {
+    final fonts = await _loadFonts();
+    final parsed = parseAdjReturnNotes(notes);
+    final reasonText = parsed.reasonCode == null
+        ? null
+        : adjReturnReasonLabel(parsed.reasonCode);
+    final userNotes = parsed.userNotes;
+    final quantitySummary = localizedQuantitySummary(
+      items,
+      quantityOf: (item) => item.quantity,
+      measurementTypeOf: (item) => item.measurementType,
+    );
+    final pdf = pw.Document();
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        textDirection: isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+        build: (pw.Context ctx) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+          children: [
+            _buildHeader(
+              company: company,
+              title: 'returns.adjustment_detail'.tr(),
+              fonts: fonts,
+              isRtl: isRtl,
+              showLogo: appSettings.showLogoOnReceipt,
+            ),
+            pw.SizedBox(height: 16),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey300),
+                borderRadius: pw.BorderRadius.circular(6),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  _pdfInfoRow(
+                    'purchases.return_number'.tr(),
+                    returnNumber,
+                    fonts.regular,
+                  ),
+                  _pdfInfoRow(
+                    'purchases.return_date'.tr(),
+                    DateFormat('dd/MM/yyyy').format(returnDate),
+                    fonts.regular,
+                  ),
+                  if (supplierName?.isNotEmpty == true)
+                    _pdfInfoRow(
+                      'purchases.supplier'.tr(),
+                      supplierName!,
+                      fonts.regular,
+                    ),
+                  _pdfInfoRow(
+                    'purchases.refund_method'.tr(),
+                    'purchases.refund_method_$refundMethod'.tr(),
+                    fonts.regular,
+                  ),
+                  if (reasonText?.isNotEmpty == true)
+                    _pdfInfoRow(
+                      'returns.reason_label'.tr(),
+                      reasonText!,
+                      fonts.regular,
+                    ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 16),
+            _buildAdjReturnItemsTable(items: items, cs: cs, fonts: fonts),
+            pw.SizedBox(height: 16),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.red50,
+                border: pw.Border.all(color: PdfColors.red200),
+                borderRadius: pw.BorderRadius.circular(6),
+              ),
+              child: pw.Column(
+                children: [
+                  _pdfMoneyRow(
+                    'purchases.total_items_count'.tr(),
+                    '${items.length}',
+                    fonts.regular,
+                  ),
+                  _pdfMoneyRow(
+                    'measurement.total_quantity'.tr(),
+                    quantitySummary,
+                    fonts.regular,
+                  ),
+                  if (subtotalCents > 0)
+                    _pdfMoneyRow(
+                      'purchases.subtotal'.tr(),
+                      cs.format(subtotalCents),
+                      fonts.regular,
+                    ),
+                  if (discountCents > 0)
+                    _pdfMoneyRow(
+                      'purchases.discount'.tr(),
+                      '- ${cs.format(discountCents)}',
+                      fonts.regular,
+                      valueColor: PdfColors.orange,
+                    ),
+                  if (taxCents > 0)
+                    _pdfMoneyRow(
+                      'purchases.tax'.tr(),
+                      '+ ${cs.format(taxCents)}',
+                      fonts.regular,
+                    ),
+                  pw.Divider(thickness: 2),
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      _bidiText(
+                        'purchases.return_total'.tr(),
+                        fonts.bold,
+                        fontSize: 14,
+                      ),
+                      pw.Text(
+                        cs.format(totalCents),
+                        style: pw.TextStyle(
+                          font: fonts.bold,
+                          fontSize: 14,
+                          color: PdfColors.red,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            if (userNotes?.isNotEmpty == true) ...[
+              pw.SizedBox(height: 12),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(8),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey300),
+                  borderRadius: pw.BorderRadius.circular(4),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    _bidiText('common.notes'.tr(), fonts.bold, fontSize: 10),
+                    pw.SizedBox(height: 4),
+                    _bidiText(userNotes!, fonts.regular, fontSize: 9),
+                  ],
+                ),
+              ),
+            ],
+            pw.SizedBox(height: 20),
+            _buildFooter(
+              fonts: fonts,
+              locale: locale,
+              receiptFooterText: appSettings.showHeaderFooterOnPurchases
+                  ? appSettings.receiptFooterText
+                  : null,
+            ),
+          ],
+        ),
+      ),
+    );
     return pdf;
   }
 

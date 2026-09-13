@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../../../core/database/daos/cheque_instrument_dao.dart';
+import '../../../../core/database/daos/cheque_confirmation_dao.dart';
 import '../../../../core/services/cheque_management_service.dart';
 import '../../../../core/utils/app_date_formatter.dart';
 
@@ -104,7 +105,14 @@ class ChequeInstrumentPdfService {
               child: pw.Column(
                 children: [
                   row('cheques.number'.tr(), c.chequeNumber ?? '—'),
-                  row('cheques.document'.tr(), entry.referenceNumber),
+                  row(
+                    ChequeSourceTables.isAccountSource(c.sourceTable)
+                        ? 'cheques.source'.tr()
+                        : 'cheques.document'.tr(),
+                    ChequeSourceTables.isAccountSource(c.sourceTable)
+                        ? 'cheques.account_source'.tr()
+                        : entry.referenceNumber,
+                  ),
                   row('cheques.party'.tr(), entry.partyName ?? '—'),
                   row('cheques.status'.tr(), 'cheques.status_${c.status}'.tr()),
                   if (c.bankName?.trim().isNotEmpty == true)

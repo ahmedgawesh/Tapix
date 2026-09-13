@@ -7,6 +7,7 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
 import '../bloc/purchase_reports_bloc.dart';
 import '../widgets/date_range_selector.dart';
+import '../widgets/report_scrollable_center.dart';
 import '../../services/purchase_reports_pdf_service.dart';
 import '../../services/purchase_reports_excel_service.dart';
 
@@ -1176,7 +1177,7 @@ class _ExcelExportViewState extends State<_ExcelExportView> {
     final theme = Theme.of(context);
     final cs = sl<CurrencyService>();
 
-    return Center(
+    return ReportScrollableCenter(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
@@ -1294,7 +1295,7 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Center(
+    return ReportScrollableCenter(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

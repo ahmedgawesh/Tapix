@@ -16,6 +16,7 @@ import '../../../../core/payments/checkout_settlement.dart';
 import '../../../../core/payments/return_cheque_settlement_dialog.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../../core/widgets/pin_verification_dialog.dart';
 import '../../../../core/widgets/action_confirmation_dialog.dart';
@@ -58,6 +59,7 @@ class PurchaseAdjReturnFormScreen extends StatelessWidget {
         final bloc = PurchaseAdjReturnFormBloc(
           sl<AdjustmentReturnDao>(),
           sl<JournalEntryService>(),
+          lan: sl<LanNetworkService>(),
         );
         if (supplierId != null && supplierName != null) {
           bloc.add(
@@ -121,7 +123,12 @@ class _FormView extends StatelessWidget {
       if (context.canPop()) {
         context.pop();
       } else {
-        context.go('/purchases');
+        final lan = sl<LanNetworkService>();
+        context.go(
+          lan.snapshot.mode == LanMode.client
+              ? '/purchases/returns'
+              : '/purchases',
+        );
       }
     }
   }
@@ -543,6 +550,78 @@ class _FormView extends StatelessWidget {
   }
 
   void _showProductPicker(BuildContext context) async {
+    final lan = sl<LanNetworkService>();
+    if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+      final page = await lan.fetchRemoteCatalog(limit: 200, management: true);
+      final rows = <AdjReturnLineItem>[];
+      for (final product in page.products) {
+        final referencePrice =
+            product.lastPurchasePriceCents ??
+            product.costCents ??
+            product.priceCents;
+        if (product.hasVariants) {
+          for (final variant in product.variants) {
+            final variantReferencePrice =
+                variant.lastPurchasePriceCents ??
+                variant.costCents ??
+                referencePrice;
+            rows.add(
+              AdjReturnLineItem(
+                productId: product.id,
+                variantId: variant.id,
+                productName: product.name,
+                variantSku: variant.sku,
+                variantLabel: variant.label,
+                quantity: product.quantityScale,
+                quantityScale: product.quantityScale,
+                measurementType: product.measurementType,
+                unitPriceCents: variantReferencePrice,
+                taxRateBps: product.purchaseTaxRateBps,
+              ),
+            );
+          }
+        } else {
+          final variant = product.variants.isEmpty
+              ? null
+              : product.variants.first;
+          rows.add(
+            AdjReturnLineItem(
+              productId: product.id,
+              variantId: variant?.id,
+              productName: product.name,
+              variantSku: product.sku ?? variant?.sku,
+              quantity: product.quantityScale,
+              quantityScale: product.quantityScale,
+              measurementType: product.measurementType,
+              unitPriceCents: referencePrice,
+              taxRateBps: product.purchaseTaxRateBps,
+            ),
+          );
+        }
+      }
+      if (!context.mounted) return;
+      final selected = await showModalBottomSheet<AdjReturnLineItem>(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) => _PartyPickerSheet<AdjReturnLineItem>(
+          title: 'returns.select_product'.tr(),
+          items: rows,
+          getName: (item) => item.displayName,
+          getInitial: (item) => item.productName.isEmpty
+              ? '?'
+              : item.productName[0].toUpperCase(),
+        ),
+      );
+      if (selected != null && context.mounted) {
+        context.read<PurchaseAdjReturnFormBloc>().add(
+          PurchaseAdjReturnItemAdded(selected),
+        );
+      }
+      return;
+    }
     final db = sl<AppDatabase>();
 
     final result = await showModalBottomSheet<AdjReturnLineItem>(
@@ -823,6 +902,31 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   }
 
   void _showSupplierPicker(BuildContext context) async {
+    final lan = sl<LanNetworkService>();
+    if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+      final suppliers = await lan.fetchRemoteSuppliers(limit: 200);
+      if (!context.mounted) return;
+      final selected = await showModalBottomSheet<LanSupplierSummary>(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) => _PartyPickerSheet<LanSupplierSummary>(
+          title: 'returns.select_supplier'.tr(),
+          items: suppliers,
+          getName: (supplier) => supplier.name,
+          getInitial: (supplier) =>
+              supplier.name.isEmpty ? '?' : supplier.name[0].toUpperCase(),
+        ),
+      );
+      if (selected != null && context.mounted) {
+        context.read<PurchaseAdjReturnFormBloc>().add(
+          PurchaseAdjReturnSupplierSelected(selected.id, selected.name),
+        );
+      }
+      return;
+    }
     final db = sl<AppDatabase>();
     final suppliers = await db.select(db.suppliers).get();
     suppliers.sort(

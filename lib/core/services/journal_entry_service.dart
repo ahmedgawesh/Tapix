@@ -2514,6 +2514,61 @@ class JournalEntryService {
     );
   }
 
+  /// Recognizes a cheque that settles a general customer/supplier balance.
+  ///
+  /// This entry is created only when the cheque is confirmed. Pending account
+  /// cheques have no journal entry and do not affect the party sub-ledger.
+  /// Bank clearance remains a separate entry posted by
+  /// [recordChequeClearanceJournalEntry].
+  Future<int> recordAccountChequeSettlementJournalEntry({
+    required int chequeId,
+    required int transactionId,
+    required String partyType,
+    required bool incoming,
+    required int amountCents,
+    required int currencyId,
+    String? paymentMethod,
+    bool throughChequeClearing = true,
+    int? userId,
+  }) async {
+    if (amountCents <= 0) {
+      throw AccountingException(
+        'Account cheque settlement amount must be positive',
+      );
+    }
+    if (partyType != 'customer' && partyType != 'supplier') {
+      throw AccountingException('Unsupported account cheque party type');
+    }
+
+    final obligationId = await _requireAccountId(
+      partyType == 'customer' ? '1100' : '2000',
+    );
+    final settlementId = throughChequeClearing
+        ? await _requireAccountId(incoming ? '1020' : '2020')
+        : (incoming
+              ? await _incomingSettlementAccountId(paymentMethod)
+              : await _outgoingSettlementAccountId(paymentMethod));
+
+    return _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description:
+            '${incoming ? 'Incoming' : 'Outgoing'} account cheque '
+            '#$chequeId settlement',
+        debitAccountId: incoming ? settlementId : obligationId,
+        creditAccountId: incoming ? obligationId : settlementId,
+        amountCents: amountCents,
+        currencyId: currencyId,
+        entryType: 'account_cheque_settlement',
+        sourceTable: partyType == 'customer'
+            ? 'customer_transactions'
+            : 'supplier_transactions',
+        sourceId: transactionId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
+  }
+
   /// Restores the economic obligation after a cheque is bounced or cancelled.
   Future<int> recordChequeObligationRestorationJournalEntry({
     required int chequeId,

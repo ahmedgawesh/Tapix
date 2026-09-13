@@ -49,6 +49,7 @@ class AppSettings {
   final bool allowPartialPayments;
   final bool allowDiscounts;
   final double maxDiscountPercent;
+  final bool allowBelowCostSales;
   final bool requireCustomerForSales;
   final bool enableLoyaltyPoints;
   final int pointsPerCurrencyUnit;
@@ -118,6 +119,7 @@ class AppSettings {
     this.allowPartialPayments = false,
     this.allowDiscounts = true,
     this.maxDiscountPercent = 100.0,
+    this.allowBelowCostSales = false,
     this.requireCustomerForSales = false,
     this.enableLoyaltyPoints = false,
     this.pointsPerCurrencyUnit = 1,
@@ -178,6 +180,7 @@ class AppSettings {
     bool? allowPartialPayments,
     bool? allowDiscounts,
     double? maxDiscountPercent,
+    bool? allowBelowCostSales,
     bool? requireCustomerForSales,
     bool? enableLoyaltyPoints,
     int? pointsPerCurrencyUnit,
@@ -240,6 +243,7 @@ class AppSettings {
       allowPartialPayments: allowPartialPayments ?? this.allowPartialPayments,
       allowDiscounts: allowDiscounts ?? this.allowDiscounts,
       maxDiscountPercent: maxDiscountPercent ?? this.maxDiscountPercent,
+      allowBelowCostSales: allowBelowCostSales ?? this.allowBelowCostSales,
       requireCustomerForSales:
           requireCustomerForSales ?? this.requireCustomerForSales,
       enableLoyaltyPoints: enableLoyaltyPoints ?? this.enableLoyaltyPoints,
@@ -306,6 +310,7 @@ class AppSettings {
     'allowPartialPayments': allowPartialPayments,
     'allowDiscounts': allowDiscounts,
     'maxDiscountPercent': maxDiscountPercent,
+    'allowBelowCostSales': allowBelowCostSales,
     'requireCustomerForSales': requireCustomerForSales,
     'enableLoyaltyPoints': enableLoyaltyPoints,
     'pointsPerCurrencyUnit': pointsPerCurrencyUnit,
@@ -369,6 +374,7 @@ class AppSettings {
       allowDiscounts: (m['allowDiscounts'] as bool?) ?? true,
       maxDiscountPercent:
           (m['maxDiscountPercent'] as num?)?.toDouble() ?? 100.0,
+      allowBelowCostSales: (m['allowBelowCostSales'] as bool?) ?? false,
       requireCustomerForSales: (m['requireCustomerForSales'] as bool?) ?? false,
       enableLoyaltyPoints: (m['enableLoyaltyPoints'] as bool?) ?? false,
       pointsPerCurrencyUnit: (m['pointsPerCurrencyUnit'] as int?) ?? 1,

@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../bloc/theme_bloc.dart';
 import '../bloc/realtime_bloc.dart';
 
 class ThemeToggleButton extends StatelessWidget {
-  const ThemeToggleButton({super.key});
+  final bool lightDarkOnly;
+
+  const ThemeToggleButton({super.key, this.lightDarkOnly = false});
 
   @override
   Widget build(BuildContext context) {
@@ -15,6 +18,21 @@ class ThemeToggleButton extends StatelessWidget {
         final currentMode = state is RealtimeSuccess<ThemeMode>
             ? state.data
             : ThemeMode.system;
+
+        if (lightDarkOnly) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          return IconButton(
+            icon: Icon(isDark ? LucideIcons.sun : LucideIcons.moon),
+            tooltip: isDark
+                ? 'welcome.theme_light'.tr()
+                : 'welcome.theme_dark'.tr(),
+            onPressed: () {
+              context.read<ThemeBloc>().add(
+                ThemeChanged(isDark ? ThemeMode.light : ThemeMode.dark),
+              );
+            },
+          );
+        }
 
         IconData icon;
         switch (currentMode) {
@@ -44,11 +62,11 @@ class ThemeToggleButton extends StatelessWidget {
   String _getTooltip(ThemeMode mode) {
     switch (mode) {
       case ThemeMode.light:
-        return 'Light Mode';
+        return 'welcome.theme_light'.tr();
       case ThemeMode.dark:
-        return 'Dark Mode';
+        return 'welcome.theme_dark'.tr();
       case ThemeMode.system:
-        return 'System Mode';
+        return 'welcome.theme_system'.tr();
     }
   }
 

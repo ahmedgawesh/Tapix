@@ -23,6 +23,8 @@ import '../widgets/edit_transaction_dialog.dart';
 import '../../../shared/widgets/unified_return_search_sheet.dart';
 import '../../../../core/services/unified_return_service.dart';
 import '../../../cheques/presentation/widgets/party_cheque_alerts_section.dart';
+import '../../../cheques/presentation/widgets/account_cheque_dialog.dart';
+import '../../../cheques/presentation/widgets/party_unapplied_balances_section.dart';
 
 /// Customer profile screen with 360° view
 class CustomerProfileScreen extends StatefulWidget {
@@ -509,9 +511,29 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
                           _showDiscountDialog(context, customer),
                       onReturnPressed: () =>
                           _openUnifiedReturn(context, customer),
+                      onAccountChequePressed: () async {
+                        final saved = await showAccountChequeDialog(
+                          context,
+                          initialPartyType: 'customer',
+                          initialPartyId: customer.id,
+                        );
+                        if (saved && context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'cheques.account_cheque_created'.tr(),
+                              ),
+                            ),
+                          );
+                        }
+                      },
                     ),
                     const SizedBox(height: 16),
                     PartyChequeAlertsSection(
+                      partyType: 'customer',
+                      partyId: widget.customerId,
+                    ),
+                    PartyUnappliedBalancesSection(
                       partyType: 'customer',
                       partyId: widget.customerId,
                     ),
@@ -2046,12 +2068,14 @@ class _QuickActionsSection extends StatelessWidget {
   final VoidCallback onPaymentPressed;
   final VoidCallback onDiscountPressed;
   final VoidCallback onReturnPressed;
+  final VoidCallback onAccountChequePressed;
 
   const _QuickActionsSection({
     required this.customer,
     required this.onPaymentPressed,
     required this.onDiscountPressed,
     required this.onReturnPressed,
+    required this.onAccountChequePressed,
   });
 
   @override
@@ -2099,6 +2123,19 @@ class _QuickActionsSection extends StatelessWidget {
       onTap: onReturnPressed,
     );
 
+    final accountChequeBtn = _QuickActionButton(
+      icon: LucideIcons.filePlus2,
+      label: 'cheques.account_cheque_short'.tr(),
+      color: isDark ? const Color(0xFFA5D6A7) : Colors.green.shade700,
+      backgroundColor: isDark
+          ? const Color(0xFF0D1E12)
+          : Colors.green.withValues(alpha: 0.10),
+      borderColor: isDark
+          ? const Color(0xFF24482B)
+          : Colors.green.withValues(alpha: 0.25),
+      onTap: onAccountChequePressed,
+    );
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 520;
@@ -2111,6 +2148,8 @@ class _QuickActionsSection extends StatelessWidget {
               Expanded(child: discountBtn),
               const SizedBox(width: 12),
               Expanded(child: returnBtn),
+              const SizedBox(width: 12),
+              Expanded(child: accountChequeBtn),
             ],
           );
         }
@@ -2125,7 +2164,13 @@ class _QuickActionsSection extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            returnBtn,
+            Row(
+              children: [
+                Expanded(child: returnBtn),
+                const SizedBox(width: 12),
+                Expanded(child: accountChequeBtn),
+              ],
+            ),
           ],
         );
       },

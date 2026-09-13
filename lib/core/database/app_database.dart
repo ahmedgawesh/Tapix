@@ -54,7 +54,7 @@ import 'database_native.dart' if (dart.library.html) 'database_web.dart';
 
 part 'app_database.g.dart';
 
-const _currentDatabaseSchemaVersion = 10081;
+const _currentDatabaseSchemaVersion = 10082;
 
 @DriftDatabase(
   tables: [
@@ -143,6 +143,9 @@ const _currentDatabaseSchemaVersion = 10081;
     EInvoiceDocuments,
     // Phase 16 — one row per physical cheque, with clearing-account links.
     ChequeInstruments,
+    // Phase 17 — cleared standalone cheque value and invoice allocations.
+    PartyAccountPayments,
+    PartyAccountPaymentApplications,
     // Phase 14.0 — cheque lifecycle sidecar (pending/cleared/bounced/cancelled)
     ChequeConfirmations,
   ],
@@ -2972,6 +2975,95 @@ SELECT ci.id AS instrument_id, ci.source_table, ci.source_id, ci.party_id,
     );
   }
 
+  /// Adds the standalone cheque allocation sub-ledger without changing any
+  /// historical invoice, payment, party balance, or journal row.
+  Future<void> _backfillPartyAccountPayments10082() async {
+    await customStatement('''
+INSERT OR IGNORE INTO party_account_payments (
+  cheque_instrument_id, party_type, party_id, direction, amount_cents,
+  applied_cents, currency_id, status, settlement_transaction_id,
+  recognized_at, created_at, updated_at
+)
+SELECT ci.id, ci.party_type, ci.party_id, ci.direction, ci.amount_cents,
+       0, ci.currency_id, 'open', ci.settlement_payment_id,
+       COALESCE(ci.cleared_at, ci.updated_at), ci.created_at, ci.updated_at
+  FROM cheque_instruments ci
+ WHERE ci.source_table IN ('customer_account', 'supplier_account')
+   AND ci.status = 'cleared'
+   AND ci.settlement_payment_id IS NOT NULL
+   AND ((ci.party_type = 'customer' AND ci.direction = 'incoming')
+     OR (ci.party_type = 'supplier' AND ci.direction = 'outgoing'))
+''');
+    developer.log(
+      'Migration 10082: added the standalone cheque allocation sub-ledger.',
+      name: 'DB_MIGRATION',
+    );
+  }
+
+  /// If an invoice payment created by an allocation is removed by an older
+  /// invoice void/delete path, reopen the corresponding unapplied value.
+  Future<void> _installPartyAccountPaymentTriggers() async {
+    Future<void> install({
+      required String name,
+      required String paymentTable,
+      required String paymentColumn,
+    }) async {
+      await customStatement('DROP TRIGGER IF EXISTS $name');
+      await customStatement('''
+CREATE TRIGGER $name
+BEFORE DELETE ON $paymentTable
+FOR EACH ROW
+BEGIN
+  UPDATE party_account_payment_applications
+     SET status = 'reversed', reversed_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP
+   WHERE $paymentColumn = OLD.id AND status = 'active';
+
+  UPDATE party_account_payments
+     SET applied_cents = COALESCE((
+           SELECT SUM(a.amount_cents)
+             FROM party_account_payment_applications a
+            WHERE a.account_payment_id = party_account_payments.id
+              AND a.status = 'active'
+         ), 0),
+         status = CASE
+           WHEN status = 'reversed' THEN 'reversed'
+           WHEN COALESCE((
+             SELECT SUM(a.amount_cents)
+               FROM party_account_payment_applications a
+              WHERE a.account_payment_id = party_account_payments.id
+                AND a.status = 'active'
+           ), 0) = 0 THEN 'open'
+           WHEN COALESCE((
+             SELECT SUM(a.amount_cents)
+               FROM party_account_payment_applications a
+              WHERE a.account_payment_id = party_account_payments.id
+                AND a.status = 'active'
+           ), 0) >= amount_cents THEN 'applied'
+           ELSE 'partially_applied'
+         END,
+         updated_at = CURRENT_TIMESTAMP
+   WHERE id IN (
+     SELECT account_payment_id
+       FROM party_account_payment_applications
+      WHERE $paymentColumn = OLD.id
+   );
+END
+''');
+    }
+
+    await install(
+      name: 'trg_sale_payment_delete_reopens_account_payment',
+      paymentTable: 'sale_payments',
+      paymentColumn: 'sale_payment_id',
+    );
+    await install(
+      name: 'trg_purchase_payment_delete_reopens_account_payment',
+      paymentTable: 'purchase_payments',
+      paymentColumn: 'purchase_payment_id',
+    );
+  }
+
   @override
   int get schemaVersion => _currentDatabaseSchemaVersion;
 
@@ -2983,6 +3075,7 @@ SELECT ci.id AS instrument_id, ci.source_table, ci.source_id, ci.party_id,
         await _ensureDocumentSequencesTable();
         await _createIndexes();
         await _installProductBatchesIntegrityTriggers();
+        await _installPartyAccountPaymentTriggers();
         await _seedInitialData();
       },
       onUpgrade: (Migrator m, int from, int to) async {
@@ -4993,6 +5086,13 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
           await _deferOpenChequePayments10081();
         }
 
+        if (from < 10082) {
+          await m.createTable(partyAccountPayments);
+          await m.createTable(partyAccountPaymentApplications);
+          await _backfillPartyAccountPayments10082();
+          await _installPartyAccountPaymentTriggers();
+        }
+
         await _createIndexes();
         await _seedInitialData();
       },
@@ -5006,6 +5106,7 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
         await customStatement('PRAGMA journal_mode = WAL');
         await customStatement('PRAGMA synchronous = NORMAL');
         await _ensureDocumentSequencesTable();
+        await _installPartyAccountPaymentTriggers();
         await _ensureSchemaIntegrity();
         await _repairProductVariantsSkuNullabilityIfNeeded();
         await _convertIntegerTimestampsToTextOnce();
@@ -5062,6 +5163,18 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
       'ON cheque_instruments(direction, COALESCE(bank_name, \'\'), '
       'COALESCE(account_number, \'\'), cheque_number) '
       "WHERE cheque_number IS NOT NULL AND TRIM(cheque_number) != ''",
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_party_account_payments_party_status '
+      'ON party_account_payments(party_type, party_id, status)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_party_account_payment_apps_payment_status '
+      'ON party_account_payment_applications(account_payment_id, status)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_party_account_payment_apps_document '
+      'ON party_account_payment_applications(document_type, document_id, status)',
     );
     await customStatement(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_cashier_shifts_one_open '

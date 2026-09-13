@@ -158,6 +158,288 @@ void main() {
     expect(outgoing['1010']?.credit, 2500);
   });
 
+  test(
+    'account cheques settle all four party directions only on clearance',
+    () async {
+      final cases =
+          <
+            ({
+              String partyType,
+              String source,
+              String direction,
+              int openingBalance,
+              int transactionDelta,
+              String obligation,
+              String clearing,
+            })
+          >[
+            (
+              partyType: 'customer',
+              source: ChequeSourceTables.customerAccount,
+              direction: ChequeDirectionValue.incoming,
+              openingBalance: 4000,
+              transactionDelta: -4000,
+              obligation: '1100',
+              clearing: '1020',
+            ),
+            (
+              partyType: 'customer',
+              source: ChequeSourceTables.customerAccount,
+              direction: ChequeDirectionValue.outgoing,
+              openingBalance: -4000,
+              transactionDelta: 4000,
+              obligation: '1100',
+              clearing: '2020',
+            ),
+            (
+              partyType: 'supplier',
+              source: ChequeSourceTables.supplierAccount,
+              direction: ChequeDirectionValue.outgoing,
+              openingBalance: 4000,
+              transactionDelta: -4000,
+              obligation: '2000',
+              clearing: '2020',
+            ),
+            (
+              partyType: 'supplier',
+              source: ChequeSourceTables.supplierAccount,
+              direction: ChequeDirectionValue.incoming,
+              openingBalance: -4000,
+              transactionDelta: 4000,
+              obligation: '2000',
+              clearing: '1020',
+            ),
+          ];
+
+      for (var index = 0; index < cases.length; index++) {
+        final testCase = cases[index];
+        final int partyId;
+        if (testCase.partyType == 'customer') {
+          partyId = await db
+              .into(db.customers)
+              .insert(
+                CustomersCompanion.insert(
+                  name: 'Account customer $index',
+                  currencyId: 1,
+                  balanceCents: Value(Decimal.fromInt(testCase.openingBalance)),
+                ),
+              );
+        } else {
+          partyId = await db
+              .into(db.suppliers)
+              .insert(
+                SuppliersCompanion.insert(
+                  name: 'Account supplier $index',
+                  currencyId: 1,
+                  balanceCents: Value(Decimal.fromInt(testCase.openingBalance)),
+                ),
+              );
+        }
+        final chequeId = await instruments.create(
+          direction: testCase.direction,
+          sourceTable: testCase.source,
+          sourceId: partyId,
+          amountCents: 4000,
+          currencyId: 1,
+          issueDate: DateTime(2026, 9, 10),
+          dueDate: DateTime(2026, 9, 20),
+          partyType: testCase.partyType,
+          partyId: partyId,
+          chequeNumber: 'ACCOUNT-CLEAR-$index',
+        );
+
+        final first = await lifecycle.markCleared(
+          sourceTable: testCase.source,
+          sourceId: partyId,
+          instrumentId: chequeId,
+        );
+        final second = await lifecycle.markCleared(
+          sourceTable: testCase.source,
+          sourceId: partyId,
+          instrumentId: chequeId,
+        );
+        expect(second.createdPaymentId, first.createdPaymentId);
+
+        final transactionTable = testCase.partyType == 'customer'
+            ? 'customer_transactions'
+            : 'supplier_transactions';
+        final transaction = await db
+            .customSelect(
+              'SELECT id, amount_cents FROM $transactionTable '
+              "WHERE reference_type = 'cheque_instrument' AND reference_id = ?",
+              variables: [Variable.withInt(chequeId)],
+            )
+            .getSingle();
+        final transactionId = transaction.read<int>('id');
+        expect(first.createdPaymentId, transactionId);
+        expect(
+          transaction.read<int>('amount_cents'),
+          testCase.transactionDelta,
+        );
+
+        final settlement = await postedLines(transactionTable, transactionId);
+        if (testCase.direction == ChequeDirectionValue.incoming) {
+          expect(settlement[testCase.clearing]?.debit, 4000);
+          expect(settlement[testCase.obligation]?.credit, 4000);
+        } else {
+          expect(settlement[testCase.obligation]?.debit, 4000);
+          expect(settlement[testCase.clearing]?.credit, 4000);
+        }
+        final clearance = await postedLines('cheque_instruments', chequeId);
+        if (testCase.direction == ChequeDirectionValue.incoming) {
+          expect(clearance['1010']?.debit, 4000);
+          expect(clearance['1020']?.credit, 4000);
+        } else {
+          expect(clearance['2020']?.debit, 4000);
+          expect(clearance['1010']?.credit, 4000);
+        }
+
+        final balanceRow = await db
+            .customSelect(
+              'SELECT balance_cents FROM '
+              '${testCase.partyType == 'customer' ? 'customers' : 'suppliers'} '
+              'WHERE id = ?',
+              variables: [Variable.withInt(partyId)],
+            )
+            .getSingle();
+        expect(balanceRow.read<int>('balance_cents'), 0);
+        final confirmationCount = await db
+            .customSelect(
+              'SELECT COUNT(*) AS c FROM cheque_confirmations '
+              'WHERE source_table = ? AND source_id = ?',
+              variables: [
+                Variable.withString(testCase.source),
+                Variable.withInt(partyId),
+              ],
+            )
+            .getSingle();
+        expect(confirmationCount.read<int>('c'), 0);
+      }
+    },
+  );
+
+  test(
+    'cleared incoming account cheque bounce restores party then cash resolves it',
+    () async {
+      final customerId = await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(
+              name: 'Bounced account customer',
+              currencyId: 1,
+              balanceCents: Value(Decimal.fromInt(5000)),
+            ),
+          );
+      final chequeId = await instruments.create(
+        direction: ChequeDirectionValue.incoming,
+        sourceTable: ChequeSourceTables.customerAccount,
+        sourceId: customerId,
+        amountCents: 2000,
+        currencyId: 1,
+        dueDate: DateTime(2026, 9, 20),
+        partyType: 'customer',
+        partyId: customerId,
+        chequeNumber: 'ACCOUNT-BOUNCE-IN',
+      );
+
+      await lifecycle.markCleared(
+        sourceTable: ChequeSourceTables.customerAccount,
+        sourceId: customerId,
+        instrumentId: chequeId,
+      );
+      await lifecycle.markBounced(
+        sourceTable: ChequeSourceTables.customerAccount,
+        sourceId: customerId,
+        instrumentId: chequeId,
+        bounceReason: 'Bank rejected',
+      );
+      var customer = await (db.select(
+        db.customers,
+      )..where((row) => row.id.equals(customerId))).getSingle();
+      expect(customer.balanceCents, Decimal.fromInt(5000));
+      var chequeLines = await postedLines('cheque_instruments', chequeId);
+      expect(chequeLines['1030']?.debit, 2000);
+
+      await lifecycle.resolveBounced(
+        instrumentId: chequeId,
+        resolutionType: ChequeResolutionType.cash,
+      );
+      customer = await (db.select(
+        db.customers,
+      )..where((row) => row.id.equals(customerId))).getSingle();
+      expect(customer.balanceCents, Decimal.fromInt(3000));
+      chequeLines = await postedLines('cheque_instruments', chequeId);
+      expect(chequeLines['1030']?.credit, 2000);
+      expect(chequeLines['1000']?.debit, 2000);
+    },
+  );
+
+  test(
+    'pending outgoing account cheque creates no posting until cash resolution',
+    () async {
+      final supplierId = await db
+          .into(db.suppliers)
+          .insert(
+            SuppliersCompanion.insert(
+              name: 'Bounced account supplier',
+              currencyId: 1,
+              balanceCents: Value(Decimal.fromInt(5000)),
+            ),
+          );
+      final chequeId = await instruments.create(
+        direction: ChequeDirectionValue.outgoing,
+        sourceTable: ChequeSourceTables.supplierAccount,
+        sourceId: supplierId,
+        amountCents: 2000,
+        currencyId: 1,
+        dueDate: DateTime(2026, 9, 20),
+        partyType: 'supplier',
+        partyId: supplierId,
+        chequeNumber: 'ACCOUNT-BOUNCE-OUT',
+      );
+
+      await lifecycle.markBounced(
+        sourceTable: ChequeSourceTables.supplierAccount,
+        sourceId: supplierId,
+        instrumentId: chequeId,
+        bounceReason: 'Bank rejected',
+      );
+      var supplier = await (db.select(
+        db.suppliers,
+      )..where((row) => row.id.equals(supplierId))).getSingle();
+      expect(supplier.balanceCents, Decimal.fromInt(5000));
+      expect(await postedLines('cheque_instruments', chequeId), isEmpty);
+      final beforeResolution = await db
+          .customSelect(
+            "SELECT COUNT(*) AS c FROM supplier_transactions WHERE reference_type = 'cheque_instrument' AND reference_id = ?",
+            variables: [Variable.withInt(chequeId)],
+          )
+          .getSingle();
+      expect(beforeResolution.read<int>('c'), 0);
+
+      await lifecycle.resolveBounced(
+        instrumentId: chequeId,
+        resolutionType: ChequeResolutionType.cash,
+      );
+      supplier = await (db.select(
+        db.suppliers,
+      )..where((row) => row.id.equals(supplierId))).getSingle();
+      expect(supplier.balanceCents, Decimal.fromInt(3000));
+      final transaction = await db
+          .customSelect(
+            "SELECT id FROM supplier_transactions WHERE reference_type = 'cheque_instrument' AND reference_id = ?",
+            variables: [Variable.withInt(chequeId)],
+          )
+          .getSingle();
+      final lines = await postedLines(
+        'supplier_transactions',
+        transaction.read<int>('id'),
+      );
+      expect(lines['2000']?.debit, 2000);
+      expect(lines['1000']?.credit, 2000);
+    },
+  );
+
   test('return cheque cannot clear without a linked party', () async {
     await instruments.create(
       direction: ChequeDirectionValue.outgoing,

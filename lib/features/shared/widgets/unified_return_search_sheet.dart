@@ -98,25 +98,54 @@ class _UnifiedReturnSearchSheetState extends State<_UnifiedReturnSearchSheet> {
     try {
       late List<InvoiceSearchResult> invoices;
       late List<ProductSearchResult> products;
-      if (_isRemoteClient && widget.side == ReturnSide.sale) {
+      if (_isRemoteClient) {
         final responses = await Future.wait([
-          _lan.fetchRemoteReturnableSales(query: q, limit: 50),
-          _lan.fetchRemoteCatalog(query: q, limit: 50),
+          widget.side == ReturnSide.sale
+              ? _lan.fetchRemoteReturnableSales(query: q, limit: 50)
+              : _lan.fetchRemoteReturnablePurchases(query: q, limit: 50),
+          _lan.fetchRemoteCatalog(
+            query: q,
+            limit: 50,
+            management: widget.side == ReturnSide.purchase,
+          ),
         ]);
-        final invoicePage = responses[0] as LanReturnableSalesPage;
         final catalogPage = responses[1] as LanCatalogPage;
-        invoices = invoicePage.sales
-            .map(
-              (sale) => InvoiceSearchResult(
-                invoiceId: sale.saleId,
-                invoiceNumber: sale.invoiceNumber,
-                date: sale.saleDate,
-                totalCents: sale.totalCents,
-                partyName: sale.customerName,
-              ),
-            )
-            .toList(growable: false);
-        products = _mapRemoteProducts(catalogPage.products);
+        if (widget.side == ReturnSide.sale) {
+          final invoicePage = responses[0] as LanReturnableSalesPage;
+          invoices = invoicePage.sales
+              .map(
+                (sale) => InvoiceSearchResult(
+                  invoiceId: sale.saleId,
+                  invoiceNumber: sale.invoiceNumber,
+                  date: sale.saleDate,
+                  totalCents: sale.totalCents,
+                  partyName: sale.customerName,
+                ),
+              )
+              .toList(growable: false);
+        } else {
+          final invoicePage = responses[0] as LanReturnablePurchasesPage;
+          invoices = invoicePage.purchases
+              .where(
+                (purchase) =>
+                    widget.partyId == null ||
+                    purchase.supplierId == widget.partyId,
+              )
+              .map(
+                (purchase) => InvoiceSearchResult(
+                  invoiceId: purchase.purchaseId,
+                  invoiceNumber: purchase.purchaseNumber,
+                  date: purchase.purchaseDate,
+                  totalCents: purchase.totalCents,
+                  partyName: purchase.supplierName,
+                ),
+              )
+              .toList(growable: false);
+        }
+        products = _mapRemoteProducts(
+          catalogPage.products,
+          purchase: widget.side == ReturnSide.purchase,
+        );
       } else {
         if (widget.side == ReturnSide.sale) {
           invoices = await _service.searchSaleInvoices(
@@ -151,8 +180,9 @@ class _UnifiedReturnSearchSheetState extends State<_UnifiedReturnSearchSheet> {
   }
 
   List<ProductSearchResult> _mapRemoteProducts(
-    List<LanCatalogProduct> catalog,
-  ) {
+    List<LanCatalogProduct> catalog, {
+    bool purchase = false,
+  }) {
     final results = <ProductSearchResult>[];
     for (final product in catalog) {
       if (product.hasVariants) {
@@ -165,8 +195,16 @@ class _UnifiedReturnSearchSheetState extends State<_UnifiedReturnSearchSheet> {
               variantLabel: variant.label,
               sku: variant.sku,
               barcode: variant.barcode,
-              lastPriceCents: variant.priceCents,
-              taxRateBps: product.salesTaxRateBps,
+              lastPriceCents: purchase
+                  ? variant.lastPurchasePriceCents ??
+                        variant.costCents ??
+                        product.lastPurchasePriceCents ??
+                        product.costCents ??
+                        variant.priceCents
+                  : variant.priceCents,
+              taxRateBps: purchase
+                  ? product.purchaseTaxRateBps
+                  : product.salesTaxRateBps,
               stockQuantity: variant.stockQuantity,
               measurementType: product.measurementType,
             ),
@@ -185,8 +223,14 @@ class _UnifiedReturnSearchSheetState extends State<_UnifiedReturnSearchSheet> {
             variantLabel: rawLabel == 'Default' ? null : rawLabel,
             sku: product.sku ?? defaultVariant?.sku,
             barcode: product.barcode ?? defaultVariant?.barcode,
-            lastPriceCents: product.priceCents,
-            taxRateBps: product.salesTaxRateBps,
+            lastPriceCents: purchase
+                ? product.lastPurchasePriceCents ??
+                      product.costCents ??
+                      product.priceCents
+                : product.priceCents,
+            taxRateBps: purchase
+                ? product.purchaseTaxRateBps
+                : product.salesTaxRateBps,
             stockQuantity: product.stockQuantity,
             measurementType: product.measurementType,
           ),

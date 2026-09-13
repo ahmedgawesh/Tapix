@@ -16,6 +16,7 @@ import '../../../../core/pricing/invoice_pricing_engine.dart';
 import '../../../../core/pricing/line_item_pricing_engine.dart';
 import '../../../../core/pricing/pricing_snapshot.dart';
 import '../../../../core/services/journal_entry_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 
 // ==================== ENUMS ====================
 
@@ -564,9 +565,14 @@ class PurchaseAdjReturnFormBloc
     extends Bloc<PurchaseAdjReturnFormEvent, PurchaseAdjReturnFormState> {
   final AdjustmentReturnDao _dao;
   final JournalEntryService _journalEntryService;
+  final LanNetworkService? _lan;
 
-  PurchaseAdjReturnFormBloc(this._dao, this._journalEntryService)
-    : super(PurchaseAdjReturnFormState()) {
+  PurchaseAdjReturnFormBloc(
+    this._dao,
+    this._journalEntryService, {
+    LanNetworkService? lan,
+  }) : _lan = lan,
+       super(PurchaseAdjReturnFormState()) {
     on<_PurchaseAdjReturnInitialized>(_onInitialized);
     on<PurchaseAdjReturnSupplierSelected>(_onSupplierSelected);
     add(const _PurchaseAdjReturnInitialized());
@@ -585,10 +591,18 @@ class PurchaseAdjReturnFormBloc
     on<PurchaseAdjReturnSubmitted>(_onSubmitted);
   }
 
+  bool get _isRemoteClient =>
+      _lan?.snapshot.mode == LanMode.client &&
+      _lan?.hasRemoteUserSession == true;
+
   Future<void> _onInitialized(
     _PurchaseAdjReturnInitialized event,
     Emitter<PurchaseAdjReturnFormState> emit,
   ) async {
+    if (_isRemoteClient) {
+      emit(state.copyWith(returnNumber: '—'));
+      return;
+    }
     try {
       final number = await _dao.generatePurchaseAdjReturnNumber();
       emit(state.copyWith(returnNumber: number));
@@ -779,6 +793,57 @@ class PurchaseAdjReturnFormBloc
       // purchase_return_adjustments.idempotency_key rejects the duplicate
       // before any stock / GL side effects fire.
       final idempotencyKey = const Uuid().v4();
+
+      if (_isRemoteClient) {
+        final result = await _lan!.submitRemotePurchaseAdjustmentReturn(
+          LanPurchaseAdjustmentReturnRequest(
+            idempotencyKey: idempotencyKey,
+            supplierId: state.supplierId!,
+            refundMethod: state.paymentMethod.name,
+            dueDate: state.dueDate,
+            returnDate: state.returnDate,
+            reasonCode: state.reasonCode!.name,
+            notes: state.notes,
+            overallDiscountCents: state.overallDiscountCents,
+            overallDiscountIsPercent: state.overallDiscountIsPercent,
+            lines: state.items
+                .map(
+                  (item) => LanPurchaseAdjustmentReturnLineRequest(
+                    productId: item.productId,
+                    variantId: item.variantId,
+                    quantity: item.quantity,
+                    unitPriceCents: item.unitPriceCents,
+                    discountCents: item.discountCents,
+                    discountPercentBps: item.discountPercentBps,
+                    reason: item.reason,
+                  ),
+                )
+                .toList(growable: false),
+            payments: event.settlementAllocations
+                .map(
+                  (payment) => LanCheckoutPaymentRequest(
+                    method: payment.method,
+                    amountCents: payment.amountCents,
+                    reference: payment.reference,
+                    bankName: payment.bankName,
+                    issueDate: payment.issueDate,
+                    dueDate: payment.dueDate,
+                    note: payment.note,
+                  ),
+                )
+                .toList(growable: false),
+          ),
+        );
+        emit(
+          state.copyWith(
+            isSubmitting: false,
+            isSuccess: true,
+            hasUnsavedChanges: false,
+            createdReturnId: result.returnId,
+          ),
+        );
+        return;
+      }
 
       // Return number is generated atomically by the DAO inside the transaction
       // Phase 11.2 — stamp pricing-engine snapshot. The state's engine call

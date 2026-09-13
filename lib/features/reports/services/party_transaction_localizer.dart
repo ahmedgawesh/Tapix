@@ -100,7 +100,22 @@ String localizedPartyTransactionDescription(
     ]);
   }
 
-  return matchReturnSettlement() ??
+  String? matchAccountCheque() {
+    final result = RegExp(
+      r'^(Incoming|Outgoing) account cheque (.+?)(?: — (.+))?$',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (result == null) return null;
+    final direction = result.group(1)!.toLowerCase();
+    final localized = resolve('reports.txn_desc_${direction}_account_cheque', [
+      result.group(2) ?? '',
+    ]);
+    final note = result.group(3)?.trim();
+    return note == null || note.isEmpty ? localized : '$localized — $note';
+  }
+
+  return matchAccountCheque() ??
+      matchReturnSettlement() ??
       match(
         r'^Reversed payments for voided sale (.+)$',
         'reversed_payments_voided_sale',
@@ -124,6 +139,18 @@ String localizedPartyTransactionDescription(
       match(
         r'^Payment for (.+?) \(issued cheque (.*)\)$',
         'payment_issued_cheque',
+        groups: 2,
+      ) ??
+      match(r'^Incoming cheque for (.+)$', 'incoming_cheque_for') ??
+      match(r'^Issued cheque for (.+)$', 'issued_cheque_for') ??
+      match(
+        r'^Incoming cheque (.+?) for (.+)$',
+        'incoming_cheque_number_for',
+        groups: 2,
+      ) ??
+      match(
+        r'^Issued cheque (.+?) for (.+)$',
+        'issued_cheque_number_for',
         groups: 2,
       ) ??
       match(

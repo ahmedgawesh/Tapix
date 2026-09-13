@@ -488,6 +488,7 @@ class _FilterSection extends StatelessWidget {
       case 'close_period':
         return Colors.red;
       case 'below_cost_override':
+      case 'below_cost_sales_policy_changed':
         return Colors.deepOrange;
       case 'login':
         return Colors.cyan;

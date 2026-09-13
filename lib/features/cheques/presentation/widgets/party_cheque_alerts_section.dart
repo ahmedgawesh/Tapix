@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/database/daos/cheque_instrument_dao.dart';
+import '../../../../core/database/daos/cheque_confirmation_dao.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/cheque_management_service.dart';
 
@@ -198,7 +199,9 @@ class _PartyChequeAlertTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${'cheques.invoice_number'.tr()}: ${entry.referenceNumber}',
+                      ChequeSourceTables.isAccountSource(cheque.sourceTable)
+                          ? '${'cheques.source'.tr()}: ${'cheques.account_source'.tr()}'
+                          : '${'cheques.invoice_number'.tr()}: ${entry.referenceNumber}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -248,6 +251,8 @@ class _PartyChequeAlertTile extends StatelessWidget {
     'sale_return_adjustment' => 'cheques.source_sale_return_adjustment'.tr(),
     'purchase_return_adjustment' =>
       'cheques.source_purchase_return_adjustment'.tr(),
+    'customer_account' => 'cheques.source_customer_account'.tr(),
+    'supplier_account' => 'cheques.source_supplier_account'.tr(),
     _ => source,
   };
 }

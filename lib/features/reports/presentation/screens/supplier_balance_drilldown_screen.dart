@@ -9,6 +9,7 @@ import '../../../../core/services/currency_service.dart';
 import '../../services/supplier_balance_drilldown_pdf_service.dart';
 import '../bloc/supplier_balance_drilldown_bloc.dart';
 import '../widgets/date_range_selector.dart';
+import '../widgets/report_scrollable_center.dart';
 import '../widgets/searchable_party_selector.dart';
 
 class SupplierBalanceDrilldownScreen extends StatelessWidget {
@@ -142,7 +143,7 @@ class _SupplierBalanceDrilldownView extends StatelessWidget {
 
   Widget _buildSelectSupplierPrompt(BuildContext context) {
     final theme = Theme.of(context);
-    return Center(
+    return ReportScrollableCenter(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -678,7 +679,7 @@ class _DrilldownContent extends StatelessWidget {
 
   Widget _buildEmptyTransactions(BuildContext context) {
     final theme = Theme.of(context);
-    return Center(
+    return ReportScrollableCenter(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(

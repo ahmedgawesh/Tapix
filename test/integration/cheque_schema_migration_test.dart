@@ -43,7 +43,7 @@ void main() {
           .get();
       final names = columns.map((row) => row.read<String>('name')).toSet();
 
-      expect(migrated.schemaVersion, 10081);
+      expect(migrated.schemaVersion, 10082);
       expect(
         names,
         containsAll(const [
@@ -122,7 +122,7 @@ void main() {
       db = migrated;
       await migrated.customSelect('SELECT 1').get();
 
-      expect(migrated.schemaVersion, 10081);
+      expect(migrated.schemaVersion, 10082);
       final cheque = await ChequeInstrumentDao(migrated).getById(chequeId);
       expect(cheque?.settlementPaymentId, paymentId);
     } finally {
@@ -328,7 +328,7 @@ void main() {
       db = migrated;
       await migrated.customSelect('SELECT 1').get();
 
-      expect(migrated.schemaVersion, 10081);
+      expect(migrated.schemaVersion, 10082);
       final sale = await (migrated.select(
         migrated.sales,
       )..where((row) => row.id.equals(saleId))).getSingle();
@@ -483,7 +483,7 @@ void main() {
         );
         db = migrated;
         await migrated.customSelect('SELECT 1').get();
-        expect(migrated.schemaVersion, 10081);
+        expect(migrated.schemaVersion, 10082);
 
         Future<int> instrumentAccountNet(int instrumentId, String code) async {
           final row = await migrated
@@ -541,4 +541,88 @@ void main() {
       }
     },
   );
+
+  test('10082 additively backfills cleared standalone cheque advances', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'tapix-account-payment-migration-',
+    );
+    final file = File('${directory.path}/tapix.db');
+    AppDatabase? db;
+    try {
+      db = AppDatabase.connect(DatabaseConnection(NativeDatabase(file)));
+      await db.customSelect('SELECT 1').get();
+      final customerId = await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(name: 'Legacy advance', currencyId: 1),
+          );
+      final transactionId = await db
+          .into(db.customerTransactions)
+          .insert(
+            CustomerTransactionsCompanion.insert(
+              customerId: customerId,
+              transactionType: 'payment',
+              amountCents: Decimal.fromInt(-7500),
+              currencyId: 1,
+              referenceType: const Value('cheque_instrument'),
+            ),
+          );
+      final chequeId = await ChequeInstrumentDao(db).create(
+        direction: ChequeDirectionValue.incoming,
+        sourceTable: ChequeSourceTables.customerAccount,
+        sourceId: customerId,
+        amountCents: 7500,
+        currencyId: 1,
+        dueDate: DateTime(2026, 9, 20),
+        partyType: 'customer',
+        partyId: customerId,
+        chequeNumber: 'LEGACY-ADVANCE',
+      );
+      await ChequeInstrumentDao(db).writeLifecycle(
+        id: chequeId,
+        status: ChequeInstrumentStatus.cleared,
+        settlementPaymentId: transactionId,
+      );
+
+      await db.customStatement(
+        'DROP TRIGGER IF EXISTS trg_sale_payment_delete_reopens_account_payment',
+      );
+      await db.customStatement(
+        'DROP TRIGGER IF EXISTS trg_purchase_payment_delete_reopens_account_payment',
+      );
+      await db.customStatement('DROP TABLE party_account_payment_applications');
+      await db.customStatement('DROP TABLE party_account_payments');
+      await db.customStatement('PRAGMA user_version = 10081');
+      await db.close();
+      db = null;
+
+      final migrated = AppDatabase.connect(
+        DatabaseConnection(NativeDatabase(file)),
+      );
+      db = migrated;
+      await migrated.customSelect('SELECT 1').get();
+
+      expect(migrated.schemaVersion, 10082);
+      final advance = await (migrated.select(
+        migrated.partyAccountPayments,
+      )..where((row) => row.chequeInstrumentId.equals(chequeId))).getSingle();
+      expect(advance.partyType, 'customer');
+      expect(advance.partyId, customerId);
+      expect(advance.amountCents, Decimal.fromInt(7500));
+      expect(advance.appliedCents, Decimal.zero);
+      expect(advance.status, 'open');
+      expect(advance.settlementTransactionId, transactionId);
+      expect(
+        await (migrated.select(
+          migrated.chequeInstruments,
+        )..where((row) => row.id.equals(chequeId))).getSingle(),
+        isNotNull,
+      );
+    } finally {
+      await db?.close();
+      if (await directory.exists()) {
+        await directory.delete(recursive: true);
+      }
+    }
+  });
 }

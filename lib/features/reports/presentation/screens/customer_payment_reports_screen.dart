@@ -600,6 +600,8 @@ class _PaymentMethodCard extends StatelessWidget {
         return LucideIcons.banknote;
       case 'card':
         return LucideIcons.creditCard;
+      case 'cheque':
+        return LucideIcons.fileCheck2;
       case 'bank':
       case 'bank_transfer':
         return LucideIcons.building2;
@@ -623,6 +625,8 @@ class _PaymentMethodCard extends StatelessWidget {
         return Colors.green;
       case 'card':
         return colorScheme.primary;
+      case 'cheque':
+        return Colors.amber.shade700;
       case 'bank':
       case 'bank_transfer':
         return colorScheme.tertiary;
@@ -646,6 +650,8 @@ class _PaymentMethodCard extends StatelessWidget {
         return 'reports.method_cash'.tr();
       case 'card':
         return 'reports.method_card'.tr();
+      case 'cheque':
+        return 'suppliers.cheque'.tr();
       case 'bank':
       case 'bank_transfer':
         return 'reports.method_bank'.tr();

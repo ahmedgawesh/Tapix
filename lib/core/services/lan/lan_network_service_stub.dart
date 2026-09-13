@@ -134,6 +134,45 @@ class LanNetworkService {
     LanSaleAdjustmentReturnRequest saleReturn,
   ) async => _unsupported();
 
+  Future<List<LanSupplierSummary>> fetchRemoteSuppliers({
+    String query = '',
+    int limit = 100,
+  }) async => _unsupported();
+
+  Future<LanReturnablePurchasesPage> fetchRemoteReturnablePurchases({
+    String query = '',
+    int offset = 0,
+    int limit = 50,
+  }) async => _unsupported();
+
+  Future<LanReturnablePurchaseDetails> fetchRemoteReturnablePurchase(
+    int purchaseId,
+  ) async => _unsupported();
+
+  Future<LanPurchaseReturnsPage> fetchRemotePurchaseReturns({
+    String query = '',
+    int offset = 0,
+    int limit = 100,
+  }) async => _unsupported();
+
+  Future<LanPurchaseReturnDetails> fetchRemotePurchaseReturnDetails({
+    required int returnId,
+    required bool adjustment,
+  }) async => _unsupported();
+
+  Future<LanPurchaseReturnResult> submitRemotePurchaseReturn(
+    LanPurchaseReturnRequest purchaseReturn,
+  ) async => _unsupported();
+
+  Future<LanPurchaseReturnResult> submitRemotePurchaseAdjustmentReturn(
+    LanPurchaseAdjustmentReturnRequest purchaseReturn,
+  ) async => _unsupported();
+
+  Future<void> voidRemotePurchaseReturn({
+    required int returnId,
+    required bool adjustment,
+  }) async => _unsupported();
+
   Future<LanCashierShiftSnapshot?> fetchOwnRemoteShift() async =>
       _unsupported();
 

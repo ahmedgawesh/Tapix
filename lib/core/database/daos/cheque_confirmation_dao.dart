@@ -19,8 +19,13 @@ class ChequeSourceTables {
   static const String purchaseReturn = 'purchase_return';
   static const String saleReturnAdjustment = 'sale_return_adjustment';
   static const String purchaseReturnAdjustment = 'purchase_return_adjustment';
+  static const String customerAccount = 'customer_account';
+  static const String supplierAccount = 'supplier_account';
 
-  static const Set<String> all = {
+  /// Sources backed by one concrete invoice/return document. Only these
+  /// sources are allowed in the legacy one-row-per-document confirmation
+  /// sidecar.
+  static const Set<String> documentSources = {
     sale,
     purchase,
     saleReturn,
@@ -28,6 +33,15 @@ class ChequeSourceTables {
     saleReturnAdjustment,
     purchaseReturnAdjustment,
   };
+
+  /// Account-level cheques are intentionally not written to
+  /// `cheque_confirmations`: a party can own any number of them, while that
+  /// legacy table is unique by `(source_table, source_id)`.
+  static const Set<String> accountSources = {customerAccount, supplierAccount};
+
+  static const Set<String> all = {...documentSources, ...accountSources};
+
+  static bool isAccountSource(String value) => accountSources.contains(value);
 }
 
 /// Allowed `cheque_confirmations.status` values.
@@ -69,10 +83,10 @@ class ChequeConfirmationDao extends DatabaseAccessor<AppDatabase>
     required int sourceId,
   }) {
     _assertValidSourceTable(sourceTable);
-    return (select(chequeConfirmations)
-          ..where((c) =>
-              c.sourceTable.equals(sourceTable) &
-              c.sourceId.equals(sourceId)))
+    return (select(chequeConfirmations)..where(
+          (c) =>
+              c.sourceTable.equals(sourceTable) & c.sourceId.equals(sourceId),
+        ))
         .getSingleOrNull();
   }
 
@@ -82,10 +96,10 @@ class ChequeConfirmationDao extends DatabaseAccessor<AppDatabase>
     required int sourceId,
   }) {
     _assertValidSourceTable(sourceTable);
-    return (select(chequeConfirmations)
-          ..where((c) =>
-              c.sourceTable.equals(sourceTable) &
-              c.sourceId.equals(sourceId)))
+    return (select(chequeConfirmations)..where(
+          (c) =>
+              c.sourceTable.equals(sourceTable) & c.sourceId.equals(sourceId),
+        ))
         .watchSingleOrNull();
   }
 
@@ -133,9 +147,7 @@ class ChequeConfirmationDao extends DatabaseAccessor<AppDatabase>
     }
     if (status == ChequeConfirmationStatus.bounced &&
         (bounceReason == null || bounceReason.trim().isEmpty)) {
-      throw ArgumentError(
-        'bounceReason is required when status = bounced',
-      );
+      throw ArgumentError('bounceReason is required when status = bounced');
     }
     if (clearedPaymentId != null && clearClearedPaymentId) {
       throw ArgumentError(
@@ -162,11 +174,13 @@ class ChequeConfirmationDao extends DatabaseAccessor<AppDatabase>
     }
 
     return transaction(() async {
-      final existing = await (select(chequeConfirmations)
-            ..where((c) =>
-                c.sourceTable.equals(sourceTable) &
-                c.sourceId.equals(sourceId)))
-          .getSingleOrNull();
+      final existing =
+          await (select(chequeConfirmations)..where(
+                (c) =>
+                    c.sourceTable.equals(sourceTable) &
+                    c.sourceId.equals(sourceId),
+              ))
+              .getSingleOrNull();
 
       if (existing == null) {
         return into(chequeConfirmations).insert(
@@ -193,9 +207,9 @@ class ChequeConfirmationDao extends DatabaseAccessor<AppDatabase>
         return existing.id;
       }
 
-      await (update(chequeConfirmations)
-            ..where((c) => c.id.equals(existing.id)))
-          .write(
+      await (update(
+        chequeConfirmations,
+      )..where((c) => c.id.equals(existing.id))).write(
         ChequeConfirmationsCompanion(
           status: Value(status),
           confirmedAt: Value(effectiveConfirmedAt),
@@ -218,24 +232,24 @@ class ChequeConfirmationDao extends DatabaseAccessor<AppDatabase>
     required int sourceId,
   }) async {
     _assertValidSourceTable(sourceTable);
-    await (update(chequeConfirmations)
-          ..where((c) =>
-              c.sourceTable.equals(sourceTable) &
-              c.sourceId.equals(sourceId)))
+    await (update(chequeConfirmations)..where(
+          (c) =>
+              c.sourceTable.equals(sourceTable) & c.sourceId.equals(sourceId),
+        ))
         .write(
-      ChequeConfirmationsCompanion(
-        status: const Value(ChequeConfirmationStatus.pending),
-        confirmedAt: const Value(null),
-        confirmedBy: const Value(null),
-        bounceReason: const Value(null),
-        // Phase 15.0 — drop the payment linkage when re-opening to pending.
-        // (If a payment row was created during a previous cleared, the
-        // caller MUST reverse it before re-opening; we just clear the
-        // pointer here so a stale FK can't confuse future transitions.)
-        clearedPaymentId: const Value<int?>(null),
-        updatedAt: Value(DateTime.now()),
-      ),
-    );
+          ChequeConfirmationsCompanion(
+            status: const Value(ChequeConfirmationStatus.pending),
+            confirmedAt: const Value(null),
+            confirmedBy: const Value(null),
+            bounceReason: const Value(null),
+            // Phase 15.0 — drop the payment linkage when re-opening to pending.
+            // (If a payment row was created during a previous cleared, the
+            // caller MUST reverse it before re-opening; we just clear the
+            // pointer here so a stale FK can't confuse future transitions.)
+            clearedPaymentId: const Value<int?>(null),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
   }
 
   /// One-time helper used by the SharedPreferences\u2192DB migration.
@@ -264,11 +278,11 @@ class ChequeConfirmationDao extends DatabaseAccessor<AppDatabase>
   }
 
   void _assertValidSourceTable(String sourceTable) {
-    if (!ChequeSourceTables.all.contains(sourceTable)) {
+    if (!ChequeSourceTables.documentSources.contains(sourceTable)) {
       throw ArgumentError.value(
         sourceTable,
         'sourceTable',
-        'Must be one of ${ChequeSourceTables.all}',
+        'Must be one of ${ChequeSourceTables.documentSources}',
       );
     }
   }

@@ -233,7 +233,7 @@ void main() {
       expect(row.read<int>('new_price_cents'), 2700);
       expect(row.read<int>('old_wholesale_price_cents'), 2000);
       expect(row.read<int>('new_wholesale_price_cents'), 2200);
-      expect(db.schemaVersion, 10081);
+      expect(db.schemaVersion, 10082);
     } finally {
       await db?.close();
       await temp.delete(recursive: true);

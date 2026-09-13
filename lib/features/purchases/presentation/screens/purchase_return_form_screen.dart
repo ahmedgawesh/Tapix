@@ -12,6 +12,7 @@ import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/payments/checkout_settlement.dart';
 import '../../../../core/payments/return_cheque_settlement_dialog.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../../core/widgets/pin_verification_dialog.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
@@ -76,7 +77,12 @@ class _ReturnFormViewState extends State<_ReturnFormView> {
       if (context.canPop()) {
         context.pop();
       } else {
-        context.go('/purchases');
+        final lan = sl<LanNetworkService>();
+        context.go(
+          lan.snapshot.mode == LanMode.client
+              ? '/purchases/returns'
+              : '/purchases',
+        );
       }
     }
   }
@@ -97,7 +103,12 @@ class _ReturnFormViewState extends State<_ReturnFormView> {
           if (context.canPop()) {
             context.pop();
           } else {
-            context.go('/purchases');
+            final lan = sl<LanNetworkService>();
+            context.go(
+              lan.snapshot.mode == LanMode.client
+                  ? '/purchases/returns'
+                  : '/purchases',
+            );
           }
           // Show print/share dialog after navigation completes
           WidgetsBinding.instance.addPostFrameCallback((_) {

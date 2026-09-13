@@ -500,6 +500,33 @@ void main() {
       );
       await client.openOwnRemoteShift(openingCashCents: 10000);
 
+      businessGateway.nextSaleError = const LanBusinessException(
+        'sale_below_cost',
+        'The discount would sell an item below its recorded cost.',
+        statusCode: 409,
+        details: {
+          'lineIndex': 0,
+          'productId': 7,
+          'productName': 'Milk',
+          'canOverride': false,
+        },
+      );
+      try {
+        await client.submitRemoteSale(request);
+        fail('The below-cost request should have been rejected.');
+      } on LanBusinessException catch (error) {
+        expect(error.code, 'sale_below_cost');
+        expect(error.details['lineIndex'], 0);
+        expect(error.details['productId'], 7);
+        expect(error.details['productName'], 'Milk');
+        expect(error.details['canOverride'], isFalse);
+        expect(
+          error.details,
+          isNot(contains('costCents')),
+          reason: 'A cashier must not receive cost through an error response',
+        );
+      }
+
       final activities = <LanMasterActivityEvent>[];
       final activitySub = master.masterActivityEvents.listen(activities.add);
       addTearDown(activitySub.cancel);
@@ -814,6 +841,164 @@ void main() {
   });
 
   test(
+    'accountant can inspect purchase returns but cannot create or void them',
+    () async {
+      await addMasterUser(
+        username: 'accountant-purchase-returns',
+        password: 'accountant-secret',
+        role: 'accountant',
+      );
+      await pairClient('Purchase returns viewer');
+      expect(
+        (await client.loginToMaster(
+          username: 'accountant-purchase-returns',
+          password: 'accountant-secret',
+        )).success,
+        isTrue,
+      );
+
+      expect((await client.fetchRemoteSuppliers()).single.id, 6);
+      final purchases = await client.fetchRemoteReturnablePurchases();
+      expect(purchases.purchases.single.purchaseId, 55);
+      final purchase = await client.fetchRemoteReturnablePurchase(55);
+      expect(purchase.lines.single.availableQuantity, 1500);
+      final returns = await client.fetchRemotePurchaseReturns();
+      expect(returns.returns.single.returnNumber, 'PR-202608-0009');
+      final details = await client.fetchRemotePurchaseReturnDetails(
+        returnId: 9,
+        adjustment: false,
+      );
+      expect(details.lines.single.purchaseItemId, 88);
+
+      await expectLater(
+        client.submitRemotePurchaseReturn(
+          const LanPurchaseReturnRequest(
+            idempotencyKey: 'accountant-forbidden-purchase-return',
+            purchaseId: 55,
+            dispositionType: 'restock',
+            refundMethod: 'credit',
+            lines: [
+              LanPurchaseReturnLineRequest(purchaseItemId: 88, quantity: 1000),
+            ],
+          ),
+        ),
+        throwsA(
+          isA<LanBusinessException>()
+              .having((error) => error.statusCode, 'statusCode', 403)
+              .having((error) => error.code, 'code', 'permission_denied'),
+        ),
+      );
+      await expectLater(
+        client.voidRemotePurchaseReturn(returnId: 9, adjustment: false),
+        throwsA(
+          isA<LanBusinessException>()
+              .having((error) => error.statusCode, 'statusCode', 403)
+              .having((error) => error.code, 'code', 'permission_denied'),
+        ),
+      );
+      expect(businessGateway.lastPurchaseReturnRequest, isNull);
+      expect(businessGateway.voidedPurchaseReturnId, isNull);
+    },
+  );
+
+  test('cashier cannot access purchase returns over LAN', () async {
+    await addMasterUser(
+      username: 'cashier-no-purchases',
+      password: 'cashier-secret',
+      role: 'cashier',
+    );
+    await pairClient('Cashier without purchase permission');
+    expect(
+      (await client.loginToMaster(
+        username: 'cashier-no-purchases',
+        password: 'cashier-secret',
+      )).success,
+      isTrue,
+    );
+
+    await expectLater(
+      client.fetchRemotePurchaseReturns(),
+      throwsA(
+        isA<LanBusinessException>()
+            .having((error) => error.statusCode, 'statusCode', 403)
+            .having((error) => error.code, 'code', 'permission_denied'),
+      ),
+    );
+  });
+
+  test(
+    'manager creates linked and adjustment purchase returns and can void',
+    () async {
+      await addMasterUser(
+        username: 'manager-purchase-returns',
+        password: 'manager-secret',
+        role: 'manager',
+      );
+      await pairClient('Purchase returns manager');
+      expect(
+        (await client.loginToMaster(
+          username: 'manager-purchase-returns',
+          password: 'manager-secret',
+        )).success,
+        isTrue,
+      );
+
+      const linkedRequest = LanPurchaseReturnRequest(
+        idempotencyKey: 'lan-purchase-return-safe-retry-001',
+        purchaseId: 55,
+        dispositionType: 'restock',
+        refundMethod: 'credit',
+        lines: [
+          LanPurchaseReturnLineRequest(purchaseItemId: 88, quantity: 1000),
+        ],
+      );
+      final created = await client.submitRemotePurchaseReturn(linkedRequest);
+      final replayed = await client.submitRemotePurchaseReturn(linkedRequest);
+      expect(created.returnId, replayed.returnId);
+      expect(created.duplicate, isFalse);
+      expect(replayed.duplicate, isTrue);
+      expect(businessGateway.createdPurchaseReturnKeys, hasLength(1));
+
+      final adjustment = await client.submitRemotePurchaseAdjustmentReturn(
+        LanPurchaseAdjustmentReturnRequest(
+          idempotencyKey: 'lan-purchase-adjustment-return-001',
+          supplierId: 6,
+          refundMethod: 'credit',
+          returnDate: DateTime.utc(2026, 8, 25),
+          reasonCode: 'other',
+          lines: const [
+            LanPurchaseAdjustmentReturnLineRequest(
+              productId: 7,
+              quantity: 1000,
+              unitPriceCents: 500,
+            ),
+          ],
+        ),
+      );
+      expect(adjustment.returnNumber, 'PRS-202608-0010');
+      expect(
+        businessGateway.lastPurchaseAdjustmentReturnRequest?.supplierId,
+        6,
+      );
+
+      await client.voidRemotePurchaseReturn(
+        returnId: created.returnId,
+        adjustment: false,
+      );
+      expect(businessGateway.voidedPurchaseReturnId, created.returnId);
+
+      final audit = await masterDb.select(masterDb.auditLogs).get();
+      expect(
+        audit.map((row) => row.action),
+        containsAll([
+          'remote_purchase_return_created',
+          'remote_purchase_return_replayed',
+        ]),
+      );
+    },
+  );
+
+  test(
     'standalone mode closes the master listener and persists the role',
     () async {
       await master.startMaster(port: 0);
@@ -919,12 +1104,18 @@ class _FakeBusinessGateway implements LanMasterBusinessGateway {
   final Set<String> createdKeys = <String>{};
   final Set<String> createdReturnKeys = <String>{};
   final Set<String> createdAdjustmentReturnKeys = <String>{};
+  final Set<String> createdPurchaseReturnKeys = <String>{};
+  final Set<String> createdPurchaseAdjustmentReturnKeys = <String>{};
   LanCashierShiftSnapshot? currentShift;
   LanSaleRequest? lastRequest;
   LanSaleReturnRequest? lastReturnRequest;
   LanSaleAdjustmentReturnRequest? lastAdjustmentReturnRequest;
+  LanPurchaseReturnRequest? lastPurchaseReturnRequest;
+  LanPurchaseAdjustmentReturnRequest? lastPurchaseAdjustmentReturnRequest;
   String? productImagePath;
   int? voidedSaleId;
+  int? voidedPurchaseReturnId;
+  LanBusinessException? nextSaleError;
 
   @override
   Future<LanSalesPage> fetchSales({required int limit}) async {
@@ -1305,6 +1496,182 @@ class _FakeBusinessGateway implements LanMasterBusinessGateway {
   }
 
   @override
+  Future<List<LanSupplierSummary>> fetchSuppliers({
+    required String query,
+    required int limit,
+  }) async => const [
+    LanSupplierSummary(id: 6, name: 'Network Supplier', phone: '01000000000'),
+  ];
+
+  @override
+  Future<LanReturnablePurchasesPage> fetchReturnablePurchases({
+    required String query,
+    required int offset,
+    required int limit,
+  }) async => LanReturnablePurchasesPage(
+    purchases: [
+      LanReturnablePurchaseSummary(
+        purchaseId: 55,
+        purchaseNumber: 'PI-202608-0055',
+        supplierId: 6,
+        supplierName: 'Network Supplier',
+        purchaseDate: DateTime.utc(2026, 8, 25),
+        totalCents: 800,
+        paymentMethod: 'credit',
+        currencyId: 1,
+        taxInclusiveAtPost: false,
+        returnableLineCount: 1,
+      ),
+    ],
+    offset: offset,
+    limit: limit,
+    hasMore: false,
+  );
+
+  @override
+  Future<LanReturnablePurchaseDetails?> fetchReturnablePurchase({
+    required int purchaseId,
+  }) async {
+    if (purchaseId != 55) return null;
+    final summary = (await fetchReturnablePurchases(
+      query: '',
+      offset: 0,
+      limit: 1,
+    )).purchases.single;
+    return LanReturnablePurchaseDetails(
+      purchase: summary,
+      lines: const [
+        LanReturnablePurchaseLine(
+          purchaseItemId: 88,
+          productId: 7,
+          productName: 'Milk',
+          originalQuantity: 2000,
+          returnedQuantity: 500,
+          availableQuantity: 1500,
+          currentStockQuantity: 3000,
+          tracksInventory: true,
+          quantityScale: 1000,
+          measurementType: 'volume',
+          unitCostCents: 400,
+          subtotalCents: 800,
+          discountCents: 0,
+          taxCents: 0,
+          totalCents: 800,
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<LanPurchaseReturnsPage> fetchPurchaseReturns({
+    required String query,
+    required int offset,
+    required int limit,
+  }) async => LanPurchaseReturnsPage(
+    returns: [
+      LanPurchaseReturnSummary(
+        id: 9,
+        purchaseId: 55,
+        purchaseNumber: 'PI-202608-0055',
+        supplierId: 6,
+        supplierName: 'Network Supplier',
+        returnNumber: 'PR-202608-0009',
+        subtotalCents: 400,
+        discountCents: 0,
+        taxCents: 0,
+        totalCents: 400,
+        currencyId: 1,
+        status: 'posted',
+        dispositionType: 'restock',
+        refundMethod: 'credit',
+        returnDate: DateTime.utc(2026, 8, 25),
+        createdAt: DateTime.utc(2026, 8, 25),
+        isAdjustment: false,
+        unifiedId: 'PR-9',
+      ),
+    ],
+    offset: offset,
+    limit: limit,
+    hasMore: false,
+  );
+
+  @override
+  Future<LanPurchaseReturnDetails?> fetchPurchaseReturnDetails({
+    required int returnId,
+    required bool adjustment,
+  }) async {
+    if (returnId != 9 || adjustment) return null;
+    final summary = (await fetchPurchaseReturns(
+      query: '',
+      offset: 0,
+      limit: 1,
+    )).returns.single;
+    return LanPurchaseReturnDetails(
+      summary: summary,
+      lines: [
+        LanPurchaseReturnDetailLine(
+          id: 21,
+          returnId: returnId,
+          purchaseItemId: 88,
+          productId: 7,
+          productName: 'Milk',
+          quantity: 1000,
+          quantityScale: 1000,
+          measurementType: 'volume',
+          unitPriceCents: 400,
+          subtotalCents: 400,
+          discountCents: 0,
+          taxCents: 0,
+          totalCents: 400,
+          dispositionType: 'restock',
+          createdAt: DateTime.utc(2026, 8, 25),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<LanPurchaseReturnResult> createPurchaseReturn({
+    required LanRemoteUser actor,
+    required LanPurchaseReturnRequest request,
+  }) async {
+    lastPurchaseReturnRequest = request;
+    final duplicate = !createdPurchaseReturnKeys.add(request.idempotencyKey);
+    return LanPurchaseReturnResult(
+      returnId: 9,
+      returnNumber: 'PR-202608-0009',
+      totalCents: 400,
+      duplicate: duplicate,
+    );
+  }
+
+  @override
+  Future<LanPurchaseReturnResult> createPurchaseAdjustmentReturn({
+    required LanRemoteUser actor,
+    required LanPurchaseAdjustmentReturnRequest request,
+  }) async {
+    lastPurchaseAdjustmentReturnRequest = request;
+    final duplicate = !createdPurchaseAdjustmentReturnKeys.add(
+      request.idempotencyKey,
+    );
+    return LanPurchaseReturnResult(
+      returnId: 10,
+      returnNumber: 'PRS-202608-0010',
+      totalCents: 500,
+      duplicate: duplicate,
+    );
+  }
+
+  @override
+  Future<void> voidPurchaseReturn({
+    required LanRemoteUser actor,
+    required int returnId,
+    required bool adjustment,
+  }) async {
+    voidedPurchaseReturnId = returnId;
+  }
+
+  @override
   Future<LanCashierShiftSnapshot?> getOwnShift({
     required LanRemoteUser actor,
   }) async => currentShift;
@@ -1357,6 +1724,11 @@ class _FakeBusinessGateway implements LanMasterBusinessGateway {
     required LanRemoteUser actor,
     required LanSaleRequest request,
   }) async {
+    final pendingError = nextSaleError;
+    if (pendingError != null) {
+      nextSaleError = null;
+      throw pendingError;
+    }
     lastRequest = request;
     final duplicate = !createdKeys.add(request.idempotencyKey);
     return LanSaleResult(

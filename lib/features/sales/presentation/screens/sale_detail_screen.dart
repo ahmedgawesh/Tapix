@@ -391,6 +391,8 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
               promotionApplications: _promotionApplications,
               cashierName: _cashierName,
               cashierShiftNumber: _cashierShiftNumber,
+              receiptHeaderText: _remoteDetails?.receiptHeaderText,
+              receiptFooterText: _remoteDetails?.receiptFooterText,
             );
           } catch (e) {
             if (context.mounted) {
@@ -414,6 +416,8 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
               promotionApplications: _promotionApplications,
               cashierName: _cashierName,
               cashierShiftNumber: _cashierShiftNumber,
+              receiptHeaderText: _remoteDetails?.receiptHeaderText,
+              receiptFooterText: _remoteDetails?.receiptFooterText,
             );
           } catch (_) {}
         }

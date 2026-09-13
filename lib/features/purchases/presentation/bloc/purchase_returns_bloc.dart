@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'package:decimal/decimal.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../../core/bloc/realtime_bloc.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../../domain/repositories/purchase_repository.dart';
 
@@ -21,6 +23,11 @@ class PurchaseReturnsSearchRequested extends PurchaseReturnsEvent {
 class PurchaseReturnsBloc
     extends RealtimeBloc<List<PurchaseReturnEntity>, PurchaseReturnsEvent> {
   final PurchaseRepository _repository;
+  final LanNetworkService? _lan;
+
+  bool get _isRemoteClient =>
+      _lan?.snapshot.mode == LanMode.client &&
+      _lan?.hasRemoteUserSession == true;
 
   String _searchQuery = '';
   List<PurchaseReturnEntity> _allReturns = [];
@@ -30,13 +37,17 @@ class PurchaseReturnsBloc
 
   static const int _maxResults = 20;
 
-  PurchaseReturnsBloc(this._repository) : super(const RealtimeLoading()) {
-    _productTermsSub = _repository
-        .watchPurchaseReturnProductSearchTerms()
-        .listen((terms) {
-          _productTerms = terms;
-          _refilter();
-        });
+  PurchaseReturnsBloc(this._repository, {LanNetworkService? lan})
+    : _lan = lan,
+      super(const RealtimeLoading()) {
+    if (!_isRemoteClient) {
+      _productTermsSub = _repository
+          .watchPurchaseReturnProductSearchTerms()
+          .listen((terms) {
+            _productTerms = terms;
+            _refilter();
+          });
+    }
   }
 
   @override
@@ -46,7 +57,40 @@ class PurchaseReturnsBloc
 
   @override
   Stream<List<PurchaseReturnEntity>> get dataStream {
-    return _repository.watchAllPurchaseReturns();
+    if (!_isRemoteClient) return _repository.watchAllPurchaseReturns();
+    return _watchRemoteReturns();
+  }
+
+  Stream<List<PurchaseReturnEntity>> _watchRemoteReturns() async* {
+    while (true) {
+      final page = await _lan!.fetchRemotePurchaseReturns(limit: 200);
+      yield page.returns
+          .map(
+            (value) => PurchaseReturnEntity(
+              id: value.id,
+              purchaseId: value.purchaseId,
+              returnNumber: value.returnNumber,
+              supplierName: value.supplierName,
+              supplierPhone: value.supplierPhone,
+              supplierId: value.supplierId,
+              subtotalCents: Decimal.fromInt(value.subtotalCents),
+              discountCents: Decimal.fromInt(value.discountCents),
+              taxCents: Decimal.fromInt(value.taxCents),
+              totalCents: Decimal.fromInt(value.totalCents),
+              currencyId: value.currencyId,
+              status: value.status,
+              dispositionType: value.dispositionType,
+              refundMethod: value.refundMethod,
+              reason: value.reason,
+              returnDate: value.returnDate,
+              createdAt: value.createdAt,
+              isAdjustment: value.isAdjustment,
+              unifiedId: value.unifiedId,
+            ),
+          )
+          .toList(growable: false);
+      await Future<void>.delayed(const Duration(seconds: 3));
+    }
   }
 
   @override

@@ -87,6 +87,10 @@ class SaleFormState extends Equatable {
   final bool allowPartialPayments;
   final bool allowDiscounts;
   final double maxDiscountPercent;
+  final bool allowBelowCostSales;
+  // Null on local sales; populated from the master for LAN cashier PDFs.
+  final String? masterReceiptHeaderText;
+  final String? masterReceiptFooterText;
   final bool requireCustomerForSales;
   final bool enableLoyaltyPoints;
   final bool enablePromotions;
@@ -132,6 +136,9 @@ class SaleFormState extends Equatable {
     this.allowPartialPayments = false,
     this.allowDiscounts = true,
     this.maxDiscountPercent = 100.0,
+    this.allowBelowCostSales = false,
+    this.masterReceiptHeaderText,
+    this.masterReceiptFooterText,
     this.requireCustomerForSales = false,
     this.enableLoyaltyPoints = false,
     this.enablePromotions = false,
@@ -379,6 +386,9 @@ class SaleFormState extends Equatable {
     bool? allowPartialPayments,
     bool? allowDiscounts,
     double? maxDiscountPercent,
+    bool? allowBelowCostSales,
+    String? masterReceiptHeaderText,
+    String? masterReceiptFooterText,
     bool? requireCustomerForSales,
     bool? enableLoyaltyPoints,
     bool? enablePromotions,
@@ -439,6 +449,11 @@ class SaleFormState extends Equatable {
       allowPartialPayments: allowPartialPayments ?? this.allowPartialPayments,
       allowDiscounts: allowDiscounts ?? this.allowDiscounts,
       maxDiscountPercent: maxDiscountPercent ?? this.maxDiscountPercent,
+      allowBelowCostSales: allowBelowCostSales ?? this.allowBelowCostSales,
+      masterReceiptHeaderText:
+          masterReceiptHeaderText ?? this.masterReceiptHeaderText,
+      masterReceiptFooterText:
+          masterReceiptFooterText ?? this.masterReceiptFooterText,
       requireCustomerForSales:
           requireCustomerForSales ?? this.requireCustomerForSales,
       enableLoyaltyPoints: enableLoyaltyPoints ?? this.enableLoyaltyPoints,
@@ -485,6 +500,9 @@ class SaleFormState extends Equatable {
     allowPartialPayments,
     allowDiscounts,
     maxDiscountPercent,
+    allowBelowCostSales,
+    masterReceiptHeaderText,
+    masterReceiptFooterText,
     requireCustomerForSales,
     enableLoyaltyPoints,
     enablePromotions,
@@ -703,6 +721,7 @@ class SaleFormInitialized extends SaleFormEvent {
   final bool allowPartialPayments;
   final bool allowDiscounts;
   final double maxDiscountPercent;
+  final bool allowBelowCostSales;
   final bool requireCustomerForSales;
   final bool enableLoyaltyPoints;
   final bool enablePromotions;
@@ -718,6 +737,7 @@ class SaleFormInitialized extends SaleFormEvent {
     this.allowPartialPayments = false,
     this.allowDiscounts = true,
     this.maxDiscountPercent = 100.0,
+    this.allowBelowCostSales = false,
     this.requireCustomerForSales = false,
     this.enableLoyaltyPoints = false,
     this.enablePromotions = false,
@@ -735,6 +755,7 @@ class SaleFormInitialized extends SaleFormEvent {
     allowPartialPayments,
     allowDiscounts,
     maxDiscountPercent,
+    allowBelowCostSales,
     requireCustomerForSales,
     enableLoyaltyPoints,
     enablePromotions,
@@ -1096,6 +1117,9 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
             allowPartialPayments: catalog.allowPartialPayments,
             allowDiscounts: catalog.allowDiscounts,
             maxDiscountPercent: catalog.maxDiscountPercent,
+            allowBelowCostSales: catalog.allowBelowCostSales,
+            masterReceiptHeaderText: catalog.receiptHeaderText,
+            masterReceiptFooterText: catalog.receiptFooterText,
             requireCustomerForSales: catalog.requireCustomerForSales,
             enableLoyaltyPoints: false,
             enablePromotions: catalog.enablePromotions,
@@ -1129,6 +1153,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
             allowPartialPayments: event.allowPartialPayments,
             allowDiscounts: event.allowDiscounts,
             maxDiscountPercent: event.maxDiscountPercent,
+            allowBelowCostSales: event.allowBelowCostSales,
             requireCustomerForSales: event.requireCustomerForSales,
             enableLoyaltyPoints: event.enableLoyaltyPoints,
             enablePromotions: event.enablePromotions,
@@ -1147,6 +1172,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
             allowPartialPayments: event.allowPartialPayments,
             allowDiscounts: event.allowDiscounts,
             maxDiscountPercent: event.maxDiscountPercent,
+            allowBelowCostSales: event.allowBelowCostSales,
             requireCustomerForSales: event.requireCustomerForSales,
             enableLoyaltyPoints: event.enableLoyaltyPoints,
             enablePromotions: event.enablePromotions,
@@ -1169,6 +1195,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         allowPartialPayments: event.allowPartialPayments,
         allowDiscounts: event.allowDiscounts,
         maxDiscountPercent: event.maxDiscountPercent,
+        allowBelowCostSales: event.allowBelowCostSales,
         requireCustomerForSales: event.requireCustomerForSales,
         isEditingPosted: event.isEditingPosted,
         paymentMethod: initialPaymentMethod,
@@ -1420,7 +1447,9 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       sellingPriceCents: event.unitPriceCents,
       productName: newItem.displayName,
       productId: event.product.id,
+      lineTempId: newItem.tempId,
       userRole: currentUserRole,
+      allowOverride: state.allowBelowCostSales,
     );
 
     if (check.isBelowCost) {
@@ -1500,7 +1529,9 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       sellingPriceCents: effectiveUnitNet,
       productName: item.displayName,
       productId: item.product.id,
+      lineTempId: item.tempId,
       userRole: currentUserRole,
+      allowOverride: state.allowBelowCostSales,
     );
     emit(
       state.copyWith(
@@ -1631,7 +1662,9 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         sellingPriceCents: effectiveUnitNet,
         productName: item.displayName,
         productId: item.product.id,
+        lineTempId: item.tempId,
         userRole: currentUserRole,
+        allowOverride: state.allowBelowCostSales,
       );
       emit(state.copyWith(belowCostWarning: check));
       return;
@@ -1774,6 +1807,11 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
             paymentMethod: paymentMethodStr,
             paidAmountCents: effectivePaidCents.toBigInt().toInt(),
             notes: state.notes,
+            belowCostOverrideReason: state.belowCostOverrides.isEmpty
+                ? null
+                : state.belowCostOverrides
+                      .map((override) => override.reason)
+                      .join(' | '),
             lines: remoteLines,
             payments: settlement == null
                 ? const []
@@ -1796,6 +1834,8 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           state.copyWith(
             saleId: result.saleId,
             saleNumber: result.invoiceNumber,
+            masterReceiptHeaderText: result.receiptHeaderText,
+            masterReceiptFooterText: result.receiptFooterText,
             isSubmitting: false,
             isSuccess: true,
             hasUnsavedChanges: false,
@@ -1824,6 +1864,8 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           appliedPromotions: state.promotionEvaluation.applications,
           initialPayments: settlement?.payments ?? const [],
         );
+
+        await _logBelowCostOverrides(saleId);
 
         // Redeem loyalty points if applicable (non-critical, outside transaction)
         if (state.loyaltyRedemptionEnabled &&
@@ -1881,6 +1923,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           'sale_id': newSaleId.toString(),
           'original_sale_id': state.saleId.toString(),
         });
+        await _logBelowCostOverrides(newSaleId);
         emit(
           state.copyWith(
             saleId: newSaleId,
@@ -1913,6 +1956,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         CrashlyticsService.instance.logAction('sale_updated', {
           'sale_id': state.saleId.toString(),
         });
+        await _logBelowCostOverrides(state.saleId!);
         emit(
           state.copyWith(
             isSubmitting: false,
@@ -1930,6 +1974,31 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           error: 'quota_exceeded:sales:${e.limit}',
         ),
       );
+    } on LanBusinessException catch (e, st) {
+      CrashlyticsService.instance.recordError(
+        e,
+        stackTrace: st,
+        reason: 'SaleFormBloc._onSubmitted LAN request rejected',
+      );
+      final warning = _belowCostWarningFromRemoteError(e);
+      if (warning != null) {
+        emit(
+          state.copyWith(
+            isSubmitting: false,
+            error: null,
+            belowCostWarning: warning,
+          ),
+        );
+        return;
+      }
+      final errorKey = switch (e.code) {
+        'sale_below_cost' => 'settings.network.sale.below_cost_rejected',
+        'sale_below_cost_reason_required' =>
+          'settings.network.sale.below_cost_reason_required',
+        'discount_exceeds_max' => 'settings.network.sale.discount_exceeds_max',
+        _ => e.message,
+      };
+      emit(state.copyWith(isSubmitting: false, error: errorKey));
     } catch (e, st) {
       CrashlyticsService.instance.recordError(
         e,
@@ -1938,6 +2007,71 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       );
       emit(state.copyWith(isSubmitting: false, error: e.toString()));
     }
+  }
+
+  BelowCostCheckResult? _belowCostWarningFromRemoteError(
+    LanBusinessException error,
+  ) {
+    if (!_isRemoteClient ||
+        (error.code != 'sale_below_cost' &&
+            error.code != 'sale_below_cost_reason_required')) {
+      return null;
+    }
+
+    final details = error.details;
+    final rawLineIndex = details['lineIndex'];
+    final lineIndex = rawLineIndex is num
+        ? rawLineIndex.toInt()
+        : int.tryParse(rawLineIndex?.toString() ?? '');
+    SaleLineItem? item;
+    if (lineIndex != null && lineIndex >= 0 && lineIndex < state.items.length) {
+      item = state.items[lineIndex];
+    } else {
+      final rawProductId = details['productId'];
+      final productId = rawProductId is num
+          ? rawProductId.toInt()
+          : int.tryParse(rawProductId?.toString() ?? '');
+      if (productId != null) {
+        final index = state.items.indexWhere(
+          (candidate) => candidate.product.id == productId,
+        );
+        if (index >= 0) item = state.items[index];
+      }
+    }
+    // Older masters do not send structured warning details. Keep their
+    // localized snackbar fallback instead of guessing and removing a line.
+    if (item == null) return null;
+
+    int amount(String key) {
+      final value = details[key];
+      return value is num ? value.toInt() : int.tryParse('$value') ?? 0;
+    }
+
+    final costCents = amount('costCents');
+    final sellingPriceCents = amount('sellingPriceCents');
+    final lossCents = amount('lossCents');
+    final rawLossPercent = details['lossPercent'];
+    final lossPercent = rawLossPercent is num
+        ? rawLossPercent.toDouble()
+        : double.tryParse(rawLossPercent?.toString() ?? '') ?? 0;
+    final serverAllowsOverride = details['canOverride'] == true;
+
+    return BelowCostCheckResult(
+      isBelowCost: true,
+      costCents: Decimal.fromInt(costCents),
+      sellingPriceCents: Decimal.fromInt(sellingPriceCents),
+      lossCents: Decimal.fromInt(lossCents),
+      productName: details['productName']?.toString().trim().isNotEmpty == true
+          ? details['productName'].toString().trim()
+          : item.displayName,
+      productId: item.product.id,
+      lineTempId: item.tempId,
+      canOverride:
+          serverAllowsOverride &&
+          BelowCostSaleService.canRoleOverride(currentUserRole),
+      exceedsThreshold: details['exceedsThreshold'] == true,
+      lossPercent: lossPercent,
+    );
   }
 
   void _onPaymentMethodChanged(
@@ -1988,18 +2122,21 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     emit(state.copyWith(dueDate: event.date));
   }
 
-  Future<void> _onBelowCostOverrideApproved(
+  void _onBelowCostOverrideApproved(
     SaleBelowCostOverrideApproved event,
     Emitter<SaleFormState> emit,
-  ) async {
+  ) {
     final warning = state.belowCostWarning;
     if (warning == null || !warning.isBelowCost) return;
 
-    // Find the last added item that matches the warning product
-    final matchingItem = state.items.lastWhere(
-      (item) => item.product.id == warning.productId,
-      orElse: () => state.items.last,
+    final matchingIndex = state.items.indexWhere(
+      (item) => item.tempId == warning.lineTempId,
     );
+    if (matchingIndex < 0) {
+      emit(state.copyWith(clearBelowCostWarning: true));
+      return;
+    }
+    final matchingItem = state.items[matchingIndex];
 
     final override = BelowCostOverride(
       tempId: matchingItem.tempId,
@@ -2011,28 +2148,33 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       reason: event.reason,
     );
 
-    // Write audit log immediately
-    try {
-      await _auditService.logBelowCostOverride(
-        productId: warning.productId,
-        productName: warning.productName,
-        costCents: warning.costCents.toBigInt().toInt(),
-        sellingPriceCents: warning.sellingPriceCents.toBigInt().toInt(),
-        lossCents: warning.lossCents.toBigInt().toInt(),
-        reason: event.reason,
-        userId: currentUserId,
-        userRole: currentUserRole.name,
-      );
-    } catch (_) {
-      // Audit failure should not block the sale
-    }
-
     emit(
       state.copyWith(
         clearBelowCostWarning: true,
         belowCostOverrides: [...state.belowCostOverrides, override],
       ),
     );
+  }
+
+  Future<void> _logBelowCostOverrides(int saleId) async {
+    for (final override in state.belowCostOverrides) {
+      try {
+        await _auditService.logBelowCostOverride(
+          saleId: saleId,
+          productId: override.productId,
+          productName: override.productName,
+          costCents: override.costCents.toBigInt().toInt(),
+          sellingPriceCents: override.sellingPriceCents.toBigInt().toInt(),
+          lossCents: override.lossCents.toBigInt().toInt(),
+          reason: override.reason,
+          userId: currentUserId,
+          userRole: currentUserRole.name,
+        );
+      } catch (_) {
+        // The sale and its balanced journals remain authoritative even if
+        // the secondary audit sink is temporarily unavailable.
+      }
+    }
   }
 
   void _onBelowCostWarningDismissed(
@@ -2045,16 +2187,16 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     if (!warning.canOverride) {
       // Cashier/Salesperson: remove the last item that triggered the warning
       final updatedItems = List<SaleLineItem>.from(state.items);
-      final idx = updatedItems.lastIndexWhere(
-        (item) => item.product.id == warning.productId,
+      final idx = updatedItems.indexWhere(
+        (item) => item.tempId == warning.lineTempId,
       );
       if (idx >= 0) updatedItems.removeAt(idx);
       emit(state.copyWith(items: updatedItems, clearBelowCostWarning: true));
     } else {
       // Manager/Owner dismissed without override: remove the item
       final updatedItems = List<SaleLineItem>.from(state.items);
-      final idx = updatedItems.lastIndexWhere(
-        (item) => item.product.id == warning.productId,
+      final idx = updatedItems.indexWhere(
+        (item) => item.tempId == warning.lineTempId,
       );
       if (idx >= 0) updatedItems.removeAt(idx);
       emit(state.copyWith(items: updatedItems, clearBelowCostWarning: true));

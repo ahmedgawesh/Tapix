@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +10,7 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../../core/widgets/pin_verification_dialog.dart';
 import '../../../auth/auth.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
@@ -18,8 +20,13 @@ import '../services/purchase_pdf_service.dart';
 
 class PurchaseReturnDetailScreen extends StatefulWidget {
   final int returnId;
+  final bool adjustment;
 
-  const PurchaseReturnDetailScreen({super.key, required this.returnId});
+  const PurchaseReturnDetailScreen({
+    super.key,
+    required this.returnId,
+    this.adjustment = false,
+  });
 
   @override
   State<PurchaseReturnDetailScreen> createState() =>
@@ -30,6 +37,7 @@ class _PurchaseReturnDetailScreenState
     extends State<PurchaseReturnDetailScreen> {
   PurchaseReturnEntity? _returnEntity;
   PurchaseEntity? _purchase;
+  LanPurchaseReturnDetails? _remoteDetails;
   List<PurchaseReturnItemEntity> _returnItems = [];
   bool _loading = true;
   StreamSubscription<List<PurchaseReturnItemEntity>>? _itemsSub;
@@ -47,6 +55,11 @@ class _PurchaseReturnDetailScreenState
   }
 
   Future<void> _loadData() async {
+    final lan = sl<LanNetworkService>();
+    if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+      await _loadRemoteData(lan);
+      return;
+    }
     final repo = sl<PurchaseRepository>();
     final ret = await repo.getPurchaseReturnById(widget.returnId);
     if (ret == null) {
@@ -73,6 +86,96 @@ class _PurchaseReturnDetailScreenState
         _purchase = purchase;
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _loadRemoteData(LanNetworkService lan) async {
+    try {
+      final details = await lan.fetchRemotePurchaseReturnDetails(
+        returnId: widget.returnId,
+        adjustment: widget.adjustment,
+      );
+      final value = details.summary;
+      final now = DateTime.now();
+      final ret = PurchaseReturnEntity(
+        id: value.id,
+        purchaseId: value.purchaseId,
+        returnNumber: value.returnNumber,
+        supplierName: value.supplierName,
+        supplierPhone: value.supplierPhone,
+        supplierId: value.supplierId,
+        subtotalCents: Decimal.fromInt(value.subtotalCents),
+        discountCents: Decimal.fromInt(value.discountCents),
+        taxCents: Decimal.fromInt(value.taxCents),
+        totalCents: Decimal.fromInt(value.totalCents),
+        currencyId: value.currencyId,
+        status: value.status,
+        dispositionType: value.dispositionType,
+        refundMethod: value.refundMethod,
+        reason: value.reason,
+        returnDate: value.returnDate,
+        createdAt: value.createdAt,
+        isAdjustment: value.isAdjustment,
+        unifiedId: value.unifiedId,
+      );
+      final original = details.originalPurchase;
+      final purchase = value.isAdjustment
+          ? null
+          : PurchaseEntity(
+              id: value.purchaseId,
+              purchaseNumber: value.purchaseNumber ?? '',
+              supplierId: value.supplierId ?? 0,
+              supplierName: value.supplierName,
+              supplierPhone: value.supplierPhone,
+              subtotalCents: Decimal.fromInt(
+                original?.totalCents ?? value.totalCents,
+              ),
+              taxCents: Decimal.zero,
+              totalCents: Decimal.fromInt(
+                original?.totalCents ?? value.totalCents,
+              ),
+              currencyId: value.currencyId,
+              status: 'posted',
+              paymentMethod: original?.paymentMethod,
+              purchaseDate: original?.purchaseDate ?? value.returnDate,
+              taxInclusiveAtPost: original?.taxInclusiveAtPost ?? false,
+              createdAt: original?.purchaseDate ?? value.createdAt,
+              updatedAt: now,
+            );
+      final items = details.lines
+          .map(
+            (line) => PurchaseReturnItemEntity(
+              id: line.id,
+              returnId: line.returnId,
+              purchaseItemId: line.purchaseItemId ?? 0,
+              quantity: line.quantity,
+              quantityScale: line.quantityScale,
+              measurementType: line.measurementType,
+              subtotalCents: Decimal.fromInt(line.subtotalCents),
+              discountCents: Decimal.fromInt(line.discountCents),
+              taxCents: Decimal.fromInt(line.taxCents),
+              refundCents: Decimal.fromInt(line.totalCents),
+              reason: line.reason,
+              productName: line.productName,
+              variantSku: line.variantSku,
+              variantBarcode: line.variantBarcode,
+              colorName: line.colorName,
+              colorHex: line.colorHex,
+              sizeName: line.sizeName,
+              createdAt: line.createdAt,
+            ),
+          )
+          .toList(growable: false);
+      if (!mounted) return;
+      setState(() {
+        _returnEntity = ret;
+        _purchase = purchase;
+        _remoteDetails = details;
+        _returnItems = items;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -138,12 +241,21 @@ class _PurchaseReturnDetailScreenState
             Builder(
               builder: (context) {
                 final authState = context.read<AuthBloc>().state;
-                final canVoid =
-                    authState is AuthAuthenticated &&
-                    sl<PermissionService>().hasPermission(
-                      authState.user,
-                      Permissions.editTransactions,
-                    );
+                final lan = sl<LanNetworkService>();
+                final remote =
+                    lan.snapshot.mode == LanMode.client &&
+                    lan.hasRemoteUserSession;
+                final permissions = lan.remoteUser?.permissions;
+                final canVoid = remote
+                    ? (permissions?.contains(Permissions.managePurchases) ==
+                              true &&
+                          permissions?.contains(Permissions.voidTransactions) ==
+                              true)
+                    : authState is AuthAuthenticated &&
+                          sl<PermissionService>().hasPermission(
+                            authState.user,
+                            Permissions.editTransactions,
+                          );
                 if (!canVoid) return const SizedBox.shrink();
                 return IconButton(
                   icon: Icon(LucideIcons.ban, color: colorScheme.error),
@@ -204,8 +316,16 @@ class _PurchaseReturnDetailScreenState
     );
     if (confirmed != true || !mounted) return;
     try {
-      final repo = sl<PurchaseRepository>();
-      await repo.voidPurchaseReturn(widget.returnId);
+      final lan = sl<LanNetworkService>();
+      if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+        await lan.voidRemotePurchaseReturn(
+          returnId: widget.returnId,
+          adjustment: widget.adjustment,
+        );
+      } else {
+        final repo = sl<PurchaseRepository>();
+        await repo.voidPurchaseReturn(widget.returnId);
+      }
       if (mounted) {
         messenger.showSnackBar(
           SnackBar(
@@ -229,14 +349,34 @@ class _PurchaseReturnDetailScreenState
   }
 
   Future<void> _printOrShare({required bool share}) async {
-    if (_returnEntity == null || _purchase == null) return;
+    if (_returnEntity == null) return;
     try {
+      final lan = sl<LanNetworkService>();
+      final remoteDetails = _remoteDetails;
+      final isRemote =
+          lan.snapshot.mode == LanMode.client && remoteDetails != null;
+      if (_returnEntity!.isAdjustment && isRemote) {
+        if (share) {
+          await PurchasePdfService.shareRemotePurchaseAdjReturn(
+            context: context,
+            details: remoteDetails,
+          );
+        } else {
+          await PurchasePdfService.printRemotePurchaseAdjReturn(
+            context: context,
+            details: remoteDetails,
+          );
+        }
+        return;
+      }
+      if (_purchase == null) return;
       if (share) {
         await PurchasePdfService.sharePurchaseReturn(
           context: context,
           originalPurchase: _purchase!,
           returnEntity: _returnEntity!,
           returnItems: _returnItems,
+          loadLocalSupplierBalance: !isRemote,
         );
       } else {
         await PurchasePdfService.printPurchaseReturn(
@@ -244,6 +384,7 @@ class _PurchaseReturnDetailScreenState
           originalPurchase: _purchase!,
           returnEntity: _returnEntity!,
           returnItems: _returnItems,
+          loadLocalSupplierBalance: !isRemote,
         );
       }
     } catch (e) {
@@ -377,6 +518,9 @@ class _PurchaseReturnDetailScreenState
   ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final lan = sl<LanNetworkService>();
+    final isRemote =
+        lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession;
     final supplierInitial =
         purchase.supplierName != null && purchase.supplierName!.isNotEmpty
         ? purchase.supplierName![0].toUpperCase()
@@ -390,7 +534,9 @@ class _PurchaseReturnDetailScreenState
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: () => context.push('/purchases/${purchase.id}'),
+        onTap: isRemote
+            ? null
+            : () => context.push('/purchases/${purchase.id}'),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(

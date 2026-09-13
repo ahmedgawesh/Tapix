@@ -17,6 +17,7 @@ import '../../../../core/pricing/invoice_pricing_engine.dart';
 import '../../../../core/pricing/line_item_pricing_engine.dart';
 import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../../core/widgets/action_confirmation_dialog.dart';
+import '../../../../core/widgets/theme_toggle_button.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 
 class LanRemoteSaleScreen extends StatefulWidget {
@@ -164,8 +165,18 @@ class _LanRemoteSaleScreenState extends State<LanRemoteSaleScreen> {
       context.read<AuthBloc>().add(const AuthLogoutRequested());
       return;
     }
+    if (error.code == 'sale_below_cost') {
+      setState(() {
+        _loading = false;
+        _submitting = false;
+        _error = null;
+      });
+      unawaited(_showBelowCostBlocked(error));
+      return;
+    }
     final localizedMessage = switch (error.code) {
-      'sale_below_cost' => 'settings.network.sale.below_cost_rejected'.tr(),
+      'sale_below_cost_reason_required' =>
+        'settings.network.sale.below_cost_reason_required'.tr(),
       'discount_exceeds_max' =>
         'settings.network.sale.discount_exceeds_max'.tr(),
       _ => error.message,
@@ -175,6 +186,43 @@ class _LanRemoteSaleScreenState extends State<LanRemoteSaleScreen> {
       _submitting = false;
       _error = localizedMessage;
     });
+  }
+
+  Future<void> _showBelowCostBlocked(LanBusinessException error) async {
+    if (!mounted) return;
+    final productName = error.details['productName']?.toString().trim();
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: Icon(
+          LucideIcons.ban,
+          color: Theme.of(dialogContext).colorScheme.error,
+        ),
+        title: Text('sales.below_cost_title'.tr()),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (productName?.isNotEmpty == true) ...[
+              Text(
+                productName!,
+                style: Theme.of(
+                  dialogContext,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 12),
+            ],
+            Text('sales.below_cost_blocked'.tr()),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text('common.ok'.tr()),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _addProduct(LanCatalogProduct product) async {
@@ -710,6 +758,19 @@ class _LanRemoteSaleScreenState extends State<LanRemoteSaleScreen> {
       });
       await _loadProducts();
     } on LanBusinessException catch (error) {
+      if (error.code == 'sale_below_cost_reason_required') {
+        if (mounted) {
+          setState(() {
+            _submitting = false;
+            _error = null;
+          });
+        }
+        final reason = await _requestBelowCostReason();
+        if (reason == null || !mounted) return;
+        _pendingRequest = request.copyWith(belowCostOverrideReason: reason);
+        await _submit();
+        return;
+      }
       _handleError(error);
     } catch (_) {
       _handleError(
@@ -718,6 +779,64 @@ class _LanRemoteSaleScreenState extends State<LanRemoteSaleScreen> {
           'The master did not confirm the sale. Retry safely.',
         ),
       );
+    }
+  }
+
+  Future<String?> _requestBelowCostReason() async {
+    final controller = TextEditingController();
+    try {
+      final result = await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          icon: const Icon(LucideIcons.shieldAlert),
+          title: Text('settings.network.sale.below_cost_reason_title'.tr()),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('settings.network.sale.below_cost_reason_message'.tr()),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: 'settings.network.sale.below_cost_reason_hint'
+                      .tr(),
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('common.cancel'.tr()),
+            ),
+            FilledButton(
+              onPressed: () {
+                final reason = controller.text.trim();
+                if (reason.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'settings.network.sale.below_cost_reason_required'.tr(),
+                      ),
+                    ),
+                  );
+                  return;
+                }
+                Navigator.pop(dialogContext, reason);
+              },
+              child: Text('settings.network.sale.below_cost_approve'.tr()),
+            ),
+          ],
+        ),
+      );
+      await Future<void>.delayed(kThemeAnimationDuration);
+      return result;
+    } finally {
+      controller.dispose();
     }
   }
 
@@ -759,6 +878,7 @@ class _LanRemoteSaleScreenState extends State<LanRemoteSaleScreen> {
           ),
           title: Text('settings.network.sale.title'.tr()),
           actions: [
+            const ThemeToggleButton(lightDarkOnly: true),
             IconButton(
               onPressed: _showCartDialog,
               tooltip: 'settings.network.sale.open_cart'.tr(),

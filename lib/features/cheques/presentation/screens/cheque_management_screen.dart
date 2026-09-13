@@ -14,6 +14,8 @@ import '../../../../core/services/cheque_management_service.dart';
 import '../../../../core/utils/app_date_formatter.dart';
 import '../../../auth/auth.dart';
 import '../services/cheque_instrument_pdf_service.dart';
+import '../widgets/account_cheque_dialog.dart';
+import '../widgets/account_payment_allocation_dialog.dart';
 
 enum _ChequeAction {
   edit,
@@ -24,6 +26,7 @@ enum _ChequeAction {
   bounce,
   resolve,
   cancel,
+  allocate,
   source,
 }
 
@@ -83,9 +86,9 @@ class _ChequeManagementScreenState extends State<ChequeManagementScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showCreatePartialDialog,
+        onPressed: _showCreateMenu,
         icon: const Icon(LucideIcons.filePlus2),
-        label: Text('cheques.add_partial'.tr()),
+        label: Text('cheques.add_cheque'.tr()),
       ),
       body: StreamBuilder<List<ChequeRegisterEntry>>(
         stream: _management.watchRegister(),
@@ -334,6 +337,12 @@ class _ChequeManagementScreenState extends State<ChequeManagementScreen> {
             userId: _userId,
           );
           _success('cheques.cancelled'.tr());
+        case _ChequeAction.allocate:
+          await showAccountPaymentAllocationDialog(
+            context,
+            chequeId: entry.instrument.id,
+            userId: _userId,
+          );
         case _ChequeAction.source:
           _openSource(entry.instrument);
       }
@@ -551,6 +560,7 @@ class _ChequeManagementScreenState extends State<ChequeManagementScreen> {
     final amount = TextEditingController(
       text: (selected.outstandingCents / 100).toStringAsFixed(2),
     );
+    final searchController = TextEditingController();
     final number = TextEditingController();
     final bank = TextEditingController();
     final branch = TextEditingController();
@@ -562,7 +572,16 @@ class _ChequeManagementScreenState extends State<ChequeManagementScreen> {
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => _DialogControllerScope(
-        controllers: [amount, number, bank, branch, account, drawer, note],
+        controllers: [
+          amount,
+          searchController,
+          number,
+          bank,
+          branch,
+          account,
+          drawer,
+          note,
+        ],
         builder: (context, setDialogState) => AlertDialog(
           title: Text('cheques.add_partial'.tr()),
           content: SizedBox(
@@ -571,30 +590,17 @@ class _ChequeManagementScreenState extends State<ChequeManagementScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  DropdownButtonFormField<ChequeOutstandingDocument>(
-                    initialValue: selected,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: 'cheques.document'.tr(),
-                    ),
-                    items: docs
-                        .map(
-                          (doc) => DropdownMenuItem(
-                            value: doc,
-                            child: Text(
-                              '${doc.referenceNumber} — ${doc.partyName ?? 'cheques.no_party'.tr()} — ${_money(doc.outstandingCents, doc.currencySymbol)}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value == null) return;
+                  _InvoiceSearchField(
+                    docs: docs,
+                    selected: selected,
+                    searchController: searchController,
+                    moneyFormatter: _money,
+                    onSelected: (value) {
                       setDialogState(() {
                         selected = value;
                         amount.text = (value.outstandingCents / 100)
                             .toStringAsFixed(2);
+                        searchController.clear();
                       });
                     },
                   ),
@@ -683,6 +689,49 @@ class _ChequeManagementScreenState extends State<ChequeManagementScreen> {
     if (saved == true) _success('cheques.partial_created'.tr());
   }
 
+  Future<void> _showCreateMenu() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'cheques.add_cheque'.tr(),
+              style: Theme.of(
+                sheetContext,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(LucideIcons.receiptText),
+              title: Text('cheques.add_partial'.tr()),
+              subtitle: Text('cheques.invoice_cheque_option_hint'.tr()),
+              onTap: () => Navigator.pop(sheetContext, 'invoice'),
+            ),
+            ListTile(
+              leading: const Icon(LucideIcons.userRound),
+              title: Text('cheques.add_account_cheque'.tr()),
+              subtitle: Text('cheques.account_cheque_option_hint'.tr()),
+              onTap: () => Navigator.pop(sheetContext, 'account'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (choice == 'invoice') {
+      await _showCreatePartialDialog();
+    } else if (choice == 'account') {
+      final saved = await showAccountChequeDialog(context, userId: _userId);
+      if (saved) _success('cheques.account_cheque_created'.tr());
+    }
+  }
+
   Future<void> _showEditDialog(ChequeRegisterEntry entry) async {
     final c = entry.instrument;
     final number = TextEditingController(text: c.chequeNumber);
@@ -707,7 +756,7 @@ class _ChequeManagementScreenState extends State<ChequeManagementScreen> {
                 children: [
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(entry.referenceNumber),
+                    title: Text(_entrySourceLabel(entry)),
                     subtitle: Text(
                       '${entry.partyName ?? 'cheques.no_party'.tr()} • ${_money(c.amountCents.toBigInt().toInt(), entry.currencySymbol)}',
                     ),
@@ -836,6 +885,8 @@ class _ChequeManagementScreenState extends State<ChequeManagementScreen> {
         '/sales/returns/adj/${instrument.sourceId}',
       ChequeSourceTables.purchaseReturnAdjustment =>
         '/purchases/returns/adj/${instrument.sourceId}',
+      ChequeSourceTables.customerAccount => '/customers/${instrument.sourceId}',
+      ChequeSourceTables.supplierAccount => '/suppliers/${instrument.sourceId}',
       _ => null,
     };
     if (path != null) context.push(path);
@@ -983,7 +1034,7 @@ class _ChequeCard extends StatelessWidget {
                               ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         Text(
-                          '${entry.referenceNumber} • ${entry.partyName ?? 'cheques.no_party'.tr()}',
+                          '${_entrySourceLabel(entry)} • ${entry.partyName ?? 'cheques.no_party'.tr()}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -1066,6 +1117,15 @@ class _ChequeCard extends StatelessWidget {
     if (c.status == ChequeInstrumentStatus.bounced && c.resolvedAt == null) {
       actions.add(_ChequeAction.resolve);
     }
+    if (c.status == ChequeInstrumentStatus.cleared &&
+        ((c.sourceTable == ChequeSourceTables.customerAccount &&
+                c.partyType == 'customer' &&
+                c.direction == ChequeDirectionValue.incoming) ||
+            (c.sourceTable == ChequeSourceTables.supplierAccount &&
+                c.partyType == 'supplier' &&
+                c.direction == ChequeDirectionValue.outgoing))) {
+      actions.add(_ChequeAction.allocate);
+    }
     return actions;
   }
 
@@ -1078,8 +1138,17 @@ class _ChequeCard extends StatelessWidget {
     _ChequeAction.bounce => 'cheques.mark_bounced'.tr(),
     _ChequeAction.resolve => 'cheques.resolve_bounced'.tr(),
     _ChequeAction.cancel => 'cheques.cancel'.tr(),
+    _ChequeAction.allocate => 'cheques.manage_advance'.tr(),
     _ChequeAction.source => 'cheques.open_document'.tr(),
   };
+}
+
+String _entrySourceLabel(ChequeRegisterEntry entry) {
+  if (entry.instrument.sourceTable == ChequeSourceTables.customerAccount ||
+      entry.instrument.sourceTable == ChequeSourceTables.supplierAccount) {
+    return 'cheques.account_source'.tr();
+  }
+  return entry.referenceNumber;
 }
 
 class _ChequeResolutionInput {
@@ -1335,3 +1404,178 @@ Color _statusColor(String status) => switch (status) {
   ChequeInstrumentStatus.deposited => Colors.blue,
   _ => Colors.orange,
 };
+
+/// Search-by-invoice-number field with autocomplete results that appear
+/// **only while typing** and always **below** the text field.
+class _InvoiceSearchField extends StatelessWidget {
+  final List<ChequeOutstandingDocument> docs;
+  final ChequeOutstandingDocument? selected;
+  final TextEditingController searchController;
+  final String Function(int cents, String symbol) moneyFormatter;
+  final ValueChanged<ChequeOutstandingDocument> onSelected;
+
+  const _InvoiceSearchField({
+    required this.docs,
+    required this.selected,
+    required this.searchController,
+    required this.moneyFormatter,
+    required this.onSelected,
+  });
+
+  String _label(ChequeOutstandingDocument doc) =>
+      '${doc.referenceNumber} — ${doc.partyName ?? 'cheques.no_party'.tr()} — ${moneyFormatter(doc.outstandingCents, doc.currencySymbol)}';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // ── Selected document info card ──
+        if (selected != null)
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer.withAlpha(50),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: theme.colorScheme.primary.withAlpha(80),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  LucideIcons.fileText,
+                  size: 18,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'cheques.document'.tr(),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _label(selected!),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        // ── Search field with autocomplete ──
+        LayoutBuilder(
+          builder: (context, constraints) =>
+              RawAutocomplete<ChequeOutstandingDocument>(
+                textEditingController: searchController,
+                focusNode: FocusNode(),
+                optionsBuilder: (textEditingValue) {
+                  final query = textEditingValue.text.trim().toLowerCase();
+                  if (query.isEmpty) {
+                    return const Iterable<ChequeOutstandingDocument>.empty();
+                  }
+                  return docs.where((doc) {
+                    final label = _label(doc).toLowerCase();
+                    return label.contains(query);
+                  });
+                },
+                displayStringForOption: (doc) => doc.referenceNumber,
+                optionsViewBuilder: (context, onAutoComplete, options) {
+                  return Align(
+                    alignment: AlignmentDirectional.topStart,
+                    child: Material(
+                      elevation: 4,
+                      borderRadius: BorderRadius.circular(8),
+                      clipBehavior: Clip.antiAlias,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: 220,
+                          maxWidth: constraints.maxWidth,
+                        ),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: options.length,
+                          itemBuilder: (context, index) {
+                            final doc = options.elementAt(index);
+                            final isSelected =
+                                selected != null &&
+                                selected!.sourceTable == doc.sourceTable &&
+                                selected!.sourceId == doc.sourceId;
+                            return ListTile(
+                              dense: true,
+                              selected: isSelected,
+                              leading: Icon(
+                                LucideIcons.receipt,
+                                size: 18,
+                                color: isSelected
+                                    ? Theme.of(context).colorScheme.primary
+                                    : null,
+                              ),
+                              title: Text(
+                                doc.referenceNumber,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              subtitle: Text(
+                                '${doc.partyName ?? 'cheques.no_party'.tr()} — ${moneyFormatter(doc.outstandingCents, doc.currencySymbol)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              onTap: () {
+                                onAutoComplete(doc);
+                                onSelected(doc);
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                fieldViewBuilder:
+                    (context, controller, focusNode, onFieldSubmitted) {
+                      return TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        decoration: InputDecoration(
+                          labelText: 'cheques.search_invoice'.tr(),
+                          prefixIcon: const Icon(LucideIcons.search),
+                          suffixIcon: controller.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(LucideIcons.x, size: 18),
+                                  onPressed: () {
+                                    controller.clear();
+                                    // Trigger rebuild to hide options
+                                    focusNode.unfocus();
+                                  },
+                                )
+                              : null,
+                        ),
+                        onChanged: (_) {
+                          // Force rebuild to toggle suffix icon
+                          (context as Element).markNeedsBuild();
+                        },
+                      );
+                    },
+              ),
+        ),
+      ],
+    );
+  }
+}

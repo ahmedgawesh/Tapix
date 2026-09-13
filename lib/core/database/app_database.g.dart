@@ -69620,6 +69620,1647 @@ class ChequeInstrumentsCompanion extends UpdateCompanion<ChequeInstrument> {
   }
 }
 
+class $PartyAccountPaymentsTable extends PartyAccountPayments
+    with TableInfo<$PartyAccountPaymentsTable, PartyAccountPayment> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PartyAccountPaymentsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _chequeInstrumentIdMeta =
+      const VerificationMeta('chequeInstrumentId');
+  @override
+  late final GeneratedColumn<int> chequeInstrumentId = GeneratedColumn<int>(
+    'cheque_instrument_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES cheque_instruments (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _partyTypeMeta = const VerificationMeta(
+    'partyType',
+  );
+  @override
+  late final GeneratedColumn<String> partyType = GeneratedColumn<String>(
+    'party_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _partyIdMeta = const VerificationMeta(
+    'partyId',
+  );
+  @override
+  late final GeneratedColumn<int> partyId = GeneratedColumn<int>(
+    'party_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _directionMeta = const VerificationMeta(
+    'direction',
+  );
+  @override
+  late final GeneratedColumn<String> direction = GeneratedColumn<String>(
+    'direction',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> amountCents =
+      GeneratedColumn<int>(
+        'amount_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+      ).withConverter<Decimal>(
+        $PartyAccountPaymentsTable.$converteramountCents,
+      );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> appliedCents =
+      GeneratedColumn<int>(
+        'applied_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(0),
+      ).withConverter<Decimal>(
+        $PartyAccountPaymentsTable.$converterappliedCents,
+      );
+  static const VerificationMeta _currencyIdMeta = const VerificationMeta(
+    'currencyId',
+  );
+  @override
+  late final GeneratedColumn<int> currencyId = GeneratedColumn<int>(
+    'currency_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES currencies (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('open'),
+  );
+  static const VerificationMeta _settlementTransactionIdMeta =
+      const VerificationMeta('settlementTransactionId');
+  @override
+  late final GeneratedColumn<int> settlementTransactionId =
+      GeneratedColumn<int>(
+        'settlement_transaction_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _recognizedAtMeta = const VerificationMeta(
+    'recognizedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> recognizedAt = GeneratedColumn<DateTime>(
+    'recognized_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _reversedAtMeta = const VerificationMeta(
+    'reversedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> reversedAt = GeneratedColumn<DateTime>(
+    'reversed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    chequeInstrumentId,
+    partyType,
+    partyId,
+    direction,
+    amountCents,
+    appliedCents,
+    currencyId,
+    status,
+    settlementTransactionId,
+    recognizedAt,
+    reversedAt,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'party_account_payments';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PartyAccountPayment> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('cheque_instrument_id')) {
+      context.handle(
+        _chequeInstrumentIdMeta,
+        chequeInstrumentId.isAcceptableOrUnknown(
+          data['cheque_instrument_id']!,
+          _chequeInstrumentIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_chequeInstrumentIdMeta);
+    }
+    if (data.containsKey('party_type')) {
+      context.handle(
+        _partyTypeMeta,
+        partyType.isAcceptableOrUnknown(data['party_type']!, _partyTypeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_partyTypeMeta);
+    }
+    if (data.containsKey('party_id')) {
+      context.handle(
+        _partyIdMeta,
+        partyId.isAcceptableOrUnknown(data['party_id']!, _partyIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_partyIdMeta);
+    }
+    if (data.containsKey('direction')) {
+      context.handle(
+        _directionMeta,
+        direction.isAcceptableOrUnknown(data['direction']!, _directionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_directionMeta);
+    }
+    if (data.containsKey('currency_id')) {
+      context.handle(
+        _currencyIdMeta,
+        currencyId.isAcceptableOrUnknown(data['currency_id']!, _currencyIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_currencyIdMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('settlement_transaction_id')) {
+      context.handle(
+        _settlementTransactionIdMeta,
+        settlementTransactionId.isAcceptableOrUnknown(
+          data['settlement_transaction_id']!,
+          _settlementTransactionIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('recognized_at')) {
+      context.handle(
+        _recognizedAtMeta,
+        recognizedAt.isAcceptableOrUnknown(
+          data['recognized_at']!,
+          _recognizedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_recognizedAtMeta);
+    }
+    if (data.containsKey('reversed_at')) {
+      context.handle(
+        _reversedAtMeta,
+        reversedAt.isAcceptableOrUnknown(data['reversed_at']!, _reversedAtMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {chequeInstrumentId},
+  ];
+  @override
+  PartyAccountPayment map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PartyAccountPayment(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      chequeInstrumentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cheque_instrument_id'],
+      )!,
+      partyType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}party_type'],
+      )!,
+      partyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}party_id'],
+      )!,
+      direction: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}direction'],
+      )!,
+      amountCents: $PartyAccountPaymentsTable.$converteramountCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}amount_cents'],
+        )!,
+      ),
+      appliedCents: $PartyAccountPaymentsTable.$converterappliedCents.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}applied_cents'],
+        )!,
+      ),
+      currencyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}currency_id'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      settlementTransactionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}settlement_transaction_id'],
+      ),
+      recognizedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}recognized_at'],
+      )!,
+      reversedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}reversed_at'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PartyAccountPaymentsTable createAlias(String alias) {
+    return $PartyAccountPaymentsTable(attachedDatabase, alias);
+  }
+
+  static TypeConverter<Decimal, int> $converteramountCents =
+      const MoneyConverter();
+  static TypeConverter<Decimal, int> $converterappliedCents =
+      const MoneyConverter();
+}
+
+class PartyAccountPayment extends DataClass
+    implements Insertable<PartyAccountPayment> {
+  final int id;
+  final int chequeInstrumentId;
+  final String partyType;
+  final int partyId;
+  final String direction;
+  final Decimal amountCents;
+  final Decimal appliedCents;
+  final int currencyId;
+  final String status;
+
+  /// Customer/supplier transaction written when the cheque was cleared.
+  /// This is deliberately polymorphic and therefore has no SQL foreign key.
+  final int? settlementTransactionId;
+  final DateTime recognizedAt;
+  final DateTime? reversedAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const PartyAccountPayment({
+    required this.id,
+    required this.chequeInstrumentId,
+    required this.partyType,
+    required this.partyId,
+    required this.direction,
+    required this.amountCents,
+    required this.appliedCents,
+    required this.currencyId,
+    required this.status,
+    this.settlementTransactionId,
+    required this.recognizedAt,
+    this.reversedAt,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['cheque_instrument_id'] = Variable<int>(chequeInstrumentId);
+    map['party_type'] = Variable<String>(partyType);
+    map['party_id'] = Variable<int>(partyId);
+    map['direction'] = Variable<String>(direction);
+    {
+      map['amount_cents'] = Variable<int>(
+        $PartyAccountPaymentsTable.$converteramountCents.toSql(amountCents),
+      );
+    }
+    {
+      map['applied_cents'] = Variable<int>(
+        $PartyAccountPaymentsTable.$converterappliedCents.toSql(appliedCents),
+      );
+    }
+    map['currency_id'] = Variable<int>(currencyId);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || settlementTransactionId != null) {
+      map['settlement_transaction_id'] = Variable<int>(settlementTransactionId);
+    }
+    map['recognized_at'] = Variable<DateTime>(recognizedAt);
+    if (!nullToAbsent || reversedAt != null) {
+      map['reversed_at'] = Variable<DateTime>(reversedAt);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  PartyAccountPaymentsCompanion toCompanion(bool nullToAbsent) {
+    return PartyAccountPaymentsCompanion(
+      id: Value(id),
+      chequeInstrumentId: Value(chequeInstrumentId),
+      partyType: Value(partyType),
+      partyId: Value(partyId),
+      direction: Value(direction),
+      amountCents: Value(amountCents),
+      appliedCents: Value(appliedCents),
+      currencyId: Value(currencyId),
+      status: Value(status),
+      settlementTransactionId: settlementTransactionId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(settlementTransactionId),
+      recognizedAt: Value(recognizedAt),
+      reversedAt: reversedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reversedAt),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory PartyAccountPayment.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PartyAccountPayment(
+      id: serializer.fromJson<int>(json['id']),
+      chequeInstrumentId: serializer.fromJson<int>(json['chequeInstrumentId']),
+      partyType: serializer.fromJson<String>(json['partyType']),
+      partyId: serializer.fromJson<int>(json['partyId']),
+      direction: serializer.fromJson<String>(json['direction']),
+      amountCents: serializer.fromJson<Decimal>(json['amountCents']),
+      appliedCents: serializer.fromJson<Decimal>(json['appliedCents']),
+      currencyId: serializer.fromJson<int>(json['currencyId']),
+      status: serializer.fromJson<String>(json['status']),
+      settlementTransactionId: serializer.fromJson<int?>(
+        json['settlementTransactionId'],
+      ),
+      recognizedAt: serializer.fromJson<DateTime>(json['recognizedAt']),
+      reversedAt: serializer.fromJson<DateTime?>(json['reversedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'chequeInstrumentId': serializer.toJson<int>(chequeInstrumentId),
+      'partyType': serializer.toJson<String>(partyType),
+      'partyId': serializer.toJson<int>(partyId),
+      'direction': serializer.toJson<String>(direction),
+      'amountCents': serializer.toJson<Decimal>(amountCents),
+      'appliedCents': serializer.toJson<Decimal>(appliedCents),
+      'currencyId': serializer.toJson<int>(currencyId),
+      'status': serializer.toJson<String>(status),
+      'settlementTransactionId': serializer.toJson<int?>(
+        settlementTransactionId,
+      ),
+      'recognizedAt': serializer.toJson<DateTime>(recognizedAt),
+      'reversedAt': serializer.toJson<DateTime?>(reversedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  PartyAccountPayment copyWith({
+    int? id,
+    int? chequeInstrumentId,
+    String? partyType,
+    int? partyId,
+    String? direction,
+    Decimal? amountCents,
+    Decimal? appliedCents,
+    int? currencyId,
+    String? status,
+    Value<int?> settlementTransactionId = const Value.absent(),
+    DateTime? recognizedAt,
+    Value<DateTime?> reversedAt = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => PartyAccountPayment(
+    id: id ?? this.id,
+    chequeInstrumentId: chequeInstrumentId ?? this.chequeInstrumentId,
+    partyType: partyType ?? this.partyType,
+    partyId: partyId ?? this.partyId,
+    direction: direction ?? this.direction,
+    amountCents: amountCents ?? this.amountCents,
+    appliedCents: appliedCents ?? this.appliedCents,
+    currencyId: currencyId ?? this.currencyId,
+    status: status ?? this.status,
+    settlementTransactionId: settlementTransactionId.present
+        ? settlementTransactionId.value
+        : this.settlementTransactionId,
+    recognizedAt: recognizedAt ?? this.recognizedAt,
+    reversedAt: reversedAt.present ? reversedAt.value : this.reversedAt,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  PartyAccountPayment copyWithCompanion(PartyAccountPaymentsCompanion data) {
+    return PartyAccountPayment(
+      id: data.id.present ? data.id.value : this.id,
+      chequeInstrumentId: data.chequeInstrumentId.present
+          ? data.chequeInstrumentId.value
+          : this.chequeInstrumentId,
+      partyType: data.partyType.present ? data.partyType.value : this.partyType,
+      partyId: data.partyId.present ? data.partyId.value : this.partyId,
+      direction: data.direction.present ? data.direction.value : this.direction,
+      amountCents: data.amountCents.present
+          ? data.amountCents.value
+          : this.amountCents,
+      appliedCents: data.appliedCents.present
+          ? data.appliedCents.value
+          : this.appliedCents,
+      currencyId: data.currencyId.present
+          ? data.currencyId.value
+          : this.currencyId,
+      status: data.status.present ? data.status.value : this.status,
+      settlementTransactionId: data.settlementTransactionId.present
+          ? data.settlementTransactionId.value
+          : this.settlementTransactionId,
+      recognizedAt: data.recognizedAt.present
+          ? data.recognizedAt.value
+          : this.recognizedAt,
+      reversedAt: data.reversedAt.present
+          ? data.reversedAt.value
+          : this.reversedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PartyAccountPayment(')
+          ..write('id: $id, ')
+          ..write('chequeInstrumentId: $chequeInstrumentId, ')
+          ..write('partyType: $partyType, ')
+          ..write('partyId: $partyId, ')
+          ..write('direction: $direction, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('appliedCents: $appliedCents, ')
+          ..write('currencyId: $currencyId, ')
+          ..write('status: $status, ')
+          ..write('settlementTransactionId: $settlementTransactionId, ')
+          ..write('recognizedAt: $recognizedAt, ')
+          ..write('reversedAt: $reversedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    chequeInstrumentId,
+    partyType,
+    partyId,
+    direction,
+    amountCents,
+    appliedCents,
+    currencyId,
+    status,
+    settlementTransactionId,
+    recognizedAt,
+    reversedAt,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PartyAccountPayment &&
+          other.id == this.id &&
+          other.chequeInstrumentId == this.chequeInstrumentId &&
+          other.partyType == this.partyType &&
+          other.partyId == this.partyId &&
+          other.direction == this.direction &&
+          other.amountCents == this.amountCents &&
+          other.appliedCents == this.appliedCents &&
+          other.currencyId == this.currencyId &&
+          other.status == this.status &&
+          other.settlementTransactionId == this.settlementTransactionId &&
+          other.recognizedAt == this.recognizedAt &&
+          other.reversedAt == this.reversedAt &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class PartyAccountPaymentsCompanion
+    extends UpdateCompanion<PartyAccountPayment> {
+  final Value<int> id;
+  final Value<int> chequeInstrumentId;
+  final Value<String> partyType;
+  final Value<int> partyId;
+  final Value<String> direction;
+  final Value<Decimal> amountCents;
+  final Value<Decimal> appliedCents;
+  final Value<int> currencyId;
+  final Value<String> status;
+  final Value<int?> settlementTransactionId;
+  final Value<DateTime> recognizedAt;
+  final Value<DateTime?> reversedAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const PartyAccountPaymentsCompanion({
+    this.id = const Value.absent(),
+    this.chequeInstrumentId = const Value.absent(),
+    this.partyType = const Value.absent(),
+    this.partyId = const Value.absent(),
+    this.direction = const Value.absent(),
+    this.amountCents = const Value.absent(),
+    this.appliedCents = const Value.absent(),
+    this.currencyId = const Value.absent(),
+    this.status = const Value.absent(),
+    this.settlementTransactionId = const Value.absent(),
+    this.recognizedAt = const Value.absent(),
+    this.reversedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  PartyAccountPaymentsCompanion.insert({
+    this.id = const Value.absent(),
+    required int chequeInstrumentId,
+    required String partyType,
+    required int partyId,
+    required String direction,
+    required Decimal amountCents,
+    this.appliedCents = const Value.absent(),
+    required int currencyId,
+    this.status = const Value.absent(),
+    this.settlementTransactionId = const Value.absent(),
+    required DateTime recognizedAt,
+    this.reversedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : chequeInstrumentId = Value(chequeInstrumentId),
+       partyType = Value(partyType),
+       partyId = Value(partyId),
+       direction = Value(direction),
+       amountCents = Value(amountCents),
+       currencyId = Value(currencyId),
+       recognizedAt = Value(recognizedAt);
+  static Insertable<PartyAccountPayment> custom({
+    Expression<int>? id,
+    Expression<int>? chequeInstrumentId,
+    Expression<String>? partyType,
+    Expression<int>? partyId,
+    Expression<String>? direction,
+    Expression<int>? amountCents,
+    Expression<int>? appliedCents,
+    Expression<int>? currencyId,
+    Expression<String>? status,
+    Expression<int>? settlementTransactionId,
+    Expression<DateTime>? recognizedAt,
+    Expression<DateTime>? reversedAt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (chequeInstrumentId != null)
+        'cheque_instrument_id': chequeInstrumentId,
+      if (partyType != null) 'party_type': partyType,
+      if (partyId != null) 'party_id': partyId,
+      if (direction != null) 'direction': direction,
+      if (amountCents != null) 'amount_cents': amountCents,
+      if (appliedCents != null) 'applied_cents': appliedCents,
+      if (currencyId != null) 'currency_id': currencyId,
+      if (status != null) 'status': status,
+      if (settlementTransactionId != null)
+        'settlement_transaction_id': settlementTransactionId,
+      if (recognizedAt != null) 'recognized_at': recognizedAt,
+      if (reversedAt != null) 'reversed_at': reversedAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  PartyAccountPaymentsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? chequeInstrumentId,
+    Value<String>? partyType,
+    Value<int>? partyId,
+    Value<String>? direction,
+    Value<Decimal>? amountCents,
+    Value<Decimal>? appliedCents,
+    Value<int>? currencyId,
+    Value<String>? status,
+    Value<int?>? settlementTransactionId,
+    Value<DateTime>? recognizedAt,
+    Value<DateTime?>? reversedAt,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return PartyAccountPaymentsCompanion(
+      id: id ?? this.id,
+      chequeInstrumentId: chequeInstrumentId ?? this.chequeInstrumentId,
+      partyType: partyType ?? this.partyType,
+      partyId: partyId ?? this.partyId,
+      direction: direction ?? this.direction,
+      amountCents: amountCents ?? this.amountCents,
+      appliedCents: appliedCents ?? this.appliedCents,
+      currencyId: currencyId ?? this.currencyId,
+      status: status ?? this.status,
+      settlementTransactionId:
+          settlementTransactionId ?? this.settlementTransactionId,
+      recognizedAt: recognizedAt ?? this.recognizedAt,
+      reversedAt: reversedAt ?? this.reversedAt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (chequeInstrumentId.present) {
+      map['cheque_instrument_id'] = Variable<int>(chequeInstrumentId.value);
+    }
+    if (partyType.present) {
+      map['party_type'] = Variable<String>(partyType.value);
+    }
+    if (partyId.present) {
+      map['party_id'] = Variable<int>(partyId.value);
+    }
+    if (direction.present) {
+      map['direction'] = Variable<String>(direction.value);
+    }
+    if (amountCents.present) {
+      map['amount_cents'] = Variable<int>(
+        $PartyAccountPaymentsTable.$converteramountCents.toSql(
+          amountCents.value,
+        ),
+      );
+    }
+    if (appliedCents.present) {
+      map['applied_cents'] = Variable<int>(
+        $PartyAccountPaymentsTable.$converterappliedCents.toSql(
+          appliedCents.value,
+        ),
+      );
+    }
+    if (currencyId.present) {
+      map['currency_id'] = Variable<int>(currencyId.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (settlementTransactionId.present) {
+      map['settlement_transaction_id'] = Variable<int>(
+        settlementTransactionId.value,
+      );
+    }
+    if (recognizedAt.present) {
+      map['recognized_at'] = Variable<DateTime>(recognizedAt.value);
+    }
+    if (reversedAt.present) {
+      map['reversed_at'] = Variable<DateTime>(reversedAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PartyAccountPaymentsCompanion(')
+          ..write('id: $id, ')
+          ..write('chequeInstrumentId: $chequeInstrumentId, ')
+          ..write('partyType: $partyType, ')
+          ..write('partyId: $partyId, ')
+          ..write('direction: $direction, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('appliedCents: $appliedCents, ')
+          ..write('currencyId: $currencyId, ')
+          ..write('status: $status, ')
+          ..write('settlementTransactionId: $settlementTransactionId, ')
+          ..write('recognizedAt: $recognizedAt, ')
+          ..write('reversedAt: $reversedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PartyAccountPaymentApplicationsTable
+    extends PartyAccountPaymentApplications
+    with
+        TableInfo<
+          $PartyAccountPaymentApplicationsTable,
+          PartyAccountPaymentApplication
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PartyAccountPaymentApplicationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _accountPaymentIdMeta = const VerificationMeta(
+    'accountPaymentId',
+  );
+  @override
+  late final GeneratedColumn<int> accountPaymentId = GeneratedColumn<int>(
+    'account_payment_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES party_account_payments (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _documentTypeMeta = const VerificationMeta(
+    'documentType',
+  );
+  @override
+  late final GeneratedColumn<String> documentType = GeneratedColumn<String>(
+    'document_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _documentIdMeta = const VerificationMeta(
+    'documentId',
+  );
+  @override
+  late final GeneratedColumn<int> documentId = GeneratedColumn<int>(
+    'document_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  late final GeneratedColumnWithTypeConverter<Decimal, int> amountCents =
+      GeneratedColumn<int>(
+        'amount_cents',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: true,
+      ).withConverter<Decimal>(
+        $PartyAccountPaymentApplicationsTable.$converteramountCents,
+      );
+  static const VerificationMeta _salePaymentIdMeta = const VerificationMeta(
+    'salePaymentId',
+  );
+  @override
+  late final GeneratedColumn<int> salePaymentId = GeneratedColumn<int>(
+    'sale_payment_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES sale_payments (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _purchasePaymentIdMeta = const VerificationMeta(
+    'purchasePaymentId',
+  );
+  @override
+  late final GeneratedColumn<int> purchasePaymentId = GeneratedColumn<int>(
+    'purchase_payment_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES purchase_payments (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('active'),
+  );
+  static const VerificationMeta _appliedAtMeta = const VerificationMeta(
+    'appliedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> appliedAt = GeneratedColumn<DateTime>(
+    'applied_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _reversedAtMeta = const VerificationMeta(
+    'reversedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> reversedAt = GeneratedColumn<DateTime>(
+    'reversed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdByMeta = const VerificationMeta(
+    'createdBy',
+  );
+  @override
+  late final GeneratedColumn<int> createdBy = GeneratedColumn<int>(
+    'created_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    accountPaymentId,
+    documentType,
+    documentId,
+    amountCents,
+    salePaymentId,
+    purchasePaymentId,
+    status,
+    appliedAt,
+    reversedAt,
+    createdBy,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'party_account_payment_applications';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PartyAccountPaymentApplication> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('account_payment_id')) {
+      context.handle(
+        _accountPaymentIdMeta,
+        accountPaymentId.isAcceptableOrUnknown(
+          data['account_payment_id']!,
+          _accountPaymentIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_accountPaymentIdMeta);
+    }
+    if (data.containsKey('document_type')) {
+      context.handle(
+        _documentTypeMeta,
+        documentType.isAcceptableOrUnknown(
+          data['document_type']!,
+          _documentTypeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_documentTypeMeta);
+    }
+    if (data.containsKey('document_id')) {
+      context.handle(
+        _documentIdMeta,
+        documentId.isAcceptableOrUnknown(data['document_id']!, _documentIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_documentIdMeta);
+    }
+    if (data.containsKey('sale_payment_id')) {
+      context.handle(
+        _salePaymentIdMeta,
+        salePaymentId.isAcceptableOrUnknown(
+          data['sale_payment_id']!,
+          _salePaymentIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('purchase_payment_id')) {
+      context.handle(
+        _purchasePaymentIdMeta,
+        purchasePaymentId.isAcceptableOrUnknown(
+          data['purchase_payment_id']!,
+          _purchasePaymentIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('applied_at')) {
+      context.handle(
+        _appliedAtMeta,
+        appliedAt.isAcceptableOrUnknown(data['applied_at']!, _appliedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_appliedAtMeta);
+    }
+    if (data.containsKey('reversed_at')) {
+      context.handle(
+        _reversedAtMeta,
+        reversedAt.isAcceptableOrUnknown(data['reversed_at']!, _reversedAtMeta),
+      );
+    }
+    if (data.containsKey('created_by')) {
+      context.handle(
+        _createdByMeta,
+        createdBy.isAcceptableOrUnknown(data['created_by']!, _createdByMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PartyAccountPaymentApplication map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PartyAccountPaymentApplication(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      accountPaymentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}account_payment_id'],
+      )!,
+      documentType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}document_type'],
+      )!,
+      documentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}document_id'],
+      )!,
+      amountCents: $PartyAccountPaymentApplicationsTable.$converteramountCents
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.int,
+              data['${effectivePrefix}amount_cents'],
+            )!,
+          ),
+      salePaymentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sale_payment_id'],
+      ),
+      purchasePaymentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}purchase_payment_id'],
+      ),
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      appliedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}applied_at'],
+      )!,
+      reversedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}reversed_at'],
+      ),
+      createdBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_by'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PartyAccountPaymentApplicationsTable createAlias(String alias) {
+    return $PartyAccountPaymentApplicationsTable(attachedDatabase, alias);
+  }
+
+  static TypeConverter<Decimal, int> $converteramountCents =
+      const MoneyConverter();
+}
+
+class PartyAccountPaymentApplication extends DataClass
+    implements Insertable<PartyAccountPaymentApplication> {
+  final int id;
+  final int accountPaymentId;
+  final String documentType;
+  final int documentId;
+  final Decimal amountCents;
+  final int? salePaymentId;
+  final int? purchasePaymentId;
+  final String status;
+  final DateTime appliedAt;
+  final DateTime? reversedAt;
+  final int? createdBy;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const PartyAccountPaymentApplication({
+    required this.id,
+    required this.accountPaymentId,
+    required this.documentType,
+    required this.documentId,
+    required this.amountCents,
+    this.salePaymentId,
+    this.purchasePaymentId,
+    required this.status,
+    required this.appliedAt,
+    this.reversedAt,
+    this.createdBy,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['account_payment_id'] = Variable<int>(accountPaymentId);
+    map['document_type'] = Variable<String>(documentType);
+    map['document_id'] = Variable<int>(documentId);
+    {
+      map['amount_cents'] = Variable<int>(
+        $PartyAccountPaymentApplicationsTable.$converteramountCents.toSql(
+          amountCents,
+        ),
+      );
+    }
+    if (!nullToAbsent || salePaymentId != null) {
+      map['sale_payment_id'] = Variable<int>(salePaymentId);
+    }
+    if (!nullToAbsent || purchasePaymentId != null) {
+      map['purchase_payment_id'] = Variable<int>(purchasePaymentId);
+    }
+    map['status'] = Variable<String>(status);
+    map['applied_at'] = Variable<DateTime>(appliedAt);
+    if (!nullToAbsent || reversedAt != null) {
+      map['reversed_at'] = Variable<DateTime>(reversedAt);
+    }
+    if (!nullToAbsent || createdBy != null) {
+      map['created_by'] = Variable<int>(createdBy);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  PartyAccountPaymentApplicationsCompanion toCompanion(bool nullToAbsent) {
+    return PartyAccountPaymentApplicationsCompanion(
+      id: Value(id),
+      accountPaymentId: Value(accountPaymentId),
+      documentType: Value(documentType),
+      documentId: Value(documentId),
+      amountCents: Value(amountCents),
+      salePaymentId: salePaymentId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(salePaymentId),
+      purchasePaymentId: purchasePaymentId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(purchasePaymentId),
+      status: Value(status),
+      appliedAt: Value(appliedAt),
+      reversedAt: reversedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reversedAt),
+      createdBy: createdBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(createdBy),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory PartyAccountPaymentApplication.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PartyAccountPaymentApplication(
+      id: serializer.fromJson<int>(json['id']),
+      accountPaymentId: serializer.fromJson<int>(json['accountPaymentId']),
+      documentType: serializer.fromJson<String>(json['documentType']),
+      documentId: serializer.fromJson<int>(json['documentId']),
+      amountCents: serializer.fromJson<Decimal>(json['amountCents']),
+      salePaymentId: serializer.fromJson<int?>(json['salePaymentId']),
+      purchasePaymentId: serializer.fromJson<int?>(json['purchasePaymentId']),
+      status: serializer.fromJson<String>(json['status']),
+      appliedAt: serializer.fromJson<DateTime>(json['appliedAt']),
+      reversedAt: serializer.fromJson<DateTime?>(json['reversedAt']),
+      createdBy: serializer.fromJson<int?>(json['createdBy']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'accountPaymentId': serializer.toJson<int>(accountPaymentId),
+      'documentType': serializer.toJson<String>(documentType),
+      'documentId': serializer.toJson<int>(documentId),
+      'amountCents': serializer.toJson<Decimal>(amountCents),
+      'salePaymentId': serializer.toJson<int?>(salePaymentId),
+      'purchasePaymentId': serializer.toJson<int?>(purchasePaymentId),
+      'status': serializer.toJson<String>(status),
+      'appliedAt': serializer.toJson<DateTime>(appliedAt),
+      'reversedAt': serializer.toJson<DateTime?>(reversedAt),
+      'createdBy': serializer.toJson<int?>(createdBy),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  PartyAccountPaymentApplication copyWith({
+    int? id,
+    int? accountPaymentId,
+    String? documentType,
+    int? documentId,
+    Decimal? amountCents,
+    Value<int?> salePaymentId = const Value.absent(),
+    Value<int?> purchasePaymentId = const Value.absent(),
+    String? status,
+    DateTime? appliedAt,
+    Value<DateTime?> reversedAt = const Value.absent(),
+    Value<int?> createdBy = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => PartyAccountPaymentApplication(
+    id: id ?? this.id,
+    accountPaymentId: accountPaymentId ?? this.accountPaymentId,
+    documentType: documentType ?? this.documentType,
+    documentId: documentId ?? this.documentId,
+    amountCents: amountCents ?? this.amountCents,
+    salePaymentId: salePaymentId.present
+        ? salePaymentId.value
+        : this.salePaymentId,
+    purchasePaymentId: purchasePaymentId.present
+        ? purchasePaymentId.value
+        : this.purchasePaymentId,
+    status: status ?? this.status,
+    appliedAt: appliedAt ?? this.appliedAt,
+    reversedAt: reversedAt.present ? reversedAt.value : this.reversedAt,
+    createdBy: createdBy.present ? createdBy.value : this.createdBy,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  PartyAccountPaymentApplication copyWithCompanion(
+    PartyAccountPaymentApplicationsCompanion data,
+  ) {
+    return PartyAccountPaymentApplication(
+      id: data.id.present ? data.id.value : this.id,
+      accountPaymentId: data.accountPaymentId.present
+          ? data.accountPaymentId.value
+          : this.accountPaymentId,
+      documentType: data.documentType.present
+          ? data.documentType.value
+          : this.documentType,
+      documentId: data.documentId.present
+          ? data.documentId.value
+          : this.documentId,
+      amountCents: data.amountCents.present
+          ? data.amountCents.value
+          : this.amountCents,
+      salePaymentId: data.salePaymentId.present
+          ? data.salePaymentId.value
+          : this.salePaymentId,
+      purchasePaymentId: data.purchasePaymentId.present
+          ? data.purchasePaymentId.value
+          : this.purchasePaymentId,
+      status: data.status.present ? data.status.value : this.status,
+      appliedAt: data.appliedAt.present ? data.appliedAt.value : this.appliedAt,
+      reversedAt: data.reversedAt.present
+          ? data.reversedAt.value
+          : this.reversedAt,
+      createdBy: data.createdBy.present ? data.createdBy.value : this.createdBy,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PartyAccountPaymentApplication(')
+          ..write('id: $id, ')
+          ..write('accountPaymentId: $accountPaymentId, ')
+          ..write('documentType: $documentType, ')
+          ..write('documentId: $documentId, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('salePaymentId: $salePaymentId, ')
+          ..write('purchasePaymentId: $purchasePaymentId, ')
+          ..write('status: $status, ')
+          ..write('appliedAt: $appliedAt, ')
+          ..write('reversedAt: $reversedAt, ')
+          ..write('createdBy: $createdBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    accountPaymentId,
+    documentType,
+    documentId,
+    amountCents,
+    salePaymentId,
+    purchasePaymentId,
+    status,
+    appliedAt,
+    reversedAt,
+    createdBy,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PartyAccountPaymentApplication &&
+          other.id == this.id &&
+          other.accountPaymentId == this.accountPaymentId &&
+          other.documentType == this.documentType &&
+          other.documentId == this.documentId &&
+          other.amountCents == this.amountCents &&
+          other.salePaymentId == this.salePaymentId &&
+          other.purchasePaymentId == this.purchasePaymentId &&
+          other.status == this.status &&
+          other.appliedAt == this.appliedAt &&
+          other.reversedAt == this.reversedAt &&
+          other.createdBy == this.createdBy &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class PartyAccountPaymentApplicationsCompanion
+    extends UpdateCompanion<PartyAccountPaymentApplication> {
+  final Value<int> id;
+  final Value<int> accountPaymentId;
+  final Value<String> documentType;
+  final Value<int> documentId;
+  final Value<Decimal> amountCents;
+  final Value<int?> salePaymentId;
+  final Value<int?> purchasePaymentId;
+  final Value<String> status;
+  final Value<DateTime> appliedAt;
+  final Value<DateTime?> reversedAt;
+  final Value<int?> createdBy;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  const PartyAccountPaymentApplicationsCompanion({
+    this.id = const Value.absent(),
+    this.accountPaymentId = const Value.absent(),
+    this.documentType = const Value.absent(),
+    this.documentId = const Value.absent(),
+    this.amountCents = const Value.absent(),
+    this.salePaymentId = const Value.absent(),
+    this.purchasePaymentId = const Value.absent(),
+    this.status = const Value.absent(),
+    this.appliedAt = const Value.absent(),
+    this.reversedAt = const Value.absent(),
+    this.createdBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  PartyAccountPaymentApplicationsCompanion.insert({
+    this.id = const Value.absent(),
+    required int accountPaymentId,
+    required String documentType,
+    required int documentId,
+    required Decimal amountCents,
+    this.salePaymentId = const Value.absent(),
+    this.purchasePaymentId = const Value.absent(),
+    this.status = const Value.absent(),
+    required DateTime appliedAt,
+    this.reversedAt = const Value.absent(),
+    this.createdBy = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : accountPaymentId = Value(accountPaymentId),
+       documentType = Value(documentType),
+       documentId = Value(documentId),
+       amountCents = Value(amountCents),
+       appliedAt = Value(appliedAt);
+  static Insertable<PartyAccountPaymentApplication> custom({
+    Expression<int>? id,
+    Expression<int>? accountPaymentId,
+    Expression<String>? documentType,
+    Expression<int>? documentId,
+    Expression<int>? amountCents,
+    Expression<int>? salePaymentId,
+    Expression<int>? purchasePaymentId,
+    Expression<String>? status,
+    Expression<DateTime>? appliedAt,
+    Expression<DateTime>? reversedAt,
+    Expression<int>? createdBy,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (accountPaymentId != null) 'account_payment_id': accountPaymentId,
+      if (documentType != null) 'document_type': documentType,
+      if (documentId != null) 'document_id': documentId,
+      if (amountCents != null) 'amount_cents': amountCents,
+      if (salePaymentId != null) 'sale_payment_id': salePaymentId,
+      if (purchasePaymentId != null) 'purchase_payment_id': purchasePaymentId,
+      if (status != null) 'status': status,
+      if (appliedAt != null) 'applied_at': appliedAt,
+      if (reversedAt != null) 'reversed_at': reversedAt,
+      if (createdBy != null) 'created_by': createdBy,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  PartyAccountPaymentApplicationsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? accountPaymentId,
+    Value<String>? documentType,
+    Value<int>? documentId,
+    Value<Decimal>? amountCents,
+    Value<int?>? salePaymentId,
+    Value<int?>? purchasePaymentId,
+    Value<String>? status,
+    Value<DateTime>? appliedAt,
+    Value<DateTime?>? reversedAt,
+    Value<int?>? createdBy,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return PartyAccountPaymentApplicationsCompanion(
+      id: id ?? this.id,
+      accountPaymentId: accountPaymentId ?? this.accountPaymentId,
+      documentType: documentType ?? this.documentType,
+      documentId: documentId ?? this.documentId,
+      amountCents: amountCents ?? this.amountCents,
+      salePaymentId: salePaymentId ?? this.salePaymentId,
+      purchasePaymentId: purchasePaymentId ?? this.purchasePaymentId,
+      status: status ?? this.status,
+      appliedAt: appliedAt ?? this.appliedAt,
+      reversedAt: reversedAt ?? this.reversedAt,
+      createdBy: createdBy ?? this.createdBy,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (accountPaymentId.present) {
+      map['account_payment_id'] = Variable<int>(accountPaymentId.value);
+    }
+    if (documentType.present) {
+      map['document_type'] = Variable<String>(documentType.value);
+    }
+    if (documentId.present) {
+      map['document_id'] = Variable<int>(documentId.value);
+    }
+    if (amountCents.present) {
+      map['amount_cents'] = Variable<int>(
+        $PartyAccountPaymentApplicationsTable.$converteramountCents.toSql(
+          amountCents.value,
+        ),
+      );
+    }
+    if (salePaymentId.present) {
+      map['sale_payment_id'] = Variable<int>(salePaymentId.value);
+    }
+    if (purchasePaymentId.present) {
+      map['purchase_payment_id'] = Variable<int>(purchasePaymentId.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (appliedAt.present) {
+      map['applied_at'] = Variable<DateTime>(appliedAt.value);
+    }
+    if (reversedAt.present) {
+      map['reversed_at'] = Variable<DateTime>(reversedAt.value);
+    }
+    if (createdBy.present) {
+      map['created_by'] = Variable<int>(createdBy.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PartyAccountPaymentApplicationsCompanion(')
+          ..write('id: $id, ')
+          ..write('accountPaymentId: $accountPaymentId, ')
+          ..write('documentType: $documentType, ')
+          ..write('documentId: $documentId, ')
+          ..write('amountCents: $amountCents, ')
+          ..write('salePaymentId: $salePaymentId, ')
+          ..write('purchasePaymentId: $purchasePaymentId, ')
+          ..write('status: $status, ')
+          ..write('appliedAt: $appliedAt, ')
+          ..write('reversedAt: $reversedAt, ')
+          ..write('createdBy: $createdBy, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $ChequeConfirmationsTable extends ChequeConfirmations
     with TableInfo<$ChequeConfirmationsTable, ChequeConfirmation> {
   @override
@@ -70462,6 +72103,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $EInvoiceDocumentsTable(this);
   late final $ChequeInstrumentsTable chequeInstruments =
       $ChequeInstrumentsTable(this);
+  late final $PartyAccountPaymentsTable partyAccountPayments =
+      $PartyAccountPaymentsTable(this);
+  late final $PartyAccountPaymentApplicationsTable
+  partyAccountPaymentApplications = $PartyAccountPaymentApplicationsTable(this);
   late final $ChequeConfirmationsTable chequeConfirmations =
       $ChequeConfirmationsTable(this);
   late final ProductDao productDao = ProductDao(this as AppDatabase);
@@ -70578,6 +72223,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     customerCreditNoteApplications,
     eInvoiceDocuments,
     chequeInstruments,
+    partyAccountPayments,
+    partyAccountPaymentApplications,
     chequeConfirmations,
   ];
   @override
@@ -71172,6 +72819,42 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('cheque_instruments', kind: UpdateKind.update)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'sale_payments',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [
+        TableUpdate(
+          'party_account_payment_applications',
+          kind: UpdateKind.update,
+        ),
+      ],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'purchase_payments',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [
+        TableUpdate(
+          'party_account_payment_applications',
+          kind: UpdateKind.update,
+        ),
+      ],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'users',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [
+        TableUpdate(
+          'party_account_payment_applications',
+          kind: UpdateKind.update,
+        ),
+      ],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -71981,6 +73664,31 @@ final class $$UsersTableReferences
     ).filter((f) => f.updatedBy.id.sqlEquals($_itemColumn<int>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_chequeUpdatedByTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $PartyAccountPaymentApplicationsTable,
+    List<PartyAccountPaymentApplication>
+  >
+  _accountPaymentApplicationCreatedByTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.partyAccountPaymentApplications,
+        aliasName: 'users__id__party_account_payment_applications__created_by',
+      );
+
+  $$PartyAccountPaymentApplicationsTableProcessedTableManager
+  get accountPaymentApplicationCreatedBy {
+    final manager = $$PartyAccountPaymentApplicationsTableTableManager(
+      $_db,
+      $_db.partyAccountPaymentApplications,
+    ).filter((f) => f.createdBy.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _accountPaymentApplicationCreatedByTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -72987,6 +74695,35 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
                 $removeJoinBuilderFromRootComposer,
           ),
     );
+    return f(composer);
+  }
+
+  Expression<bool> accountPaymentApplicationCreatedBy(
+    Expression<bool> Function(
+      $$PartyAccountPaymentApplicationsTableFilterComposer f,
+    )
+    f,
+  ) {
+    final $$PartyAccountPaymentApplicationsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.partyAccountPaymentApplications,
+          getReferencedColumn: (t) => t.createdBy,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PartyAccountPaymentApplicationsTableFilterComposer(
+                $db: $db,
+                $table: $db.partyAccountPaymentApplications,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
     return f(composer);
   }
 
@@ -74057,6 +75794,35 @@ class $$UsersTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> accountPaymentApplicationCreatedBy<T extends Object>(
+    Expression<T> Function(
+      $$PartyAccountPaymentApplicationsTableAnnotationComposer a,
+    )
+    f,
+  ) {
+    final $$PartyAccountPaymentApplicationsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.partyAccountPaymentApplications,
+          getReferencedColumn: (t) => t.createdBy,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PartyAccountPaymentApplicationsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.partyAccountPaymentApplications,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> chequeConfirmedBy<T extends Object>(
     Expression<T> Function($$ChequeConfirmationsTableAnnotationComposer a) f,
   ) {
@@ -74134,6 +75900,7 @@ class $$UsersTableTableManager
             bool inventoryAdjustmentsRefs,
             bool chequeCreatedBy,
             bool chequeUpdatedBy,
+            bool accountPaymentApplicationCreatedBy,
             bool chequeConfirmedBy,
           })
         > {
@@ -74246,6 +76013,7 @@ class $$UsersTableTableManager
                 inventoryAdjustmentsRefs = false,
                 chequeCreatedBy = false,
                 chequeUpdatedBy = false,
+                accountPaymentApplicationCreatedBy = false,
                 chequeConfirmedBy = false,
               }) {
                 return PrefetchHooks(
@@ -74291,6 +76059,8 @@ class $$UsersTableTableManager
                     if (inventoryAdjustmentsRefs) db.inventoryAdjustments,
                     if (chequeCreatedBy) db.chequeInstruments,
                     if (chequeUpdatedBy) db.chequeInstruments,
+                    if (accountPaymentApplicationCreatedBy)
+                      db.partyAccountPaymentApplications,
                     if (chequeConfirmedBy) db.chequeConfirmations,
                   ],
                   addJoins: null,
@@ -75028,6 +76798,27 @@ class $$UsersTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (accountPaymentApplicationCreatedBy)
+                        await $_getPrefetchedData<
+                          User,
+                          $UsersTable,
+                          PartyAccountPaymentApplication
+                        >(
+                          currentTable: table,
+                          referencedTable: $$UsersTableReferences
+                              ._accountPaymentApplicationCreatedByTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$UsersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).accountPaymentApplicationCreatedBy,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.createdBy == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (chequeConfirmedBy)
                         await $_getPrefetchedData<
                           User,
@@ -75106,6 +76897,7 @@ typedef $$UsersTableProcessedTableManager =
         bool inventoryAdjustmentsRefs,
         bool chequeCreatedBy,
         bool chequeUpdatedBy,
+        bool accountPaymentApplicationCreatedBy,
         bool chequeConfirmedBy,
       })
     >;
@@ -75663,6 +77455,31 @@ final class $$CurrenciesTableReferences
 
     final cache = $_typedResult.readTableOrNull(
       _chequeInstrumentsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $PartyAccountPaymentsTable,
+    List<PartyAccountPayment>
+  >
+  _partyAccountPaymentsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.partyAccountPayments,
+        aliasName: 'currencies__id__party_account_payments__currency_id',
+      );
+
+  $$PartyAccountPaymentsTableProcessedTableManager
+  get partyAccountPaymentsRefs {
+    final manager = $$PartyAccountPaymentsTableTableManager(
+      $_db,
+      $_db.partyAccountPayments,
+    ).filter((f) => f.currencyId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _partyAccountPaymentsRefsTable($_db),
     );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
@@ -76371,6 +78188,31 @@ class $$CurrenciesTableFilterComposer
           }) => $$ChequeInstrumentsTableFilterComposer(
             $db: $db,
             $table: $db.chequeInstruments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> partyAccountPaymentsRefs(
+    Expression<bool> Function($$PartyAccountPaymentsTableFilterComposer f) f,
+  ) {
+    final $$PartyAccountPaymentsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.partyAccountPayments,
+      getReferencedColumn: (t) => t.currencyId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PartyAccountPaymentsTableFilterComposer(
+            $db: $db,
+            $table: $db.partyAccountPayments,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -77135,6 +78977,32 @@ class $$CurrenciesTableAnnotationComposer
         );
     return f(composer);
   }
+
+  Expression<T> partyAccountPaymentsRefs<T extends Object>(
+    Expression<T> Function($$PartyAccountPaymentsTableAnnotationComposer a) f,
+  ) {
+    final $$PartyAccountPaymentsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.partyAccountPayments,
+          getReferencedColumn: (t) => t.currencyId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PartyAccountPaymentsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.partyAccountPayments,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$CurrenciesTableTableManager
@@ -77177,6 +79045,7 @@ class $$CurrenciesTableTableManager
             bool inventoryAdjustmentsRefs,
             bool customerCreditNotesRefs,
             bool chequeInstrumentsRefs,
+            bool partyAccountPaymentsRefs,
           })
         > {
   $$CurrenciesTableTableManager(_$AppDatabase db, $CurrenciesTable table)
@@ -77270,6 +79139,7 @@ class $$CurrenciesTableTableManager
                 inventoryAdjustmentsRefs = false,
                 customerCreditNotesRefs = false,
                 chequeInstrumentsRefs = false,
+                partyAccountPaymentsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -77302,6 +79172,7 @@ class $$CurrenciesTableTableManager
                     if (inventoryAdjustmentsRefs) db.inventoryAdjustments,
                     if (customerCreditNotesRefs) db.customerCreditNotes,
                     if (chequeInstrumentsRefs) db.chequeInstruments,
+                    if (partyAccountPaymentsRefs) db.partyAccountPayments,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -77852,6 +79723,27 @@ class $$CurrenciesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (partyAccountPaymentsRefs)
+                        await $_getPrefetchedData<
+                          Currency,
+                          $CurrenciesTable,
+                          PartyAccountPayment
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CurrenciesTableReferences
+                              ._partyAccountPaymentsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CurrenciesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).partyAccountPaymentsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.currencyId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -77899,6 +79791,7 @@ typedef $$CurrenciesTableProcessedTableManager =
         bool inventoryAdjustmentsRefs,
         bool customerCreditNotesRefs,
         bool chequeInstrumentsRefs,
+        bool partyAccountPaymentsRefs,
       })
     >;
 typedef $$AppSettingsTableCreateCompanionBuilder =
@@ -112557,6 +114450,33 @@ final class $$SalePaymentsTableReferences
       manager.$state.copyWith(prefetchedData: [item]),
     );
   }
+
+  static MultiTypedResultKey<
+    $PartyAccountPaymentApplicationsTable,
+    List<PartyAccountPaymentApplication>
+  >
+  _partyAccountPaymentApplicationsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.partyAccountPaymentApplications,
+    aliasName:
+        'sale_payments__id__party_account_payment_applications__sale_payment_id',
+  );
+
+  $$PartyAccountPaymentApplicationsTableProcessedTableManager
+  get partyAccountPaymentApplicationsRefs {
+    final manager = $$PartyAccountPaymentApplicationsTableTableManager(
+      $_db,
+      $_db.partyAccountPaymentApplications,
+    ).filter((f) => f.salePaymentId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _partyAccountPaymentApplicationsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$SalePaymentsTableFilterComposer
@@ -112671,6 +114591,35 @@ class $$SalePaymentsTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> partyAccountPaymentApplicationsRefs(
+    Expression<bool> Function(
+      $$PartyAccountPaymentApplicationsTableFilterComposer f,
+    )
+    f,
+  ) {
+    final $$PartyAccountPaymentApplicationsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.partyAccountPaymentApplications,
+          getReferencedColumn: (t) => t.salePaymentId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PartyAccountPaymentApplicationsTableFilterComposer(
+                $db: $db,
+                $table: $db.partyAccountPaymentApplications,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
   }
 }
 
@@ -112893,6 +114842,35 @@ class $$SalePaymentsTableAnnotationComposer
     );
     return composer;
   }
+
+  Expression<T> partyAccountPaymentApplicationsRefs<T extends Object>(
+    Expression<T> Function(
+      $$PartyAccountPaymentApplicationsTableAnnotationComposer a,
+    )
+    f,
+  ) {
+    final $$PartyAccountPaymentApplicationsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.partyAccountPaymentApplications,
+          getReferencedColumn: (t) => t.salePaymentId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PartyAccountPaymentApplicationsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.partyAccountPaymentApplications,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$SalePaymentsTableTableManager
@@ -112912,6 +114890,7 @@ class $$SalePaymentsTableTableManager
             bool saleId,
             bool cashierShiftId,
             bool currencyId,
+            bool partyAccountPaymentApplicationsRefs,
           })
         > {
   $$SalePaymentsTableTableManager(_$AppDatabase db, $SalePaymentsTable table)
@@ -112982,10 +114961,18 @@ class $$SalePaymentsTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({saleId = false, cashierShiftId = false, currencyId = false}) {
+              ({
+                saleId = false,
+                cashierShiftId = false,
+                currencyId = false,
+                partyAccountPaymentApplicationsRefs = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
-                  explicitlyWatchedTables: [],
+                  explicitlyWatchedTables: [
+                    if (partyAccountPaymentApplicationsRefs)
+                      db.partyAccountPaymentApplications,
+                  ],
                   addJoins:
                       <
                         T extends TableManagerState<
@@ -113051,7 +115038,29 @@ class $$SalePaymentsTableTableManager
                         return state;
                       },
                   getPrefetchedDataCallback: (items) async {
-                    return [];
+                    return [
+                      if (partyAccountPaymentApplicationsRefs)
+                        await $_getPrefetchedData<
+                          SalePayment,
+                          $SalePaymentsTable,
+                          PartyAccountPaymentApplication
+                        >(
+                          currentTable: table,
+                          referencedTable: $$SalePaymentsTableReferences
+                              ._partyAccountPaymentApplicationsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$SalePaymentsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).partyAccountPaymentApplicationsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.salePaymentId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
                   },
                 );
               },
@@ -113075,6 +115084,7 @@ typedef $$SalePaymentsTableProcessedTableManager =
         bool saleId,
         bool cashierShiftId,
         bool currencyId,
+        bool partyAccountPaymentApplicationsRefs,
       })
     >;
 typedef $$PurchasesTableCreateCompanionBuilder =
@@ -117334,6 +119344,33 @@ final class $$PurchasePaymentsTableReferences
       manager.$state.copyWith(prefetchedData: [item]),
     );
   }
+
+  static MultiTypedResultKey<
+    $PartyAccountPaymentApplicationsTable,
+    List<PartyAccountPaymentApplication>
+  >
+  _partyAccountPaymentApplicationsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.partyAccountPaymentApplications,
+    aliasName:
+        'purchase_payments__id__party_account_payment_applications__purchase_payment_id',
+  );
+
+  $$PartyAccountPaymentApplicationsTableProcessedTableManager
+  get partyAccountPaymentApplicationsRefs {
+    final manager = $$PartyAccountPaymentApplicationsTableTableManager(
+      $_db,
+      $_db.partyAccountPaymentApplications,
+    ).filter((f) => f.purchasePaymentId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _partyAccountPaymentApplicationsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$PurchasePaymentsTableFilterComposer
@@ -117425,6 +119462,35 @@ class $$PurchasePaymentsTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> partyAccountPaymentApplicationsRefs(
+    Expression<bool> Function(
+      $$PartyAccountPaymentApplicationsTableFilterComposer f,
+    )
+    f,
+  ) {
+    final $$PartyAccountPaymentApplicationsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.partyAccountPaymentApplications,
+          getReferencedColumn: (t) => t.purchasePaymentId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PartyAccountPaymentApplicationsTableFilterComposer(
+                $db: $db,
+                $table: $db.partyAccountPaymentApplications,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
   }
 }
 
@@ -117601,6 +119667,35 @@ class $$PurchasePaymentsTableAnnotationComposer
     );
     return composer;
   }
+
+  Expression<T> partyAccountPaymentApplicationsRefs<T extends Object>(
+    Expression<T> Function(
+      $$PartyAccountPaymentApplicationsTableAnnotationComposer a,
+    )
+    f,
+  ) {
+    final $$PartyAccountPaymentApplicationsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.partyAccountPaymentApplications,
+          getReferencedColumn: (t) => t.purchasePaymentId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PartyAccountPaymentApplicationsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.partyAccountPaymentApplications,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$PurchasePaymentsTableTableManager
@@ -117616,7 +119711,11 @@ class $$PurchasePaymentsTableTableManager
           $$PurchasePaymentsTableUpdateCompanionBuilder,
           (PurchasePayment, $$PurchasePaymentsTableReferences),
           PurchasePayment,
-          PrefetchHooks Function({bool purchaseId, bool currencyId})
+          PrefetchHooks Function({
+            bool purchaseId,
+            bool currencyId,
+            bool partyAccountPaymentApplicationsRefs,
+          })
         > {
   $$PurchasePaymentsTableTableManager(
     _$AppDatabase db,
@@ -117683,64 +119782,94 @@ class $$PurchasePaymentsTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({purchaseId = false, currencyId = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [],
-              addJoins:
-                  <
-                    T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic
-                    >
-                  >(state) {
-                    if (purchaseId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.purchaseId,
-                                referencedTable:
-                                    $$PurchasePaymentsTableReferences
-                                        ._purchaseIdTable(db),
-                                referencedColumn:
-                                    $$PurchasePaymentsTableReferences
-                                        ._purchaseIdTable(db)
-                                        .id,
-                              )
-                              as T;
-                    }
-                    if (currencyId) {
-                      state =
-                          state.withJoin(
-                                currentTable: table,
-                                currentColumn: table.currencyId,
-                                referencedTable:
-                                    $$PurchasePaymentsTableReferences
-                                        ._currencyIdTable(db),
-                                referencedColumn:
-                                    $$PurchasePaymentsTableReferences
-                                        ._currencyIdTable(db)
-                                        .id,
-                              )
-                              as T;
-                    }
+          prefetchHooksCallback:
+              ({
+                purchaseId = false,
+                currencyId = false,
+                partyAccountPaymentApplicationsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (partyAccountPaymentApplicationsRefs)
+                      db.partyAccountPaymentApplications,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (purchaseId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.purchaseId,
+                                    referencedTable:
+                                        $$PurchasePaymentsTableReferences
+                                            ._purchaseIdTable(db),
+                                    referencedColumn:
+                                        $$PurchasePaymentsTableReferences
+                                            ._purchaseIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (currencyId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.currencyId,
+                                    referencedTable:
+                                        $$PurchasePaymentsTableReferences
+                                            ._currencyIdTable(db),
+                                    referencedColumn:
+                                        $$PurchasePaymentsTableReferences
+                                            ._currencyIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
 
-                    return state;
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (partyAccountPaymentApplicationsRefs)
+                        await $_getPrefetchedData<
+                          PurchasePayment,
+                          $PurchasePaymentsTable,
+                          PartyAccountPaymentApplication
+                        >(
+                          currentTable: table,
+                          referencedTable: $$PurchasePaymentsTableReferences
+                              ._partyAccountPaymentApplicationsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$PurchasePaymentsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).partyAccountPaymentApplicationsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.purchasePaymentId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
                   },
-              getPrefetchedDataCallback: (items) async {
-                return [];
+                );
               },
-            );
-          },
         ),
       );
 }
@@ -117757,7 +119886,11 @@ typedef $$PurchasePaymentsTableProcessedTableManager =
       $$PurchasePaymentsTableUpdateCompanionBuilder,
       (PurchasePayment, $$PurchasePaymentsTableReferences),
       PurchasePayment,
-      PrefetchHooks Function({bool purchaseId, bool currencyId})
+      PrefetchHooks Function({
+        bool purchaseId,
+        bool currencyId,
+        bool partyAccountPaymentApplicationsRefs,
+      })
     >;
 typedef $$AccountsTableCreateCompanionBuilder =
     AccountsCompanion Function({
@@ -135789,6 +137922,36 @@ final class $$ChequeInstrumentsTableReferences
       manager.$state.copyWith(prefetchedData: [item]),
     );
   }
+
+  static MultiTypedResultKey<
+    $PartyAccountPaymentsTable,
+    List<PartyAccountPayment>
+  >
+  _partyAccountPaymentsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.partyAccountPayments,
+    aliasName:
+        'cheque_instruments__id__party_account_payments__cheque_instrument_id',
+  );
+
+  $$PartyAccountPaymentsTableProcessedTableManager
+  get partyAccountPaymentsRefs {
+    final manager =
+        $$PartyAccountPaymentsTableTableManager(
+          $_db,
+          $_db.partyAccountPayments,
+        ).filter(
+          (f) => f.chequeInstrumentId.id.sqlEquals($_itemColumn<int>('id')!),
+        );
+
+    final cache = $_typedResult.readTableOrNull(
+      _partyAccountPaymentsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$ChequeInstrumentsTableFilterComposer
@@ -136028,6 +138191,31 @@ class $$ChequeInstrumentsTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> partyAccountPaymentsRefs(
+    Expression<bool> Function($$PartyAccountPaymentsTableFilterComposer f) f,
+  ) {
+    final $$PartyAccountPaymentsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.partyAccountPayments,
+      getReferencedColumn: (t) => t.chequeInstrumentId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PartyAccountPaymentsTableFilterComposer(
+            $db: $db,
+            $table: $db.partyAccountPayments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 }
 
@@ -136480,6 +138668,32 @@ class $$ChequeInstrumentsTableAnnotationComposer
     );
     return composer;
   }
+
+  Expression<T> partyAccountPaymentsRefs<T extends Object>(
+    Expression<T> Function($$PartyAccountPaymentsTableAnnotationComposer a) f,
+  ) {
+    final $$PartyAccountPaymentsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.partyAccountPayments,
+          getReferencedColumn: (t) => t.chequeInstrumentId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PartyAccountPaymentsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.partyAccountPayments,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
 }
 
 class $$ChequeInstrumentsTableTableManager
@@ -136499,6 +138713,7 @@ class $$ChequeInstrumentsTableTableManager
             bool currencyId,
             bool createdBy,
             bool updatedBy,
+            bool partyAccountPaymentsRefs,
           })
         > {
   $$ChequeInstrumentsTableTableManager(
@@ -136674,10 +138889,17 @@ class $$ChequeInstrumentsTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({currencyId = false, createdBy = false, updatedBy = false}) {
+              ({
+                currencyId = false,
+                createdBy = false,
+                updatedBy = false,
+                partyAccountPaymentsRefs = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
-                  explicitlyWatchedTables: [],
+                  explicitlyWatchedTables: [
+                    if (partyAccountPaymentsRefs) db.partyAccountPayments,
+                  ],
                   addJoins:
                       <
                         T extends TableManagerState<
@@ -136743,7 +138965,29 @@ class $$ChequeInstrumentsTableTableManager
                         return state;
                       },
                   getPrefetchedDataCallback: (items) async {
-                    return [];
+                    return [
+                      if (partyAccountPaymentsRefs)
+                        await $_getPrefetchedData<
+                          ChequeInstrument,
+                          $ChequeInstrumentsTable,
+                          PartyAccountPayment
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ChequeInstrumentsTableReferences
+                              ._partyAccountPaymentsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ChequeInstrumentsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).partyAccountPaymentsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.chequeInstrumentId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
                   },
                 );
               },
@@ -136763,7 +139007,1543 @@ typedef $$ChequeInstrumentsTableProcessedTableManager =
       $$ChequeInstrumentsTableUpdateCompanionBuilder,
       (ChequeInstrument, $$ChequeInstrumentsTableReferences),
       ChequeInstrument,
-      PrefetchHooks Function({bool currencyId, bool createdBy, bool updatedBy})
+      PrefetchHooks Function({
+        bool currencyId,
+        bool createdBy,
+        bool updatedBy,
+        bool partyAccountPaymentsRefs,
+      })
+    >;
+typedef $$PartyAccountPaymentsTableCreateCompanionBuilder =
+    PartyAccountPaymentsCompanion Function({
+      Value<int> id,
+      required int chequeInstrumentId,
+      required String partyType,
+      required int partyId,
+      required String direction,
+      required Decimal amountCents,
+      Value<Decimal> appliedCents,
+      required int currencyId,
+      Value<String> status,
+      Value<int?> settlementTransactionId,
+      required DateTime recognizedAt,
+      Value<DateTime?> reversedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+typedef $$PartyAccountPaymentsTableUpdateCompanionBuilder =
+    PartyAccountPaymentsCompanion Function({
+      Value<int> id,
+      Value<int> chequeInstrumentId,
+      Value<String> partyType,
+      Value<int> partyId,
+      Value<String> direction,
+      Value<Decimal> amountCents,
+      Value<Decimal> appliedCents,
+      Value<int> currencyId,
+      Value<String> status,
+      Value<int?> settlementTransactionId,
+      Value<DateTime> recognizedAt,
+      Value<DateTime?> reversedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$PartyAccountPaymentsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $PartyAccountPaymentsTable,
+          PartyAccountPayment
+        > {
+  $$PartyAccountPaymentsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ChequeInstrumentsTable _chequeInstrumentIdTable(_$AppDatabase db) =>
+      db.chequeInstruments.createAlias(
+        'party_account_payments__cheque_instrument_id__cheque_instruments__id',
+      );
+
+  $$ChequeInstrumentsTableProcessedTableManager get chequeInstrumentId {
+    final $_column = $_itemColumn<int>('cheque_instrument_id')!;
+
+    final manager = $$ChequeInstrumentsTableTableManager(
+      $_db,
+      $_db.chequeInstruments,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_chequeInstrumentIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $CurrenciesTable _currencyIdTable(_$AppDatabase db) => db.currencies
+      .createAlias('party_account_payments__currency_id__currencies__id');
+
+  $$CurrenciesTableProcessedTableManager get currencyId {
+    final $_column = $_itemColumn<int>('currency_id')!;
+
+    final manager = $$CurrenciesTableTableManager(
+      $_db,
+      $_db.currencies,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_currencyIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $PartyAccountPaymentApplicationsTable,
+    List<PartyAccountPaymentApplication>
+  >
+  _partyAccountPaymentApplicationsRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.partyAccountPaymentApplications,
+    aliasName:
+        'party_account_payments__id__party_account_payment_applications__account_payment_id',
+  );
+
+  $$PartyAccountPaymentApplicationsTableProcessedTableManager
+  get partyAccountPaymentApplicationsRefs {
+    final manager = $$PartyAccountPaymentApplicationsTableTableManager(
+      $_db,
+      $_db.partyAccountPaymentApplications,
+    ).filter((f) => f.accountPaymentId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _partyAccountPaymentApplicationsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$PartyAccountPaymentsTableFilterComposer
+    extends Composer<_$AppDatabase, $PartyAccountPaymentsTable> {
+  $$PartyAccountPaymentsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get partyType => $composableBuilder(
+    column: $table.partyType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get partyId => $composableBuilder(
+    column: $table.partyId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get direction => $composableBuilder(
+    column: $table.direction,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get amountCents =>
+      $composableBuilder(
+        column: $table.amountCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get appliedCents =>
+      $composableBuilder(
+        column: $table.appliedCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get settlementTransactionId => $composableBuilder(
+    column: $table.settlementTransactionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get recognizedAt => $composableBuilder(
+    column: $table.recognizedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get reversedAt => $composableBuilder(
+    column: $table.reversedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ChequeInstrumentsTableFilterComposer get chequeInstrumentId {
+    final $$ChequeInstrumentsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.chequeInstrumentId,
+      referencedTable: $db.chequeInstruments,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ChequeInstrumentsTableFilterComposer(
+            $db: $db,
+            $table: $db.chequeInstruments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$CurrenciesTableFilterComposer get currencyId {
+    final $$CurrenciesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.currencyId,
+      referencedTable: $db.currencies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CurrenciesTableFilterComposer(
+            $db: $db,
+            $table: $db.currencies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> partyAccountPaymentApplicationsRefs(
+    Expression<bool> Function(
+      $$PartyAccountPaymentApplicationsTableFilterComposer f,
+    )
+    f,
+  ) {
+    final $$PartyAccountPaymentApplicationsTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.partyAccountPaymentApplications,
+          getReferencedColumn: (t) => t.accountPaymentId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PartyAccountPaymentApplicationsTableFilterComposer(
+                $db: $db,
+                $table: $db.partyAccountPaymentApplications,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$PartyAccountPaymentsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PartyAccountPaymentsTable> {
+  $$PartyAccountPaymentsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get partyType => $composableBuilder(
+    column: $table.partyType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get partyId => $composableBuilder(
+    column: $table.partyId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get direction => $composableBuilder(
+    column: $table.direction,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get appliedCents => $composableBuilder(
+    column: $table.appliedCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get settlementTransactionId => $composableBuilder(
+    column: $table.settlementTransactionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get recognizedAt => $composableBuilder(
+    column: $table.recognizedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get reversedAt => $composableBuilder(
+    column: $table.reversedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ChequeInstrumentsTableOrderingComposer get chequeInstrumentId {
+    final $$ChequeInstrumentsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.chequeInstrumentId,
+      referencedTable: $db.chequeInstruments,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ChequeInstrumentsTableOrderingComposer(
+            $db: $db,
+            $table: $db.chequeInstruments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$CurrenciesTableOrderingComposer get currencyId {
+    final $$CurrenciesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.currencyId,
+      referencedTable: $db.currencies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CurrenciesTableOrderingComposer(
+            $db: $db,
+            $table: $db.currencies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PartyAccountPaymentsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PartyAccountPaymentsTable> {
+  $$PartyAccountPaymentsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get partyType =>
+      $composableBuilder(column: $table.partyType, builder: (column) => column);
+
+  GeneratedColumn<int> get partyId =>
+      $composableBuilder(column: $table.partyId, builder: (column) => column);
+
+  GeneratedColumn<String> get direction =>
+      $composableBuilder(column: $table.direction, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get amountCents =>
+      $composableBuilder(
+        column: $table.amountCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get appliedCents =>
+      $composableBuilder(
+        column: $table.appliedCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<int> get settlementTransactionId => $composableBuilder(
+    column: $table.settlementTransactionId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get recognizedAt => $composableBuilder(
+    column: $table.recognizedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get reversedAt => $composableBuilder(
+    column: $table.reversedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$ChequeInstrumentsTableAnnotationComposer get chequeInstrumentId {
+    final $$ChequeInstrumentsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.chequeInstrumentId,
+          referencedTable: $db.chequeInstruments,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$ChequeInstrumentsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.chequeInstruments,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$CurrenciesTableAnnotationComposer get currencyId {
+    final $$CurrenciesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.currencyId,
+      referencedTable: $db.currencies,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CurrenciesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.currencies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> partyAccountPaymentApplicationsRefs<T extends Object>(
+    Expression<T> Function(
+      $$PartyAccountPaymentApplicationsTableAnnotationComposer a,
+    )
+    f,
+  ) {
+    final $$PartyAccountPaymentApplicationsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.partyAccountPaymentApplications,
+          getReferencedColumn: (t) => t.accountPaymentId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PartyAccountPaymentApplicationsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.partyAccountPaymentApplications,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$PartyAccountPaymentsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PartyAccountPaymentsTable,
+          PartyAccountPayment,
+          $$PartyAccountPaymentsTableFilterComposer,
+          $$PartyAccountPaymentsTableOrderingComposer,
+          $$PartyAccountPaymentsTableAnnotationComposer,
+          $$PartyAccountPaymentsTableCreateCompanionBuilder,
+          $$PartyAccountPaymentsTableUpdateCompanionBuilder,
+          (PartyAccountPayment, $$PartyAccountPaymentsTableReferences),
+          PartyAccountPayment,
+          PrefetchHooks Function({
+            bool chequeInstrumentId,
+            bool currencyId,
+            bool partyAccountPaymentApplicationsRefs,
+          })
+        > {
+  $$PartyAccountPaymentsTableTableManager(
+    _$AppDatabase db,
+    $PartyAccountPaymentsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PartyAccountPaymentsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PartyAccountPaymentsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PartyAccountPaymentsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> chequeInstrumentId = const Value.absent(),
+                Value<String> partyType = const Value.absent(),
+                Value<int> partyId = const Value.absent(),
+                Value<String> direction = const Value.absent(),
+                Value<Decimal> amountCents = const Value.absent(),
+                Value<Decimal> appliedCents = const Value.absent(),
+                Value<int> currencyId = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<int?> settlementTransactionId = const Value.absent(),
+                Value<DateTime> recognizedAt = const Value.absent(),
+                Value<DateTime?> reversedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => PartyAccountPaymentsCompanion(
+                id: id,
+                chequeInstrumentId: chequeInstrumentId,
+                partyType: partyType,
+                partyId: partyId,
+                direction: direction,
+                amountCents: amountCents,
+                appliedCents: appliedCents,
+                currencyId: currencyId,
+                status: status,
+                settlementTransactionId: settlementTransactionId,
+                recognizedAt: recognizedAt,
+                reversedAt: reversedAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int chequeInstrumentId,
+                required String partyType,
+                required int partyId,
+                required String direction,
+                required Decimal amountCents,
+                Value<Decimal> appliedCents = const Value.absent(),
+                required int currencyId,
+                Value<String> status = const Value.absent(),
+                Value<int?> settlementTransactionId = const Value.absent(),
+                required DateTime recognizedAt,
+                Value<DateTime?> reversedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => PartyAccountPaymentsCompanion.insert(
+                id: id,
+                chequeInstrumentId: chequeInstrumentId,
+                partyType: partyType,
+                partyId: partyId,
+                direction: direction,
+                amountCents: amountCents,
+                appliedCents: appliedCents,
+                currencyId: currencyId,
+                status: status,
+                settlementTransactionId: settlementTransactionId,
+                recognizedAt: recognizedAt,
+                reversedAt: reversedAt,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$PartyAccountPaymentsTable, PartyAccountPayment>(
+                    table,
+                  ),
+                  $$PartyAccountPaymentsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                chequeInstrumentId = false,
+                currencyId = false,
+                partyAccountPaymentApplicationsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (partyAccountPaymentApplicationsRefs)
+                      db.partyAccountPaymentApplications,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (chequeInstrumentId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.chequeInstrumentId,
+                                    referencedTable:
+                                        $$PartyAccountPaymentsTableReferences
+                                            ._chequeInstrumentIdTable(db),
+                                    referencedColumn:
+                                        $$PartyAccountPaymentsTableReferences
+                                            ._chequeInstrumentIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (currencyId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.currencyId,
+                                    referencedTable:
+                                        $$PartyAccountPaymentsTableReferences
+                                            ._currencyIdTable(db),
+                                    referencedColumn:
+                                        $$PartyAccountPaymentsTableReferences
+                                            ._currencyIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (partyAccountPaymentApplicationsRefs)
+                        await $_getPrefetchedData<
+                          PartyAccountPayment,
+                          $PartyAccountPaymentsTable,
+                          PartyAccountPaymentApplication
+                        >(
+                          currentTable: table,
+                          referencedTable: $$PartyAccountPaymentsTableReferences
+                              ._partyAccountPaymentApplicationsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$PartyAccountPaymentsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).partyAccountPaymentApplicationsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.accountPaymentId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$PartyAccountPaymentsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PartyAccountPaymentsTable,
+      PartyAccountPayment,
+      $$PartyAccountPaymentsTableFilterComposer,
+      $$PartyAccountPaymentsTableOrderingComposer,
+      $$PartyAccountPaymentsTableAnnotationComposer,
+      $$PartyAccountPaymentsTableCreateCompanionBuilder,
+      $$PartyAccountPaymentsTableUpdateCompanionBuilder,
+      (PartyAccountPayment, $$PartyAccountPaymentsTableReferences),
+      PartyAccountPayment,
+      PrefetchHooks Function({
+        bool chequeInstrumentId,
+        bool currencyId,
+        bool partyAccountPaymentApplicationsRefs,
+      })
+    >;
+typedef $$PartyAccountPaymentApplicationsTableCreateCompanionBuilder =
+    PartyAccountPaymentApplicationsCompanion Function({
+      Value<int> id,
+      required int accountPaymentId,
+      required String documentType,
+      required int documentId,
+      required Decimal amountCents,
+      Value<int?> salePaymentId,
+      Value<int?> purchasePaymentId,
+      Value<String> status,
+      required DateTime appliedAt,
+      Value<DateTime?> reversedAt,
+      Value<int?> createdBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+typedef $$PartyAccountPaymentApplicationsTableUpdateCompanionBuilder =
+    PartyAccountPaymentApplicationsCompanion Function({
+      Value<int> id,
+      Value<int> accountPaymentId,
+      Value<String> documentType,
+      Value<int> documentId,
+      Value<Decimal> amountCents,
+      Value<int?> salePaymentId,
+      Value<int?> purchasePaymentId,
+      Value<String> status,
+      Value<DateTime> appliedAt,
+      Value<DateTime?> reversedAt,
+      Value<int?> createdBy,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$PartyAccountPaymentApplicationsTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $PartyAccountPaymentApplicationsTable,
+          PartyAccountPaymentApplication
+        > {
+  $$PartyAccountPaymentApplicationsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $PartyAccountPaymentsTable _accountPaymentIdTable(
+    _$AppDatabase db,
+  ) => db.partyAccountPayments.createAlias(
+    'party_account_payment_applications__account_payment_id__party_account_payments__id',
+  );
+
+  $$PartyAccountPaymentsTableProcessedTableManager get accountPaymentId {
+    final $_column = $_itemColumn<int>('account_payment_id')!;
+
+    final manager = $$PartyAccountPaymentsTableTableManager(
+      $_db,
+      $_db.partyAccountPayments,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_accountPaymentIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $SalePaymentsTable _salePaymentIdTable(
+    _$AppDatabase db,
+  ) => db.salePayments.createAlias(
+    'party_account_payment_applications__sale_payment_id__sale_payments__id',
+  );
+
+  $$SalePaymentsTableProcessedTableManager? get salePaymentId {
+    final $_column = $_itemColumn<int>('sale_payment_id');
+    if ($_column == null) return null;
+    final manager = $$SalePaymentsTableTableManager(
+      $_db,
+      $_db.salePayments,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_salePaymentIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $PurchasePaymentsTable _purchasePaymentIdTable(
+    _$AppDatabase db,
+  ) => db.purchasePayments.createAlias(
+    'party_account_payment_applications__purchase_payment_id__purchase_payments__id',
+  );
+
+  $$PurchasePaymentsTableProcessedTableManager? get purchasePaymentId {
+    final $_column = $_itemColumn<int>('purchase_payment_id');
+    if ($_column == null) return null;
+    final manager = $$PurchasePaymentsTableTableManager(
+      $_db,
+      $_db.purchasePayments,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_purchasePaymentIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $UsersTable _createdByTable(_$AppDatabase db) => db.users.createAlias(
+    'party_account_payment_applications__created_by__users__id',
+  );
+
+  $$UsersTableProcessedTableManager? get createdBy {
+    final $_column = $_itemColumn<int>('created_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_createdByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$PartyAccountPaymentApplicationsTableFilterComposer
+    extends Composer<_$AppDatabase, $PartyAccountPaymentApplicationsTable> {
+  $$PartyAccountPaymentApplicationsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get documentType => $composableBuilder(
+    column: $table.documentType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<Decimal, Decimal, int> get amountCents =>
+      $composableBuilder(
+        column: $table.amountCents,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get appliedAt => $composableBuilder(
+    column: $table.appliedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get reversedAt => $composableBuilder(
+    column: $table.reversedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$PartyAccountPaymentsTableFilterComposer get accountPaymentId {
+    final $$PartyAccountPaymentsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.accountPaymentId,
+      referencedTable: $db.partyAccountPayments,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PartyAccountPaymentsTableFilterComposer(
+            $db: $db,
+            $table: $db.partyAccountPayments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$SalePaymentsTableFilterComposer get salePaymentId {
+    final $$SalePaymentsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.salePaymentId,
+      referencedTable: $db.salePayments,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SalePaymentsTableFilterComposer(
+            $db: $db,
+            $table: $db.salePayments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$PurchasePaymentsTableFilterComposer get purchasePaymentId {
+    final $$PurchasePaymentsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.purchasePaymentId,
+      referencedTable: $db.purchasePayments,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PurchasePaymentsTableFilterComposer(
+            $db: $db,
+            $table: $db.purchasePayments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableFilterComposer get createdBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PartyAccountPaymentApplicationsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PartyAccountPaymentApplicationsTable> {
+  $$PartyAccountPaymentApplicationsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get documentType => $composableBuilder(
+    column: $table.documentType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get amountCents => $composableBuilder(
+    column: $table.amountCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get appliedAt => $composableBuilder(
+    column: $table.appliedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get reversedAt => $composableBuilder(
+    column: $table.reversedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$PartyAccountPaymentsTableOrderingComposer get accountPaymentId {
+    final $$PartyAccountPaymentsTableOrderingComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.accountPaymentId,
+          referencedTable: $db.partyAccountPayments,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PartyAccountPaymentsTableOrderingComposer(
+                $db: $db,
+                $table: $db.partyAccountPayments,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$SalePaymentsTableOrderingComposer get salePaymentId {
+    final $$SalePaymentsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.salePaymentId,
+      referencedTable: $db.salePayments,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SalePaymentsTableOrderingComposer(
+            $db: $db,
+            $table: $db.salePayments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$PurchasePaymentsTableOrderingComposer get purchasePaymentId {
+    final $$PurchasePaymentsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.purchasePaymentId,
+      referencedTable: $db.purchasePayments,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PurchasePaymentsTableOrderingComposer(
+            $db: $db,
+            $table: $db.purchasePayments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableOrderingComposer get createdBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PartyAccountPaymentApplicationsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PartyAccountPaymentApplicationsTable> {
+  $$PartyAccountPaymentApplicationsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get documentType => $composableBuilder(
+    column: $table.documentType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get documentId => $composableBuilder(
+    column: $table.documentId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<Decimal, int> get amountCents =>
+      $composableBuilder(
+        column: $table.amountCents,
+        builder: (column) => column,
+      );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get appliedAt =>
+      $composableBuilder(column: $table.appliedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get reversedAt => $composableBuilder(
+    column: $table.reversedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$PartyAccountPaymentsTableAnnotationComposer get accountPaymentId {
+    final $$PartyAccountPaymentsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.accountPaymentId,
+          referencedTable: $db.partyAccountPayments,
+          getReferencedColumn: (t) => t.id,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PartyAccountPaymentsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.partyAccountPayments,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return composer;
+  }
+
+  $$SalePaymentsTableAnnotationComposer get salePaymentId {
+    final $$SalePaymentsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.salePaymentId,
+      referencedTable: $db.salePayments,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SalePaymentsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.salePayments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$PurchasePaymentsTableAnnotationComposer get purchasePaymentId {
+    final $$PurchasePaymentsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.purchasePaymentId,
+      referencedTable: $db.purchasePayments,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PurchasePaymentsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.purchasePayments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$UsersTableAnnotationComposer get createdBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.createdBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$PartyAccountPaymentApplicationsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PartyAccountPaymentApplicationsTable,
+          PartyAccountPaymentApplication,
+          $$PartyAccountPaymentApplicationsTableFilterComposer,
+          $$PartyAccountPaymentApplicationsTableOrderingComposer,
+          $$PartyAccountPaymentApplicationsTableAnnotationComposer,
+          $$PartyAccountPaymentApplicationsTableCreateCompanionBuilder,
+          $$PartyAccountPaymentApplicationsTableUpdateCompanionBuilder,
+          (
+            PartyAccountPaymentApplication,
+            $$PartyAccountPaymentApplicationsTableReferences,
+          ),
+          PartyAccountPaymentApplication,
+          PrefetchHooks Function({
+            bool accountPaymentId,
+            bool salePaymentId,
+            bool purchasePaymentId,
+            bool createdBy,
+          })
+        > {
+  $$PartyAccountPaymentApplicationsTableTableManager(
+    _$AppDatabase db,
+    $PartyAccountPaymentApplicationsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PartyAccountPaymentApplicationsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PartyAccountPaymentApplicationsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PartyAccountPaymentApplicationsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> accountPaymentId = const Value.absent(),
+                Value<String> documentType = const Value.absent(),
+                Value<int> documentId = const Value.absent(),
+                Value<Decimal> amountCents = const Value.absent(),
+                Value<int?> salePaymentId = const Value.absent(),
+                Value<int?> purchasePaymentId = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime> appliedAt = const Value.absent(),
+                Value<DateTime?> reversedAt = const Value.absent(),
+                Value<int?> createdBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => PartyAccountPaymentApplicationsCompanion(
+                id: id,
+                accountPaymentId: accountPaymentId,
+                documentType: documentType,
+                documentId: documentId,
+                amountCents: amountCents,
+                salePaymentId: salePaymentId,
+                purchasePaymentId: purchasePaymentId,
+                status: status,
+                appliedAt: appliedAt,
+                reversedAt: reversedAt,
+                createdBy: createdBy,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int accountPaymentId,
+                required String documentType,
+                required int documentId,
+                required Decimal amountCents,
+                Value<int?> salePaymentId = const Value.absent(),
+                Value<int?> purchasePaymentId = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                required DateTime appliedAt,
+                Value<DateTime?> reversedAt = const Value.absent(),
+                Value<int?> createdBy = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => PartyAccountPaymentApplicationsCompanion.insert(
+                id: id,
+                accountPaymentId: accountPaymentId,
+                documentType: documentType,
+                documentId: documentId,
+                amountCents: amountCents,
+                salePaymentId: salePaymentId,
+                purchasePaymentId: purchasePaymentId,
+                status: status,
+                appliedAt: appliedAt,
+                reversedAt: reversedAt,
+                createdBy: createdBy,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<
+                    $PartyAccountPaymentApplicationsTable,
+                    PartyAccountPaymentApplication
+                  >(table),
+                  $$PartyAccountPaymentApplicationsTableReferences(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                accountPaymentId = false,
+                salePaymentId = false,
+                purchasePaymentId = false,
+                createdBy = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (accountPaymentId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.accountPaymentId,
+                                    referencedTable:
+                                        $$PartyAccountPaymentApplicationsTableReferences
+                                            ._accountPaymentIdTable(db),
+                                    referencedColumn:
+                                        $$PartyAccountPaymentApplicationsTableReferences
+                                            ._accountPaymentIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (salePaymentId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.salePaymentId,
+                                    referencedTable:
+                                        $$PartyAccountPaymentApplicationsTableReferences
+                                            ._salePaymentIdTable(db),
+                                    referencedColumn:
+                                        $$PartyAccountPaymentApplicationsTableReferences
+                                            ._salePaymentIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (purchasePaymentId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.purchasePaymentId,
+                                    referencedTable:
+                                        $$PartyAccountPaymentApplicationsTableReferences
+                                            ._purchasePaymentIdTable(db),
+                                    referencedColumn:
+                                        $$PartyAccountPaymentApplicationsTableReferences
+                                            ._purchasePaymentIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (createdBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.createdBy,
+                                    referencedTable:
+                                        $$PartyAccountPaymentApplicationsTableReferences
+                                            ._createdByTable(db),
+                                    referencedColumn:
+                                        $$PartyAccountPaymentApplicationsTableReferences
+                                            ._createdByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$PartyAccountPaymentApplicationsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PartyAccountPaymentApplicationsTable,
+      PartyAccountPaymentApplication,
+      $$PartyAccountPaymentApplicationsTableFilterComposer,
+      $$PartyAccountPaymentApplicationsTableOrderingComposer,
+      $$PartyAccountPaymentApplicationsTableAnnotationComposer,
+      $$PartyAccountPaymentApplicationsTableCreateCompanionBuilder,
+      $$PartyAccountPaymentApplicationsTableUpdateCompanionBuilder,
+      (
+        PartyAccountPaymentApplication,
+        $$PartyAccountPaymentApplicationsTableReferences,
+      ),
+      PartyAccountPaymentApplication,
+      PrefetchHooks Function({
+        bool accountPaymentId,
+        bool salePaymentId,
+        bool purchasePaymentId,
+        bool createdBy,
+      })
     >;
 typedef $$ChequeConfirmationsTableCreateCompanionBuilder =
     ChequeConfirmationsCompanion Function({
@@ -137422,6 +141202,14 @@ class $AppDatabaseManager {
       $$EInvoiceDocumentsTableTableManager(_db, _db.eInvoiceDocuments);
   $$ChequeInstrumentsTableTableManager get chequeInstruments =>
       $$ChequeInstrumentsTableTableManager(_db, _db.chequeInstruments);
+  $$PartyAccountPaymentsTableTableManager get partyAccountPayments =>
+      $$PartyAccountPaymentsTableTableManager(_db, _db.partyAccountPayments);
+  $$PartyAccountPaymentApplicationsTableTableManager
+  get partyAccountPaymentApplications =>
+      $$PartyAccountPaymentApplicationsTableTableManager(
+        _db,
+        _db.partyAccountPaymentApplications,
+      );
   $$ChequeConfirmationsTableTableManager get chequeConfirmations =>
       $$ChequeConfirmationsTableTableManager(_db, _db.chequeConfirmations);
 }

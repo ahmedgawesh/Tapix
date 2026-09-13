@@ -693,6 +693,110 @@ class LanNetworkService {
     return LanSaleReturnResult.fromJson(response.body);
   }
 
+  Future<List<LanSupplierSummary>> fetchRemoteSuppliers({
+    String query = '',
+    int limit = 100,
+  }) async {
+    final response = await _authenticatedClientRequest(
+      method: 'GET',
+      path: '/v1/suppliers',
+      queryParameters: {'q': query, 'limit': limit.toString()},
+    );
+    return (response.body['suppliers'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(LanSupplierSummary.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<LanReturnablePurchasesPage> fetchRemoteReturnablePurchases({
+    String query = '',
+    int offset = 0,
+    int limit = 50,
+  }) async {
+    final response = await _authenticatedClientRequest(
+      method: 'GET',
+      path: '/v1/purchases/returnable',
+      queryParameters: {
+        'q': query,
+        'offset': offset.toString(),
+        'limit': limit.toString(),
+      },
+    );
+    return LanReturnablePurchasesPage.fromJson(response.body);
+  }
+
+  Future<LanReturnablePurchaseDetails> fetchRemoteReturnablePurchase(
+    int purchaseId,
+  ) async {
+    final response = await _authenticatedClientRequest(
+      method: 'GET',
+      path: '/v1/purchases/$purchaseId/returnable',
+    );
+    return LanReturnablePurchaseDetails.fromJson(response.body);
+  }
+
+  Future<LanPurchaseReturnsPage> fetchRemotePurchaseReturns({
+    String query = '',
+    int offset = 0,
+    int limit = 100,
+  }) async {
+    final response = await _authenticatedClientRequest(
+      method: 'GET',
+      path: '/v1/purchase-returns',
+      queryParameters: {
+        'q': query,
+        'offset': offset.toString(),
+        'limit': limit.toString(),
+      },
+    );
+    return LanPurchaseReturnsPage.fromJson(response.body);
+  }
+
+  Future<LanPurchaseReturnDetails> fetchRemotePurchaseReturnDetails({
+    required int returnId,
+    required bool adjustment,
+  }) async {
+    final response = await _authenticatedClientRequest(
+      method: 'GET',
+      path:
+          '/v1/purchase-returns/${adjustment ? 'adjustment' : 'linked'}/$returnId',
+    );
+    return LanPurchaseReturnDetails.fromJson(response.body);
+  }
+
+  Future<LanPurchaseReturnResult> submitRemotePurchaseReturn(
+    LanPurchaseReturnRequest purchaseReturn,
+  ) async {
+    final response = await _authenticatedClientRequest(
+      method: 'POST',
+      path: '/v1/purchase-returns',
+      body: purchaseReturn.toJson(),
+    );
+    return LanPurchaseReturnResult.fromJson(response.body);
+  }
+
+  Future<LanPurchaseReturnResult> submitRemotePurchaseAdjustmentReturn(
+    LanPurchaseAdjustmentReturnRequest purchaseReturn,
+  ) async {
+    final response = await _authenticatedClientRequest(
+      method: 'POST',
+      path: '/v1/purchase-adjustment-returns',
+      body: purchaseReturn.toJson(),
+    );
+    return LanPurchaseReturnResult.fromJson(response.body);
+  }
+
+  Future<void> voidRemotePurchaseReturn({
+    required int returnId,
+    required bool adjustment,
+  }) async {
+    await _authenticatedClientRequest(
+      method: 'POST',
+      path:
+          '/v1/purchase-returns/${adjustment ? 'adjustment' : 'linked'}/$returnId/void',
+    );
+  }
+
   Future<LanCashierShiftSnapshot?> fetchOwnRemoteShift() async {
     final response = await _authenticatedClientRequest(
       method: 'GET',
@@ -788,6 +892,9 @@ class LanNetworkService {
         response.body['code']?.toString() ?? 'remote_request_failed',
         response.body['message']?.toString() ?? 'Master request failed.',
         statusCode: response.statusCode,
+        details: response.body['details'] is Map
+            ? Map<String, dynamic>.from(response.body['details'] as Map)
+            : const {},
       );
     }
     return response;
@@ -1770,7 +1877,10 @@ class LanNetworkService {
         }
         final management = request.uri.queryParameters['view'] == 'management';
         if (management &&
-            !_hasAnyPermission(session.user, const ['view_products'])) {
+            !_hasAnyPermission(session.user, const [
+              'view_products',
+              'manage_purchases',
+            ])) {
           await _respond(request, HttpStatus.forbidden, {
             'code': 'permission_denied',
             'message': 'This user cannot open product management.',
@@ -1808,7 +1918,10 @@ class LanNetworkService {
         );
         final includeCost =
             management &&
-            _hasAnyPermission(session.user, const ['view_product_cost']);
+            _hasAnyPermission(session.user, const [
+              'view_product_cost',
+              'manage_purchases',
+            ]);
         await _respond(
           request,
           HttpStatus.ok,
@@ -2061,6 +2174,7 @@ class LanNetworkService {
           await _respond(request, error.statusCode, {
             'code': error.code,
             'message': error.message,
+            if (error.details.isNotEmpty) 'details': error.details,
           });
         }
         return;
@@ -2585,6 +2699,217 @@ class LanNetworkService {
         return;
       }
 
+      final isPurchaseReturnApi =
+          path == '/v1/suppliers' ||
+          path == '/v1/purchases/returnable' ||
+          (path.startsWith('/v1/purchases/') && path.endsWith('/returnable')) ||
+          path == '/v1/purchase-returns' ||
+          path.startsWith('/v1/purchase-returns/') ||
+          path == '/v1/purchase-adjustment-returns';
+      if (isPurchaseReturnApi) {
+        final device = _authorizeDevice(request);
+        if (device == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'device_unauthorized',
+            'message': 'Device is not authorized.',
+          });
+          return;
+        }
+        final session = await _authorizeUserSession(request, device);
+        if (session == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'authentication_required',
+            'message': 'User session is invalid or expired.',
+          });
+          return;
+        }
+        final canView = _hasAnyPermission(session.user, const [
+          'view_purchases',
+          'manage_purchases',
+        ]);
+        final canManage = _hasAnyPermission(session.user, const [
+          'manage_purchases',
+        ]);
+        final mutating = request.method != 'GET';
+        if ((!mutating && !canView) || (mutating && !canManage)) {
+          await _respond(request, HttpStatus.forbidden, {
+            'code': 'permission_denied',
+            'message': mutating
+                ? 'This user cannot process purchase returns.'
+                : 'This user cannot view purchase returns.',
+          });
+          return;
+        }
+        final isVoid = request.method == 'POST' && path.endsWith('/void');
+        if (isVoid &&
+            !_hasAnyPermission(session.user, const ['void_transactions'])) {
+          await _respond(request, HttpStatus.forbidden, {
+            'code': 'permission_denied',
+            'message': 'This user cannot void purchase returns.',
+          });
+          return;
+        }
+        if (_businessGateway == null) {
+          await _respond(request, HttpStatus.serviceUnavailable, {
+            'code': 'business_api_unavailable',
+            'message': 'Master business services are unavailable.',
+          });
+          return;
+        }
+        try {
+          if (request.method == 'GET' && path == '/v1/suppliers') {
+            final limit = int.tryParse(
+              request.uri.queryParameters['limit'] ?? '',
+            );
+            final suppliers = await _businessGateway.fetchSuppliers(
+              query: request.uri.queryParameters['q'] ?? '',
+              limit: limit ?? 100,
+            );
+            await _respond(request, HttpStatus.ok, {
+              'suppliers': suppliers.map((value) => value.toJson()).toList(),
+            });
+            return;
+          }
+          if (request.method == 'GET' && path == '/v1/purchases/returnable') {
+            final result = await _businessGateway.fetchReturnablePurchases(
+              query: request.uri.queryParameters['q'] ?? '',
+              offset:
+                  int.tryParse(request.uri.queryParameters['offset'] ?? '') ??
+                  0,
+              limit:
+                  int.tryParse(request.uri.queryParameters['limit'] ?? '') ??
+                  50,
+            );
+            await _respond(request, HttpStatus.ok, result.toJson());
+            return;
+          }
+          if (request.method == 'GET' &&
+              path.startsWith('/v1/purchases/') &&
+              path.endsWith('/returnable')) {
+            final rawId = path.substring(
+              '/v1/purchases/'.length,
+              path.length - '/returnable'.length,
+            );
+            final purchaseId = int.tryParse(rawId);
+            final details = purchaseId == null
+                ? null
+                : await _businessGateway.fetchReturnablePurchase(
+                    purchaseId: purchaseId,
+                  );
+            if (details == null) {
+              await _respond(request, HttpStatus.notFound, {
+                'code': 'purchase_not_returnable',
+                'message': 'Purchase not found or has no returnable items.',
+              });
+            } else {
+              await _respond(request, HttpStatus.ok, details.toJson());
+            }
+            return;
+          }
+          if (request.method == 'GET' && path == '/v1/purchase-returns') {
+            final result = await _businessGateway.fetchPurchaseReturns(
+              query: request.uri.queryParameters['q'] ?? '',
+              offset:
+                  int.tryParse(request.uri.queryParameters['offset'] ?? '') ??
+                  0,
+              limit:
+                  int.tryParse(request.uri.queryParameters['limit'] ?? '') ??
+                  100,
+            );
+            await _respond(request, HttpStatus.ok, result.toJson());
+            return;
+          }
+          if (request.method == 'GET' &&
+              path.startsWith('/v1/purchase-returns/')) {
+            final segments = request.uri.pathSegments;
+            final kind = segments.length > 2 ? segments[2] : '';
+            final returnId = segments.length > 3
+                ? int.tryParse(segments[3])
+                : null;
+            final details = returnId == null
+                ? null
+                : await _businessGateway.fetchPurchaseReturnDetails(
+                    returnId: returnId,
+                    adjustment: kind == 'adjustment',
+                  );
+            if ((kind != 'linked' && kind != 'adjustment') || details == null) {
+              await _respond(request, HttpStatus.notFound, {
+                'code': 'purchase_return_not_found',
+                'message': 'Purchase return not found.',
+              });
+            } else {
+              await _respond(request, HttpStatus.ok, details.toJson());
+            }
+            return;
+          }
+          if (isVoid) {
+            final segments = request.uri.pathSegments;
+            final kind = segments.length > 2 ? segments[2] : '';
+            final returnId = segments.length > 3
+                ? int.tryParse(segments[3])
+                : null;
+            if (returnId == null ||
+                (kind != 'linked' && kind != 'adjustment')) {
+              throw const FormatException('Invalid purchase return.');
+            }
+            await _businessGateway.voidPurchaseReturn(
+              actor: session.user,
+              returnId: returnId,
+              adjustment: kind == 'adjustment',
+            );
+            await _respond(request, HttpStatus.ok, {'status': 'voided'});
+            return;
+          }
+          if (request.method != 'POST' ||
+              (path != '/v1/purchase-returns' &&
+                  path != '/v1/purchase-adjustment-returns')) {
+            await _respond(request, HttpStatus.notFound, {
+              'code': 'not_found',
+              'message': 'Endpoint not found.',
+            });
+            return;
+          }
+          final body = await _readJson(request);
+          final result = path == '/v1/purchase-adjustment-returns'
+              ? await _businessGateway.createPurchaseAdjustmentReturn(
+                  actor: session.user,
+                  request: LanPurchaseAdjustmentReturnRequest.fromJson(body),
+                )
+              : await _businessGateway.createPurchaseReturn(
+                  actor: session.user,
+                  request: LanPurchaseReturnRequest.fromJson(body),
+                );
+          await _recordSecurityEventSafe(
+            LanAuthAuditEvent(
+              action: result.duplicate
+                  ? 'remote_purchase_return_replayed'
+                  : 'remote_purchase_return_created',
+              targetUserId: session.user.id,
+              username: session.user.username,
+              role: session.user.role,
+              deviceId: device.id,
+              deviceName: device.name,
+              remoteAddress: _remoteAddress(request),
+              authenticatedActor: true,
+              reason: result.returnNumber,
+            ),
+          );
+          await _respond(request, HttpStatus.ok, result.toJson());
+        } on LanBusinessException catch (error) {
+          await _respond(request, error.statusCode, {
+            'code': error.code,
+            'message': error.message,
+            if (error.details.isNotEmpty) 'details': error.details,
+          });
+        } on FormatException catch (error) {
+          await _respond(request, HttpStatus.badRequest, {
+            'code': 'invalid_request',
+            'message': error.message,
+          });
+        }
+        return;
+      }
+
       if (request.method == 'POST' && path == '/v1/sales') {
         final device = _authorizeDevice(request);
         if (device == null) {
@@ -2654,6 +2979,7 @@ class LanNetworkService {
           await _respond(request, error.statusCode, {
             'code': error.code,
             'message': error.message,
+            if (error.details.isNotEmpty) 'details': error.details,
           });
         }
         return;

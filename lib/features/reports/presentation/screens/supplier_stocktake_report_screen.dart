@@ -12,6 +12,7 @@ import '../../../../core/services/currency_service.dart';
 import '../../services/supplier_stocktake_pdf_service.dart';
 import '../bloc/supplier_stocktake_report_bloc.dart';
 import '../widgets/date_range_selector.dart';
+import '../widgets/report_scrollable_center.dart';
 import '../widgets/searchable_party_selector.dart';
 
 class SupplierStocktakeReportScreen extends StatelessWidget {
@@ -145,7 +146,7 @@ class _SupplierStocktakeReportView extends StatelessWidget {
 
   Widget _buildSelectSupplierPrompt(BuildContext context) {
     final theme = Theme.of(context);
-    return Center(
+    return ReportScrollableCenter(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -664,7 +665,7 @@ class _StocktakeContentState extends State<_StocktakeContent> {
 
   Widget _buildEmptyProducts(BuildContext context) {
     final theme = Theme.of(context);
-    return Center(
+    return ReportScrollableCenter(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(

@@ -26,6 +26,7 @@ import '../services/einvoice/einvoice_dispatch_service.dart';
 import '../services/einvoice/einvoice_provider_registry.dart';
 import '../services/localization_service.dart';
 import '../services/audit_log_service.dart';
+import '../services/party_account_payment_service.dart';
 import '../services/below_cost_sale_service.dart';
 import '../services/biometric_service.dart';
 import '../services/pin_service.dart';
@@ -508,6 +509,13 @@ Future<void> init() async {
   // AP/AR balance through the cheque clearing account; clearance later
   // transfers that amount between the clearing account and the bank.
   sl.registerLazySingleton(
+    () => PartyAccountPaymentService(
+      db: sl<AppDatabase>(),
+      auditLogService: sl<AuditLogService>(),
+    ),
+  );
+
+  sl.registerLazySingleton(
     () => ChequeLifecycleService(
       db: sl<AppDatabase>(),
       confirmationDao: sl<ChequeConfirmationDao>(),
@@ -516,6 +524,7 @@ Future<void> init() async {
       saleRepository: sl<SaleRepository>(),
       journalEntryService: sl<JournalEntryService>(),
       auditLogService: sl<AuditLogService>(),
+      accountPaymentService: sl<PartyAccountPaymentService>(),
     ),
   );
 
@@ -653,8 +662,18 @@ Future<void> init() async {
       sl<ProductRepository>(),
     ),
   );
-  sl.registerFactory(() => PurchaseReturnsBloc(sl<PurchaseRepository>()));
-  sl.registerFactory(() => PurchaseReturnFormBloc(sl<PurchaseRepository>()));
+  sl.registerFactory(
+    () => PurchaseReturnsBloc(
+      sl<PurchaseRepository>(),
+      lan: sl<LanNetworkService>(),
+    ),
+  );
+  sl.registerFactory(
+    () => PurchaseReturnFormBloc(
+      sl<PurchaseRepository>(),
+      lan: sl<LanNetworkService>(),
+    ),
+  );
 
   // Sales Blocs
   sl.registerFactory(
@@ -1078,6 +1097,7 @@ Future<void> init() async {
     () => LanMasterBusinessGatewayImpl(
       database: sl<AppDatabase>(),
       sales: sl<SaleRepository>(),
+      purchases: sl<PurchaseRepository>(),
       settings: sl<AppSettingsService>(),
       shifts: sl<CashierShiftService>(),
       currencyService: sl<CurrencyService>(),
@@ -1088,6 +1108,7 @@ Future<void> init() async {
       pharmacy: sl<PharmacyDao>(),
       promotions: sl<PromotionRepository>(),
       featureGate: sl<FeatureGateService>(),
+      auditLog: sl<AuditLogService>(),
     ),
   );
   sl.registerLazySingleton(

@@ -201,6 +201,151 @@ void main() {
     );
   });
 
+  test(
+    'account cheque stays pending without payment journal or balance change',
+    () async {
+      final customerId = await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(
+              name: 'Account customer',
+              currencyId: 1,
+              balanceCents: Value(Decimal.fromInt(9000)),
+            ),
+          );
+      final party = (await service.getAccountParties()).singleWhere(
+        (row) => row.partyType == 'customer' && row.partyId == customerId,
+      );
+
+      final id = await service.createAccountCheque(
+        party: party,
+        direction: ChequeDirectionValue.incoming,
+        amountCents: 4000,
+        chequeNumber: 'ACCOUNT-PENDING-1',
+        issueDate: DateTime(2026, 9, 10),
+        dueDate: DateTime(2026, 9, 20),
+      );
+
+      final cheque = await instruments.getById(id);
+      expect(cheque?.sourceTable, ChequeSourceTables.customerAccount);
+      expect(cheque?.sourceId, customerId);
+      expect(cheque?.settlementPaymentId, isNull);
+      expect(cheque?.status, ChequeInstrumentStatus.received);
+      final customer = await (db.select(
+        db.customers,
+      )..where((row) => row.id.equals(customerId))).getSingle();
+      expect(customer.balanceCents, Decimal.fromInt(9000));
+
+      for (final table in [
+        'customer_transactions',
+        'journal_entries',
+        'cheque_confirmations',
+      ]) {
+        final count = await db
+            .customSelect('SELECT COUNT(*) AS c FROM $table')
+            .getSingle();
+        expect(count.read<int>('c'), 0, reason: table);
+      }
+      verifyNever(
+        () => sales.recordPayment(
+          saleId: any(named: 'saleId'),
+          amountCents: any(named: 'amountCents'),
+          currencyId: any(named: 'currencyId'),
+          paymentMethod: any(named: 'paymentMethod'),
+          reference: any(named: 'reference'),
+          notes: any(named: 'notes'),
+          paymentDate: any(named: 'paymentDate'),
+        ),
+      );
+    },
+  );
+
+  test('account cheque may exceed the balance and remains pending', () async {
+    final supplierId = await db
+        .into(db.suppliers)
+        .insert(
+          SuppliersCompanion.insert(
+            name: 'Account supplier',
+            currencyId: 1,
+            balanceCents: Value(Decimal.fromInt(10000)),
+          ),
+        );
+    final party = (await service.getAccountParties()).singleWhere(
+      (row) => row.partyType == 'supplier' && row.partyId == supplierId,
+    );
+    await service.createAccountCheque(
+      party: party,
+      direction: ChequeDirectionValue.outgoing,
+      amountCents: 7000,
+      chequeNumber: 'ACCOUNT-RESERVE-1',
+      issueDate: DateTime(2026, 9, 10),
+      dueDate: DateTime(2026, 9, 20),
+    );
+
+    await service.createAccountCheque(
+      party: party,
+      direction: ChequeDirectionValue.outgoing,
+      amountCents: 4000,
+      chequeNumber: 'ACCOUNT-RESERVE-2',
+      issueDate: DateTime(2026, 9, 10),
+      dueDate: DateTime(2026, 9, 20),
+    );
+    final supplier = await (db.select(
+      db.suppliers,
+    )..where((row) => row.id.equals(supplierId))).getSingle();
+    expect(supplier.balanceCents, Decimal.fromInt(10000));
+    final payments = await db.select(db.purchasePayments).get();
+    final journals = await db.select(db.journalEntries).get();
+    expect(payments, isEmpty);
+    expect(journals, isEmpty);
+  });
+
+  test(
+    'customer receipt and supplier payment are allowed at zero balance',
+    () async {
+      final customerId = await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(name: 'Advance customer', currencyId: 1),
+          );
+      final supplierId = await db
+          .into(db.suppliers)
+          .insert(
+            SuppliersCompanion.insert(name: 'Advance supplier', currencyId: 1),
+          );
+      final parties = await service.getAccountParties();
+      final customer = parties.singleWhere(
+        (row) => row.partyType == 'customer' && row.partyId == customerId,
+      );
+      final supplier = parties.singleWhere(
+        (row) => row.partyType == 'supplier' && row.partyId == supplierId,
+      );
+
+      await service.createAccountCheque(
+        party: customer,
+        direction: ChequeDirectionValue.incoming,
+        amountCents: 15000,
+        chequeNumber: 'ZERO-CUSTOMER',
+        issueDate: DateTime(2026, 9, 10),
+        dueDate: DateTime(2026, 9, 20),
+      );
+      await service.createAccountCheque(
+        party: supplier,
+        direction: ChequeDirectionValue.outgoing,
+        amountCents: 12000,
+        chequeNumber: 'ZERO-SUPPLIER',
+        issueDate: DateTime(2026, 9, 10),
+        dueDate: DateTime(2026, 9, 20),
+      );
+
+      expect(await db.select(db.chequeInstruments).get(), hasLength(2));
+      expect(await db.select(db.customerTransactions).get(), isEmpty);
+      expect(await db.select(db.supplierTransactions).get(), isEmpty);
+      expect(await db.select(db.journalEntries).get(), isEmpty);
+      expect(await db.select(db.partyAccountPayments).get(), isEmpty);
+    },
+  );
+
   test('same cheque number is rejected for the same bank account', () async {
     when(() => sales.getSaleById(10)).thenAnswer((_) async => sale());
     await instruments.create(

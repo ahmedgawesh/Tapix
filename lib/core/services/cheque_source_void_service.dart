@@ -21,7 +21,9 @@ class ChequeSourceVoidService {
     required String reason,
     int? userId,
   }) async {
-    if (!ChequeSourceTables.all.contains(sourceTable)) return;
+    // Account-level cheques have no source document to void. Keep this
+    // service strictly scoped to the six existing invoice/return sources.
+    if (!ChequeSourceTables.documentSources.contains(sourceTable)) return;
 
     await db.transaction(() async {
       final dao = ChequeInstrumentDao(db);

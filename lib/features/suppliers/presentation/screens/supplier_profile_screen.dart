@@ -18,6 +18,8 @@ import '../../../customers/presentation/widgets/edit_transaction_dialog.dart';
 import '../../../shared/widgets/unified_return_search_sheet.dart';
 import '../../../../core/services/unified_return_service.dart';
 import '../../../cheques/presentation/widgets/party_cheque_alerts_section.dart';
+import '../../../cheques/presentation/widgets/account_cheque_dialog.dart';
+import '../../../cheques/presentation/widgets/party_unapplied_balances_section.dart';
 
 /// Supplier profile screen with balance, actions, and transactions
 class SupplierProfileScreen extends StatefulWidget {
@@ -180,9 +182,29 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                           _showPaymentDialog(context, supplier),
                       onSeasonalDiscountPressed: () =>
                           _showSeasonalDiscountDialog(context, supplier),
+                      onAccountChequePressed: () async {
+                        final saved = await showAccountChequeDialog(
+                          context,
+                          initialPartyType: 'supplier',
+                          initialPartyId: supplier.id,
+                        );
+                        if (saved && context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'cheques.account_cheque_created'.tr(),
+                              ),
+                            ),
+                          );
+                        }
+                      },
                     ),
                     const SizedBox(height: 16),
                     PartyChequeAlertsSection(
+                      partyType: 'supplier',
+                      partyId: widget.supplierId,
+                    ),
+                    PartyUnappliedBalancesSection(
                       partyType: 'supplier',
                       partyId: widget.supplierId,
                     ),
@@ -945,11 +967,13 @@ class _QuickActionsSection extends StatelessWidget {
   final Supplier supplier;
   final VoidCallback onPaymentPressed;
   final VoidCallback onSeasonalDiscountPressed;
+  final VoidCallback onAccountChequePressed;
 
   const _QuickActionsSection({
     required this.supplier,
     required this.onPaymentPressed,
     required this.onSeasonalDiscountPressed,
+    required this.onAccountChequePressed,
   });
 
   @override
@@ -994,6 +1018,16 @@ class _QuickActionsSection extends StatelessWidget {
       },
     );
 
+    final accountChequeBtn = _QuickActionButton(
+      icon: LucideIcons.filePlus2,
+      label: 'cheques.account_cheque_short'.tr(),
+      color: isDark ? const Color(0xFFA5D6A7) : Colors.green.shade700,
+      backgroundColor: isDark
+          ? const Color(0xFF0D1E12)
+          : Colors.green.withValues(alpha: 0.10),
+      onTap: onAccountChequePressed,
+    );
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 520;
@@ -1006,6 +1040,8 @@ class _QuickActionsSection extends StatelessWidget {
               Expanded(child: purchaseBtn),
               const SizedBox(width: 12),
               Expanded(child: returnBtn),
+              const SizedBox(width: 12),
+              Expanded(child: accountChequeBtn),
             ],
           );
         }
@@ -1020,7 +1056,13 @@ class _QuickActionsSection extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            returnBtn,
+            Row(
+              children: [
+                Expanded(child: returnBtn),
+                const SizedBox(width: 12),
+                Expanded(child: accountChequeBtn),
+              ],
+            ),
           ],
         );
       },

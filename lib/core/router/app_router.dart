@@ -91,6 +91,7 @@ import '../../features/reports/presentation/screens/customer_reports_screen.dart
 import '../../features/reports/presentation/screens/customer_sales_returns_reports_screen.dart';
 import '../../features/reports/presentation/screens/top_customers_screen.dart';
 import '../../features/reports/presentation/screens/customer_payment_reports_screen.dart';
+import '../../features/reports/presentation/screens/unapplied_advances_report_screen.dart';
 import '../../features/reports/presentation/screens/customer_sales_report_screen.dart';
 import '../../features/reports/presentation/screens/customer_aging_report_screen.dart';
 import '../../features/reports/presentation/screens/customer_statement_report_screen.dart';
@@ -230,7 +231,10 @@ class AppRouter {
         // path has been migrated to the authenticated master API. This allow
         // list prevents an unfinished module from reading or writing the
         // client's unrelated local SQLite database.
-        if (sl<LanNetworkService>().snapshot.mode == LanMode.client) {
+        final lan = sl<LanNetworkService>();
+        final isRemoteClient = lan.snapshot.mode == LanMode.client;
+        var isRemotePurchaseReturnRoute = false;
+        if (isRemoteClient) {
           final isAuthEntry =
               currentPath == '/login' ||
               currentPath == '/setup' ||
@@ -247,6 +251,28 @@ class AppRouter {
           final isRemoteReturnDetail = RegExp(
             r'^/sales/returns/(?:adj/)?\d+$',
           ).hasMatch(currentPath);
+          final isRemotePurchaseReturnList =
+              currentPath == '/purchases/returns';
+          final isRemotePurchaseReturnForm =
+              currentPath == '/purchases/returns/new' ||
+              currentPath == '/purchases/returns/adjustment';
+          final isRemotePurchaseReturnDetail = RegExp(
+            r'^/purchases/returns/(?:adj/)?\d+$',
+          ).hasMatch(currentPath);
+          isRemotePurchaseReturnRoute =
+              isRemotePurchaseReturnList ||
+              isRemotePurchaseReturnForm ||
+              isRemotePurchaseReturnDetail;
+          if (isRemotePurchaseReturnRoute) {
+            final permissions = lan.remoteUser?.permissions ?? const <String>[];
+            final canView =
+                permissions.contains(Permissions.viewPurchases) ||
+                permissions.contains(Permissions.managePurchases);
+            final canManage = permissions.contains(Permissions.managePurchases);
+            if (!canView || (isRemotePurchaseReturnForm && !canManage)) {
+              return '/access-denied';
+            }
+          }
           final isRemoteReady =
               currentPath == '/dashboard' ||
               currentPath == '/client-session' ||
@@ -258,6 +284,7 @@ class AppRouter {
               isRemoteReturnForm ||
               isRemoteSaleDetail ||
               isRemoteReturnDetail ||
+              isRemotePurchaseReturnRoute ||
               currentPath == '/access-denied';
           if (!isRemoteReady) return '/dashboard';
           if (isRemoteSaleForm && user.role == UserRole.cashier) {
@@ -288,7 +315,9 @@ class AppRouter {
           return (from != null && from.isNotEmpty) ? from : '/dashboard';
         }
 
-        if (ProRoutePolicy.requiresPro(currentPath) && !isPro) {
+        if (ProRoutePolicy.requiresPro(currentPath) &&
+            !isPro &&
+            !isRemotePurchaseReturnRoute) {
           final encoded = Uri.encodeComponent(currentPath);
           return '/upgrade?from=$encoded';
         }
@@ -706,6 +735,13 @@ class AppRouter {
                     state.pathParameters['returnId'] ?? '',
                   );
                   if (returnId == null) return const PurchaseReturnsScreen();
+                  final lan = sl<LanNetworkService>();
+                  if (lan.snapshot.mode == LanMode.client) {
+                    return PurchaseReturnDetailScreen(
+                      returnId: returnId,
+                      adjustment: true,
+                    );
+                  }
                   return PurchaseAdjReturnDetailScreen(returnId: returnId);
                 },
               ),
@@ -838,6 +874,10 @@ class AppRouter {
           GoRoute(
             path: 'customer-payments',
             builder: (context, state) => const CustomerPaymentReportsScreen(),
+          ),
+          GoRoute(
+            path: 'unapplied-advances',
+            builder: (context, state) => const UnappliedAdvancesReportScreen(),
           ),
           GoRoute(
             path: 'customer-sales',
@@ -1348,9 +1388,7 @@ class AppRouter {
       ),
       GoRoute(
         path: '/access-denied',
-        builder: (context, state) => const AccessDeniedScreen(
-          message: 'You do not have permission to access this page.',
-        ),
+        builder: (context, state) => const AccessDeniedScreen(),
       ),
       GoRoute(
         path: '/upgrade',

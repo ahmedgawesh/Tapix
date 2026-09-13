@@ -95,6 +95,7 @@ class AccountingRepository {
     'cheque_clearance',
     'cheque_return_deferral',
     'cheque_return_settlement',
+    'account_cheque_settlement',
     'cheque_dishonour',
     'cheque_dishonour_resolution',
     'cheque_reinstatement',

@@ -98,22 +98,25 @@ class CustomerPaymentReportsData {
       transactionCount: transactionCount ?? this.transactionCount,
       uniqueCustomerCount: uniqueCustomerCount ?? this.uniqueCustomerCount,
       dateRange: dateRange ?? this.dateRange,
-      methodFilter: clearMethodFilter ? null : (methodFilter ?? this.methodFilter),
+      methodFilter: clearMethodFilter
+          ? null
+          : (methodFilter ?? this.methodFilter),
     );
   }
 }
 
 // ==================== BLOC ====================
 
-class CustomerPaymentReportsBloc extends RealtimeBloc<
-    CustomerPaymentReportsData, CustomerPaymentReportsEvent> {
+class CustomerPaymentReportsBloc
+    extends
+        RealtimeBloc<CustomerPaymentReportsData, CustomerPaymentReportsEvent> {
   final AppDatabase _db;
   ReportDateRange _dateRange;
   String? _methodFilter;
 
   CustomerPaymentReportsBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -184,10 +187,14 @@ class CustomerPaymentReportsBloc extends RealtimeBloc<
 
     // Query payment transactions grouped by description (which contains payment method info)
     // transaction_type for payments is typically 'payment', 'receipt', or 'settlement'
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
-        COALESCE(ct.reference_type, ct.transaction_type) AS payment_method,
+        CASE
+          WHEN ct.reference_type = 'cheque_instrument' THEN 'cheque'
+          ELSE COALESCE(ct.reference_type, ct.transaction_type)
+        END AS payment_method,
         COALESCE(SUM(ABS(ct.amount_cents)), 0) AS total_amount_cents,
         COUNT(*) AS transaction_count
       FROM customer_transactions ct
@@ -197,12 +204,13 @@ class CustomerPaymentReportsBloc extends RealtimeBloc<
       GROUP BY payment_method
       ORDER BY total_amount_cents DESC
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.customerTransactions},
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {_db.customerTransactions},
+        )
+        .get();
 
     // Calculate grand total for percentage
     int grandTotal = 0;
@@ -237,12 +245,15 @@ class CustomerPaymentReportsBloc extends RealtimeBloc<
 
     if (_methodFilter != null) {
       whereClause +=
-          ' AND COALESCE(ct.reference_type, ct.transaction_type) = ?';
+          " AND CASE WHEN ct.reference_type = 'cheque_instrument' "
+          "THEN 'cheque' ELSE COALESCE(ct.reference_type, "
+          'ct.transaction_type) END = ?';
       variables.add(Variable.withString(_methodFilter!));
     }
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         ct.id AS transaction_id,
         ct.customer_id AS customer_id,
@@ -258,9 +269,10 @@ class CustomerPaymentReportsBloc extends RealtimeBloc<
       WHERE $whereClause
       ORDER BY ct.transaction_date DESC, ct.id DESC
       ''',
-      variables: variables,
-      readsFrom: {_db.customerTransactions, _db.customers},
-    ).get();
+          variables: variables,
+          readsFrom: {_db.customerTransactions, _db.customers},
+        )
+        .get();
 
     return rows.map((row) {
       return CustomerPaymentDetail(
@@ -269,8 +281,7 @@ class CustomerPaymentReportsBloc extends RealtimeBloc<
         customerName: row.read<String>('customer_name'),
         transactionType: row.read<String>('transaction_type'),
         amountCents: row.read<int>('amount_cents'),
-        transactionDate:
-            DateTime.parse(row.read<String>('transaction_date')),
+        transactionDate: DateTime.parse(row.read<String>('transaction_date')),
         description: row.readNullable<String>('description'),
         referenceType: row.readNullable<String>('reference_type'),
         referenceId: row.readNullable<int>('reference_id'),
