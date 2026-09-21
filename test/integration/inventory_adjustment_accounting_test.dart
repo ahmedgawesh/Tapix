@@ -32,32 +32,38 @@ void main() {
   late int variantId;
 
   Future<int> accountIdByCode(String code) async {
-    final row = await db.customSelect(
-      'SELECT id FROM accounts WHERE account_code = ?',
-      variables: [Variable.withString(code)],
-    ).getSingle();
+    final row = await db
+        .customSelect(
+          'SELECT id FROM accounts WHERE account_code = ?',
+          variables: [Variable.withString(code)],
+        )
+        .getSingle();
     return row.read<int>('id');
   }
 
   Future<List<({int accountId, int debitCents, int creditCents})>>
-      linesForAdjustment(int adjustmentId) async {
-    final rows = await db.customSelect(
-      'SELECT jel.account_id, jel.debit_cents, jel.credit_cents '
-      'FROM journal_entry_lines jel '
-      'INNER JOIN journal_entries je ON je.id = jel.journal_entry_id '
-      'WHERE je.source_table = ? AND je.source_id = ? AND je.status = ?',
-      variables: [
-        Variable.withString('inventory_adjustments'),
-        Variable.withInt(adjustmentId),
-        Variable.withString('posted'),
-      ],
-    ).get();
+  linesForAdjustment(int adjustmentId) async {
+    final rows = await db
+        .customSelect(
+          'SELECT jel.account_id, jel.debit_cents, jel.credit_cents '
+          'FROM journal_entry_lines jel '
+          'INNER JOIN journal_entries je ON je.id = jel.journal_entry_id '
+          'WHERE je.source_table = ? AND je.source_id = ? AND je.status = ?',
+          variables: [
+            Variable.withString('inventory_adjustments'),
+            Variable.withInt(adjustmentId),
+            Variable.withString('posted'),
+          ],
+        )
+        .get();
     return rows
-        .map((r) => (
-              accountId: r.read<int>('account_id'),
-              debitCents: r.read<int>('debit_cents'),
-              creditCents: r.read<int>('credit_cents'),
-            ))
+        .map(
+          (r) => (
+            accountId: r.read<int>('account_id'),
+            debitCents: r.read<int>('debit_cents'),
+            creditCents: r.read<int>('credit_cents'),
+          ),
+        )
         .toList();
   }
 
@@ -66,11 +72,7 @@ void main() {
     adjDao = InventoryAdjustmentDao(db);
     final accountingRepo = AccountingRepository(db);
     journal = JournalEntryService(accountingRepo);
-    service = InventoryAdjustmentService(
-      db: db,
-      dao: adjDao,
-      journal: journal,
-    );
+    service = InventoryAdjustmentService(db: db, dao: adjDao, journal: journal);
 
     // Force DB init (seeds accounts, currencies)
     await db.customSelect('SELECT 1').get();
@@ -83,34 +85,170 @@ void main() {
     );
 
     // Seed product + variant (cost = $30, stock = 100 units)
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     currencyId = usd.id;
 
-    productId = await db.into(db.products).insert(
-      ProductsCompanion.insert(
-        sku: const Value<String?>('INV-ADJ-001'),
-        name: 'Inventory Adj Test Product',
-        costCents: Decimal.fromInt(3000),
-        priceCents: Decimal.fromInt(5000),
-        currencyId: Value(currencyId),
-        stockQuantity: const Value(100),
-      ),
-    );
+    productId = await db
+        .into(db.products)
+        .insert(
+          ProductsCompanion.insert(
+            sku: const Value<String?>('INV-ADJ-001'),
+            name: 'Inventory Adj Test Product',
+            costCents: Decimal.fromInt(3000),
+            priceCents: Decimal.fromInt(5000),
+            currencyId: Value(currencyId),
+            stockQuantity: const Value(100),
+          ),
+        );
 
-    variantId = await db.into(db.productVariants).insert(
-      ProductVariantsCompanion.insert(
-        productId: productId,
-        stockQuantity: const Value(100),
-        costCents: Decimal.fromInt(3000),
-        priceCents: Decimal.fromInt(5000),
-      ),
-    );
+    variantId = await db
+        .into(db.productVariants)
+        .insert(
+          ProductVariantsCompanion.insert(
+            productId: productId,
+            stockQuantity: const Value(100),
+            costCents: Decimal.fromInt(3000),
+            priceCents: Decimal.fromInt(5000),
+          ),
+        );
   });
 
   tearDown(() async => db.close());
 
+  Future<void> seedFifoLayers() async {
+    await db.customStatement(
+      "UPDATE products SET costing_method = 'fifo' WHERE id = ?",
+      [productId],
+    );
+    for (final layer in [(2, 100), (98, 300)]) {
+      await db
+          .into(db.productBatches)
+          .insert(
+            ProductBatchesCompanion.insert(
+              productId: productId,
+              variantId: Value(variantId),
+              batchNumber: 'LAYER-${layer.$2}',
+              source: const Value('opening'),
+              receivedQuantity: layer.$1,
+              remainingQuantity: layer.$1,
+              unitCostCents: Decimal.fromInt(layer.$2),
+              receivedDate: Value(DateTime(2026, 1, layer.$2 == 100 ? 1 : 2)),
+            ),
+          );
+    }
+  }
+
+  for (final explicitVariant in [false, true]) {
+    test(
+      'FIFO shrinkage posts consumed layer costs: variant=$explicitVariant',
+      () async {
+        await seedFifoLayers();
+        if (explicitVariant) {
+          await db.customStatement(
+            'UPDATE product_variants SET cost_cents = 0 WHERE id = ?',
+            [variantId],
+          );
+        }
+        final result = await service.adjust(
+          productId: productId,
+          variantId: explicitVariant ? variantId : null,
+          type: InventoryAdjustmentType.shrinkage,
+          quantityDelta: -3,
+          reason: 'Counted damaged stock',
+          currencyId: currencyId,
+          userId: 0,
+        );
+        // Two from the oldest layer at100, then one at300; display cost is3000.
+        expect(result.totalValueCents, 500);
+        final lines = await linesForAdjustment(result.adjustmentId);
+        expect(lines.fold<int>(0, (s, l) => s + l.debitCents), 500);
+        expect(lines.fold<int>(0, (s, l) => s + l.creditCents), 500);
+        final row = (await adjDao.getById(result.adjustmentId))!;
+        expect(row.totalValueCents, Decimal.fromInt(500));
+        expect(row.costingMethod, 'fifo');
+        expect(row.unitCostCents, Decimal.fromInt(167));
+        expect(
+          (await db.select(db.productVariants).getSingle()).stockQuantity,
+          97,
+        );
+        final layers = await (db.select(
+          db.productBatches,
+        )..orderBy([(b) => OrderingTerm.asc(b.id)])).get();
+        expect(layers.map((l) => l.remainingQuantity), [0, 97]);
+      },
+    );
+  }
+
+  test('FIFO journal failure rolls back stock, layers and adjustment', () async {
+    await seedFifoLayers();
+    await db.customStatement(
+      "CREATE TRIGGER reject_fifo_journal BEFORE INSERT ON journal_entries BEGIN SELECT RAISE(ABORT, 'Injected failure'); END",
+    );
+    await expectLater(
+      service.adjust(
+        productId: productId,
+        variantId: variantId,
+        type: InventoryAdjustmentType.shrinkage,
+        quantityDelta: -3,
+        reason: 'Rollback test',
+        currencyId: currencyId,
+        userId: 0,
+      ),
+      throwsA(anything),
+    );
+    expect(
+      (await db.select(db.productVariants).getSingle()).stockQuantity,
+      100,
+    );
+    expect(await db.select(db.inventoryAdjustments).get(), isEmpty);
+    expect(await db.select(db.batchConsumptions).get(), isEmpty);
+    final layers = await (db.select(
+      db.productBatches,
+    )..orderBy([(b) => OrderingTerm.asc(b.id)])).get();
+    expect(layers.map((l) => l.remainingQuantity), [2, 98]);
+  });
+
+  test(
+    'FIFO revaluation uses real layers and preserves their historical costs',
+    () async {
+      await seedFifoLayers();
+      final result = await service.adjust(
+        productId: productId,
+        variantId: variantId,
+        type: InventoryAdjustmentType.revaluation,
+        newUnitCostCents: 4000,
+        reason: 'Revalue remaining layers',
+        currencyId: currencyId,
+        userId: 0,
+      );
+      expect(result.totalValueCents, 370400); // 400000 - (2*100 + 98*300)
+      final original =
+          await (db.select(db.productBatches)
+                ..where((b) => b.source.equals('opening'))
+                ..orderBy([(b) => OrderingTerm.asc(b.id)]))
+              .get();
+      expect(original.map((b) => b.unitCostCents.toBigInt().toInt()), [
+        100,
+        300,
+      ]);
+      expect(original.map((b) => b.remainingQuantity), [0, 0]);
+      final layers = await db.select(db.inventoryRevaluationLayers).get();
+      expect(layers.length, 2);
+      expect(
+        layers.fold<int>(
+          0,
+          (sum, r) => sum + r.newValueCents - r.previousValueCents,
+        ),
+        370400,
+      );
+      expect(
+        (await db.select(db.productVariants).getSingle()).stockQuantity,
+        100,
+      );
+    },
+  );
   group('Chart of Accounts', () {
     test('seeds 4200, 5800, 5900 on init', () async {
       final gain = await accountIdByCode('4200');
@@ -123,50 +261,50 @@ void main() {
   });
 
   group('Shrinkage', () {
-    test('balanced JE Dr 5800 / Cr 1200, stock decreased, row linked',
-        () async {
-      final result = await service.adjust(
-        productId: productId,
-        variantId: variantId,
-        type: InventoryAdjustmentType.shrinkage,
-        quantityDelta: -5,
-        reason: 'Damaged during shelving',
-        currencyId: currencyId,
-        userId: 0,
-      );
+    test(
+      'balanced JE Dr 5800 / Cr 1200, stock decreased, row linked',
+      () async {
+        final result = await service.adjust(
+          productId: productId,
+          variantId: variantId,
+          type: InventoryAdjustmentType.shrinkage,
+          quantityDelta: -5,
+          reason: 'Damaged during shelving',
+          currencyId: currencyId,
+          userId: 0,
+        );
 
-      // Value = 5 × $30 = $150
-      expect(result.totalValueCents, equals(15000));
+        // Value = 5 × $30 = $150
+        expect(result.totalValueCents, equals(15000));
 
-      final lines = await linesForAdjustment(result.adjustmentId);
-      expect(lines.length, equals(2));
-      final totalD = lines.fold<int>(0, (s, l) => s + l.debitCents);
-      final totalC = lines.fold<int>(0, (s, l) => s + l.creditCents);
-      expect(totalD, equals(totalC), reason: 'must balance');
-      expect(totalD, equals(15000));
+        final lines = await linesForAdjustment(result.adjustmentId);
+        expect(lines.length, equals(2));
+        final totalD = lines.fold<int>(0, (s, l) => s + l.debitCents);
+        final totalC = lines.fold<int>(0, (s, l) => s + l.creditCents);
+        expect(totalD, equals(totalC), reason: 'must balance');
+        expect(totalD, equals(15000));
 
-      final shrinkageId = await accountIdByCode('5800');
-      final inventoryId = await accountIdByCode('1200');
-      final debit =
-          lines.firstWhere((l) => l.debitCents > 0);
-      final credit =
-          lines.firstWhere((l) => l.creditCents > 0);
-      expect(debit.accountId, equals(shrinkageId));
-      expect(credit.accountId, equals(inventoryId));
+        final shrinkageId = await accountIdByCode('5800');
+        final inventoryId = await accountIdByCode('1200');
+        final debit = lines.firstWhere((l) => l.debitCents > 0);
+        final credit = lines.firstWhere((l) => l.creditCents > 0);
+        expect(debit.accountId, equals(shrinkageId));
+        expect(credit.accountId, equals(inventoryId));
 
-      // Stock decreased from 100 → 95 on the variant
-      final v = await (db.select(db.productVariants)
-            ..where((x) => x.id.equals(variantId)))
-          .getSingle();
-      expect(v.stockQuantity, equals(95));
+        // Stock decreased from 100 → 95 on the variant
+        final v = await (db.select(
+          db.productVariants,
+        )..where((x) => x.id.equals(variantId))).getSingle();
+        expect(v.stockQuantity, equals(95));
 
-      // Adjustment row links back to the JE
-      final row = await adjDao.getById(result.adjustmentId);
-      expect(row, isNotNull);
-      expect(row!.journalEntryId, equals(result.journalEntryId));
-      expect(row.costingMethod, equals('weighted_average'));
-      expect(row.adjustmentType, equals('shrinkage'));
-    });
+        // Adjustment row links back to the JE
+        final row = await adjDao.getById(result.adjustmentId);
+        expect(row, isNotNull);
+        expect(row!.journalEntryId, equals(result.journalEntryId));
+        expect(row.costingMethod, equals('weighted_average'));
+        expect(row.adjustmentType, equals('shrinkage'));
+      },
+    );
 
     test('rejects empty / whitespace reason without touching DB', () async {
       expect(
@@ -241,9 +379,9 @@ void main() {
       expect(debit.accountId, equals(inventoryId));
       expect(credit.accountId, equals(gainId));
 
-      final v = await (db.select(db.productVariants)
-            ..where((x) => x.id.equals(variantId)))
-          .getSingle();
+      final v = await (db.select(
+        db.productVariants,
+      )..where((x) => x.id.equals(variantId))).getSingle();
       expect(v.stockQuantity, equals(107));
     });
 
@@ -263,40 +401,42 @@ void main() {
   });
 
   group('Revaluation', () {
-    test('write-up: Dr 1200 / Cr 5900, cost updated, stock unchanged',
-        () async {
-      // Cost $30 → $40; on-hand 100 ⇒ delta = +$10 × 100 = +$1000
-      final result = await service.adjust(
-        productId: productId,
-        variantId: variantId,
-        type: InventoryAdjustmentType.revaluation,
-        quantityDelta: 0,
-        newUnitCostCents: 4000,
-        reason: 'Supplier price correction (upward)',
-        currencyId: currencyId,
-        userId: 0,
-      );
+    test(
+      'write-up: Dr 1200 / Cr 5900, cost updated, stock unchanged',
+      () async {
+        // Cost $30 → $40; on-hand 100 ⇒ delta = +$10 × 100 = +$1000
+        final result = await service.adjust(
+          productId: productId,
+          variantId: variantId,
+          type: InventoryAdjustmentType.revaluation,
+          quantityDelta: 0,
+          newUnitCostCents: 4000,
+          reason: 'Supplier price correction (upward)',
+          currencyId: currencyId,
+          userId: 0,
+        );
 
-      expect(result.totalValueCents, equals(100000));
+        expect(result.totalValueCents, equals(100000));
 
-      final lines = await linesForAdjustment(result.adjustmentId);
-      expect(lines.length, equals(2));
-      final inventoryId = await accountIdByCode('1200');
-      final revalId = await accountIdByCode('5900');
-      final debit = lines.firstWhere((l) => l.debitCents > 0);
-      final credit = lines.firstWhere((l) => l.creditCents > 0);
-      expect(debit.accountId, equals(inventoryId));
-      expect(credit.accountId, equals(revalId));
-      expect(debit.debitCents, equals(100000));
+        final lines = await linesForAdjustment(result.adjustmentId);
+        expect(lines.length, equals(2));
+        final inventoryId = await accountIdByCode('1200');
+        final revalId = await accountIdByCode('5900');
+        final debit = lines.firstWhere((l) => l.debitCents > 0);
+        final credit = lines.firstWhere((l) => l.creditCents > 0);
+        expect(debit.accountId, equals(inventoryId));
+        expect(credit.accountId, equals(revalId));
+        expect(debit.debitCents, equals(100000));
 
-      // Variant cost updated, stock unchanged
-      final v = await (db.select(db.productVariants)
-            ..where((x) => x.id.equals(variantId)))
-          .getSingle();
-      expect(v.stockQuantity, equals(100));
-      expect(v.costCents, equals(Decimal.fromInt(4000)));
-      expect(v.previousCostCents, equals(Decimal.fromInt(3000)));
-    });
+        // Variant cost updated, stock unchanged
+        final v = await (db.select(
+          db.productVariants,
+        )..where((x) => x.id.equals(variantId))).getSingle();
+        expect(v.stockQuantity, equals(100));
+        expect(v.costCents, equals(Decimal.fromInt(4000)));
+        expect(v.previousCostCents, equals(Decimal.fromInt(3000)));
+      },
+    );
 
     test('write-down: Dr 5900 / Cr 1200', () async {
       // $30 → $20 on 100 units ⇒ delta = -$10 × 100 = -$1000 → |1000|
@@ -378,7 +518,9 @@ void main() {
     setUp(() async {
       // Product with a single Small-size variant (no strict-default variant
       // i.e. color_id IS NULL AND size_id IS NULL does NOT exist).
-      dimProductId = await db.into(db.products).insert(
+      dimProductId = await db
+          .into(db.products)
+          .insert(
             ProductsCompanion.insert(
               sku: const Value<String?>('INV-DIM-001'),
               name: 'Skirt (Small only)',
@@ -389,10 +531,12 @@ void main() {
               hasVariants: const Value(true),
             ),
           );
-      sizeId = await db.into(db.sizes).insert(
-            SizesCompanion.insert(name: 'Small'),
-          );
-      smallVariantId = await db.into(db.productVariants).insert(
+      sizeId = await db
+          .into(db.sizes)
+          .insert(SizesCompanion.insert(name: 'Small'));
+      smallVariantId = await db
+          .into(db.productVariants)
+          .insert(
             ProductVariantsCompanion.insert(
               productId: dimProductId,
               sizeId: Value(sizeId),
@@ -403,8 +547,7 @@ void main() {
           );
     });
 
-    test(
-        'variantId=null + no strict-default variant → rollback, NO stock '
+    test('variantId=null + no strict-default variant → rollback, NO stock '
         'change, NO journal entry (prevents -150 silent loss)', () async {
       expect(
         () => service.adjust(
@@ -420,18 +563,24 @@ void main() {
       );
 
       // Stock on the variant is untouched: still 100 (was NOT decremented).
-      final v = await (db.select(db.productVariants)
-            ..where((x) => x.id.equals(smallVariantId)))
-          .getSingle();
-      expect(v.stockQuantity, equals(100),
-          reason: 'variant row must be untouched after rollback');
+      final v = await (db.select(
+        db.productVariants,
+      )..where((x) => x.id.equals(smallVariantId))).getSingle();
+      expect(
+        v.stockQuantity,
+        equals(100),
+        reason: 'variant row must be untouched after rollback',
+      );
 
       // Stock on the product is untouched: still 100.
-      final p = await (db.select(db.products)
-            ..where((x) => x.id.equals(dimProductId)))
-          .getSingle();
-      expect(p.stockQuantity, equals(100),
-          reason: 'products.stock_quantity must be untouched after rollback');
+      final p = await (db.select(
+        db.products,
+      )..where((x) => x.id.equals(dimProductId))).getSingle();
+      expect(
+        p.stockQuantity,
+        equals(100),
+        reason: 'products.stock_quantity must be untouched after rollback',
+      );
 
       // No inventory_adjustments row was committed.
       final adjCount = await db
@@ -454,38 +603,43 @@ void main() {
             ],
           )
           .getSingle();
-      expect(jeCount.read<int>('cnt'), equals(0),
-          reason: 'no orphan posted JE (would drift assets negative)');
-    });
-
-    test('variantId=smallVariantId (correct call) → balanced, stock 100→95',
-        () async {
-      final result = await service.adjust(
-        productId: dimProductId,
-        variantId: smallVariantId,
-        type: InventoryAdjustmentType.shrinkage,
-        quantityDelta: -5,
-        reason: 'Damaged during shelving',
-        currencyId: currencyId,
-        userId: 0,
+      expect(
+        jeCount.read<int>('cnt'),
+        equals(0),
+        reason: 'no orphan posted JE (would drift assets negative)',
       );
-
-      final v = await (db.select(db.productVariants)
-            ..where((x) => x.id.equals(smallVariantId)))
-          .getSingle();
-      expect(v.stockQuantity, equals(95));
-
-      final p = await (db.select(db.products)
-            ..where((x) => x.id.equals(dimProductId)))
-          .getSingle();
-      // syncProductStockFromVariants must mirror SUM(variants).
-      expect(p.stockQuantity, equals(95));
-
-      final lines = await linesForAdjustment(result.adjustmentId);
-      final totalD = lines.fold<int>(0, (s, l) => s + l.debitCents);
-      final totalC = lines.fold<int>(0, (s, l) => s + l.creditCents);
-      expect(totalD, equals(totalC));
-      expect(totalD, equals(15000));
     });
+
+    test(
+      'variantId=smallVariantId (correct call) → balanced, stock 100→95',
+      () async {
+        final result = await service.adjust(
+          productId: dimProductId,
+          variantId: smallVariantId,
+          type: InventoryAdjustmentType.shrinkage,
+          quantityDelta: -5,
+          reason: 'Damaged during shelving',
+          currencyId: currencyId,
+          userId: 0,
+        );
+
+        final v = await (db.select(
+          db.productVariants,
+        )..where((x) => x.id.equals(smallVariantId))).getSingle();
+        expect(v.stockQuantity, equals(95));
+
+        final p = await (db.select(
+          db.products,
+        )..where((x) => x.id.equals(dimProductId))).getSingle();
+        // syncProductStockFromVariants must mirror SUM(variants).
+        expect(p.stockQuantity, equals(95));
+
+        final lines = await linesForAdjustment(result.adjustmentId);
+        final totalD = lines.fold<int>(0, (s, l) => s + l.debitCents);
+        final totalC = lines.fold<int>(0, (s, l) => s + l.creditCents);
+        expect(totalD, equals(totalC));
+        expect(totalD, equals(15000));
+      },
+    );
   });
 }

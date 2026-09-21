@@ -3,8 +3,9 @@ import 'dart:async';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_core/firebase_core.dart';
-import '../firebase_options.dart';
+import 'firebase_options.dart';
 import 'core/services/crashlytics_service.dart';
+import 'core/services/push_notification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -46,6 +47,13 @@ void main() {
         await Firebase.initializeApp(
           options: DefaultFirebaseOptions.currentPlatform,
         );
+      }
+
+      // Push notifications are deliberately independent from licensing.
+      // Android/iOS devices register with the standalone TapBix Notifications
+      // WordPress plugin; Windows is handled separately in a later phase.
+      if (!kIsWeb && (PlatformUtils.isAndroid || PlatformUtils.isIOS)) {
+        await PushNotificationService.instance.initialize();
       }
 
       // Initialize Crashlytics

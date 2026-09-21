@@ -986,6 +986,15 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                                   fontSize: 11,
                                 ),
                               ),
+                            if (item.manufacturerLotNumber != null)
+                              Text(
+                                '${'pharmacy.batch.lot_number'.tr()}: ${item.manufacturerLotNumber}',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.primary,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             if (item.expiryDate != null)
                               Padding(
                                 padding: const EdgeInsets.only(top: 2),

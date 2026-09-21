@@ -1,7 +1,10 @@
+import '../../../../core/services/business/warehouse_read_scope.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+import '../../../../core/services/business/warehouse_document_scope.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -260,11 +263,15 @@ class PurchaseReportsData {
 class PurchaseReportsBloc
     extends RealtimeBloc<PurchaseReportsData, PurchaseReportsEvent> {
   final AppDatabase _db;
+  final WarehouseReadScope? warehouseScope;
   ReportDateRange _dateRange;
 
-  PurchaseReportsBloc(this._db, {String defaultDateRange = 'month'})
-    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-      super(const RealtimeLoading());
+  PurchaseReportsBloc(
+    this._db, {
+    String defaultDateRange = 'month',
+    this.warehouseScope,
+  }) : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+       super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -276,13 +283,16 @@ class PurchaseReportsBloc
         .customSelect(
           'SELECT 1',
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.purchases,
             _db.purchaseReturns,
             _db.purchaseReturnAdjustments,
           },
         )
         .watch()
-        .asyncMap((_) => _loadAll());
+        .asyncMap(
+          (_) => WarehouseReadScope.snapshot(_db, warehouseScope, _loadAll),
+        );
   }
 
   @override
@@ -380,16 +390,16 @@ class PurchaseReportsBloc
         .customSelect(
           '''
       SELECT
-        (SELECT COALESCE(SUM(pr.total_cents), 0) FROM purchase_returns pr
+        (SELECT COALESCE(SUM(pr.total_cents), 0) FROM ${warehouseScope?.documents(InventoryPostingDocument.purchaseReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseReturn)} pr
            WHERE pr.status = 'posted'
              AND pr.return_date >= ? AND pr.return_date <= ?)
-        + (SELECT COALESCE(SUM(pra.total_cents), 0) FROM purchase_return_adjustments pra
+        + (SELECT COALESCE(SUM(pra.total_cents), 0) FROM ${warehouseScope?.documents(InventoryPostingDocument.purchaseAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseAdjustment)} pra
            WHERE pra.status = 'posted'
              AND pra.return_date >= ? AND pra.return_date <= ?) AS total_cents,
-        (SELECT COUNT(*) FROM purchase_returns pr
+        (SELECT COUNT(*) FROM ${warehouseScope?.documents(InventoryPostingDocument.purchaseReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseReturn)} pr
            WHERE pr.status = 'posted'
              AND pr.return_date >= ? AND pr.return_date <= ?)
-        + (SELECT COUNT(*) FROM purchase_return_adjustments pra
+        + (SELECT COUNT(*) FROM ${warehouseScope?.documents(InventoryPostingDocument.purchaseAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseAdjustment)} pra
            WHERE pra.status = 'posted'
              AND pra.return_date >= ? AND pra.return_date <= ?) AS return_count
       ''',
@@ -403,7 +413,11 @@ class PurchaseReportsBloc
             Variable.withString(startIso),
             Variable.withString(endIso),
           ],
-          readsFrom: {_db.purchaseReturns, _db.purchaseReturnAdjustments},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.purchaseReturns,
+            _db.purchaseReturnAdjustments,
+          },
         )
         .get();
 
@@ -438,7 +452,7 @@ class PurchaseReportsBloc
         ) AS cheque_statuses,
         p.status,
         p.purchase_date
-      FROM purchases p
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.purchase) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} p
       INNER JOIN suppliers su ON su.id = p.supplier_id
       WHERE p.status NOT IN ('voided', 'draft')
         AND p.purchase_date >= ?
@@ -449,7 +463,12 @@ class PurchaseReportsBloc
             Variable.withString(startIso),
             Variable.withString(endIso),
           ],
-          readsFrom: {_db.purchases, _db.suppliers, _db.chequeInstruments},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.purchases,
+            _db.suppliers,
+            _db.chequeInstruments,
+          },
         )
         .get();
 
@@ -488,7 +507,7 @@ class PurchaseReportsBloc
         COALESCE(SUM(pi.tax_cents), 0) AS total_tax_cents,
         COUNT(DISTINCT p.id) AS invoice_count
       FROM purchase_items pi
-      INNER JOIN purchases p ON p.id = pi.purchase_id
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchase) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} p ON p.id = pi.purchase_id
       INNER JOIN products pr ON pr.id = pi.product_id
       LEFT JOIN product_categories pc ON pc.id = pr.category_id
       WHERE p.status NOT IN ('voided', 'draft')
@@ -502,6 +521,7 @@ class PurchaseReportsBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.purchases,
             _db.purchaseItems,
             _db.products,
@@ -541,7 +561,7 @@ class PurchaseReportsBloc
         COUNT(DISTINCT pr.id) AS product_count,
         COUNT(DISTINCT p.id) AS invoice_count
       FROM purchase_items pi
-      INNER JOIN purchases p ON p.id = pi.purchase_id
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchase) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} p ON p.id = pi.purchase_id
       INNER JOIN products pr ON pr.id = pi.product_id
       LEFT JOIN product_categories pc ON pc.id = pr.category_id
       WHERE p.status NOT IN ('voided', 'draft')
@@ -555,6 +575,7 @@ class PurchaseReportsBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.purchases,
             _db.purchaseItems,
             _db.products,
@@ -593,7 +614,7 @@ class PurchaseReportsBloc
         COUNT(p.id) AS invoice_count,
         COALESCE(SUM(item_totals.total_qty), 0) AS total_quantity,
         MAX(p.purchase_date) AS last_purchase_date
-      FROM purchases p
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.purchase) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} p
       INNER JOIN suppliers su ON su.id = p.supplier_id
       LEFT JOIN (
         SELECT pi.purchase_id, SUM(pi.quantity) AS total_qty
@@ -610,7 +631,12 @@ class PurchaseReportsBloc
             Variable.withString(startIso),
             Variable.withString(endIso),
           ],
-          readsFrom: {_db.purchases, _db.purchaseItems, _db.suppliers},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.purchases,
+            _db.purchaseItems,
+            _db.suppliers,
+          },
         )
         .get();
 
@@ -646,7 +672,7 @@ class PurchaseReportsBloc
         p.status,
         p.purchase_date,
         p.notes
-      FROM purchases p
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.purchase) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} p
       INNER JOIN suppliers su ON su.id = p.supplier_id
       WHERE p.status = 'voided'
         AND p.purchase_date >= ?
@@ -657,7 +683,11 @@ class PurchaseReportsBloc
             Variable.withString(startIso),
             Variable.withString(endIso),
           ],
-          readsFrom: {_db.purchases, _db.suppliers},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.purchases,
+            _db.suppliers,
+          },
         )
         .get();
 
@@ -689,7 +719,7 @@ class PurchaseReportsBloc
         p.status,
         p.purchase_date,
         p.due_date
-      FROM purchases p
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.purchase) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} p
       INNER JOIN suppliers su ON su.id = p.supplier_id
       WHERE p.payment_method = 'purchaseOrder'
         AND p.status != 'voided'
@@ -701,7 +731,11 @@ class PurchaseReportsBloc
             Variable.withString(startIso),
             Variable.withString(endIso),
           ],
-          readsFrom: {_db.purchases, _db.suppliers},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.purchases,
+            _db.suppliers,
+          },
         )
         .get();
 

@@ -1,7 +1,10 @@
+import '../../../../core/services/business/warehouse_read_scope.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+import '../../../../core/services/business/warehouse_document_scope.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -100,12 +103,16 @@ class CustomerSalesReportData {
 class CustomerSalesReportBloc
     extends RealtimeBloc<CustomerSalesReportData, CustomerSalesReportEvent> {
   final AppDatabase _db;
+  final WarehouseReadScope? warehouseScope;
   ReportDateRange _dateRange;
   CustomerSalesSortType _sort = CustomerSalesSortType.revenueDesc;
 
-  CustomerSalesReportBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+  CustomerSalesReportBloc(
+    this._db, {
+    String defaultDateRange = 'month',
+    this.warehouseScope,
+  }) : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+       super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -121,34 +128,43 @@ class CustomerSalesReportBloc
   }
 
   Stream<CustomerSalesReportData> _buildCombinedStream() {
-    // Watch sales table for real-time changes.
-    // Note: This watches ALL sales (not date-filtered) because Drift
-    // table-level watches don't support WHERE clauses. The asyncMap re-queries
-    // with the current date range, so data is always correct.
-    return _db.select(_db.sales).watch().asyncMap((_) async {
-      final customers = await _loadCustomerSales();
+    return _db
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.sales,
+            _db.customers,
+            _db.saleItems,
+          },
+        )
+        .watch()
+        .asyncMap(
+          (_) => WarehouseReadScope.snapshot(_db, warehouseScope, () async {
+            final customers = await _loadCustomerSales();
 
-      int totalSales = 0;
-      int totalInvoices = 0;
-      int totalQuantity = 0;
-      for (final c in customers) {
-        totalSales += c.totalSalesCents;
-        totalInvoices += c.invoiceCount;
-        totalQuantity += c.totalQuantity;
-      }
+            int totalSales = 0;
+            int totalInvoices = 0;
+            int totalQuantity = 0;
+            for (final c in customers) {
+              totalSales += c.totalSalesCents;
+              totalInvoices += c.invoiceCount;
+              totalQuantity += c.totalQuantity;
+            }
 
-      final sorted = _applySortToCustomers(customers, _sort);
+            final sorted = _applySortToCustomers(customers, _sort);
 
-      return CustomerSalesReportData(
-        customers: sorted,
-        grandTotalSalesCents: totalSales,
-        grandTotalInvoices: totalInvoices,
-        grandTotalQuantity: totalQuantity,
-        uniqueCustomerCount: customers.length,
-        dateRange: _dateRange,
-        sort: _sort,
-      );
-    });
+            return CustomerSalesReportData(
+              customers: sorted,
+              grandTotalSalesCents: totalSales,
+              grandTotalInvoices: totalInvoices,
+              grandTotalQuantity: totalQuantity,
+              uniqueCustomerCount: customers.length,
+              dateRange: _dateRange,
+              sort: _sort,
+            );
+          }),
+        );
   }
 
   Future<void> _onDateRangeChanged(
@@ -167,12 +183,11 @@ class CustomerSalesReportBloc
     final current = currentData;
     if (current != null) {
       final sorted = _applySortToCustomers(current.customers, event.sort);
-      emit(RealtimeSuccess<CustomerSalesReportData>(
-        data: current.copyWith(
-          customers: sorted,
-          sort: event.sort,
+      emit(
+        RealtimeSuccess<CustomerSalesReportData>(
+          data: current.copyWith(customers: sorted, sort: event.sort),
         ),
-      ));
+      );
     }
   }
 
@@ -202,8 +217,9 @@ class CustomerSalesReportBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         c.id AS customer_id,
         c.name AS customer_name,
@@ -212,7 +228,7 @@ class CustomerSalesReportBloc
         COALESCE(SUM(s.total_cents), 0) AS total_sales_cents,
         COALESCE(SUM(item_totals.total_qty), 0) AS total_quantity,
         MAX(s.sale_date) AS last_sale_date
-      FROM sales s
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s
       INNER JOIN customers c ON c.id = s.customer_id
       LEFT JOIN (
         SELECT si.sale_id, SUM(si.quantity) AS total_qty
@@ -227,16 +243,18 @@ class CustomerSalesReportBloc
       HAVING total_sales_cents > 0
       ORDER BY total_sales_cents DESC
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {
-        _db.sales,
-        _db.saleItems,
-        _db.customers,
-      },
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.sales,
+            _db.saleItems,
+            _db.customers,
+          },
+        )
+        .get();
 
     return rows.map((row) {
       final totalSales = row.read<int>('total_sales_cents');
@@ -252,9 +270,7 @@ class CustomerSalesReportBloc
         invoiceCount: invoices,
         totalQuantity: row.read<int>('total_quantity'),
         averageOrderCents: avgOrder,
-        lastSaleDate: lastDateVal != null
-            ? DateTime.parse(lastDateVal)
-            : null,
+        lastSaleDate: lastDateVal != null ? DateTime.parse(lastDateVal) : null,
       );
     }).toList();
   }

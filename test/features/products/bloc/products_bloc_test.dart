@@ -1,3 +1,9 @@
+import 'package:tapix/features/products/data/repositories/product_variant_repository_impl.dart';
+import 'package:tapix/features/products/data/datasources/variant_local_datasource.dart';
+import 'package:tapix/core/database/daos/inventory_adjustment_dao.dart';
+import 'package:tapix/core/services/inventory/inventory_adjustment_service.dart';
+import 'package:tapix/core/services/journal_entry_service.dart';
+import 'package:tapix/features/accounting/data/repositories/accounting_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
@@ -20,18 +26,41 @@ void main() {
     late int currencyId;
 
     setUp(() async {
-      database = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
-      repository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao), AuditLogService(database), SessionService());
-      bloc = ProductsBloc(repository);
-
-      currencyId = await database.into(database.currencies).insert(
-        CurrenciesCompanion.insert(
-          code: 'TST',
-          name: 'Test Currency',
-          symbol: 'T',
-          exchangeRate: Decimal.fromInt(1),
+      database = AppDatabase.connect(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      repository = ProductRepositoryImpl(
+        ProductLocalDatasourceImpl(database.productDao),
+        AuditLogService(database),
+        SessionService(),
+      );
+      final variants = ProductVariantRepositoryImpl(
+        VariantLocalDatasourceImpl(
+          database.productVariantDao,
+          database.productColorDao,
+          database.sizeDao,
+        ),
+        InventoryAdjustmentService(
+          db: database,
+          dao: InventoryAdjustmentDao(database),
+          journal: JournalEntryService(AccountingRepository(database)),
         ),
       );
+      bloc = ProductsBloc(repository, null, null, variants);
+      await database.customStatement(
+        "INSERT OR IGNORE INTO users (id, username, password_hash, role, is_active, created_at, updated_at) VALUES (0, 'system', 'no-pin', 'owner', 1, 0, 0)",
+      );
+
+      currencyId = await database
+          .into(database.currencies)
+          .insert(
+            CurrenciesCompanion.insert(
+              code: 'TST',
+              name: 'Test Currency',
+              symbol: 'T',
+              exchangeRate: Decimal.fromInt(1),
+            ),
+          );
     });
 
     tearDown(() async {
@@ -58,13 +87,15 @@ void main() {
       test('creates product and stream updates state', () async {
         await Future<void>.delayed(const Duration(milliseconds: 100));
 
-        bloc.add(ProductCreateRequested(
-          sku: 'CREATE-001',
-          name: 'Created Product',
-          costCents: Decimal.fromInt(100),
-          priceCents: Decimal.fromInt(200),
-          currencyId: currencyId,
-        ));
+        bloc.add(
+          ProductCreateRequested(
+            sku: 'CREATE-001',
+            name: 'Created Product',
+            costCents: Decimal.fromInt(100),
+            priceCents: Decimal.fromInt(200),
+            currencyId: currencyId,
+          ),
+        );
 
         await Future<void>.delayed(const Duration(milliseconds: 300));
 
@@ -75,38 +106,56 @@ void main() {
       test('creates product with all optional fields', () async {
         await Future<void>.delayed(const Duration(milliseconds: 100));
 
-        bloc.add(ProductCreateRequested(
-          sku: 'CREATE-002',
-          name: 'Full Product',
-          description: 'A detailed description',
-          costCents: Decimal.fromInt(100),
-          priceCents: Decimal.fromInt(200),
-          currencyId: currencyId,
-          trackInventory: true,
-          stockQuantity: 50,
-          minQuantity: 10,
-          hasVariants: false,
-        ));
+        bloc.add(
+          ProductCreateRequested(
+            sku: 'CREATE-002',
+            name: 'Full Product',
+            description: 'A detailed description',
+            costCents: Decimal.fromInt(100),
+            priceCents: Decimal.fromInt(200),
+            currencyId: currencyId,
+            trackInventory: true,
+            stockQuantity: 50,
+            minQuantity: 10,
+            hasVariants: false,
+          ),
+        );
 
         await Future<void>.delayed(const Duration(milliseconds: 300));
 
         expect(bloc.currentData?.length, equals(1));
-        expect(bloc.currentData?.first.description, equals('A detailed description'));
+        expect(
+          bloc.currentData?.first.description,
+          equals('A detailed description'),
+        );
         expect(bloc.currentData?.first.stockQuantity, equals(50));
+        expect(
+          await database.select(database.inventoryAdjustments).get(),
+          hasLength(1),
+        );
+        final journal = await database
+            .customSelect(
+              'SELECT SUM(debit_cents) AS dr, SUM(credit_cents) AS cr FROM journal_entry_lines',
+            )
+            .getSingle();
+        expect(journal.read<int>('dr'), 5000);
+        expect(journal.read<int>('cr'), 5000);
       });
     });
 
     group('ProductUpdateRequested', () {
       test('updates product optimistically', () async {
-        await database.into(database.products).insert(
-          ProductsCompanion.insert(
-            sku: const Value<String?>('UPDATE-001'),
-            name: 'Original',
-            costCents: Decimal.fromInt(100),
-            priceCents: Decimal.fromInt(200),
-            currencyId: Value(currencyId),
-          ),
-        );
+        await database
+            .into(database.products)
+            .insert(
+              ProductsCompanion.insert(
+                sku: const Value<String?>('UPDATE-001'),
+                name: 'Original',
+                costCents: Decimal.fromInt(100),
+                priceCents: Decimal.fromInt(200),
+                currencyId: Value(currencyId),
+              ),
+            );
 
         await Future<void>.delayed(const Duration(milliseconds: 200));
 
@@ -123,15 +172,17 @@ void main() {
 
     group('ProductDeleteRequested', () {
       test('deletes product optimistically', () async {
-        final productId = await database.into(database.products).insert(
-          ProductsCompanion.insert(
-            sku: const Value<String?>('DELETE-001'),
-            name: 'To Delete',
-            costCents: Decimal.fromInt(100),
-            priceCents: Decimal.fromInt(200),
-            currencyId: Value(currencyId),
-          ),
-        );
+        final productId = await database
+            .into(database.products)
+            .insert(
+              ProductsCompanion.insert(
+                sku: const Value<String?>('DELETE-001'),
+                name: 'To Delete',
+                costCents: Decimal.fromInt(100),
+                priceCents: Decimal.fromInt(200),
+                currencyId: Value(currencyId),
+              ),
+            );
 
         await Future<void>.delayed(const Duration(milliseconds: 200));
 
@@ -147,25 +198,29 @@ void main() {
 
     group('ProductSearchRequested', () {
       test('searches products and updates state', () async {
-        await database.into(database.products).insert(
-          ProductsCompanion.insert(
-            sku: const Value<String?>('SEARCH-001'),
-            name: 'Apple Phone',
-            costCents: Decimal.fromInt(100),
-            priceCents: Decimal.fromInt(200),
-            currencyId: Value(currencyId),
-          ),
-        );
+        await database
+            .into(database.products)
+            .insert(
+              ProductsCompanion.insert(
+                sku: const Value<String?>('SEARCH-001'),
+                name: 'Apple Phone',
+                costCents: Decimal.fromInt(100),
+                priceCents: Decimal.fromInt(200),
+                currencyId: Value(currencyId),
+              ),
+            );
 
-        await database.into(database.products).insert(
-          ProductsCompanion.insert(
-            sku: const Value<String?>('SEARCH-002'),
-            name: 'Samsung Phone',
-            costCents: Decimal.fromInt(100),
-            priceCents: Decimal.fromInt(200),
-            currencyId: Value(currencyId),
-          ),
-        );
+        await database
+            .into(database.products)
+            .insert(
+              ProductsCompanion.insert(
+                sku: const Value<String?>('SEARCH-002'),
+                name: 'Samsung Phone',
+                costCents: Decimal.fromInt(100),
+                priceCents: Decimal.fromInt(200),
+                currencyId: Value(currencyId),
+              ),
+            );
 
         await Future<void>.delayed(const Duration(milliseconds: 200));
 
@@ -179,15 +234,17 @@ void main() {
       });
 
       test('empty search clears query and refreshes', () async {
-        await database.into(database.products).insert(
-          ProductsCompanion.insert(
-            sku: const Value<String?>('SEARCH-003'),
-            name: 'Test Product',
-            costCents: Decimal.fromInt(100),
-            priceCents: Decimal.fromInt(200),
-            currencyId: Value(currencyId),
-          ),
-        );
+        await database
+            .into(database.products)
+            .insert(
+              ProductsCompanion.insert(
+                sku: const Value<String?>('SEARCH-003'),
+                name: 'Test Product',
+                costCents: Decimal.fromInt(100),
+                priceCents: Decimal.fromInt(200),
+                currencyId: Value(currencyId),
+              ),
+            );
 
         await Future<void>.delayed(const Duration(milliseconds: 200));
 
@@ -203,25 +260,29 @@ void main() {
       });
 
       test('clearSearch resets to full list', () async {
-        await database.into(database.products).insert(
-          ProductsCompanion.insert(
-            sku: const Value<String?>('CLEAR-001'),
-            name: 'Product One',
-            costCents: Decimal.fromInt(100),
-            priceCents: Decimal.fromInt(200),
-            currencyId: Value(currencyId),
-          ),
-        );
+        await database
+            .into(database.products)
+            .insert(
+              ProductsCompanion.insert(
+                sku: const Value<String?>('CLEAR-001'),
+                name: 'Product One',
+                costCents: Decimal.fromInt(100),
+                priceCents: Decimal.fromInt(200),
+                currencyId: Value(currencyId),
+              ),
+            );
 
-        await database.into(database.products).insert(
-          ProductsCompanion.insert(
-            sku: const Value<String?>('CLEAR-002'),
-            name: 'Product Two',
-            costCents: Decimal.fromInt(100),
-            priceCents: Decimal.fromInt(200),
-            currencyId: Value(currencyId),
-          ),
-        );
+        await database
+            .into(database.products)
+            .insert(
+              ProductsCompanion.insert(
+                sku: const Value<String?>('CLEAR-002'),
+                name: 'Product Two',
+                costCents: Decimal.fromInt(100),
+                priceCents: Decimal.fromInt(200),
+                currencyId: Value(currencyId),
+              ),
+            );
 
         await Future<void>.delayed(const Duration(milliseconds: 200));
 
@@ -239,15 +300,17 @@ void main() {
 
     group('Refresh', () {
       test('refresh resubscribes to stream', () async {
-        await database.into(database.products).insert(
-          ProductsCompanion.insert(
-            sku: const Value<String?>('REFRESH-001'),
-            name: 'Refresh Test',
-            costCents: Decimal.fromInt(100),
-            priceCents: Decimal.fromInt(200),
-            currencyId: Value(currencyId),
-          ),
-        );
+        await database
+            .into(database.products)
+            .insert(
+              ProductsCompanion.insert(
+                sku: const Value<String?>('REFRESH-001'),
+                name: 'Refresh Test',
+                costCents: Decimal.fromInt(100),
+                priceCents: Decimal.fromInt(200),
+                currencyId: Value(currencyId),
+              ),
+            );
 
         await Future<void>.delayed(const Duration(milliseconds: 200));
 

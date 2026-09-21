@@ -1,7 +1,10 @@
+import '../../../../core/services/business/warehouse_read_scope.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+import '../../../../core/services/business/warehouse_document_scope.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -130,14 +133,19 @@ class CustomerAnalysisReportData {
 // ==================== BLOC ====================
 
 class CustomerAnalysisReportBloc
-    extends RealtimeBloc<CustomerAnalysisReportData, CustomerAnalysisReportEvent> {
+    extends
+        RealtimeBloc<CustomerAnalysisReportData, CustomerAnalysisReportEvent> {
   final AppDatabase _db;
+  final WarehouseReadScope? warehouseScope;
   ReportDateRange _dateRange;
   CustomerAnalysisSortType _sort = CustomerAnalysisSortType.totalSpentDesc;
 
-  CustomerAnalysisReportBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+  CustomerAnalysisReportBloc(
+    this._db, {
+    String defaultDateRange = 'month',
+    this.warehouseScope,
+  }) : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+       super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -153,33 +161,48 @@ class CustomerAnalysisReportBloc
   }
 
   Stream<CustomerAnalysisReportData> _buildCombinedStream() {
-    return _db.select(_db.sales).watch().asyncMap((_) async {
-      final customers = await _loadCustomerAnalysis();
+    return _db
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.sales,
+            _db.customers,
+          },
+        )
+        .watch()
+        .asyncMap(
+          (_) => WarehouseReadScope.snapshot(_db, warehouseScope, () async {
+            final customers = await _loadCustomerAnalysis();
 
-      int totalSpent = 0;
-      int totalPurchases = 0;
-      final segmentCounts = <RfmSegment, int>{};
+            int totalSpent = 0;
+            int totalPurchases = 0;
+            final segmentCounts = <RfmSegment, int>{};
 
-      for (final c in customers) {
-        totalSpent += c.totalSpentCents;
-        totalPurchases += c.purchaseCount;
-        segmentCounts[c.rfmSegment] = (segmentCounts[c.rfmSegment] ?? 0) + 1;
-      }
+            for (final c in customers) {
+              totalSpent += c.totalSpentCents;
+              totalPurchases += c.purchaseCount;
+              segmentCounts[c.rfmSegment] =
+                  (segmentCounts[c.rfmSegment] ?? 0) + 1;
+            }
 
-      final overallAvg = totalPurchases > 0 ? totalSpent ~/ totalPurchases : 0;
-      final sorted = _applySortToCustomers(customers, _sort);
+            final overallAvg = totalPurchases > 0
+                ? totalSpent ~/ totalPurchases
+                : 0;
+            final sorted = _applySortToCustomers(customers, _sort);
 
-      return CustomerAnalysisReportData(
-        customers: sorted,
-        totalCustomers: customers.length,
-        grandTotalSpentCents: totalSpent,
-        grandTotalPurchases: totalPurchases,
-        overallAvgOrderCents: overallAvg,
-        segmentCounts: segmentCounts,
-        dateRange: _dateRange,
-        sort: _sort,
-      );
-    });
+            return CustomerAnalysisReportData(
+              customers: sorted,
+              totalCustomers: customers.length,
+              grandTotalSpentCents: totalSpent,
+              grandTotalPurchases: totalPurchases,
+              overallAvgOrderCents: overallAvg,
+              segmentCounts: segmentCounts,
+              dateRange: _dateRange,
+              sort: _sort,
+            );
+          }),
+        );
   }
 
   Future<void> _onDateRangeChanged(
@@ -198,12 +221,11 @@ class CustomerAnalysisReportBloc
     final current = currentData;
     if (current != null) {
       final sorted = _applySortToCustomers(current.customers, event.sort);
-      emit(RealtimeSuccess<CustomerAnalysisReportData>(
-        data: current.copyWith(
-          customers: sorted,
-          sort: event.sort,
+      emit(
+        RealtimeSuccess<CustomerAnalysisReportData>(
+          data: current.copyWith(customers: sorted, sort: event.sort),
         ),
-      ));
+      );
     }
   }
 
@@ -222,9 +244,13 @@ class CustomerAnalysisReportBloc
       case CustomerAnalysisSortType.frequencyAsc:
         list.sort((a, b) => a.purchaseCount.compareTo(b.purchaseCount));
       case CustomerAnalysisSortType.recencyDesc:
-        list.sort((a, b) => a.daysSinceLastPurchase.compareTo(b.daysSinceLastPurchase));
+        list.sort(
+          (a, b) => a.daysSinceLastPurchase.compareTo(b.daysSinceLastPurchase),
+        );
       case CustomerAnalysisSortType.recencyAsc:
-        list.sort((a, b) => b.daysSinceLastPurchase.compareTo(a.daysSinceLastPurchase));
+        list.sort(
+          (a, b) => b.daysSinceLastPurchase.compareTo(a.daysSinceLastPurchase),
+        );
       case CustomerAnalysisSortType.nameAsc:
         list.sort((a, b) => a.customerName.compareTo(b.customerName));
       case CustomerAnalysisSortType.nameDesc:
@@ -238,8 +264,9 @@ class CustomerAnalysisReportBloc
     final endIso = _dateRange.endDate.toIso8601String();
     final now = DateTime.now();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         c.id AS customer_id,
         c.name AS customer_name,
@@ -249,7 +276,7 @@ class CustomerAnalysisReportBloc
         COALESCE(MAX(s.total_cents), 0) AS largest_order_cents,
         MAX(s.sale_date) AS last_sale_date,
         MIN(s.sale_date) AS first_sale_date
-      FROM sales s
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s
       INNER JOIN customers c ON c.id = s.customer_id
       WHERE s.status != 'voided'
         AND s.customer_id IS NOT NULL
@@ -259,15 +286,17 @@ class CustomerAnalysisReportBloc
       HAVING purchase_count > 0
       ORDER BY total_spent_cents DESC
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {
-        _db.sales,
-        _db.customers,
-      },
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.sales,
+            _db.customers,
+          },
+        )
+        .get();
 
     // Compute max values for RFM scoring
     int maxSpent = 0;
@@ -283,9 +312,7 @@ class CustomerAnalysisReportBloc
       if (totalSpent > maxSpent) maxSpent = totalSpent;
       if (purchaseCount > maxPurchases) maxPurchases = purchaseCount;
 
-      final lastDate = lastDateStr != null
-          ? DateTime.parse(lastDateStr)
-          : null;
+      final lastDate = lastDateStr != null ? DateTime.parse(lastDateStr) : null;
       final firstDate = firstDateStr != null
           ? DateTime.parse(firstDateStr)
           : null;
@@ -302,30 +329,36 @@ class CustomerAnalysisReportBloc
 
       final avgOrder = purchaseCount > 0 ? totalSpent ~/ purchaseCount : 0;
 
-      rawItems.add(_RawAnalysisData(
-        customerId: row.read<int>('customer_id'),
-        customerName: row.read<String>('customer_name'),
-        segment: row.read<String>('segment'),
-        purchaseCount: purchaseCount,
-        avgDaysBetweenPurchases: avgDays,
-        avgOrderValueCents: avgOrder,
-        totalSpentCents: totalSpent,
-        largestOrderCents: row.read<int>('largest_order_cents'),
-        lastPurchaseDate: lastDate,
-        daysSinceLastPurchase: daysSinceLast,
-      ));
+      rawItems.add(
+        _RawAnalysisData(
+          customerId: row.read<int>('customer_id'),
+          customerName: row.read<String>('customer_name'),
+          segment: row.read<String>('segment'),
+          purchaseCount: purchaseCount,
+          avgDaysBetweenPurchases: avgDays,
+          avgOrderValueCents: avgOrder,
+          totalSpentCents: totalSpent,
+          largestOrderCents: row.read<int>('largest_order_cents'),
+          lastPurchaseDate: lastDate,
+          daysSinceLastPurchase: daysSinceLast,
+        ),
+      );
     }
 
     // Compute max days since last purchase for recency scoring
     int maxDaysSince = 1;
     for (final item in rawItems) {
-      if (item.daysSinceLastPurchase < 9999 && item.daysSinceLastPurchase > maxDaysSince) {
+      if (item.daysSinceLastPurchase < 9999 &&
+          item.daysSinceLastPurchase > maxDaysSince) {
         maxDaysSince = item.daysSinceLastPurchase;
       }
     }
 
     return rawItems.map((item) {
-      final recency = computeRecencyScore(item.daysSinceLastPurchase, maxDaysSince);
+      final recency = computeRecencyScore(
+        item.daysSinceLastPurchase,
+        maxDaysSince,
+      );
       final frequency = computeFrequencyScore(item.purchaseCount, maxPurchases);
       final monetary = computeMonetaryScore(item.totalSpentCents, maxSpent);
       final rfm = computeRfmSegment(recency, frequency, monetary);
@@ -402,7 +435,9 @@ class CustomerAnalysisReportBloc
     // Promising: moderate R, low F
     if (r >= 3 && f <= 1) return RfmSegment.promising;
     // Needs Attention: moderate R, moderate F, moderate M
-    if (r >= 2 && r <= 3 && f >= 2 && f <= 3 && m >= 2 && m <= 3) return RfmSegment.needsAttention;
+    if (r >= 2 && r <= 3 && f >= 2 && f <= 3 && m >= 2 && m <= 3) {
+      return RfmSegment.needsAttention;
+    }
     // Hibernating: low R, low F, low M (before aboutToSleep)
     if (r <= 2 && f <= 2 && m <= 2) return RfmSegment.hibernating;
     // About to Sleep: low R, low F (any M)

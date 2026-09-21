@@ -1,7 +1,12 @@
+import '../../../../core/pricing/pricing_preview_fingerprint.dart';
+import '../../../../core/services/business/branch_tax_policy_store.dart';
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/business/warehouse_catalog_scope.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+import '../../../../core/services/business/warehouse_document_scope.dart';
 import '../../../../core/database/daos/adjustment_return_dao.dart';
 import '../../../../core/database/daos/pharmacy_dao.dart';
 import '../../../../core/measurement/measurement.dart';
@@ -83,16 +88,40 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
   bool _isEnabled(AppFeature feature, bool settingEnabled) =>
       _featureGate.isEnabled(feature, settingEnabled: settingEnabled);
 
+  Future<Set<int>> _primaryDocumentIds(InventoryPostingDocument kind) async =>
+      (await _database
+              .customSelect(
+                'SELECT id FROM ${WarehouseDocumentScope.primaryDocuments(kind)}',
+              )
+              .get())
+          .map((row) => row.read<int>('id'))
+          .toSet();
+
   @override
   Future<LanSalesPage> fetchSales({required int limit}) async {
     final safeLimit = limit.clamp(1, 500);
+    final allowed = await _primaryDocumentIds(InventoryPostingDocument.sale);
     final results = await Future.wait<dynamic>([
       _sales.watchAllSales().first,
-      _sales.watchDashboardStats().first,
+      _database.saleDao
+          .getDashboardStats(primaryWarehouseOnly: true)
+          .then(
+            (stats) => SaleDashboardStats(
+              totalCount: stats.totalCount,
+              completedCount: stats.completedCount,
+              voidedCount: stats.voidedCount,
+              totalSalesCents: stats.totalSalesCents,
+              returnsCount: stats.returnsCount,
+              totalReturnsCents: stats.totalReturnsCents,
+              todaySalesCents: stats.todaySalesCents,
+              todayCount: stats.todayCount,
+            ),
+          ),
       _sales.watchSaleIdsWithReturns().first,
       _sales.watchSaleProductSearchTerms().first,
     ]);
     final sales = (results[0] as List<SaleEntity>)
+        .where((sale) => allowed.contains(sale.id))
         .take(safeLimit)
         .toList(growable: false);
     final stats = results[1] as SaleDashboardStats;
@@ -154,6 +183,13 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
 
   @override
   Future<LanSaleDetails?> fetchSaleDetails({required int saleId}) async {
+    if (!await WarehouseDocumentScope.contains(
+      _database,
+      InventoryPostingDocument.sale,
+      saleId,
+    )) {
+      return null;
+    }
     if (saleId <= 0) return null;
     final sale = await _sales.getSaleById(saleId);
     if (sale == null) return null;
@@ -286,7 +322,16 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     final safeOffset = offset.clamp(0, 1000000);
     final safeLimit = limit.clamp(1, 200);
     final normalized = query.trim();
-    final appSettings = _settings.current;
+    final policy = await BranchTaxPolicyStore(_database).read();
+    if (policy == null && _settings.requiresPersistedTaxPolicy) {
+      throw const LanBusinessException(
+        'tax_policy_unavailable',
+        'The branch tax policy is unavailable.',
+        statusCode: 409,
+      );
+    }
+    final appSettings =
+        policy?.policy.applyTo(_settings.current) ?? _settings.current;
     final pharmacyEnabled = _isEnabled(
       AppFeature.pharmacy,
       appSettings.enablePharmacyFeatures,
@@ -324,6 +369,13 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       includeMedicine: pharmacyEnabled,
     );
     final currency = await _selectedCurrency();
+    if (currency == null) {
+      throw const LanBusinessException(
+        'currency_unavailable',
+        'The selected master currency must be active in the database.',
+        statusCode: 409,
+      );
+    }
     final activePromotionRules = promotionsEnabled
         ? await _promotions.loadActiveRules()
         : const <PromotionRule>[];
@@ -365,11 +417,13 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       offset: safeOffset,
       limit: safeLimit,
       hasMore: hasMore,
-      currencyId: currency?.id ?? 1,
-      currencyCode: _currencyService.currencyCode,
-      currencySymbol: _currencyService.currencySymbol,
+      currencyId: currency.id,
+      currencyCode: currency.code,
+      currencySymbol: currency.symbol,
       enableTaxCalculations: appSettings.enableTaxCalculations,
       defaultSalesTaxRateBps: (appSettings.defaultSalesTaxRate * 100).round(),
+      defaultPurchaseTaxRateBps: (appSettings.defaultPurchaseTaxRate * 100)
+          .round(),
       taxInclusivePricing: appSettings.taxInclusivePricing,
       allowNegativeStock: appSettings.allowNegativeStock,
       allowPartialPayments: appSettings.allowPartialPayments,
@@ -417,7 +471,15 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     required bool includeMedicine,
   }) async {
     final productIds = products.map((row) => row.id).toList(growable: false);
-    final variants = productIds.isEmpty
+    final scopedProducts = {
+      for (final p in await WarehouseCatalogScope.readProducts(
+        _database,
+        productIds,
+      ))
+        p.id: p,
+    };
+    products = products.map((p) => scopedProducts[p.id]!).toList();
+    final storedVariants = productIds.isEmpty
         ? <ProductVariant>[]
         : await (_database.select(_database.productVariants)
                 ..where(
@@ -427,6 +489,11 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
                 )
                 ..orderBy([(row) => OrderingTerm.asc(row.id)]))
               .get();
+
+    final variants = await WarehouseCatalogScope.readVariants(
+      _database,
+      storedVariants.map((v) => v.id).toList(),
+    );
     final colors = await _database.select(_database.productColors).get();
     final sizes = await _database.select(_database.sizes).get();
     final colorNames = {for (final value in colors) value.id: value.name};
@@ -546,6 +613,33 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     final path = product?.imagePath?.trim();
     return path == null || path.isEmpty ? null : path;
   }
+
+  @override
+  Future<LanCustomerCheckout> fetchCustomerCheckout(int customerId) =>
+      _database.transaction(() async {
+        final customer =
+            await (_database.select(_database.customers)..where(
+                  (c) => c.id.equals(customerId) & c.isActive.equals(true),
+                ))
+                .getSingleOrNull();
+        if (customer == null) {
+          throw const LanBusinessException(
+            'customer_not_found',
+            'Customer is unavailable.',
+            statusCode: 404,
+          );
+        }
+        final currency = await (_database.select(
+          _database.currencies,
+        )..where((c) => c.id.equals(customer.currencyId))).getSingle();
+        return LanCustomerCheckout(
+          customerId: customer.id,
+          currencyId: currency.id,
+          currencyCode: currency.code,
+          balanceCents: _cents(customer.balanceCents),
+          pointsBalance: customer.loyaltyPointsBalance,
+        );
+      });
 
   @override
   Future<List<LanCustomerSummary>> fetchCustomers({
@@ -760,6 +854,11 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
             ),
           ])
           ..where(_database.sales.status.equals('completed'))
+          ..where(
+            CustomExpression<bool>(
+              'sales.id IN (SELECT id FROM ${WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)})',
+            ),
+          )
           ..orderBy([
             OrderingTerm.desc(_database.sales.saleDate),
             OrderingTerm.desc(_database.sales.id),
@@ -820,6 +919,13 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
   Future<LanReturnableSaleDetails?> fetchReturnableSale({
     required int saleId,
   }) async {
+    if (!await WarehouseDocumentScope.contains(
+      _database,
+      InventoryPostingDocument.sale,
+      saleId,
+    )) {
+      return null;
+    }
     if (saleId <= 0) return null;
     final sale =
         await (_database.select(_database.sales)
@@ -929,7 +1035,19 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     final safeOffset = offset.clamp(0, 1000000);
     final safeLimit = limit.clamp(1, 200);
     final normalized = query.trim().toLowerCase();
-    final all = await _sales.watchAllSaleReturns().first;
+    final linkedIds = await _primaryDocumentIds(
+      InventoryPostingDocument.saleReturn,
+    );
+    final adjustmentIds = await _primaryDocumentIds(
+      InventoryPostingDocument.saleAdjustment,
+    );
+    final all = (await _sales.watchAllSaleReturns().first)
+        .where(
+          (value) => (value.isAdjustment ? adjustmentIds : linkedIds).contains(
+            value.id,
+          ),
+        )
+        .toList(growable: false);
     final filtered = normalized.isEmpty
         ? all
         : all
@@ -989,6 +1107,15 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     required int returnId,
     required bool adjustment,
   }) async {
+    if (!await WarehouseDocumentScope.contains(
+      _database,
+      adjustment
+          ? InventoryPostingDocument.saleAdjustment
+          : InventoryPostingDocument.saleReturn,
+      returnId,
+    )) {
+      return null;
+    }
     if (returnId <= 0) return null;
 
     if (!adjustment) {
@@ -1349,7 +1476,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
   Future<LanSaleReturnResult> createSaleAdjustmentReturn({
     required LanRemoteUser actor,
     required LanSaleAdjustmentReturnRequest request,
-  }) async {
+  }) => _database.transaction(() async {
     _guardRemotePinProtectedOperation();
     final key = request.idempotencyKey.trim();
     if (key.length < 8 || key.length > 128) {
@@ -1480,20 +1607,20 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
         .map((line) => line.productId)
         .toSet()
         .toList(growable: false);
-    final products = await (_database.select(
-      _database.products,
-    )..where((row) => row.id.isIn(productIds))).get();
+    final products = await WarehouseCatalogScope.readProducts(
+      _database,
+      productIds,
+    );
     final productMap = {for (final value in products) value.id: value};
     final variantIds = request.lines
         .map((line) => line.variantId)
         .whereType<int>()
         .toSet()
         .toList(growable: false);
-    final variants = variantIds.isEmpty
-        ? <ProductVariant>[]
-        : await (_database.select(
-            _database.productVariants,
-          )..where((row) => row.id.isIn(variantIds))).get();
+    final variants = await WarehouseCatalogScope.readVariants(
+      _database,
+      variantIds,
+    );
     final variantMap = {for (final value in variants) value.id: value};
 
     final pricingInputs = <LineItemPricingInput>[];
@@ -1588,7 +1715,16 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
         'The overall discount is invalid.',
       );
     }
-    final appSettings = _settings.current;
+    final policy = await BranchTaxPolicyStore(_database).read();
+    if (policy == null && _settings.requiresPersistedTaxPolicy) {
+      throw const LanBusinessException(
+        'tax_policy_unavailable',
+        'The branch tax policy is unavailable.',
+        statusCode: 409,
+      );
+    }
+    final appSettings =
+        policy?.policy.applyTo(_settings.current) ?? _settings.current;
     final overallDiscount = request.overallDiscountIsPercent
         ? Discount.percent(request.overallDiscountCents)
         : request.overallDiscountCents > 0
@@ -1603,6 +1739,18 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
         taxInclusivePricing: appSettings.taxInclusivePricing,
       ),
     );
+    if (request.expectedPricingFingerprint != null &&
+        request.expectedPricingFingerprint !=
+            pricingPreviewFingerprint(
+              pricing,
+              taxInclusive: appSettings.taxInclusivePricing,
+            )) {
+      throw const LanBusinessException(
+        'pricing_preview_changed',
+        'Pricing changed. Refresh and review the return before submitting again.',
+        statusCode: 409,
+      );
+    }
     if (pricing.totalDiscount.cents > 0 && !appSettings.allowDiscounts) {
       throw const LanBusinessException(
         'discounts_disabled',
@@ -1662,7 +1810,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
           taxCents: Value(Decimal.fromInt(line.tax.cents)),
           totalCents: Decimal.fromInt(line.total.cents),
           reason: Value(value.request.reason),
-          taxRateBpsAtPost: Value(value.taxRateBps),
+          taxRateBpsAtPost: Value(line.local.effectiveTaxRateBps),
           dispositionType: Value(value.request.dispositionType),
         ),
       );
@@ -1706,7 +1854,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
         statusCode: 409,
       );
     }
-  }
+  });
 
   @override
   Future<List<LanSupplierSummary>> fetchSuppliers({
@@ -1744,7 +1892,12 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     final safeOffset = offset.clamp(0, 1000000);
     final safeLimit = limit.clamp(1, 200);
     final normalized = query.trim().toLowerCase();
-    final all = await _purchases.watchAllPurchases().first;
+    final allowed = await _primaryDocumentIds(
+      InventoryPostingDocument.purchase,
+    );
+    final all = (await _purchases.watchAllPurchases().first).where(
+      (value) => allowed.contains(value.id),
+    );
     final candidates = all.where(
       (value) =>
           value.isPosted &&
@@ -1795,6 +1948,13 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
   Future<LanReturnablePurchaseDetails?> fetchReturnablePurchase({
     required int purchaseId,
   }) async {
+    if (!await WarehouseDocumentScope.contains(
+      _database,
+      InventoryPostingDocument.purchase,
+      purchaseId,
+    )) {
+      return null;
+    }
     final purchase = await _purchases.getPurchaseById(purchaseId);
     if (purchase == null || !purchase.isPosted) return null;
     final items = await _purchases.getPurchaseItems(purchaseId);
@@ -1884,7 +2044,19 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     final safeOffset = offset.clamp(0, 1000000);
     final safeLimit = limit.clamp(1, 200);
     final normalized = query.trim().toLowerCase();
-    final all = await _purchases.watchAllPurchaseReturns().first;
+    final linkedIds = await _primaryDocumentIds(
+      InventoryPostingDocument.purchaseReturn,
+    );
+    final adjustmentIds = await _primaryDocumentIds(
+      InventoryPostingDocument.purchaseAdjustment,
+    );
+    final all = (await _purchases.watchAllPurchaseReturns().first)
+        .where(
+          (value) => (value.isAdjustment ? adjustmentIds : linkedIds).contains(
+            value.id,
+          ),
+        )
+        .toList(growable: false);
     final filtered = normalized.isEmpty
         ? all
         : all
@@ -1948,6 +2120,15 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     required int returnId,
     required bool adjustment,
   }) async {
+    if (!await WarehouseDocumentScope.contains(
+      _database,
+      adjustment
+          ? InventoryPostingDocument.purchaseAdjustment
+          : InventoryPostingDocument.purchaseReturn,
+      returnId,
+    )) {
+      return null;
+    }
     if (!adjustment) {
       final ret = await _purchases.getPurchaseReturnById(returnId);
       if (ret == null || ret.isAdjustment) return null;
@@ -2237,7 +2418,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
   Future<LanPurchaseReturnResult> createPurchaseAdjustmentReturn({
     required LanRemoteUser actor,
     required LanPurchaseAdjustmentReturnRequest request,
-  }) async {
+  }) => _database.transaction(() async {
     _guardRemotePinProtectedOperation();
     final key = request.idempotencyKey.trim();
     if (key.length < 8 || key.length > 128 || request.lines.isEmpty) {
@@ -2297,19 +2478,19 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       );
     }
     final productIds = request.lines.map((line) => line.productId).toSet();
-    final products = await (_database.select(
-      _database.products,
-    )..where((row) => row.id.isIn(productIds))).get();
+    final products = await WarehouseCatalogScope.readProducts(
+      _database,
+      productIds.toList(),
+    );
     final productMap = {for (final value in products) value.id: value};
     final variantIds = request.lines
         .map((line) => line.variantId)
         .whereType<int>()
         .toSet();
-    final variants = variantIds.isEmpty
-        ? <ProductVariant>[]
-        : await (_database.select(
-            _database.productVariants,
-          )..where((row) => row.id.isIn(variantIds))).get();
+    final variants = await WarehouseCatalogScope.readVariants(
+      _database,
+      variantIds.toList(),
+    );
     final variantMap = {for (final value in variants) value.id: value};
     final inputs = <LineItemPricingInput>[];
     final resolved =
@@ -2377,15 +2558,38 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
         : request.overallDiscountCents > 0
         ? Discount.fixed(Money.fromCents(request.overallDiscountCents))
         : Discount.none;
+    final policy = await BranchTaxPolicyStore(_database).read();
+    if (policy == null && _settings.requiresPersistedTaxPolicy) {
+      throw const LanBusinessException(
+        'tax_policy_unavailable',
+        'The branch tax policy is unavailable.',
+        statusCode: 409,
+      );
+    }
+    final appSettings =
+        policy?.policy.applyTo(_settings.current) ?? _settings.current;
     final pricing = InvoicePricingEngine.compute(
       InvoicePricingInput(
         lines: inputs,
         overallDiscount: overall,
-        enableTaxCalculations: true,
-        defaultTaxRateBps: 0,
-        taxInclusivePricing: false,
+        enableTaxCalculations: appSettings.enableTaxCalculations,
+        defaultTaxRateBps: (appSettings.defaultPurchaseTaxRate * 100).round(),
+        taxInclusivePricing: appSettings.taxInclusivePricing,
       ),
     );
+    final expected = request.expectedPricingFingerprint;
+    if (expected != null &&
+        expected !=
+            pricingPreviewFingerprint(
+              pricing,
+              taxInclusive: appSettings.taxInclusivePricing,
+            )) {
+      throw const LanBusinessException(
+        'pricing_preview_changed',
+        'Pricing changed. Refresh and review the return before submitting again.',
+        statusCode: 409,
+      );
+    }
     final currency = await _selectedCurrency();
     if (currency == null) {
       throw const LanBusinessException(
@@ -2427,7 +2631,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
       idempotencyKey: Value(key),
       returnMode: const Value('auto_adjustment'),
       modeReason: const Value('Remote unlinked purchase return'),
-    ).withPricingSnapshot(taxInclusive: false);
+    ).withPricingSnapshot(taxInclusive: appSettings.taxInclusivePricing);
     final itemRows = <PurchaseReturnAdjustmentItemsCompanion>[];
     for (var index = 0; index < resolved.length; index++) {
       final value = resolved[index];
@@ -2445,7 +2649,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
           taxCents: Value(Decimal.fromInt(line.tax.cents)),
           totalCents: Decimal.fromInt(line.total.cents),
           reason: Value(value.request.reason),
-          taxRateBpsAtPost: Value(value.taxRate),
+          taxRateBpsAtPost: Value(line.local.effectiveTaxRateBps),
           dispositionType: const Value('restock'),
         ),
       );
@@ -2475,7 +2679,7 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
         statusCode: 409,
       );
     }
-  }
+  });
 
   @override
   Future<void> voidPurchaseReturn({
@@ -2588,9 +2792,10 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
         .map((line) => line.productId)
         .toSet()
         .toList(growable: false);
-    final products = await (_database.select(
-      _database.products,
-    )..where((row) => row.id.isIn(productIds))).get();
+    final products = await WarehouseCatalogScope.readProducts(
+      _database,
+      productIds.toList(),
+    );
     final productMap = {for (final value in products) value.id: value};
 
     final variantIds = request.lines
@@ -2598,11 +2803,10 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
         .whereType<int>()
         .toSet()
         .toList(growable: false);
-    final variants = variantIds.isEmpty
-        ? <ProductVariant>[]
-        : await (_database.select(
-            _database.productVariants,
-          )..where((row) => row.id.isIn(variantIds))).get();
+    final variants = await WarehouseCatalogScope.readVariants(
+      _database,
+      variantIds.toList(),
+    );
     final variantMap = {for (final value in variants) value.id: value};
 
     final salespersonIds = <int>{
@@ -3204,28 +3408,14 @@ class LanMasterBusinessGatewayImpl implements LanMasterBusinessGateway {
     }
   }
 
+  /// The configured currency must resolve exactly. Falling back to the base
+  /// currency can label one currency while posting another without conversion.
   Future<Currency?> _selectedCurrency() async {
     final selectedCode = _currencyService.currencyCode.trim().toUpperCase();
-    if (selectedCode.isNotEmpty) {
-      final selected =
-          await (_database.select(_database.currencies)
-                ..where(
-                  (row) =>
-                      row.code.equals(selectedCode) & row.isActive.equals(true),
-                )
-                ..limit(1))
-              .getSingleOrNull();
-      if (selected != null) return selected;
-    }
-    return await (_database.select(_database.currencies)
-              ..where(
-                (row) => row.isBase.equals(true) & row.isActive.equals(true),
-              )
-              ..limit(1))
-            .getSingleOrNull() ??
-        await (_database.select(
-          _database.currencies,
-        )..limit(1)).getSingleOrNull();
+    return (_database.select(_database.currencies)..where(
+          (row) => row.code.equals(selectedCode) & row.isActive.equals(true),
+        ))
+        .getSingleOrNull();
   }
 
   int _cents(Decimal value) => value.toBigInt().toInt();

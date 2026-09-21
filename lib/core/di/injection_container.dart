@@ -1,3 +1,9 @@
+import '../../features/reports/presentation/bloc/supplier_sales_report_bloc.dart';
+import '../services/business/warehouse_read_scope.dart';
+import '../services/business/branch_currency_policy_store.dart';
+import '../services/business/warehouse_stocktake_service.dart';
+import '../../features/business/data/warehouse_setup_service.dart';
+import '../../features/products/services/export_stock_reader.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,6 +23,8 @@ import '../database/daos/barcode_template_dao.dart';
 import '../database/daos/purchase_dao.dart';
 import '../database/daos/sale_dao.dart';
 import '../services/currency_service.dart';
+import '../services/business/branch_tax_policy_store.dart';
+import '../services/business/warehouse_stock_initialization_service.dart';
 import '../services/cashier_shift_service.dart';
 import '../money/money_input_parser.dart';
 import '../services/parties/party_balance_classifier.dart';
@@ -270,7 +278,19 @@ Future<void> init() async {
   // Core Services
   sl.registerLazySingleton(() => ThemeService(sl()));
   sl.registerLazySingleton(() => LocalizationService(sl()));
-  sl.registerLazySingleton(() => CurrencyService(sl()));
+  sl.registerLazySingleton(() => BranchCurrencyPolicyStore(sl<AppDatabase>()));
+  sl.registerLazySingleton(
+    () => CurrencyService(
+      sl(),
+      validateDefinitionChange: (code, digits) =>
+          sl<BranchCurrencyPolicyStore>().validateDefinitionChange(
+            code,
+            digits,
+          ),
+      validateCurrencyChange: (code) =>
+          sl<BranchCurrencyPolicyStore>().validateDisplayCode(code),
+    ),
+  );
   sl.registerLazySingleton(() => CashierShiftService(sl<AppDatabase>()));
   // Phase 3.5.1 — single source of truth for free-form text → cents.
   // All UI forms must obtain cents via this parser instead of doing
@@ -300,6 +320,7 @@ Future<void> init() async {
       sl<JournalEntryService>(),
       sl<CommissionService>(),
       sl<LoyaltyPointsService>(),
+      settings: sl<AppSettingsService>(),
       sessionService: sl<SessionService>(),
       cashierShiftService: sl<CashierShiftService>(),
     ),
@@ -465,6 +486,13 @@ Future<void> init() async {
     ),
   );
 
+  sl.registerLazySingleton<WarehouseStocktakeService>(
+    () => WarehouseStocktakeService(
+      sl<AppDatabase>(),
+      sl<InventoryAdjustmentService>(),
+    ),
+  );
+
   // Purchases
   sl.registerLazySingleton<PurchaseLocalDatasource>(
     () => PurchaseLocalDatasourceImpl(
@@ -606,6 +634,7 @@ Future<void> init() async {
       sl<ProductRepository>(),
       sl<ProductVariantRepository>(),
       sl<CategoryRepository>(),
+      WarehouseExportStockReader(sl<AppDatabase>()),
     ),
   );
 
@@ -615,6 +644,7 @@ Future<void> init() async {
       sl<ProductRepository>(),
       sl<LanNetworkService>(),
       sl<CurrencyService>(),
+      sl<ProductVariantRepository>(),
     ),
   );
   sl.registerFactory(
@@ -660,6 +690,7 @@ Future<void> init() async {
       sl<PurchaseRepository>(),
       sl<ProductVariantRepository>(),
       sl<ProductRepository>(),
+      pharmacyDao: sl<PharmacyDao>(),
     ),
   );
   sl.registerFactory(
@@ -778,44 +809,64 @@ Future<void> init() async {
       defaultDateRange: defaultRange,
     );
   });
-  sl.registerFactory(() {
+  sl.registerFactoryParam<InventoryReportsBloc, WarehouseReadScope?, void>((
+    warehouseScope,
+    _,
+  ) {
     final defaultRange =
         sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
     return InventoryReportsBloc(
       sl<AppDatabase>(),
       defaultDateRange: defaultRange,
+      warehouseScope: warehouseScope,
     );
   });
-  sl.registerFactory(() {
-    final defaultRange =
-        sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
-    return ProductMovementDetailBloc(
-      sl<AppDatabase>(),
-      defaultDateRange: defaultRange,
-    );
-  });
-  sl.registerFactory(() {
+  sl.registerFactoryParam<ProductMovementDetailBloc, WarehouseReadScope?, void>(
+    (warehouseScope, _) {
+      final defaultRange =
+          sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+      return ProductMovementDetailBloc(
+        sl<AppDatabase>(),
+        defaultDateRange: defaultRange,
+        warehouseScope: warehouseScope,
+      );
+    },
+  );
+  sl.registerFactoryParam<StockMovementReportBloc, WarehouseReadScope?, void>((
+    warehouseScope,
+    _,
+  ) {
     final defaultRange =
         sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
     return StockMovementReportBloc(
       sl<AppDatabase>(),
       defaultDateRange: defaultRange,
+      warehouseScope: warehouseScope,
     );
   });
-  sl.registerFactory(() {
+  sl.registerFactoryParam<
+    ProductVariantMovementBloc,
+    WarehouseReadScope?,
+    void
+  >((warehouseScope, _) {
     final defaultRange =
         sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
     return ProductVariantMovementBloc(
       sl<AppDatabase>(),
       defaultDateRange: defaultRange,
+      warehouseScope: warehouseScope,
     );
   });
-  sl.registerFactory(() {
+  sl.registerFactoryParam<CategoryMovementBloc, WarehouseReadScope?, void>((
+    warehouseScope,
+    _,
+  ) {
     final defaultRange =
         sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
     return CategoryMovementBloc(
       sl<AppDatabase>(),
       defaultDateRange: defaultRange,
+      warehouseScope: warehouseScope,
     );
   });
   sl.registerFactory(() {
@@ -826,18 +877,29 @@ Future<void> init() async {
       defaultDateRange: defaultRange,
     );
   });
-  sl.registerFactory(() {
+  sl.registerFactoryParam<CustomerSalesReturnsBloc, WarehouseReadScope?, void>((
+    warehouseScope,
+    _,
+  ) {
     final defaultRange =
         sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
     return CustomerSalesReturnsBloc(
       sl<AppDatabase>(),
       defaultDateRange: defaultRange,
+      warehouseScope: warehouseScope,
     );
   });
-  sl.registerFactory(() {
+  sl.registerFactoryParam<TopCustomersBloc, WarehouseReadScope?, void>((
+    warehouseScope,
+    _,
+  ) {
     final defaultRange =
         sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
-    return TopCustomersBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+    return TopCustomersBloc(
+      sl<AppDatabase>(),
+      defaultDateRange: defaultRange,
+      warehouseScope: warehouseScope,
+    );
   });
   sl.registerFactory(() {
     final defaultRange =
@@ -847,12 +909,16 @@ Future<void> init() async {
       defaultDateRange: defaultRange,
     );
   });
-  sl.registerFactory(() {
+  sl.registerFactoryParam<CustomerSalesReportBloc, WarehouseReadScope?, void>((
+    warehouseScope,
+    _,
+  ) {
     final defaultRange =
         sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
     return CustomerSalesReportBloc(
       sl<AppDatabase>(),
       defaultDateRange: defaultRange,
+      warehouseScope: warehouseScope,
     );
   });
   sl.registerFactory(() {
@@ -871,12 +937,17 @@ Future<void> init() async {
       defaultDateRange: defaultRange,
     );
   });
-  sl.registerFactory(() {
+  sl.registerFactoryParam<
+    CustomerAnalysisReportBloc,
+    WarehouseReadScope?,
+    void
+  >((warehouseScope, _) {
     final defaultRange =
         sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
     return CustomerAnalysisReportBloc(
       sl<AppDatabase>(),
       defaultDateRange: defaultRange,
+      warehouseScope: warehouseScope,
     );
   });
   sl.registerFactory(() {
@@ -943,36 +1014,54 @@ Future<void> init() async {
       defaultDateRange: defaultRange,
     );
   });
-  sl.registerFactory(() {
+  sl.registerFactoryParam<
+    CustomerInvoicesReportBloc,
+    WarehouseReadScope?,
+    void
+  >((warehouseScope, _) {
     final defaultRange =
         sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
     return CustomerInvoicesReportBloc(
       sl<AppDatabase>(),
       defaultDateRange: defaultRange,
+      warehouseScope: warehouseScope,
     );
   });
-  sl.registerFactory(() {
+  sl.registerFactoryParam<
+    SupplierInvoicesReportBloc,
+    WarehouseReadScope?,
+    void
+  >((warehouseScope, _) {
     final defaultRange =
         sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
     return SupplierInvoicesReportBloc(
       sl<AppDatabase>(),
       defaultDateRange: defaultRange,
+      warehouseScope: warehouseScope,
     );
   });
-  sl.registerFactory(() {
-    final defaultRange =
-        sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
-    return SupplierReturnsReportBloc(
-      sl<AppDatabase>(),
-      defaultDateRange: defaultRange,
-    );
-  });
-  sl.registerFactory(() {
+  sl.registerFactoryParam<SupplierReturnsReportBloc, WarehouseReadScope?, void>(
+    (warehouseScope, _) {
+      final defaultRange =
+          sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
+      return SupplierReturnsReportBloc(
+        sl<AppDatabase>(),
+        defaultDateRange: defaultRange,
+        warehouseScope: warehouseScope,
+      );
+    },
+  );
+  sl.registerFactoryParam<
+    SupplierStocktakeReportBloc,
+    WarehouseReadScope?,
+    void
+  >((warehouseScope, _) {
     final defaultRange =
         sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
     return SupplierStocktakeReportBloc(
       sl<AppDatabase>(),
       defaultDateRange: defaultRange,
+      warehouseScope: warehouseScope,
     );
   });
   sl.registerFactory(() {
@@ -983,12 +1072,17 @@ Future<void> init() async {
       defaultDateRange: defaultRange,
     );
   });
-  sl.registerFactory(() {
+  sl.registerFactoryParam<
+    SalespeopleCommissionReportBloc,
+    WarehouseReadScope?,
+    void
+  >((warehouseScope, _) {
     final defaultRange =
         sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
     return SalespeopleCommissionReportBloc(
       sl<AppDatabase>(),
       defaultDateRange: defaultRange,
+      warehouseScope: warehouseScope,
     );
   });
   sl.registerFactory(() {
@@ -996,47 +1090,85 @@ Future<void> init() async {
         sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
     return ExpenseReportBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
   });
-  sl.registerFactory(() {
+  sl.registerFactoryParam<SalesTaxReportBloc, WarehouseReadScope?, void>((
+    warehouseScope,
+    _,
+  ) {
     final defaultRange =
         sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
     return SalesTaxReportBloc(
       sl<AppDatabase>(),
       defaultDateRange: defaultRange,
+      warehouseScope: warehouseScope,
     );
   });
-  sl.registerFactory(() {
+  sl.registerFactoryParam<PurchaseTaxReportBloc, WarehouseReadScope?, void>((
+    warehouseScope,
+    _,
+  ) {
     final defaultRange =
         sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
     return PurchaseTaxReportBloc(
       sl<AppDatabase>(),
       defaultDateRange: defaultRange,
+      warehouseScope: warehouseScope,
     );
   });
-  sl.registerFactory(() {
+  sl.registerFactoryParam<SupplierSalesReportBloc, WarehouseReadScope?, void>(
+    (scope, _) => SupplierSalesReportBloc(
+      sl<AppDatabase>(),
+      warehouseScope: scope,
+      defaultDateRange:
+          sl<AppSettingsBloc>().state.settings.defaultReportDateRange,
+    ),
+  );
+  sl.registerFactoryParam<SalesReportsBloc, WarehouseReadScope?, void>((
+    warehouseScope,
+    _,
+  ) {
     final defaultRange =
         sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
-    return SalesReportsBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+    return SalesReportsBloc(
+      sl<AppDatabase>(),
+      defaultDateRange: defaultRange,
+      warehouseScope: warehouseScope,
+    );
   });
-  sl.registerFactory(() {
+  sl.registerFactoryParam<PurchaseReportsBloc, WarehouseReadScope?, void>((
+    warehouseScope,
+    _,
+  ) {
     final defaultRange =
         sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
     return PurchaseReportsBloc(
       sl<AppDatabase>(),
       defaultDateRange: defaultRange,
+      warehouseScope: warehouseScope,
     );
   });
-  sl.registerFactory(() {
+  sl.registerFactoryParam<DiscountReportsBloc, WarehouseReadScope?, void>((
+    warehouseScope,
+    _,
+  ) {
     final defaultRange =
         sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
     return DiscountReportsBloc(
       sl<AppDatabase>(),
       defaultDateRange: defaultRange,
+      warehouseScope: warehouseScope,
     );
   });
-  sl.registerFactory(() {
+  sl.registerFactoryParam<ProfitReportsBloc, WarehouseReadScope?, void>((
+    warehouseScope,
+    _,
+  ) {
     final defaultRange =
         sl<AppSettingsBloc>().state.settings.defaultReportDateRange;
-    return ProfitReportsBloc(sl<AppDatabase>(), defaultDateRange: defaultRange);
+    return ProfitReportsBloc(
+      sl<AppDatabase>(),
+      defaultDateRange: defaultRange,
+      warehouseScope: warehouseScope,
+    );
   });
 
   // Ledger Rebuild Service
@@ -1058,7 +1190,32 @@ Future<void> init() async {
 
   // Settings Services
   sl.registerLazySingleton(() => CompanyProfileService(sl()));
-  sl.registerLazySingleton(() => AppSettingsService(sl()));
+  sl.registerLazySingleton(() => BranchTaxPolicyStore(sl<AppDatabase>()));
+  sl.registerLazySingleton(
+    () => WarehouseStockInitializationService(sl<AppDatabase>()),
+  );
+  sl.registerLazySingleton<WarehouseSetupEntitlement>(
+    () => const UnreleasedWarehouseSetupEntitlement(),
+  );
+  sl.registerLazySingleton(
+    () => WarehouseSetupService(
+      sl<AppDatabase>(),
+      sl<SessionService>(),
+      sl<WarehouseSetupEntitlement>(),
+      stocktake: sl<WarehouseStocktakeService>(),
+      adjustments: sl<InventoryAdjustmentService>(),
+      operatingCurrencyCode: () => sl<CurrencyService>().getCurrency().code,
+      isRemoteClient: () =>
+          sl<LanNetworkService>().snapshot.mode == LanMode.client,
+    ),
+  );
+  sl.registerLazySingleton(
+    () => AppSettingsService(
+      sl<SharedPreferences>(),
+      taxStore: sl<BranchTaxPolicyStore>(),
+    ),
+  );
+  await sl<AppSettingsService>().initializeTaxPolicy();
 
   // Inventory Valuation Service — single source of truth for the
   // business-wide inventory valuation method (WAC | FIFO). Lives in the

@@ -122,6 +122,7 @@ class PurchaseItemEntity extends Equatable {
   final Decimal? newSellPriceCents;
   final Decimal? newWholesalePriceCents;
   final DateTime? expiryDate;
+  final String? manufacturerLotNumber;
   final DateTime createdAt;
 
   PurchaseItemEntity({
@@ -150,6 +151,7 @@ class PurchaseItemEntity extends Equatable {
     this.newSellPriceCents,
     this.newWholesalePriceCents,
     this.expiryDate,
+    this.manufacturerLotNumber,
     required this.createdAt,
   }) : discountCents = discountCents ?? Decimal.zero;
 
@@ -199,6 +201,7 @@ class PurchaseItemEntity extends Equatable {
     newSellPriceCents,
     newWholesalePriceCents,
     expiryDate,
+    manufacturerLotNumber,
     createdAt,
   ];
 }

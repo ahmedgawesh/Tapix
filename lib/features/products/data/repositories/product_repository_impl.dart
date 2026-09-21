@@ -167,58 +167,91 @@ class ProductRepositoryImpl implements ProductRepository {
     String costingMethod = 'wac',
     String inventoryTrackingType = 'standard',
   }) async {
-    assert(
-      inventoryTrackingType == 'standard' ||
-          inventoryTrackingType == 'batch' ||
-          inventoryTrackingType == 'batch_expiry',
-      'inventoryTrackingType must be standard | batch | batch_expiry',
-    );
-    // Phase B4 — enforce free-tier cumulative cap BEFORE the insert.
-    // Pro users bypass; free users at or past the cap get
-    // [FreeQuotaExceededException].
-    _freeQuotaService?.guardProductCreation();
-    final productId = await _datasource.createProduct(
-      db.ProductsCompanion(
-        name: Value(name),
-        nameAr: Value(nameAr),
-        nameFr: Value(nameFr),
-        description: Value(description),
-        sku: Value(sku),
-        barcode: Value(barcode),
-        costCents: Value(costCents),
-        priceCents: Value(priceCents),
-        wholesalePriceCents: Value(wholesalePriceCents),
-        stockQuantity: Value(stockQuantity),
-        minQuantity: Value(minQuantity),
-        categoryId: Value(categoryId),
-        supplierId: Value(supplierId),
-        currencyId: Value(currencyId ?? 1),
-        imagePath: Value(imagePath),
-        hasVariants: Value(hasVariants),
-        isTaxable: Value(isTaxable),
-        purchaseTaxRateBps: Value(purchaseTaxRateBps),
-        salesTaxRateBps: Value(salesTaxRateBps),
-        isActive: Value(isActive),
-        trackInventory: Value(trackInventory),
-        measurementType: Value(measurementType),
-        costingMethod: Value(costingMethod),
-        inventoryTrackingType: Value(inventoryTrackingType),
-      ),
-    );
+    if (stockQuantity != 0) {
+      throw ArgumentError.value(
+        stockQuantity,
+        'stockQuantity',
+        'Create the product at zero stock; record opening stock through its variant in the same transaction.',
+      );
+    }
+    if (!const {
+      'piece',
+      'length',
+      'weight',
+      'volume',
+    }.contains(measurementType)) {
+      throw ArgumentError.value(
+        measurementType,
+        'measurementType',
+        'Unsupported inventory policy',
+      );
+    }
+    if (!const {'wac', 'fifo'}.contains(costingMethod)) {
+      throw ArgumentError.value(
+        costingMethod,
+        'costingMethod',
+        'Unsupported inventory policy',
+      );
+    }
+    if (!const {
+      'standard',
+      'batch',
+      'batch_expiry',
+    }.contains(inventoryTrackingType)) {
+      throw ArgumentError.value(
+        inventoryTrackingType,
+        'inventoryTrackingType',
+        'Unsupported inventory policy',
+      );
+    }
+    return runInTransaction(() async {
+      // Phase B4 — enforce free-tier cumulative cap BEFORE the insert.
+      // Pro users bypass; free users at or past the cap get
+      // [FreeQuotaExceededException].
+      _freeQuotaService?.guardProductCreation();
+      final productId = await _datasource.createProduct(
+        db.ProductsCompanion(
+          name: Value(name),
+          nameAr: Value(nameAr),
+          nameFr: Value(nameFr),
+          description: Value(description),
+          sku: Value(sku),
+          barcode: Value(barcode),
+          costCents: Value(costCents),
+          priceCents: Value(priceCents),
+          wholesalePriceCents: Value(wholesalePriceCents),
+          stockQuantity: Value(stockQuantity),
+          minQuantity: Value(minQuantity),
+          categoryId: Value(categoryId),
+          supplierId: Value(supplierId),
+          currencyId: Value(currencyId ?? 1),
+          imagePath: Value(imagePath),
+          hasVariants: Value(hasVariants),
+          isTaxable: Value(isTaxable),
+          purchaseTaxRateBps: Value(purchaseTaxRateBps),
+          salesTaxRateBps: Value(salesTaxRateBps),
+          isActive: Value(isActive),
+          trackInventory: Value(trackInventory),
+          measurementType: Value(measurementType),
+          costingMethod: Value(costingMethod),
+          inventoryTrackingType: Value(inventoryTrackingType),
+        ),
+      );
 
-    // Audit: log product creation
-    await _audit.logProductCreated(
-      productId: productId,
-      productName: name,
-      userId: await _currentUserId(),
-    );
+      // Audit: log product creation
+      await _audit.logProductCreated(
+        productId: productId,
+        productName: name,
+        userId: await _currentUserId(),
+      );
 
-    // Phase B4 — bump the cumulative counter ONLY after a successful insert.
-    // Pro users still increment so that, if their subscription lapses, the
-    // free-tier counter accurately reflects lifetime usage.
-    await _freeQuotaService?.incrementProductsCreated();
+      // Phase B4 — bump the cumulative counter ONLY after a successful insert.
+      // Pro users still increment so that, if their subscription lapses, the
+      // free-tier counter accurately reflects lifetime usage.
+      await _freeQuotaService?.incrementProductsCreated();
 
-    return productId;
+      return productId;
+    });
   }
 
   @override
@@ -334,26 +367,28 @@ class ProductRepositoryImpl implements ProductRepository {
 
   @override
   Future<ProductDeletionResult> smartDeleteProduct(int productId) async {
-    final result = await _datasource.smartDeleteProduct(productId);
-    if (result.wasDeleted) {
-      _audit.logProductDeleted(
-        productId: productId,
-        productName: 'Product #$productId',
-        userId: await _currentUserId(),
+    return _datasource.runInTransaction(() async {
+      final result = await _datasource.smartDeleteProduct(productId);
+      if (result.wasDeleted) {
+        await _audit.logProductDeleted(
+          productId: productId,
+          productName: 'Product #$productId',
+          userId: await _currentUserId(),
+        );
+      } else {
+        // Deactivation is audit-relevant but less severe than hard delete.
+        await _audit.logProductUpdated(
+          productId: productId,
+          productName:
+              'Product #$productId (deactivated, ${result.referenceCount} refs)',
+          userId: await _currentUserId(),
+        );
+      }
+      return ProductDeletionResult(
+        wasDeleted: result.wasDeleted,
+        referenceCount: result.referenceCount,
       );
-    } else {
-      // Deactivation is audit-relevant but less severe than hard delete.
-      _audit.logProductUpdated(
-        productId: productId,
-        productName:
-            'Product #$productId (deactivated, ${result.referenceCount} refs)',
-        userId: await _currentUserId(),
-      );
-    }
-    return ProductDeletionResult(
-      wasDeleted: result.wasDeleted,
-      referenceCount: result.referenceCount,
-    );
+    });
   }
 
   @override
@@ -361,35 +396,37 @@ class ProductRepositoryImpl implements ProductRepository {
     required int productId,
     required String reason,
   }) async {
-    // The accounting-safe write-off step requires both the variant
-    // datasource (to enumerate every variant carrying stock) and the
-    // adjustment service (to post the shrinkage JE per variant). They
-    // are optional in the constructor for backwards-compat; if either
-    // is missing we fall back to the plain smart-delete (the old behaviour
-    // — accepted only when the product carries no stock).
-    final variantDs = _variantDatasource;
-    final adjSvc = _adjustmentService;
+    return _datasource.runInTransaction(() async {
+      // The accounting-safe write-off step requires both the variant
+      // datasource (to enumerate every variant carrying stock) and the
+      // adjustment service (to post the shrinkage JE per variant). They
+      // are optional in the constructor for backwards-compat; if either
+      // is missing we fall back to the plain smart-delete (the old behaviour
+      // — accepted only when the product carries no stock).
+      final variantDs = _variantDatasource;
+      final adjSvc = _adjustmentService;
 
-    if (variantDs != null && adjSvc != null) {
-      // Iterate active variants with stock>0 and shrink each to zero
-      // before touching the products table. Inactive variants already
-      // had their stock zeroed (or never had any) so we leave them be.
-      final variants = await variantDs.getVariantsByProduct(productId);
-      for (final v in variants) {
-        if (v.stockQuantity > 0) {
-          await adjSvc.adjustForProduct(
-            productId: productId,
-            variantId: v.id,
-            type: InventoryAdjustmentType.shrinkage,
-            quantityDelta: -v.stockQuantity,
-            reason: reason,
-          );
+      if (variantDs != null && adjSvc != null) {
+        // Iterate active variants with stock>0 and shrink each to zero
+        // before touching the products table. Inactive variants already
+        // had their stock zeroed (or never had any) so we leave them be.
+        final variants = await variantDs.getVariantsByProduct(productId);
+        for (final v in variants) {
+          if (v.stockQuantity > 0) {
+            await adjSvc.adjustForProduct(
+              productId: productId,
+              variantId: v.id,
+              type: InventoryAdjustmentType.shrinkage,
+              quantityDelta: -v.stockQuantity,
+              reason: reason,
+            );
+          }
         }
       }
-    }
 
-    // Now delete (hard if no refs, soft if any).
-    return smartDeleteProduct(productId);
+      // Now delete (hard if no refs, soft if any).
+      return smartDeleteProduct(productId);
+    });
   }
 
   @override
@@ -427,51 +464,65 @@ class ProductRepositoryImpl implements ProductRepository {
   Future<Map<int, int>> bulkCreateProducts(
     List<BulkProductData> products,
   ) async {
-    _freeQuotaService?.guardProductCreations(products.length);
-    final companions = products
-        .map(
-          (p) => db.ProductsCompanion(
-            name: Value(p.name),
-            nameAr: Value(p.nameAr),
-            nameFr: Value(p.nameFr),
-            sku: Value(p.sku),
-            barcode: Value(p.barcode),
-            costCents: Value(p.costCents),
-            priceCents: Value(p.priceCents),
-            wholesalePriceCents: Value(p.wholesalePriceCents),
-            stockQuantity: Value(p.stockQuantity),
-            minQuantity: Value(p.minQuantity),
-            categoryId: Value(p.categoryId),
-            supplierId: Value(p.supplierId),
-            currencyId: const Value(1),
-            hasVariants: Value(p.hasVariants),
-            isTaxable: Value(p.isTaxable),
-            purchaseTaxRateBps: Value(p.purchaseTaxRateBps),
-            salesTaxRateBps: Value(p.salesTaxRateBps),
-            isActive: Value(p.isActive),
-            trackInventory: Value(p.trackInventory),
-          ),
-        )
-        .toList();
-
-    final created = await _datasource.bulkCreateProducts(companions);
-
-    final userId = await _currentUserId();
-    final productByRow = {
-      for (final product in products) product.rowIndex: product,
-    };
-    for (final entry in created.entries) {
-      final product = productByRow[entry.key];
-      if (product == null) continue;
-      await _audit.logProductCreated(
-        productId: entry.value,
-        productName: product.name,
-        userId: userId,
+    if (products.any((product) => product.stockQuantity != 0)) {
+      throw ArgumentError(
+        'Create bulk products at zero stock; record opening stock through their variants in the same transaction.',
       );
     }
+    return runInTransaction(() async {
+      if (products.map((p) => p.rowIndex).toSet().length != products.length) {
+        throw ArgumentError('Bulk product row indexes must be unique.');
+      }
+      _freeQuotaService?.guardProductCreations(products.length);
+      final companions = products
+          .map(
+            (p) => db.ProductsCompanion(
+              name: Value(p.name),
+              nameAr: Value(p.nameAr),
+              nameFr: Value(p.nameFr),
+              sku: Value(p.sku),
+              barcode: Value(p.barcode),
+              costCents: Value(p.costCents),
+              priceCents: Value(p.priceCents),
+              wholesalePriceCents: Value(p.wholesalePriceCents),
+              stockQuantity: Value(p.stockQuantity),
+              minQuantity: Value(p.minQuantity),
+              categoryId: Value(p.categoryId),
+              supplierId: Value(p.supplierId),
+              currencyId: const Value(1),
+              hasVariants: Value(p.hasVariants),
+              isTaxable: Value(p.isTaxable),
+              purchaseTaxRateBps: Value(p.purchaseTaxRateBps),
+              salesTaxRateBps: Value(p.salesTaxRateBps),
+              isActive: Value(p.isActive),
+              trackInventory: Value(p.trackInventory),
+            ),
+          )
+          .toList();
 
-    await _freeQuotaService?.incrementProductsCreatedBy(created.length);
-    return created;
+      final indexed = await _datasource.bulkCreateProducts(companions);
+      final created = {
+        for (final entry in indexed.entries)
+          products[entry.key].rowIndex: entry.value,
+      };
+
+      final userId = await _currentUserId();
+      final productByRow = {
+        for (final product in products) product.rowIndex: product,
+      };
+      for (final entry in created.entries) {
+        final product = productByRow[entry.key];
+        if (product == null) continue;
+        await _audit.logProductCreated(
+          productId: entry.value,
+          productName: product.name,
+          userId: userId,
+        );
+      }
+
+      await _freeQuotaService?.incrementProductsCreatedBy(created.length);
+      return created;
+    });
   }
 
   @override
@@ -504,15 +555,32 @@ class ProductRepositoryImpl implements ProductRepository {
 
   @override
   Future<T> runInTransaction<T>(Future<T> Function() action) async {
-    final quotaSnapshot = _freeQuotaService?.productsCreatedLifetime;
-    try {
-      return await _datasource.runInTransaction(action);
-    } catch (_) {
-      if (quotaSnapshot != null) {
+    int? quotaSnapshot;
+    var restored = false;
+    Future<void> restoreQuota() async {
+      if (quotaSnapshot != null && !restored) {
         await _freeQuotaService!.restoreProductsCreatedAfterRollback(
-          quotaSnapshot,
+          quotaSnapshot!,
         );
+        restored = true;
       }
+    }
+
+    try {
+      return await _datasource.runInTransaction(() async {
+        // Snapshot after obtaining the transaction, so a queued failure
+        // cannot restore a counter from before another successful creation.
+        quotaSnapshot = _freeQuotaService?.productsCreatedLifetime;
+        try {
+          return await action();
+        } catch (_) {
+          await restoreQuota();
+          rethrow;
+        }
+      });
+    } catch (_) {
+      // Also compensate if committing the database transaction itself fails.
+      await restoreQuota();
       rethrow;
     }
   }

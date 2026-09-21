@@ -9,9 +9,7 @@ class DiscountReportsHubScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('reports.discount_reports'.tr()),
-      ),
+      appBar: AppBar(title: Text('reports.discount_reports'.tr())),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -56,9 +54,9 @@ class _SectionHeader extends StatelessWidget {
     return Text(
       title,
       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.bold,
-            color: Theme.of(context).colorScheme.primary,
-          ),
+        fontWeight: FontWeight.bold,
+        color: Theme.of(context).colorScheme.primary,
+      ),
     );
   }
 }

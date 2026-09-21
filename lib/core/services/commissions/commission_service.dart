@@ -116,13 +116,25 @@ class CommissionService {
   /// (sum-preservation invariant).
   Future<void> reverseForReturn({
     required int saleId,
+    int? saleReturnId,
     required int saleSubtotalCents,
     required int totalSaleItemCount,
     required int returnSubtotalCents,
     required int returnedItemCount,
     required int currencyId,
     required DateTime returnDate,
-  }) async {
+  }) => _employeeDao.attachedDatabase.transaction(() async {
+    if (saleReturnId != null) {
+      final existing = await (_employeeDao.attachedDatabase.select(
+        _employeeDao.attachedDatabase.commissions,
+      )..where((c) => c.saleReturnId.equals(saleReturnId))).get();
+      if (existing.isNotEmpty) {
+        if (existing.any((c) => c.saleId != saleId)) {
+          throw StateError('Commission return belongs to another sale.');
+        }
+        return;
+      }
+    }
     if (saleSubtotalCents <= 0) return;
 
     final commissions = await _employeeDao.getCommissionsBySaleId(saleId);
@@ -167,6 +179,7 @@ class CommissionService {
       final companion = db.CommissionsCompanion(
         employeeId: Value(c.employeeId),
         saleId: Value(saleId),
+        saleReturnId: Value(saleReturnId),
         commissionRateBps: Value(c.commissionRateBps),
         commissionAmountCents: Value(Decimal.fromInt(-deduction)),
         currencyId: Value(currencyId),
@@ -178,7 +191,7 @@ class CommissionService {
 
       await _employeeDao.createCommission(companion);
     }
-  }
+  });
 
   /// Reverse (deduct) commission for an UNLINKED (adjustment) sale return.
   ///

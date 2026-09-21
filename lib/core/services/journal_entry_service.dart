@@ -2070,6 +2070,28 @@ class JournalEntryService {
     );
   }
 
+  Future<void> recordLoyaltyReturnJournalEntry({
+    required int returnId,
+    required int valueCents,
+    required int currencyId,
+  }) async {
+    if (valueCents <= 0) return;
+    await _accountingRepo.createJournalEntry(
+      userId: null,
+      entryData: JournalEntryData.simple(
+        description: 'Reverse earned loyalty — Return #$returnId',
+        debitAccountId: await _requireAccountId('2300'),
+        creditAccountId: await _requireAccountId('5500'),
+        amountCents: valueCents,
+        currencyId: currencyId,
+        entryType: 'loyalty_return',
+        sourceTable: 'sale_returns',
+        sourceId: returnId,
+        autoPost: true,
+      ),
+    );
+  }
+
   /// Create journal entry when loyalty points are REDEEMED.
   ///
   /// STRICT RULE — When points are redeemed:

@@ -246,6 +246,7 @@ class PurchaseItemInput {
   final Decimal taxCents;
   final Decimal totalCents;
   final DateTime? expiryDate;
+  final String? manufacturerLotNumber;
   final Decimal? originalCostCents;
   final Decimal? originalPriceCents;
   final Decimal? originalWholesalePriceCents;
@@ -264,6 +265,7 @@ class PurchaseItemInput {
     required this.taxCents,
     required this.totalCents,
     this.expiryDate,
+    this.manufacturerLotNumber,
     this.originalCostCents,
     this.originalPriceCents,
     this.originalWholesalePriceCents,

@@ -1,7 +1,10 @@
+import '../../../../core/services/business/warehouse_read_scope.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+import '../../../../core/services/business/warehouse_document_scope.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -36,10 +39,7 @@ enum TopCustomersSortType {
   nameDesc,
 }
 
-enum TopCustomersViewType {
-  byRevenue,
-  byVolume,
-}
+enum TopCustomersViewType { byRevenue, byVolume }
 
 // ==================== DATA MODELS ====================
 
@@ -116,13 +116,17 @@ class TopCustomersData {
 class TopCustomersBloc
     extends RealtimeBloc<TopCustomersData, TopCustomersEvent> {
   final AppDatabase _db;
+  final WarehouseReadScope? warehouseScope;
   ReportDateRange _dateRange;
   TopCustomersSortType _sort = TopCustomersSortType.revenueDesc;
   TopCustomersViewType _view = TopCustomersViewType.byRevenue;
 
-  TopCustomersBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+  TopCustomersBloc(
+    this._db, {
+    String defaultDateRange = 'month',
+    this.warehouseScope,
+  }) : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+       super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -139,32 +143,44 @@ class TopCustomersBloc
   }
 
   Stream<TopCustomersData> _buildCombinedStream() {
-    // Watch sales table for real-time changes
-    return _db.select(_db.sales).watch().asyncMap((_) async {
-      final customers = await _loadTopCustomers();
+    return _db
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.sales,
+            _db.customers,
+            _db.saleItems,
+          },
+        )
+        .watch()
+        .asyncMap(
+          (_) => WarehouseReadScope.snapshot(_db, warehouseScope, () async {
+            final customers = await _loadTopCustomers();
 
-      int totalRevenue = 0;
-      int totalTransactions = 0;
-      int totalQuantity = 0;
-      for (final c in customers) {
-        totalRevenue += c.totalRevenueCents;
-        totalTransactions += c.transactionCount;
-        totalQuantity += c.totalQuantity;
-      }
+            int totalRevenue = 0;
+            int totalTransactions = 0;
+            int totalQuantity = 0;
+            for (final c in customers) {
+              totalRevenue += c.totalRevenueCents;
+              totalTransactions += c.transactionCount;
+              totalQuantity += c.totalQuantity;
+            }
 
-      final sorted = _applySortToCustomers(customers, _sort);
+            final sorted = _applySortToCustomers(customers, _sort);
 
-      return TopCustomersData(
-        customers: sorted,
-        grandTotalRevenueCents: totalRevenue,
-        grandTotalTransactions: totalTransactions,
-        grandTotalQuantity: totalQuantity,
-        uniqueCustomerCount: customers.length,
-        dateRange: _dateRange,
-        sort: _sort,
-        view: _view,
-      );
-    });
+            return TopCustomersData(
+              customers: sorted,
+              grandTotalRevenueCents: totalRevenue,
+              grandTotalTransactions: totalTransactions,
+              grandTotalQuantity: totalQuantity,
+              uniqueCustomerCount: customers.length,
+              dateRange: _dateRange,
+              sort: _sort,
+              view: _view,
+            );
+          }),
+        );
   }
 
   Future<void> _onDateRangeChanged(
@@ -183,12 +199,11 @@ class TopCustomersBloc
     final current = currentData;
     if (current != null) {
       final sorted = _applySortToCustomers(current.customers, event.sort);
-      emit(RealtimeSuccess<TopCustomersData>(
-        data: current.copyWith(
-          customers: sorted,
-          sort: event.sort,
+      emit(
+        RealtimeSuccess<TopCustomersData>(
+          data: current.copyWith(customers: sorted, sort: event.sort),
         ),
-      ));
+      );
     }
   }
 
@@ -205,13 +220,15 @@ class TopCustomersBloc
           : TopCustomersSortType.volumeDesc;
       _sort = newSort;
       final sorted = _applySortToCustomers(current.customers, newSort);
-      emit(RealtimeSuccess<TopCustomersData>(
-        data: current.copyWith(
-          customers: sorted,
-          sort: newSort,
-          view: event.view,
+      emit(
+        RealtimeSuccess<TopCustomersData>(
+          data: current.copyWith(
+            customers: sorted,
+            sort: newSort,
+            view: event.view,
+          ),
         ),
-      ));
+      );
     }
   }
 
@@ -222,17 +239,13 @@ class TopCustomersBloc
     final list = List<TopCustomerItem>.from(items);
     switch (sort) {
       case TopCustomersSortType.revenueDesc:
-        list.sort(
-            (a, b) => b.totalRevenueCents.compareTo(a.totalRevenueCents));
+        list.sort((a, b) => b.totalRevenueCents.compareTo(a.totalRevenueCents));
       case TopCustomersSortType.revenueAsc:
-        list.sort(
-            (a, b) => a.totalRevenueCents.compareTo(b.totalRevenueCents));
+        list.sort((a, b) => a.totalRevenueCents.compareTo(b.totalRevenueCents));
       case TopCustomersSortType.volumeDesc:
-        list.sort(
-            (a, b) => b.transactionCount.compareTo(a.transactionCount));
+        list.sort((a, b) => b.transactionCount.compareTo(a.transactionCount));
       case TopCustomersSortType.volumeAsc:
-        list.sort(
-            (a, b) => a.transactionCount.compareTo(b.transactionCount));
+        list.sort((a, b) => a.transactionCount.compareTo(b.transactionCount));
       case TopCustomersSortType.nameAsc:
         list.sort((a, b) => a.customerName.compareTo(b.customerName));
       case TopCustomersSortType.nameDesc:
@@ -245,8 +258,9 @@ class TopCustomersBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         c.id AS customer_id,
         c.name AS customer_name,
@@ -255,7 +269,7 @@ class TopCustomersBloc
         COALESCE(SUM(s.total_cents), 0) AS total_revenue_cents,
         COALESCE(SUM(item_totals.total_qty), 0) AS total_quantity,
         MAX(s.sale_date) AS last_purchase_date
-      FROM sales s
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s
       INNER JOIN customers c ON c.id = s.customer_id
       LEFT JOIN (
         SELECT si.sale_id, SUM(si.quantity) AS total_qty
@@ -270,16 +284,18 @@ class TopCustomersBloc
       HAVING total_revenue_cents > 0
       ORDER BY total_revenue_cents DESC
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {
-        _db.sales,
-        _db.saleItems,
-        _db.customers,
-      },
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.sales,
+            _db.saleItems,
+            _db.customers,
+          },
+        )
+        .get();
 
     return rows.map((row) {
       final totalRevenue = row.read<int>('total_revenue_cents');

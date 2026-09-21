@@ -12,6 +12,12 @@ mixin _$ProductDaoMixin on DatabaseAccessor<AppDatabase> {
   $ProductColorsTable get productColors => attachedDatabase.productColors;
   $SizesTable get sizes => attachedDatabase.sizes;
   $ProductVariantsTable get productVariants => attachedDatabase.productVariants;
+  $BusinessOrganizationsTable get businessOrganizations =>
+      attachedDatabase.businessOrganizations;
+  $BusinessBranchesTable get businessBranches =>
+      attachedDatabase.businessBranches;
+  $BusinessWarehousesTable get businessWarehouses =>
+      attachedDatabase.businessWarehouses;
   $ProductBatchesTable get productBatches => attachedDatabase.productBatches;
   $BatchConsumptionsTable get batchConsumptions =>
       attachedDatabase.batchConsumptions;
@@ -45,6 +51,21 @@ class ProductDaoManager {
       $$ProductVariantsTableTableManager(
         _db.attachedDatabase,
         _db.productVariants,
+      );
+  $$BusinessOrganizationsTableTableManager get businessOrganizations =>
+      $$BusinessOrganizationsTableTableManager(
+        _db.attachedDatabase,
+        _db.businessOrganizations,
+      );
+  $$BusinessBranchesTableTableManager get businessBranches =>
+      $$BusinessBranchesTableTableManager(
+        _db.attachedDatabase,
+        _db.businessBranches,
+      );
+  $$BusinessWarehousesTableTableManager get businessWarehouses =>
+      $$BusinessWarehousesTableTableManager(
+        _db.attachedDatabase,
+        _db.businessWarehouses,
       );
   $$ProductBatchesTableTableManager get productBatches =>
       $$ProductBatchesTableTableManager(

@@ -7,18 +7,20 @@ import 'dart:typed_data';
 import 'package:bcrypt/bcrypt.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'lan_tls_identity.dart';
+import 'lan_request_body.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../database/daos/settings_dao.dart';
 import '../localization_service.dart';
+import '../business/local_branch_scope.dart';
 import 'lan_business_models.dart';
 import 'lan_models.dart';
 
-/// Owns the first, deliberately narrow LAN protocol.
-///
-/// This phase exposes health/pairing only. Database and accounting operations
-/// remain local until authenticated request signing and transactional API
-/// endpoints are introduced. The SQLite file is never shared over the network.
+/// TLS-only LAN protocol. Pairing transfers the master's certificate fingerprint
+/// out of band through the code displayed on its screen. Every subsequent
+/// connection is pinned to that identity, including discovery and images.
 class LanNetworkService {
   LanNetworkService(
     this._settingsDao, {
@@ -29,19 +31,23 @@ class LanNetworkService {
        _businessGateway = businessGateway,
        _localizationService = localizationService;
 
-  static const int protocolVersion = 1;
+  static const int protocolVersion = 2;
   static const int defaultPort = 45820;
   static const int discoveryPort = 45821;
-  static const _discoveryProbe = 'TAPIX_DISCOVER_V1';
+  static const _discoveryProbe = 'TAPIX_DISCOVER_V2';
 
   static const _modeKey = 'lan.mode';
   static const _portKey = 'lan.port';
   static const _deviceIdKey = 'lan.device_id';
   static const _masterHostKey = 'lan.master_host';
   static const _masterIdKey = 'lan.master_id';
-  static const _clientTokenKey = 'lan.client_token';
+  static const _clientTokenKey = 'lan.client_token.v2';
   static const _clientDeviceNameKey = 'lan.client_device_name';
-  static const _authorizedDevicesKey = 'lan.authorized_devices';
+  // V1 credentials crossed plaintext connections and must not survive upgrade.
+  static const _authorizedDevicesKey = 'lan.authorized_devices.v2';
+  static const _scopeBindingMigrationKey = 'lan.scope_binding.v1';
+  LocalBranchScope? _masterScope;
+
   static const _userSessionHeader = 'X-Tapix-User-Session';
   static const _platformHeader = 'X-Tapix-Platform';
   static const _deviceNameHeader = 'X-Tapix-Device-Name';
@@ -60,6 +66,15 @@ class LanNetworkService {
 
   LanNetworkSnapshot _snapshot = const LanNetworkSnapshot();
   HttpServer? _server;
+  LanTlsIdentity? _tlsIdentity;
+  String? _trustedFingerprint;
+  DateTime? _pairingExpiresAt;
+  Timer? _pairingTimer;
+  int _activeRequests = 0;
+  final Map<String, List<DateTime>> _pairAttempts = {};
+  final List<DateTime> _globalPairAttempts = [];
+  String get _pinStorageKey => 'lan.tls.master_pin.v2.$_deviceId';
+
   Timer? _monitorTimer;
   Timer? _masterMonitorTimer;
   RawDatagramSocket? _discoverySocket;
@@ -85,6 +100,9 @@ class LanNetworkService {
 
   Future<void> initialize() async {
     _deviceId = await _loadOrCreateDeviceId();
+    _trustedFingerprint = await const FlutterSecureStorage().read(
+      key: _pinStorageKey,
+    );
     _clientDeviceName = await _settingsDao.getSetting(_clientDeviceNameKey);
     await _loadAuthorizedDevices();
 
@@ -151,13 +169,30 @@ class LanNetworkService {
     );
 
     try {
-      _server = await HttpServer.bind(
+      final scope = await LocalBranchScope.read(_settingsDao.attachedDatabase);
+      if (_masterScope != null &&
+          !_masterScope!.matchesBinding(scope.toJson())) {
+        _userSessions.clear();
+        _loginChallenges.clear();
+      }
+      _masterScope = scope;
+      await _bindLegacyDevicesToScope(scope);
+      _tlsIdentity ??= await LanTlsIdentity.loadOrCreate(_deviceId!);
+      _server = await HttpServer.bindSecure(
         InternetAddress.anyIPv4,
         port,
+        _tlsIdentity!.context,
         shared: false,
       );
       _server!.idleTimeout = const Duration(seconds: 20);
-      _server!.listen(_handleRequest, onError: _handleServerError);
+      _server!.listen((request) {
+        unawaited(
+          _handleRequest(request).catchError((Object _) {
+            // A disconnected peer can also make writing an error response fail.
+            // Keep connection failures outside the application's fatal zone.
+          }),
+        );
+      }, onError: _handleServerError);
       _masterStartedAt = DateTime.now().toUtc();
 
       final addresses = await _localIpv4Addresses();
@@ -209,10 +244,13 @@ class LanNetworkService {
     required String deviceName,
   }) async {
     final cleanHost = _normalizeHost(host);
-    if (cleanHost.isEmpty || pairingCode.trim().length != 6) {
+    final cleanCode = pairingCode.trim().toLowerCase();
+    if (cleanHost.isEmpty ||
+        !RegExp(r'^[0-9]{6}:[a-f0-9]{64}$').hasMatch(cleanCode)) {
       return const LanPairResult.failure('Invalid address or pairing code.');
     }
 
+    final pairingFingerprint = cleanCode.split(':').last;
     if (_snapshot.mode == LanMode.client && hasRemoteUserSession) {
       await logoutFromMaster();
     }
@@ -232,6 +270,7 @@ class LanNetworkService {
         host: cleanHost,
         port: port,
         path: '/v1/health',
+        fingerprint: pairingFingerprint,
       );
       if (health.statusCode != HttpStatus.ok ||
           health.body['protocolVersion'] != protocolVersion) {
@@ -246,8 +285,9 @@ class LanNetworkService {
         host: cleanHost,
         port: port,
         path: '/v1/pair',
+        fingerprint: pairingFingerprint,
         body: {
-          'pairingCode': pairingCode.trim(),
+          'pairingCode': cleanCode,
           'deviceId': _deviceId,
           'deviceName': deviceName.trim().isEmpty
               ? 'Tapix device'
@@ -266,6 +306,11 @@ class LanNetworkService {
         throw const FormatException('Invalid pairing response.');
       }
 
+      await const FlutterSecureStorage().write(
+        key: _pinStorageKey,
+        value: pairingFingerprint,
+      );
+      _trustedFingerprint = pairingFingerprint;
       await _settingsDao.saveSetting(_modeKey, LanMode.client.name);
       await _settingsDao.saveSetting(_masterHostKey, cleanHost);
       await _settingsDao.saveSetting(_portKey, port.toString());
@@ -502,12 +547,12 @@ class LanNetworkService {
         statusCode: 401,
       );
     }
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
+    final client = _tlsClient();
     try {
       final request = await client
           .getUrl(
             Uri(
-              scheme: 'http',
+              scheme: 'https',
               host: host,
               port: _snapshot.port,
               path: '/v1/catalog/images/$productId',
@@ -519,6 +564,7 @@ class LanNetworkService {
         'Bearer $deviceToken',
       );
       request.headers.set(_userSessionHeader, sessionToken);
+      request.followRedirects = false;
       final response = await request.close().timeout(
         const Duration(seconds: 8),
       );
@@ -579,6 +625,23 @@ class LanNetworkService {
       path: '/v1/sales/$saleId/void',
     );
     return LanSaleVoidResult.fromJson(response.body);
+  }
+
+  Future<LanCustomerCheckout> fetchRemoteCustomerCheckout(
+    int customerId,
+  ) async {
+    final response = await _authenticatedClientRequest(
+      method: 'GET',
+      path: '/v1/customers/$customerId/checkout',
+    );
+    final result = LanCustomerCheckout.fromJson(response.body);
+    if (result.customerId != customerId) {
+      throw const LanBusinessException(
+        'customer_mismatch',
+        'Customer response does not match the request.',
+      );
+    }
+    return result;
   }
 
   Future<List<LanCustomerSummary>> fetchRemoteCustomers({
@@ -901,6 +964,15 @@ class LanNetworkService {
   }
 
   Future<bool> testConnection({String? host, int? port}) async {
+    if (_trustedFingerprint == null) {
+      _emit(
+        _snapshot.copyWith(
+          status: LanConnectionStatus.error,
+          error: 'Secure pairing required. Pair again with the master.',
+        ),
+      );
+      return false;
+    }
     var targetHost = _normalizeHost(
       host ??
           _snapshot.masterHost ??
@@ -1207,14 +1279,15 @@ class LanNetworkService {
     int port,
     String expectedMasterId,
   ) async {
-    final client = HttpClient()
+    final client = _tlsClient()
       ..connectionTimeout = const Duration(milliseconds: 350);
     try {
       final request = await client
           .getUrl(
-            Uri(scheme: 'http', host: host, port: port, path: '/v1/health'),
+            Uri(scheme: 'https', host: host, port: port, path: '/v1/health'),
           )
           .timeout(const Duration(milliseconds: 450));
+      request.followRedirects = false;
       final response = await request.close().timeout(
         const Duration(milliseconds: 450),
       );
@@ -1422,6 +1495,8 @@ class LanNetworkService {
   }
 
   Future<void> stop() async {
+    _pairingTimer?.cancel();
+    _pairingExpiresAt = null;
     _monitorTimer?.cancel();
     _monitorTimer = null;
     _masterMonitorTimer?.cancel();
@@ -1483,6 +1558,14 @@ class LanNetworkService {
       ..set('Cache-Control', 'no-store')
       ..set('X-Content-Type-Options', 'nosniff');
 
+    if (_activeRequests >= 32) {
+      request.response.persistentConnection = false;
+      await _respond(request, HttpStatus.serviceUnavailable, {
+        'message': 'Server busy.',
+      });
+      return;
+    }
+    _activeRequests++;
     try {
       if (request.method == 'OPTIONS') {
         request.response.statusCode = HttpStatus.noContent;
@@ -1490,6 +1573,50 @@ class LanNetworkService {
         return;
       }
 
+      LocalBranchScope scope;
+      try {
+        scope = await LocalBranchScope.read(_settingsDao.attachedDatabase);
+      } on StateError {
+        throw const LanRequestBodyException(
+          503,
+          'Business scope is unavailable.',
+        );
+      }
+      if (_masterScope == null ||
+          !_masterScope!.matchesBinding(scope.toJson())) {
+        throw const LanRequestBodyException(
+          503,
+          'Business scope is unavailable.',
+        );
+      }
+      final selectors = <String, dynamic>{};
+      for (final entry in request.uri.queryParametersAll.entries) {
+        selectors[entry.key] = entry.value.length == 1
+            ? entry.value.single
+            : entry.value;
+      }
+      if (!scope.acceptsSelectors(selectors)) {
+        throw const LanRequestBodyException(
+          403,
+          'Business scope is not authorized.',
+        );
+      }
+      for (final entry in const {
+        'X-Tapix-Organization-Id': 'organizationId',
+        'X-Tapix-Branch-Id': 'branchId',
+        'X-Tapix-Warehouse-Id': 'warehouseId',
+        'X-Tapix-Database-Id': 'databaseId',
+      }.entries) {
+        final values = request.headers[entry.key];
+        if (values != null &&
+            (values.length != 1 ||
+                !scope.acceptsSelectors({entry.value: values.single}))) {
+          throw const LanRequestBodyException(
+            403,
+            'Business scope is not authorized.',
+          );
+        }
+      }
       final path = request.uri.path;
       if (request.method == 'GET' && path == '/v1/health') {
         await _respond(request, HttpStatus.ok, {
@@ -1504,8 +1631,21 @@ class LanNetworkService {
       }
 
       if (request.method == 'POST' && path == '/v1/pair') {
+        if (!_allowPairAttempt(_remoteAddress(request) ?? 'unknown')) {
+          request.response.persistentConnection = false;
+          await _respond(request, HttpStatus.tooManyRequests, {
+            'message': 'Too many pairing attempts. Try again later.',
+          });
+          return;
+        }
         final body = await _readJson(request);
-        if (body['pairingCode']?.toString() != _snapshot.pairingCode) {
+        if (_pairingExpiresAt == null ||
+            !DateTime.now().toUtc().isBefore(_pairingExpiresAt!) ||
+            _snapshot.pairingCode == null ||
+            !_constantTimeEquals(
+              body['pairingCode']?.toString() ?? '',
+              _snapshot.pairingCode!,
+            )) {
           await _respond(request, HttpStatus.forbidden, {
             'message': 'Invalid pairing code.',
           });
@@ -1513,15 +1653,19 @@ class LanNetworkService {
         }
 
         final deviceId = body['deviceId']?.toString().trim() ?? '';
-        if (deviceId.isEmpty) {
+        if (deviceId.isEmpty || deviceId.length > 128) {
           await _respond(request, HttpStatus.badRequest, {
             'message': 'Missing device identity.',
           });
           return;
         }
 
+        // Consume synchronously before any database/audit await.
+        _pairingExpiresAt = null;
+        _pairingTimer?.cancel();
         final token = _newToken();
         _authorizedDevices[deviceId] = {
+          'businessScope': scope.toJson(),
           'name': body['deviceName']?.toString() ?? 'Tapix device',
           'platform': body['platform']?.toString() ?? 'unknown',
           'tokenHash': sha256.convert(utf8.encode(token)).toString(),
@@ -1984,6 +2128,57 @@ class LanNetworkService {
           productId: productId,
         );
         await _respond(request, HttpStatus.ok, result.toJson());
+        return;
+      }
+
+      if (request.method == 'GET' &&
+          RegExp(r'^/v1/customers/[1-9][0-9]*/checkout$').hasMatch(path)) {
+        final device = _authorizeDevice(request);
+        if (device == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'device_unauthorized',
+            'message': 'Device is not authorized.',
+          });
+          return;
+        }
+        final session = await _authorizeUserSession(request, device);
+        if (session == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'authentication_required',
+            'message': 'User session is invalid or expired.',
+          });
+          return;
+        }
+        if (!_hasAnyPermission(session.user, const [
+          'view_customers',
+          'create_sales',
+          'process_sales',
+          'manage_sales',
+        ])) {
+          await _respond(request, HttpStatus.forbidden, {
+            'code': 'permission_denied',
+            'message': 'This user cannot view customers.',
+          });
+          return;
+        }
+        if (_businessGateway == null) {
+          await _respond(request, HttpStatus.serviceUnavailable, {
+            'code': 'business_api_unavailable',
+            'message': 'Master business services are unavailable.',
+          });
+          return;
+        }
+        final customerId = int.tryParse(path.split('/')[3]);
+        if (customerId == null) {
+          await _respond(request, HttpStatus.badRequest, {
+            'code': 'invalid_customer',
+          });
+          return;
+        }
+        final summary = await _businessGateway.fetchCustomerCheckout(
+          customerId,
+        );
+        await _respond(request, HttpStatus.ok, summary.toJson());
         return;
       }
 
@@ -2985,6 +3180,22 @@ class LanNetworkService {
         return;
       }
 
+      if (request.method == 'GET' && path == '/v1/business/scope') {
+        final device = _authorizeDevice(request);
+        final session = device == null
+            ? null
+            : await _authorizeUserSession(request, device);
+        if (session == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'authentication_required',
+            'message': 'An authorized device and user session are required.',
+          });
+          return;
+        }
+        await _respond(request, HttpStatus.ok, {'scope': scope.toJson()});
+        return;
+      }
+
       if (request.method == 'GET' && path == '/v1/status') {
         final device = _authorizeDevice(request);
         if (device == null) {
@@ -3005,6 +3216,14 @@ class LanNetworkService {
       }
 
       await _respond(request, HttpStatus.notFound, {'message': 'Not found.'});
+    } on LanRequestBodyException catch (error) {
+      request.response.persistentConnection = false;
+      await _respond(request, error.status, {'message': error.message});
+    } on FormatException {
+      request.response.persistentConnection = false;
+      await _respond(request, HttpStatus.badRequest, {
+        'message': 'Invalid JSON request.',
+      });
     } catch (error) {
       try {
         await _respond(request, HttpStatus.internalServerError, {
@@ -3014,6 +3233,8 @@ class LanNetworkService {
         // The response may already have been closed by a completed handler.
         await request.response.close();
       }
+    } finally {
+      _activeRequests--;
     }
   }
 
@@ -3028,6 +3249,10 @@ class LanNetworkService {
         entry.value['tokenHash']?.toString() ?? '',
         candidateHash,
       )) {
+        if (_masterScope?.matchesBinding(entry.value['businessScope']) !=
+            true) {
+          return null;
+        }
         entry.value['lastSeenAt'] = DateTime.now().toUtc().toIso8601String();
         entry.value['lastAddress'] = _remoteAddress(request);
         final platform = request.headers.value(_platformHeader)?.trim();
@@ -3224,14 +3449,20 @@ class LanNetworkService {
   }
 
   Future<Map<String, dynamic>> _readJson(HttpRequest request) async {
-    final content = await utf8.decoder.bind(request).join();
-    if (content.length > 65536) {
-      throw const FormatException('Request body is too large.');
+    if (request.contentLength > 65536) {
+      throw const LanRequestBodyException(413, 'Request body is too large.');
     }
+    final content = utf8.decode(await readLanRequestBody(request));
     if (content.isEmpty) return {};
     final decoded = jsonDecode(content);
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException('Expected a JSON object.');
+    }
+    if (_masterScope?.acceptsSelectors(decoded) != true) {
+      throw const LanRequestBodyException(
+        403,
+        'Business scope is not authorized.',
+      );
     }
     return decoded;
   }
@@ -3255,14 +3486,15 @@ class LanNetworkService {
     Map<String, dynamic>? body,
     String? token,
     String? userToken,
+    String? fingerprint,
   }) async {
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
+    final client = _tlsClient(fingerprint: fingerprint);
     try {
       final request = await client
           .openUrl(
             method,
             Uri(
-              scheme: 'http',
+              scheme: 'https',
               host: host,
               port: port,
               path: path,
@@ -3281,6 +3513,7 @@ class LanNetworkService {
       if (userToken != null) {
         request.headers.set(_userSessionHeader, userToken);
       }
+      request.followRedirects = false;
       if (body != null) request.write(jsonEncode(body));
       final response = await request.close().timeout(
         const Duration(seconds: 6),
@@ -3324,12 +3557,84 @@ class LanNetworkService {
     }
   }
 
+  /// One-time upgrade of locally stored TLS credentials. A partial or foreign
+  /// binding is never repaired into permission for this branch. Once marked,
+  /// subsequently unscoped credentials remain unauthorized until re-pairing.
+  Future<void> _bindLegacyDevicesToScope(LocalBranchScope scope) async {
+    if (await _settingsDao.getSetting(_scopeBindingMigrationKey) != null) {
+      return;
+    }
+    await _settingsDao.attachedDatabase.transaction(() async {
+      for (final device in _authorizedDevices.values) {
+        if (!device.containsKey('businessScope') &&
+            RegExp(
+              r'^[a-f0-9]{64}$',
+            ).hasMatch(device['tokenHash']?.toString() ?? '')) {
+          device['businessScope'] = scope.toJson();
+        }
+      }
+      await _saveAuthorizedDevices();
+      await _settingsDao.saveSetting(
+        _scopeBindingMigrationKey,
+        scope.databaseId,
+      );
+    });
+  }
+
   Future<void> _saveAuthorizedDevices() => _settingsDao.saveSetting(
     _authorizedDevicesKey,
     jsonEncode(_authorizedDevices),
   );
 
-  String _newPairingCode() => (100000 + _random.nextInt(900000)).toString();
+  String _newPairingCode() {
+    _pairingExpiresAt = DateTime.now().toUtc().add(const Duration(minutes: 5));
+    _pairingTimer?.cancel();
+    _pairingTimer = Timer(const Duration(minutes: 5), () {
+      _pairingExpiresAt = null;
+      _emit(_snapshot.copyWith(clearPairingCode: true));
+    });
+    return '${100000 + _random.nextInt(900000)}:${_tlsIdentity!.fingerprint}';
+  }
+
+  bool _allowPairAttempt(String address) {
+    final cutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 5));
+    _globalPairAttempts.removeWhere((t) => t.isBefore(cutoff));
+    _pairAttempts.removeWhere((_, times) {
+      times.removeWhere((t) => t.isBefore(cutoff));
+      return times.isEmpty;
+    });
+    if (_globalPairAttempts.length >= 30) return false;
+    final times = _pairAttempts.putIfAbsent(address, () => []);
+    if (times.length >= 5) return false;
+    final now = DateTime.now().toUtc();
+    times.add(now);
+    _globalPairAttempts.add(now);
+    return true;
+  }
+
+  HttpClient _tlsClient({String? fingerprint}) {
+    final pin = fingerprint ?? _trustedFingerprint;
+    if (pin == null || !RegExp(r'^[a-f0-9]{64}$').hasMatch(pin)) {
+      throw StateError('Secure pairing required. Pair again with the master.');
+    }
+    // No system roots: even a publicly trusted certificate must match the
+    // exact identity obtained from the master's screen, never TOFU/network.
+    return HttpClient(
+        context: SecurityContext(withTrustedRoots: false)
+          ..minimumTlsProtocolVersion = TlsProtocolVersion.tls1_2,
+      )
+      ..connectionTimeout = const Duration(seconds: 5)
+      ..findProxy = ((_) => 'DIRECT')
+      ..badCertificateCallback = (certificate, host, port) {
+        final now = DateTime.now().toUtc();
+        return !now.isBefore(certificate.startValidity) &&
+            now.isBefore(certificate.endValidity) &&
+            _constantTimeEquals(
+              sha256.convert(certificate.der).toString(),
+              pin,
+            );
+      };
+  }
 
   String _newToken() {
     final bytes = List<int>.generate(32, (_) => _random.nextInt(256));

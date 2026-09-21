@@ -1334,6 +1334,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         state.copyWith(
           customerId: event.customerId,
           customerName: event.customerName,
+          clearLoyalty: true,
         ),
       );
       // Auto-load loyalty data for the selected customer
@@ -2210,6 +2211,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
     if (_isRemoteClient || _loyaltyRepository == null) return;
     try {
       final settings = await _loyaltyRepository.getLoyaltySettings();
+      if (state.customerId != event.customerId) return;
       if (settings == null ||
           !settings.isEnabled ||
           !settings.allowPointsRedemption) {
@@ -2220,6 +2222,7 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       final summary = await _loyaltyRepository.getCustomerLoyaltySummary(
         event.customerId,
       );
+      if (state.customerId != event.customerId) return;
       if (summary == null) {
         emit(state.copyWith(clearLoyalty: true));
         return;
@@ -2235,7 +2238,9 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         ),
       );
     } catch (_) {
-      emit(state.copyWith(clearLoyalty: true));
+      if (state.customerId == event.customerId) {
+        emit(state.copyWith(clearLoyalty: true));
+      }
     }
   }
 

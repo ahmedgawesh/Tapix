@@ -75,6 +75,21 @@ void main() {
             stockQuantity: const Value(openingQuantity),
           ),
         );
+    await db
+        .into(db.inventoryAdjustments)
+        .insert(
+          InventoryAdjustmentsCompanion.insert(
+            id: const Value(99001),
+            adjustmentNumber: 'OPEN-FIXTURE-99001',
+            productId: productId,
+            adjustmentType: 'opening_balance',
+            quantityDelta: openingQuantity,
+            unitCostCents: Decimal.fromInt(unitCostCents),
+            totalValueCents: Decimal.fromInt(openingValueCents),
+            reason: 'Opening fixture source',
+            currencyId: currencyId,
+          ),
+        );
     await journal.recordInventoryOpeningBalanceJournalEntry(
       adjustmentId: 99001,
       valueCents: openingValueCents,

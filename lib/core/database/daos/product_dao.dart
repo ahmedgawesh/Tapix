@@ -1,9 +1,21 @@
+import '../../services/business/warehouse_catalog_scope.dart';
+import '../../services/business/warehouse_batch_scope.dart';
+import '../../services/business/warehouse_stock_scope.dart';
 import 'package:drift/drift.dart';
 import '../app_database.dart';
 import '../tables/products.dart';
 import '../tables/transactions.dart';
 
 part 'product_dao.g.dart';
+
+/// A shared product cannot be hidden while any location still holds stock.
+class ProductStockNotZeroException implements Exception {
+  final int productId;
+  const ProductStockNotZeroException(this.productId);
+
+  @override
+  String toString() => 'ProductStockNotZeroException(productId: $productId)';
+}
 
 @DriftAccessor(
   tables: [
@@ -65,6 +77,22 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
         .getSingleOrNull();
   }
 
+  // Legacy products without an operational row retain their stored balance.
+  // Otherwise the warehouse ledger is the source for stock-status decisions.
+  static const _primaryProductQuantity =
+      '''CASE WHEN EXISTS (
+    SELECT 1 FROM product_variants v WHERE v.product_id = p.id AND v.is_active = 1
+  ) THEN (
+    SELECT SUM(ws.quantity) FROM product_variants v
+    JOIN ${WarehouseStockScope.primaryStocks} ws ON ws.variant_id = v.id
+    WHERE v.product_id = p.id AND v.is_active = 1
+  ) ELSE p.stock_quantity END''';
+
+  Product _mapStockFilteredProduct(QueryRow row) => products.map({
+    ...row.data,
+    'stock_quantity': row.read<int>('warehouse_stock_quantity'),
+  });
+
   Future<List<Product>> filterProducts({
     int? categoryId,
     String? stockStatus,
@@ -105,11 +133,11 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
 
     if (stockStatus == 'out_of_stock') {
       where.write(
-        ' AND ((p.has_variants = 0 AND p.stock_quantity = 0) OR (p.has_variants = 1 AND NOT EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id AND v.is_active = 1 AND v.stock_quantity > 0)))',
+        ' AND ((p.has_variants = 0 AND ($_primaryProductQuantity) = 0) OR (p.has_variants = 1 AND NOT EXISTS (SELECT 1 FROM product_variants v JOIN ${WarehouseStockScope.primaryStocks} ws ON ws.variant_id = v.id WHERE v.product_id = p.id AND v.is_active = 1 AND ws.quantity > 0)))',
       );
     } else if (stockStatus == 'low_stock') {
       where.write(
-        ' AND ((p.has_variants = 0 AND p.stock_quantity > 0 AND p.stock_quantity <= CASE WHEN p.min_quantity > 0 THEN p.min_quantity ELSE ? END) OR (p.has_variants = 1 AND EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id AND v.is_active = 1 AND v.stock_quantity > 0 AND v.stock_quantity <= CASE WHEN p.min_quantity > 0 THEN p.min_quantity ELSE ? END)))',
+        ' AND ((p.has_variants = 0 AND ($_primaryProductQuantity) > 0 AND ($_primaryProductQuantity) <= CASE WHEN p.min_quantity > 0 THEN p.min_quantity ELSE ? END) OR (p.has_variants = 1 AND EXISTS (SELECT 1 FROM product_variants v JOIN ${WarehouseStockScope.primaryStocks} ws ON ws.variant_id = v.id WHERE v.product_id = p.id AND v.is_active = 1 AND ws.quantity > 0 AND ws.quantity <= CASE WHEN p.min_quantity > 0 THEN p.min_quantity ELSE ? END)))',
       );
       vars.add(Variable.withInt(lowStockThreshold));
       vars.add(Variable.withInt(lowStockThreshold));
@@ -120,10 +148,14 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     vars.add(Variable.withInt(offset));
 
     return customSelect(
-      'SELECT p.* FROM products p ${where.toString()}',
+      'SELECT p.*, ($_primaryProductQuantity) AS warehouse_stock_quantity FROM products p ${where.toString()}',
       variables: vars,
-      readsFrom: {products, productVariants},
-    ).map((row) => products.map(row.data)).get();
+      readsFrom: {
+        products,
+        productVariants,
+        ...WarehouseStockScope.dependencies(db),
+      },
+    ).map(_mapStockFilteredProduct).get();
   }
 
   Stream<List<Product>> watchFilteredProducts({
@@ -162,11 +194,11 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
 
     if (stockStatus == 'out_of_stock') {
       where.write(
-        ' AND ((p.has_variants = 0 AND p.stock_quantity = 0) OR (p.has_variants = 1 AND NOT EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id AND v.is_active = 1 AND v.stock_quantity > 0)))',
+        ' AND ((p.has_variants = 0 AND ($_primaryProductQuantity) = 0) OR (p.has_variants = 1 AND NOT EXISTS (SELECT 1 FROM product_variants v JOIN ${WarehouseStockScope.primaryStocks} ws ON ws.variant_id = v.id WHERE v.product_id = p.id AND v.is_active = 1 AND ws.quantity > 0)))',
       );
     } else if (stockStatus == 'low_stock') {
       where.write(
-        ' AND ((p.has_variants = 0 AND p.stock_quantity > 0 AND p.stock_quantity <= CASE WHEN p.min_quantity > 0 THEN p.min_quantity ELSE ? END) OR (p.has_variants = 1 AND EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id AND v.is_active = 1 AND v.stock_quantity > 0 AND v.stock_quantity <= CASE WHEN p.min_quantity > 0 THEN p.min_quantity ELSE ? END)))',
+        ' AND ((p.has_variants = 0 AND ($_primaryProductQuantity) > 0 AND ($_primaryProductQuantity) <= CASE WHEN p.min_quantity > 0 THEN p.min_quantity ELSE ? END) OR (p.has_variants = 1 AND EXISTS (SELECT 1 FROM product_variants v JOIN ${WarehouseStockScope.primaryStocks} ws ON ws.variant_id = v.id WHERE v.product_id = p.id AND v.is_active = 1 AND ws.quantity > 0 AND ws.quantity <= CASE WHEN p.min_quantity > 0 THEN p.min_quantity ELSE ? END)))',
       );
       vars.add(Variable.withInt(lowStockThreshold));
       vars.add(Variable.withInt(lowStockThreshold));
@@ -175,32 +207,57 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     where.write(' ORDER BY p.name');
 
     return customSelect(
-      'SELECT p.* FROM products p ${where.toString()}',
+      'SELECT p.*, ($_primaryProductQuantity) AS warehouse_stock_quantity FROM products p ${where.toString()}',
       variables: vars,
-      readsFrom: {products, productVariants},
-    ).map((row) => products.map(row.data)).watch();
+      readsFrom: {
+        products,
+        productVariants,
+        ...WarehouseStockScope.dependencies(db),
+      },
+    ).map(_mapStockFilteredProduct).watch();
+  }
+
+  Selectable<Product> _exportProducts({
+    int? categoryId,
+    int? supplierId,
+    bool activeOnly = true,
+    int? limit,
+    int offset = 0,
+  }) {
+    final filters = <String>[];
+    final variables = <Variable>[];
+    if (activeOnly) filters.add('is_active = 1');
+    if (categoryId != null) {
+      filters.add('category_id = ?');
+      variables.add(Variable.withInt(categoryId));
+    }
+    if (supplierId != null) {
+      filters.add('supplier_id = ?');
+      variables.add(Variable.withInt(supplierId));
+    }
+    var sql = 'SELECT * FROM ${WarehouseCatalogScope.products}';
+    if (filters.isNotEmpty) sql += ' WHERE ${filters.join(' AND ')}';
+    sql += ' ORDER BY name';
+    if (limit != null) {
+      sql += ' LIMIT ? OFFSET ?';
+      variables.addAll([Variable.withInt(limit), Variable.withInt(offset)]);
+    }
+    return customSelect(
+      sql,
+      variables: variables,
+      readsFrom: WarehouseCatalogScope.dependencies(db),
+    ).map((row) => WarehouseCatalogScope.mapProduct(db, row));
   }
 
   Stream<List<Product>> watchProductsForExport({
     int? categoryId,
     int? supplierId,
     bool activeOnly = true,
-  }) {
-    final query = select(products);
-
-    if (activeOnly) {
-      query.where((p) => p.isActive.equals(true));
-    }
-    if (categoryId != null) {
-      query.where((p) => p.categoryId.equals(categoryId));
-    }
-    if (supplierId != null) {
-      query.where((p) => p.supplierId.equals(supplierId));
-    }
-
-    query.orderBy([(p) => OrderingTerm(expression: p.name)]);
-    return query.watch();
-  }
+  }) => _exportProducts(
+    categoryId: categoryId,
+    supplierId: supplierId,
+    activeOnly: activeOnly,
+  ).watch();
 
   Future<List<Product>> fetchProductsForExport({
     int? categoryId,
@@ -208,25 +265,13 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     bool activeOnly = true,
     int limit = 1000,
     int offset = 0,
-  }) {
-    final query = select(products);
-
-    if (activeOnly) {
-      query.where((p) => p.isActive.equals(true));
-    }
-    if (categoryId != null) {
-      query.where((p) => p.categoryId.equals(categoryId));
-    }
-    if (supplierId != null) {
-      query.where((p) => p.supplierId.equals(supplierId));
-    }
-
-    query
-      ..orderBy([(p) => OrderingTerm(expression: p.name)])
-      ..limit(limit, offset: offset);
-
-    return query.get();
-  }
+  }) => _exportProducts(
+    categoryId: categoryId,
+    supplierId: supplierId,
+    activeOnly: activeOnly,
+    limit: limit,
+    offset: offset,
+  ).get();
 
   Future<Product?> findBySku(String sku) {
     return (select(
@@ -255,25 +300,71 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     return into(products).insert(product);
   }
 
+  Future<void> _requireZeroStock(Iterable<int> ids) async {
+    for (final id in ids.toSet()) {
+      final row = await customSelect(
+        'SELECT EXISTS(SELECT 1 FROM products p WHERE p.id = ? '
+        'AND (p.stock_quantity != 0 OR EXISTS(SELECT 1 FROM product_variants v '
+        'WHERE v.product_id = p.id AND (v.stock_quantity != 0 OR EXISTS('
+        'SELECT 1 FROM business_warehouse_stocks ws WHERE ws.variant_id = v.id '
+        'AND ws.quantity != 0))))) AS has_stock',
+        variables: [Variable.withInt(id)],
+      ).getSingle();
+      if (row.read<int>('has_stock') == 1) {
+        throw ProductStockNotZeroException(id);
+      }
+    }
+  }
+
   Future<bool> updateProduct(Product product) {
     return transaction(() async {
-      final ok = await update(products).replace(product);
-
-      await customUpdate(
-        'UPDATE product_variants SET is_active = ? WHERE product_id = ?',
-        variables: [
-          Variable.withInt(product.isActive ? 1 : 0),
-          Variable.withInt(product.id),
-        ],
-        updates: {productVariants},
-      );
-
+      final persisted = await (select(
+        products,
+      )..where((p) => p.id.equals(product.id))).getSingleOrNull();
+      if (persisted == null) return false;
+      if (!product.isActive) await _requireZeroStock([product.id]);
+      // Stock/cost and inventory policy have dedicated accounting/lock-checked
+      // writers. Generic catalog changes cannot replace them with stale values.
+      final changes = product
+          .toCompanion(false)
+          .copyWith(
+            id: const Value.absent(),
+            stockQuantity: const Value.absent(),
+            costCents: const Value.absent(),
+            previousCostCents: const Value.absent(),
+            previousPriceCents: const Value.absent(),
+            previousWholesalePriceCents: const Value.absent(),
+            lastPurchasePriceCents: const Value.absent(),
+            createdAt: const Value.absent(),
+            trackInventory: const Value.absent(),
+            measurementType: const Value.absent(),
+            costingMethod: const Value.absent(),
+            inventoryTrackingType: const Value.absent(),
+          );
+      final ok =
+          await (update(
+            products,
+          )..where((p) => p.id.equals(product.id))).write(changes) ==
+          1;
+      if (persisted.isActive != product.isActive) {
+        await customUpdate(
+          'UPDATE product_variants SET is_active = ? WHERE product_id = ?',
+          variables: [
+            Variable.withInt(product.isActive ? 1 : 0),
+            Variable.withInt(product.id),
+          ],
+          updates: {productVariants},
+        );
+      }
       return ok;
     });
   }
 
   Future<int> deleteProduct(int id) {
-    return (delete(products)..where((p) => p.id.equals(id))).go();
+    return transaction(() async {
+      await _requireZeroStock([id]);
+      return (delete(products)..where((p) => p.id.equals(id))).go();
+    });
   }
 
   /// Runs [action] inside a Drift transaction scoped to this DAO's database.
@@ -320,6 +411,7 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     int productId,
   ) {
     return transaction(() async {
+      await _requireZeroStock([productId]);
       final refCount = await countProductReferences(productId);
       if (refCount > 0) {
         await (update(products)..where((p) => p.id.equals(productId))).write(
@@ -345,7 +437,10 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
 
   Future<int> bulkDeleteProducts(List<int> ids) {
     if (ids.isEmpty) return Future.value(0);
-    return (delete(products)..where((p) => p.id.isIn(ids))).go();
+    return transaction(() async {
+      await _requireZeroStock(ids);
+      return (delete(products)..where((p) => p.id.isIn(ids))).go();
+    });
   }
 
   // ──────────────────────────────────────────────────────────────────────
@@ -367,7 +462,9 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
       SELECT
         (SELECT COALESCE(stock_quantity, 0) FROM products WHERE id = ?1) AS p_stock,
         EXISTS(SELECT 1 FROM product_variants
-          WHERE product_id = ?1 AND stock_quantity != 0) AS has_v_stock
+          WHERE product_id = ?1 AND (stock_quantity != 0 OR EXISTS (
+            SELECT 1 FROM business_warehouse_stocks ws
+            WHERE ws.variant_id = product_variants.id AND ws.quantity != 0))) AS has_v_stock
       ''',
       variables: [Variable.withInt(productId)],
     ).getSingle();
@@ -402,13 +499,18 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     required int productId,
     required String measurementType,
   }) {
-    assert(
-      measurementType == 'piece' ||
-          measurementType == 'length' ||
-          measurementType == 'weight' ||
-          measurementType == 'volume',
-      'measurement type must be piece | length | weight | volume',
-    );
+    if (!const {
+      'piece',
+      'length',
+      'weight',
+      'volume',
+    }.contains(measurementType)) {
+      throw ArgumentError.value(
+        measurementType,
+        'measurementType',
+        'Unsupported inventory policy',
+      );
+    }
     return transaction(() async {
       final reason = await getCostingMethodLockReason(productId);
       if (reason != null) return reason;
@@ -449,10 +551,13 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     required int productId,
     required String method,
   }) async {
-    assert(
-      method == 'wac' || method == 'fifo',
-      'costing method must be wac or fifo',
-    );
+    if (!const {'wac', 'fifo'}.contains(method)) {
+      throw ArgumentError.value(
+        method,
+        'method',
+        'Unsupported inventory policy',
+      );
+    }
     return transaction(() async {
       final reason = await getCostingMethodLockReason(productId);
       if (reason != null) return reason;
@@ -497,12 +602,13 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
     required int productId,
     required String trackingType,
   }) async {
-    assert(
-      trackingType == 'standard' ||
-          trackingType == 'batch' ||
-          trackingType == 'batch_expiry',
-      'tracking type must be standard | batch | batch_expiry',
-    );
+    if (!const {'standard', 'batch', 'batch_expiry'}.contains(trackingType)) {
+      throw ArgumentError.value(
+        trackingType,
+        'trackingType',
+        'Unsupported inventory policy',
+      );
+    }
     return transaction(() async {
       final reason = await getCostingMethodLockReason(productId);
       if (reason != null) return reason;
@@ -612,7 +718,7 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
           CASE WHEN b.expiry_date >= ?1 THEN b.expiry_date ELSE NULL END
         ) AS next_expiry_iso
       FROM products p
-      INNER JOIN product_batches b ON b.product_id = p.id
+      INNER JOIN ${WarehouseBatchScope.primaryBatches} b ON b.product_id = p.id
       WHERE p.inventory_tracking_type = 'batch_expiry'
         AND b.is_active = 1
         AND b.remaining_quantity > 0
@@ -621,21 +727,31 @@ class ProductDao extends DatabaseAccessor<AppDatabase> with _$ProductDaoMixin {
       HAVING expired_qty > 0 OR next_expiry_iso IS NOT NULL
       ''',
       variables: [Variable.withString(todayIso)],
-      readsFrom: {products, productBatches},
+      readsFrom: {
+        products,
+        productBatches,
+        ...WarehouseBatchScope.dependencies(attachedDatabase),
+      },
     );
   }
 
   Future<int> deactivateProduct(int id) {
-    return (update(products)..where((p) => p.id.equals(id))).write(
-      const ProductsCompanion(isActive: Value(false)),
-    );
+    return transaction(() async {
+      await _requireZeroStock([id]);
+      return (update(products)..where((p) => p.id.equals(id))).write(
+        const ProductsCompanion(isActive: Value(false)),
+      );
+    });
   }
 
   Future<int> bulkDeactivateProducts(List<int> ids) {
     if (ids.isEmpty) return Future.value(0);
-    return (update(products)..where((p) => p.id.isIn(ids))).write(
-      const ProductsCompanion(isActive: Value(false)),
-    );
+    return transaction(() async {
+      await _requireZeroStock(ids);
+      return (update(products)..where((p) => p.id.isIn(ids))).write(
+        const ProductsCompanion(isActive: Value(false)),
+      );
+    });
   }
 
   Future<List<int>> findProductIdsReferencedByOpenPurchases(

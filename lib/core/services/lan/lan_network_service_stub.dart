@@ -95,6 +95,10 @@ class LanNetworkService {
 
   Future<LanSaleVoidResult> voidRemoteSale(int saleId) async => _unsupported();
 
+  Future<LanCustomerCheckout> fetchRemoteCustomerCheckout(
+    int customerId,
+  ) async => _unsupported();
+
   Future<List<LanCustomerSummary>> fetchRemoteCustomers({
     String query = '',
     int limit = 100,

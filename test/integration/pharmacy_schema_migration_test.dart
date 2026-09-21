@@ -31,7 +31,7 @@ void main() {
   test(
     'fresh schema stores multi-ingredient medicine strengths exactly',
     () async {
-      expect(db.schemaVersion, 10082);
+      expect(db.schemaVersion, 10091);
       final flag =
           await (db.select(db.appSettings)
                 ..where((row) => row.key.equals('pharmacy_features_enabled')))
@@ -235,6 +235,65 @@ void main() {
     expect(flag.value, '1');
   });
 
+  test(
+    '10084 database adds manufacturer lot columns without data loss',
+    () async {
+      final temp = await Directory.systemTemp.createTemp(
+        'tapix-lot-migration-',
+      );
+      final file = File('${temp.path}/tapix.db');
+      AppDatabase? fileDb;
+      try {
+        fileDb = AppDatabase.connect(DatabaseConnection(NativeDatabase(file)));
+        await fileDb.customSelect('SELECT 1').get();
+        final productId = await fileDb
+            .into(fileDb.products)
+            .insert(
+              ProductsCompanion.insert(
+                name: 'Existing product before lot migration',
+                costCents: Decimal.fromInt(100),
+                priceCents: Decimal.fromInt(200),
+              ),
+            );
+        await fileDb.customStatement(
+          'DROP INDEX IF EXISTS idx_product_batches_manufacturer_lot',
+        );
+        await fileDb.customStatement(
+          'ALTER TABLE purchase_items DROP COLUMN manufacturer_lot_number',
+        );
+        await fileDb.customStatement(
+          'ALTER TABLE product_batches DROP COLUMN manufacturer_lot_number',
+        );
+        await fileDb.customStatement('PRAGMA user_version = 10084');
+        await fileDb.close();
+        fileDb = null;
+
+        fileDb = AppDatabase.connect(DatabaseConnection(NativeDatabase(file)));
+        await fileDb.customSelect('SELECT 1').get();
+        expect(fileDb.schemaVersion, 10091);
+        expect(
+          (await (fileDb.select(
+            fileDb.products,
+          )..where((row) => row.id.equals(productId))).getSingle()).name,
+          'Existing product before lot migration',
+        );
+        for (final table in ['purchase_items', 'product_batches']) {
+          final columns = await fileDb
+              .customSelect('PRAGMA table_info($table)')
+              .get();
+          expect(
+            columns.map((row) => row.read<String>('name')),
+            contains('manufacturer_lot_number'),
+            reason: '$table must gain manufacturer_lot_number',
+          );
+        }
+      } finally {
+        await fileDb?.close();
+        await temp.delete(recursive: true);
+      }
+    },
+  );
+
   test('10069 database migrates additively to pharmacy schema 10070', () async {
     final temp = await Directory.systemTemp.createTemp(
       'tapix-pharmacy-migration-',
@@ -266,7 +325,7 @@ void main() {
 
       fileDb = AppDatabase.connect(DatabaseConnection(NativeDatabase(file)));
       await fileDb.customSelect('SELECT 1').get();
-      expect(fileDb.schemaVersion, 10082);
+      expect(fileDb.schemaVersion, 10091);
       final existing = await (fileDb.select(
         fileDb.products,
       )..where((row) => row.id.equals(productId))).getSingle();

@@ -9,9 +9,7 @@ class PurchaseReportsHubScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('reports.purchase_reports'.tr()),
-      ),
+      appBar: AppBar(title: Text('reports.purchase_reports'.tr())),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -162,13 +160,23 @@ class _ReportTile extends StatelessWidget {
           ),
           child: Icon(icon, size: 20, color: colorScheme.primary),
         ),
-        title: Text(title, style: theme.textTheme.bodyMedium?.copyWith(
-          fontWeight: FontWeight.w600,
-        )),
-        subtitle: Text(subtitle, style: theme.textTheme.bodySmall?.copyWith(
+        title: Text(
+          title,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+        trailing: Icon(
+          LucideIcons.chevronRight,
+          size: 18,
           color: colorScheme.onSurfaceVariant,
-        )),
-        trailing: Icon(LucideIcons.chevronRight, size: 18, color: colorScheme.onSurfaceVariant),
+        ),
         onTap: onTap,
       ),
     );

@@ -1,3 +1,4 @@
+import '../presentation/widgets/warehouse_report_context.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -19,7 +20,15 @@ class PurchaseReportsExcelService {
   }) async {
     final cs = sl<CurrencyService>();
     final lang = context.locale.languageCode;
+    final reportLocation = WarehouseReportContext.maybeOf(context);
+    await reportLocation?.scope.checkAccess();
     final excel = Excel.createExcel();
+    if (reportLocation != null) {
+      excel['Warehouse'].appendRow([
+        TextCellValue(reportLocation.label),
+        TextCellValue(reportLocation.scope.warehouseId),
+      ]);
+    }
 
     final sheet = excel['Purchases'];
     excel.delete('Sheet1');
@@ -85,7 +94,15 @@ class PurchaseReportsExcelService {
   }) async {
     final cs = sl<CurrencyService>();
     final lang = context.locale.languageCode;
+    final reportLocation = WarehouseReportContext.maybeOf(context);
+    await reportLocation?.scope.checkAccess();
     final excel = Excel.createExcel();
+    if (reportLocation != null) {
+      excel['Warehouse'].appendRow([
+        TextCellValue(reportLocation.label),
+        TextCellValue(reportLocation.scope.warehouseId),
+      ]);
+    }
 
     // Purchases sheet
     final purchasesSheet = excel['Purchases'];

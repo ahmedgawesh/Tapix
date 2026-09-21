@@ -23,7 +23,7 @@ class CurrencyBloc extends RealtimeBloc<Currency, CurrencyEvent> {
   final CurrencyService _currencyService;
 
   CurrencyBloc(this._currencyService)
-      : super(RealtimeSuccess(data: _currencyService.getCurrency()));
+    : super(RealtimeSuccess(data: _currencyService.getCurrency()));
 
   @override
   Stream<Currency> get dataStream => _currencyService.currencyStream;
@@ -38,26 +38,42 @@ class CurrencyBloc extends RealtimeBloc<Currency, CurrencyEvent> {
     CurrencyChanged event,
     Emitter<RealtimeState<Currency>> emit,
   ) async {
-    // We get the full Currency object for the optimistic update
-    final newCurrency = Currency.fromCode(event.code);
-    
-    await performOptimisticUpdate(
-      operationId: 'currency_change_${DateTime.now().millisecondsSinceEpoch}',
-      optimisticData: newCurrency,
-      operation: () => _currencyService.setCurrency(event.code),
-    );
+    try {
+      await _currencyService.setCurrency(event.code);
+      emit(RealtimeSuccess(data: _currencyService.getCurrency()));
+    } catch (error, stackTrace) {
+      emit(
+        RealtimeError(
+          error: error,
+          stackTrace: stackTrace,
+          previousData: _currencyService.getCurrency(),
+        ),
+      );
+    }
   }
 
   Future<void> _onCustomCurrencyAdded(
     CustomCurrencyAdded event,
     Emitter<RealtimeState<Currency>> emit,
   ) async {
-    await _currencyService.addCustomCurrency(event.currency);
-    if (event.setAsActive) {
-      await performOptimisticUpdate(
-        operationId: 'currency_custom_${DateTime.now().millisecondsSinceEpoch}',
-        optimisticData: event.currency,
-        operation: () => _currencyService.setCurrency(event.currency.code),
+    try {
+      if (event.setAsActive) {
+        await _currencyService.validateCurrencyChange?.call(
+          event.currency.code,
+        );
+      }
+      await _currencyService.addCustomCurrency(event.currency);
+      if (event.setAsActive) {
+        await _currencyService.setCurrency(event.currency.code);
+      }
+      emit(RealtimeSuccess(data: _currencyService.getCurrency()));
+    } catch (error, stackTrace) {
+      emit(
+        RealtimeError(
+          error: error,
+          stackTrace: stackTrace,
+          previousData: _currencyService.getCurrency(),
+        ),
       );
     }
   }

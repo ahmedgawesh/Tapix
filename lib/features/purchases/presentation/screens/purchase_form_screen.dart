@@ -10,6 +10,7 @@ import 'package:decimal/decimal.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/services/feature_gate_service.dart';
 import '../../../../core/services/pricing/discount_converter.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../../core/widgets/action_confirmation_dialog.dart';
@@ -54,6 +55,10 @@ class PurchaseFormScreen extends StatelessWidget {
     final appSettingsState = context.read<AppSettingsBloc>().state;
     final settings = appSettingsState.settings;
     final enableTax = settings.enableTaxCalculations;
+    final pharmacyFeaturesEnabled = sl<FeatureGateService>().isEnabled(
+      AppFeature.pharmacy,
+      settingEnabled: settings.enablePharmacyFeatures,
+    );
     // Convert percentage to basis points (e.g., 15% -> 1500 bps)
     final taxRateBps = (settings.defaultPurchaseTaxRate * 100).round();
 
@@ -69,6 +74,7 @@ class PurchaseFormScreen extends StatelessWidget {
                 defaultPurchaseTaxRateBps: taxRateBps,
                 taxInclusivePricing: settings.taxInclusivePricing,
                 isEditingPosted: isEditingPosted,
+                pharmacyFeaturesEnabled: pharmacyFeaturesEnabled,
               ),
             ),
         ),
@@ -1449,6 +1455,7 @@ class _PurchaseFormView extends StatelessWidget {
                     currencyService: cs,
                     showItemDiscount:
                         state.discountMode == DiscountMode.perItem,
+                    showManufacturerLot: state.pharmacyFeaturesEnabled,
                     onTap: () => _showEditItemDialog(context, item),
                     onRemove: () async {
                       final confirmed = await confirmInvoiceLineRemoval(
@@ -1745,6 +1752,10 @@ class _PurchaseFormView extends StatelessWidget {
         item: item,
         currencyService: sl<CurrencyService>(),
         discountMode: context.read<PurchaseFormBloc>().state.discountMode,
+        pharmacyFeaturesEnabled: context
+            .read<PurchaseFormBloc>()
+            .state
+            .pharmacyFeaturesEnabled,
         onSave:
             (
               qty,
@@ -1752,6 +1763,8 @@ class _PurchaseFormView extends StatelessWidget {
               discount,
               expiry,
               clearExpiry,
+              manufacturerLotNumber,
+              clearManufacturerLotNumber,
               sellPriceCents,
               wholesalePriceCents,
             ) {
@@ -1763,6 +1776,8 @@ class _PurchaseFormView extends StatelessWidget {
                   discountCents: discount,
                   expiryDate: expiry,
                   clearExpiry: clearExpiry,
+                  manufacturerLotNumber: manufacturerLotNumber,
+                  clearManufacturerLotNumber: clearManufacturerLotNumber,
                   newSellPriceCents: sellPriceCents,
                   newWholesalePriceCents: wholesalePriceCents,
                 ),
@@ -1920,6 +1935,7 @@ class _PurchaseItemTile extends StatelessWidget {
   final int index;
   final CurrencyService currencyService;
   final bool showItemDiscount;
+  final bool showManufacturerLot;
   final VoidCallback onTap;
   final VoidCallback onRemove;
   final ValueChanged<int> onQuantityChanged;
@@ -1929,6 +1945,7 @@ class _PurchaseItemTile extends StatelessWidget {
     required this.index,
     required this.currencyService,
     required this.showItemDiscount,
+    required this.showManufacturerLot,
     required this.onTap,
     required this.onRemove,
     required this.onQuantityChanged,
@@ -2047,6 +2064,32 @@ class _PurchaseItemTile extends StatelessWidget {
                       '${'purchases.discount'.tr()}: -${currencyService.format(item.discountCents.toBigInt().toInt())}',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: cs.tertiary,
+                      ),
+                    ),
+                  if (showManufacturerLot &&
+                      item.requiresManufacturerLot &&
+                      item.manufacturerLotNumber?.trim().isNotEmpty == true)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        '${'pharmacy.batch.lot_short'.tr()}: ${item.manufacturerLotNumber}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: cs.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  if (showManufacturerLot &&
+                      item.requiresManufacturerLot &&
+                      (item.manufacturerLotNumber?.trim().isEmpty ?? true))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        'pharmacy.batch.lot_required'.tr(),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: cs.error,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   if (item.expiryDate != null)
@@ -2206,12 +2249,15 @@ class _EditItemSheet extends StatefulWidget {
   final PurchaseLineItem item;
   final CurrencyService currencyService;
   final DiscountMode discountMode;
+  final bool pharmacyFeaturesEnabled;
   final void Function(
     int qty,
     Decimal cost,
     Decimal? discount,
     DateTime? expiry,
     bool clearExpiry,
+    String? manufacturerLotNumber,
+    bool clearManufacturerLotNumber,
     Decimal? sellPriceCents,
     Decimal? wholesalePriceCents,
   )
@@ -2221,6 +2267,7 @@ class _EditItemSheet extends StatefulWidget {
     required this.item,
     required this.currencyService,
     required this.discountMode,
+    required this.pharmacyFeaturesEnabled,
     required this.onSave,
   });
 
@@ -2236,6 +2283,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
   late final TextEditingController _wholesalePriceCtrl;
   late final TextEditingController _discountPercentCtrl;
   late final TextEditingController _discountFixedCtrl;
+  late final TextEditingController _manufacturerLotController;
   DateTime? _expiryDate;
   bool _updatingDiscount = false;
   bool _saving = false;
@@ -2306,6 +2354,9 @@ class _EditItemSheetState extends State<_EditItemSheet> {
     );
 
     _expiryDate = widget.item.expiryDate;
+    _manufacturerLotController = TextEditingController(
+      text: widget.item.manufacturerLotNumber ?? '',
+    );
 
     _discountPercentCtrl.addListener(_syncFromPercent);
     _discountFixedCtrl.addListener(_syncFromFixed);
@@ -2319,6 +2370,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
     _costCtrl.addListener(_rebuildTotals);
     _discountPercentCtrl.addListener(_rebuildTotals);
     _discountFixedCtrl.addListener(_rebuildTotals);
+    _manufacturerLotController.addListener(_rebuildTotals);
     // Keep below-cost warning reactive to sell/wholesale price changes.
     _sellPriceCtrl.addListener(_rebuildTotals);
     _wholesalePriceCtrl.addListener(_rebuildTotals);
@@ -2390,6 +2442,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
     _wholesalePriceCtrl.dispose();
     _discountPercentCtrl.dispose();
     _discountFixedCtrl.dispose();
+    _manufacturerLotController.dispose();
     super.dispose();
   }
 
@@ -2894,6 +2947,33 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                         ],
                       ),
                     ],
+                    // Manufacturer lot is a pharmacy-only receiving datum
+                    // (GS1 AI 10). It belongs to each received stock batch,
+                    // not to the product master record.
+                    if (widget.pharmacyFeaturesEnabled &&
+                        widget.item.requiresManufacturerLot) ...[
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _manufacturerLotController,
+                        textCapitalization: TextCapitalization.characters,
+                        maxLength: 20,
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(20),
+                          FilteringTextInputFormatter.deny(RegExp(r'[\r\n]')),
+                        ],
+                        decoration: InputDecoration(
+                          labelText: 'pharmacy.batch.lot_number'.tr(),
+                          helperText: 'pharmacy.batch.lot_help'.tr(),
+                          errorText:
+                              _manufacturerLotController.text.trim().isEmpty
+                              ? 'pharmacy.batch.lot_required'.tr()
+                              : null,
+                          border: const OutlineInputBorder(),
+                          prefixIcon: const Icon(LucideIcons.packageSearch),
+                          counterText: '',
+                        ),
+                      ),
+                    ],
                     // ── Expiry Date ──
                     // Required when the product is batch_expiry-tracked
                     // (Phase C — two-layer inventory architecture). The
@@ -3154,10 +3234,17 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                             'batch_expiry';
                         final missingRequired =
                             requiresExpiry && _expiryDate == null;
+                        final missingManufacturerLot =
+                            widget.pharmacyFeaturesEnabled &&
+                            widget.item.requiresManufacturerLot &&
+                            _manufacturerLotController.text.trim().isEmpty;
                         return FilledButton.icon(
                           icon: const Icon(LucideIcons.check, size: 18),
                           label: Text('common.save'.tr()),
-                          onPressed: _saving || missingRequired
+                          onPressed:
+                              _saving ||
+                                  missingRequired ||
+                                  missingManufacturerLot
                               ? null
                               : () {
                                   setState(() => _saving = true);
@@ -3203,6 +3290,18 @@ class _EditItemSheetState extends State<_EditItemSheet> {
                                       _expiryDate,
                                       _expiryDate == null &&
                                           widget.item.expiryDate != null,
+                                      widget.pharmacyFeaturesEnabled &&
+                                              widget
+                                                  .item
+                                                  .requiresManufacturerLot
+                                          ? _manufacturerLotController.text
+                                                .trim()
+                                          : widget.item.manufacturerLotNumber,
+                                      widget.pharmacyFeaturesEnabled &&
+                                          widget.item.requiresManufacturerLot &&
+                                          _manufacturerLotController.text
+                                              .trim()
+                                              .isEmpty,
                                       sellCents,
                                       wholesaleCents,
                                     );

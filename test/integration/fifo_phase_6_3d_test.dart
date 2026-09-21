@@ -1,3 +1,4 @@
+import '../features/business/business_foundation_test.dart' as fixtures;
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart' hide isNotNull;
 import 'package:drift/native.dart';
@@ -51,7 +52,9 @@ void main() {
     String costingMethod = 'fifo',
     bool hasVariants = false,
   }) async {
-    final pid = await db.into(db.products).insert(
+    final pid = await db
+        .into(db.products)
+        .insert(
           ProductsCompanion.insert(
             sku: Value(sku),
             name: name,
@@ -78,7 +81,9 @@ void main() {
     int? colorId,
     int? sizeId,
   }) async {
-    return db.into(db.productVariants).insert(
+    return db
+        .into(db.productVariants)
+        .insert(
           ProductVariantsCompanion.insert(
             productId: productId,
             stockQuantity: Value(stock),
@@ -97,7 +102,9 @@ void main() {
     required int unitCostCents,
     String poNumber = 'PO-X',
   }) async {
-    final purchaseId = await db.into(db.purchases).insert(
+    final purchaseId = await db
+        .into(db.purchases)
+        .insert(
           PurchasesCompanion.insert(
             purchaseNumber: poNumber,
             supplierId: supplierId,
@@ -110,7 +117,9 @@ void main() {
             paymentMethod: const Value('credit'),
           ),
         );
-    await db.into(db.purchaseItems).insert(
+    await db
+        .into(db.purchaseItems)
+        .insert(
           PurchaseItemsCompanion.insert(
             purchaseId: purchaseId,
             productId: productId,
@@ -132,7 +141,9 @@ void main() {
     required int unitPriceCents,
     String invoiceNumber = 'INV-X',
   }) async {
-    final saleId = await db.into(db.sales).insert(
+    final saleId = await db
+        .into(db.sales)
+        .insert(
           SalesCompanion.insert(
             invoiceNumber: invoiceNumber,
             customerId: Value(customerId),
@@ -145,7 +156,9 @@ void main() {
             status: const Value('draft'),
           ),
         );
-    await db.into(db.saleItems).insert(
+    await db
+        .into(db.saleItems)
+        .insert(
           SaleItemsCompanion.insert(
             saleId: saleId,
             productId: productId,
@@ -161,53 +174,63 @@ void main() {
   }
 
   Future<List<({int id, int remaining, int unitCost, String source})>>
-      activeBatches({required int productId, int? variantId}) async {
+  activeBatches({required int productId, int? variantId}) async {
     final filterVar = variantId == null ? '' : 'AND variant_id = ?';
     final vars = <Variable>[Variable.withInt(productId)];
     if (variantId != null) vars.add(Variable.withInt(variantId));
-    final rows = await db.customSelect(
-      'SELECT id, remaining_quantity, unit_cost_cents, source '
-      '  FROM product_batches '
-      ' WHERE product_id = ? $filterVar AND is_active = 1 '
-      ' ORDER BY received_date ASC, id ASC',
-      variables: vars,
-    ).get();
+    final rows = await db
+        .customSelect(
+          'SELECT id, remaining_quantity, unit_cost_cents, source '
+          '  FROM product_batches '
+          ' WHERE product_id = ? $filterVar AND is_active = 1 '
+          ' ORDER BY received_date ASC, id ASC',
+          variables: vars,
+        )
+        .get();
     return rows
-        .map((r) => (
-              id: r.read<int>('id'),
-              remaining: r.read<int>('remaining_quantity'),
-              unitCost: r.read<int>('unit_cost_cents'),
-              source: r.read<String>('source'),
-            ))
+        .map(
+          (r) => (
+            id: r.read<int>('id'),
+            remaining: r.read<int>('remaining_quantity'),
+            unitCost: r.read<int>('unit_cost_cents'),
+            source: r.read<String>('source'),
+          ),
+        )
         .toList();
   }
 
   Future<List<({String type, String direction, int qty, int unitCost})>>
-      consumptionsForSale(int saleItemId) async {
-    final rows = await db.customSelect(
-      'SELECT consumption_type, direction, quantity, unit_cost_cents '
-      '  FROM batch_consumptions '
-      ' WHERE sale_item_id = ? '
-      ' ORDER BY id ASC',
-      variables: [Variable.withInt(saleItemId)],
-    ).get();
+  consumptionsForSale(int saleItemId) async {
+    final rows = await db
+        .customSelect(
+          'SELECT consumption_type, direction, quantity, unit_cost_cents '
+          '  FROM batch_consumptions '
+          ' WHERE sale_item_id = ? '
+          ' ORDER BY id ASC',
+          variables: [Variable.withInt(saleItemId)],
+        )
+        .get();
     return rows
-        .map((r) => (
-              type: r.read<String>('consumption_type'),
-              direction: r.read<String>('direction'),
-              qty: r.read<int>('quantity'),
-              unitCost: r.read<int>('unit_cost_cents'),
-            ))
+        .map(
+          (r) => (
+            type: r.read<String>('consumption_type'),
+            direction: r.read<String>('direction'),
+            qty: r.read<int>('quantity'),
+            unitCost: r.read<int>('unit_cost_cents'),
+          ),
+        )
         .toList();
   }
 
   Future<int> consumptionCountForProduct(int productId) async {
-    final row = await db.customSelect(
-      'SELECT COUNT(*) AS cnt FROM batch_consumptions bc '
-      'INNER JOIN product_batches pb ON pb.id = bc.batch_id '
-      'WHERE pb.product_id = ?',
-      variables: [Variable.withInt(productId)],
-    ).getSingle();
+    final row = await db
+        .customSelect(
+          'SELECT COUNT(*) AS cnt FROM batch_consumptions bc '
+          'INNER JOIN product_batches pb ON pb.id = bc.batch_id '
+          'WHERE pb.product_id = ?',
+          variables: [Variable.withInt(productId)],
+        )
+        .getSingle();
     return row.read<int>('cnt');
   }
 
@@ -235,19 +258,23 @@ void main() {
       "VALUES (0, 'system', 'no-pin', 'owner', 1, $now, $now)",
     );
 
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     currencyId = usd.id;
 
-    customerId = await db.into(db.customers).insert(
+    customerId = await db
+        .into(db.customers)
+        .insert(
           CustomersCompanion.insert(
             name: 'FIFO Test Customer',
             currencyId: currencyId,
             balanceCents: Value(Decimal.zero),
           ),
         );
-    supplierId = await db.into(db.suppliers).insert(
+    supplierId = await db
+        .into(db.suppliers)
+        .insert(
           SuppliersCompanion.insert(
             name: 'FIFO Test Supplier',
             currencyId: currencyId,
@@ -287,32 +314,34 @@ void main() {
       );
     });
 
-    test('two purchases at different costs → two independent batches',
-        () async {
-      final pid = await insertProduct(sku: 'F-002', name: 'F2');
-      final vid = await insertVariant(productId: pid);
+    test(
+      'two purchases at different costs → two independent batches',
+      () async {
+        final pid = await insertProduct(sku: 'F-002', name: 'F2');
+        final vid = await insertVariant(productId: pid);
 
-      await postPurchase(
-        productId: pid,
-        variantId: vid,
-        quantity: 10,
-        unitCostCents: 100,
-        poNumber: 'PO-F2-A',
-      );
-      await postPurchase(
-        productId: pid,
-        variantId: vid,
-        quantity: 10,
-        unitCostCents: 120,
-        poNumber: 'PO-F2-B',
-      );
+        await postPurchase(
+          productId: pid,
+          variantId: vid,
+          quantity: 10,
+          unitCostCents: 100,
+          poNumber: 'PO-F2-A',
+        );
+        await postPurchase(
+          productId: pid,
+          variantId: vid,
+          quantity: 10,
+          unitCostCents: 120,
+          poNumber: 'PO-F2-B',
+        );
 
-      final batches = await activeBatches(productId: pid, variantId: vid);
-      expect(batches.length, equals(2));
-      expect(batches[0].unitCost, equals(100));
-      expect(batches[1].unitCost, equals(120));
-      expect(batches.fold<int>(0, (s, b) => s + b.remaining), equals(20));
-    });
+        final batches = await activeBatches(productId: pid, variantId: vid);
+        expect(batches.length, equals(2));
+        expect(batches[0].unitCost, equals(100));
+        expect(batches[1].unitCost, equals(120));
+        expect(batches.fold<int>(0, (s, b) => s + b.remaining), equals(20));
+      },
+    );
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -324,17 +353,19 @@ void main() {
       final vid = await insertVariant(productId: pid);
 
       await postPurchase(
-          productId: pid,
-          variantId: vid,
-          quantity: 10,
-          unitCostCents: 100,
-          poNumber: 'PO-F3-A');
+        productId: pid,
+        variantId: vid,
+        quantity: 10,
+        unitCostCents: 100,
+        poNumber: 'PO-F3-A',
+      );
       await postPurchase(
-          productId: pid,
-          variantId: vid,
-          quantity: 10,
-          unitCostCents: 120,
-          poNumber: 'PO-F3-B');
+        productId: pid,
+        variantId: vid,
+        quantity: 10,
+        unitCostCents: 120,
+        poNumber: 'PO-F3-B',
+      );
 
       final saleId = await postSale(
         productId: pid,
@@ -344,9 +375,9 @@ void main() {
         invoiceNumber: 'INV-F3',
       );
 
-      final saleItem = await (db.select(db.saleItems)
-            ..where((i) => i.saleId.equals(saleId)))
-          .getSingle();
+      final saleItem = await (db.select(
+        db.saleItems,
+      )..where((i) => i.saleId.equals(saleId))).getSingle();
       final cons = await consumptionsForSale(saleItem.id);
       expect(cons.length, equals(1));
       expect(cons.first.qty, equals(5));
@@ -354,8 +385,11 @@ void main() {
       expect(cons.first.direction, equals('out'));
 
       final batches = await activeBatches(productId: pid, variantId: vid);
-      expect(batches[0].remaining, equals(5),
-          reason: 'first batch depleted by 5');
+      expect(
+        batches[0].remaining,
+        equals(5),
+        reason: 'first batch depleted by 5',
+      );
       expect(batches[1].remaining, equals(10), reason: 'newer batch untouched');
 
       await BatchService.assertInvariant(
@@ -370,17 +404,19 @@ void main() {
       final vid = await insertVariant(productId: pid);
 
       await postPurchase(
-          productId: pid,
-          variantId: vid,
-          quantity: 10,
-          unitCostCents: 100,
-          poNumber: 'PO-F4-A');
+        productId: pid,
+        variantId: vid,
+        quantity: 10,
+        unitCostCents: 100,
+        poNumber: 'PO-F4-A',
+      );
       await postPurchase(
-          productId: pid,
-          variantId: vid,
-          quantity: 10,
-          unitCostCents: 120,
-          poNumber: 'PO-F4-B');
+        productId: pid,
+        variantId: vid,
+        quantity: 10,
+        unitCostCents: 120,
+        poNumber: 'PO-F4-B',
+      );
 
       final saleId = await postSale(
         productId: pid,
@@ -390,12 +426,11 @@ void main() {
         invoiceNumber: 'INV-F4',
       );
 
-      final saleItem = await (db.select(db.saleItems)
-            ..where((i) => i.saleId.equals(saleId)))
-          .getSingle();
+      final saleItem = await (db.select(
+        db.saleItems,
+      )..where((i) => i.saleId.equals(saleId))).getSingle();
       final cons = await consumptionsForSale(saleItem.id);
-      expect(cons.length, equals(2),
-          reason: 'consumption spans two batches');
+      expect(cons.length, equals(2), reason: 'consumption spans two batches');
       expect(cons[0].qty, equals(10));
       expect(cons[0].unitCost, equals(100));
       expect(cons[1].qty, equals(4));
@@ -415,17 +450,19 @@ void main() {
       final pid = await insertProduct(sku: 'F-005', name: 'F5');
       final vid = await insertVariant(productId: pid);
       await postPurchase(
-          productId: pid,
-          variantId: vid,
-          quantity: 10,
-          unitCostCents: 100,
-          poNumber: 'PO-F5-A');
+        productId: pid,
+        variantId: vid,
+        quantity: 10,
+        unitCostCents: 100,
+        poNumber: 'PO-F5-A',
+      );
       await postPurchase(
-          productId: pid,
-          variantId: vid,
-          quantity: 10,
-          unitCostCents: 120,
-          poNumber: 'PO-F5-B');
+        productId: pid,
+        variantId: vid,
+        quantity: 10,
+        unitCostCents: 120,
+        poNumber: 'PO-F5-B',
+      );
 
       final saleId = await postSale(
         productId: pid,
@@ -443,10 +480,16 @@ void main() {
       await db.saleDao.voidSale(saleId);
 
       batches = await activeBatches(productId: pid, variantId: vid);
-      expect(batches[0].remaining, equals(10),
-          reason: 'first batch fully restored');
-      expect(batches[1].remaining, equals(10),
-          reason: 'second batch fully restored');
+      expect(
+        batches[0].remaining,
+        equals(10),
+        reason: 'first batch fully restored',
+      );
+      expect(
+        batches[1].remaining,
+        equals(10),
+        reason: 'second batch fully restored',
+      );
 
       await BatchService.assertInvariant(
         db.saleDao,
@@ -464,17 +507,19 @@ void main() {
       final pid = await insertProduct(sku: 'F-006', name: 'F6');
       final vid = await insertVariant(productId: pid);
       await postPurchase(
-          productId: pid,
-          variantId: vid,
-          quantity: 10,
-          unitCostCents: 100,
-          poNumber: 'PO-F6-A');
+        productId: pid,
+        variantId: vid,
+        quantity: 10,
+        unitCostCents: 100,
+        poNumber: 'PO-F6-A',
+      );
       await postPurchase(
-          productId: pid,
-          variantId: vid,
-          quantity: 10,
-          unitCostCents: 120,
-          poNumber: 'PO-F6-B');
+        productId: pid,
+        variantId: vid,
+        quantity: 10,
+        unitCostCents: 120,
+        poNumber: 'PO-F6-B',
+      );
 
       final result = await invAdjService.adjust(
         productId: pid,
@@ -492,12 +537,14 @@ void main() {
       expect(batches[1].remaining, equals(10));
 
       // Linked consumption row exists
-      final rows = await db.customSelect(
-        'SELECT consumption_type, direction, quantity, unit_cost_cents '
-        '  FROM batch_consumptions '
-        ' WHERE inventory_adjustment_id = ?',
-        variables: [Variable.withInt(result.adjustmentId)],
-      ).get();
+      final rows = await db
+          .customSelect(
+            'SELECT consumption_type, direction, quantity, unit_cost_cents '
+            '  FROM batch_consumptions '
+            ' WHERE inventory_adjustment_id = ?',
+            variables: [Variable.withInt(result.adjustmentId)],
+          )
+          .get();
       expect(rows.length, equals(1));
       expect(rows.first.read<String>('direction'), equals('out'));
       expect(rows.first.read<int>('quantity'), equals(3));
@@ -505,18 +552,15 @@ void main() {
     });
 
     test('gain creates new "found" batch at current cost', () async {
-      final pid = await insertProduct(
-        sku: 'F-007',
-        name: 'F7',
-        costCents: 100,
-      );
+      final pid = await insertProduct(sku: 'F-007', name: 'F7', costCents: 100);
       final vid = await insertVariant(productId: pid, costCents: 100);
       await postPurchase(
-          productId: pid,
-          variantId: vid,
-          quantity: 5,
-          unitCostCents: 100,
-          poNumber: 'PO-F7');
+        productId: pid,
+        variantId: vid,
+        quantity: 5,
+        unitCostCents: 100,
+        poNumber: 'PO-F7',
+      );
 
       await invAdjService.adjust(
         productId: pid,
@@ -545,127 +589,235 @@ void main() {
   // 8-9. SALE ADJUSTMENT RETURN (no original invoice)
   // ──────────────────────────────────────────────────────────────────────────
   group('Sale Adjustment Return — FIFO', () {
-    test('post → new batch source=sale_return; void → consume FIFO',
-        () async {
-      final pid = await insertProduct(sku: 'F-008', name: 'F8', costCents: 30);
-      final vid = await insertVariant(productId: pid, costCents: 30);
-      await postPurchase(
+    test(
+      'post creates a return layer; void reverses exactly that layer',
+      () async {
+        final pid = await insertProduct(
+          sku: 'F-008',
+          name: 'F8',
+          costCents: 30,
+        );
+        final vid = await insertVariant(productId: pid, costCents: 30);
+        await postPurchase(
           productId: pid,
           variantId: vid,
           quantity: 10,
           unitCostCents: 30,
-          poNumber: 'PO-F8');
+          poNumber: 'PO-F8',
+        );
 
-      final retId = await adjReturnDao.createSaleAdjReturn(
-        SaleReturnAdjustmentsCompanion.insert(
-          returnNumber: 'SAR-F8',
-          customerId: Value(customerId),
-          currencyId: currencyId,
-          totalCents: Decimal.fromInt(100),
-          refundMethod: const Value('credit'),
-        ),
-        [
-          SaleReturnAdjustmentItemsCompanion.insert(
-            returnId: 0,
-            productId: pid,
-            variantId: Value(vid),
-            quantity: 2,
-            unitPriceCents: Decimal.fromInt(50),
+        final retId = await adjReturnDao.createSaleAdjReturn(
+          SaleReturnAdjustmentsCompanion.insert(
+            returnNumber: 'SAR-F8',
+            customerId: Value(customerId),
+            currencyId: currencyId,
             totalCents: Decimal.fromInt(100),
+            refundMethod: const Value('credit'),
           ),
-        ],
-      );
-      await adjReturnDao.postSaleAdjReturn(
-        retId,
-        journalEntryService: journal,
-        allowOverHistory: true,
-      );
+          [
+            SaleReturnAdjustmentItemsCompanion.insert(
+              returnId: 0,
+              productId: pid,
+              variantId: Value(vid),
+              quantity: 2,
+              unitPriceCents: Decimal.fromInt(50),
+              totalCents: Decimal.fromInt(100),
+            ),
+          ],
+        );
+        await adjReturnDao.postSaleAdjReturn(
+          retId,
+          journalEntryService: journal,
+          allowOverHistory: true,
+        );
 
-      // After post: original batch 10 + new sale_return batch 2 = 12
-      var batches = await activeBatches(productId: pid, variantId: vid);
-      expect(batches.length, equals(2));
-      final saleReturnBatch =
-          batches.firstWhere((b) => b.source == 'sale_return');
-      expect(saleReturnBatch.remaining, equals(2));
-      expect(saleReturnBatch.unitCost, equals(30));
+        // After post: original batch 10 + new sale_return batch 2 = 12
+        var batches = await activeBatches(productId: pid, variantId: vid);
+        expect(batches.length, equals(2));
+        final saleReturnBatch = batches.firstWhere(
+          (b) => b.source == 'sale_return',
+        );
+        expect(saleReturnBatch.remaining, equals(2));
+        expect(saleReturnBatch.unitCost, equals(30));
 
-      await BatchService.assertInvariant(
-        db.saleDao,
-        productId: pid,
-        variantId: vid,
-      );
+        await BatchService.assertInvariant(
+          db.saleDao,
+          productId: pid,
+          variantId: vid,
+        );
 
-      // Now void → must consume FIFO from oldest (the original purchase batch)
-      await adjReturnDao.voidSaleAdjReturn(
-        retId,
-        journalEntryService: journal,
-      );
+        // Void reverses its own layer and preserves the original purchase.
+        await adjReturnDao.voidSaleAdjReturn(
+          retId,
+          journalEntryService: journal,
+        );
 
-      batches = await activeBatches(productId: pid, variantId: vid);
-      final purchaseBatch =
-          batches.firstWhere((b) => b.source == 'purchase');
-      expect(purchaseBatch.remaining, equals(8),
-          reason: 'oldest batch consumed first on void');
+        batches = await activeBatches(productId: pid, variantId: vid);
+        final purchaseBatch = batches.firstWhere((b) => b.source == 'purchase');
+        expect(
+          purchaseBatch.remaining,
+          equals(10),
+          reason: 'void must preserve the original purchase layer',
+        );
+        expect(
+          batches.firstWhere((b) => b.source == 'sale_return').remaining,
+          0,
+        );
 
-      await BatchService.assertInvariant(
-        db.saleDao,
-        productId: pid,
-        variantId: vid,
-      );
-    });
+        await BatchService.assertInvariant(
+          db.saleDao,
+          productId: pid,
+          variantId: vid,
+        );
+      },
+    );
+    test(
+      'void refuses a consumed return layer despite stock in newer layers',
+      () async {
+        final pid = await insertProduct(
+          sku: 'F-008',
+          name: 'F8',
+          costCents: 30,
+        );
+        final vid = await insertVariant(productId: pid, costCents: 30);
+        await postPurchase(
+          productId: pid,
+          variantId: vid,
+          quantity: 10,
+          unitCostCents: 30,
+          poNumber: 'PO-F8',
+        );
+
+        final retId = await adjReturnDao.createSaleAdjReturn(
+          SaleReturnAdjustmentsCompanion.insert(
+            returnNumber: 'SAR-F8',
+            customerId: Value(customerId),
+            currencyId: currencyId,
+            totalCents: Decimal.fromInt(100),
+            refundMethod: const Value('credit'),
+          ),
+          [
+            SaleReturnAdjustmentItemsCompanion.insert(
+              returnId: 0,
+              productId: pid,
+              variantId: Value(vid),
+              quantity: 2,
+              unitPriceCents: Decimal.fromInt(50),
+              totalCents: Decimal.fromInt(100),
+            ),
+          ],
+        );
+        await adjReturnDao.postSaleAdjReturn(
+          retId,
+          journalEntryService: journal,
+          allowOverHistory: true,
+        );
+
+        // After post: original batch 10 + new sale_return batch 2 = 12
+        var batches = await activeBatches(productId: pid, variantId: vid);
+        expect(batches.length, equals(2));
+        final saleReturnBatch = batches.firstWhere(
+          (b) => b.source == 'sale_return',
+        );
+        expect(saleReturnBatch.remaining, equals(2));
+        expect(saleReturnBatch.unitCost, equals(30));
+
+        await BatchService.assertInvariant(
+          db.saleDao,
+          productId: pid,
+          variantId: vid,
+        );
+
+        await postSale(
+          productId: pid,
+          variantId: vid,
+          quantity: 11,
+          unitPriceCents: 50,
+          invoiceNumber: 'CONSUME-RETURN',
+        );
+        await postPurchase(
+          productId: pid,
+          variantId: vid,
+          quantity: 5,
+          unitCostCents: 40,
+          poNumber: 'LATER-PURCHASE',
+        );
+        final before = await fixtures.legacySnapshot(db);
+        await expectLater(
+          adjReturnDao.voidSaleAdjReturn(retId, journalEntryService: journal),
+          throwsA(isA<BatchInsufficientStockException>()),
+        );
+        expect(await fixtures.legacySnapshot(db), before);
+        await BatchService.assertInvariant(
+          db.saleDao,
+          productId: pid,
+          variantId: vid,
+        );
+      },
+    );
   });
 
   // ──────────────────────────────────────────────────────────────────────────
   // 10. PURCHASE ADJUSTMENT RETURN (no original invoice) — mirror reversal
   // ──────────────────────────────────────────────────────────────────────────
   group('Purchase Adjustment Return — FIFO', () {
-    test('post consumes FIFO; void restores SAME batches at SAME cost',
-        () async {
-      final pid = await insertProduct(sku: 'F-009', name: 'F9', costCents: 30);
-      final vid = await insertVariant(productId: pid, costCents: 30);
-      await postPurchase(
+    test(
+      'post consumes FIFO; void restores SAME batches at SAME cost',
+      () async {
+        final pid = await insertProduct(
+          sku: 'F-009',
+          name: 'F9',
+          costCents: 30,
+        );
+        final vid = await insertVariant(productId: pid, costCents: 30);
+        await postPurchase(
           productId: pid,
           variantId: vid,
           quantity: 10,
           unitCostCents: 30,
-          poNumber: 'PO-F9');
+          poNumber: 'PO-F9',
+        );
 
-      final retId = await adjReturnDao.createPurchaseAdjReturn(
-        PurchaseReturnAdjustmentsCompanion.insert(
-          returnNumber: 'PAR-F9',
-          supplierId: supplierId,
-          currencyId: currencyId,
-          totalCents: Decimal.fromInt(150),
-        ),
-        [
-          PurchaseReturnAdjustmentItemsCompanion.insert(
-            returnId: 0,
-            productId: pid,
-            variantId: Value(vid),
-            quantity: 3,
-            unitPriceCents: Decimal.fromInt(50),
+        final retId = await adjReturnDao.createPurchaseAdjReturn(
+          PurchaseReturnAdjustmentsCompanion.insert(
+            returnNumber: 'PAR-F9',
+            supplierId: supplierId,
+            currencyId: currencyId,
             totalCents: Decimal.fromInt(150),
           ),
-        ],
-      );
+          [
+            PurchaseReturnAdjustmentItemsCompanion.insert(
+              returnId: 0,
+              productId: pid,
+              variantId: Value(vid),
+              quantity: 3,
+              unitPriceCents: Decimal.fromInt(50),
+              totalCents: Decimal.fromInt(150),
+            ),
+          ],
+        );
 
-      await adjReturnDao.postPurchaseAdjReturn(
-        retId,
-        journalEntryService: journal,
-        allowOverHistory: true,
-      );
-      var batches = await activeBatches(productId: pid, variantId: vid);
-      expect(batches.first.remaining, equals(7));
+        await adjReturnDao.postPurchaseAdjReturn(
+          retId,
+          journalEntryService: journal,
+          allowOverHistory: true,
+        );
+        var batches = await activeBatches(productId: pid, variantId: vid);
+        expect(batches.first.remaining, equals(7));
 
-      await adjReturnDao.voidPurchaseAdjReturn(
-        retId,
-        journalEntryService: journal,
-      );
-      batches = await activeBatches(productId: pid, variantId: vid);
-      expect(batches.first.remaining, equals(10),
-          reason: 'void restored exactly the same batch');
-      expect(batches.first.unitCost, equals(30));
-    });
+        await adjReturnDao.voidPurchaseAdjReturn(
+          retId,
+          journalEntryService: journal,
+        );
+        batches = await activeBatches(productId: pid, variantId: vid);
+        expect(
+          batches.first.remaining,
+          equals(10),
+          reason: 'void restored exactly the same batch',
+        );
+        expect(batches.first.unitCost, equals(30));
+      },
+    );
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -682,9 +834,9 @@ void main() {
         unitCostCents: 30,
         poNumber: 'PO-F10',
       );
-      final purchaseItem = await (db.select(db.purchaseItems)
-            ..where((i) => i.purchaseId.equals(purchaseId)))
-          .getSingle();
+      final purchaseItem = await (db.select(
+        db.purchaseItems,
+      )..where((i) => i.purchaseId.equals(purchaseId))).getSingle();
 
       final retId = await db.purchaseDao.createPurchaseReturn(
         PurchaseReturnsCompanion.insert(
@@ -712,8 +864,11 @@ void main() {
 
       await db.purchaseDao.voidPurchaseReturn(retId);
       batches = await activeBatches(productId: pid, variantId: vid);
-      expect(batches.first.remaining, equals(10),
-          reason: 'restored back to original');
+      expect(
+        batches.first.remaining,
+        equals(10),
+        reason: 'restored back to original',
+      );
     });
   });
 
@@ -721,33 +876,39 @@ void main() {
   // 12. VOID PURCHASE BLOCKS WHEN PARTIALLY CONSUMED
   // ──────────────────────────────────────────────────────────────────────────
   group('Void purchase guards', () {
-    test('BLOCKS when batch from this purchase has been partially consumed',
-        () async {
-      final pid = await insertProduct(sku: 'F-011', name: 'F11', costCents: 30);
-      final vid = await insertVariant(productId: pid, costCents: 30);
-      final purchaseId = await postPurchase(
-        productId: pid,
-        variantId: vid,
-        quantity: 10,
-        unitCostCents: 30,
-        poNumber: 'PO-F11',
-      );
+    test(
+      'BLOCKS when batch from this purchase has been partially consumed',
+      () async {
+        final pid = await insertProduct(
+          sku: 'F-011',
+          name: 'F11',
+          costCents: 30,
+        );
+        final vid = await insertVariant(productId: pid, costCents: 30);
+        final purchaseId = await postPurchase(
+          productId: pid,
+          variantId: vid,
+          quantity: 10,
+          unitCostCents: 30,
+          poNumber: 'PO-F11',
+        );
 
-      // Sell 3 → batch is partially consumed
-      await postSale(
-        productId: pid,
-        variantId: vid,
-        quantity: 3,
-        unitPriceCents: 50,
-        invoiceNumber: 'INV-F11',
-      );
+        // Sell 3 → batch is partially consumed
+        await postSale(
+          productId: pid,
+          variantId: vid,
+          quantity: 3,
+          unitPriceCents: 50,
+          invoiceNumber: 'INV-F11',
+        );
 
-      // Now voiding the purchase MUST raise.
-      expect(
-        () => db.purchaseDao.voidPurchase(purchaseId),
-        throwsA(isA<Exception>()),
-      );
-    });
+        // Now voiding the purchase MUST raise.
+        expect(
+          () => db.purchaseDao.voidPurchase(purchaseId),
+          throwsA(isA<Exception>()),
+        );
+      },
+    );
 
     test('ALLOWS void when batch is fully untouched', () async {
       final pid = await insertProduct(sku: 'F-012', name: 'F12', costCents: 30);
@@ -771,113 +932,139 @@ void main() {
   // 13. WAC PRODUCTS — NO BATCH CONSUMPTIONS
   // ──────────────────────────────────────────────────────────────────────────
   group('WAC products (legacy path untouched)', () {
-    test('purchase + sale on WAC product writes ZERO batch_consumption rows',
-        () async {
-      final pid = await insertProduct(
-        sku: 'W-001',
-        name: 'WAC1',
-        costingMethod: 'wac',
-      );
-      final vid = await insertVariant(productId: pid);
+    test(
+      'purchase + sale on WAC product writes ZERO batch_consumption rows',
+      () async {
+        final pid = await insertProduct(
+          sku: 'W-001',
+          name: 'WAC1',
+          costingMethod: 'wac',
+        );
+        final vid = await insertVariant(productId: pid);
 
-      await postPurchase(
+        await postPurchase(
           productId: pid,
           variantId: vid,
           quantity: 10,
           unitCostCents: 100,
-          poNumber: 'PO-W1');
-      await postSale(
-        productId: pid,
-        variantId: vid,
-        quantity: 3,
-        unitPriceCents: 200,
-        invoiceNumber: 'INV-W1',
-      );
+          poNumber: 'PO-W1',
+        );
+        await postSale(
+          productId: pid,
+          variantId: vid,
+          quantity: 3,
+          unitPriceCents: 200,
+          invoiceNumber: 'INV-W1',
+        );
 
-      // No consumption rows are written for WAC products on sale.
-      expect(await consumptionCountForProduct(pid), equals(0));
+        // No consumption rows are written for WAC products on sale.
+        expect(await consumptionCountForProduct(pid), equals(0));
 
-      // Purchase still creates a batch row (the batch ledger is the canonical
-      // source for expiry tracking, even on WAC products), but the sale must
-      // NOT touch its remaining_quantity.
-      final batches = await activeBatches(productId: pid, variantId: vid);
-      expect(batches.length, equals(1));
-      expect(batches.first.remaining, equals(10),
-          reason: 'WAC sale must not deplete the batch ledger');
+        // Purchase still creates a batch row (the batch ledger is the canonical
+        // source for expiry tracking, even on WAC products), but the sale must
+        // NOT touch its remaining_quantity.
+        final batches = await activeBatches(productId: pid, variantId: vid);
+        expect(batches.length, equals(1));
+        expect(
+          batches.first.remaining,
+          equals(10),
+          reason: 'WAC sale must not deplete the batch ledger',
+        );
 
-      // Variant stock_quantity is the source of truth for WAC: 10 - 3 = 7.
-      final v = await (db.select(db.productVariants)
-            ..where((x) => x.id.equals(vid)))
-          .getSingle();
-      expect(v.stockQuantity, equals(7));
-    });
+        // Variant stock_quantity is the source of truth for WAC: 10 - 3 = 7.
+        final v = await (db.select(
+          db.productVariants,
+        )..where((x) => x.id.equals(vid))).getSingle();
+        expect(v.stockQuantity, equals(7));
+      },
+    );
   });
 
   // ──────────────────────────────────────────────────────────────────────────
   // 14. INVARIANT GUARD AFTER A LONG MIXED OPERATION SEQUENCE
   // ──────────────────────────────────────────────────────────────────────────
   group('Invariant after mixed-op sequence', () {
-    test('Σ(batch.remaining) == variant.stock_quantity at every checkpoint',
-        () async {
-      final pid = await insertProduct(sku: 'F-013', name: 'F13', costCents: 50);
-      final vid = await insertVariant(productId: pid, costCents: 50);
+    test(
+      'Σ(batch.remaining) == variant.stock_quantity at every checkpoint',
+      () async {
+        final pid = await insertProduct(
+          sku: 'F-013',
+          name: 'F13',
+          costCents: 50,
+        );
+        final vid = await insertVariant(productId: pid, costCents: 50);
 
-      // Mix of purchases / sales / shrink / gain
-      await postPurchase(
+        // Mix of purchases / sales / shrink / gain
+        await postPurchase(
           productId: pid,
           variantId: vid,
           quantity: 20,
           unitCostCents: 50,
-          poNumber: 'PO-F13-A');
-      await postPurchase(
+          poNumber: 'PO-F13-A',
+        );
+        await postPurchase(
           productId: pid,
           variantId: vid,
           quantity: 30,
           unitCostCents: 60,
-          poNumber: 'PO-F13-B');
-      await BatchService.assertInvariant(db.purchaseDao,
-          productId: pid, variantId: vid);
+          poNumber: 'PO-F13-B',
+        );
+        await BatchService.assertInvariant(
+          db.purchaseDao,
+          productId: pid,
+          variantId: vid,
+        );
 
-      await postSale(
-        productId: pid,
-        variantId: vid,
-        quantity: 25,
-        unitPriceCents: 100,
-        invoiceNumber: 'INV-F13-A',
-      );
-      await BatchService.assertInvariant(db.saleDao,
-          productId: pid, variantId: vid);
+        await postSale(
+          productId: pid,
+          variantId: vid,
+          quantity: 25,
+          unitPriceCents: 100,
+          invoiceNumber: 'INV-F13-A',
+        );
+        await BatchService.assertInvariant(
+          db.saleDao,
+          productId: pid,
+          variantId: vid,
+        );
 
-      await invAdjService.adjust(
-        productId: pid,
-        variantId: vid,
-        type: InventoryAdjustmentType.shrinkage,
-        quantityDelta: -2,
-        reason: 'count diff',
-        currencyId: currencyId,
-        userId: 0,
-      );
-      await BatchService.assertInvariant(db.inventoryAdjustmentDao,
-          productId: pid, variantId: vid);
+        await invAdjService.adjust(
+          productId: pid,
+          variantId: vid,
+          type: InventoryAdjustmentType.shrinkage,
+          quantityDelta: -2,
+          reason: 'count diff',
+          currencyId: currencyId,
+          userId: 0,
+        );
+        await BatchService.assertInvariant(
+          db.inventoryAdjustmentDao,
+          productId: pid,
+          variantId: vid,
+        );
 
-      await invAdjService.adjust(
-        productId: pid,
-        variantId: vid,
-        type: InventoryAdjustmentType.gain,
-        quantityDelta: 5,
-        reason: 'recount',
-        currencyId: currencyId,
-        userId: 0,
-      );
-      await BatchService.assertInvariant(db.inventoryAdjustmentDao,
-          productId: pid, variantId: vid);
+        await invAdjService.adjust(
+          productId: pid,
+          variantId: vid,
+          type: InventoryAdjustmentType.gain,
+          quantityDelta: 5,
+          reason: 'recount',
+          currencyId: currencyId,
+          userId: 0,
+        );
+        await BatchService.assertInvariant(
+          db.inventoryAdjustmentDao,
+          productId: pid,
+          variantId: vid,
+        );
 
-      // Final ground truth: 20 + 30 - 25 - 2 + 5 = 28
-      final v = await (db.select(db.productVariants)
-            ..where((x) => x.id.equals(vid)))
-          .getSingle();
-      expect(v.stockQuantity, equals(28));
-    });
+        // Final ground truth: 20 + 30 - 25 - 2 + 5 = 28
+        final v = await (db.select(
+          db.productVariants,
+        )..where((x) => x.id.equals(vid))).getSingle();
+        expect(v.stockQuantity, equals(28));
+      },
+    );
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -893,12 +1080,12 @@ void main() {
       );
       // Insert two real (color-tagged) variants — leave NO strict-default
       // variant so accidental null-variant calls would explode loudly.
-      final colorRed = await db.into(db.productColors).insert(
-            ProductColorsCompanion.insert(name: 'Red'),
-          );
-      final colorBlue = await db.into(db.productColors).insert(
-            ProductColorsCompanion.insert(name: 'Blue'),
-          );
+      final colorRed = await db
+          .into(db.productColors)
+          .insert(ProductColorsCompanion.insert(name: 'Red'));
+      final colorBlue = await db
+          .into(db.productColors)
+          .insert(ProductColorsCompanion.insert(name: 'Blue'));
       final vA = await insertVariant(
         productId: pid,
         colorId: colorRed,
@@ -911,17 +1098,19 @@ void main() {
       );
 
       await postPurchase(
-          productId: pid,
-          variantId: vA,
-          quantity: 10,
-          unitCostCents: 50,
-          poNumber: 'PO-F14-A');
+        productId: pid,
+        variantId: vA,
+        quantity: 10,
+        unitCostCents: 50,
+        poNumber: 'PO-F14-A',
+      );
       await postPurchase(
-          productId: pid,
-          variantId: vB,
-          quantity: 10,
-          unitCostCents: 80,
-          poNumber: 'PO-F14-B');
+        productId: pid,
+        variantId: vB,
+        quantity: 10,
+        unitCostCents: 80,
+        poNumber: 'PO-F14-B',
+      );
 
       await postSale(
         productId: pid,
@@ -934,14 +1123,23 @@ void main() {
       final batchesA = await activeBatches(productId: pid, variantId: vA);
       final batchesB = await activeBatches(productId: pid, variantId: vB);
       expect(batchesA.first.remaining, equals(6));
-      expect(batchesB.first.remaining, equals(10),
-          reason: 'sibling variant batches must be untouched');
+      expect(
+        batchesB.first.remaining,
+        equals(10),
+        reason: 'sibling variant batches must be untouched',
+      );
       expect(batchesB.first.unitCost, equals(80));
 
-      await BatchService.assertInvariant(db.saleDao,
-          productId: pid, variantId: vA);
-      await BatchService.assertInvariant(db.saleDao,
-          productId: pid, variantId: vB);
+      await BatchService.assertInvariant(
+        db.saleDao,
+        productId: pid,
+        variantId: vA,
+      );
+      await BatchService.assertInvariant(
+        db.saleDao,
+        productId: pid,
+        variantId: vB,
+      );
     });
   });
 }

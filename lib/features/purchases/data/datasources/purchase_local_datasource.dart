@@ -1,3 +1,4 @@
+import '../../../../core/services/business/warehouse_operation_scope.dart';
 import 'dart:async';
 
 import '../../../../core/database/app_database.dart' as db;
@@ -21,16 +22,18 @@ abstract class PurchaseLocalDatasource {
   Future<String> generatePurchaseNumber();
   Future<int> createPurchase(
     db.PurchasesCompanion purchase,
-    List<db.PurchaseItemsCompanion> items,
-  );
+    List<db.PurchaseItemsCompanion> items, {
+    WarehouseOperationScope? scope,
+  });
   Future<bool> updatePurchase(
     int purchaseId,
     db.PurchasesCompanion purchase,
     List<db.PurchaseItemsCompanion> items,
   );
-  Future<void> postPurchase(int purchaseId);
+  Future<void> postPurchase(int purchaseId, {WarehouseOperationScope? scope});
   Future<void> voidPurchase(
     int purchaseId, {
+    WarehouseOperationScope? scope,
     JournalEntryService? journalEntryService,
     int? userId,
   });
@@ -58,8 +61,12 @@ abstract class PurchaseLocalDatasource {
   Future<void> postPurchaseReturn(
     int returnId, {
     bool allowNegativeStock = false,
+    WarehouseOperationScope? scope,
   });
-  Future<void> voidPurchaseReturn(int returnId);
+  Future<void> voidPurchaseReturn(
+    int returnId, {
+    WarehouseOperationScope? scope,
+  });
 
   // Payments
   Stream<List<PurchasePaymentEntity>> watchPurchasePayments(int purchaseId);
@@ -145,9 +152,10 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
   @override
   Future<int> createPurchase(
     db.PurchasesCompanion purchase,
-    List<db.PurchaseItemsCompanion> items,
-  ) {
-    return _dao.createPurchase(purchase, items);
+    List<db.PurchaseItemsCompanion> items, {
+    WarehouseOperationScope? scope,
+  }) {
+    return _dao.createPurchase(purchase, items, scope: scope);
   }
 
   @override
@@ -160,13 +168,14 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
   }
 
   @override
-  Future<void> postPurchase(int purchaseId) {
-    return _dao.postPurchase(purchaseId);
+  Future<void> postPurchase(int purchaseId, {WarehouseOperationScope? scope}) {
+    return _dao.postPurchase(purchaseId, scope: scope);
   }
 
   @override
   Future<void> voidPurchase(
     int purchaseId, {
+    WarehouseOperationScope? scope,
     JournalEntryService? journalEntryService,
     int? userId,
   }) {
@@ -177,6 +186,7 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
     // `tapix_backup_20260513_121448.db`.
     return _dao.voidPurchase(
       purchaseId,
+      scope: scope,
       journalEntryService: journalEntryService,
       userId: userId,
     );
@@ -213,6 +223,8 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
   Stream<List<PurchaseReturnEntity>> watchAllPurchaseReturns() {
     List<PurchaseReturnEntity> lastLinked = [];
     List<PurchaseReturnEntity> lastAdj = [];
+    var linkedLoaded = false;
+    var adjustmentLoaded = false;
 
     List<PurchaseReturnEntity> merge() {
       final merged = <PurchaseReturnEntity>[...lastLinked, ...lastAdj];
@@ -222,6 +234,7 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
 
     final controller = StreamController<List<PurchaseReturnEntity>>.broadcast();
     final sub1 = _dao.watchAllPurchaseReturnsWithParty().listen((rows) {
+      linkedLoaded = true;
       lastLinked = rows
           .map(
             (r) =>
@@ -229,9 +242,10 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
                     as PurchaseReturnEntity,
           )
           .toList();
-      controller.add(merge());
+      if (adjustmentLoaded) controller.add(merge());
     });
     final sub2 = _adjDao.watchAllPurchaseAdjReturnsWithParty().listen((rows) {
+      adjustmentLoaded = true;
       lastAdj = rows
           .map(
             (a) =>
@@ -239,7 +253,7 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
                     as PurchaseReturnEntity,
           )
           .toList();
-      controller.add(merge());
+      if (linkedLoaded) controller.add(merge());
     });
     controller.onCancel = () {
       sub1.cancel();
@@ -344,16 +358,21 @@ class PurchaseLocalDatasourceImpl implements PurchaseLocalDatasource {
   Future<void> postPurchaseReturn(
     int returnId, {
     bool allowNegativeStock = false,
+    WarehouseOperationScope? scope,
   }) {
     return _dao.postPurchaseReturn(
       returnId,
       allowNegativeStock: allowNegativeStock,
+      scope: scope,
     );
   }
 
   @override
-  Future<void> voidPurchaseReturn(int returnId) {
-    return _dao.voidPurchaseReturn(returnId);
+  Future<void> voidPurchaseReturn(
+    int returnId, {
+    WarehouseOperationScope? scope,
+  }) {
+    return _dao.voidPurchaseReturn(returnId, scope: scope);
   }
 
   // ==================== PAYMENTS ====================

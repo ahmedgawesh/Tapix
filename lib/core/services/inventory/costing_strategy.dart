@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import '../../database/app_database.dart';
+import '../business/warehouse_operation_scope.dart';
 
 /// Inventory costing method marker — stored on every adjustment row so that
 /// a future switch to FIFO for a product class (e.g. pharmacy batches) does
@@ -9,9 +10,9 @@ enum CostingMethod {
   fifo;
 
   String get wireName => switch (this) {
-        CostingMethod.weightedAverage => 'weighted_average',
-        CostingMethod.fifo => 'fifo',
-      };
+    CostingMethod.weightedAverage => 'weighted_average',
+    CostingMethod.fifo => 'fifo',
+  };
 }
 
 /// Pluggable strategy that resolves the **unit cost** that should be used
@@ -30,6 +31,7 @@ abstract class CostingStrategy {
     required DatabaseAccessor<AppDatabase> dao,
     required int productId,
     int? variantId,
+    WarehouseOperationScope? scope,
   });
 
   /// Current on-hand quantity used for revaluation delta calculation.
@@ -37,13 +39,13 @@ abstract class CostingStrategy {
     required DatabaseAccessor<AppDatabase> dao,
     required int productId,
     int? variantId,
+    WarehouseOperationScope? scope,
   });
 }
 
-/// Moving-Weighted-Average implementation — the default used by QuickBooks,
-/// Xero, Odoo (default), Zoho Inventory and every mainstream SME ERP.
-/// Deterministic, conflict-free under offline-first multi-branch sync
-/// (the arithmetic average of purchases converges regardless of ordering).
+/// Reads the selected warehouse's current moving-average cost. Callers capture
+/// quantity and cost inside the same posting transaction. Moving-average cost
+/// depends on movement order; it is not a conflict-resolution rule for sync.
 class WeightedAverageCostingStrategy implements CostingStrategy {
   const WeightedAverageCostingStrategy();
 
@@ -55,39 +57,79 @@ class WeightedAverageCostingStrategy implements CostingStrategy {
     required DatabaseAccessor<AppDatabase> dao,
     required int productId,
     int? variantId,
-  }) async {
-    if (variantId != null) {
-      final row = await dao.customSelect(
-        'SELECT cost_cents FROM product_variants WHERE id = ?',
-        variables: [Variable.withInt(variantId)],
-      ).getSingleOrNull();
-      if (row != null) return row.read<int>('cost_cents');
-    }
-    // Fallback: single-variant product — read from products table.
-    final row = await dao.customSelect(
-      'SELECT cost_cents FROM products WHERE id = ?',
-      variables: [Variable.withInt(productId)],
-    ).getSingleOrNull();
-    return row?.read<int>('cost_cents') ?? 0;
-  }
+    WarehouseOperationScope? scope,
+  }) async => (await _balance(dao, productId, variantId, scope)).cost;
 
   @override
   Future<int> onHandQuantity({
     required DatabaseAccessor<AppDatabase> dao,
     required int productId,
     int? variantId,
-  }) async {
-    if (variantId != null) {
-      final row = await dao.customSelect(
-        'SELECT stock_quantity FROM product_variants WHERE id = ?',
-        variables: [Variable.withInt(variantId)],
-      ).getSingleOrNull();
-      return row?.read<int>('stock_quantity') ?? 0;
+    WarehouseOperationScope? scope,
+  }) async => (await _balance(dao, productId, variantId, scope)).quantity;
+
+  static Future<({int quantity, int cost})> _balance(
+    DatabaseAccessor<AppDatabase> dao,
+    int productId,
+    int? variantId,
+    WarehouseOperationScope? scope,
+  ) async {
+    final operation =
+        scope ?? await WarehouseOperationScope.resolve(dao.attachedDatabase);
+    await operation.validate(dao.attachedDatabase);
+    final product = await (dao.attachedDatabase.select(
+      dao.attachedDatabase.products,
+    )..where((p) => p.id.equals(productId))).getSingleOrNull();
+    if (product == null) {
+      throw StateError('Inventory costing product is missing.');
     }
-    final row = await dao.customSelect(
-      'SELECT stock_quantity FROM products WHERE id = ?',
-      variables: [Variable.withInt(productId)],
-    ).getSingleOrNull();
-    return row?.read<int>('stock_quantity') ?? 0;
+    var resolved = variantId;
+    if (resolved == null) {
+      if (product.hasVariants) {
+        throw StateError('Inventory costing requires an explicit variant.');
+      }
+      final rows = await dao
+          .customSelect(
+            'SELECT id FROM product_variants WHERE product_id = ? AND is_active = 1 LIMIT 2',
+            variables: [Variable.withInt(productId)],
+          )
+          .get();
+      if (rows.length > 1) {
+        throw StateError('Inventory costing variant is ambiguous.');
+      }
+      if (rows.isEmpty) {
+        if (!operation.isPrimary) {
+          throw StateError(
+            'Selected warehouse requires an operational variant.',
+          );
+        }
+        return (
+          quantity: product.stockQuantity,
+          cost: product.costCents.toBigInt().toInt(),
+        );
+      }
+      resolved = rows.single.read<int>('id');
+    }
+    final row = await dao
+        .customSelect(
+          'SELECT s.quantity, s.unit_cost_cents FROM business_warehouse_stocks s '
+          'JOIN product_variants v ON v.id = s.variant_id '
+          'WHERE s.warehouse_id = ? AND s.variant_id = ? AND v.product_id = ?',
+          variables: [
+            Variable.withString(operation.warehouseId),
+            Variable.withInt(resolved),
+            Variable.withInt(productId),
+          ],
+        )
+        .getSingleOrNull();
+    if (row == null) {
+      throw StateError(
+        'Inventory costing balance missing or variant belongs to another product.',
+      );
+    }
+    return (
+      quantity: row.read<int>('quantity'),
+      cost: row.read<int>('unit_cost_cents'),
+    );
   }
 }

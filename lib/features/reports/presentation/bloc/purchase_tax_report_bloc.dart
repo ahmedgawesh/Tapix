@@ -1,7 +1,10 @@
+import '../../../../core/services/business/warehouse_read_scope.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+import '../../../../core/services/business/warehouse_document_scope.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -150,12 +153,16 @@ class PurchaseTaxReportData {
 class PurchaseTaxReportBloc
     extends RealtimeBloc<PurchaseTaxReportData, PurchaseTaxReportEvent> {
   final AppDatabase _db;
+  final WarehouseReadScope? warehouseScope;
   ReportDateRange _dateRange;
   PurchaseTaxSortType _sort = PurchaseTaxSortType.dateDesc;
 
-  PurchaseTaxReportBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+  PurchaseTaxReportBloc(
+    this._db, {
+    String defaultDateRange = 'month',
+    this.warehouseScope,
+  }) : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+       super(const RealtimeLoading());
 
   @override
   Stream<PurchaseTaxReportData> get dataStream {
@@ -165,13 +172,17 @@ class PurchaseTaxReportBloc
         .customSelect(
           'SELECT 1',
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.suppliers,
             _db.purchases,
             _db.purchaseReturns,
             _db.purchaseReturnAdjustments,
           },
         )
         .watch()
-        .asyncMap((_) => _loadData());
+        .asyncMap(
+          (_) => WarehouseReadScope.snapshot(_db, warehouseScope, _loadData),
+        );
   }
 
   @override
@@ -196,9 +207,11 @@ class PurchaseTaxReportBloc
     final current = currentData;
     if (current != null) {
       final sorted = _applySortToInvoices(current.invoices, event.sort);
-      emit(RealtimeSuccess<PurchaseTaxReportData>(
-        data: current.copyWith(invoices: sorted, sort: event.sort),
-      ));
+      emit(
+        RealtimeSuccess<PurchaseTaxReportData>(
+          data: current.copyWith(invoices: sorted, sort: event.sort),
+        ),
+      );
     }
   }
 
@@ -206,8 +219,9 @@ class PurchaseTaxReportBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final purchaseRows = await _db.customSelect(
-      '''
+    final purchaseRows = await _db
+        .customSelect(
+          '''
       SELECT 
         p.id AS purchase_id,
         p.purchase_number,
@@ -218,16 +232,24 @@ class PurchaseTaxReportBloc
         p.tax_cents,
         p.total_cents,
         p.status
-      FROM purchases p
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.purchase) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} p
       LEFT JOIN suppliers sup ON sup.id = p.supplier_id
       WHERE p.status != 'voided'
         AND p.purchase_date >= ?
         AND p.purchase_date <= ?
       ORDER BY p.purchase_date DESC
       ''',
-      variables: [Variable.withString(startIso), Variable.withString(endIso)],
-      readsFrom: {_db.purchases, _db.suppliers},
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.purchases,
+            _db.suppliers,
+          },
+        )
+        .get();
 
     final invoices = purchaseRows.map((row) {
       final subtotal = row.read<int>('subtotal_cents');
@@ -251,8 +273,9 @@ class PurchaseTaxReportBloc
     // adjustment (unlinked, product-based) returns. Input-VAT reversed on an
     // adjustment return is just as real as on a linked return and must reduce
     // the net recoverable tax the same way.
-    final returnRows = await _db.customSelect(
-      '''
+    final returnRows = await _db
+        .customSelect(
+          '''
       SELECT return_id, return_number, supplier_name, return_date,
              subtotal_cents, discount_cents, tax_cents, total_cents
       FROM (
@@ -265,7 +288,7 @@ class PurchaseTaxReportBloc
           pr.discount_cents AS discount_cents,
           pr.tax_cents AS tax_cents,
           pr.total_cents AS total_cents
-        FROM purchase_returns pr
+        FROM ${warehouseScope?.documents(InventoryPostingDocument.purchaseReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseReturn)} pr
         INNER JOIN purchases p ON p.id = pr.purchase_id
         LEFT JOIN suppliers sup ON sup.id = p.supplier_id
         WHERE pr.status = 'posted'
@@ -281,7 +304,7 @@ class PurchaseTaxReportBloc
           pra.discount_cents AS discount_cents,
           pra.tax_cents AS tax_cents,
           pra.total_cents AS total_cents
-        FROM purchase_return_adjustments pra
+        FROM ${warehouseScope?.documents(InventoryPostingDocument.purchaseAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseAdjustment)} pra
         LEFT JOIN suppliers sup ON sup.id = pra.supplier_id
         WHERE pra.status = 'posted'
           AND pra.return_date >= ?
@@ -289,19 +312,21 @@ class PurchaseTaxReportBloc
       )
       ORDER BY return_date DESC
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {
-        _db.purchaseReturns,
-        _db.purchaseReturnAdjustments,
-        _db.purchases,
-        _db.suppliers,
-      },
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.purchaseReturns,
+            _db.purchaseReturnAdjustments,
+            _db.purchases,
+            _db.suppliers,
+          },
+        )
+        .get();
 
     final returns = returnRows.map((row) {
       return PurchaseTaxReturnItem(

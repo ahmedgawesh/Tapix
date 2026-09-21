@@ -1,3 +1,7 @@
+import '../../../../core/services/business/warehouse_document_reader.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+import '../../../../core/services/business/warehouse_operation_scope.dart';
+import '../../../../core/services/business/warehouse_read_scope.dart';
 import 'dart:developer' as developer;
 
 import 'package:decimal/decimal.dart';
@@ -24,14 +28,17 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   final SessionService _sessionService;
   final JournalEntryService _journalService;
   final db.AppDatabase _db;
+  final WarehouseOperationScope? warehouseScope;
+  late final _reader = WarehouseDocumentReader(_db, scope: warehouseScope);
 
   PurchaseRepositoryImpl(
     this._datasource,
     this._auditService,
     this._sessionService,
     this._journalService,
-    this._db,
-  );
+    this._db, {
+    this.warehouseScope,
+  });
 
   /// Get the current user ID from the session for audit logging.
   Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
@@ -40,37 +47,76 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
 
   @override
   Stream<List<PurchaseEntity>> watchAllPurchases() {
-    return _datasource.watchAllPurchases();
+    return _datasource.watchAllPurchases().asyncMap(
+      (rows) => _reader.filter(
+        rows,
+        (_) => InventoryPostingDocument.purchase,
+        (r) => r.id,
+      ),
+    );
   }
 
   @override
   Stream<List<PurchaseEntity>> watchPurchasesByStatus(String status) {
-    return _datasource.watchPurchasesByStatus(status);
+    return _datasource
+        .watchPurchasesByStatus(status)
+        .asyncMap(
+          (rows) => _reader.filter(
+            rows,
+            (_) => InventoryPostingDocument.purchase,
+            (r) => r.id,
+          ),
+        );
   }
 
   @override
   Stream<List<PurchaseEntity>> watchPurchasesBySupplier(int supplierId) {
-    return _datasource.watchPurchasesBySupplier(supplierId);
+    return _datasource
+        .watchPurchasesBySupplier(supplierId)
+        .asyncMap(
+          (rows) => _reader.filter(
+            rows,
+            (_) => InventoryPostingDocument.purchase,
+            (r) => r.id,
+          ),
+        );
   }
 
   @override
   Stream<List<PurchaseEntity>> searchPurchases(String query) {
-    return _datasource.searchPurchases(query);
+    return _datasource
+        .searchPurchases(query)
+        .asyncMap(
+          (rows) => _reader.filter(
+            rows,
+            (_) => InventoryPostingDocument.purchase,
+            (r) => r.id,
+          ),
+        );
   }
 
   @override
-  Future<PurchaseEntity?> getPurchaseById(int id) {
-    return _datasource.getPurchaseById(id);
+  Future<PurchaseEntity?> getPurchaseById(int id) async {
+    return await _reader.contains(InventoryPostingDocument.purchase, id)
+        ? _datasource.getPurchaseById(id)
+        : null;
   }
 
   @override
-  Future<List<PurchaseItemEntity>> getPurchaseItems(int purchaseId) {
-    return _datasource.getPurchaseItems(purchaseId);
+  Future<List<PurchaseItemEntity>> getPurchaseItems(int purchaseId) async {
+    return await _reader.contains(InventoryPostingDocument.purchase, purchaseId)
+        ? _datasource.getPurchaseItems(purchaseId)
+        : [];
   }
 
   @override
   Stream<List<PurchaseItemEntity>> watchPurchaseItems(int purchaseId) {
-    return _datasource.watchPurchaseItems(purchaseId);
+    return _reader.gate(
+      InventoryPostingDocument.purchase,
+      purchaseId,
+      _datasource.watchPurchaseItems(purchaseId),
+      <PurchaseItemEntity>[],
+    );
   }
 
   @override
@@ -150,6 +196,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
             newSellPriceCents: Value(item.newSellPriceCents),
             newWholesalePriceCents: Value(item.newWholesalePriceCents),
             expiryDate: Value(item.expiryDate),
+            manufacturerLotNumber: Value(item.manufacturerLotNumber),
           ),
         )
         .toList();
@@ -171,6 +218,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
           final id = await _datasource.createPurchase(
             companionWithNumber,
             itemCompanions,
+            scope: warehouseScope,
           );
           for (final allocation in initialPayments) {
             if (allocation.isCheque) {
@@ -262,11 +310,20 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     DateTime? purchaseDate,
     DateTime? dueDate,
     bool taxInclusiveAtPost = false,
-  }) async {
+  }) => _db.transaction(() async {
+    await DocumentPostingScope.validate(
+      _db,
+      InventoryPostingDocument.purchase,
+      purchaseId,
+      scope: warehouseScope,
+    );
     // Guard: only draft/pending purchases can be edited.
     // Posted/voided purchases have journal entries that would become stale.
     final existing = await getPurchaseById(purchaseId);
-    if (existing != null && !existing.isDraft) {
+    if (existing == null) {
+      throw StateError('Purchase not found in this warehouse.');
+    }
+    if (!existing.isDraft) {
       throw Exception(
         'Cannot edit a ${existing.status} purchase. Void it and create a new one instead.',
       );
@@ -310,6 +367,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
             newSellPriceCents: Value(item.newSellPriceCents),
             newWholesalePriceCents: Value(item.newWholesalePriceCents),
             expiryDate: Value(item.expiryDate),
+            manufacturerLotNumber: Value(item.manufacturerLotNumber),
           ),
         )
         .toList();
@@ -347,199 +405,215 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     }
 
     return ok;
-  }
+  });
 
   @override
   Future<void> postPurchase(int purchaseId) async {
-    final userId = await _currentUserId();
+    await _db.transaction(() async {
+      final userId = await _currentUserId();
 
-    // Read purchase data BEFORE posting (need totalCents, paidAmountCents, etc.)
-    final purchase = await _datasource.getPurchaseById(purchaseId);
-    if (purchase == null) throw Exception('Purchase not found');
-    if ((purchase.paymentMethod == 'cheque' ||
-            purchase.paymentMethod == 'check') &&
-        purchase.dueDate == null) {
-      throw StateError('cheque_due_date_required');
-    }
-
-    // Post purchase (updates stock, supplier balance, supplier transactions)
-    await _datasource.postPurchase(purchaseId);
-
-    // Create journal entries AFTER posting so GL and sub-ledger stay in sync.
-    // Void any legacy journal entries that may have been created at draft time.
-    await _journalService.voidJournalEntriesForSource(
-      sourceTable: 'purchases',
-      sourceId: purchaseId,
-      reason: 'Re-creating journal entries on post',
-      userId: userId,
-    );
-
-    final inventoryNetCents = await _db.purchaseDao
-        .computePurchaseInventoryNetCents(purchaseId);
-    final payments = await _datasource.getPurchasePayments(purchaseId);
-    final useStructuredSettlement =
-        purchase.paymentMethod == 'mixed' ||
-        purchase.paymentMethod == 'cheque' ||
-        purchase.paymentMethod == 'check';
-    await _journalService.recordPurchaseJournalEntry(
-      purchaseId: purchaseId,
-      totalCents: purchase.totalCents.toBigInt().toInt(),
-      paidAmountCents: useStructuredSettlement
-          ? 0
-          : purchase.paidAmountCents.toBigInt().toInt(),
-      currencyId: purchase.currencyId,
-      taxCents: purchase.taxCents.toBigInt().toInt(),
-      inventoryNetCents: inventoryNetCents,
-      paymentMethod: useStructuredSettlement
-          ? 'credit'
-          : purchase.paymentMethod,
-      userId: userId,
-    );
-
-    if (useStructuredSettlement) {
-      for (final payment in payments) {
-        await _journalService.recordSupplierPaymentJournalEntry(
-          paymentId: payment.id,
-          amountCents: payment.amountCents.toBigInt().toInt(),
-          currencyId: payment.currencyId,
-          paymentMethod: payment.paymentMethod,
-          userId: userId,
-        );
+      // Read purchase data BEFORE posting (need totalCents, paidAmountCents, etc.)
+      final purchase = await _datasource.getPurchaseById(purchaseId);
+      if (purchase == null) throw Exception('Purchase not found');
+      if ((purchase.paymentMethod == 'cheque' ||
+              purchase.paymentMethod == 'check') &&
+          purchase.dueDate == null) {
+        throw StateError('cheque_due_date_required');
       }
-    }
 
-    if ((purchase.paymentMethod == 'cheque' ||
-            purchase.paymentMethod == 'check') &&
-        purchase.dueDate != null) {
-      final instrumentDao = ChequeInstrumentDao(_db);
-      final existingInstruments = await instrumentDao.getBySource(
-        sourceTable: ChequeSourceTables.purchase,
-        sourceId: purchaseId,
-      );
-      if (existingInstruments.isEmpty) {
-        await instrumentDao.ensurePrimary(
-          direction: ChequeDirectionValue.outgoing,
-          sourceTable: ChequeSourceTables.purchase,
-          sourceId: purchaseId,
-          amountCents: purchase.totalCents.toBigInt().toInt(),
-          currencyId: purchase.currencyId,
-          dueDate: purchase.dueDate!,
-          partyType: 'supplier',
-          partyId: purchase.supplierId,
-          userId: userId,
-        );
-      }
-    }
+      // Post purchase (updates stock, supplier balance, supplier transactions)
+      await _datasource.postPurchase(purchaseId, scope: warehouseScope);
 
-    final actualInventoryValue = await _db.purchaseDao
-        .computePurchaseInventoryValueAtPostCents(purchaseId);
-    final roundingDelta = actualInventoryValue - inventoryNetCents;
-    if (roundingDelta != 0) {
-      await _journalService.recordInventoryRoundingJournalEntry(
+      // Create journal entries AFTER posting so GL and sub-ledger stay in sync.
+      // Void any legacy journal entries that may have been created at draft time.
+      await _journalService.voidJournalEntriesForSource(
         sourceTable: 'purchases',
         sourceId: purchaseId,
-        deltaValueCents: roundingDelta,
-        currencyId: purchase.currencyId,
-        reason: 'Purchase ${purchase.purchaseNumber}',
+        reason: 'Re-creating journal entries on post',
         userId: userId,
       );
-    }
 
-    // Audit: log purchase posting (stock was updated)
-    await _auditService.log(
-      entityType: 'purchase',
-      entityId: purchaseId,
-      action: 'post',
-      newValue: {'status': 'posted'},
-      userId: userId,
-    );
+      final inventoryNetCents = await _db.purchaseDao
+          .computePurchaseInventoryNetCents(purchaseId);
+      final payments = await _reader.read(
+        InventoryPostingDocument.purchase,
+        purchaseId,
+        () => _datasource.getPurchasePayments(purchaseId),
+        <PurchasePaymentEntity>[],
+      );
+      final useStructuredSettlement =
+          purchase.paymentMethod == 'mixed' ||
+          purchase.paymentMethod == 'cheque' ||
+          purchase.paymentMethod == 'check';
+      await _journalService.recordPurchaseJournalEntry(
+        purchaseId: purchaseId,
+        totalCents: purchase.totalCents.toBigInt().toInt(),
+        paidAmountCents: useStructuredSettlement
+            ? 0
+            : purchase.paidAmountCents.toBigInt().toInt(),
+        currencyId: purchase.currencyId,
+        taxCents: purchase.taxCents.toBigInt().toInt(),
+        inventoryNetCents: inventoryNetCents,
+        paymentMethod: useStructuredSettlement
+            ? 'credit'
+            : purchase.paymentMethod,
+        userId: userId,
+      );
+
+      if (useStructuredSettlement) {
+        for (final payment in payments) {
+          await _journalService.recordSupplierPaymentJournalEntry(
+            paymentId: payment.id,
+            amountCents: payment.amountCents.toBigInt().toInt(),
+            currencyId: payment.currencyId,
+            paymentMethod: payment.paymentMethod,
+            userId: userId,
+          );
+        }
+      }
+
+      if ((purchase.paymentMethod == 'cheque' ||
+              purchase.paymentMethod == 'check') &&
+          purchase.dueDate != null) {
+        final instrumentDao = ChequeInstrumentDao(_db);
+        final existingInstruments = await instrumentDao.getBySource(
+          sourceTable: ChequeSourceTables.purchase,
+          sourceId: purchaseId,
+        );
+        if (existingInstruments.isEmpty) {
+          await instrumentDao.ensurePrimary(
+            direction: ChequeDirectionValue.outgoing,
+            sourceTable: ChequeSourceTables.purchase,
+            sourceId: purchaseId,
+            amountCents: purchase.totalCents.toBigInt().toInt(),
+            currencyId: purchase.currencyId,
+            dueDate: purchase.dueDate!,
+            partyType: 'supplier',
+            partyId: purchase.supplierId,
+            userId: userId,
+          );
+        }
+      }
+
+      final actualInventoryValue = await _db.purchaseDao
+          .computePurchaseInventoryValueAtPostCents(purchaseId);
+      final roundingDelta = actualInventoryValue - inventoryNetCents;
+      if (roundingDelta != 0) {
+        await _journalService.recordInventoryRoundingJournalEntry(
+          sourceTable: 'purchases',
+          sourceId: purchaseId,
+          deltaValueCents: roundingDelta,
+          currencyId: purchase.currencyId,
+          reason: 'Purchase ${purchase.purchaseNumber}',
+          userId: userId,
+        );
+      }
+
+      // Audit: log purchase posting (stock was updated)
+      await _auditService.log(
+        entityType: 'purchase',
+        entityId: purchaseId,
+        action: 'post',
+        newValue: {'status': 'posted'},
+        userId: userId,
+      );
+    });
   }
 
   @override
   Future<void> voidPurchase(int purchaseId) async {
-    // 2026-05-13 — pre-flight integrity guard. The analyzer is the single
-    // source of truth for "what breaks if we void this purchase?". On a
-    // hard blocker (entangled adjustment returns or projected negative
-    // stock) we throw `VoidBlockedByImpactException` carrying the full
-    // report so the UI can render an actionable dialog instead of
-    // silently producing AP / Inventory drift like the one diagnosed in
-    // `tapix_backup_20260513_121448.db`.
-    final report = await VoidImpactAnalyzer(
-      _db,
-    ).analyzePurchaseVoid(purchaseId);
-    if (report.hasBlockers) {
-      throw VoidBlockedByImpactException(report);
-    }
+    await _db.transaction(() async {
+      // 2026-05-13 — pre-flight integrity guard. The analyzer is the single
+      // source of truth for "what breaks if we void this purchase?". On a
+      // hard blocker (entangled adjustment returns or projected negative
+      // stock) we throw `VoidBlockedByImpactException` carrying the full
+      // report so the UI can render an actionable dialog instead of
+      // silently producing AP / Inventory drift like the one diagnosed in
+      // `tapix_backup_20260513_121448.db`.
+      final report = await VoidImpactAnalyzer(
+        _db,
+        warehouseScope: warehouseScope == null
+            ? null
+            : await WarehouseReadScope.resolve(
+                _db,
+                warehouseId: warehouseScope!.warehouseId,
+              ),
+      ).analyzePurchaseVoid(purchaseId);
+      if (report.hasBlockers) {
+        throw VoidBlockedByImpactException(report);
+      }
 
-    final userId = await _currentUserId();
-    final linkedReturns =
-        await (_db.select(_db.purchaseReturns)..where(
-              (row) =>
-                  row.purchaseId.equals(purchaseId) &
-                  row.status.isNotValue('voided'),
-            ))
-            .get();
-    for (final purchaseReturn in linkedReturns) {
+      final userId = await _currentUserId();
+      final linkedReturns =
+          await (_db.select(_db.purchaseReturns)..where(
+                (row) =>
+                    row.purchaseId.equals(purchaseId) &
+                    row.status.isNotValue('voided'),
+              ))
+              .get();
+      for (final purchaseReturn in linkedReturns) {
+        await ChequeSourceVoidService.voidForSource(
+          db: _db,
+          journalService: _journalService,
+          sourceTable: ChequeSourceTables.purchaseReturn,
+          sourceId: purchaseReturn.id,
+          reason: 'Purchase voided — linked return cheque cancelled',
+          userId: userId,
+        );
+      }
       await ChequeSourceVoidService.voidForSource(
         db: _db,
         journalService: _journalService,
-        sourceTable: ChequeSourceTables.purchaseReturn,
-        sourceId: purchaseReturn.id,
-        reason: 'Purchase voided — linked return cheque cancelled',
+        sourceTable: ChequeSourceTables.purchase,
+        sourceId: purchaseId,
+        reason: 'Purchase voided — cheque cancelled',
         userId: userId,
       );
-    }
-    await ChequeSourceVoidService.voidForSource(
-      db: _db,
-      journalService: _journalService,
-      sourceTable: ChequeSourceTables.purchase,
-      sourceId: purchaseId,
-      reason: 'Purchase voided — cheque cancelled',
-      userId: userId,
-    );
 
-    // Void journal entries BEFORE voiding the purchase.
-    // This MUST succeed — if it fails the entire void is aborted to prevent GL drift.
-    await _journalService.voidJournalEntriesForSource(
-      sourceTable: 'purchases',
-      sourceId: purchaseId,
-      reason: 'Purchase voided',
-      userId: await _currentUserId(),
-    );
-
-    // 2026-05-18 — Phase 15.2 — Reverse the GL journal entry for EVERY
-    // payment row attached to this purchase (cash, cheque-cleared, mixed
-    // tender, supplier-credit reapplications). The DAO already records a
-    // `payment_reversal` supplier_transaction so the sub-ledger zeroes out,
-    // but until Phase 15.2 the GL leg was orphaned: JE Dr 2000 / Cr Cash|Bank
-    // remained posted, so AP and the cash/bank ledger silently drifted by
-    // the cleared payment amount. Root cause of the AP drift = 89991¢
-    // reproduced in `tapix_backup_20260518_051956.db`.
-    final paymentsForVoid = await _datasource.getPurchasePayments(purchaseId);
-    for (final p in paymentsForVoid) {
+      // Void journal entries BEFORE voiding the purchase.
+      // This MUST succeed — if it fails the entire void is aborted to prevent GL drift.
       await _journalService.voidJournalEntriesForSource(
-        sourceTable: 'purchase_payments',
-        sourceId: p.id,
-        reason: 'Purchase voided — payment JE reversed',
+        sourceTable: 'purchases',
+        sourceId: purchaseId,
+        reason: 'Purchase voided',
         userId: await _currentUserId(),
       );
-    }
 
-    // 2026-05-13 — pass the journal service so the DAO's cascade-void of
-    // linked purchase_returns also reverses their JEs (root-cause #3).
-    await _datasource.voidPurchase(
-      purchaseId,
-      journalEntryService: _journalService,
-      userId: await _currentUserId(),
-    );
+      // 2026-05-18 — Phase 15.2 — Reverse the GL journal entry for EVERY
+      // payment row attached to this purchase (cash, cheque-cleared, mixed
+      // tender, supplier-credit reapplications). The DAO already records a
+      // `payment_reversal` supplier_transaction so the sub-ledger zeroes out,
+      // but until Phase 15.2 the GL leg was orphaned: JE Dr 2000 / Cr Cash|Bank
+      // remained posted, so AP and the cash/bank ledger silently drifted by
+      // the cleared payment amount. Root cause of the AP drift = 89991¢
+      // reproduced in `tapix_backup_20260518_051956.db`.
+      final paymentsForVoid = await _datasource.getPurchasePayments(purchaseId);
+      for (final p in paymentsForVoid) {
+        await _journalService.voidJournalEntriesForSource(
+          sourceTable: 'purchase_payments',
+          sourceId: p.id,
+          reason: 'Purchase voided — payment JE reversed',
+          userId: await _currentUserId(),
+        );
+      }
 
-    // Audit: log purchase voiding (stock was reversed)
-    await _auditService.logVoid(
-      entityType: 'purchase',
-      entityId: purchaseId,
-      reason: 'User voided purchase',
-      userId: await _currentUserId(),
-    );
+      // 2026-05-13 — pass the journal service so the DAO's cascade-void of
+      // linked purchase_returns also reverses their JEs (root-cause #3).
+      await _datasource.voidPurchase(
+        purchaseId,
+        scope: warehouseScope,
+        journalEntryService: _journalService,
+        userId: await _currentUserId(),
+      );
+
+      // Audit: log purchase voiding (stock was reversed)
+      await _auditService.logVoid(
+        entityType: 'purchase',
+        entityId: purchaseId,
+        reason: 'User voided purchase',
+        userId: await _currentUserId(),
+      );
+    });
   }
 
   @override
@@ -559,7 +633,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     DateTime? purchaseDate,
     DateTime? dueDate,
     bool taxInclusiveAtPost = false,
-  }) async {
+  }) => _db.transaction(() async {
     // 1. Fetch original purchase to validate
     final originalPurchase = await getPurchaseById(originalPurchaseId);
     if (originalPurchase == null) {
@@ -652,10 +726,16 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     );
 
     return newPurchaseId;
-  }
+  });
 
   @override
-  Future<int> deletePurchase(int purchaseId) async {
+  Future<int> deletePurchase(int purchaseId) => _db.transaction(() async {
+    await DocumentPostingScope.validate(
+      _db,
+      InventoryPostingDocument.purchase,
+      purchaseId,
+      scope: warehouseScope,
+    );
     // Void journal entries BEFORE deleting the purchase record.
     // This MUST succeed — if it fails the entire delete is aborted to prevent GL drift.
     await _journalService.voidJournalEntriesForSource(
@@ -675,54 +755,119 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     );
 
     return _datasource.deletePurchase(purchaseId);
-  }
+  });
 
   @override
-  Future<bool> updatePurchaseStatus(int purchaseId, String status) {
-    return _datasource.updatePurchaseStatus(purchaseId, status);
-  }
+  Future<bool> updatePurchaseStatus(int purchaseId, String status) =>
+      _db.transaction(() async {
+        await DocumentPostingScope.validate(
+          _db,
+          InventoryPostingDocument.purchase,
+          purchaseId,
+          scope: warehouseScope,
+        );
+        final purchase = await _datasource.getPurchaseById(purchaseId);
+        if (purchase == null ||
+            !purchase.isDraft ||
+            (status != 'draft' && status != 'pending')) {
+          throw StateError(
+            'Posting and voiding require the accounting workflow.',
+          );
+        }
+        return _datasource.updatePurchaseStatus(purchaseId, status);
+      });
 
   @override
-  Stream<PurchaseDashboardStats> watchDashboardStats() {
-    return _datasource.watchDashboardStats();
-  }
+  Stream<PurchaseDashboardStats> watchDashboardStats() =>
+      _reader.changes.asyncMap(
+        (_) => _reader.snapshot((scope) async {
+          final stats = await _db.purchaseDao.getDashboardStats(
+            warehouseScope: scope,
+          );
+          return PurchaseDashboardStats(
+            totalCount: stats.totalCount,
+            draftCount: stats.draftCount,
+            postedCount: stats.postedCount,
+            totalPayableCents: stats.totalPayableCents,
+            totalPaidCents: stats.totalPaidCents,
+            overdueCount: stats.overdueCount,
+            returnsCount: stats.returnsCount,
+          );
+        }),
+      );
 
   // ==================== RETURNS ====================
 
   @override
   Stream<List<PurchaseReturnEntity>> watchAllPurchaseReturns() {
-    return _datasource.watchAllPurchaseReturns();
+    return _datasource.watchAllPurchaseReturns().asyncMap(
+      (rows) => _reader.filter(
+        rows,
+        (r) => r.isAdjustment
+            ? InventoryPostingDocument.purchaseAdjustment
+            : InventoryPostingDocument.purchaseReturn,
+        (r) => r.id,
+      ),
+    );
   }
 
   @override
   Stream<List<PurchaseReturnEntity>> watchPurchaseReturnsByPurchase(
     int purchaseId,
   ) {
-    return _datasource.watchPurchaseReturnsByPurchase(purchaseId);
+    return _datasource
+        .watchPurchaseReturnsByPurchase(purchaseId)
+        .asyncMap(
+          (rows) => _reader.filter(
+            rows,
+            (_) => InventoryPostingDocument.purchaseReturn,
+            (r) => r.id,
+          ),
+        );
   }
 
   @override
   Future<List<PurchaseReturnEntity>> getPurchaseReturns(int purchaseId) {
-    return _datasource.getPurchaseReturns(purchaseId);
+    return _reader.read(
+      InventoryPostingDocument.purchase,
+      purchaseId,
+      () => _datasource.getPurchaseReturns(purchaseId),
+      <PurchaseReturnEntity>[],
+    );
   }
 
   @override
   Future<PurchaseReturnEntity?> getPurchaseReturnById(int id) {
-    return _datasource.getPurchaseReturnById(id);
+    return _reader.read(
+      InventoryPostingDocument.purchaseReturn,
+      id,
+      () => _datasource.getPurchaseReturnById(id),
+      null,
+    );
   }
 
   @override
   Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItems(
     int returnId,
   ) {
-    return _datasource.watchPurchaseReturnItems(returnId);
+    return _reader.gate(
+      InventoryPostingDocument.purchaseReturn,
+      returnId,
+      _datasource.watchPurchaseReturnItems(returnId),
+      <PurchaseReturnItemEntity>[],
+    );
   }
 
   @override
   Stream<List<PurchaseReturnItemEntity>> watchPurchaseReturnItemsWithDetails(
     int returnId,
   ) {
-    return _datasource.watchPurchaseReturnItemsWithDetails(returnId);
+    return _reader.gate(
+      InventoryPostingDocument.purchaseReturn,
+      returnId,
+      _datasource.watchPurchaseReturnItemsWithDetails(returnId),
+      <PurchaseReturnItemEntity>[],
+    );
   }
 
   @override
@@ -757,7 +902,6 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     if (isChequeRefund && dueDate == null) {
       throw ArgumentError('cheque_due_date_required');
     }
-    final returnNumber = await generateReturnNumber();
 
     // Phase 14.0 — only persist dueDate when refund method is cheque.
     final effectiveDueDate = isChequeRefund ? dueDate : null;
@@ -770,7 +914,9 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     late int postedTaxCents;
     late int postedTotalCents;
 
+    late String returnNumber;
     final returnId = await _db.transaction(() async {
+      returnNumber = await generateReturnNumber();
       final originalPurchase = await _datasource.getPurchaseById(purchaseId);
       if (originalPurchase == null) throw Exception('Purchase not found');
       final inclusive = originalPurchase.taxInclusiveAtPost;
@@ -869,6 +1015,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       // Auto-post the return (update stock)
       await _datasource.postPurchaseReturn(
         id,
+        scope: warehouseScope,
         allowNegativeStock: allowNegativeStock,
       );
 
@@ -960,6 +1107,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   }) async {
     await _datasource.postPurchaseReturn(
       returnId,
+      scope: warehouseScope,
       allowNegativeStock: allowNegativeStock,
     );
 
@@ -999,7 +1147,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
         reason: 'Purchase return voided',
         userId: userId,
       );
-      await _datasource.voidPurchaseReturn(returnId);
+      await _datasource.voidPurchaseReturn(returnId, scope: warehouseScope);
     });
 
     await _auditService.logVoid(
@@ -1014,12 +1162,22 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
 
   @override
   Stream<List<PurchasePaymentEntity>> watchPurchasePayments(int purchaseId) {
-    return _datasource.watchPurchasePayments(purchaseId);
+    return _reader.gate(
+      InventoryPostingDocument.purchase,
+      purchaseId,
+      _datasource.watchPurchasePayments(purchaseId),
+      <PurchasePaymentEntity>[],
+    );
   }
 
   @override
   Future<List<PurchasePaymentEntity>> getPurchasePayments(int purchaseId) {
-    return _datasource.getPurchasePayments(purchaseId);
+    return _reader.read(
+      InventoryPostingDocument.purchase,
+      purchaseId,
+      () => _datasource.getPurchasePayments(purchaseId),
+      <PurchasePaymentEntity>[],
+    );
   }
 
   @override
@@ -1046,6 +1204,25 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
     final userId = await _currentUserId();
 
     final paymentId = await _db.transaction(() async {
+      await DocumentPostingScope.validate(
+        _db,
+        InventoryPostingDocument.purchase,
+        purchaseId,
+        scope: warehouseScope,
+      );
+      final source = await (_db.select(
+        _db.purchases,
+      )..where((d) => d.id.equals(purchaseId))).getSingle();
+      if (source.status != 'posted') {
+        throw StateError('Payments require a posted purchase');
+      }
+      if (source.currencyId != currencyId ||
+          amountCents <= Decimal.zero ||
+          Decimal.fromBigInt(amountCents.toBigInt()) != amountCents) {
+        throw StateError(
+          'Payment must use positive whole minor units in the invoice currency',
+        );
+      }
       final id = await _datasource.recordPayment(payment);
 
       // Post journal entry: Dr Accounts Payable, Cr Cash/Bank
@@ -1077,7 +1254,18 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
   }
 
   @override
-  Future<void> deletePayment(int paymentId) async {
+  Future<void> deletePayment(int paymentId) => _db.transaction(() async {
+    final payment = await (_db.select(
+      _db.purchasePayments,
+    )..where((p) => p.id.equals(paymentId))).getSingleOrNull();
+    if (payment == null) throw StateError('Payment not found');
+    await DocumentPostingScope.validate(
+      _db,
+      InventoryPostingDocument.purchase,
+      payment.purchaseId,
+      scope: warehouseScope,
+    );
+
     // Void journal entries BEFORE deleting the payment
     await _journalService.voidJournalEntriesForSource(
       sourceTable: 'purchase_payments',
@@ -1095,28 +1283,40 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       userId: await _currentUserId(),
     );
 
-    return _datasource.deletePayment(paymentId);
-  }
+    await _datasource.deletePayment(paymentId);
+  });
 
   @override
-  Future<int> getReturnedQuantity(int purchaseItemId) {
-    return _datasource.getReturnedQuantity(purchaseItemId);
-  }
+  Future<int> getReturnedQuantity(int purchaseItemId) => _reader.readItem(
+    InventoryPostingDocument.purchase,
+    purchaseItemId,
+    () => _datasource.getReturnedQuantity(purchaseItemId),
+    0,
+  );
 
   @override
-  Future<LinkedReturnHistory> getLinkedReturnHistory(int purchaseItemId) {
-    return _db.purchaseDao.getLinkedReturnHistory(purchaseItemId);
-  }
+  Future<LinkedReturnHistory> getLinkedReturnHistory(int purchaseItemId) =>
+      _reader.readItem(
+        InventoryPostingDocument.purchase,
+        purchaseItemId,
+        () => _db.purchaseDao.getLinkedReturnHistory(purchaseItemId),
+        LinkedReturnHistory.zero,
+      );
 
   @override
-  Stream<Set<int>> watchPurchaseIdsWithReturns() =>
-      _datasource.watchPurchaseIdsWithReturns();
+  Stream<Set<int>> watchPurchaseIdsWithReturns() => _datasource
+      .watchPurchaseIdsWithReturns()
+      .asyncMap((rows) => _reader.ids(InventoryPostingDocument.purchase, rows));
 
   @override
   Stream<Map<int, List<String>>> watchPurchaseProductSearchTerms() =>
-      _datasource.watchPurchaseProductSearchTerms();
+      _datasource.watchPurchaseProductSearchTerms().asyncMap(
+        (rows) => _reader.searchTerms(InventoryPostingDocument.purchase, rows),
+      );
 
   @override
   Stream<Map<String, List<String>>> watchPurchaseReturnProductSearchTerms() =>
-      _datasource.watchPurchaseReturnProductSearchTerms();
+      _datasource.watchPurchaseReturnProductSearchTerms().asyncMap(
+        _reader.returnSearchTerms,
+      );
 }

@@ -103,6 +103,7 @@ class PurchaseItemModel extends PurchaseItemEntity {
     super.newSellPriceCents,
     super.newWholesalePriceCents,
     super.expiryDate,
+    super.manufacturerLotNumber,
     required super.createdAt,
   });
 
@@ -126,6 +127,7 @@ class PurchaseItemModel extends PurchaseItemEntity {
       newSellPriceCents: item.newSellPriceCents,
       newWholesalePriceCents: item.newWholesalePriceCents,
       expiryDate: item.expiryDate,
+      manufacturerLotNumber: item.manufacturerLotNumber,
       createdAt: item.createdAt,
     );
   }
@@ -157,6 +159,7 @@ class PurchaseItemModel extends PurchaseItemEntity {
       newSellPriceCents: d.item.newSellPriceCents,
       newWholesalePriceCents: d.item.newWholesalePriceCents,
       expiryDate: d.item.expiryDate,
+      manufacturerLotNumber: d.item.manufacturerLotNumber,
       createdAt: d.item.createdAt,
     );
   }

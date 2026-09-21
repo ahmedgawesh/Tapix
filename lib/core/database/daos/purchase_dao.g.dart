@@ -4,6 +4,12 @@ part of 'purchase_dao.dart';
 
 // ignore_for_file: type=lint
 mixin _$PurchaseDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessOrganizationsTable get businessOrganizations =>
+      attachedDatabase.businessOrganizations;
+  $BusinessBranchesTable get businessBranches =>
+      attachedDatabase.businessBranches;
+  $BusinessWarehousesTable get businessWarehouses =>
+      attachedDatabase.businessWarehouses;
   $CurrenciesTable get currencies => attachedDatabase.currencies;
   $SuppliersTable get suppliers => attachedDatabase.suppliers;
   $PurchasesTable get purchases => attachedDatabase.purchases;
@@ -31,6 +37,21 @@ mixin _$PurchaseDaoMixin on DatabaseAccessor<AppDatabase> {
 class PurchaseDaoManager {
   final _$PurchaseDaoMixin _db;
   PurchaseDaoManager(this._db);
+  $$BusinessOrganizationsTableTableManager get businessOrganizations =>
+      $$BusinessOrganizationsTableTableManager(
+        _db.attachedDatabase,
+        _db.businessOrganizations,
+      );
+  $$BusinessBranchesTableTableManager get businessBranches =>
+      $$BusinessBranchesTableTableManager(
+        _db.attachedDatabase,
+        _db.businessBranches,
+      );
+  $$BusinessWarehousesTableTableManager get businessWarehouses =>
+      $$BusinessWarehousesTableTableManager(
+        _db.attachedDatabase,
+        _db.businessWarehouses,
+      );
   $$CurrenciesTableTableManager get currencies =>
       $$CurrenciesTableTableManager(_db.attachedDatabase, _db.currencies);
   $$SuppliersTableTableManager get suppliers =>

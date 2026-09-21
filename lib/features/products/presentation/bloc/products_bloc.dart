@@ -1,4 +1,3 @@
-
 import 'package:decimal/decimal.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -10,6 +9,7 @@ import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/repositories/product_repository.dart';
+import '../../domain/repositories/product_variant_repository.dart';
 
 /// Events specific to products management
 abstract class ProductsEvent extends RealtimeEvent {
@@ -122,6 +122,7 @@ class ProductLoadMoreRequested extends ProductsEvent {
 /// Products Bloc that extends RealtimeBloc for automatic real-time updates
 class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
   final ProductRepository _repository;
+  final ProductVariantRepository? _variantRepository;
   final LanNetworkService? _lan;
   final CurrencyService? _currencyService;
   final Map<int, LanCatalogProduct> _remoteCatalog = {};
@@ -135,7 +136,12 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
   bool _hasMoreData = false;
   bool _isLoadingMore = false;
 
-  ProductsBloc(this._repository, [this._lan, this._currencyService]) : super();
+  ProductsBloc(
+    this._repository, [
+    this._lan,
+    this._currencyService,
+    this._variantRepository,
+  ]) : super();
 
   bool get isRemoteClient => _lan?.snapshot.mode == LanMode.client;
 
@@ -299,7 +305,7 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
     Emitter<RealtimeState<List<Product>>> emit,
   ) async {
     try {
-      await _repository.createProduct(
+      Future<int> createCatalog() => _repository.createProduct(
         sku: event.sku,
         name: event.name,
         description: event.description,
@@ -309,7 +315,7 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
         wholesalePriceCents: event.wholesalePriceCents,
         currencyId: event.currencyId,
         trackInventory: event.trackInventory,
-        stockQuantity: event.stockQuantity,
+        stockQuantity: 0,
         minQuantity: event.minQuantity,
         hasVariants: event.hasVariants,
         isTaxable: event.isTaxable,
@@ -317,6 +323,30 @@ class ProductsBloc extends RealtimeBloc<List<Product>, ProductsEvent> {
         salesTaxRateBps: event.salesTaxRateBps,
         imagePath: event.imagePath,
       );
+      if (event.stockQuantity == 0) {
+        await createCatalog();
+      } else {
+        final variants = _variantRepository;
+        if (event.stockQuantity < 0 ||
+            !event.trackInventory ||
+            event.hasVariants ||
+            variants == null) {
+          throw StateError(
+            'Opening stock requires a tracked simple product and a variant repository.',
+          );
+        }
+        await _repository.runInTransaction(() async {
+          final id = await createCatalog();
+          await variants.createVariant(
+            productId: id,
+            sku: event.sku,
+            costCents: event.costCents,
+            priceCents: event.priceCents,
+            wholesalePriceCents: event.wholesalePriceCents,
+            stockQuantity: event.stockQuantity,
+          );
+        });
+      }
     } catch (e, st) {
       add(RealtimeErrorOccurred(e, st));
     }

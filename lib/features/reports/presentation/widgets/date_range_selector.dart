@@ -42,10 +42,12 @@ class DateRangeSelector extends StatelessWidget {
                   color: colorScheme.primary,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  '${DateFormat('dd/MM/yyyy').format(dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(dateRange.endDate)}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w600,
+                Flexible(
+                  child: Text(
+                    '${DateFormat('dd/MM/yyyy').format(dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(dateRange.endDate)}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 4),

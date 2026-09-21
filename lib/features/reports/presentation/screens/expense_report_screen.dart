@@ -69,11 +69,12 @@ class _ExpenseReportView extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.error_outline,
-                      size: 48, color: colorScheme.error),
+                  Icon(Icons.error_outline, size: 48, color: colorScheme.error),
                   const SizedBox(height: 16),
-                  Text(state.error.toString(),
-                      style: theme.textTheme.bodyLarge),
+                  Text(
+                    state.error.toString(),
+                    style: theme.textTheme.bodyLarge,
+                  ),
                 ],
               ),
             );
@@ -87,9 +88,9 @@ class _ExpenseReportView extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                   child: DateRangeSelector(
                     dateRange: state.data.dateRange,
-                    onChanged: (range) => context
-                        .read<ExpenseReportBloc>()
-                        .add(ExpenseReportDateRangeChanged(range)),
+                    onChanged: (range) => context.read<ExpenseReportBloc>().add(
+                      ExpenseReportDateRangeChanged(range),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -99,9 +100,7 @@ class _ExpenseReportView extends StatelessWidget {
                 const SizedBox(height: 8),
 
                 // Content
-                Expanded(
-                  child: _ExpenseReportContent(data: state.data),
-                ),
+                Expanded(child: _ExpenseReportContent(data: state.data)),
               ],
             );
           }
@@ -146,11 +145,14 @@ class _ExpenseReportView extends StatelessWidget {
           if (isWide) {
             return Row(
               children: cards
-                  .map((c) => Expanded(
-                          child: Padding(
+                  .map(
+                    (c) => Expanded(
+                      child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: c,
-                      )))
+                      ),
+                    ),
+                  )
                   .toList(),
             );
           }
@@ -160,15 +162,17 @@ class _ExpenseReportView extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: cards[0],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: cards[0],
+                    ),
+                  ),
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: cards[1],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: cards[1],
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -181,11 +185,10 @@ class _ExpenseReportView extends StatelessWidget {
   }
 
   Future<void> _printReport(
-      BuildContext context, ExpenseReportData data) async {
-    await ExpensePdfService.printExpenseReport(
-      context: context,
-      data: data,
-    );
+    BuildContext context,
+    ExpenseReportData data,
+  ) async {
+    await ExpensePdfService.printExpenseReport(context: context, data: data);
     sl<AuditLogService>().log(
       entityType: 'report',
       entityId: 0,
@@ -194,11 +197,10 @@ class _ExpenseReportView extends StatelessWidget {
   }
 
   Future<void> _shareReport(
-      BuildContext context, ExpenseReportData data) async {
-    await ExpensePdfService.shareExpenseReport(
-      context: context,
-      data: data,
-    );
+    BuildContext context,
+    ExpenseReportData data,
+  ) async {
+    await ExpensePdfService.shareExpenseReport(context: context, data: data);
     sl<AuditLogService>().log(
       entityType: 'report',
       entityId: 0,
@@ -284,16 +286,23 @@ class _ExpenseReportContent extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.receipt, size: 48,
-                color: theme.colorScheme.onSurfaceVariant),
+            Icon(
+              LucideIcons.receipt,
+              size: 48,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
             const SizedBox(height: 16),
-            Text('reports.no_expense_data'.tr(),
-                style: theme.textTheme.bodyLarge),
+            Text(
+              'reports.no_expense_data'.tr(),
+              style: theme.textTheme.bodyLarge,
+            ),
             const SizedBox(height: 8),
-            Text('reports.no_expense_data_desc'.tr(),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                )),
+            Text(
+              'reports.no_expense_data_desc'.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       );
@@ -347,8 +356,9 @@ class _ExpenseCategoryCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     item.categoryName,
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.bold),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -401,8 +411,7 @@ class _ExpenseCategoryCard extends StatelessWidget {
 
                 if (isWide) {
                   return Row(
-                    children:
-                        metrics.map((m) => Expanded(child: m)).toList(),
+                    children: metrics.map((m) => Expanded(child: m)).toList(),
                   );
                 }
                 return Row(
@@ -441,15 +450,19 @@ class _MetricItem extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            )),
-        Text(value,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: valueColor,
-            )),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        Text(
+          value,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: valueColor,
+          ),
+        ),
       ],
     );
   }

@@ -678,9 +678,20 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
         );
         break;
       case 'isMedicine':
+        final enabled = event.value as bool;
+        final shouldEnableTraceability =
+            enabled &&
+            state.trackInventory &&
+            state.costingMethodLockReason == null &&
+            state.inventoryTrackingType == 'standard';
         emit(
           state.copyWith(
-            isMedicine: event.value as bool,
+            isMedicine: enabled,
+            // New medicines default to FEFO-ready batch + expiry tracking.
+            // Never rewrite an explicit batch choice or a locked product.
+            inventoryTrackingType: shouldEnableTraceability
+                ? 'batch_expiry'
+                : state.inventoryTrackingType,
             fieldErrors: newErrors,
           ),
         );
@@ -1113,7 +1124,7 @@ class ProductFormBloc extends Bloc<ProductFormEvent, ProductFormState> {
             costCents: state.costCents,
             priceCents: state.priceCents,
             wholesalePriceCents: state.wholesalePriceCents,
-            stockQuantity: state.stockQuantity,
+            stockQuantity: 0,
             minQuantity: state.minQuantity,
             categoryId: state.categoryId,
             supplierId: state.supplierId,

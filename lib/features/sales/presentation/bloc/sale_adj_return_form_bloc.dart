@@ -14,6 +14,12 @@ import '../../../../core/payments/checkout_settlement.dart';
 import '../../../../core/pricing/discount.dart';
 import '../../../../core/pricing/invoice_pricing_engine.dart';
 import '../../../../core/pricing/pricing_snapshot.dart';
+import '../../../../core/pricing/pricing_preview_fingerprint.dart';
+import '../../../../core/measurement/measurement.dart';
+import '../../../../core/services/business/branch_tax_policy_store.dart';
+import '../../../../core/services/tax_calculation_service.dart';
+import '../../../settings/data/services/app_settings_service.dart';
+import '../../../settings/domain/entities/app_settings.dart';
 import '../../../../core/services/journal_entry_service.dart';
 import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../../core/services/commissions/commission_service.dart';
@@ -106,10 +112,13 @@ class SaleAdjReturnFormState extends Equatable {
                   : Discount.none),
         enableTaxCalculations: true,
         defaultTaxRateBps: 0,
-        taxInclusivePricing: false,
+        taxInclusivePricing: taxInclusivePricing,
       ),
     );
   }
+
+  bool get taxInclusivePricing =>
+      items.isNotEmpty && items.first.taxInclusivePricing;
 
   int get totalSubtotalCents => pricing.subtotal.cents;
   int get totalItemDiscountCents => pricing.itemDiscountTotal.cents;
@@ -380,6 +389,11 @@ class _SaleAdjReturnRecomputeLoyalty extends SaleAdjReturnFormEvent {
   const _SaleAdjReturnRecomputeLoyalty();
 }
 
+class _LocalSaleReturnPricingChanged implements Exception {
+  const _LocalSaleReturnPricingChanged(this.preview);
+  final SaleAdjReturnFormState preview;
+}
+
 class SaleAdjReturnFormBloc
     extends Bloc<SaleAdjReturnFormEvent, SaleAdjReturnFormState> {
   final AdjustmentReturnDao _dao;
@@ -388,6 +402,7 @@ class SaleAdjReturnFormBloc
   final LoyaltyPointsService _loyaltyPointsService;
   final SessionService _sessionService;
   final LanNetworkService? _lan;
+  final AppSettingsService? _settings;
 
   bool get _isRemoteClient =>
       _lan?.snapshot.mode == LanMode.client &&
@@ -400,7 +415,9 @@ class SaleAdjReturnFormBloc
     this._loyaltyPointsService,
     this._sessionService, {
     LanNetworkService? lan,
+    AppSettingsService? settings,
   }) : _lan = lan,
+       _settings = settings,
        super(SaleAdjReturnFormState()) {
     on<_SaleAdjReturnInitialized>(_onInitialized);
     on<_SaleAdjReturnRecomputeLoyalty>(_onRecomputeLoyalty);
@@ -446,6 +463,7 @@ class SaleAdjReturnFormBloc
       if (state.loyaltyEnabled || state.loyaltyPointsToDeduct != 0) {
         emit(
           state.copyWith(
+            error: state.error,
             loyaltyEnabled: false,
             loyaltyPointsToDeduct: 0,
             loyaltyPointValueCents: 0,
@@ -459,6 +477,7 @@ class SaleAdjReturnFormBloc
       if (state.loyaltyPointsToDeduct != 0 || state.loyaltyEnabled) {
         emit(
           state.copyWith(
+            error: state.error,
             loyaltyEnabled: false,
             loyaltyPointsToDeduct: 0,
             loyaltyPointValueCents: 0,
@@ -474,6 +493,7 @@ class SaleAdjReturnFormBloc
         );
     emit(
       state.copyWith(
+        error: state.error,
         loyaltyEnabled: preview.enabled,
         loyaltyPointsToDeduct: preview.pointsToDeduct,
         loyaltyPointValueCents: preview.pointValueCents,
@@ -499,17 +519,111 @@ class SaleAdjReturnFormBloc
     add(const _SaleAdjReturnRecomputeLoyalty());
   }
 
-  void _onItemAdded(
+  Future<AppSettings> _loadTaxPolicy() async {
+    final stored = await BranchTaxPolicyStore(_dao.attachedDatabase).read();
+    if (stored == null && (_settings?.requiresPersistedTaxPolicy ?? false)) {
+      throw StateError('Branch tax policy is missing.');
+    }
+    final current = _settings?.current ?? const AppSettings();
+    return stored?.policy.applyTo(current) ?? current;
+  }
+
+  Future<SaleAdjReturnFormState> _refreshLocalPricing(
+    SaleAdjReturnFormState submitted,
+  ) async {
+    final policy = await _loadTaxPolicy();
+    final ids = submitted.items.map((i) => i.productId).toSet();
+    final products = await (_dao.select(
+      _dao.products,
+    )..where((p) => p.id.isIn(ids))).get();
+    final byId = {for (final p in products) p.id: p};
+    final refreshed = <AdjReturnLineItem>[];
+    for (final item in submitted.items) {
+      final product = byId[item.productId];
+      if (product == null ||
+          !product.isActive ||
+          product.measurementType != item.measurementType ||
+          MeasurementType.fromDb(product.measurementType).quantityScale !=
+              item.quantityScale) {
+        throw StateError('Return product or measurement is unavailable.');
+      }
+      refreshed.add(
+        item.copyWith(
+          taxRateBps: policy.enableTaxCalculations
+              ? TaxCalculationService.resolveLineItemTaxRateBps(
+                  isTaxable: product.isTaxable,
+                  productTaxRateBps: product.salesTaxRateBps,
+                  defaultTaxRateBps: (policy.defaultSalesTaxRate * 100).round(),
+                )
+              : 0,
+          taxInclusivePricing: policy.taxInclusivePricing,
+        ),
+      );
+    }
+    return submitted.copyWith(items: refreshed);
+  }
+
+  Future<SaleAdjReturnFormState> _refreshRemotePricing(
+    SaleAdjReturnFormState submitted,
+  ) async {
+    final policy = await _lan!.fetchRemoteCatalog(limit: 1);
+    final products = <int, LanCatalogProduct>{};
+    final refreshed = <AdjReturnLineItem>[];
+    for (final item in submitted.items) {
+      if (!products.containsKey(item.productId)) {
+        final page = await _lan.fetchRemoteCatalog(
+          query: item.productName,
+          limit: 200,
+        );
+        for (final product in page.products) {
+          products[product.id] = product;
+        }
+      }
+      final product = products[item.productId];
+      if (product == null ||
+          product.measurementType != item.measurementType ||
+          MeasurementType.fromDb(product.measurementType).quantityScale !=
+              item.quantityScale) {
+        throw StateError('Return product or measurement is unavailable.');
+      }
+      refreshed.add(
+        item.copyWith(
+          taxRateBps: policy.enableTaxCalculations
+              ? TaxCalculationService.resolveLineItemTaxRateBps(
+                  isTaxable: product.isTaxable,
+                  productTaxRateBps: product.salesTaxRateBps,
+                  defaultTaxRateBps: policy.defaultSalesTaxRateBps,
+                )
+              : 0,
+          taxInclusivePricing: policy.taxInclusivePricing,
+        ),
+      );
+    }
+    return submitted.copyWith(items: refreshed);
+  }
+
+  Future<void> _onItemAdded(
     SaleAdjReturnItemAdded event,
     Emitter<SaleAdjReturnFormState> emit,
-  ) {
-    emit(
-      state.copyWith(
-        items: [...state.items, event.item],
-        hasUnsavedChanges: true,
-      ),
-    );
-    add(const _SaleAdjReturnRecomputeLoyalty());
+  ) async {
+    try {
+      while (true) {
+        final before = state;
+        var preview = before.copyWith(items: [...before.items, event.item]);
+        if (_isRemoteClient) {
+          preview = await _refreshRemotePricing(preview);
+        } else {
+          preview = await _dao.transaction(() => _refreshLocalPricing(preview));
+        }
+        // Preserve edits/events that completed while product rules were read.
+        if (!identical(before.items, state.items)) continue;
+        emit(state.copyWith(items: preview.items, hasUnsavedChanges: true));
+        break;
+      }
+      add(const _SaleAdjReturnRecomputeLoyalty());
+    } catch (_) {
+      emit(state.copyWith(error: 'returns.return_failed'.tr()));
+    }
   }
 
   void _onItemRemoved(
@@ -670,6 +784,10 @@ class SaleAdjReturnFormBloc
       final result = await _lan!.submitRemoteSaleAdjustmentReturn(
         LanSaleAdjustmentReturnRequest(
           idempotencyKey: const Uuid().v4(),
+          expectedPricingFingerprint: pricingPreviewFingerprint(
+            state.pricing,
+            taxInclusive: state.taxInclusivePricing,
+          ),
           customerId: state.customerId,
           employeeId: state.employeeId,
           refundMethod: state.paymentMethod.name,
@@ -717,7 +835,32 @@ class SaleAdjReturnFormBloc
         ),
       );
     } on LanBusinessException catch (error) {
-      emit(state.copyWith(isSubmitting: false, error: error.message));
+      if (error.code == 'pricing_preview_changed') {
+        try {
+          while (true) {
+            final before = state;
+            final refreshed = await _refreshRemotePricing(before);
+            if (!identical(before.items, state.items)) continue;
+            emit(
+              state.copyWith(
+                items: refreshed.items,
+                isSubmitting: false,
+                error: 'returns.pricing_preview_updated'.tr(),
+              ),
+            );
+            break;
+          }
+        } catch (_) {
+          emit(
+            state.copyWith(
+              isSubmitting: false,
+              error: 'returns.pricing_preview_refresh_failed'.tr(),
+            ),
+          );
+        }
+      } else {
+        emit(state.copyWith(isSubmitting: false, error: error.message));
+      }
     } catch (error, stackTrace) {
       developer.log(
         'Remote sale adjustment return submission failed: $error',
@@ -738,7 +881,7 @@ class SaleAdjReturnFormBloc
     SaleAdjReturnSubmitted event,
     Emitter<SaleAdjReturnFormState> emit,
   ) async {
-    if (state.isSuccess) return;
+    if (state.isSuccess || state.isSubmitting) return;
     // Customer required for credit/cheque only
     if ((state.paymentMethod == AdjReturnPaymentMethod.credit ||
             state.paymentMethod == AdjReturnPaymentMethod.cheque) &&
@@ -775,78 +918,92 @@ class SaleAdjReturnFormBloc
       // addition to `state.isSubmitting`).
       final idempotencyKey = const Uuid().v4();
 
-      // Return number is generated atomically by the DAO inside the transaction
-      // Phase 11.2 — stamp pricing-engine snapshot. The state's engine call
-      // hardcodes `taxInclusivePricing: false`, so the snapshot must mirror
-      // that exact flag.
-      final returnData = SaleReturnAdjustmentsCompanion.insert(
-        returnNumber: '', // Overridden by DAO inside transaction
-        customerId: Value(state.customerId),
-        employeeId: Value(state.employeeId),
-        currencyId: state.currencyId,
-        subtotalCents: Value(Decimal.fromInt(state.totalSubtotalCents)),
-        discountCents: Value(
-          Decimal.fromInt(
-            state.totalItemDiscountCents + state.effectiveOverallDiscountCents,
+      final submitted = state;
+      final createdId = await _dao.transaction(() async {
+        final refreshed = await _refreshLocalPricing(submitted);
+        if (pricingPreviewFingerprint(
+              submitted.pricing,
+              taxInclusive: submitted.taxInclusivePricing,
+            ) !=
+            pricingPreviewFingerprint(
+              refreshed.pricing,
+              taxInclusive: refreshed.taxInclusivePricing,
+            )) {
+          throw _LocalSaleReturnPricingChanged(refreshed);
+        }
+        // Return number is generated atomically by the DAO inside the transaction
+        final returnData = SaleReturnAdjustmentsCompanion.insert(
+          returnNumber: '', // Overridden by DAO inside transaction
+          customerId: Value(submitted.customerId),
+          employeeId: Value(submitted.employeeId),
+          currencyId: submitted.currencyId,
+          subtotalCents: Value(Decimal.fromInt(submitted.totalSubtotalCents)),
+          discountCents: Value(
+            Decimal.fromInt(
+              submitted.totalItemDiscountCents +
+                  submitted.effectiveOverallDiscountCents,
+            ),
           ),
-        ),
-        taxCents: Value(Decimal.fromInt(state.totalAdjustedTaxCents)),
-        totalCents: Decimal.fromInt(state.totalCents),
-        notes: Value(
-          buildAdjReturnNotes(
-            reasonCode: state.reasonCode!,
-            userNotes: state.notes,
+          taxCents: Value(Decimal.fromInt(submitted.totalAdjustedTaxCents)),
+          totalCents: Decimal.fromInt(submitted.totalCents),
+          notes: Value(
+            buildAdjReturnNotes(
+              reasonCode: submitted.reasonCode!,
+              userNotes: submitted.notes,
+            ),
           ),
-        ),
-        returnDate: Value(state.returnDate),
-        refundMethod: Value(
-          event.settlementAllocations.isEmpty
-              ? state.paymentMethod.name
-              : 'mixed',
-        ),
-        dueDate: Value(
-          event.settlementAllocations.isEmpty ? state.dueDate : null,
-        ),
-        idempotencyKey: Value(idempotencyKey),
-      ).withPricingSnapshot(taxInclusive: false);
+          returnDate: Value(submitted.returnDate),
+          refundMethod: Value(
+            event.settlementAllocations.isEmpty
+                ? submitted.paymentMethod.name
+                : 'mixed',
+          ),
+          dueDate: Value(
+            event.settlementAllocations.isEmpty ? submitted.dueDate : null,
+          ),
+          idempotencyKey: Value(idempotencyKey),
+        ).withPricingSnapshot(taxInclusive: submitted.taxInclusivePricing);
 
-      // The engine has already done all the hard work: per-line subtotal,
-      // per-line item discount, the proportional share of the invoice-
-      // level discount, the post-allocation net, and the tax computed on
-      // that net. We just persist what the engine produced — there is no
-      // second arithmetic path here, which is the whole point of Phase 1.
-      final pricing = state.pricing;
-      final itemCompanions = <SaleReturnAdjustmentItemsCompanion>[];
-      for (int idx = 0; idx < state.items.length; idx++) {
-        final item = state.items[idx];
-        final line = pricing.lines[idx];
-        itemCompanions.add(
-          SaleReturnAdjustmentItemsCompanion.insert(
-            returnId: 0, // Will be set by DAO
-            productId: item.productId,
-            variantId: Value(item.variantId),
-            quantity: item.quantity,
-            quantityScale: Value(item.quantityScale),
-            measurementType: Value(item.measurementType),
-            unitPriceCents: Decimal.fromInt(item.unitPriceCents),
-            // Total discount on this item = per-line discount + share of overall
-            discountCents: Value(Decimal.fromInt(line.totalLineDiscount.cents)),
-            taxCents: Value(Decimal.fromInt(line.tax.cents)),
-            totalCents: Decimal.fromInt(line.total.cents),
-            reason: Value(item.reason),
-          ),
+        // The engine has already done all the hard work: per-line subtotal,
+        // per-line item discount, the proportional share of the invoice-
+        // level discount, the post-allocation net, and the tax computed on
+        // that net. We just persist what the engine produced — there is no
+        // second arithmetic path here, which is the whole point of Phase 1.
+        final pricing = submitted.pricing;
+        final itemCompanions = <SaleReturnAdjustmentItemsCompanion>[];
+        for (int idx = 0; idx < submitted.items.length; idx++) {
+          final item = submitted.items[idx];
+          final line = pricing.lines[idx];
+          itemCompanions.add(
+            SaleReturnAdjustmentItemsCompanion.insert(
+              returnId: 0, // Will be set by DAO
+              productId: item.productId,
+              variantId: Value(item.variantId),
+              quantity: item.quantity,
+              quantityScale: Value(item.quantityScale),
+              measurementType: Value(item.measurementType),
+              unitPriceCents: Decimal.fromInt(item.unitPriceCents),
+              // Total discount on this item = per-line discount + share of overall
+              discountCents: Value(
+                Decimal.fromInt(line.totalLineDiscount.cents),
+              ),
+              taxCents: Value(Decimal.fromInt(line.tax.cents)),
+              totalCents: Decimal.fromInt(line.total.cents),
+              reason: Value(item.reason),
+            ),
+          );
+        }
+
+        return _dao.createAndPostSaleAdjReturn(
+          returnData,
+          itemCompanions,
+          journalEntryService: _journalEntryService,
+          userId: await _sessionService.getCurrentUserId(),
+          commissionService: _commissionService,
+          loyaltyPointsService: _loyaltyPointsService,
+          settlementAllocations: event.settlementAllocations,
         );
-      }
-
-      final createdId = await _dao.createAndPostSaleAdjReturn(
-        returnData,
-        itemCompanions,
-        journalEntryService: _journalEntryService,
-        userId: await _sessionService.getCurrentUserId(),
-        commissionService: _commissionService,
-        loyaltyPointsService: _loyaltyPointsService,
-        settlementAllocations: event.settlementAllocations,
-      );
+      });
 
       emit(
         state.copyWith(
@@ -856,6 +1013,15 @@ class SaleAdjReturnFormBloc
           createdReturnId: createdId,
         ),
       );
+    } on _LocalSaleReturnPricingChanged catch (e) {
+      emit(
+        state.copyWith(
+          items: e.preview.items,
+          isSubmitting: false,
+          error: 'returns.pricing_preview_updated'.tr(),
+        ),
+      );
+      add(const _SaleAdjReturnRecomputeLoyalty());
     } on StockInsufficientException catch (e) {
       emit(
         state.copyWith(

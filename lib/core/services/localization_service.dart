@@ -2,6 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../utils/platform_utils.dart';
+import 'push_notification_service.dart';
+
 class LocalizationService {
   final SharedPreferences _prefs;
   static const String _localeKey = 'locale_code';
@@ -28,6 +31,12 @@ class LocalizationService {
   Future<void> setLocale(Locale locale) async {
     await _prefs.setString(_localeKey, locale.languageCode);
     _localeController.add(locale);
+
+    // Keep the standalone notifications profile in sync with the language
+    // selected inside TapBix. This does not touch licensing or subscriptions.
+    if (PlatformUtils.isAndroid || PlatformUtils.isIOS) {
+      unawaited(PushNotificationService.instance.refreshRegistration());
+    }
   }
 
   bool isRTL(Locale locale) {

@@ -270,6 +270,8 @@ class PurchasePdfService {
                         measurementType: item.measurementType,
                         unitCostCents: item.unitCostCents.toBigInt().toInt(),
                         totalCents: item.totalCents.toBigInt().toInt(),
+                        manufacturerLotNumber: item.manufacturerLotNumber,
+                        expiryDate: item.expiryDate,
                       ),
                     )
                     .toList(),
@@ -407,6 +409,8 @@ class PurchasePdfService {
                         measurementType: item.product.measurementType,
                         unitCostCents: item.unitCostCents.toBigInt().toInt(),
                         totalCents: item.totalCents.toBigInt().toInt(),
+                        manufacturerLotNumber: item.manufacturerLotNumber,
+                        expiryDate: item.expiryDate,
                       ),
                     )
                     .toList(),
@@ -890,10 +894,19 @@ class PurchasePdfService {
           final displayName = item.variantSku != null
               ? '${item.name} (${item.variantSku})'
               : item.name;
+          final traceability = <String>[
+            if (item.manufacturerLotNumber != null)
+              '${'pharmacy.batch.lot_short'.tr()}: ${item.manufacturerLotNumber}',
+            if (item.expiryDate != null)
+              '${'purchases.expiry'.tr()}: ${DateFormat('dd/MM/yyyy').format(item.expiryDate!)}',
+          ];
+          final tracedDisplayName = traceability.isEmpty
+              ? displayName
+              : '$displayName\n${traceability.join(' • ')}';
           return pw.TableRow(
             children: [
               _tableCell('${idx + 1}', fonts.regular),
-              _tableCell(displayName, fonts.regular),
+              _tableCell(tracedDisplayName, fonts.regular),
               _tableCell(
                 localizedQuantity(item.quantity, item.measurementType),
                 fonts.regular,
@@ -1858,6 +1871,8 @@ class _PdfLineItem {
   final String measurementType;
   final int unitCostCents;
   final int totalCents;
+  final String? manufacturerLotNumber;
+  final DateTime? expiryDate;
 
   const _PdfLineItem({
     required this.name,
@@ -1866,5 +1881,7 @@ class _PdfLineItem {
     this.measurementType = 'piece',
     required this.unitCostCents,
     required this.totalCents,
+    this.manufacturerLotNumber,
+    this.expiryDate,
   });
 }

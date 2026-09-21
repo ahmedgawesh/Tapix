@@ -1,3 +1,4 @@
+import '../widgets/warehouse_report_context.dart';
 import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
@@ -17,7 +18,9 @@ class InventoryReportsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => sl<InventoryReportsBloc>(),
+      create: (_) => sl<InventoryReportsBloc>(
+        param1: WarehouseReportContext.maybeOf(context)?.scope,
+      ),
       child: const _InventoryReportsView(),
     );
   }
@@ -34,8 +37,10 @@ class _InventoryReportsView extends StatelessWidget {
         appBar: AppBar(
           title: Text('reports.inventory_reports'.tr()),
           actions: [
-            BlocBuilder<InventoryReportsBloc,
-                RealtimeState<InventoryReportsData>>(
+            BlocBuilder<
+              InventoryReportsBloc,
+              RealtimeState<InventoryReportsData>
+            >(
               builder: (context, state) {
                 if (state is! RealtimeSuccess<InventoryReportsData>) {
                   return const SizedBox.shrink();
@@ -55,7 +60,11 @@ class _InventoryReportsView extends StatelessWidget {
                           child: Row(
                             children: [
                               if (state.data.priceType == PriceDisplayType.cost)
-                                Icon(LucideIcons.check, size: 16, color: Theme.of(context).colorScheme.primary)
+                                Icon(
+                                  LucideIcons.check,
+                                  size: 16,
+                                  color: Theme.of(context).colorScheme.primary,
+                                )
                               else
                                 const SizedBox(width: 16),
                               const SizedBox(width: 8),
@@ -68,7 +77,11 @@ class _InventoryReportsView extends StatelessWidget {
                           child: Row(
                             children: [
                               if (state.data.priceType == PriceDisplayType.sale)
-                                Icon(LucideIcons.check, size: 16, color: Theme.of(context).colorScheme.primary)
+                                Icon(
+                                  LucideIcons.check,
+                                  size: 16,
+                                  color: Theme.of(context).colorScheme.primary,
+                                )
                               else
                                 const SizedBox(width: 16),
                               const SizedBox(width: 8),
@@ -80,8 +93,13 @@ class _InventoryReportsView extends StatelessWidget {
                           value: PriceDisplayType.wholesale,
                           child: Row(
                             children: [
-                              if (state.data.priceType == PriceDisplayType.wholesale)
-                                Icon(LucideIcons.check, size: 16, color: Theme.of(context).colorScheme.primary)
+                              if (state.data.priceType ==
+                                  PriceDisplayType.wholesale)
+                                Icon(
+                                  LucideIcons.check,
+                                  size: 16,
+                                  color: Theme.of(context).colorScheme.primary,
+                                )
                               else
                                 const SizedBox(width: 16),
                               const SizedBox(width: 8),
@@ -123,76 +141,85 @@ class _InventoryReportsView extends StatelessWidget {
             ],
           ),
         ),
-        body: BlocBuilder<InventoryReportsBloc,
-            RealtimeState<InventoryReportsData>>(
-          builder: (context, state) {
-            if (state is RealtimeLoading<InventoryReportsData>) {
-              return const Center(child: CircularProgressIndicator());
-            }
+        body:
+            BlocBuilder<
+              InventoryReportsBloc,
+              RealtimeState<InventoryReportsData>
+            >(
+              builder: (context, state) {
+                if (state is RealtimeLoading<InventoryReportsData>) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-            if (state is RealtimeError<InventoryReportsData>) {
-              final colorScheme = Theme.of(context).colorScheme;
-              return Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.error_outline,
-                        size: 48, color: colorScheme.error),
-                    const SizedBox(height: 16),
-                    Text(state.error.toString(),
-                        style: Theme.of(context).textTheme.bodyLarge),
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      onPressed: () => context
-                          .read<InventoryReportsBloc>()
-                          .refresh(),
-                      icon: const Icon(LucideIcons.refreshCw),
-                      label: Text('reports.retry'.tr()),
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            if (state is RealtimeSuccess<InventoryReportsData>) {
-              final data = state.data;
-              return Column(
-                children: [
-                  // Date range selector
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    child: DateRangeSelector(
-                      dateRange: data.dateRange,
-                      onChanged: (range) => context
-                          .read<InventoryReportsBloc>()
-                          .add(InventoryReportsDateRangeChanged(range)),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Tab content
-                  Expanded(
-                    child: TabBarView(
+                if (state is RealtimeError<InventoryReportsData>) {
+                  final colorScheme = Theme.of(context).colorScheme;
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        _StockValuationTab(data: data),
-                        _LowStockTab(items: data.lowStockItems),
-                        _ProductMovementTab(data: data),
+                        Icon(
+                          Icons.error_outline,
+                          size: 48,
+                          color: colorScheme.error,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          state.error.toString(),
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
+                        const SizedBox(height: 16),
+                        FilledButton.icon(
+                          onPressed: () =>
+                              context.read<InventoryReportsBloc>().refresh(),
+                          icon: const Icon(LucideIcons.refreshCw),
+                          label: Text('reports.retry'.tr()),
+                        ),
                       ],
                     ),
-                  ),
-                ],
-              );
-            }
+                  );
+                }
 
-            return const SizedBox.shrink();
-          },
-        ),
+                if (state is RealtimeSuccess<InventoryReportsData>) {
+                  final data = state.data;
+                  return Column(
+                    children: [
+                      // Date range selector
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                        child: DateRangeSelector(
+                          dateRange: data.dateRange,
+                          onChanged: (range) => context
+                              .read<InventoryReportsBloc>()
+                              .add(InventoryReportsDateRangeChanged(range)),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Tab content
+                      Expanded(
+                        child: TabBarView(
+                          children: [
+                            _StockValuationTab(data: data),
+                            _LowStockTab(items: data.lowStockItems),
+                            _ProductMovementTab(data: data),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
+                return const SizedBox.shrink();
+              },
+            ),
       ),
     );
   }
 
   Future<void> _printReport(
-      BuildContext context, InventoryReportsData data) async {
+    BuildContext context,
+    InventoryReportsData data,
+  ) async {
     await InventoryPdfService.printInventoryReport(
       context: context,
       data: data,
@@ -201,7 +228,9 @@ class _InventoryReportsView extends StatelessWidget {
   }
 
   Future<void> _shareReport(
-      BuildContext context, InventoryReportsData data) async {
+    BuildContext context,
+    InventoryReportsData data,
+  ) async {
     await InventoryPdfService.shareInventoryReport(
       context: context,
       data: data,
@@ -308,10 +337,7 @@ class _StockValuationTab extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              Text(
-                'reports.sort_by'.tr(),
-                style: theme.textTheme.bodySmall,
-              ),
+              Text('reports.sort_by'.tr(), style: theme.textTheme.bodySmall),
               const SizedBox(width: 8),
               Expanded(
                 child: SingleChildScrollView(
@@ -320,46 +346,46 @@ class _StockValuationTab extends StatelessWidget {
                     children: [
                       _SortChip(
                         label: 'reports.sort_value'.tr(),
-                        selected: data.sort == StockValuationSort.valueDesc ||
+                        selected:
+                            data.sort == StockValuationSort.valueDesc ||
                             data.sort == StockValuationSort.valueAsc,
                         onTap: () {
-                          final next =
-                              data.sort == StockValuationSort.valueDesc
-                                  ? StockValuationSort.valueAsc
-                                  : StockValuationSort.valueDesc;
-                          context
-                              .read<InventoryReportsBloc>()
-                              .add(InventoryReportsSortChanged(next));
+                          final next = data.sort == StockValuationSort.valueDesc
+                              ? StockValuationSort.valueAsc
+                              : StockValuationSort.valueDesc;
+                          context.read<InventoryReportsBloc>().add(
+                            InventoryReportsSortChanged(next),
+                          );
                         },
                         ascending: data.sort == StockValuationSort.valueAsc,
                       ),
                       _SortChip(
                         label: 'reports.sort_name'.tr(),
-                        selected: data.sort == StockValuationSort.nameAsc ||
+                        selected:
+                            data.sort == StockValuationSort.nameAsc ||
                             data.sort == StockValuationSort.nameDesc,
                         onTap: () {
-                          final next =
-                              data.sort == StockValuationSort.nameAsc
-                                  ? StockValuationSort.nameDesc
-                                  : StockValuationSort.nameAsc;
-                          context
-                              .read<InventoryReportsBloc>()
-                              .add(InventoryReportsSortChanged(next));
+                          final next = data.sort == StockValuationSort.nameAsc
+                              ? StockValuationSort.nameDesc
+                              : StockValuationSort.nameAsc;
+                          context.read<InventoryReportsBloc>().add(
+                            InventoryReportsSortChanged(next),
+                          );
                         },
                         ascending: data.sort == StockValuationSort.nameAsc,
                       ),
                       _SortChip(
                         label: 'reports.sort_stock'.tr(),
-                        selected: data.sort == StockValuationSort.stockDesc ||
+                        selected:
+                            data.sort == StockValuationSort.stockDesc ||
                             data.sort == StockValuationSort.stockAsc,
                         onTap: () {
-                          final next =
-                              data.sort == StockValuationSort.stockDesc
-                                  ? StockValuationSort.stockAsc
-                                  : StockValuationSort.stockDesc;
-                          context
-                              .read<InventoryReportsBloc>()
-                              .add(InventoryReportsSortChanged(next));
+                          final next = data.sort == StockValuationSort.stockDesc
+                              ? StockValuationSort.stockAsc
+                              : StockValuationSort.stockDesc;
+                          context.read<InventoryReportsBloc>().add(
+                            InventoryReportsSortChanged(next),
+                          );
                         },
                         ascending: data.sort == StockValuationSort.stockAsc,
                       ),
@@ -381,7 +407,10 @@ class _StockValuationTab extends StatelessWidget {
                   itemCount: data.stockValuation.length,
                   itemBuilder: (context, index) {
                     final item = data.stockValuation[index];
-                    return _StockValuationCard(item: item, priceType: data.priceType);
+                    return _StockValuationCard(
+                      item: item,
+                      priceType: data.priceType,
+                    );
                   },
                 ),
         ),
@@ -479,7 +508,9 @@ class _ProductMovementTabState extends State<_ProductMovementTab> {
   @override
   void initState() {
     super.initState();
-    _searchController = TextEditingController(text: widget.data.movementSearchQuery);
+    _searchController = TextEditingController(
+      text: widget.data.movementSearchQuery,
+    );
   }
 
   @override
@@ -492,7 +523,9 @@ class _ProductMovementTabState extends State<_ProductMovementTab> {
   void _onSearchChanged(String query) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 400), () {
-      context.read<InventoryReportsBloc>().add(InventoryMovementSearchChanged(query));
+      context.read<InventoryReportsBloc>().add(
+        InventoryMovementSearchChanged(query),
+      );
     });
   }
 
@@ -504,14 +537,18 @@ class _ProductMovementTabState extends State<_ProductMovementTab> {
     final items = data.productMovement;
 
     // Compute totals
-    int totalPurchased = 0, totalSold = 0, totalSaleReturned = 0, totalPurchaseReturned = 0;
+    int totalPurchased = 0,
+        totalSold = 0,
+        totalSaleReturned = 0,
+        totalPurchaseReturned = 0;
     for (final item in items) {
       totalPurchased += item.purchasedQty;
       totalSold += item.soldQty;
       totalSaleReturned += item.saleReturnedQty;
       totalPurchaseReturned += item.purchaseReturnedQty;
     }
-    final totalNet = totalPurchased - totalSold + totalSaleReturned - totalPurchaseReturned;
+    final totalNet =
+        totalPurchased - totalSold + totalSaleReturned - totalPurchaseReturned;
 
     return Column(
       children: [
@@ -533,10 +570,17 @@ class _ProductMovementTabState extends State<_ProductMovementTab> {
                     )
                   : null,
               isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               filled: true,
-              fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+              fillColor: colorScheme.surfaceContainerHighest.withValues(
+                alpha: 0.3,
+              ),
             ),
             onChanged: (q) {
               setState(() {}); // update clear button visibility
@@ -556,7 +600,9 @@ class _ProductMovementTabState extends State<_ProductMovementTab> {
                 // Category filter
                 _FilterDropdownChip(
                   icon: LucideIcons.folderOpen,
-                  label: data.movementCategoryName ?? 'reports.filter_category'.tr(),
+                  label:
+                      data.movementCategoryName ??
+                      'reports.filter_category'.tr(),
                   sheetTitle: 'reports.filter_category'.tr(),
                   isActive: data.movementCategoryId != null,
                   options: data.availableCategories,
@@ -568,7 +614,9 @@ class _ProductMovementTabState extends State<_ProductMovementTab> {
                 // Supplier filter
                 _FilterDropdownChip(
                   icon: LucideIcons.truck,
-                  label: data.movementSupplierName ?? 'reports.filter_supplier'.tr(),
+                  label:
+                      data.movementSupplierName ??
+                      'reports.filter_supplier'.tr(),
                   sheetTitle: 'reports.filter_supplier'.tr(),
                   isActive: data.movementSupplierId != null,
                   options: data.availableSuppliers,
@@ -596,7 +644,9 @@ class _ProductMovementTabState extends State<_ProductMovementTab> {
                   label: 'reports.sort_net_movement'.tr(),
                   selected: data.movementSort == MovementSort.netMovement,
                   onTap: () => context.read<InventoryReportsBloc>().add(
-                    const InventoryMovementSortChanged(MovementSort.netMovement),
+                    const InventoryMovementSortChanged(
+                      MovementSort.netMovement,
+                    ),
                   ),
                 ),
               ],
@@ -611,13 +661,29 @@ class _ProductMovementTabState extends State<_ProductMovementTab> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                _MiniSummary(label: 'reports.purchased'.tr(), value: '+$totalPurchased', color: colorScheme.primary),
+                _MiniSummary(
+                  label: 'reports.purchased'.tr(),
+                  value: '+$totalPurchased',
+                  color: colorScheme.primary,
+                ),
                 const SizedBox(width: 6),
-                _MiniSummary(label: 'reports.sold'.tr(), value: '-$totalSold', color: colorScheme.error),
+                _MiniSummary(
+                  label: 'reports.sold'.tr(),
+                  value: '-$totalSold',
+                  color: colorScheme.error,
+                ),
                 const SizedBox(width: 6),
-                _MiniSummary(label: 'reports.movement_sale_return'.tr(), value: '+$totalSaleReturned', color: Colors.orange),
+                _MiniSummary(
+                  label: 'reports.movement_sale_return'.tr(),
+                  value: '+$totalSaleReturned',
+                  color: Colors.orange,
+                ),
                 const SizedBox(width: 6),
-                _MiniSummary(label: 'reports.movement_purchase_return'.tr(), value: '-$totalPurchaseReturned', color: Colors.deepPurple),
+                _MiniSummary(
+                  label: 'reports.movement_purchase_return'.tr(),
+                  value: '-$totalPurchaseReturned',
+                  color: Colors.deepPurple,
+                ),
                 const SizedBox(width: 6),
                 _MiniSummary(
                   label: 'reports.net_movement'.tr(),
@@ -637,7 +703,9 @@ class _ProductMovementTabState extends State<_ProductMovementTab> {
               alignment: AlignmentDirectional.centerStart,
               child: Text(
                 '${items.length} ${'reports.products_count'.tr()}',
-                style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           ),
@@ -781,7 +849,10 @@ class _StockValuationCard extends StatelessWidget {
                         ),
                       if (item.variantLabel.isNotEmpty)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: colorScheme.tertiaryContainer,
                             borderRadius: BorderRadius.circular(4),
@@ -799,10 +870,9 @@ class _StockValuationCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'reports.stock_qty_variants'.tr(args: [
-                      '${item.totalStock}',
-                      '${item.variantCount}',
-                    ]),
+                    'reports.stock_qty_variants'.tr(
+                      args: ['${item.totalStock}', '${item.variantCount}'],
+                    ),
                     style: theme.textTheme.bodySmall,
                   ),
                 ],
@@ -904,7 +974,10 @@ class _LowStockCard extends StatelessWidget {
                         ),
                       if (item.variantLabel.isNotEmpty)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: colorScheme.tertiaryContainer,
                             borderRadius: BorderRadius.circular(4),
@@ -929,7 +1002,9 @@ class _LowStockCard extends StatelessWidget {
                   '${item.currentStock} / ${item.reorderLevel}',
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: isOutOfStock ? colorScheme.error : colorScheme.tertiary,
+                    color: isOutOfStock
+                        ? colorScheme.error
+                        : colorScheme.tertiary,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -975,7 +1050,9 @@ class _ProductMovementCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: _parseColor(item.colorHex!),
                       shape: BoxShape.circle,
-                      border: Border.all(color: colorScheme.outline.withValues(alpha: 0.3)),
+                      border: Border.all(
+                        color: colorScheme.outline.withValues(alpha: 0.3),
+                      ),
                     ),
                   ),
                 Expanded(
@@ -1006,7 +1083,10 @@ class _ProductMovementCard extends StatelessWidget {
                             ),
                           if (item.categoryName != null)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1,
+                              ),
                               decoration: BoxDecoration(
                                 color: colorScheme.secondaryContainer,
                                 borderRadius: BorderRadius.circular(4),
@@ -1021,7 +1101,10 @@ class _ProductMovementCard extends StatelessWidget {
                             ),
                           if (item.variantLabel.isNotEmpty)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1,
+                              ),
                               decoration: BoxDecoration(
                                 color: colorScheme.tertiaryContainer,
                                 borderRadius: BorderRadius.circular(4),
@@ -1035,7 +1118,11 @@ class _ProductMovementCard extends StatelessWidget {
                               ),
                             ),
                           if (item.hasVariants)
-                            Icon(LucideIcons.layers, size: 12, color: colorScheme.onSurfaceVariant),
+                            Icon(
+                              LucideIcons.layers,
+                              size: 12,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
                         ],
                       ),
                     ],
@@ -1043,7 +1130,10 @@ class _ProductMovementCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: item.netMovement >= 0
                         ? Colors.teal.withValues(alpha: 0.1)
@@ -1051,10 +1141,14 @@ class _ProductMovementCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    item.netMovement >= 0 ? '+${item.netMovement}' : '${item.netMovement}',
+                    item.netMovement >= 0
+                        ? '+${item.netMovement}'
+                        : '${item.netMovement}',
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.bold,
-                      color: item.netMovement >= 0 ? Colors.teal : colorScheme.error,
+                      color: item.netMovement >= 0
+                          ? Colors.teal
+                          : colorScheme.error,
                     ),
                   ),
                 ),
@@ -1283,7 +1377,9 @@ class _FilterSearchSheetState extends State<_FilterSearchSheet> {
   List<FilterOption> get _filtered {
     if (_query.isEmpty) return widget.options;
     final q = _query.toLowerCase();
-    return widget.options.where((o) => o.name.toLowerCase().contains(q)).toList();
+    return widget.options
+        .where((o) => o.name.toLowerCase().contains(q))
+        .toList();
   }
 
   @override
@@ -1315,7 +1411,9 @@ class _FilterSearchSheetState extends State<_FilterSearchSheet> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
               child: Text(
                 widget.title,
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             // Search field
@@ -1327,10 +1425,17 @@ class _FilterSearchSheetState extends State<_FilterSearchSheet> {
                   hintText: 'common.search'.tr(),
                   prefixIcon: const Icon(LucideIcons.search, size: 18),
                   isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   filled: true,
-                  fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                  fillColor: colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.3,
+                  ),
                 ),
                 onChanged: (q) => setState(() => _query = q),
               ),
@@ -1338,16 +1443,22 @@ class _FilterSearchSheetState extends State<_FilterSearchSheet> {
             const SizedBox(height: 8),
             // "All" option
             ListTile(
-              leading: Icon(LucideIcons.layers, color: !widget.isActive ? colorScheme.primary : null),
+              leading: Icon(
+                LucideIcons.layers,
+                color: !widget.isActive ? colorScheme.primary : null,
+              ),
               title: Text(
                 'reports.all'.tr(),
                 style: TextStyle(
-                  fontWeight: !widget.isActive ? FontWeight.bold : FontWeight.normal,
+                  fontWeight: !widget.isActive
+                      ? FontWeight.bold
+                      : FontWeight.normal,
                   color: !widget.isActive ? colorScheme.primary : null,
                 ),
               ),
               dense: true,
-              onTap: () => Navigator.pop(context, const FilterOption(id: -1, name: '')),
+              onTap: () =>
+                  Navigator.pop(context, const FilterOption(id: -1, name: '')),
             ),
             const Divider(height: 1),
             // Options list
@@ -1356,7 +1467,9 @@ class _FilterSearchSheetState extends State<_FilterSearchSheet> {
                   ? Center(
                       child: Text(
                         'common.no_results'.tr(),
-                        style: theme.textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     )
                   : ListView.builder(

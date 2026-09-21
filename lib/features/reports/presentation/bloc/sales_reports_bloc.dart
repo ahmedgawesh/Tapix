@@ -1,7 +1,10 @@
+import '../../../../core/services/business/warehouse_read_scope.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+import '../../../../core/services/business/warehouse_document_scope.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -279,11 +282,15 @@ class SalesReportsData {
 class SalesReportsBloc
     extends RealtimeBloc<SalesReportsData, SalesReportsEvent> {
   final AppDatabase _db;
+  final WarehouseReadScope? warehouseScope;
   ReportDateRange _dateRange;
 
-  SalesReportsBloc(this._db, {String defaultDateRange = 'month'})
-    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-      super(const RealtimeLoading());
+  SalesReportsBloc(
+    this._db, {
+    String defaultDateRange = 'month',
+    this.warehouseScope,
+  }) : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+       super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -294,10 +301,17 @@ class SalesReportsBloc
     return _db
         .customSelect(
           'SELECT 1',
-          readsFrom: {_db.sales, _db.saleReturns, _db.saleReturnAdjustments},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.sales,
+            _db.saleReturns,
+            _db.saleReturnAdjustments,
+          },
         )
         .watch()
-        .asyncMap((_) => _loadAll());
+        .asyncMap(
+          (_) => WarehouseReadScope.snapshot(_db, warehouseScope, _loadAll),
+        );
   }
 
   @override
@@ -398,16 +412,16 @@ class SalesReportsBloc
         .customSelect(
           '''
       SELECT
-        (SELECT COALESCE(SUM(sr.total_cents), 0) FROM sale_returns sr
+        (SELECT COALESCE(SUM(sr.total_cents), 0) FROM ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr
            WHERE sr.status = 'posted'
              AND sr.return_date >= ? AND sr.return_date <= ?)
-        + (SELECT COALESCE(SUM(sra.total_cents), 0) FROM sale_return_adjustments sra
+        + (SELECT COALESCE(SUM(sra.total_cents), 0) FROM ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra
            WHERE sra.status = 'posted'
              AND sra.return_date >= ? AND sra.return_date <= ?) AS total_cents,
-        (SELECT COUNT(*) FROM sale_returns sr
+        (SELECT COUNT(*) FROM ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr
            WHERE sr.status = 'posted'
              AND sr.return_date >= ? AND sr.return_date <= ?)
-        + (SELECT COUNT(*) FROM sale_return_adjustments sra
+        + (SELECT COUNT(*) FROM ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra
            WHERE sra.status = 'posted'
              AND sra.return_date >= ? AND sra.return_date <= ?) AS return_count
       ''',
@@ -421,7 +435,11 @@ class SalesReportsBloc
             Variable.withString(startIso),
             Variable.withString(endIso),
           ],
-          readsFrom: {_db.saleReturns, _db.saleReturnAdjustments},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.saleReturns,
+            _db.saleReturnAdjustments,
+          },
         )
         .get();
 
@@ -467,7 +485,7 @@ class SalesReportsBloc
         ) AS cheque_statuses,
         s.status,
         s.sale_date
-      FROM sales s
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s
       LEFT JOIN customers c ON c.id = s.customer_id
       LEFT JOIN cashier_shifts cs ON cs.id = s.cashier_shift_id
       LEFT JOIN users u ON u.id = cs.cashier_user_id
@@ -481,6 +499,7 @@ class SalesReportsBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.sales,
             _db.customers,
             _db.cashierShifts,
@@ -528,7 +547,7 @@ class SalesReportsBloc
         COALESCE(SUM(si.tax_cents), 0) AS total_tax_cents,
         COUNT(DISTINCT s.id) AS invoice_count
       FROM sale_items si
-      INNER JOIN sales s ON s.id = si.sale_id
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s ON s.id = si.sale_id
       INNER JOIN products p ON p.id = si.product_id
       LEFT JOIN product_categories pc ON pc.id = p.category_id
       WHERE s.status != 'voided'
@@ -542,6 +561,7 @@ class SalesReportsBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.sales,
             _db.saleItems,
             _db.products,
@@ -581,7 +601,7 @@ class SalesReportsBloc
         COUNT(DISTINCT p.id) AS product_count,
         COUNT(DISTINCT s.id) AS invoice_count
       FROM sale_items si
-      INNER JOIN sales s ON s.id = si.sale_id
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s ON s.id = si.sale_id
       INNER JOIN products p ON p.id = si.product_id
       LEFT JOIN product_categories pc ON pc.id = p.category_id
       WHERE s.status != 'voided'
@@ -595,6 +615,7 @@ class SalesReportsBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.sales,
             _db.saleItems,
             _db.products,
@@ -633,7 +654,7 @@ class SalesReportsBloc
         COUNT(s.id) AS invoice_count,
         COALESCE(SUM(item_totals.total_qty), 0) AS total_quantity,
         MAX(s.sale_date) AS last_sale_date
-      FROM sales s
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s
       INNER JOIN customers c ON c.id = s.customer_id
       LEFT JOIN (
         SELECT si.sale_id, SUM(si.quantity) AS total_qty
@@ -651,7 +672,12 @@ class SalesReportsBloc
             Variable.withString(startIso),
             Variable.withString(endIso),
           ],
-          readsFrom: {_db.sales, _db.saleItems, _db.customers},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.sales,
+            _db.saleItems,
+            _db.customers,
+          },
         )
         .get();
 
@@ -687,7 +713,7 @@ class SalesReportsBloc
         s.status,
         s.sale_date,
         s.notes
-      FROM sales s
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s
       LEFT JOIN customers c ON c.id = s.customer_id
       WHERE s.status = 'voided'
         AND s.sale_date >= ?
@@ -698,7 +724,11 @@ class SalesReportsBloc
             Variable.withString(startIso),
             Variable.withString(endIso),
           ],
-          readsFrom: {_db.sales, _db.customers},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.sales,
+            _db.customers,
+          },
         )
         .get();
 
@@ -730,7 +760,7 @@ class SalesReportsBloc
         p.sales_tax_rate_bps AS tax_rate_bps,
         COALESCE(SUM(si.quantity), 0) AS total_quantity
       FROM sale_items si
-      INNER JOIN sales s ON s.id = si.sale_id
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s ON s.id = si.sale_id
       INNER JOIN products p ON p.id = si.product_id
       WHERE s.status != 'voided'
         AND si.tax_cents > 0
@@ -743,7 +773,12 @@ class SalesReportsBloc
             Variable.withString(startIso),
             Variable.withString(endIso),
           ],
-          readsFrom: {_db.sales, _db.saleItems, _db.products},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.sales,
+            _db.saleItems,
+            _db.products,
+          },
         )
         .get();
 
@@ -772,7 +807,7 @@ class SalesReportsBloc
         COALESCE(SUM(s.total_cents), 0) AS total_sales_cents,
         COALESCE(SUM(s.tax_cents), 0) AS total_tax_cents,
         COUNT(s.id) AS invoice_count
-      FROM sales s
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s
       INNER JOIN customers c ON c.id = s.customer_id
       WHERE s.status != 'voided'
         AND s.tax_cents > 0
@@ -786,7 +821,11 @@ class SalesReportsBloc
             Variable.withString(startIso),
             Variable.withString(endIso),
           ],
-          readsFrom: {_db.sales, _db.customers},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.sales,
+            _db.customers,
+          },
         )
         .get();
 

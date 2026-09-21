@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import '../../database/app_database.dart';
 import '../logging_service.dart';
+import '../business/warehouse_operation_scope.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // PRODUCT COST SERVICE
@@ -39,6 +40,12 @@ import '../logging_service.dart';
 ///   * [syncProductFromVariants] — recomputes the parent `products` row
 ///     as a TRUE weighted average (`SUM(cost × qty) / SUM(qty)`) across
 ///     all active variants, matching the QuickBooks / Xero convention.
+///
+/// An explicit [WarehouseOperationScope] routes cost writes to that warehouse.
+/// Omission preserves primary-warehouse behavior. Global product/variant mirrors,
+/// including previous cost, belong to the primary warehouse only. Callers must
+/// read pre-movement quantity/cost from the same scope and wrap quantity, cost,
+/// batches and accounting in their posting transaction.
 ///
 /// Style follows `StockService` and `BalanceService`:
 ///   * Static-only, private constructor.
@@ -97,6 +104,7 @@ class ProductCostService {
     required int addedQty,
     required int newPaidCostCents,
     required String costingMethod,
+    WarehouseOperationScope? scope,
   }) async {
     assert(variantId > 0, 'variantId must be positive');
     assert(addedQty > 0, 'addedQty must be positive');
@@ -119,16 +127,12 @@ class ProductCostService {
       tag: _tag,
     );
 
-    final now = DateTime.now().toIso8601String();
-    await dao.customUpdate(
-      'UPDATE product_variants SET cost_cents = ?, updated_at = ? WHERE id = ?',
-      variables: [
-        Variable.withInt(resolvedCost),
-        Variable.withString(now),
-        Variable.withInt(variantId),
-      ],
-      updates: {dao.attachedDatabase.productVariants},
-      updateKind: UpdateKind.update,
+    await _writeVariantCost(
+      dao,
+      variantId: variantId,
+      newCostCents: resolvedCost,
+      rememberPrevious: false,
+      scope: scope,
     );
 
     return resolvedCost;
@@ -149,6 +153,7 @@ class ProductCostService {
     required int addedQty,
     required int newPaidCostCents,
     required String costingMethod,
+    WarehouseOperationScope? scope,
   }) async {
     assert(productId > 0, 'productId must be positive');
     assert(addedQty > 0, 'addedQty must be positive');
@@ -171,17 +176,32 @@ class ProductCostService {
       tag: _tag,
     );
 
-    final now = DateTime.now().toIso8601String();
-    await dao.customUpdate(
-      'UPDATE products SET cost_cents = ?, updated_at = ? WHERE id = ?',
-      variables: [
-        Variable.withInt(resolvedCost),
-        Variable.withString(now),
-        Variable.withInt(productId),
-      ],
-      updates: {dao.attachedDatabase.products},
-      updateKind: UpdateKind.update,
-    );
+    await dao.attachedDatabase.transaction(() async {
+      final operationScope =
+          scope ?? await WarehouseOperationScope.resolve(dao.attachedDatabase);
+      await operationScope.validate(dao.attachedDatabase);
+      if (!operationScope.isPrimary) {
+        await _writeVariantCost(
+          dao,
+          variantId: await _requireSimpleVariant(dao, productId),
+          newCostCents: resolvedCost,
+          rememberPrevious: false,
+          scope: operationScope,
+        );
+        return;
+      }
+      final now = DateTime.now().toIso8601String();
+      await dao.customUpdate(
+        'UPDATE products SET cost_cents = ?, updated_at = ? WHERE id = ?',
+        variables: [
+          Variable.withInt(resolvedCost),
+          Variable.withString(now),
+          Variable.withInt(productId),
+        ],
+        updates: {dao.attachedDatabase.products},
+        updateKind: UpdateKind.update,
+      );
+    });
 
     return resolvedCost;
   }
@@ -201,6 +221,7 @@ class ProductCostService {
     required int removedQty,
     required int removedUnitCostCents,
     required String costingMethod,
+    WarehouseOperationScope? scope,
   }) async {
     assert(variantId > 0, 'variantId must be positive');
     assert(removedQty > 0, 'removedQty must be positive');
@@ -223,7 +244,12 @@ class ProductCostService {
       tag: _tag,
     );
 
-    await setVariantCost(dao, variantId: variantId, newCostCents: resolvedCost);
+    await setVariantCost(
+      dao,
+      variantId: variantId,
+      newCostCents: resolvedCost,
+      scope: scope,
+    );
     return resolvedCost;
   }
 
@@ -242,6 +268,7 @@ class ProductCostService {
     DatabaseAccessor<AppDatabase> dao, {
     required int variantId,
     required int newCostCents,
+    WarehouseOperationScope? scope,
   }) async {
     assert(variantId > 0, 'variantId must be positive');
     assert(newCostCents >= 0, 'newCostCents must be non-negative');
@@ -251,18 +278,78 @@ class ProductCostService {
       tag: _tag,
     );
 
-    final now = DateTime.now().toIso8601String();
-    await dao.customUpdate(
-      'UPDATE product_variants SET previous_cost_cents = cost_cents, '
-      'cost_cents = ?, updated_at = ? WHERE id = ?',
-      variables: [
-        Variable.withInt(newCostCents),
-        Variable.withString(now),
-        Variable.withInt(variantId),
-      ],
-      updates: {dao.attachedDatabase.productVariants},
-      updateKind: UpdateKind.update,
+    await _writeVariantCost(
+      dao,
+      variantId: variantId,
+      newCostCents: newCostCents,
+      rememberPrevious: true,
+      scope: scope,
     );
+  }
+
+  /// Warehouse cost and its legacy projection change in one transaction.
+  /// Capture previous cost from the authoritative balance before its trigger
+  /// updates the compatibility row. Purchase blending preserves its historical
+  /// contract of leaving previous_cost_cents unchanged.
+  static Future<void> _writeVariantCost(
+    DatabaseAccessor<AppDatabase> dao, {
+    required int variantId,
+    required int newCostCents,
+    required bool rememberPrevious,
+    WarehouseOperationScope? scope,
+  }) async {
+    if (variantId <= 0 || newCostCents < 0) {
+      throw ArgumentError(
+        'Cost requires a positive variant and non-negative cents.',
+      );
+    }
+    final db = dao.attachedDatabase;
+    await db.transaction(() async {
+      final operationScope = scope ?? await WarehouseOperationScope.resolve(db);
+      await operationScope.validate(db);
+      final balance = await dao
+          .customSelect(
+            'SELECT unit_cost_cents FROM business_warehouse_stocks '
+            'WHERE warehouse_id = ? AND variant_id = ?',
+            variables: [
+              Variable.withString(operationScope.warehouseId),
+              Variable.withInt(variantId),
+            ],
+          )
+          .getSingleOrNull();
+      if (balance == null) {
+        throw StateError('Missing warehouse cost balance.');
+      }
+      final now = DateTime.now().toIso8601String();
+      if (operationScope.isPrimary) {
+        await dao.customUpdate(
+          'UPDATE product_variants SET '
+          '${rememberPrevious ? 'previous_cost_cents = ?, ' : ''}'
+          'updated_at = ? WHERE id = ?',
+          variables: [
+            if (rememberPrevious)
+              Variable.withInt(balance.read<int>('unit_cost_cents')),
+            Variable.withString(now),
+            Variable.withInt(variantId),
+          ],
+          updates: {db.productVariants},
+          updateKind: UpdateKind.update,
+        );
+      }
+      final changed = await dao.customUpdate(
+        'UPDATE business_warehouse_stocks SET unit_cost_cents = ?, updated_at = ? '
+        'WHERE warehouse_id = ? AND variant_id = ?',
+        variables: [
+          Variable.withInt(newCostCents),
+          Variable.withString(now),
+          Variable.withString(operationScope.warehouseId),
+          Variable.withInt(variantId),
+        ],
+        updates: {db.businessWarehouseStocks, db.productVariants},
+        updateKind: UpdateKind.update,
+      );
+      if (changed != 1) throw StateError('Warehouse cost update failed.');
+    });
   }
 
   /// Overwrite `products.cost_cents` with an absolute value. Mirrors the
@@ -273,6 +360,7 @@ class ProductCostService {
     required int productId,
     required int newCostCents,
     bool mirrorToDefaultVariant = true,
+    WarehouseOperationScope? scope,
   }) async {
     assert(productId > 0, 'productId must be positive');
     assert(newCostCents >= 0, 'newCostCents must be non-negative');
@@ -283,42 +371,64 @@ class ProductCostService {
       tag: _tag,
     );
 
-    final now = DateTime.now().toIso8601String();
-    await dao.customUpdate(
-      'UPDATE products SET previous_cost_cents = cost_cents, '
-      'cost_cents = ?, updated_at = ? WHERE id = ?',
-      variables: [
-        Variable.withInt(newCostCents),
-        Variable.withString(now),
-        Variable.withInt(productId),
-      ],
-      updates: {dao.attachedDatabase.products},
-      updateKind: UpdateKind.update,
-    );
-
-    if (mirrorToDefaultVariant) {
+    await dao.attachedDatabase.transaction(() async {
+      final operationScope =
+          scope ?? await WarehouseOperationScope.resolve(dao.attachedDatabase);
+      await operationScope.validate(dao.attachedDatabase);
+      if (!operationScope.isPrimary) {
+        if (!mirrorToDefaultVariant) {
+          throw StateError(
+            'A secondary warehouse has no product cost projection.',
+          );
+        }
+        await setVariantCost(
+          dao,
+          variantId: await _requireSimpleVariant(dao, productId),
+          newCostCents: newCostCents,
+          scope: operationScope,
+        );
+        return;
+      }
+      final now = DateTime.now().toIso8601String();
       await dao.customUpdate(
-        'UPDATE product_variants SET previous_cost_cents = cost_cents, '
-        'cost_cents = ?, updated_at = ? '
-        'WHERE id = (SELECT v.id FROM product_variants v '
-        'JOIN products p ON p.id = v.product_id '
-        'WHERE v.product_id = ? AND v.is_active = 1 '
-        'AND p.has_variants = 0 ORDER BY v.id LIMIT 1)',
+        'UPDATE products SET previous_cost_cents = cost_cents, '
+        'cost_cents = ?, updated_at = ? WHERE id = ?',
         variables: [
           Variable.withInt(newCostCents),
           Variable.withString(now),
           Variable.withInt(productId),
         ],
-        updates: {dao.attachedDatabase.productVariants},
+        updates: {dao.attachedDatabase.products},
         updateKind: UpdateKind.update,
       );
-    }
+      if (mirrorToDefaultVariant) {
+        final rows = await dao
+            .customSelect(
+              'SELECT v.id FROM product_variants v JOIN products p ON p.id = v.product_id '
+              'WHERE v.product_id = ? AND v.is_active = 1 AND p.has_variants = 0 ORDER BY v.id LIMIT 2',
+              variables: [Variable.withInt(productId)],
+            )
+            .get();
+        if (rows.length > 1) {
+          throw StateError('Ambiguous simple-product operational row.');
+        }
+        if (rows.isNotEmpty) {
+          await setVariantCost(
+            dao,
+            variantId: rows.single.read<int>('id'),
+            newCostCents: newCostCents,
+            scope: operationScope,
+          );
+        }
+      }
+    });
   }
 
   // ────────────────────────────────────────────────────────────────────────
   // PARENT AGGREGATION
   // ────────────────────────────────────────────────────────────────────────
 
+  /// Recompute the parent from primary-warehouse quantity/cost and variant prices.
   /// Recompute `products.cost_cents` / `stock_quantity` / `price_cents` /
   /// `wholesale_price_cents` as a TRUE weighted average across active
   /// variants:
@@ -346,107 +456,142 @@ class ProductCostService {
     bool syncStock = true,
     bool syncCost = true,
     bool syncPrice = true,
+    WarehouseOperationScope? scope,
   }) async {
     assert(productId > 0, 'productId must be positive');
     if (!syncStock && !syncCost && !syncPrice) return;
 
-    // Weighted average via SQL keeps the aggregation atomic and avoids
-    // pulling every variant into Dart memory. `NULLIF` guards against the
-    // zero-denominator case — we fall back to the simple average further
-    // down when weighted_cost is NULL.
-    final row = await dao
+    await dao.attachedDatabase.transaction(() async {
+      final operationScope =
+          scope ?? await WarehouseOperationScope.resolve(dao.attachedDatabase);
+      await operationScope.validate(dao.attachedDatabase);
+      if (!operationScope.isPrimary) return;
+      // Weighted average via SQL keeps the aggregation atomic and avoids
+      // pulling every variant into Dart memory. `NULLIF` guards against the
+      // zero-denominator case — we fall back to the simple average further
+      // down when weighted_cost is NULL.
+      final row = await dao
+          .customSelect(
+            '''
+        SELECT
+          COALESCE(SUM(ws.quantity), 0) AS total_stock,
+          CAST(ROUND(
+            CAST(SUM(ws.unit_cost_cents * ws.quantity) AS REAL)
+            / NULLIF(SUM(ws.quantity), 0)
+          ) AS INTEGER) AS weighted_cost,
+          CAST(ROUND(AVG(ws.unit_cost_cents)) AS INTEGER) AS avg_cost,
+          COALESCE(MAX(price_cents), 0) AS max_price,
+          MAX(wholesale_price_cents) AS max_wholesale,
+          MAX(last_purchase_price_cents) AS max_last_purchase,
+          COUNT(v.id) AS variant_count,
+          COUNT(ws.variant_id) AS balance_count
+        FROM product_variants v
+        LEFT JOIN business_warehouse_stocks ws ON ws.variant_id = v.id AND ws.warehouse_id = ?
+        WHERE v.product_id = ? AND v.is_active = 1
+        ''',
+            variables: [
+              Variable.withString(operationScope.warehouseId),
+              Variable.withInt(productId),
+            ],
+          )
+          .getSingleOrNull();
+
+      if (row == null) return;
+
+      final variantCount = row.read<int>('variant_count');
+      if (variantCount != row.read<int>('balance_count')) {
+        throw StateError(
+          'Missing warehouse balance during product aggregation.',
+        );
+      }
+      if (variantCount == 0) return;
+
+      final totalStock = row.read<int>('total_stock');
+      final weightedCost = row.readNullable<int>('weighted_cost');
+      final avgCost = row.read<int>('avg_cost');
+      final maxPrice = row.read<int>('max_price');
+      final maxWholesale = row.readNullable<int>('max_wholesale');
+      // Supplier reference price aggregation — mirrors the existing
+      // `MAX(price_cents)` convention. NULL when every variant is still on
+      // the legacy schema (no purchase posted after migration 10055); in
+      // that case we leave the parent column untouched so the
+      // `lastPurchasePriceCents ?? costCents` fallback at read sites keeps
+      // working.
+      final maxLastPurchase = row.readNullable<int>('max_last_purchase');
+
+      // Fall back to simple average when every variant is out of stock
+      // (weighted_cost is NULL because SUM(stock_quantity) == 0).
+      final resolvedCost = weightedCost ?? avgCost;
+
+      LoggingService.debug(
+        'syncProductFromVariants: product=$productId '
+        'variants=$variantCount totalStock=$totalStock '
+        'weightedCost=$weightedCost avgCost=$avgCost '
+        'resolvedCost=$resolvedCost',
+        tag: _tag,
+      );
+
+      // Build the SET clause dynamically so callers can opt out of individual
+      // column syncs. The common case (all three) still compiles to a single
+      // UPDATE statement.
+      final setClauses = <String>[];
+      final variables = <Variable>[];
+      if (syncStock) {
+        setClauses.add('stock_quantity = ?');
+        variables.add(Variable.withInt(totalStock));
+      }
+      if (syncCost) {
+        setClauses.add('cost_cents = ?');
+        variables.add(Variable.withInt(resolvedCost));
+        // Propagate the supplier reference price from variants to parent so
+        // the product detail screen reads from a single, kept-fresh column.
+        // Skipped when every variant predates migration 10055 (NULL); the
+        // UI fallback (`lastPurchasePriceCents ?? costCents`) covers that.
+        if (maxLastPurchase != null) {
+          setClauses.add('last_purchase_price_cents = ?');
+          variables.add(Variable.withInt(maxLastPurchase));
+        }
+      }
+      if (syncPrice) {
+        setClauses.add('price_cents = ?');
+        variables.add(Variable.withInt(maxPrice));
+        if (maxWholesale != null) {
+          setClauses.add('wholesale_price_cents = ?');
+          variables.add(Variable.withInt(maxWholesale));
+        }
+      }
+      if (setClauses.isEmpty) return;
+
+      final nowIso = DateTime.now().toIso8601String();
+      setClauses.add('updated_at = ?');
+      variables.add(Variable.withString(nowIso));
+      variables.add(Variable.withInt(productId));
+
+      await dao.customUpdate(
+        'UPDATE products SET ${setClauses.join(', ')} WHERE id = ?',
+        variables: variables,
+        updates: {dao.attachedDatabase.products},
+        updateKind: UpdateKind.update,
+      );
+    });
+  }
+
+  /// A selected warehouse cannot fall back to a global product cost cell.
+  static Future<int> _requireSimpleVariant(
+    DatabaseAccessor<AppDatabase> dao,
+    int productId,
+  ) async {
+    final rows = await dao
         .customSelect(
-          '''
-      SELECT
-        COALESCE(SUM(stock_quantity), 0) AS total_stock,
-        CAST(ROUND(
-          CAST(SUM(cost_cents * stock_quantity) AS REAL)
-          / NULLIF(SUM(stock_quantity), 0)
-        ) AS INTEGER) AS weighted_cost,
-        CAST(ROUND(AVG(cost_cents)) AS INTEGER) AS avg_cost,
-        COALESCE(MAX(price_cents), 0) AS max_price,
-        MAX(wholesale_price_cents) AS max_wholesale,
-        MAX(last_purchase_price_cents) AS max_last_purchase,
-        COUNT(*) AS variant_count
-      FROM product_variants
-      WHERE product_id = ? AND is_active = 1
-      ''',
+          'SELECT v.id FROM product_variants v JOIN products p ON p.id = v.product_id '
+          'WHERE p.id = ? AND p.has_variants = 0 AND v.is_active = 1 LIMIT 2',
           variables: [Variable.withInt(productId)],
         )
-        .getSingleOrNull();
-
-    if (row == null) return;
-
-    final variantCount = row.read<int>('variant_count');
-    if (variantCount == 0) return;
-
-    final totalStock = row.read<int>('total_stock');
-    final weightedCost = row.readNullable<int>('weighted_cost');
-    final avgCost = row.read<int>('avg_cost');
-    final maxPrice = row.read<int>('max_price');
-    final maxWholesale = row.readNullable<int>('max_wholesale');
-    // Supplier reference price aggregation — mirrors the existing
-    // `MAX(price_cents)` convention. NULL when every variant is still on
-    // the legacy schema (no purchase posted after migration 10055); in
-    // that case we leave the parent column untouched so the
-    // `lastPurchasePriceCents ?? costCents` fallback at read sites keeps
-    // working.
-    final maxLastPurchase = row.readNullable<int>('max_last_purchase');
-
-    // Fall back to simple average when every variant is out of stock
-    // (weighted_cost is NULL because SUM(stock_quantity) == 0).
-    final resolvedCost = weightedCost ?? avgCost;
-
-    LoggingService.debug(
-      'syncProductFromVariants: product=$productId '
-      'variants=$variantCount totalStock=$totalStock '
-      'weightedCost=$weightedCost avgCost=$avgCost '
-      'resolvedCost=$resolvedCost',
-      tag: _tag,
-    );
-
-    // Build the SET clause dynamically so callers can opt out of individual
-    // column syncs. The common case (all three) still compiles to a single
-    // UPDATE statement.
-    final setClauses = <String>[];
-    final variables = <Variable>[];
-    if (syncStock) {
-      setClauses.add('stock_quantity = ?');
-      variables.add(Variable.withInt(totalStock));
+        .get();
+    if (rows.length != 1) {
+      throw StateError('Expected exactly one active simple-product variant.');
     }
-    if (syncCost) {
-      setClauses.add('cost_cents = ?');
-      variables.add(Variable.withInt(resolvedCost));
-      // Propagate the supplier reference price from variants to parent so
-      // the product detail screen reads from a single, kept-fresh column.
-      // Skipped when every variant predates migration 10055 (NULL); the
-      // UI fallback (`lastPurchasePriceCents ?? costCents`) covers that.
-      if (maxLastPurchase != null) {
-        setClauses.add('last_purchase_price_cents = ?');
-        variables.add(Variable.withInt(maxLastPurchase));
-      }
-    }
-    if (syncPrice) {
-      setClauses.add('price_cents = ?');
-      variables.add(Variable.withInt(maxPrice));
-      if (maxWholesale != null) {
-        setClauses.add('wholesale_price_cents = ?');
-        variables.add(Variable.withInt(maxWholesale));
-      }
-    }
-    if (setClauses.isEmpty) return;
-
-    final nowIso = DateTime.now().toIso8601String();
-    setClauses.add('updated_at = ?');
-    variables.add(Variable.withString(nowIso));
-    variables.add(Variable.withInt(productId));
-
-    await dao.customUpdate(
-      'UPDATE products SET ${setClauses.join(', ')} WHERE id = ?',
-      variables: variables,
-      updates: {dao.attachedDatabase.products},
-      updateKind: UpdateKind.update,
-    );
+    return rows.single.read<int>('id');
   }
 
   // ────────────────────────────────────────────────────────────────────────

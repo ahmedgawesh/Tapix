@@ -12,6 +12,9 @@ import '../models/product_color_model.dart';
 import '../models/size_model.dart';
 
 abstract class VariantLocalDatasource {
+  /// Runs related catalog and inventory writes in the same database transaction.
+  Future<T> runInTransaction<T>(Future<T> Function() action);
+
   // Variants
   Stream<List<ProductVariantModel>> watchAllVariants();
   Stream<List<ProductVariantModel>> watchVariantsByProduct(int productId);
@@ -84,6 +87,11 @@ class VariantLocalDatasourceImpl implements VariantLocalDatasource {
   final SizeDao _sizeDao;
 
   VariantLocalDatasourceImpl(this._variantDao, this._colorDao, this._sizeDao);
+
+  @override
+  Future<T> runInTransaction<T>(Future<T> Function() action) {
+    return _variantDao.runInTransaction(action);
+  }
 
   // Variants
   @override

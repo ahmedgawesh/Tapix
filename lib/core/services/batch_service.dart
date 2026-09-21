@@ -3,6 +3,8 @@ import 'package:drift/drift.dart';
 import '../database/app_database.dart';
 import '../measurement/measurement.dart';
 import 'logging_service.dart';
+import 'business/warehouse_batch_scope.dart';
+import 'business/warehouse_operation_scope.dart';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // BATCH SERVICE
@@ -43,8 +45,8 @@ class BatchConsumptionResult {
 ///   1. `batch.unit_cost_cents` is FROZEN — only inventory revaluation may
 ///      rewrite it (and that path lives in InventoryAdjustmentDao).
 ///   2. `batch.remaining_quantity` is mutated *only* through this service.
-///   3. Σ(remaining where product_id=P, variant_id=V, is_active=1)
-///      == product_variants.stock_quantity (asserted by [assertInvariant]).
+///   3. Σ(active remaining for product/variant in the selected warehouse)
+///      == business_warehouse_stocks.quantity (see [assertInvariant]).
 ///   4. Reversals (`restoreConsumptions`) write a mirrored 'in' direction
 ///      row carrying the *original* `unit_cost_cents`, never the current
 ///      product cost — preserves COGS truth across revaluations.
@@ -71,8 +73,10 @@ class BatchService {
     required int unitCostCents,
     DateTime? receivedDate,
     DateTime? expiryDate,
+    String? manufacturerLotNumber,
+    WarehouseOperationScope? scope,
   }) async {
-    assert(quantity > 0, 'Batch quantity must be positive');
+    if (quantity <= 0) throw ArgumentError.value(quantity, 'quantity');
     final resolvedVariantId = await _resolveVariantId(
       dao,
       productId: productId,
@@ -89,10 +93,109 @@ class BatchService {
       source: 'purchase',
       receivedDate: receivedDate ?? DateTime.now(),
       expiryDate: expiryDate,
+      manufacturerLotNumber: manufacturerLotNumber,
       receivedQuantity: quantity,
       unitCostCents: unitCostCents,
+      scope: scope,
     );
   }
+
+  /// Move only the still-owned quantity into a new valuation layer. The old
+  /// layer keeps its original cost for historical sale returns and reversals.
+  static Future<int> revalueRemainingBatch(
+    DatabaseAccessor<AppDatabase> dao, {
+    required WarehouseOperationScope scope,
+    required ProductBatch batch,
+    required int newUnitCostCents,
+    required int adjustmentId,
+    required String adjustmentNumber,
+    required int quantityScale,
+  }) => dao.attachedDatabase.transaction(() async {
+    await WarehouseBatchScope.requireBatch(
+      dao.attachedDatabase,
+      batch.id,
+      scope: scope,
+    );
+    final current = await (dao.attachedDatabase.select(
+      dao.attachedDatabase.productBatches,
+    )..where((b) => b.id.equals(batch.id))).getSingle();
+    if (!current.isActive ||
+        current.remainingQuantity <= 0 ||
+        current.remainingQuantity != batch.remainingQuantity ||
+        current.unitCostCents != batch.unitCostCents) {
+      throw StateError('FIFO layer changed during revaluation');
+    }
+    final adjustment = await (dao.attachedDatabase.select(
+      dao.attachedDatabase.inventoryAdjustments,
+    )..where((a) => a.id.equals(adjustmentId))).getSingle();
+    if (adjustment.adjustmentType != 'revaluation' ||
+        adjustment.costingMethod != 'fifo' ||
+        adjustment.warehouseId != scope.warehouseId ||
+        adjustment.productId != current.productId ||
+        (adjustment.variantId != null &&
+            adjustment.variantId != current.variantId) ||
+        adjustment.unitCostCents.toBigInt().toInt() != newUnitCostCents ||
+        adjustment.journalEntryId != null ||
+        newUnitCostCents < 0) {
+      throw StateError(
+        'FIFO layer must belong to its pending revaluation adjustment',
+      );
+    }
+    final oldCost = current.unitCostCents.toBigInt().toInt();
+    final consumed = await consumeFifo(
+      dao,
+      scope: scope,
+      productId: current.productId,
+      variantId: current.variantId,
+      quantity: current.remainingQuantity,
+      requiredBatchId: current.id,
+      consumptionType: 'inventory_revaluation',
+      inventoryAdjustmentId: adjustmentId,
+      notes: 'Revaluation $adjustmentNumber',
+    );
+    if (consumed.length != 1 || consumed.single.batchId != current.id) {
+      throw StateError('Revaluation did not isolate its source layer');
+    }
+    final newBatch = await _insertBatch(
+      dao,
+      scope: scope,
+      productId: current.productId,
+      variantId: current.variantId!,
+      batchNumber: '$adjustmentNumber-B${current.id}',
+      purchaseItemId: current.purchaseItemId,
+      supplierId: current.supplierId,
+      source: 'revaluation',
+      receivedDate: current.receivedDate,
+      expiryDate: current.expiryDate,
+      manufacturerLotNumber: current.manufacturerLotNumber,
+      receivedQuantity: current.remainingQuantity,
+      unitCostCents: newUnitCostCents,
+    );
+    await dao.attachedDatabase
+        .into(dao.attachedDatabase.inventoryRevaluationLayers)
+        .insert(
+          InventoryRevaluationLayersCompanion.insert(
+            adjustmentId: adjustmentId,
+            oldBatchId: current.id,
+            newBatchId: newBatch,
+            quantity: current.remainingQuantity,
+            quantityScale: quantityScale,
+            oldUnitCostCents: oldCost,
+            newUnitCostCents: newUnitCostCents,
+            previousValueCents: MeasuredAmount.cents(
+              unitCents: oldCost,
+              quantity: current.remainingQuantity,
+              quantityScale: quantityScale,
+            ),
+            newValueCents: MeasuredAmount.cents(
+              unitCents: newUnitCostCents,
+              quantity: current.remainingQuantity,
+              quantityScale: quantityScale,
+            ),
+          ),
+        );
+    return newBatch;
+  });
 
   /// Create a non-purchase batch — used for:
   ///   - 'opening'     opening stock at FIFO activation
@@ -115,13 +218,14 @@ class BatchService {
     required String source,
     DateTime? receivedDate,
     DateTime? expiryDate,
+    String? manufacturerLotNumber,
     String? documentReference,
+    WarehouseOperationScope? scope,
   }) async {
-    assert(quantity > 0, 'Batch quantity must be positive');
-    assert(
-      source == 'opening' || source == 'found' || source == 'sale_return',
-      'Invalid opening batch source: $source',
-    );
+    if (quantity <= 0) throw ArgumentError.value(quantity, 'quantity');
+    if (!const {'opening', 'found', 'sale_return'}.contains(source)) {
+      throw ArgumentError.value(source, 'source');
+    }
     final resolvedVariantId = await _resolveVariantId(
       dao,
       productId: productId,
@@ -153,8 +257,10 @@ class BatchService {
       source: source,
       receivedDate: receivedDate ?? DateTime.now(),
       expiryDate: expiryDate,
+      manufacturerLotNumber: manufacturerLotNumber,
       receivedQuantity: quantity,
       unitCostCents: unitCostCents,
+      scope: scope,
     );
   }
 
@@ -189,113 +295,125 @@ class BatchService {
     int? purchaseReturnAdjustmentItemId,
     int? saleReturnAdjustmentItemId,
     String? notes,
+    WarehouseOperationScope? scope,
+    int? requiredBatchId,
   }) async {
-    assert(quantity > 0, 'Consumption quantity must be positive');
-    final resolvedVariantId = await _resolveVariantId(
-      dao,
-      productId: productId,
-      variantId: variantId,
-    );
-    final scaleRow = await dao
-        .customSelect(
-          'SELECT measurement_type FROM products WHERE id = ?',
-          variables: [Variable.withInt(productId)],
-        )
-        .getSingleOrNull();
-    final quantityScale = MeasurementType.fromDb(
-      scaleRow?.read<String?>('measurement_type'),
-    ).quantityScale;
-
-    LoggingService.debug(
-      'consumeFifo: product=$productId variant=$resolvedVariantId qty=$quantity '
-      'type=$consumptionType',
-      tag: _tag,
-    );
-
-    int remaining = quantity;
-    final results = <BatchConsumptionResult>[];
-    // Re-query each iteration so we always see the freshest remaining_quantity.
-    while (remaining > 0) {
-      final batchRow = await dao
+    if (quantity <= 0) throw ArgumentError.value(quantity, 'quantity');
+    return dao.attachedDatabase.transaction(() async {
+      final operationScope =
+          scope ?? await WarehouseOperationScope.resolve(dao.attachedDatabase);
+      await operationScope.validate(dao.attachedDatabase);
+      final resolvedVariantId = await _resolveVariantId(
+        dao,
+        productId: productId,
+        variantId: variantId,
+      );
+      final scaleRow = await dao
           .customSelect(
-            'SELECT id, remaining_quantity, unit_cost_cents '
-            '  FROM product_batches '
-            ' WHERE product_id = ? AND variant_id = ? '
-            '   AND is_active = 1 AND remaining_quantity > 0 '
-            ' ORDER BY (expiry_date IS NULL) ASC, expiry_date ASC, '
-            '          received_date ASC, id ASC '
-            ' LIMIT 1',
-            variables: [
-              Variable.withInt(productId),
-              Variable.withInt(resolvedVariantId),
-            ],
+            'SELECT measurement_type FROM products WHERE id = ?',
+            variables: [Variable.withInt(productId)],
           )
           .getSingleOrNull();
+      final quantityScale = MeasurementType.fromDb(
+        scaleRow?.read<String?>('measurement_type'),
+      ).quantityScale;
 
-      if (batchRow == null) {
-        throw BatchInsufficientStockException(
-          productId: productId,
-          variantId: resolvedVariantId,
-          requested: quantity,
-          shortfall: remaining,
+      LoggingService.debug(
+        'consumeFifo: product=$productId variant=$resolvedVariantId qty=$quantity '
+        'type=$consumptionType',
+        tag: _tag,
+      );
+
+      int remaining = quantity;
+      final results = <BatchConsumptionResult>[];
+      // Re-query each iteration so we always see the freshest remaining_quantity.
+      while (remaining > 0) {
+        final batchRow = await dao
+            .customSelect(
+              'SELECT id, remaining_quantity, unit_cost_cents '
+              '  FROM product_batches '
+              ' WHERE product_id = ? AND variant_id = ? '
+              '   AND is_active = 1 AND remaining_quantity > 0 '
+              '   AND (? IS NULL OR id = ?) '
+              '   AND ${WarehouseBatchScope.operationPredicate('product_batches')} '
+              ' ORDER BY (expiry_date IS NULL) ASC, expiry_date ASC, '
+              '          received_date ASC, id ASC '
+              ' LIMIT 1',
+              variables: [
+                Variable.withInt(productId),
+                Variable.withInt(resolvedVariantId),
+                Variable<int>(requiredBatchId),
+                Variable<int>(requiredBatchId),
+                ...WarehouseBatchScope.operationVariables(operationScope),
+              ],
+            )
+            .getSingleOrNull();
+
+        if (batchRow == null) {
+          throw BatchInsufficientStockException(
+            productId: productId,
+            variantId: resolvedVariantId,
+            requested: quantity,
+            shortfall: remaining,
+          );
+        }
+
+        final batchId = batchRow.read<int>('id');
+        final batchRemaining = batchRow.read<int>('remaining_quantity');
+        final unitCost = batchRow.read<int>('unit_cost_cents');
+        final take = batchRemaining < remaining ? batchRemaining : remaining;
+
+        // Optimistic lock: only succeed if the batch still holds at least [take].
+        final updated = await dao.customUpdate(
+          'UPDATE product_batches SET remaining_quantity = remaining_quantity - ?, '
+          '       updated_at = ? '
+          ' WHERE id = ? AND remaining_quantity >= ?',
+          variables: [
+            Variable.withInt(take),
+            Variable.withString(DateTime.now().toIso8601String()),
+            Variable.withInt(batchId),
+            Variable.withInt(take),
+          ],
+          updates: {dao.attachedDatabase.productBatches},
+          updateKind: UpdateKind.update,
         );
-      }
 
-      final batchId = batchRow.read<int>('id');
-      final batchRemaining = batchRow.read<int>('remaining_quantity');
-      final unitCost = batchRow.read<int>('unit_cost_cents');
-      final take = batchRemaining < remaining ? batchRemaining : remaining;
+        if (updated == 0) {
+          // Race lost — another transaction depleted this batch. Retry loop.
+          continue;
+        }
 
-      // Optimistic lock: only succeed if the batch still holds at least [take].
-      final updated = await dao.customUpdate(
-        'UPDATE product_batches SET remaining_quantity = remaining_quantity - ?, '
-        '       updated_at = ? '
-        ' WHERE id = ? AND remaining_quantity >= ?',
-        variables: [
-          Variable.withInt(take),
-          Variable.withString(DateTime.now().toIso8601String()),
-          Variable.withInt(batchId),
-          Variable.withInt(take),
-        ],
-        updates: {dao.attachedDatabase.productBatches},
-        updateKind: UpdateKind.update,
-      );
-
-      if (updated == 0) {
-        // Race lost — another transaction depleted this batch. Retry loop.
-        continue;
-      }
-
-      final consumptionId = await _insertConsumption(
-        dao,
-        batchId: batchId,
-        consumptionType: consumptionType,
-        direction: 'out',
-        quantity: take,
-        unitCostCents: unitCost,
-        saleItemId: saleItemId,
-        saleReturnItemId: saleReturnItemId,
-        purchaseReturnItemId: purchaseReturnItemId,
-        inventoryAdjustmentId: inventoryAdjustmentId,
-        purchaseReturnAdjustmentItemId: purchaseReturnAdjustmentItemId,
-        saleReturnAdjustmentItemId: saleReturnAdjustmentItemId,
-        notes: notes,
-      );
-
-      results.add(
-        BatchConsumptionResult(
+        final consumptionId = await _insertConsumption(
+          dao,
           batchId: batchId,
-          consumptionId: consumptionId,
+          consumptionType: consumptionType,
+          direction: 'out',
           quantity: take,
           unitCostCents: unitCost,
-          quantityScale: quantityScale,
-        ),
-      );
+          saleItemId: saleItemId,
+          saleReturnItemId: saleReturnItemId,
+          purchaseReturnItemId: purchaseReturnItemId,
+          inventoryAdjustmentId: inventoryAdjustmentId,
+          purchaseReturnAdjustmentItemId: purchaseReturnAdjustmentItemId,
+          saleReturnAdjustmentItemId: saleReturnAdjustmentItemId,
+          notes: notes,
+        );
 
-      remaining -= take;
-    }
+        results.add(
+          BatchConsumptionResult(
+            batchId: batchId,
+            consumptionId: consumptionId,
+            quantity: take,
+            unitCostCents: unitCost,
+            quantityScale: quantityScale,
+          ),
+        );
 
-    return results;
+        remaining -= take;
+      }
+
+      return results;
+    });
   }
 
   // ────────────────────────────────────────────────────────────────────────
@@ -346,103 +464,131 @@ class BatchService {
     int? saleReturnAdjustmentItemId,
     int? upToQuantity,
     String? notes,
+    WarehouseOperationScope? scope,
   }) async {
-    // Only "source-of-`out`" FKs are valid WHERE filters. The
-    // reversal-context FK (`saleReturnItemId`) is stamped on the new `in`
-    // row but excluded from the filter — `out` rows never carry it.
-    final filters = <String>[];
-    final vars = <Variable>[];
-    if (saleItemId != null) {
-      filters.add('sale_item_id = ?');
-      vars.add(Variable.withInt(saleItemId));
+    if (upToQuantity != null && upToQuantity < 0) {
+      throw ArgumentError.value(upToQuantity, 'upToQuantity');
     }
-    if (purchaseReturnItemId != null) {
-      filters.add('purchase_return_item_id = ?');
-      vars.add(Variable.withInt(purchaseReturnItemId));
-    }
-    if (inventoryAdjustmentId != null) {
-      filters.add('inventory_adjustment_id = ?');
-      vars.add(Variable.withInt(inventoryAdjustmentId));
-    }
-    if (purchaseReturnAdjustmentItemId != null) {
-      filters.add('purchase_return_adjustment_item_id = ?');
-      vars.add(Variable.withInt(purchaseReturnAdjustmentItemId));
-    }
-    if (saleReturnAdjustmentItemId != null) {
-      filters.add('sale_return_adjustment_item_id = ?');
-      vars.add(Variable.withInt(saleReturnAdjustmentItemId));
-    }
-    if (filters.isEmpty) {
-      throw ArgumentError(
-        'restoreConsumptions: at least one source-of-`out` FK must be '
-        'provided (saleItemId, purchaseReturnItemId, '
-        'purchaseReturnAdjustmentItemId, inventoryAdjustmentId, or '
-        'saleReturnAdjustmentItemId). `saleReturnItemId` is a '
-        'reversal-context tag only and cannot be used in isolation.',
+    return dao.attachedDatabase.transaction(() async {
+      final operationScope =
+          scope ?? await WarehouseOperationScope.resolve(dao.attachedDatabase);
+      await operationScope.validate(dao.attachedDatabase);
+      // Only "source-of-`out`" FKs are valid WHERE filters. The
+      // reversal-context FK (`saleReturnItemId`) is stamped on the new `in`
+      // row but excluded from the filter — `out` rows never carry it.
+      final filters = <String>[];
+      final vars = <Variable>[];
+      if (saleItemId != null) {
+        filters.add('sale_item_id = ?');
+        vars.add(Variable.withInt(saleItemId));
+      }
+      if (purchaseReturnItemId != null) {
+        filters.add('purchase_return_item_id = ?');
+        vars.add(Variable.withInt(purchaseReturnItemId));
+      }
+      if (inventoryAdjustmentId != null) {
+        filters.add('inventory_adjustment_id = ?');
+        vars.add(Variable.withInt(inventoryAdjustmentId));
+      }
+      if (purchaseReturnAdjustmentItemId != null) {
+        filters.add('purchase_return_adjustment_item_id = ?');
+        vars.add(Variable.withInt(purchaseReturnAdjustmentItemId));
+      }
+      if (saleReturnAdjustmentItemId != null) {
+        filters.add('sale_return_adjustment_item_id = ?');
+        vars.add(Variable.withInt(saleReturnAdjustmentItemId));
+      }
+      if (filters.isEmpty) {
+        throw ArgumentError(
+          'restoreConsumptions: at least one source-of-`out` FK must be '
+          'provided (saleItemId, purchaseReturnItemId, '
+          'purchaseReturnAdjustmentItemId, inventoryAdjustmentId, or '
+          'saleReturnAdjustmentItemId). `saleReturnItemId` is a '
+          'reversal-context tag only and cannot be used in isolation.',
+        );
+      }
+
+      if (inventoryAdjustmentId != null) {
+        final layerMove = await dao
+            .customSelect(
+              'SELECT adjustment_id FROM inventory_revaluation_layers WHERE adjustment_id = ? LIMIT 1',
+              variables: [Variable.withInt(inventoryAdjustmentId)],
+            )
+            .getSingleOrNull();
+        if (layerMove != null) {
+          throw StateError(
+            'FIFO revaluation layers cannot be reversed as quantity adjustments',
+          );
+        }
+      }
+
+      // Fetch every 'out' row matching the source so we can mirror them.
+      final rows = await dao
+          .customSelect(
+            'SELECT id, batch_id, quantity, unit_cost_cents '
+            '  FROM batch_consumptions '
+            ' WHERE direction = ? AND ${filters.join(' AND ')} '
+            ' ORDER BY id ASC',
+            variables: [Variable.withString('out'), ...vars],
+          )
+          .get();
+
+      int restored = 0;
+      int budget = upToQuantity ?? 1 << 30;
+
+      for (final r in rows) {
+        if (budget <= 0) break;
+        final batchId = r.read<int>('batch_id');
+        await WarehouseBatchScope.requireBatch(
+          dao.attachedDatabase,
+          batchId,
+          scope: operationScope,
+        );
+        final originalQty = r.read<int>('quantity');
+        final unitCost = r.read<int>('unit_cost_cents');
+        final restoreQty = originalQty <= budget ? originalQty : budget;
+        budget -= restoreQty;
+
+        await dao.customUpdate(
+          'UPDATE product_batches '
+          '   SET remaining_quantity = remaining_quantity + ?, '
+          '       updated_at = ? '
+          ' WHERE id = ?',
+          variables: [
+            Variable.withInt(restoreQty),
+            Variable.withString(DateTime.now().toIso8601String()),
+            Variable.withInt(batchId),
+          ],
+          updates: {dao.attachedDatabase.productBatches},
+          updateKind: UpdateKind.update,
+        );
+
+        await _insertConsumption(
+          dao,
+          batchId: batchId,
+          consumptionType: reverseConsumptionType,
+          direction: 'in',
+          quantity: restoreQty,
+          unitCostCents: unitCost,
+          saleItemId: saleItemId,
+          saleReturnItemId: saleReturnItemId,
+          purchaseReturnItemId: purchaseReturnItemId,
+          inventoryAdjustmentId: inventoryAdjustmentId,
+          purchaseReturnAdjustmentItemId: purchaseReturnAdjustmentItemId,
+          saleReturnAdjustmentItemId: saleReturnAdjustmentItemId,
+          notes: notes,
+        );
+
+        restored += restoreQty;
+      }
+
+      LoggingService.debug(
+        'restoreConsumptions: type=$reverseConsumptionType restored=$restored '
+        'matched ${rows.length} rows',
+        tag: _tag,
       );
-    }
-
-    // Fetch every 'out' row matching the source so we can mirror them.
-    final rows = await dao
-        .customSelect(
-          'SELECT id, batch_id, quantity, unit_cost_cents '
-          '  FROM batch_consumptions '
-          ' WHERE direction = ? AND ${filters.join(' AND ')} '
-          ' ORDER BY id ASC',
-          variables: [Variable.withString('out'), ...vars],
-        )
-        .get();
-
-    int restored = 0;
-    int budget = upToQuantity ?? 1 << 30;
-
-    for (final r in rows) {
-      if (budget <= 0) break;
-      final batchId = r.read<int>('batch_id');
-      final originalQty = r.read<int>('quantity');
-      final unitCost = r.read<int>('unit_cost_cents');
-      final restoreQty = originalQty <= budget ? originalQty : budget;
-      budget -= restoreQty;
-
-      await dao.customUpdate(
-        'UPDATE product_batches '
-        '   SET remaining_quantity = remaining_quantity + ?, '
-        '       updated_at = ? '
-        ' WHERE id = ?',
-        variables: [
-          Variable.withInt(restoreQty),
-          Variable.withString(DateTime.now().toIso8601String()),
-          Variable.withInt(batchId),
-        ],
-        updates: {dao.attachedDatabase.productBatches},
-        updateKind: UpdateKind.update,
-      );
-
-      await _insertConsumption(
-        dao,
-        batchId: batchId,
-        consumptionType: reverseConsumptionType,
-        direction: 'in',
-        quantity: restoreQty,
-        unitCostCents: unitCost,
-        saleItemId: saleItemId,
-        saleReturnItemId: saleReturnItemId,
-        purchaseReturnItemId: purchaseReturnItemId,
-        inventoryAdjustmentId: inventoryAdjustmentId,
-        purchaseReturnAdjustmentItemId: purchaseReturnAdjustmentItemId,
-        saleReturnAdjustmentItemId: saleReturnAdjustmentItemId,
-        notes: notes,
-      );
-
-      restored += restoreQty;
-    }
-
-    LoggingService.debug(
-      'restoreConsumptions: type=$reverseConsumptionType restored=$restored '
-      'matched ${rows.length} rows',
-      tag: _tag,
-    );
-    return restored;
+      return restored;
+    });
   }
 
   // ────────────────────────────────────────────────────────────────────────
@@ -472,66 +618,74 @@ class BatchService {
     DatabaseAccessor<AppDatabase> dao, {
     required int batchId,
     required DateTime? newExpiry,
+    WarehouseOperationScope? scope,
   }) async {
-    final batchRow = await dao
-        .customSelect(
-          'SELECT id, is_active, expiry_date FROM product_batches WHERE id = ?',
-          variables: [Variable.withInt(batchId)],
-        )
-        .getSingleOrNull();
-    if (batchRow == null) {
-      throw StateError(
-        'BatchService.updateExpiryDate: batch=$batchId not found.',
+    await dao.attachedDatabase.transaction(() async {
+      await WarehouseBatchScope.requireBatch(
+        dao.attachedDatabase,
+        batchId,
+        scope: scope,
       );
-    }
-    final isActive = batchRow.read<int>('is_active') == 1;
-    if (!isActive) {
-      throw BatchExpiryLockedException(batchId: batchId, reason: 'inactive');
-    }
+      final batchRow = await dao
+          .customSelect(
+            'SELECT id, is_active, expiry_date FROM product_batches WHERE id = ?',
+            variables: [Variable.withInt(batchId)],
+          )
+          .getSingleOrNull();
+      if (batchRow == null) {
+        throw StateError(
+          'BatchService.updateExpiryDate: batch=$batchId not found.',
+        );
+      }
+      final isActive = batchRow.read<int>('is_active') == 1;
+      if (!isActive) {
+        throw BatchExpiryLockedException(batchId: batchId, reason: 'inactive');
+      }
 
-    final outCountRow = await dao
-        .customSelect(
-          'SELECT COUNT(*) AS c FROM batch_consumptions '
-          ' WHERE batch_id = ? AND direction = \'out\'',
-          variables: [Variable.withInt(batchId)],
-        )
-        .getSingle();
-    final outCount = outCountRow.read<int>('c');
-    if (outCount > 0) {
-      throw BatchExpiryLockedException(
-        batchId: batchId,
-        reason: 'has_consumptions',
-        consumptionCount: outCount,
+      final outCountRow = await dao
+          .customSelect(
+            'SELECT COUNT(*) AS c FROM batch_consumptions '
+            ' WHERE batch_id = ? AND direction = \'out\'',
+            variables: [Variable.withInt(batchId)],
+          )
+          .getSingle();
+      final outCount = outCountRow.read<int>('c');
+      if (outCount > 0) {
+        throw BatchExpiryLockedException(
+          batchId: batchId,
+          reason: 'has_consumptions',
+          consumptionCount: outCount,
+        );
+      }
+
+      await dao.customUpdate(
+        'UPDATE product_batches '
+        '   SET expiry_date = ?, updated_at = ? '
+        ' WHERE id = ?',
+        variables: [
+          newExpiry == null
+              ? const Variable<String>(null)
+              : Variable.withString(newExpiry.toIso8601String()),
+          Variable.withString(DateTime.now().toIso8601String()),
+          Variable.withInt(batchId),
+        ],
+        updates: {dao.attachedDatabase.productBatches},
+        updateKind: UpdateKind.update,
       );
-    }
 
-    await dao.customUpdate(
-      'UPDATE product_batches '
-      '   SET expiry_date = ?, updated_at = ? '
-      ' WHERE id = ?',
-      variables: [
-        newExpiry == null
-            ? const Variable<String>(null)
-            : Variable.withString(newExpiry.toIso8601String()),
-        Variable.withString(DateTime.now().toIso8601String()),
-        Variable.withInt(batchId),
-      ],
-      updates: {dao.attachedDatabase.productBatches},
-      updateKind: UpdateKind.update,
-    );
-
-    LoggingService.debug(
-      'updateExpiryDate: batch=$batchId newExpiry=$newExpiry',
-      tag: _tag,
-    );
+      LoggingService.debug(
+        'updateExpiryDate: batch=$batchId newExpiry=$newExpiry',
+        tag: _tag,
+      );
+    });
   }
 
   // ────────────────────────────────────────────────────────────────────────
   // INVARIANT GUARD
   // ────────────────────────────────────────────────────────────────────────
 
-  /// Verify Σ(remaining_quantity) for the (product, variant) pair equals
-  /// the variant's `stock_quantity`. Throws [StateError] when violated.
+  /// Verify local active batch quantity equals the selected warehouse balance
+  /// for the product/variant. Throws [StateError] when violated.
   ///
   /// Should be called at the end of any FIFO-mutating transaction so that
   /// a desync is caught immediately rather than poisoning later reports.
@@ -539,7 +693,11 @@ class BatchService {
     DatabaseAccessor<AppDatabase> dao, {
     required int productId,
     int? variantId,
+    WarehouseOperationScope? scope,
   }) async {
+    final operationScope =
+        scope ?? await WarehouseOperationScope.resolve(dao.attachedDatabase);
+    await operationScope.validate(dao.attachedDatabase);
     final resolvedVariantId = await _resolveVariantId(
       dao,
       productId: productId,
@@ -550,10 +708,12 @@ class BatchService {
         .customSelect(
           'SELECT COALESCE(SUM(remaining_quantity), 0) AS total '
           '  FROM product_batches '
-          ' WHERE product_id = ? AND variant_id = ? AND is_active = 1',
+          ' WHERE product_id = ? AND variant_id = ? AND is_active = 1 '
+          'AND ${WarehouseBatchScope.operationPredicate('product_batches')}',
           variables: [
             Variable.withInt(productId),
             Variable.withInt(resolvedVariantId),
+            ...WarehouseBatchScope.operationVariables(operationScope),
           ],
         )
         .getSingle();
@@ -561,16 +721,23 @@ class BatchService {
 
     final variantRow = await dao
         .customSelect(
-          'SELECT stock_quantity FROM product_variants WHERE id = ?',
-          variables: [Variable.withInt(resolvedVariantId)],
+          'SELECT quantity AS stock_quantity FROM business_warehouse_stocks '
+          'WHERE variant_id = ? AND warehouse_id = ?',
+          variables: [
+            Variable.withInt(resolvedVariantId),
+            Variable.withString(operationScope.warehouseId),
+          ],
         )
         .getSingleOrNull();
-    final stockQty = variantRow?.read<int>('stock_quantity') ?? 0;
+    if (variantRow == null) {
+      throw StateError('Missing warehouse balance.');
+    }
+    final stockQty = variantRow.read<int>('stock_quantity');
 
     if (batchTotal != stockQty) {
       throw StateError(
         'BatchService.assertInvariant: product=$productId variant=$resolvedVariantId '
-        'Σ(batch.remaining)=$batchTotal but product_variants.stock_quantity=$stockQty. '
+        'Σ(batch.remaining)=$batchTotal but warehouse quantity=$stockQty. '
         'Refuse to leave the transaction in a desynchronised state.',
       );
     }
@@ -580,7 +747,11 @@ class BatchService {
   static Future<void> assertInvariantForProduct(
     DatabaseAccessor<AppDatabase> dao, {
     required int productId,
+    WarehouseOperationScope? scope,
   }) async {
+    final operationScope =
+        scope ?? await WarehouseOperationScope.resolve(dao.attachedDatabase);
+    await operationScope.validate(dao.attachedDatabase);
     final variantRows = await dao
         .customSelect(
           'SELECT id FROM product_variants WHERE product_id = ? AND is_active = 1',
@@ -592,6 +763,7 @@ class BatchService {
         dao,
         productId: productId,
         variantId: r.read<int>('id'),
+        scope: operationScope,
       );
     }
   }
@@ -608,7 +780,22 @@ class BatchService {
     required int productId,
     required int? variantId,
   }) async {
-    if (variantId != null) return variantId;
+    if (productId <= 0) throw ArgumentError.value(productId, 'productId');
+    if (variantId != null) {
+      final variant = await dao
+          .customSelect(
+            'SELECT id FROM product_variants WHERE id = ? AND product_id = ?',
+            variables: [
+              Variable.withInt(variantId),
+              Variable.withInt(productId),
+            ],
+          )
+          .getSingleOrNull();
+      if (variant == null) {
+        throw StateError('Variant does not belong to product.');
+      }
+      return variantId;
+    }
     final row = await dao
         .customSelect(
           'SELECT id FROM product_variants '
@@ -650,46 +837,84 @@ class BatchService {
     required String source,
     required DateTime receivedDate,
     required DateTime? expiryDate,
+    required String? manufacturerLotNumber,
     required int receivedQuantity,
     required int unitCostCents,
+    WarehouseOperationScope? scope,
   }) async {
-    final now = DateTime.now().toIso8601String();
-    await dao.customInsert(
-      'INSERT INTO product_batches '
-      '(product_id, variant_id, batch_number, purchase_item_id, supplier_id, '
-      ' source, received_date, expiry_date, received_quantity, '
-      ' remaining_quantity, unit_cost_cents, is_active, created_at, updated_at) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)',
-      variables: [
-        Variable.withInt(productId),
-        Variable.withInt(variantId),
-        Variable.withString(batchNumber),
-        if (purchaseItemId != null)
-          Variable.withInt(purchaseItemId)
-        else
-          const Variable<int>(null),
-        if (supplierId != null)
-          Variable.withInt(supplierId)
-        else
-          const Variable<int>(null),
-        Variable.withString(source),
-        Variable.withString(receivedDate.toIso8601String()),
-        if (expiryDate != null)
-          Variable.withString(expiryDate.toIso8601String())
-        else
-          const Variable<String>(null),
-        Variable.withInt(receivedQuantity),
-        Variable.withInt(receivedQuantity),
-        Variable.withInt(unitCostCents),
-        Variable.withString(now),
-        Variable.withString(now),
-      ],
-      updates: {dao.attachedDatabase.productBatches},
-    );
-    final idRow = await dao
-        .customSelect('SELECT last_insert_rowid() AS id')
-        .getSingle();
-    return idRow.read<int>('id');
+    return dao.attachedDatabase.transaction(() async {
+      final operationScope =
+          scope ?? await WarehouseOperationScope.resolve(dao.attachedDatabase);
+      await operationScope.validate(dao.attachedDatabase);
+      if (purchaseItemId != null && !operationScope.isPrimary) {
+        final parent = await dao
+            .customSelect(
+              'SELECT pi.id FROM purchase_items pi JOIN business_document_locations l '
+              "ON l.source_table = 'purchases' AND l.source_id = pi.purchase_id "
+              'WHERE pi.id = ? AND pi.product_id = ? AND (pi.variant_id IS NULL OR pi.variant_id = ?) '
+              'AND l.organization_id = ? AND l.branch_id = ? AND l.warehouse_id = ?',
+              variables: [
+                Variable.withInt(purchaseItemId),
+                Variable.withInt(productId),
+                Variable.withInt(variantId),
+                ...WarehouseBatchScope.operationVariables(operationScope),
+              ],
+            )
+            .get();
+        if (parent.length != 1) {
+          throw StateError(
+            'Purchase line does not belong to the batch warehouse.',
+          );
+        }
+      }
+      final normalizedManufacturerLot = manufacturerLotNumber?.trim();
+      if (normalizedManufacturerLot != null &&
+          normalizedManufacturerLot.length > 20) {
+        throw ArgumentError.value(
+          manufacturerLotNumber,
+          'manufacturerLotNumber',
+          'GS1 AI (10) lot numbers must not exceed 20 characters',
+        );
+      }
+      final now = DateTime.now().toIso8601String();
+      return dao.customInsert(
+        'INSERT INTO product_batches '
+        '(warehouse_id, product_id, variant_id, batch_number, purchase_item_id, supplier_id, '
+        ' source, received_date, expiry_date, manufacturer_lot_number, received_quantity, '
+        ' remaining_quantity, unit_cost_cents, is_active, created_at, updated_at) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)',
+        variables: [
+          Variable.withString(operationScope.warehouseId),
+          Variable.withInt(productId),
+          Variable.withInt(variantId),
+          Variable.withString(batchNumber),
+          if (purchaseItemId != null)
+            Variable.withInt(purchaseItemId)
+          else
+            const Variable<int>(null),
+          if (supplierId != null)
+            Variable.withInt(supplierId)
+          else
+            const Variable<int>(null),
+          Variable.withString(source),
+          Variable.withString(receivedDate.toIso8601String()),
+          if (expiryDate != null)
+            Variable.withString(expiryDate.toIso8601String())
+          else
+            const Variable<String>(null),
+          if (normalizedManufacturerLot?.isNotEmpty == true)
+            Variable.withString(normalizedManufacturerLot!)
+          else
+            const Variable<String>(null),
+          Variable.withInt(receivedQuantity),
+          Variable.withInt(receivedQuantity),
+          Variable.withInt(unitCostCents),
+          Variable.withString(now),
+          Variable.withString(now),
+        ],
+        updates: {dao.attachedDatabase.productBatches},
+      );
+    });
   }
 
   static Future<int> _insertConsumption(
@@ -707,7 +932,7 @@ class BatchService {
     int? saleReturnAdjustmentItemId,
     String? notes,
   }) async {
-    await dao.customInsert(
+    return dao.customInsert(
       'INSERT INTO batch_consumptions '
       '(batch_id, consumption_type, direction, quantity, unit_cost_cents, '
       ' sale_item_id, sale_return_item_id, purchase_return_item_id, '
@@ -733,10 +958,6 @@ class BatchService {
       ],
       updates: {dao.attachedDatabase.batchConsumptions},
     );
-    final idRow = await dao
-        .customSelect('SELECT last_insert_rowid() AS id')
-        .getSingle();
-    return idRow.read<int>('id');
   }
 
   static Variable _intOrNull(int? v) =>

@@ -1,3 +1,7 @@
+import 'package:tapix/core/services/business/branch_tax_policy.dart';
+import 'package:tapix/core/services/business/branch_tax_policy_store.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tapix/features/settings/data/services/app_settings_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
@@ -26,9 +30,16 @@ void main() {
   late AppDatabase db;
   late UnifiedReturnService service;
   late AdjustmentReturnDao adjDao;
+  late AppSettingsService settings;
 
   setUp(() async {
+    SharedPreferences.setMockInitialValues({});
     db = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
+    settings = AppSettingsService(
+      await SharedPreferences.getInstance(),
+      taxStore: BranchTaxPolicyStore(db),
+    );
+    await settings.initializeTaxPolicy();
     final accountingRepo = AccountingRepository(db);
     final journalService = JournalEntryService(accountingRepo);
     adjDao = AdjustmentReturnDao(db);
@@ -44,6 +55,7 @@ void main() {
         journalService,
         db,
       ),
+      settings: settings,
     );
 
     // Force DB init (triggers beforeOpen → seeds accounts)
@@ -51,6 +63,7 @@ void main() {
   });
 
   tearDown(() async {
+    settings.dispose();
     await db.close();
   });
 
@@ -1047,4 +1060,397 @@ void main() {
       expect(result.taxCents, equals(1500));
     });
   });
+  test(
+    'preview reads durable policy even when settings cache is stale',
+    () async {
+      final pid = await createProduct();
+      await (db.update(db.products)..where((p) => p.id.equals(pid))).write(
+        const ProductsCompanion(isTaxable: Value(true)),
+      );
+      final store = BranchTaxPolicyStore(db);
+      final prior = (await store.read())!;
+      await store.update(
+        expected: prior,
+        policy: BranchTaxPolicy.fromLegacy(
+          settings.current.copyWith(
+            enableTaxCalculations: true,
+            defaultSalesTaxRate: 20,
+          ),
+        ),
+      );
+      expect(settings.current.defaultSalesTaxRate, 0);
+      final quote = await service.priceAdjustmentItems(
+        side: ReturnSide.sale,
+        items: [
+          UnifiedReturnLineItem(
+            productId: pid,
+            productName: 'Tax product',
+            quantity: 1,
+            unitPriceCents: 10000,
+            mode: ReturnMode.adjustment,
+            modeReason: ReturnModeReason.noInvoiceHistory,
+          ),
+        ],
+      );
+      expect(quote.pricing.tax.cents, 2000);
+    },
+  );
+
+  test('missing durable policy never falls back to cached settings', () async {
+    await db.customStatement(
+      "DELETE FROM app_settings WHERE key LIKE 'business.tax_policy.%'",
+    );
+    await expectLater(
+      service.priceAdjustmentItems(side: ReturnSide.sale, items: []),
+      throwsStateError,
+    );
+  });
+
+  for (final side in ReturnSide.values) {
+    for (final change in ['policy', 'product', 'quantity', 'side']) {
+      test('reject stale ${side.name} adjustment preview: $change', () async {
+        final cid = await getCurrencyId();
+        final pid = await createProduct(currencyId: cid);
+        final party = side == ReturnSide.sale
+            ? await createCustomer(cid)
+            : await createSupplier(cid);
+        final items = [
+          UnifiedReturnLineItem(
+            productId: pid,
+            productName: 'Preview product',
+            quantity: 1,
+            unitPriceCents: 10000,
+            mode: ReturnMode.adjustment,
+            modeReason: ReturnModeReason.noInvoiceHistory,
+          ),
+        ];
+        final quote = await service.priceAdjustmentItems(
+          side: change == 'side'
+              ? (side == ReturnSide.sale
+                    ? ReturnSide.purchase
+                    : ReturnSide.sale)
+              : side,
+          items: items,
+        );
+        if (change == 'policy') {
+          await settings.patch((s) => s.copyWith(defaultSalesTaxRate: 17));
+          // Returning to identical values must still invalidate the revision.
+          await settings.patch((s) => s.copyWith(defaultSalesTaxRate: 0));
+        } else if (change == 'product') {
+          await (db.update(db.products)..where((p) => p.id.equals(pid))).write(
+            const ProductsCompanion(isTaxable: Value(true)),
+          );
+        } else if (change == 'quantity') {
+          items[0] = items[0].copyWith(quantity: 2);
+        }
+        Future<List<Object?>> financialState() async => [
+          for (final table in [
+            'sale_returns',
+            'purchase_returns',
+            'sale_return_adjustments',
+            'purchase_return_adjustments',
+            'journal_entries',
+            'journal_entry_lines',
+            'products',
+            'customers',
+            'suppliers',
+          ])
+            (await db.customSelect('SELECT * FROM $table').get())
+                .map((r) => r.data)
+                .toList(),
+        ];
+        final before = await financialState();
+        await expectLater(
+          side == ReturnSide.sale
+              ? service.submitSaleReturn(
+                  customerId: party,
+                  currencyId: cid,
+                  items: items,
+                  refundMethod: 'credit',
+                  allowOverHistory: true,
+                  expectedAdjustmentQuote: quote,
+                )
+              : service.submitPurchaseReturn(
+                  supplierId: party,
+                  currencyId: cid,
+                  items: items,
+                  refundMethod: 'credit',
+                  allowOverHistory: true,
+                  expectedAdjustmentQuote: quote,
+                ),
+          throwsStateError,
+        );
+        expect(await financialState(), before);
+      });
+    }
+  }
+
+  for (final side in ReturnSide.values) {
+    for (final inclusive in [false, true]) {
+      for (final kind in ['default', 'disabled', 'exempt', 'override']) {
+        test(
+          'unified adjustment tax ${side.name} inclusive=$inclusive $kind',
+          () async {
+            await settings.patch(
+              (s) => s.copyWith(
+                defaultSalesTaxRate: 20,
+                defaultPurchaseTaxRate: 10,
+                enableTaxCalculations: kind != 'disabled',
+                taxInclusivePricing: inclusive,
+              ),
+            );
+            final cid = await getCurrencyId();
+            final pid = await createProduct(currencyId: cid);
+            final vid = await createVariant(pid);
+            await (db.update(
+              db.products,
+            )..where((p) => p.id.equals(pid))).write(
+              ProductsCompanion(
+                isTaxable: Value(kind != 'exempt'),
+                hasVariants: Value(kind == 'override'),
+                salesTaxRateBps: Value(kind == 'override' ? 1000 : 0),
+                purchaseTaxRateBps: Value(kind == 'override' ? 1000 : 0),
+              ),
+            );
+            final party = side == ReturnSide.sale
+                ? await createCustomer(cid)
+                : await createSupplier(cid);
+            final items = [
+              UnifiedReturnLineItem(
+                productId: pid,
+                variantId: kind == 'override' ? vid : null,
+                productName: 'Tax product',
+                quantity: 1,
+                unitPriceCents: 13200,
+                mode: ReturnMode.adjustment,
+                modeReason: ReturnModeReason.noInvoiceHistory,
+              ),
+            ];
+            final quote = await service.priceAdjustmentItems(
+              side: side,
+              items: items,
+            );
+            final rate = kind == 'disabled' || kind == 'exempt'
+                ? 0
+                : kind == 'override' || side == ReturnSide.purchase
+                ? 10
+                : 20;
+            final tax = rate == 0
+                ? 0
+                : inclusive
+                ? (rate == 20 ? 2200 : 1200)
+                : (rate == 20 ? 2640 : 1320);
+            final total = inclusive ? 13200 : 13200 + tax;
+            expect(quote.pricing.tax.cents, tax);
+            expect(quote.pricing.total.cents, total);
+            final batch = side == ReturnSide.sale
+                ? await service.submitSaleReturn(
+                    customerId: party,
+                    currencyId: cid,
+                    items: items,
+                    refundMethod: 'credit',
+                    allowOverHistory: true,
+                    expectedAdjustmentQuote: quote,
+                  )
+                : await service.submitPurchaseReturn(
+                    supplierId: party,
+                    currencyId: cid,
+                    items: items,
+                    refundMethod: 'credit',
+                    allowOverHistory: true,
+                    expectedAdjustmentQuote: quote,
+                  );
+            final table = side == ReturnSide.sale
+                ? 'sale_return_adjustments'
+                : 'purchase_return_adjustments';
+            final lineTable = side == ReturnSide.sale
+                ? 'sale_return_adjustment_items'
+                : 'purchase_return_adjustment_items';
+            final header = await db
+                .customSelect(
+                  'SELECT * FROM $table WHERE batch_id = ?',
+                  variables: [Variable.withString(batch)],
+                )
+                .getSingle();
+            final id = header.read<int>('id');
+            final lines = await db
+                .customSelect(
+                  'SELECT * FROM $lineTable WHERE return_id = ?',
+                  variables: [Variable.withInt(id)],
+                )
+                .get();
+            expect(header.read<int>('tax_cents'), tax);
+            expect(header.read<int>('total_cents'), total);
+            expect(header.read<int>('subtotal_cents'), 13200);
+            expect(
+              header.read<int>('tax_inclusive_at_post'),
+              inclusive ? 1 : 0,
+            );
+            expect(lines.single.read<int>('tax_cents'), tax);
+            expect(lines.single.read<int>('tax_rate_bps_at_post'), rate * 100);
+            final vatAccount = side == ReturnSide.sale ? '2100' : '1300';
+            final journal = await db
+                .customSelect(
+                  'SELECT a.account_code, l.debit_cents, l.credit_cents '
+                  'FROM journal_entry_lines l JOIN journal_entries j ON j.id = l.journal_entry_id '
+                  'JOIN accounts a ON a.id = l.account_id WHERE j.source_table = ? AND j.source_id = ?',
+                  variables: [Variable.withString(table), Variable.withInt(id)],
+                )
+                .get();
+            final vat = journal
+                .where((r) => r.read<String>('account_code') == vatAccount)
+                .fold<int>(
+                  0,
+                  (sum, r) =>
+                      sum +
+                      (side == ReturnSide.sale
+                          ? r.read<int>('debit_cents') -
+                                r.read<int>('credit_cents')
+                          : r.read<int>('credit_cents') -
+                                r.read<int>('debit_cents')),
+                );
+            expect(vat, tax);
+            expect(
+              journal.fold<int>(0, (n, r) => n + r.read<int>('debit_cents')),
+              journal.fold<int>(0, (n, r) => n + r.read<int>('credit_cents')),
+            );
+            await settings.patch(
+              (s) => s.copyWith(
+                defaultSalesTaxRate: 1,
+                defaultPurchaseTaxRate: 2,
+                taxInclusivePricing: !inclusive,
+              ),
+            );
+            expect(
+              (await db
+                      .customSelect(
+                        'SELECT tax_cents FROM $table WHERE id = ?',
+                        variables: [Variable.withInt(id)],
+                      )
+                      .getSingle())
+                  .read<int>('tax_cents'),
+              tax,
+            );
+          },
+        );
+      }
+    }
+  }
+  for (final side in ReturnSide.values) {
+    test(
+      'linked ${side.name} preserves historical tax and mixed failure rolls back',
+      () async {
+        final cid = await getCurrencyId();
+        final pid = await createProduct(currencyId: cid);
+        final vid = await createVariant(pid);
+        final party = side == ReturnSide.sale
+            ? await createCustomer(cid)
+            : await createSupplier(cid);
+        if (side == ReturnSide.sale) {
+          await createFractionalSale(
+            customerId: party,
+            productId: pid,
+            variantId: vid,
+            currencyId: cid,
+            quantity: 2,
+            unitPriceCents: 1200,
+            subtotalCents: 2400,
+            discountCents: 0,
+            taxCents: 400,
+            totalCents: 2400,
+            taxInclusive: true,
+          );
+        } else {
+          await createFractionalPurchase(
+            supplierId: party,
+            productId: pid,
+            variantId: vid,
+            currencyId: cid,
+            quantity: 2,
+            unitCostCents: 1200,
+            subtotalCents: 2400,
+            discountCents: 0,
+            taxCents: 400,
+            totalCents: 2400,
+            taxInclusive: true,
+          );
+        }
+        await settings.patch(
+          (s) => s.copyWith(
+            enableTaxCalculations: false,
+            defaultSalesTaxRate: 5,
+            defaultPurchaseTaxRate: 7,
+            taxInclusivePricing: false,
+          ),
+        );
+        final linked = await service.resolveLineItem(
+          productId: pid,
+          variantId: vid,
+          productName: 'Historical tax',
+          quantity: 2,
+          unitPriceCents: 1200,
+          side: side,
+          partyId: party,
+        );
+        expect(linked.single.mode, ReturnMode.linked);
+        final bad = UnifiedReturnLineItem(
+          productId: pid,
+          variantId: vid,
+          productName: 'Invalid scale',
+          quantity: 1,
+          quantityScale: 1000,
+          unitPriceCents: 1200,
+          mode: ReturnMode.adjustment,
+          modeReason: ReturnModeReason.quantityOverflow,
+        );
+        Future<String> submit(List<UnifiedReturnLineItem> items) =>
+            side == ReturnSide.sale
+            ? service.submitSaleReturn(
+                customerId: party,
+                currencyId: cid,
+                items: items,
+                refundMethod: 'credit',
+                allowOverHistory: true,
+              )
+            : service.submitPurchaseReturn(
+                supplierId: party,
+                currencyId: cid,
+                items: items,
+                refundMethod: 'credit',
+                allowOverHistory: true,
+              );
+        final stockBefore = await (db.select(
+          db.productVariants,
+        )..where((v) => v.id.equals(vid))).getSingle();
+        final journalsBefore = await db.select(db.journalEntries).get();
+        await expectLater(submit([...linked, bad]), throwsStateError);
+        expect(await db.select(db.journalEntries).get(), journalsBefore);
+        expect(
+          (await (db.select(
+            db.productVariants,
+          )..where((v) => v.id.equals(vid))).getSingle()).stockQuantity,
+          stockBefore.stockQuantity,
+        );
+        final table = side == ReturnSide.sale
+            ? 'sale_returns'
+            : 'purchase_returns';
+        expect(await db.customSelect('SELECT id FROM $table').get(), isEmpty);
+        expect(await submit(linked), isNotEmpty);
+        final header = await db
+            .customSelect('SELECT id, tax_inclusive_at_post FROM $table')
+            .getSingle();
+        expect(header.read<int>('tax_inclusive_at_post'), 1);
+        final lineTable = side == ReturnSide.sale
+            ? 'sale_return_items'
+            : 'purchase_return_items';
+        final tax = await db
+            .customSelect(
+              'SELECT SUM(tax_cents) amount FROM $lineTable WHERE return_id = ?',
+              variables: [Variable.withInt(header.read<int>('id'))],
+            )
+            .getSingle();
+        expect(tax.read<int>('amount'), 400);
+      },
+    );
+  }
 }

@@ -3,6 +3,7 @@ import '../converters/money_converter.dart';
 import 'settings.dart';
 import 'parties.dart';
 import 'users.dart';
+import 'business.dart';
 
 @DataClassName('ProductCategory')
 class ProductCategories extends Table {
@@ -246,6 +247,13 @@ class ProductPriceHistories extends Table {
 ///       'sale_return' → unlinked sale-adjustment-return that increased stock
 @DataClassName('ProductBatch')
 class ProductBatches extends Table {
+  /// Creation route only; immutable document location remains the history source.
+  /// NULL preserves the default route for legacy inserts.
+  TextColumn get warehouseId => text().nullable().references(
+    BusinessWarehouses,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
   IntColumn get id => integer().autoIncrement()();
   IntColumn get productId =>
       integer().references(Products, #id, onDelete: KeyAction.cascade)();
@@ -257,6 +265,11 @@ class ProductBatches extends Table {
 
   /// Human-readable unique batch identifier, e.g. `BATCH-202604-12-3`.
   TextColumn get batchNumber => text().unique()();
+
+  /// Manufacturer-assigned batch/lot identifier printed on the pack
+  /// (GS1 Application Identifier 10). It is deliberately non-unique because
+  /// one manufacturer lot can be received in more than one purchase.
+  TextColumn get manufacturerLotNumber => text().nullable()();
 
   /// Source purchase item that created this batch (null for opening / found /
   /// return-originated batches). Restrict prevents losing audit trail.

@@ -15,8 +15,15 @@ import '../../../../core/pricing/discount.dart';
 import '../../../../core/pricing/invoice_pricing_engine.dart';
 import '../../../../core/pricing/line_item_pricing_engine.dart';
 import '../../../../core/pricing/pricing_snapshot.dart';
+import '../../../../core/pricing/pricing_preview_fingerprint.dart';
+import '../../../../core/services/business/branch_tax_policy_store.dart';
+import '../../../../core/measurement/measurement.dart';
 import '../../../../core/services/journal_entry_service.dart';
 import '../../../../core/services/lan/lan_network_service.dart';
+
+import '../../../settings/data/services/app_settings_service.dart';
+import '../../../settings/domain/entities/app_settings.dart';
+import '../../../../core/services/tax_calculation_service.dart';
 
 // ==================== ENUMS ====================
 
@@ -135,6 +142,8 @@ class AdjReturnLineItem extends Equatable {
 
   /// Tax rate in basis points (e.g. 1500 = 15%).
   final int taxRateBps;
+  final bool? isTaxable;
+  final bool taxInclusivePricing;
   final String? reason;
 
   const AdjReturnLineItem({
@@ -153,6 +162,8 @@ class AdjReturnLineItem extends Equatable {
     this.discountCents = 0,
     this.discountPercentBps = 0,
     this.taxRateBps = 0,
+    this.isTaxable,
+    this.taxInclusivePricing = false,
     this.reason,
   });
 
@@ -179,7 +190,7 @@ class AdjReturnLineItem extends Equatable {
     input: toPricingInput(),
     enableTaxCalculations: taxRateBps > 0,
     defaultTaxRateBps: 0,
-    taxInclusivePricing: false,
+    taxInclusivePricing: taxInclusivePricing,
   );
 
   int get subtotalCents => _compute().subtotal.cents;
@@ -209,6 +220,7 @@ class AdjReturnLineItem extends Equatable {
     int? discountCents,
     int? discountPercentBps,
     int? taxRateBps,
+    bool? taxInclusivePricing,
     String? reason,
   }) {
     return AdjReturnLineItem(
@@ -227,6 +239,8 @@ class AdjReturnLineItem extends Equatable {
       discountCents: discountCents ?? this.discountCents,
       discountPercentBps: discountPercentBps ?? this.discountPercentBps,
       taxRateBps: taxRateBps ?? this.taxRateBps,
+      isTaxable: isTaxable,
+      taxInclusivePricing: taxInclusivePricing ?? this.taxInclusivePricing,
       reason: reason ?? this.reason,
     );
   }
@@ -248,6 +262,8 @@ class AdjReturnLineItem extends Equatable {
     discountCents,
     discountPercentBps,
     taxRateBps,
+    isTaxable,
+    taxInclusivePricing,
     reason,
   ];
 }
@@ -319,10 +335,13 @@ class PurchaseAdjReturnFormState extends Equatable {
         // global tax toggle is always on; lines with rate 0 produce 0 tax.
         enableTaxCalculations: true,
         defaultTaxRateBps: 0,
-        taxInclusivePricing: false,
+        taxInclusivePricing: taxInclusivePricing,
       ),
     );
   }
+
+  bool get taxInclusivePricing =>
+      items.isNotEmpty && items.first.taxInclusivePricing;
 
   int get totalSubtotalCents => pricing.subtotal.cents;
   int get totalItemDiscountCents => pricing.itemDiscountTotal.cents;
@@ -561,17 +580,26 @@ class _PurchaseAdjReturnInitialized extends PurchaseAdjReturnFormEvent {
   const _PurchaseAdjReturnInitialized();
 }
 
+class _LocalPurchaseReturnPricingChanged implements Exception {
+  const _LocalPurchaseReturnPricingChanged(this.preview);
+  final PurchaseAdjReturnFormState preview;
+}
+
 class PurchaseAdjReturnFormBloc
     extends Bloc<PurchaseAdjReturnFormEvent, PurchaseAdjReturnFormState> {
   final AdjustmentReturnDao _dao;
   final JournalEntryService _journalEntryService;
   final LanNetworkService? _lan;
+  final AppSettingsService? _settings;
+  Future<AppSettings>? _taxPolicy;
 
   PurchaseAdjReturnFormBloc(
     this._dao,
     this._journalEntryService, {
     LanNetworkService? lan,
+    AppSettingsService? settings,
   }) : _lan = lan,
+       _settings = settings,
        super(PurchaseAdjReturnFormState()) {
     on<_PurchaseAdjReturnInitialized>(_onInitialized);
     on<PurchaseAdjReturnSupplierSelected>(_onSupplierSelected);
@@ -622,16 +650,112 @@ class PurchaseAdjReturnFormBloc
     );
   }
 
-  void _onItemAdded(
+  Future<AppSettings> _loadTaxPolicy() async {
+    if (_isRemoteClient) {
+      final page = await _lan!.fetchRemoteCatalog(limit: 1, management: true);
+      // Older masters use product-only, exclusive purchase-return pricing.
+      final purchaseRate = page.defaultPurchaseTaxRateBps;
+      if (purchaseRate == null) return const AppSettings();
+      return AppSettings(
+        enableTaxCalculations: page.enableTaxCalculations,
+        defaultPurchaseTaxRate: purchaseRate / 100,
+        taxInclusivePricing: page.taxInclusivePricing,
+      );
+    }
+    final stored = await BranchTaxPolicyStore(_dao.attachedDatabase).read();
+    if (stored == null && (_settings?.requiresPersistedTaxPolicy ?? false)) {
+      throw StateError('Branch tax policy is missing.');
+    }
+    final current = _settings?.current ?? const AppSettings();
+    return stored?.policy.applyTo(current) ?? current;
+  }
+
+  /// Read and price within the caller's posting transaction. Never persist the
+  /// form's cached tax values without comparing with current product rules.
+  Future<PurchaseAdjReturnFormState> _refreshLocalPricing(
+    PurchaseAdjReturnFormState submitted,
+  ) async {
+    final policy = await _loadTaxPolicy();
+    final ids = submitted.items.map((i) => i.productId).toSet();
+    final products = await (_dao.select(
+      _dao.products,
+    )..where((p) => p.id.isIn(ids))).get();
+    final byId = {for (final p in products) p.id: p};
+    final refreshed = <AdjReturnLineItem>[];
+    for (final item in submitted.items) {
+      final product = byId[item.productId];
+      if (product == null ||
+          !product.isActive ||
+          product.measurementType != item.measurementType ||
+          MeasurementType.fromDb(product.measurementType).quantityScale !=
+              item.quantityScale) {
+        throw StateError('Return product or measurement is unavailable.');
+      }
+      refreshed.add(
+        item.copyWith(
+          taxRateBps: policy.enableTaxCalculations
+              ? TaxCalculationService.resolveLineItemTaxRateBps(
+                  isTaxable: product.isTaxable,
+                  productTaxRateBps: product.purchaseTaxRateBps,
+                  defaultTaxRateBps: (policy.defaultPurchaseTaxRate * 100)
+                      .round(),
+                )
+              : 0,
+          taxInclusivePricing: policy.taxInclusivePricing,
+        ),
+      );
+    }
+    return submitted.copyWith(items: refreshed);
+  }
+
+  Future<void> _onItemAdded(
     PurchaseAdjReturnItemAdded event,
     Emitter<PurchaseAdjReturnFormState> emit,
-  ) {
-    emit(
-      state.copyWith(
-        items: [...state.items, event.item],
-        hasUnsavedChanges: true,
-      ),
-    );
+  ) async {
+    try {
+      var item = event.item;
+      if (_settings != null || _isRemoteClient) {
+        final policy = await (_taxPolicy ??= _loadTaxPolicy());
+        var taxable = item.isTaxable ?? (item.taxRateBps > 0);
+        var rate = item.taxRateBps;
+        if (_isRemoteClient && item.isTaxable == null) {
+          final page = await _lan!.fetchRemoteCatalog(
+            query: item.productName,
+            limit: 200,
+            management: true,
+          );
+          final product = page.products.firstWhere(
+            (p) => p.id == item.productId,
+          );
+          taxable = product.isTaxable;
+          rate = product.purchaseTaxRateBps;
+        }
+        if (!_isRemoteClient) {
+          final product = await (_dao.select(
+            _dao.products,
+          )..where((p) => p.id.equals(item.productId))).getSingle();
+          taxable = product.isTaxable;
+          rate = product.purchaseTaxRateBps;
+        }
+        item = item.copyWith(
+          taxRateBps: policy.enableTaxCalculations
+              ? TaxCalculationService.resolveLineItemTaxRateBps(
+                  isTaxable: taxable,
+                  productTaxRateBps: rate,
+                  defaultTaxRateBps: (policy.defaultPurchaseTaxRate * 100)
+                      .round(),
+                )
+              : 0,
+          taxInclusivePricing: policy.taxInclusivePricing,
+        );
+      }
+      emit(
+        state.copyWith(items: [...state.items, item], hasUnsavedChanges: true),
+      );
+    } catch (error) {
+      _taxPolicy = null;
+      emit(state.copyWith(error: error.toString()));
+    }
   }
 
   void _onItemRemoved(
@@ -764,7 +888,7 @@ class PurchaseAdjReturnFormBloc
     PurchaseAdjReturnSubmitted event,
     Emitter<PurchaseAdjReturnFormState> emit,
   ) async {
-    if (state.isSuccess) return;
+    if (state.isSuccess || state.isSubmitting) return;
     if (state.supplierId == null) {
       emit(state.copyWith(error: 'returns.supplier_required'.tr()));
       return;
@@ -798,6 +922,10 @@ class PurchaseAdjReturnFormBloc
         final result = await _lan!.submitRemotePurchaseAdjustmentReturn(
           LanPurchaseAdjustmentReturnRequest(
             idempotencyKey: idempotencyKey,
+            expectedPricingFingerprint: pricingPreviewFingerprint(
+              state.pricing,
+              taxInclusive: state.taxInclusivePricing,
+            ),
             supplierId: state.supplierId!,
             refundMethod: state.paymentMethod.name,
             dueDate: state.dueDate,
@@ -845,75 +973,90 @@ class PurchaseAdjReturnFormBloc
         return;
       }
 
-      // Return number is generated atomically by the DAO inside the transaction
-      // Phase 11.2 — stamp pricing-engine snapshot. The state's engine call
-      // hardcodes `taxInclusivePricing: false`, so the snapshot must mirror
-      // that exact flag.
-      final returnData = PurchaseReturnAdjustmentsCompanion.insert(
-        returnNumber: '', // Overridden by DAO inside transaction
-        supplierId: state.supplierId!,
-        currencyId: state.currencyId,
-        subtotalCents: Value(Decimal.fromInt(state.totalSubtotalCents)),
-        discountCents: Value(
-          Decimal.fromInt(
-            state.totalItemDiscountCents + state.effectiveOverallDiscountCents,
+      final submitted = state;
+      final createdId = await _dao.transaction(() async {
+        final refreshed = await _refreshLocalPricing(submitted);
+        if (pricingPreviewFingerprint(
+              submitted.pricing,
+              taxInclusive: submitted.taxInclusivePricing,
+            ) !=
+            pricingPreviewFingerprint(
+              refreshed.pricing,
+              taxInclusive: refreshed.taxInclusivePricing,
+            )) {
+          throw _LocalPurchaseReturnPricingChanged(refreshed);
+        }
+        // Return number is generated atomically by the DAO inside the transaction
+        // Preserve the pricing mode used by the form.
+        final returnData = PurchaseReturnAdjustmentsCompanion.insert(
+          returnNumber: '', // Overridden by DAO inside transaction
+          supplierId: submitted.supplierId!,
+          currencyId: submitted.currencyId,
+          subtotalCents: Value(Decimal.fromInt(submitted.totalSubtotalCents)),
+          discountCents: Value(
+            Decimal.fromInt(
+              submitted.totalItemDiscountCents +
+                  submitted.effectiveOverallDiscountCents,
+            ),
           ),
-        ),
-        taxCents: Value(Decimal.fromInt(state.totalAdjustedTaxCents)),
-        totalCents: Decimal.fromInt(state.totalCents),
-        notes: Value(
-          buildAdjReturnNotes(
-            reasonCode: state.reasonCode!,
-            userNotes: state.notes,
+          taxCents: Value(Decimal.fromInt(submitted.totalAdjustedTaxCents)),
+          totalCents: Decimal.fromInt(submitted.totalCents),
+          notes: Value(
+            buildAdjReturnNotes(
+              reasonCode: submitted.reasonCode!,
+              userNotes: submitted.notes,
+            ),
           ),
-        ),
-        returnDate: Value(state.returnDate),
-        refundMethod: Value(
-          event.settlementAllocations.isEmpty
-              ? state.paymentMethod.name
-              : 'mixed',
-        ),
-        dueDate: Value(
-          event.settlementAllocations.isEmpty ? state.dueDate : null,
-        ),
-        idempotencyKey: Value(idempotencyKey),
-      ).withPricingSnapshot(taxInclusive: false);
+          returnDate: Value(submitted.returnDate),
+          refundMethod: Value(
+            event.settlementAllocations.isEmpty
+                ? submitted.paymentMethod.name
+                : 'mixed',
+          ),
+          dueDate: Value(
+            event.settlementAllocations.isEmpty ? submitted.dueDate : null,
+          ),
+          idempotencyKey: Value(idempotencyKey),
+        ).withPricingSnapshot(taxInclusive: submitted.taxInclusivePricing);
 
-      // The engine has already done all the hard work: per-line subtotal,
-      // per-line item discount, the proportional share of the invoice-
-      // level discount, the post-allocation net, and the tax computed on
-      // that net. We just persist what the engine produced — there is no
-      // second arithmetic path here, which is the whole point of Phase 1.
-      final pricing = state.pricing;
-      final itemCompanions = <PurchaseReturnAdjustmentItemsCompanion>[];
-      for (int idx = 0; idx < state.items.length; idx++) {
-        final item = state.items[idx];
-        final line = pricing.lines[idx];
-        itemCompanions.add(
-          PurchaseReturnAdjustmentItemsCompanion.insert(
-            returnId: 0, // Will be set by DAO
-            productId: item.productId,
-            variantId: Value(item.variantId),
-            quantity: item.quantity,
-            quantityScale: Value(item.quantityScale),
-            measurementType: Value(item.measurementType),
-            unitPriceCents: Decimal.fromInt(item.unitPriceCents),
-            // Total discount on this item = per-line discount + share of overall
-            discountCents: Value(Decimal.fromInt(line.totalLineDiscount.cents)),
-            taxCents: Value(Decimal.fromInt(line.tax.cents)),
-            totalCents: Decimal.fromInt(line.total.cents),
-            reason: Value(item.reason),
-          ),
+        // The engine has already done all the hard work: per-line subtotal,
+        // per-line item discount, the proportional share of the invoice-
+        // level discount, the post-allocation net, and the tax computed on
+        // that net. We just persist what the engine produced — there is no
+        // second arithmetic path here, which is the whole point of Phase 1.
+        final pricing = submitted.pricing;
+        final itemCompanions = <PurchaseReturnAdjustmentItemsCompanion>[];
+        for (int idx = 0; idx < submitted.items.length; idx++) {
+          final item = submitted.items[idx];
+          final line = pricing.lines[idx];
+          itemCompanions.add(
+            PurchaseReturnAdjustmentItemsCompanion.insert(
+              returnId: 0, // Will be set by DAO
+              productId: item.productId,
+              variantId: Value(item.variantId),
+              quantity: item.quantity,
+              quantityScale: Value(item.quantityScale),
+              measurementType: Value(item.measurementType),
+              unitPriceCents: Decimal.fromInt(item.unitPriceCents),
+              // Total discount on this item = per-line discount + share of overall
+              discountCents: Value(
+                Decimal.fromInt(line.totalLineDiscount.cents),
+              ),
+              taxCents: Value(Decimal.fromInt(line.tax.cents)),
+              totalCents: Decimal.fromInt(line.total.cents),
+              reason: Value(item.reason),
+            ),
+          );
+        }
+
+        return _dao.createAndPostPurchaseAdjReturn(
+          returnData,
+          itemCompanions,
+          journalEntryService: _journalEntryService,
+          allowNegativeStock: event.allowNegativeStock,
+          settlementAllocations: event.settlementAllocations,
         );
-      }
-
-      final createdId = await _dao.createAndPostPurchaseAdjReturn(
-        returnData,
-        itemCompanions,
-        journalEntryService: _journalEntryService,
-        allowNegativeStock: event.allowNegativeStock,
-        settlementAllocations: event.settlementAllocations,
-      );
+      });
 
       emit(
         state.copyWith(
@@ -921,6 +1064,15 @@ class PurchaseAdjReturnFormBloc
           isSuccess: true,
           hasUnsavedChanges: false,
           createdReturnId: createdId,
+        ),
+      );
+    } on _LocalPurchaseReturnPricingChanged catch (e) {
+      _taxPolicy = null;
+      emit(
+        state.copyWith(
+          items: e.preview.items,
+          isSubmitting: false,
+          error: 'returns.pricing_preview_updated'.tr(),
         ),
       );
     } on StockInsufficientException catch (e) {
@@ -935,6 +1087,59 @@ class PurchaseAdjReturnFormBloc
           ),
         ),
       );
+    } on LanBusinessException catch (e) {
+      if (e.code == 'pricing_preview_changed') {
+        try {
+          _taxPolicy = null;
+          final policy = await (_taxPolicy = _loadTaxPolicy());
+          final refreshed = <AdjReturnLineItem>[];
+          for (final item in state.items) {
+            final page = await _lan!.fetchRemoteCatalog(
+              query: item.productName,
+              limit: 200,
+              management: true,
+            );
+            final product = page.products.firstWhere(
+              (p) => p.id == item.productId,
+            );
+            refreshed.add(
+              item.copyWith(
+                taxRateBps: policy.enableTaxCalculations
+                    ? TaxCalculationService.resolveLineItemTaxRateBps(
+                        isTaxable: product.isTaxable,
+                        productTaxRateBps: product.purchaseTaxRateBps,
+                        defaultTaxRateBps: (policy.defaultPurchaseTaxRate * 100)
+                            .round(),
+                      )
+                    : 0,
+                taxInclusivePricing: policy.taxInclusivePricing,
+              ),
+            );
+          }
+          emit(
+            state.copyWith(
+              items: refreshed,
+              isSubmitting: false,
+              error: 'returns.pricing_preview_updated'.tr(),
+            ),
+          );
+        } catch (_) {
+          _taxPolicy = null;
+          emit(
+            state.copyWith(
+              isSubmitting: false,
+              error: 'returns.pricing_preview_refresh_failed'.tr(),
+            ),
+          );
+        }
+      } else {
+        emit(
+          state.copyWith(
+            isSubmitting: false,
+            error: 'returns.return_failed'.tr(),
+          ),
+        );
+      }
     } catch (e, st) {
       developer.log(
         'Purchase adjustment return submission failed: $e',

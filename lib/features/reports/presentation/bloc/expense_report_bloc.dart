@@ -110,8 +110,8 @@ class ExpenseReportBloc
   ExpenseReportSortType _sort = ExpenseReportSortType.amountDesc;
 
   ExpenseReportBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -147,20 +147,23 @@ class ExpenseReportBloc
 
       if (items.isNotEmpty) {
         final highest = items.reduce(
-            (a, b) => a.totalAmountCents >= b.totalAmountCents ? a : b);
+          (a, b) => a.totalAmountCents >= b.totalAmountCents ? a : b,
+        );
         highestCents = highest.totalAmountCents;
         highestName = highest.categoryName;
 
         final lowest = items.reduce(
-            (a, b) => a.totalAmountCents <= b.totalAmountCents ? a : b);
+          (a, b) => a.totalAmountCents <= b.totalAmountCents ? a : b,
+        );
         lowestCents = lowest.totalAmountCents;
         lowestName = lowest.categoryName;
       }
 
       // Calculate percentages
       final withPercentages = items.map((item) {
-        final pct =
-            grandTotal > 0 ? (item.totalAmountCents / grandTotal) * 100 : 0.0;
+        final pct = grandTotal > 0
+            ? (item.totalAmountCents / grandTotal) * 100
+            : 0.0;
         return ExpenseCategorySummary(
           categoryId: item.categoryId,
           categoryName: item.categoryName,
@@ -203,12 +206,11 @@ class ExpenseReportBloc
     final current = currentData;
     if (current != null) {
       final sorted = _applySortToCategories(current.categories, event.sort);
-      emit(RealtimeSuccess<ExpenseReportData>(
-        data: current.copyWith(
-          categories: sorted,
-          sort: event.sort,
+      emit(
+        RealtimeSuccess<ExpenseReportData>(
+          data: current.copyWith(categories: sorted, sort: event.sort),
         ),
-      ));
+      );
     }
   }
 
@@ -219,11 +221,9 @@ class ExpenseReportBloc
     final list = List<ExpenseCategorySummary>.from(items);
     switch (sort) {
       case ExpenseReportSortType.amountDesc:
-        list.sort(
-            (a, b) => b.totalAmountCents.compareTo(a.totalAmountCents));
+        list.sort((a, b) => b.totalAmountCents.compareTo(a.totalAmountCents));
       case ExpenseReportSortType.amountAsc:
-        list.sort(
-            (a, b) => a.totalAmountCents.compareTo(b.totalAmountCents));
+        list.sort((a, b) => a.totalAmountCents.compareTo(b.totalAmountCents));
       case ExpenseReportSortType.categoryAsc:
         list.sort((a, b) => a.categoryName.compareTo(b.categoryName));
       case ExpenseReportSortType.categoryDesc:
@@ -248,8 +248,9 @@ class ExpenseReportBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         ec.id AS category_id,
         ec.name AS category_name,
@@ -263,12 +264,13 @@ class ExpenseReportBloc
       HAVING expense_count > 0
       ORDER BY total_amount_cents DESC
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.expenses, _db.expenseCategories},
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {_db.expenses, _db.expenseCategories},
+        )
+        .get();
 
     return rows.map((row) {
       return ExpenseCategorySummary(

@@ -1,3 +1,4 @@
+import '../../features/reports/presentation/screens/supplier_sales_report_screen.dart';
 import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
@@ -1000,6 +1001,10 @@ class AppRouter {
                 path: 'all',
                 builder: (context, state) =>
                     const SalesReportScreen(reportType: SalesReportType.all),
+              ),
+              GoRoute(
+                path: 'by-supplier',
+                builder: (context, state) => const SupplierSalesReportScreen(),
               ),
               GoRoute(
                 path: 'by-product',

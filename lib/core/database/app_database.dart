@@ -1,3 +1,4 @@
+import 'migrations/inventory_revaluation_audit.dart';
 import 'dart:developer' as developer;
 
 import 'package:drift/drift.dart';
@@ -5,6 +6,14 @@ import 'package:decimal/decimal.dart';
 import 'package:flutter/foundation.dart';
 
 import 'tables/settings.dart';
+import 'migrations/variant_nullability.dart';
+import 'tables/business.dart';
+import 'tables/business_documents.dart';
+import 'tables/business_stock.dart';
+import 'migrations/business_warehouse_stock.dart';
+import 'migrations/business_document_locations.dart';
+import 'migrations/commission_return_source.dart';
+import 'migrations/business_foundation.dart';
 import 'tables/users.dart';
 import 'tables/products.dart';
 import 'tables/pharmacy.dart';
@@ -54,10 +63,16 @@ import 'database_native.dart' if (dart.library.html) 'database_web.dart';
 
 part 'app_database.g.dart';
 
-const _currentDatabaseSchemaVersion = 10082;
+const _currentDatabaseSchemaVersion = 10091;
 
 @DriftDatabase(
   tables: [
+    BusinessOrganizations,
+    BusinessBranches,
+    BusinessWarehouses,
+    BusinessContexts,
+    BusinessDocumentLocations,
+    BusinessWarehouseStocks,
     Users,
     Currencies,
     AppSettings,
@@ -133,6 +148,7 @@ const _currentDatabaseSchemaVersion = 10082;
     SaleReturnAdjustments,
     SaleReturnAdjustmentItems,
     InventoryAdjustments,
+    InventoryRevaluationLayers,
     // Phase 2 — compliance & period management
     FiscalPeriods,
     CustomerCreditNotes,
@@ -189,156 +205,8 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  Future<void> _repairProductVariantsSkuNullabilityIfNeeded() async {
-    var foreignKeysDisabled = false;
-    try {
-      // Some SQLite builds are picky about the `pragma_table_info(...).notnull` column name.
-      // To keep this repair robust across platforms, inspect the CREATE TABLE DDL instead.
-      final ddlRow = await customSelect(
-        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'product_variants'",
-      ).getSingleOrNull();
-
-      final ddl = ddlRow?.readNullable<String>('sql') ?? '';
-      if (ddl.isEmpty) {
-        return;
-      }
-
-      final skuNotNull = RegExp(
-        r'\bsku\b[^,]*\bNOT\s+NULL\b',
-        caseSensitive: false,
-      ).hasMatch(ddl);
-      final barcodeNotNull = RegExp(
-        r'\bbarcode\b[^,]*\bNOT\s+NULL\b',
-        caseSensitive: false,
-      ).hasMatch(ddl);
-
-      if (!skuNotNull && !barcodeNotNull) {
-        return;
-      }
-
-      debugPrint(
-        'DB schema fix: rebuilding product_variants to relax NOT NULL constraints',
-      );
-      await _ensureSchemaIntegrity();
-
-      await customStatement('PRAGMA foreign_keys = OFF');
-      foreignKeysDisabled = true;
-      await customStatement(
-        'ALTER TABLE product_variants RENAME TO product_variants__old',
-      );
-
-      final wholesaleColumnRow = await customSelect(
-        "SELECT COUNT(*) as cnt FROM pragma_table_info('product_variants__old') WHERE name = 'wholesale_price_cents'",
-      ).getSingle();
-      final hasWholesalePriceCents = wholesaleColumnRow.read<int>('cnt') > 0;
-
-      await customStatement('''
-CREATE TABLE product_variants (
-  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-  product_id INTEGER NOT NULL REFERENCES products (id) ON DELETE CASCADE,
-  sku TEXT UNIQUE,
-  barcode TEXT UNIQUE,
-  color_id INTEGER REFERENCES product_colors (id) ON DELETE RESTRICT,
-  size_id INTEGER REFERENCES sizes (id) ON DELETE RESTRICT,
-  cost_cents INTEGER NOT NULL,
-  price_cents INTEGER NOT NULL,
-  wholesale_price_cents INTEGER,
-  price_adjustment_cents INTEGER NOT NULL DEFAULT 0,
-  stock_quantity INTEGER NOT NULL DEFAULT 0,
-  is_active INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-)
-''');
-
-      if (hasWholesalePriceCents) {
-        await customStatement('''
-INSERT INTO product_variants (
-  id,
-  product_id,
-  sku,
-  barcode,
-  color_id,
-  size_id,
-  cost_cents,
-  price_cents,
-  wholesale_price_cents,
-  price_adjustment_cents,
-  stock_quantity,
-  is_active,
-  created_at,
-  updated_at
-)
-SELECT
-  id,
-  product_id,
-  NULLIF(sku, ''),
-  NULLIF(barcode, ''),
-  color_id,
-  size_id,
-  COALESCE(cost_cents, 0),
-  COALESCE(price_cents, 0),
-  wholesale_price_cents,
-  COALESCE(price_adjustment_cents, 0),
-  COALESCE(stock_quantity, 0),
-  COALESCE(is_active, 1),
-  COALESCE(created_at, CURRENT_TIMESTAMP),
-  COALESCE(updated_at, CURRENT_TIMESTAMP)
-FROM product_variants__old
-''');
-      } else {
-        await customStatement('''
-INSERT INTO product_variants (
-  id,
-  product_id,
-  sku,
-  barcode,
-  color_id,
-  size_id,
-  cost_cents,
-  price_cents,
-  wholesale_price_cents,
-  price_adjustment_cents,
-  stock_quantity,
-  is_active,
-  created_at,
-  updated_at
-)
-SELECT
-  id,
-  product_id,
-  NULLIF(sku, ''),
-  NULLIF(barcode, ''),
-  color_id,
-  size_id,
-  COALESCE(cost_cents, 0),
-  COALESCE(price_cents, 0),
-  NULL,
-  COALESCE(price_adjustment_cents, 0),
-  COALESCE(stock_quantity, 0),
-  COALESCE(is_active, 1),
-  COALESCE(created_at, CURRENT_TIMESTAMP),
-  COALESCE(updated_at, CURRENT_TIMESTAMP)
-FROM product_variants__old
-''');
-      }
-
-      await customStatement('DROP TABLE product_variants__old');
-      await customStatement('PRAGMA foreign_keys = ON');
-      foreignKeysDisabled = false;
-    } catch (e, st) {
-      debugPrint('DB schema fix failed (product_variants rebuild): $e');
-      debugPrint('$st');
-    } finally {
-      if (foreignKeysDisabled) {
-        try {
-          await customStatement('PRAGMA foreign_keys = ON');
-        } catch (_) {
-          // ignore
-        }
-      }
-    }
-  }
+  Future<void> _repairProductVariantsSkuNullabilityIfNeeded() =>
+      repairVariantNullability(this);
 
   /// Converts any integer (Unix epoch seconds) DateTime columns to ISO 8601 text.
   /// This is needed after switching Drift from storeDateTimeAsText: false → true.
@@ -3072,6 +2940,11 @@ END
     return MigrationStrategy(
       onCreate: (Migrator m) async {
         await m.createAll();
+        await installInventoryRevaluationAudit(this);
+        await initializeBusinessFoundation(this);
+        await installBusinessDocumentLocations(this);
+        await installBusinessWarehouseStock(this);
+        await installCommissionReturnSource(this);
         await _ensureDocumentSequencesTable();
         await _createIndexes();
         await _installProductBatchesIntegrityTriggers();
@@ -3081,6 +2954,10 @@ END
       onUpgrade: (Migrator m, int from, int to) async {
         if (from == to) {
           return;
+        }
+
+        if (from < 10084) {
+          await removeBusinessDocumentLocationTriggers(this);
         }
 
         developer.log(
@@ -5093,6 +4970,110 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
           await _installPartyAccountPaymentTriggers();
         }
 
+        // Older files may retain NOT NULL identifiers despite their version.
+        // Repair before introducing warehouse foreign keys.
+        if (from < 10086) {
+          await _repairProductVariantsSkuNullabilityIfNeeded();
+        }
+
+        // Business migrations must roll back together, including table
+        // creation, when an old database cannot be assigned safely.
+        await transaction(() async {
+          if (from < 10091) {
+            final existing = await customSelect(
+              "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'inventory_revaluation_layers'",
+            ).getSingleOrNull();
+            if (existing == null) {
+              await m.createTable(inventoryRevaluationLayers);
+            }
+            await installInventoryRevaluationAudit(this);
+          }
+          if (from < 10090) {
+            await _safeAddColumn(
+              'sale_return_adjustment_items',
+              'return_batch_id',
+              'INTEGER REFERENCES product_batches(id) ON DELETE RESTRICT',
+            );
+            for (final table in [
+              'sale_return_adjustments',
+              'purchase_return_adjustments',
+            ]) {
+              await _safeAddColumn(
+                table,
+                'warehouse_id',
+                'TEXT REFERENCES business_warehouses(id) ON DELETE RESTRICT',
+              );
+            }
+            await _safeAddColumn(
+              'sales',
+              'warehouse_id',
+              'TEXT REFERENCES business_warehouses(id) ON DELETE RESTRICT',
+            );
+            await _safeAddColumn(
+              'purchases',
+              'warehouse_id',
+              'TEXT REFERENCES business_warehouses(id) ON DELETE RESTRICT',
+            );
+          }
+          if (from < 10089) {
+            await _safeAddColumn(
+              'inventory_adjustments',
+              'warehouse_id',
+              'TEXT REFERENCES business_warehouses(id) ON DELETE RESTRICT',
+            );
+          }
+          if (from < 10088) {
+            await _safeAddColumn(
+              'product_batches',
+              'warehouse_id',
+              'TEXT REFERENCES business_warehouses(id) ON DELETE RESTRICT',
+            );
+          }
+          if (from < 10083) {
+            await m.createTable(businessOrganizations);
+            await m.createTable(businessBranches);
+            await m.createTable(businessWarehouses);
+            await m.createTable(businessContexts);
+            await initializeBusinessFoundation(this);
+          }
+          if (from < 10084) {
+            await m.createTable(businessDocumentLocations);
+            await installBusinessDocumentLocations(this);
+          }
+          if (from >= 10084 && from < 10090) {
+            await installBusinessDocumentLocations(this);
+          }
+          if (from < 10086) {
+            await m.createTable(businessWarehouseStocks);
+            await installBusinessWarehouseStock(this);
+          }
+        });
+
+        if (from < 10087) {
+          await transaction(() async {
+            await _safeAddColumn('commissions', 'sale_return_id', 'INTEGER');
+            await installCommissionReturnSource(this);
+          });
+        }
+
+        if (from < 10085) {
+          await _safeAddColumn(
+            'purchase_items',
+            'manufacturer_lot_number',
+            'TEXT',
+          );
+          await _safeAddColumn(
+            'product_batches',
+            'manufacturer_lot_number',
+            'TEXT',
+          );
+          await customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_product_batches_manufacturer_lot '
+            'ON product_batches(product_id, manufacturer_lot_number) '
+            'WHERE manufacturer_lot_number IS NOT NULL',
+          );
+        }
+
         await _createIndexes();
         await _seedInitialData();
       },
@@ -5435,6 +5416,11 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_product_batches_purchase_item '
       'ON product_batches(purchase_item_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_product_batches_manufacturer_lot '
+      'ON product_batches(product_id, manufacturer_lot_number) '
+      'WHERE manufacturer_lot_number IS NOT NULL',
     );
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_batch_consumptions_batch '
@@ -5995,8 +5981,17 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
         await customStatement(
           'UPDATE return_reason_codes SET '
           'label_en = ?, label_ar = ?, side = ?, is_system = 1, '
-          'updated_at = CURRENT_TIMESTAMP WHERE code = ?',
-          [row['label_en']!, row['label_ar']!, row['side']!, row['code']!],
+          'updated_at = CURRENT_TIMESTAMP WHERE code = ? '
+          'AND (label_en IS NOT ? OR label_ar IS NOT ? OR side IS NOT ? OR is_system IS NOT 1)',
+          [
+            row['label_en']!,
+            row['label_ar']!,
+            row['side']!,
+            row['code']!,
+            row['label_en']!,
+            row['label_ar']!,
+            row['side']!,
+          ],
         );
       }
     }

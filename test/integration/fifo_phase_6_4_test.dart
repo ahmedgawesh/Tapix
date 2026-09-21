@@ -84,6 +84,7 @@ void main() {
     required int quantity,
     required int unitCostCents,
     DateTime? expiryDate,
+    String? manufacturerLotNumber,
     String poNumber = 'PO-X',
   }) async {
     final purchaseId = await db
@@ -113,6 +114,7 @@ void main() {
             subtotalCents: Decimal.fromInt(quantity * unitCostCents),
             totalCents: Decimal.fromInt(quantity * unitCostCents),
             expiryDate: Value(expiryDate),
+            manufacturerLotNumber: Value(manufacturerLotNumber),
           ),
         );
     await db.purchaseDao.postPurchase(purchaseId);
@@ -221,6 +223,39 @@ void main() {
   });
 
   tearDown(() async => db.close());
+
+  test(
+    'posted purchase carries manufacturer lot into inventory batch',
+    () async {
+      final pid = await insertProduct(sku: 'LOT-001', name: 'Lot medicine');
+      final vid = await insertVariant(productId: pid);
+
+      final purchaseId = await postPurchase(
+        productId: pid,
+        variantId: vid,
+        quantity: 5,
+        unitCostCents: 100,
+        expiryDate: DateTime(2028, 9, 20),
+        manufacturerLotNumber: 'MFG-LOT-42',
+        poNumber: 'PO-LOT-42',
+      );
+
+      final batch = await db
+          .customSelect(
+            'SELECT pb.manufacturer_lot_number, pb.expiry_date '
+            'FROM product_batches pb '
+            'INNER JOIN purchase_items pi ON pi.id = pb.purchase_item_id '
+            'WHERE pi.purchase_id = ?',
+            variables: [Variable.withInt(purchaseId)],
+          )
+          .getSingle();
+      expect(batch.read<String>('manufacturer_lot_number'), 'MFG-LOT-42');
+      expect(
+        batch.read<DateTime>('expiry_date').toIso8601String().substring(0, 10),
+        '2028-09-20',
+      );
+    },
+  );
 
   // ──────────────────────────────────────────────────────────────────────────
   // 1-4. COSTING METHOD LOCK
@@ -476,7 +511,7 @@ void main() {
         //     unlinked-sale-return batches from SR- to SAR-; v10059 added
         //     adjustment-return commission reversal)
         //   - no batch rows exist for an empty seed (sanity)
-        expect(db.schemaVersion, equals(10082));
+        expect(db.schemaVersion, equals(10091));
 
         final any = await db
             .customSelect('SELECT COUNT(*) AS c FROM product_batches')

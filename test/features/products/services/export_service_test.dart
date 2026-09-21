@@ -1,3 +1,5 @@
+import 'package:tapix/features/products/services/export_stock_reader.dart';
+import 'package:tapix/features/products/domain/entities/product_variant_entity.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:tapix/features/products/services/export_service.dart';
@@ -11,9 +13,17 @@ import 'package:decimal/decimal.dart';
 
 class MockProductRepository extends Mock implements ProductRepository {}
 
-class MockProductVariantRepository extends Mock implements ProductVariantRepository {}
+class MockProductVariantRepository extends Mock
+    implements ProductVariantRepository {}
 
 class MockCategoryRepository extends Mock implements CategoryRepository {}
+
+class _TestStockReader implements ExportStockReader {
+  @override
+  Future<ProductVariant> read(ProductVariant variant) async => variant;
+  @override
+  Future<T> snapshot<T>(Future<T> Function() action) => action();
+}
 
 void main() {
   late ExportService exportService;
@@ -26,13 +36,28 @@ void main() {
     mockVariantRepository = MockProductVariantRepository();
     mockCategoryRepository = MockCategoryRepository();
 
-    when(() => mockVariantRepository.getAllColors()).thenAnswer((_) async => <ProductColor>[]);
-    when(() => mockVariantRepository.getAllSizes()).thenAnswer((_) async => <Size>[]);
-    when(() => mockVariantRepository.getVariantsByProduct(any())).thenAnswer((_) async => []);
-    when(() => mockVariantRepository.getDefaultVariantByProduct(any())).thenAnswer((_) async => null);
-    when(() => mockCategoryRepository.getAllCategories()).thenAnswer((_) async => []);
+    when(
+      () => mockVariantRepository.getAllColors(),
+    ).thenAnswer((_) async => <ProductColor>[]);
+    when(
+      () => mockVariantRepository.getAllSizes(),
+    ).thenAnswer((_) async => <Size>[]);
+    when(
+      () => mockVariantRepository.getVariantsByProduct(any()),
+    ).thenAnswer((_) async => []);
+    when(
+      () => mockVariantRepository.getDefaultVariantByProduct(any()),
+    ).thenAnswer((_) async => null);
+    when(
+      () => mockCategoryRepository.getAllCategories(),
+    ).thenAnswer((_) async => []);
 
-    exportService = ExportServiceImpl(mockProductRepository, mockVariantRepository, mockCategoryRepository);
+    exportService = ExportServiceImpl(
+      mockProductRepository,
+      mockVariantRepository,
+      mockCategoryRepository,
+      _TestStockReader(),
+    );
   });
 
   group('ExportService', () {
@@ -73,18 +98,25 @@ void main() {
 
     group('exportToCSV', () {
       test('generates CSV with all product fields in cents', () async {
-        when(() => mockProductRepository.fetchProductsForExport(
-              categoryId: any(named: 'categoryId'),
-              supplierId: any(named: 'supplierId'),
-              activeOnly: any(named: 'activeOnly'),
-              limit: any(named: 'limit'),
-              offset: any(named: 'offset'),
-            )).thenAnswer((_) async => testProducts);
+        when(
+          () => mockProductRepository.fetchProductsForExport(
+            categoryId: any(named: 'categoryId'),
+            supplierId: any(named: 'supplierId'),
+            activeOnly: any(named: 'activeOnly'),
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+          ),
+        ).thenAnswer((_) async => testProducts);
 
         final result = await exportService.exportToCSV();
 
         expect(result, isNotNull);
-        expect(result, contains('product_id,name,description,category,sku,barcode,color,size'));
+        expect(
+          result,
+          contains(
+            'product_id,name,description,category,sku,barcode,color,size',
+          ),
+        );
         expect(result, contains('Product 1'));
         expect(result, contains('1000')); // cost in cents
         expect(result, contains('1500')); // price in cents
@@ -92,51 +124,64 @@ void main() {
       });
 
       test('handles empty product list', () async {
-        when(() => mockProductRepository.fetchProductsForExport(
-              categoryId: any(named: 'categoryId'),
-              supplierId: any(named: 'supplierId'),
-              activeOnly: any(named: 'activeOnly'),
-              limit: any(named: 'limit'),
-              offset: any(named: 'offset'),
-            )).thenAnswer((_) async => []);
+        when(
+          () => mockProductRepository.fetchProductsForExport(
+            categoryId: any(named: 'categoryId'),
+            supplierId: any(named: 'supplierId'),
+            activeOnly: any(named: 'activeOnly'),
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+          ),
+        ).thenAnswer((_) async => []);
 
         final result = await exportService.exportToCSV();
 
         expect(result, isNotNull);
-        expect(result, contains('product_id,name,description,category,sku,barcode,color,size')); // Header only
+        expect(
+          result,
+          contains(
+            'product_id,name,description,category,sku,barcode,color,size',
+          ),
+        ); // Header only
       });
 
       test('respects category filter', () async {
-        when(() => mockProductRepository.fetchProductsForExport(
-              categoryId: 5,
-              supplierId: any(named: 'supplierId'),
-              activeOnly: any(named: 'activeOnly'),
-              limit: any(named: 'limit'),
-              offset: any(named: 'offset'),
-            )).thenAnswer((_) async => [testProducts.first]);
+        when(
+          () => mockProductRepository.fetchProductsForExport(
+            categoryId: 5,
+            supplierId: any(named: 'supplierId'),
+            activeOnly: any(named: 'activeOnly'),
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+          ),
+        ).thenAnswer((_) async => [testProducts.first]);
 
         final result = await exportService.exportToCSV(categoryId: 5);
 
         expect(result, isNotNull);
-        verify(() => mockProductRepository.fetchProductsForExport(
-              categoryId: 5,
-              supplierId: any(named: 'supplierId'),
-              activeOnly: any(named: 'activeOnly'),
-              limit: any(named: 'limit'),
-              offset: any(named: 'offset'),
-            )).called(1);
+        verify(
+          () => mockProductRepository.fetchProductsForExport(
+            categoryId: 5,
+            supplierId: any(named: 'supplierId'),
+            activeOnly: any(named: 'activeOnly'),
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+          ),
+        ).called(1);
       });
     });
 
     group('exportToExcel', () {
       test('generates Excel file bytes', () async {
-        when(() => mockProductRepository.fetchProductsForExport(
-              categoryId: any(named: 'categoryId'),
-              supplierId: any(named: 'supplierId'),
-              activeOnly: any(named: 'activeOnly'),
-              limit: any(named: 'limit'),
-              offset: any(named: 'offset'),
-            )).thenAnswer((_) async => testProducts);
+        when(
+          () => mockProductRepository.fetchProductsForExport(
+            categoryId: any(named: 'categoryId'),
+            supplierId: any(named: 'supplierId'),
+            activeOnly: any(named: 'activeOnly'),
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+          ),
+        ).thenAnswer((_) async => testProducts);
 
         final result = await exportService.exportToExcel();
 
@@ -164,13 +209,15 @@ void main() {
           ),
         );
 
-        when(() => mockProductRepository.fetchProductsForExport(
-              categoryId: any(named: 'categoryId'),
-              supplierId: any(named: 'supplierId'),
-              activeOnly: any(named: 'activeOnly'),
-              limit: any(named: 'limit'),
-              offset: any(named: 'offset'),
-            )).thenAnswer((_) async => largeDataset);
+        when(
+          () => mockProductRepository.fetchProductsForExport(
+            categoryId: any(named: 'categoryId'),
+            supplierId: any(named: 'supplierId'),
+            activeOnly: any(named: 'activeOnly'),
+            limit: any(named: 'limit'),
+            offset: any(named: 'offset'),
+          ),
+        ).thenAnswer((_) async => largeDataset);
 
         final stopwatch = Stopwatch()..start();
         final result = await exportService.exportToExcel();
@@ -178,7 +225,10 @@ void main() {
 
         expect(result, isNotNull);
         expect(result.length, greaterThan(0));
-        expect(stopwatch.elapsedMilliseconds, lessThan(5000)); // < 5 seconds for 1k products
+        expect(
+          stopwatch.elapsedMilliseconds,
+          lessThan(5000),
+        ); // < 5 seconds for 1k products
       });
     });
 
@@ -203,24 +253,28 @@ void main() {
           ),
         );
 
-        when(() => mockProductRepository.fetchProductsForExport(
-              categoryId: any(named: 'categoryId'),
-              supplierId: any(named: 'supplierId'),
-              activeOnly: any(named: 'activeOnly'),
-              limit: 10,
-              offset: 0,
-            )).thenAnswer((_) async => products.take(10).toList());
+        when(
+          () => mockProductRepository.fetchProductsForExport(
+            categoryId: any(named: 'categoryId'),
+            supplierId: any(named: 'supplierId'),
+            activeOnly: any(named: 'activeOnly'),
+            limit: 10,
+            offset: 0,
+          ),
+        ).thenAnswer((_) async => products.take(10).toList());
 
         final result = await exportService.getExportPreview();
 
         expect(result.length, equals(10));
-        verify(() => mockProductRepository.fetchProductsForExport(
-              categoryId: any(named: 'categoryId'),
-              supplierId: any(named: 'supplierId'),
-              activeOnly: any(named: 'activeOnly'),
-              limit: 10,
-              offset: 0,
-            )).called(1);
+        verify(
+          () => mockProductRepository.fetchProductsForExport(
+            categoryId: any(named: 'categoryId'),
+            supplierId: any(named: 'supplierId'),
+            activeOnly: any(named: 'activeOnly'),
+            limit: 10,
+            offset: 0,
+          ),
+        ).called(1);
       });
     });
   });

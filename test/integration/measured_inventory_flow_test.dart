@@ -600,6 +600,21 @@ void main() {
             ),
           );
       // round(493.6 m x 11.88) = 5,863.97.
+      await db
+          .into(db.inventoryAdjustments)
+          .insert(
+            InventoryAdjustmentsCompanion.insert(
+              id: const Value(9001),
+              adjustmentNumber: 'OPEN-FIXTURE-9001',
+              productId: lengthProductId,
+              adjustmentType: 'opening_balance',
+              quantityDelta: 493600,
+              unitCostCents: Decimal.fromInt(1188),
+              totalValueCents: Decimal.fromInt(586397),
+              reason: 'Opening fixture source',
+              currencyId: currencyId,
+            ),
+          );
       await journal.recordInventoryOpeningBalanceJournalEntry(
         adjustmentId: 9001,
         valueCents: 586397,
@@ -837,6 +852,21 @@ void main() {
           costCents: Value(Decimal.fromInt(1188)),
         ),
       );
+      await db
+          .into(db.inventoryAdjustments)
+          .insert(
+            InventoryAdjustmentsCompanion.insert(
+              id: const Value(9002),
+              adjustmentNumber: 'OPEN-FIXTURE-9002',
+              productId: productId,
+              adjustmentType: 'opening_balance',
+              quantityDelta: 491800,
+              unitCostCents: Decimal.fromInt(1188),
+              totalValueCents: Decimal.fromInt(584258),
+              reason: 'Opening fixture source',
+              currencyId: currencyId,
+            ),
+          );
       await journal.recordInventoryOpeningBalanceJournalEntry(
         adjustmentId: 9002,
         valueCents: 584258,

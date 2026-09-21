@@ -1,3 +1,8 @@
+import '../../../../core/services/business/warehouse_read_scope.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+import '../../../../core/services/business/warehouse_document_scope.dart';
+import '../../../../core/services/business/warehouse_batch_scope.dart';
+import '../../../../core/services/business/warehouse_stock_scope.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
@@ -346,6 +351,7 @@ class SupplierStocktakeReportBloc
           SupplierStocktakeReportEvent
         > {
   final AppDatabase _db;
+  final WarehouseReadScope? warehouseScope;
   ReportDateRange _dateRange;
   SupplierStocktakeSortType _sort = SupplierStocktakeSortType.valueDesc;
   int? _supplierId;
@@ -353,9 +359,12 @@ class SupplierStocktakeReportBloc
   int? _filterCategoryId;
   String? _filterCategoryName;
 
-  SupplierStocktakeReportBloc(this._db, {String defaultDateRange = 'month'})
-    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-      super(const RealtimeLoading());
+  SupplierStocktakeReportBloc(
+    this._db, {
+    String defaultDateRange = 'month',
+    this.warehouseScope,
+  }) : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+       super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
   int? get supplierId => _supplierId;
@@ -388,6 +397,9 @@ class SupplierStocktakeReportBloc
             _db.productColors,
             _db.sizes,
             _db.productBatches,
+            ...WarehouseBatchScope.dependencies(_db),
+            ...WarehouseDocumentScope.dependencies(_db),
+            ...WarehouseStockScope.dependencies(_db),
             _db.batchConsumptions,
             _db.purchases,
             _db.purchaseItems,
@@ -404,9 +416,11 @@ class SupplierStocktakeReportBloc
           },
         )
         .watch()
-        .asyncMap((_) async {
-          return _loadStocktakeData();
-        });
+        .asyncMap(
+          (_) => WarehouseReadScope.snapshot(_db, warehouseScope, () async {
+            return _loadStocktakeData();
+          }),
+        );
   }
 
   Future<void> _onDateRangeChanged(
@@ -588,9 +602,7 @@ class SupplierStocktakeReportBloc
     }
 
     String resolvedVariant(String alias) =>
-        'COALESCE($alias.variant_id, (SELECT MIN(pv0.id) FROM '
-        'product_variants pv0 WHERE pv0.product_id = $alias.product_id '
-        'AND pv0.is_active = 1), 0)';
+        'COALESCE(${WarehouseDocumentScope.operationalVariant(alias)}, 0)';
 
     final metaRows = await _db
         .customSelect(
@@ -599,8 +611,8 @@ class SupplierStocktakeReportBloc
              p.name AS product_name, COALESCE(pv.sku, p.sku) AS product_sku,
              pc.name AS color_name, sz.name AS size_name,
              cat.name AS category_name,
-             COALESCE(pv.stock_quantity, p.stock_quantity, 0) AS current_stock,
-             COALESCE(pv.cost_cents, p.cost_cents, 0) AS current_cost,
+             CASE WHEN pv.id IS NULL THEN COALESCE(p.stock_quantity, 0) ELSE ws.quantity END AS current_stock,
+             CASE WHEN pv.id IS NULL THEN COALESCE(p.cost_cents, 0) ELSE ws.unit_cost_cents END AS current_cost,
              COALESCE(pv.price_cents, p.price_cents, 0) AS current_price,
              p.measurement_type AS measurement_type,
              CASE WHEN p.measurement_type = 'piece' THEN 1 ELSE 1000 END AS quantity_scale,
@@ -610,10 +622,12 @@ class SupplierStocktakeReportBloc
       FROM products p
       LEFT JOIN product_variants pv
         ON pv.product_id = p.id AND pv.is_active = 1
+      LEFT JOIN ${warehouseScope?.stocks ?? WarehouseStockScope.primaryStocks} ws ON ws.variant_id = pv.id
       LEFT JOIN product_categories cat ON cat.id = p.category_id
       LEFT JOIN product_colors pc ON pc.id = pv.color_id
       LEFT JOIN sizes sz ON sz.id = pv.size_id
       WHERE p.is_active = 1 AND p.track_inventory = 1
+        ${warehouseScope != null && !warehouseScope!.isPrimary ? 'AND ws.variant_id IS NOT NULL' : ''}
         $extraWhere
       ORDER BY p.name, pc.name, sz.name
       ''',
@@ -624,6 +638,7 @@ class SupplierStocktakeReportBloc
             _db.productCategories,
             _db.productColors,
             _db.sizes,
+            ...WarehouseStockScope.dependencies(_db),
           },
         )
         .get();
@@ -665,23 +680,23 @@ class SupplierStocktakeReportBloc
         SELECT 'purchase' AS kind, pi.product_id AS product_id,
                ${resolvedVariant('pi')} AS variant_id, pi.quantity AS quantity
         FROM purchase_items pi
-        INNER JOIN purchases pu ON pu.id = pi.purchase_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchase) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} pu ON pu.id = pi.purchase_id
         WHERE pu.status = 'posted' AND pu.supplier_id = ?
           AND pu.purchase_date >= ? AND pu.purchase_date <= ?
         UNION ALL
         SELECT 'return' AS kind, pi.product_id AS product_id,
                ${resolvedVariant('pi')} AS variant_id, pri.quantity AS quantity
         FROM purchase_return_items pri
-        INNER JOIN purchase_returns pr ON pr.id = pri.return_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchaseReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseReturn)} pr ON pr.id = pri.return_id
         INNER JOIN purchase_items pi ON pi.id = pri.purchase_item_id
-        INNER JOIN purchases pu ON pu.id = pi.purchase_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchase) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} pu ON pu.id = pi.purchase_id
         WHERE pr.status = 'posted' AND pu.supplier_id = ?
           AND pr.return_date >= ? AND pr.return_date <= ?
         UNION ALL
         SELECT 'return' AS kind, prai.product_id AS product_id,
                ${resolvedVariant('prai')} AS variant_id, prai.quantity AS quantity
         FROM purchase_return_adjustment_items prai
-        INNER JOIN purchase_return_adjustments pra ON pra.id = prai.return_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchaseAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseAdjustment)} pra ON pra.id = prai.return_id
         WHERE pra.status = 'posted' AND pra.supplier_id = ?
           AND pra.return_date >= ? AND pra.return_date <= ?
       ) activity
@@ -699,6 +714,7 @@ class SupplierStocktakeReportBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.purchases,
             _db.purchaseItems,
             _db.purchaseReturns,
@@ -733,26 +749,27 @@ class SupplierStocktakeReportBloc
         SELECT pu.supplier_id AS supplier_id, pi.product_id AS product_id,
                ${resolvedVariant('pi')} AS variant_id, pi.quantity AS quantity_delta
         FROM purchase_items pi
-        INNER JOIN purchases pu ON pu.id = pi.purchase_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchase) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} pu ON pu.id = pi.purchase_id
         WHERE pu.status = 'posted'
         UNION ALL
         SELECT pu.supplier_id AS supplier_id, pi.product_id AS product_id,
                ${resolvedVariant('pi')} AS variant_id, -pri.quantity AS quantity_delta
         FROM purchase_return_items pri
-        INNER JOIN purchase_returns pr ON pr.id = pri.return_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchaseReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseReturn)} pr ON pr.id = pri.return_id
         INNER JOIN purchase_items pi ON pi.id = pri.purchase_item_id
-        INNER JOIN purchases pu ON pu.id = pi.purchase_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchase) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} pu ON pu.id = pi.purchase_id
         WHERE pr.status = 'posted'
         UNION ALL
         SELECT pra.supplier_id AS supplier_id, prai.product_id AS product_id,
                ${resolvedVariant('prai')} AS variant_id, -prai.quantity AS quantity_delta
         FROM purchase_return_adjustment_items prai
-        INNER JOIN purchase_return_adjustments pra ON pra.id = prai.return_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchaseAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseAdjustment)} pra ON pra.id = prai.return_id
         WHERE pra.status = 'posted'
       ) source_movements
       GROUP BY supplier_id, product_id, variant_id
       ''',
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.purchases,
             _db.purchaseItems,
             _db.purchaseReturns,
@@ -785,12 +802,17 @@ class SupplierStocktakeReportBloc
                FROM product_variants pv0 WHERE pv0.product_id = pb.product_id
                AND pv0.is_active = 1), 0) AS variant_id,
              SUM(pb.received_quantity) AS weight
-      FROM product_batches pb
+      FROM ${warehouseScope?.batches ?? WarehouseBatchScope.primaryBatches} pb
       WHERE pb.is_active = 1 AND pb.supplier_id IS NULL
         AND pb.source != 'purchase'
       GROUP BY pb.product_id, COALESCE(pb.variant_id, 0)
       ''',
-          readsFrom: {_db.productBatches, _db.productVariants},
+          readsFrom: {
+            _db.productBatches,
+            ...WarehouseBatchScope.dependencies(_db),
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.productVariants,
+          },
         )
         .get();
     final unassignedWeights = <_VariantKey, int>{};
@@ -835,14 +857,20 @@ class SupplierStocktakeReportBloc
                1.0 * pb.remaining_quantity * pb.unit_cost_cents /
                CASE WHEN p.measurement_type = 'piece' THEN 1 ELSE 1000 END
              ) AS INTEGER)) AS remaining_value
-      FROM product_batches pb
+      FROM ${warehouseScope?.batches ?? WarehouseBatchScope.primaryBatches} pb
       INNER JOIN products p ON p.id = pb.product_id
       WHERE pb.is_active = 1 AND pb.remaining_quantity != 0
         AND pb.supplier_id = ?
       GROUP BY pb.product_id, COALESCE(pb.variant_id, 0)
       ''',
           variables: [Variable.withInt(_supplierId!)],
-          readsFrom: {_db.productBatches, _db.productVariants, _db.products},
+          readsFrom: {
+            _db.productBatches,
+            ...WarehouseBatchScope.dependencies(_db),
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.productVariants,
+            _db.products,
+          },
         )
         .get();
     for (final row in fifoBalanceRows) {
@@ -891,7 +919,7 @@ class SupplierStocktakeReportBloc
                CAST(ROUND(1.0 * si.quantity * COALESCE(si.cost_cents, pv.cost_cents, p.cost_cents, 0)
                           / si.quantity_scale) AS INTEGER) AS net_cogs
         FROM sale_items si
-        INNER JOIN sales sa ON sa.id = si.sale_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} sa ON sa.id = si.sale_id
         INNER JOIN products p ON p.id = si.product_id AND p.track_inventory = 1
         LEFT JOIN product_variants pv ON pv.id = si.variant_id
         WHERE sa.status = 'completed' AND sa.sale_date >= ? AND sa.sale_date <= ?
@@ -903,7 +931,7 @@ class SupplierStocktakeReportBloc
                                          si.cost_cents, pv.cost_cents,
                                          p.cost_cents, 0) / sri.quantity_scale) AS INTEGER) AS net_cogs
         FROM sale_return_items sri
-        INNER JOIN sale_returns sr ON sr.id = sri.return_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr ON sr.id = sri.return_id
         INNER JOIN sale_items si ON si.id = sri.sale_item_id
         INNER JOIN products p ON p.id = si.product_id AND p.track_inventory = 1
         LEFT JOIN product_variants pv ON pv.id = si.variant_id
@@ -915,7 +943,7 @@ class SupplierStocktakeReportBloc
                -CAST(ROUND(1.0 * srai.quantity * COALESCE(srai.unit_cost_at_post_cents,
                                           srai.unit_cost_cents, 0) / srai.quantity_scale) AS INTEGER) AS net_cogs
         FROM sale_return_adjustment_items srai
-        INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra ON sra.id = srai.return_id
         INNER JOIN products p ON p.id = srai.product_id AND p.track_inventory = 1
         WHERE sra.status = 'posted' AND sra.return_date >= ? AND sra.return_date <= ?
       ) activity
@@ -930,6 +958,7 @@ class SupplierStocktakeReportBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.sales,
             _db.saleItems,
             _db.saleReturns,
@@ -988,9 +1017,9 @@ class SupplierStocktakeReportBloc
                CAST(ROUND(1.0 * bc.quantity * bc.unit_cost_cents / si.quantity_scale) AS INTEGER) AS source_cost,
                (si.total_cents - si.tax_cents) AS net_revenue
         FROM batch_consumptions bc
-        INNER JOIN product_batches pb ON pb.id = bc.batch_id
+        INNER JOIN ${warehouseScope?.batches ?? WarehouseBatchScope.primaryBatches} pb ON pb.id = bc.batch_id
         INNER JOIN sale_items si ON si.id = bc.sale_item_id
-        INNER JOIN sales sa ON sa.id = si.sale_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} sa ON sa.id = si.sale_id
         WHERE bc.direction = 'out' AND bc.consumption_type = 'sale'
           AND sa.status = 'completed' AND sa.sale_date >= ? AND sa.sale_date <= ?
         UNION ALL
@@ -1001,9 +1030,9 @@ class SupplierStocktakeReportBloc
                CAST(ROUND(1.0 * bc.quantity * bc.unit_cost_cents / sri.quantity_scale) AS INTEGER) AS source_cost,
                -(sri.refund_cents - sri.tax_cents) AS net_revenue
         FROM batch_consumptions bc
-        INNER JOIN product_batches pb ON pb.id = bc.batch_id
+        INNER JOIN ${warehouseScope?.batches ?? WarehouseBatchScope.primaryBatches} pb ON pb.id = bc.batch_id
         INNER JOIN sale_return_items sri ON sri.id = bc.sale_return_item_id
-        INNER JOIN sale_returns sr ON sr.id = sri.return_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr ON sr.id = sri.return_id
         INNER JOIN sale_items si ON si.id = sri.sale_item_id
         WHERE bc.direction = 'in' AND bc.consumption_type = 'sale_return_reverse'
           AND sr.status = 'posted' AND sr.return_date >= ? AND sr.return_date <= ?
@@ -1015,10 +1044,10 @@ class SupplierStocktakeReportBloc
                CAST(ROUND(1.0 * bc.quantity * bc.unit_cost_cents / srai.quantity_scale) AS INTEGER) AS source_cost,
                -(srai.total_cents - srai.tax_cents) AS net_revenue
         FROM batch_consumptions bc
-        INNER JOIN product_batches pb ON pb.id = bc.batch_id
+        INNER JOIN ${warehouseScope?.batches ?? WarehouseBatchScope.primaryBatches} pb ON pb.id = bc.batch_id
         INNER JOIN sale_return_adjustment_items srai
           ON srai.id = bc.sale_return_adjustment_item_id
-        INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra ON sra.id = srai.return_id
         WHERE bc.direction = 'in'
           AND bc.consumption_type = 'sale_adj_return_reverse'
           AND sra.status = 'posted' AND sra.return_date >= ? AND sra.return_date <= ?
@@ -1036,6 +1065,8 @@ class SupplierStocktakeReportBloc
           readsFrom: {
             _db.batchConsumptions,
             _db.productBatches,
+            ...WarehouseBatchScope.dependencies(_db),
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.sales,
             _db.saleItems,
             _db.saleReturns,

@@ -36,9 +36,9 @@ void main() {
   late int customerId;
 
   Future<int> loyaltyBalance() async {
-    final c = await (db.select(db.customers)
-          ..where((x) => x.id.equals(customerId)))
-        .getSingle();
+    final c = await (db.select(
+      db.customers,
+    )..where((x) => x.id.equals(customerId))).getSingle();
     return c.loyaltyPointsBalance;
   }
 
@@ -59,12 +59,14 @@ void main() {
     // (this test pins the base×multiplier math, not tier configuration).
     await db.delete(db.loyaltyTiers).go();
 
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     currencyId = usd.id;
 
-    productId = await db.into(db.products).insert(
+    productId = await db
+        .into(db.products)
+        .insert(
           ProductsCompanion.insert(
             sku: const Value<String?>('LOY-TEST-001'),
             name: 'Loyalty Test Product',
@@ -74,7 +76,9 @@ void main() {
             stockQuantity: const Value(100),
           ),
         );
-    variantId = await db.into(db.productVariants).insert(
+    variantId = await db
+        .into(db.productVariants)
+        .insert(
           ProductVariantsCompanion.insert(
             productId: productId,
             stockQuantity: const Value(100),
@@ -82,7 +86,9 @@ void main() {
             priceCents: Decimal.fromInt(5000),
           ),
         );
-    customerId = await db.into(db.customers).insert(
+    customerId = await db
+        .into(db.customers)
+        .insert(
           CustomersCompanion.insert(
             name: 'roby',
             currencyId: currencyId,
@@ -119,40 +125,97 @@ void main() {
     );
   }
 
-  test('post deducts base points (ppu=1); void restores them exactly',
+  for (final entry in [('JPY', 1), ('KWD', 1000)]) {
+    test(
+      'adjustment loyalty preview and posting agree for ${entry.$1}',
       () async {
-    // $100 return, default ppu=1 → 100 base points, multiplier 1.0.
-    final returnId = await createCreditReturn(totalCents: 10000);
-    expect(await loyaltyBalance(), equals(500));
-
-    await adjDao.postSaleAdjReturn(
-      returnId,
-      journalEntryService: journalService,
-      allowOverHistory: true,
-      loyaltyPointsService: loyalty,
+        final currency = await (db.select(
+          db.currencies,
+        )..where((c) => c.code.equals(entry.$1))).getSingleOrNull();
+        final id =
+            currency?.id ??
+            await db
+                .into(db.currencies)
+                .insert(
+                  CurrenciesCompanion.insert(
+                    exchangeRate: Decimal.one,
+                    code: entry.$1,
+                    name: entry.$1,
+                    symbol: entry.$1,
+                  ),
+                );
+        currencyId = id;
+        await (db.update(db.customers)..where((c) => c.id.equals(customerId)))
+            .write(CustomersCompanion(currencyId: Value(id)));
+        await (db.update(db.products)..where((p) => p.id.equals(productId)))
+            .write(ProductsCompanion(currencyId: Value(id)));
+        final preview = await loyalty.previewAdjustmentReturnDeduction(
+          customerId: customerId,
+          returnTotalCents: 10 * entry.$2,
+        );
+        expect(preview.pointsToDeduct, 10);
+        final returnId = await createCreditReturn(totalCents: 10 * entry.$2);
+        await adjDao.postSaleAdjReturn(
+          returnId,
+          journalEntryService: journalService,
+          allowOverHistory: true,
+          loyaltyPointsService: loyalty,
+        );
+        expect(await loyaltyBalance(), 490);
+        await adjDao.voidSaleAdjReturn(
+          returnId,
+          journalEntryService: journalService,
+          loyaltyPointsService: loyalty,
+        );
+        expect(await loyaltyBalance(), 500);
+      },
     );
+  }
 
-    expect(await loyaltyBalance(), equals(400),
-        reason: '500 − 100 deducted for the credit adjustment return.');
+  test(
+    'post deducts base points (ppu=1); void restores them exactly',
+    () async {
+      // $100 return, default ppu=1 → 100 base points, multiplier 1.0.
+      final returnId = await createCreditReturn(totalCents: 10000);
+      expect(await loyaltyBalance(), equals(500));
 
-    // A redeem transaction keyed by the adjustment return id exists.
-    final redeemed = await (db.select(db.loyaltyPointTransactions)
-          ..where((t) =>
-              t.referenceType.equals('sale_return_adjustment') &
-              t.referenceId.equals(returnId)))
-        .get();
-    expect(redeemed.length, equals(1));
-    expect(redeemed.single.points, equals(-100));
+      await adjDao.postSaleAdjReturn(
+        returnId,
+        journalEntryService: journalService,
+        allowOverHistory: true,
+        loyaltyPointsService: loyalty,
+      );
 
-    // Void restores exactly.
-    await adjDao.voidSaleAdjReturn(
-      returnId,
-      journalEntryService: journalService,
-      loyaltyPointsService: loyalty,
-    );
-    expect(await loyaltyBalance(), equals(500),
-        reason: 'Void re-credits the 100 points deducted on post.');
-  });
+      expect(
+        await loyaltyBalance(),
+        equals(400),
+        reason: '500 − 100 deducted for the credit adjustment return.',
+      );
+
+      // A redeem transaction keyed by the adjustment return id exists.
+      final redeemed =
+          await (db.select(db.loyaltyPointTransactions)..where(
+                (t) =>
+                    t.referenceType.equals('sale_return_adjustment') &
+                    t.referenceId.equals(returnId),
+              ))
+              .get();
+      expect(redeemed.length, equals(1));
+      expect(redeemed.single.points, equals(-100));
+
+      // Void restores exactly.
+      await adjDao.voidSaleAdjReturn(
+        returnId,
+        journalEntryService: journalService,
+        loyaltyPointsService: loyalty,
+      );
+      expect(
+        await loyaltyBalance(),
+        equals(500),
+        reason: 'Void re-credits the 100 points deducted on post.',
+      );
+    },
+  );
 
   test('deduction is capped at the customer current balance', () async {
     // Drain the customer to 30 points; a $100 return would compute 100 but
@@ -168,8 +231,11 @@ void main() {
       loyaltyPointsService: loyalty,
     );
 
-    expect(await loyaltyBalance(), equals(0),
-        reason: 'Capped deduction: 30 − 30 = 0, never negative.');
+    expect(
+      await loyaltyBalance(),
+      equals(0),
+      reason: 'Capped deduction: 30 − 30 = 0, never negative.',
+    );
   });
 
   test('preview reports the same points + per-point value', () async {
@@ -193,7 +259,10 @@ void main() {
       allowOverHistory: true,
       loyaltyPointsService: loyalty,
     );
-    expect(await loyaltyBalance(), equals(500),
-        reason: 'Loyalty disabled → no points deducted.');
+    expect(
+      await loyaltyBalance(),
+      equals(500),
+      reason: 'Loyalty disabled → no points deducted.',
+    );
   });
 }

@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import '../app_database.dart';
+import '../../services/business/warehouse_stock_scope.dart';
 import '../tables/products.dart';
 
 part 'product_variant_dao.g.dart';
@@ -56,14 +57,23 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase>
   /// Returns a map of productId -> (variantCount, totalStock) for all products with variants
   Stream<Map<int, ({int count, int totalStock})>> watchVariantSummaries() {
     return customSelect(
-      'SELECT product_id, COUNT(*) as cnt, SUM(stock_quantity) as total_stock '
-      'FROM product_variants WHERE is_active = 1 GROUP BY product_id',
-      readsFrom: {productVariants},
+      'SELECT v.product_id, COUNT(v.id) as cnt, COUNT(ws.variant_id) as balance_count, SUM(ws.quantity) as total_stock '
+      'FROM product_variants v LEFT JOIN ${WarehouseStockScope.primaryStocks} ws ON ws.variant_id = v.id '
+      'WHERE v.is_active = 1 GROUP BY v.product_id',
+      readsFrom: {
+        productVariants,
+        ...WarehouseStockScope.dependencies(attachedDatabase),
+      },
     ).watch().map((rows) {
       final result = <int, ({int count, int totalStock})>{};
       for (final row in rows) {
         final productId = row.read<int>('product_id');
         final count = row.read<int>('cnt');
+        if (count != row.read<int>('balance_count')) {
+          throw StateError(
+            'Missing primary warehouse balance in variant summary.',
+          );
+        }
         final totalStock = row.read<int>('total_stock');
         result[productId] = (count: count, totalStock: totalStock);
       }
@@ -170,13 +180,17 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase>
     int productId,
   ) async {
     final row = await customSelect(
-      'SELECT COUNT(*) as cnt, SUM(stock_quantity) as total_stock '
-      'FROM product_variants WHERE product_id = ? AND is_active = 1',
+      'SELECT COUNT(v.id) as cnt, COUNT(ws.variant_id) as balance_count, SUM(ws.quantity) as total_stock '
+      'FROM product_variants v LEFT JOIN ${WarehouseStockScope.primaryStocks} ws ON ws.variant_id = v.id '
+      'WHERE v.product_id = ? AND v.is_active = 1',
       variables: [Variable.withInt(productId)],
     ).getSingleOrNull();
     if (row == null) return null;
     final count = row.read<int>('cnt');
     if (count == 0) return null;
+    if (count != row.read<int>('balance_count')) {
+      throw StateError('Missing primary warehouse balance in variant summary.');
+    }
     final totalStock = row.read<int>('total_stock');
     return (count: count, totalStock: totalStock);
   }
@@ -309,19 +323,53 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// Stock in different locations must never cancel out when deciding whether
+  /// a shared variant may be hidden. Retain legacy stock as a conservative guard.
+  Future<bool> _hasStockInAnyWarehouse(int variantId) async {
+    final row = await customSelect(
+      'SELECT EXISTS(SELECT 1 FROM product_variants v WHERE v.id = ? '
+      'AND (v.stock_quantity != 0 OR EXISTS (SELECT 1 FROM business_warehouse_stocks ws '
+      'WHERE ws.variant_id = v.id AND ws.quantity != 0))) AS has_stock',
+      variables: [Variable.withInt(variantId)],
+    ).getSingle();
+    return row.read<int>('has_stock') == 1;
+  }
+
   Future<bool> updateVariant(ProductVariant variant) {
     return transaction(() async {
       final persisted = await (select(
         productVariants,
       )..where((v) => v.id.equals(variant.id))).getSingleOrNull();
-      if (persisted != null &&
-          persisted.isActive &&
+      if (persisted == null) return false;
+      if (persisted.productId != variant.productId) {
+        throw StateError('Variant product identity cannot be changed.');
+      }
+      if (persisted.isActive &&
           !variant.isActive &&
-          persisted.stockQuantity != 0) {
+          await _hasStockInAnyWarehouse(persisted.id)) {
         throw const VariantStockNotZeroException(1);
       }
 
-      final ok = await update(productVariants).replace(variant);
+      // Catalog edits must not write financial fields, even with stale input.
+      // Omitting these columns also avoids firing stock/cost mirror triggers.
+      final changes = variant
+          .toCompanion(false)
+          .copyWith(
+            id: const Value.absent(),
+            productId: const Value.absent(),
+            stockQuantity: const Value.absent(),
+            costCents: const Value.absent(),
+            previousCostCents: const Value.absent(),
+            previousPriceCents: const Value.absent(),
+            previousWholesalePriceCents: const Value.absent(),
+            lastPurchasePriceCents: const Value.absent(),
+            createdAt: const Value.absent(),
+          );
+      final ok =
+          await (update(
+            productVariants,
+          )..where((v) => v.id.equals(variant.id))).write(changes) ==
+          1;
 
       final row = await customSelect(
         'SELECT COUNT(*) as cnt FROM product_variants WHERE product_id = ? AND is_active = 1',
@@ -363,7 +411,8 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase>
       'SELECT COUNT(*) AS cnt FROM product_variants '
       'WHERE product_id = ? AND is_active = 1 '
       'AND (color_id IS NOT NULL OR size_id IS NOT NULL) '
-      'AND stock_quantity != 0',
+      'AND (stock_quantity != 0 OR EXISTS (SELECT 1 FROM business_warehouse_stocks ws '
+      'WHERE ws.variant_id = product_variants.id AND ws.quantity != 0))',
       variables: [Variable.withInt(productId)],
     ).getSingle();
     return row.read<int>('cnt');
@@ -400,7 +449,7 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase>
       final variant = await (select(
         productVariants,
       )..where((v) => v.id.equals(id))).getSingleOrNull();
-      if (variant != null && variant.stockQuantity != 0) {
+      if (variant != null && await _hasStockInAnyWarehouse(variant.id)) {
         throw const VariantStockNotZeroException(1);
       }
       final affected = await (delete(
@@ -468,7 +517,7 @@ class ProductVariantDao extends DatabaseAccessor<AppDatabase>
         return (wasDeleted: false, referenceCount: 0);
       }
 
-      if (variant.stockQuantity != 0) {
+      if (await _hasStockInAnyWarehouse(variant.id)) {
         throw const VariantStockNotZeroException(1);
       }
 

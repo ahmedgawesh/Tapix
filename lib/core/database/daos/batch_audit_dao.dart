@@ -1,3 +1,4 @@
+import '../../services/business/warehouse_batch_scope.dart';
 import 'package:drift/drift.dart';
 
 import '../app_database.dart';
@@ -34,6 +35,7 @@ import '../../measurement/measurement.dart';
 class BatchSummary {
   final int batchId;
   final String batchNumber;
+  final String? manufacturerLotNumber;
   final int productId;
   final int variantId;
   final String? productName;
@@ -55,6 +57,7 @@ class BatchSummary {
   const BatchSummary({
     required this.batchId,
     required this.batchNumber,
+    this.manufacturerLotNumber,
     required this.productId,
     required this.variantId,
     this.productName,
@@ -166,6 +169,7 @@ class BatchConsumptionRecord {
 class BatchSaleConsumed {
   final int batchId;
   final String batchNumber;
+  final String? manufacturerLotNumber;
   final int quantity;
   final int unitCostCents;
   final int quantityScale;
@@ -175,6 +179,7 @@ class BatchSaleConsumed {
   const BatchSaleConsumed({
     required this.batchId,
     required this.batchNumber,
+    this.manufacturerLotNumber,
     required this.quantity,
     required this.unitCostCents,
     this.quantityScale = 1,
@@ -298,14 +303,15 @@ class BatchAuditDao {
     final sql =
         '''
       SELECT
-        pb.id, pb.batch_number, pb.product_id, pb.variant_id, pb.source,
+        pb.id, pb.batch_number, pb.manufacturer_lot_number,
+        pb.product_id, pb.variant_id, pb.source,
         pb.supplier_id, pb.purchase_item_id, pb.received_date, pb.expiry_date,
         pb.received_quantity, pb.remaining_quantity, pb.unit_cost_cents,
         pb.is_active, p.measurement_type,
         sup.name      AS supplier_name,
         pc.name       AS color_name,
         sz.name       AS size_name
-      FROM product_batches pb
+      FROM ${WarehouseBatchScope.primaryBatches} pb
       INNER JOIN products          p   ON p.id  = pb.product_id
       LEFT JOIN suppliers        sup ON sup.id = pb.supplier_id
       LEFT JOIN product_variants pv  ON pv.id  = pb.variant_id
@@ -324,6 +330,7 @@ class BatchAuditDao {
           variables: vars,
           readsFrom: {
             _db.productBatches,
+            ...WarehouseBatchScope.dependencies(_db),
             _db.batchConsumptions,
             _db.products,
             _db.suppliers,
@@ -356,7 +363,8 @@ class BatchAuditDao {
   ///
   /// Filters:
   ///   * [query] — case-insensitive LIKE against `products.name`,
-  ///     `COALESCE(variant.sku, product.sku)` and `batch_number`.
+  ///     `COALESCE(variant.sku, product.sku)`, the internal batch number,
+  ///     and the manufacturer's lot number.
   ///   * [source] — exact match against `product_batches.source`
   ///     (`'purchase'`, `'opening'`, `'found'`, `'sale_return'`).
   ///   * [supplierId] — narrow to a single supplier.
@@ -403,10 +411,12 @@ class BatchAuditDao {
         '('
         'p.name LIKE ? ESCAPE \'\\\' OR '
         'COALESCE(pv.sku, p.sku) LIKE ? ESCAPE \'\\\' OR '
-        'pb.batch_number LIKE ? ESCAPE \'\\\''
+        'pb.batch_number LIKE ? ESCAPE \'\\\' OR '
+        'pb.manufacturer_lot_number LIKE ? ESCAPE \'\\\''
         ')',
       );
       vars
+        ..add(Variable.withString(pattern))
         ..add(Variable.withString(pattern))
         ..add(Variable.withString(pattern))
         ..add(Variable.withString(pattern));
@@ -473,7 +483,8 @@ class BatchAuditDao {
     final sql =
         '''
       SELECT
-        pb.id, pb.batch_number, pb.product_id, pb.variant_id, pb.source,
+        pb.id, pb.batch_number, pb.manufacturer_lot_number,
+        pb.product_id, pb.variant_id, pb.source,
         pb.supplier_id, pb.purchase_item_id, pb.received_date, pb.expiry_date,
         pb.received_quantity, pb.remaining_quantity, pb.unit_cost_cents,
         pb.is_active, p.measurement_type,
@@ -482,7 +493,7 @@ class BatchAuditDao {
         sup.name                     AS supplier_name,
         pc.name                      AS color_name,
         sz.name                      AS size_name
-      FROM product_batches pb
+      FROM ${WarehouseBatchScope.primaryBatches} pb
       INNER JOIN products        p   ON p.id   = pb.product_id
       LEFT  JOIN suppliers       sup ON sup.id = pb.supplier_id
       LEFT  JOIN product_variants pv ON pv.id  = pb.variant_id
@@ -501,6 +512,7 @@ class BatchAuditDao {
           variables: vars,
           readsFrom: {
             _db.productBatches,
+            ...WarehouseBatchScope.dependencies(_db),
             _db.batchConsumptions,
             _db.products,
             _db.suppliers,
@@ -545,7 +557,7 @@ class BatchAuditDao {
           p0.measurement_type AS measurement_type,
           $_kRefSelect
         FROM batch_consumptions bc
-        INNER JOIN product_batches pb0 ON pb0.id = bc.batch_id
+        INNER JOIN ${WarehouseBatchScope.primaryBatches} pb0 ON pb0.id = bc.batch_id
         INNER JOIN products p0 ON p0.id = pb0.product_id
         $_kRefJoins
         WHERE bc.batch_id = ?
@@ -555,6 +567,7 @@ class BatchAuditDao {
           readsFrom: {
             _db.batchConsumptions,
             _db.productBatches,
+            ...WarehouseBatchScope.dependencies(_db),
             _db.products,
             _db.saleItems,
             _db.sales,
@@ -590,7 +603,7 @@ class BatchAuditDao {
               p0.measurement_type AS measurement_type,
               $_kRefSelect
             FROM batch_consumptions bc
-            INNER JOIN product_batches pb0 ON pb0.id = bc.batch_id
+            INNER JOIN ${WarehouseBatchScope.primaryBatches} pb0 ON pb0.id = bc.batch_id
             INNER JOIN products p0 ON p0.id = pb0.product_id
             $_kRefJoins
             WHERE bc.batch_id = ?
@@ -600,6 +613,7 @@ class BatchAuditDao {
           readsFrom: {
             _db.batchConsumptions,
             _db.productBatches,
+            ...WarehouseBatchScope.dependencies(_db),
             _db.products,
             _db.saleItems,
             _db.sales,
@@ -684,14 +698,19 @@ class BatchAuditDao {
           bc.quantity          AS quantity,
           bc.unit_cost_cents   AS unit_cost_cents,
           pb.batch_number      AS batch_number,
+          pb.manufacturer_lot_number AS manufacturer_lot_number,
           pb.expiry_date       AS expiry_date
         FROM batch_consumptions bc
-        INNER JOIN product_batches pb ON pb.id = bc.batch_id
+        INNER JOIN ${WarehouseBatchScope.primaryBatches} pb ON pb.id = bc.batch_id
         WHERE bc.sale_item_id IN ($placeholders)
         ORDER BY bc.id ASC
       ''',
           variables: saleItemIds.map((id) => Variable.withInt(id)).toList(),
-          readsFrom: {_db.batchConsumptions, _db.productBatches},
+          readsFrom: {
+            _db.batchConsumptions,
+            _db.productBatches,
+            ...WarehouseBatchScope.dependencies(_db),
+          },
         )
         .get();
 
@@ -706,6 +725,9 @@ class BatchAuditDao {
         () => _BatchAcc(
           batchId: batchId,
           batchNumber: r.read<String>('batch_number'),
+          manufacturerLotNumber: r.readNullable<String>(
+            'manufacturer_lot_number',
+          ),
           unitCostCents: r.read<int>('unit_cost_cents'),
           expiryDate: r.readNullable<DateTime>('expiry_date'),
         ),
@@ -729,6 +751,7 @@ class BatchAuditDao {
                 (b) => BatchSaleConsumed(
                   batchId: b.batchId,
                   batchNumber: b.batchNumber,
+                  manufacturerLotNumber: b.manufacturerLotNumber,
                   quantity: b.netQty,
                   unitCostCents: b.unitCostCents,
                   quantityScale: row.read<int>('quantity_scale'),
@@ -776,7 +799,7 @@ class BatchAuditDao {
           p0.measurement_type AS measurement_type,
           $_kRefSelect
         FROM batch_consumptions bc
-        INNER JOIN product_batches pb0 ON pb0.id = bc.batch_id
+        INNER JOIN ${WarehouseBatchScope.primaryBatches} pb0 ON pb0.id = bc.batch_id
         INNER JOIN products p0 ON p0.id = pb0.product_id
         $_kRefJoins
         WHERE bc.sale_item_id = ?
@@ -786,6 +809,7 @@ class BatchAuditDao {
           readsFrom: {
             _db.batchConsumptions,
             _db.productBatches,
+            ...WarehouseBatchScope.dependencies(_db),
             _db.products,
             _db.saleItems,
             _db.sales,
@@ -828,6 +852,7 @@ class BatchAuditDao {
     return BatchSummary(
       batchId: r.read<int>('id'),
       batchNumber: r.read<String>('batch_number'),
+      manufacturerLotNumber: r.readNullable<String>('manufacturer_lot_number'),
       productId: r.read<int>('product_id'),
       variantId: r.read<int>('variant_id'),
       productName: productName,
@@ -937,6 +962,7 @@ class _LineAcc {
 class _BatchAcc {
   final int batchId;
   final String batchNumber;
+  final String? manufacturerLotNumber;
   final int unitCostCents;
   final DateTime? expiryDate;
   int netQty = 0;
@@ -944,6 +970,7 @@ class _BatchAcc {
   _BatchAcc({
     required this.batchId,
     required this.batchNumber,
+    required this.manufacturerLotNumber,
     required this.unitCostCents,
     required this.expiryDate,
   });

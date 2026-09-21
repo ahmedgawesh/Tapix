@@ -1,3 +1,4 @@
+import '../widgets/warehouse_report_context.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -18,7 +19,9 @@ class ProductVariantMovementScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => sl<ProductVariantMovementBloc>(),
+      create: (_) => sl<ProductVariantMovementBloc>(
+        param1: WarehouseReportContext.maybeOf(context)?.scope,
+      ),
       child: const _VariantMovementView(),
     );
   }

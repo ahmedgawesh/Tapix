@@ -1,3 +1,10 @@
+import '../../services/business/warehouse_read_scope.dart';
+import '../../services/loyalty/linked_return_loyalty_reversal.dart';
+import '../../services/business/warehouse_inventory_reader.dart';
+import '../../services/business/warehouse_operation_scope.dart';
+import '../../services/business/warehouse_batch_scope.dart';
+import '../../services/business/document_posting_scope.dart';
+import '../../services/business/warehouse_document_scope.dart';
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../measurement/measurement.dart';
@@ -296,10 +303,21 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   /// Create sale with items in a transaction
   Future<int> createSaleWithItems(
     SalesCompanion sale,
-    List<SaleItemsCompanion> items,
-  ) {
+    List<SaleItemsCompanion> items, {
+    WarehouseOperationScope? scope,
+  }) {
     return transaction(() async {
-      final saleId = await into(sales).insert(sale);
+      final operation =
+          scope ?? await WarehouseOperationScope.resolve(attachedDatabase);
+      await operation.validate(attachedDatabase);
+      if (sale.warehouseId.present &&
+          sale.warehouseId.value != null &&
+          sale.warehouseId.value != operation.warehouseId) {
+        throw StateError('Sale route differs from authorized operation scope');
+      }
+      final saleId = await into(
+        sales,
+      ).insert(sale.copyWith(warehouseId: Value(operation.warehouseId)));
 
       for (final item in items) {
         final itemWithSaleId = item.copyWith(saleId: Value(saleId));
@@ -362,11 +380,30 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   ///   The cheque due date tracks when payment is expected.
   ///
   /// If [allowNegativeStock] is true, stock validation is skipped and stock can go negative.
-  Future<void> postSale(int saleId, {bool allowNegativeStock = false}) {
+  Future<void> postSale(
+    int saleId, {
+    bool allowNegativeStock = false,
+    WarehouseOperationScope? scope,
+  }) {
     return transaction(() async {
+      final operationScope = await DocumentPostingScope.validate(
+        attachedDatabase,
+        InventoryPostingDocument.sale,
+        saleId,
+        scope: scope,
+      );
+      await DocumentPostingScope.validatePostingTerms(
+        attachedDatabase,
+        InventoryPostingDocument.sale,
+        saleId,
+        operationScope,
+      );
       final sale = await getSaleById(saleId);
       if (sale == null) throw Exception('Sale not found');
       if (sale.status == 'completed') throw Exception('Sale already completed');
+      if (sale.status != 'draft' && sale.status != 'pending') {
+        throw StateError('Only draft or pending sales can be posted');
+      }
 
       // 1. Validate stock availability BEFORE any deduction (unless allowNegativeStock)
       final items = await getSaleItems(saleId);
@@ -388,46 +425,22 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       }
 
       if (!allowNegativeStock) {
+        final remaining = <int, int>{};
         for (final item in items) {
-          final variantId = item.variantId;
-          final productId = item.productId;
-          if (trackedProductIds[productId] == false) continue;
-
-          if (variantId != null) {
-            final row = await customSelect(
-              'SELECT stock_quantity FROM product_variants WHERE id = ?',
-              variables: [Variable.withInt(variantId)],
-            ).getSingleOrNull();
-            final currentStock = row?.read<int>('stock_quantity') ?? 0;
-            if (currentStock < item.quantity) {
-              // Look up variant display info for a clear error message
-              final infoRow = await customSelect(
-                'SELECT p.name AS product_name FROM products p '
-                'INNER JOIN product_variants pv ON pv.product_id = p.id '
-                'WHERE pv.id = ?',
-                variables: [Variable.withInt(variantId)],
-              ).getSingleOrNull();
-              final productName =
-                  infoRow?.read<String>('product_name') ?? 'Unknown';
-              throw Exception(
-                'Insufficient stock for "$productName" (variant #$variantId): '
-                'available $currentStock, required ${item.quantity}.',
-              );
-            }
-          } else {
-            final row = await customSelect(
-              'SELECT stock_quantity, name FROM products WHERE id = ?',
-              variables: [Variable.withInt(productId)],
-            ).getSingleOrNull();
-            final currentStock = row?.read<int>('stock_quantity') ?? 0;
-            final productName = row?.read<String>('name') ?? 'Unknown';
-            if (currentStock < item.quantity) {
-              throw Exception(
-                'Insufficient stock for "$productName" (product #$productId): '
-                'available $currentStock, required ${item.quantity}.',
-              );
-            }
+          if (trackedProductIds[item.productId] == false) continue;
+          final stock = await WarehouseInventoryReader.read(
+            this,
+            operationScope,
+            item.productId,
+            item.variantId,
+          );
+          final available = remaining[stock.variantId] ?? stock.quantity;
+          if (available < item.quantity) {
+            throw StateError(
+              'Insufficient stock for product #${item.productId}: available $available, required ${item.quantity}',
+            );
           }
+          remaining[stock.variantId] = available - item.quantity;
         }
       }
 
@@ -448,11 +461,13 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         affectedProductIds.add(item.productId);
         final valuationSnapshot = await InventoryValuationDeltaService.capture(
           this,
+          scope: operationScope,
           productId: item.productId,
           variantId: item.variantId,
         );
         await StockService.adjustStock(
           this,
+          scope: operationScope,
           productId: item.productId,
           variantId: item.variantId,
           quantity: item.quantity,
@@ -471,6 +486,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       for (final productId in affectedProductIds) {
         await StockService.syncProductStockFromVariants(
           this,
+          scope: operationScope,
           productId: productId,
         );
       }
@@ -538,6 +554,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           batchedProductIds.add(item.productId);
           final consumed = await BatchService.consumeFifo(
             this,
+            scope: operationScope,
             productId: item.productId,
             variantId: item.variantId,
             quantity: item.quantity,
@@ -556,19 +573,12 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             quantityScale: item.quantityScale,
           );
         } else {
-          if (item.variantId != null) {
-            final row = await customSelect(
-              'SELECT cost_cents FROM product_variants WHERE id = ?',
-              variables: [Variable.withInt(item.variantId!)],
-            ).getSingleOrNull();
-            unitCost = row?.read<int>('cost_cents') ?? 0;
-          } else {
-            final row = await customSelect(
-              'SELECT cost_cents FROM products WHERE id = ?',
-              variables: [Variable.withInt(item.productId)],
-            ).getSingleOrNull();
-            unitCost = row?.read<int>('cost_cents') ?? 0;
-          }
+          unitCost = (await WarehouseInventoryReader.read(
+            this,
+            operationScope,
+            item.productId,
+            item.variantId,
+          )).unitCostCents;
           final frozenPoolDelta = standardValuationByItem[item.id];
           totalCogsCents =
               frozenPoolDelta ??
@@ -602,8 +612,9 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       // desync BEFORE the transaction commits — turns Phase A's documented
       // invariant into an enforced one.
       for (final productId in batchedProductIds) {
-        await BatchService.assertInvariantForProduct(
+        await WarehouseInventoryReader.assertBatches(
           this,
+          scope: operationScope,
           productId: productId,
         );
       }
@@ -764,8 +775,15 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     int saleId, {
     JournalEntryService? journalEntryService,
     int? userId,
+    WarehouseOperationScope? scope,
   }) {
     return transaction(() async {
+      final operationScope = await DocumentPostingScope.validate(
+        attachedDatabase,
+        InventoryPostingDocument.sale,
+        saleId,
+        scope: scope,
+      );
       final sale = await getSaleById(saleId);
       if (sale == null) throw Exception('Sale not found');
       if (sale.status == 'voided') throw Exception('Sale already voided');
@@ -790,7 +808,11 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           // Cascade-void: when voiding the parent sale we must unwind the return
           // regardless of negative-stock policy, otherwise GL/stock/AR would
           // desynchronize. Pass true to skip the guard for this implicit flow.
-          await voidSaleReturn(ret.id, allowNegativeStock: true);
+          await voidSaleReturn(
+            ret.id,
+            allowNegativeStock: true,
+            scope: operationScope,
+          );
         }
       }
 
@@ -805,6 +827,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           voidAffectedProductIds.add(item.productId);
           final wacSnapshot = await WacMovementService.capture(
             this,
+            scope: operationScope,
             productId: item.productId,
             variantId: item.variantId,
           );
@@ -814,6 +837,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
               0;
           await StockService.adjustStock(
             this,
+            scope: operationScope,
             productId: item.productId,
             variantId: item.variantId,
             quantity: item.quantity,
@@ -835,6 +859,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           //     consumptions; restoreConsumptions silently no-ops for them.
           await BatchService.restoreConsumptions(
             this,
+            scope: operationScope,
             reverseConsumptionType: 'void_sale_reverse',
             saleItemId: item.id,
           );
@@ -847,14 +872,16 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         for (final productId in voidAffectedProductIds) {
           await StockService.syncProductStockFromVariants(
             this,
+            scope: operationScope,
             productId: productId,
           );
         }
 
         // 1c. I4 (Invariant I1): cross-table invariant for FIFO products.
         for (final productId in voidBatchedProductIds) {
-          await BatchService.assertInvariantForProduct(
+          await WarehouseInventoryReader.assertBatches(
             this,
+            scope: operationScope,
             productId: productId,
           );
         }
@@ -1302,12 +1329,35 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   /// - cash: Customer already received money back → no balance change.
   /// - cheque: Refund is reclassified to issued cheques when registered.
   /// - credit: Refund applied as credit note → reduces customer balance (they owe less).
-  Future<void> postSaleReturn(int returnId) {
+  Future<void> postSaleReturn(int returnId, {WarehouseOperationScope? scope}) {
     return transaction(() async {
+      final operationScope = await DocumentPostingScope.validate(
+        attachedDatabase,
+        InventoryPostingDocument.saleReturn,
+        returnId,
+        scope: scope,
+      );
+      await DocumentPostingScope.validatePostingTerms(
+        attachedDatabase,
+        InventoryPostingDocument.saleReturn,
+        returnId,
+        operationScope,
+      );
       final returnData = await getSaleReturnById(returnId);
       if (returnData == null) throw Exception('Return not found');
       if (returnData.status == 'posted') {
         throw Exception('Return already posted');
+      }
+
+      if (returnData.status != 'draft' && returnData.status != 'pending') {
+        throw StateError('Only draft or pending returns can be posted');
+      }
+      final originalSale = await getSaleById(returnData.saleId);
+      if (originalSale == null || originalSale.status != 'completed') {
+        throw StateError('A sale return requires a completed source sale');
+      }
+      if (returnData.currencyId != originalSale.currencyId) {
+        throw StateError('Return currency must match the source sale');
       }
 
       // Validate return quantities don't exceed available (sold - already returned)
@@ -1319,9 +1369,18 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       ])..where(saleReturnItems.returnId.equals(returnId));
 
       final returnItemRows = await returnItemsQuery.get();
+      if (returnItemRows.isEmpty) {
+        throw StateError('A sale return must contain at least one item');
+      }
       for (final row in returnItemRows) {
         final returnItem = row.readTable(saleReturnItems);
         final saleItem = row.readTable(saleItems);
+        if (returnItem.quantity <= 0 ||
+            returnItem.quantityScale <= 0 ||
+            returnItem.quantityScale != saleItem.quantityScale ||
+            returnItem.measurementType != saleItem.measurementType) {
+          throw StateError('Return quantity and unit must match the source');
+        }
 
         final alreadyReturned = await getReturnedQuantity(saleItem.id);
         // Subtract this return's own quantity since it's not yet posted
@@ -1364,12 +1423,14 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           // not at whatever WAC happens to be current on the return date.
           final wacSnapshot = await WacMovementService.capture(
             this,
+            scope: operationScope,
             productId: saleItem.productId,
             variantId: saleItem.variantId,
           );
           final valuationSnapshot =
               await InventoryValuationDeltaService.capture(
                 this,
+                scope: operationScope,
                 productId: saleItem.productId,
                 variantId: saleItem.variantId,
               );
@@ -1388,6 +1449,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
 
           await StockService.adjustStock(
             this,
+            scope: operationScope,
             productId: saleItem.productId,
             variantId: saleItem.variantId,
             quantity: returnItem.quantity,
@@ -1410,6 +1472,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           // remaining 'out' rows still represent units the customer kept.
           await BatchService.restoreConsumptions(
             this,
+            scope: operationScope,
             reverseConsumptionType: 'sale_return_reverse',
             saleItemId: saleItem.id,
             saleReturnItemId: returnItem.id,
@@ -1440,14 +1503,16 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         for (final productId in returnAffectedProductIds) {
           await StockService.syncProductStockFromVariants(
             this,
+            scope: operationScope,
             productId: productId,
           );
         }
 
         // I4 (Invariant I1): cross-table invariant for FIFO products.
         for (final productId in returnBatchedProductIds) {
-          await BatchService.assertInvariantForProduct(
+          await WarehouseInventoryReader.assertBatches(
             this,
+            scope: operationScope,
             productId: productId,
           );
         }
@@ -1532,8 +1597,18 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   /// on post). If [allowNegativeStock] is false and current stock is insufficient
   /// to cover the reversal, the operation is rejected to match the inventory
   /// policy used by SAP / NetSuite / Odoo / QuickBooks.
-  Future<void> voidSaleReturn(int returnId, {bool allowNegativeStock = false}) {
+  Future<void> voidSaleReturn(
+    int returnId, {
+    bool allowNegativeStock = false,
+    WarehouseOperationScope? scope,
+  }) {
     return transaction(() async {
+      final operationScope = await DocumentPostingScope.validate(
+        attachedDatabase,
+        InventoryPostingDocument.saleReturn,
+        returnId,
+        scope: scope,
+      );
       final returnData = await getSaleReturnById(returnId);
       if (returnData == null) throw Exception('Return not found');
       if (returnData.status == 'voided') {
@@ -1541,6 +1616,20 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       }
 
       if (returnData.status == 'posted') {
+        // Legacy reversal rows cannot safely be assigned by date or amount.
+        // Abort before changing stock/accounts instead of leaving a deduction
+        // behind or deleting a different return's commission.
+        final unresolved = await customSelect(
+          'SELECT id FROM commissions WHERE sale_id = ? '
+          'AND commission_amount_cents < 0 AND sale_return_id IS NULL '
+          'AND sale_return_adjustment_id IS NULL LIMIT 1',
+          variables: [Variable.withInt(returnData.saleId)],
+        ).get();
+        if (unresolved.isNotEmpty) {
+          throw StateError(
+            'Legacy return commissions require source reconciliation before voiding.',
+          );
+        }
         // 1. Always reverse stock changes (mirrors postSaleReturn).
         {
           final query = select(saleReturnItems).join([
@@ -1556,47 +1645,24 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           // We must validate ALL lines BEFORE any deduction, so a single
           // insufficient line aborts the whole void atomically.
           if (!allowNegativeStock) {
+            final remaining = <int, int>{};
             for (final row in items) {
-              final returnItem = row.readTable(saleReturnItems);
-              final saleItem = row.readTable(saleItems);
-              if (!await _tracksInventory(saleItem.productId)) continue;
-              final variantId = saleItem.variantId;
-              final productId = saleItem.productId;
-
-              if (variantId != null) {
-                final vRow = await customSelect(
-                  'SELECT stock_quantity FROM product_variants WHERE id = ?',
-                  variables: [Variable.withInt(variantId)],
-                ).getSingleOrNull();
-                final currentStock = vRow?.read<int>('stock_quantity') ?? 0;
-                if (currentStock < returnItem.quantity) {
-                  final infoRow = await customSelect(
-                    'SELECT p.name AS product_name FROM products p '
-                    'INNER JOIN product_variants pv ON pv.product_id = p.id '
-                    'WHERE pv.id = ?',
-                    variables: [Variable.withInt(variantId)],
-                  ).getSingleOrNull();
-                  final productName =
-                      infoRow?.read<String>('product_name') ?? 'Unknown';
-                  throw Exception(
-                    'Insufficient stock for "$productName" (variant #$variantId): '
-                    'available $currentStock, required ${returnItem.quantity}.',
-                  );
-                }
-              } else {
-                final pRow = await customSelect(
-                  'SELECT stock_quantity, name FROM products WHERE id = ?',
-                  variables: [Variable.withInt(productId)],
-                ).getSingleOrNull();
-                final currentStock = pRow?.read<int>('stock_quantity') ?? 0;
-                final productName = pRow?.read<String>('name') ?? 'Unknown';
-                if (currentStock < returnItem.quantity) {
-                  throw Exception(
-                    'Insufficient stock for "$productName" (product #$productId): '
-                    'available $currentStock, required ${returnItem.quantity}.',
-                  );
-                }
+              final ri = row.readTable(saleReturnItems);
+              final si = row.readTable(saleItems);
+              if (!await _tracksInventory(si.productId)) continue;
+              final stock = await WarehouseInventoryReader.read(
+                this,
+                operationScope,
+                si.productId,
+                si.variantId,
+              );
+              final available = remaining[stock.variantId] ?? stock.quantity;
+              if (available < ri.quantity) {
+                throw StateError(
+                  'Insufficient stock to void sale return for product #${si.productId}',
+                );
               }
+              remaining[stock.variantId] = available - ri.quantity;
             }
           }
 
@@ -1620,6 +1686,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
 
             final wacSnapshot = await WacMovementService.capture(
               this,
+              scope: operationScope,
               productId: saleItem.productId,
               variantId: saleItem.variantId,
             );
@@ -1631,6 +1698,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
 
             await StockService.adjustStock(
               this,
+              scope: operationScope,
               productId: saleItem.productId,
               variantId: saleItem.variantId,
               quantity: returnItem.quantity,
@@ -1655,6 +1723,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             // saleReturnItemId, then issue an 'out' against each batch). For
             // WAC products this is a silent no-op.
             await _reverseRestoredFifo(
+              scope: operationScope,
               saleReturnItemId: returnItem.id,
               consumptionType: 'sale_return_void_reverse',
             );
@@ -1667,18 +1736,22 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           for (final productId in voidReturnAffectedProductIds) {
             await StockService.syncProductStockFromVariants(
               this,
+              scope: operationScope,
               productId: productId,
             );
           }
 
           // I4 (Invariant I1): cross-table invariant for FIFO products.
           for (final productId in voidReturnBatchedProductIds) {
-            await BatchService.assertInvariantForProduct(
+            await WarehouseInventoryReader.assertBatches(
               this,
+              scope: operationScope,
               productId: productId,
             );
           }
         }
+
+        await LinkedReturnLoyaltyReversal.restore(attachedDatabase, returnId);
 
         // 2. Reverse customer accounting
         final sale = await getSaleById(returnData.saleId);
@@ -1725,6 +1798,10 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           }
         }
       }
+
+      await (delete(
+        db.commissions,
+      )..where((c) => c.saleReturnId.equals(returnId))).go();
 
       await (update(saleReturns)..where((r) => r.id.equals(returnId))).write(
         const SaleReturnsCompanion(status: Value('voided')),
@@ -1836,15 +1913,11 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         ),
       );
 
-      final isOnAccount =
-          sale?.paymentMethod == 'credit' ||
-          sale?.paymentMethod == 'cheque' ||
-          sale?.paymentMethod == 'check' ||
-          sale?.paymentMethod == 'mixed';
+      // Every completed customer sale records a payment in the sub-ledger,
+      // regardless of the invoice's original tender label. Reverse it symmetrically.
       if (sale != null &&
           sale.customerId != null &&
-          sale.status == 'completed' &&
-          isOnAccount) {
+          sale.status == 'completed') {
         final amountCents = payment.amountCents.toBigInt().toInt();
 
         await into(db.customerTransactions).insert(
@@ -1935,7 +2008,24 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   // ==================== DASHBOARD STATS ====================
 
   /// Get dashboard stats using SQL aggregation (no full-table load).
-  Future<SaleDashboardStats> getDashboardStats() async {
+  Future<SaleDashboardStats> getDashboardStats({
+    bool primaryWarehouseOnly = false,
+    WarehouseReadScope? warehouseScope,
+  }) => WarehouseReadScope.snapshot(db, warehouseScope, () async {
+    final salesSource =
+        warehouseScope?.documents(InventoryPostingDocument.sale) ??
+        (primaryWarehouseOnly
+            ? WarehouseDocumentScope.primaryDocuments(
+                InventoryPostingDocument.sale,
+              )
+            : 'sales');
+    final returnsSource =
+        warehouseScope?.documents(InventoryPostingDocument.saleReturn) ??
+        (primaryWarehouseOnly
+            ? WarehouseDocumentScope.primaryDocuments(
+                InventoryPostingDocument.saleReturn,
+              )
+            : 'sale_returns');
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day).toIso8601String();
 
@@ -1949,7 +2039,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       "  COALESCE(SUM(CASE WHEN status = 'completed' THEN total_cents ELSE 0 END), 0) AS total_sales_cents, "
       "  COALESCE(SUM(CASE WHEN status = 'completed' AND sale_date >= ? THEN total_cents ELSE 0 END), 0) AS today_sales_cents, "
       "  COALESCE(SUM(CASE WHEN status = 'completed' AND sale_date >= ? THEN 1 ELSE 0 END), 0) AS today_count "
-      'FROM sales',
+      'FROM $salesSource',
       variables: [
         Variable.withString(todayStart),
         Variable.withString(todayStart),
@@ -1960,7 +2050,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     final returnsRow = await customSelect(
       'SELECT COUNT(*) AS returns_count, '
       'COALESCE(SUM(total_cents), 0) AS total_returns_cents '
-      'FROM sale_returns',
+      "FROM $returnsSource WHERE status = 'posted'",
     ).getSingle();
 
     return SaleDashboardStats(
@@ -1973,7 +2063,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       todaySalesCents: statsRow.read<int>('today_sales_cents'),
       todayCount: statsRow.read<int>('today_count'),
     );
-  }
+  });
 
   /// Watch dashboard stats
   Stream<SaleDashboardStats> watchDashboardStats() {
@@ -2039,6 +2129,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   /// We deduct each previously-restored quantity at the FROZEN unit cost so
   /// the batch ledger ends up exactly as if the return had never been posted.
   Future<void> _reverseRestoredFifo({
+    required WarehouseOperationScope scope,
     required int saleReturnItemId,
     required String consumptionType,
   }) async {
@@ -2058,6 +2149,11 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     final now = DateTime.now().toIso8601String();
     for (final r in inRows) {
       final batchId = r.read<int>('batch_id');
+      await WarehouseBatchScope.requireBatch(
+        attachedDatabase,
+        batchId,
+        scope: scope,
+      );
       final qty = r.read<int>('quantity');
       final unitCost = r.read<int>('unit_cost_cents');
 

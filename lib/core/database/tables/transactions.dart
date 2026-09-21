@@ -1,3 +1,4 @@
+import 'business.dart';
 import 'package:drift/drift.dart';
 import '../converters/money_converter.dart';
 import 'settings.dart';
@@ -34,6 +35,11 @@ class ReturnReasonCodes extends Table {
 
 @DataClassName('Sale')
 class Sales extends Table {
+  TextColumn get warehouseId => text().nullable().references(
+    BusinessWarehouses,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
   IntColumn get id => integer().autoIncrement()();
   TextColumn get invoiceNumber => text().unique()();
   IntColumn get customerId => integer().nullable().references(
@@ -338,6 +344,12 @@ class SalePayments extends Table {
 
 @DataClassName('Purchase')
 class Purchases extends Table {
+  /// Frozen internal route. NULL preserves the existing primary warehouse.
+  TextColumn get warehouseId => text().nullable().references(
+    BusinessWarehouses,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
   IntColumn get id => integer().autoIncrement()();
   TextColumn get purchaseNumber => text().unique()();
   IntColumn get supplierId =>
@@ -408,6 +420,11 @@ class PurchaseItems extends Table {
       integer().map(const MoneyConverter()).nullable()();
   IntColumn get newWholesalePriceCents =>
       integer().map(const MoneyConverter()).nullable()();
+
+  /// Manufacturer-assigned batch/lot identifier (GS1 AI 10). Unlike the
+  /// app's internal batch number this value is not globally unique: the same
+  /// lot may arrive across multiple purchase documents.
+  TextColumn get manufacturerLotNumber => text().nullable()();
   DateTimeColumn get expiryDate => dateTime().nullable()();
 
   /// Atomic returned-quantity counter (linked path).
@@ -579,6 +596,11 @@ class PurchasePayments extends Table {
 /// Used when quantity exceeds a single invoice, price was renegotiated, etc.
 @DataClassName('PurchaseReturnAdjustment')
 class PurchaseReturnAdjustments extends Table {
+  TextColumn get warehouseId => text().nullable().references(
+    BusinessWarehouses,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
   IntColumn get id => integer().autoIncrement()();
   TextColumn get returnNumber => text().unique()();
   IntColumn get supplierId =>
@@ -735,6 +757,11 @@ class PurchaseReturnAdjustmentItems extends Table {
 /// Used when customer returns goods outside of a specific invoice context.
 @DataClassName('SaleReturnAdjustment')
 class SaleReturnAdjustments extends Table {
+  TextColumn get warehouseId => text().nullable().references(
+    BusinessWarehouses,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
   IntColumn get id => integer().autoIncrement()();
   TextColumn get returnNumber => text().unique()();
   IntColumn get customerId => integer().nullable().references(
@@ -845,6 +872,12 @@ class SaleReturnAdjustments extends Table {
 
 @DataClassName('SaleReturnAdjustmentItem')
 class SaleReturnAdjustmentItems extends Table {
+  /// Exact FIFO layer created by this inbound adjustment. Legacy rows are null.
+  IntColumn get returnBatchId => integer().nullable().references(
+    ProductBatches,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
   IntColumn get id => integer().autoIncrement()();
   IntColumn get returnId => integer().references(
     SaleReturnAdjustments,

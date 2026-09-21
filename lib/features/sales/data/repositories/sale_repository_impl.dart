@@ -1,3 +1,8 @@
+import 'dart:async';
+import '../../../../core/services/business/warehouse_document_reader.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+import '../../../../core/services/business/warehouse_operation_scope.dart';
+import '../../../../core/services/business/warehouse_read_scope.dart';
 import 'dart:developer' as developer;
 import 'dart:convert';
 
@@ -32,8 +37,22 @@ import '../../domain/repositories/sale_repository.dart';
 import '../datasources/sale_local_datasource.dart';
 
 class SaleRepositoryImpl implements SaleRepository {
+  static final Object _commitEffectsKey = Object();
+
+  Future<void> _afterCommit(Future<void> Function() effect) async {
+    final pending =
+        Zone.current[_commitEffectsKey] as List<Future<void> Function()>?;
+    if (pending != null) {
+      pending.add(effect);
+    } else {
+      await effect();
+    }
+  }
+
   final SaleLocalDatasource _datasource;
   final SaleDao _dao;
+  final WarehouseOperationScope? warehouseScope;
+  late final _reader = WarehouseDocumentReader(_dao.db, scope: warehouseScope);
   final JournalEntryService _journalService;
   final AuditLogService _audit;
   final SessionService _sessionService;
@@ -66,6 +85,7 @@ class SaleRepositoryImpl implements SaleRepository {
     this._loyaltyRepository,
     this._commissionService,
     this._loyaltyPointsService, {
+    this.warehouseScope,
     EInvoiceDispatchService? einvoiceDispatch,
     FreeQuotaService? freeQuotaService,
     CashierShiftService? cashierShiftService,
@@ -79,22 +99,45 @@ class SaleRepositoryImpl implements SaleRepository {
   Future<String> generateInvoiceNumber() => _datasource.generateInvoiceNumber();
 
   @override
-  Stream<List<SaleEntity>> watchAllSales() => _datasource.watchAllSales();
+  Stream<List<SaleEntity>> watchAllSales() =>
+      _datasource.watchAllSales().asyncMap(
+        (rows) => _reader.filter(
+          rows,
+          (_) => InventoryPostingDocument.sale,
+          (r) => r.id,
+        ),
+      );
 
   @override
-  Stream<List<SaleEntity>> watchCustomerSales(int customerId) =>
-      _datasource.watchCustomerSales(customerId);
+  Stream<List<SaleEntity>> watchCustomerSales(int customerId) => _datasource
+      .watchCustomerSales(customerId)
+      .asyncMap(
+        (rows) => _reader.filter(
+          rows,
+          (_) => InventoryPostingDocument.sale,
+          (r) => r.id,
+        ),
+      );
 
   @override
-  Future<SaleEntity?> getSaleById(int id) => _datasource.getSaleById(id);
+  Future<SaleEntity?> getSaleById(int id) async =>
+      await _reader.contains(InventoryPostingDocument.sale, id)
+      ? _datasource.getSaleById(id)
+      : null;
 
   @override
-  Future<List<SaleItemEntity>> getSaleItems(int saleId) =>
-      _datasource.getSaleItemsWithDetails(saleId);
+  Future<List<SaleItemEntity>> getSaleItems(int saleId) async =>
+      await _reader.contains(InventoryPostingDocument.sale, saleId)
+      ? _datasource.getSaleItemsWithDetails(saleId)
+      : [];
 
   @override
-  Stream<List<SaleItemEntity>> watchSaleItems(int saleId) =>
-      _datasource.watchSaleItems(saleId);
+  Stream<List<SaleItemEntity>> watchSaleItems(int saleId) => _reader.gate(
+    InventoryPostingDocument.sale,
+    saleId,
+    _datasource.watchSaleItems(saleId),
+    <SaleItemEntity>[],
+  );
 
   @override
   Future<int> createSale({
@@ -147,7 +190,15 @@ class SaleRepositoryImpl implements SaleRepository {
                 (row) => row.idempotencyKey.equals(normalizedIdempotencyKey),
               ))
               .getSingleOrNull();
-      if (existing != null) return existing.id;
+      if (existing != null) {
+        await DocumentPostingScope.validate(
+          _dao.db,
+          InventoryPostingDocument.sale,
+          existing.id,
+          scope: warehouseScope,
+        );
+        return existing.id;
+      }
     }
 
     // Phase B4 — enforce free-tier cumulative cap BEFORE opening the tx.
@@ -234,6 +285,7 @@ class SaleRepositoryImpl implements SaleRepository {
           final id = await _dao.createSaleWithItems(
             companionWithNumber,
             itemCompanions,
+            scope: warehouseScope,
           );
 
           await _persistPromotionSnapshots(
@@ -243,7 +295,11 @@ class SaleRepositoryImpl implements SaleRepository {
           );
 
           // Auto-post: deduct stock and update customer balance
-          await _dao.postSale(id, allowNegativeStock: allowNegativeStock);
+          await _dao.postSale(
+            id,
+            allowNegativeStock: allowNegativeStock,
+            scope: warehouseScope,
+          );
 
           // Create journal entries — MANDATORY, errors propagate
           await _journalService.recordSaleJournalEntry(
@@ -323,55 +379,16 @@ class SaleRepositoryImpl implements SaleRepository {
             userId: userId,
           );
 
-          // Create commission records for assigned salesperson(s) via the
-          // CommissionService (Phase 6 SoT).
-          final totalItemCount = items.fold<int>(
-            0,
-            (sum, i) => sum + i.quantity,
-          );
-          if (employeeId != null) {
-            await _commissionService.createForSale(
-              saleId: id,
-              employeeId: employeeId,
-              subtotalCents: subtotalCents.toBigInt().toInt(),
-              discountCents: discountCents.toBigInt().toInt(),
-              itemCount: totalItemCount,
-              currencyId: currencyId,
-              saleDate: effectiveSaleDate,
-            );
-          } else {
-            // Per-item salesperson commissions: aggregate subtotal, discount and
-            // item count per employee so percentage commission is computed on the
-            // post-discount base per salesperson.
-            final perEmployeeSubtotals = <int, int>{};
-            final perEmployeeDiscounts = <int, int>{};
-            final perEmployeeItemCounts = <int, int>{};
-            for (final item in items) {
-              if (item.employeeId != null) {
-                perEmployeeSubtotals[item.employeeId!] =
-                    (perEmployeeSubtotals[item.employeeId!] ?? 0) +
-                    item.subtotalCents.toBigInt().toInt();
-                perEmployeeDiscounts[item.employeeId!] =
-                    (perEmployeeDiscounts[item.employeeId!] ?? 0) +
-                    item.discountCents.toBigInt().toInt();
-                perEmployeeItemCounts[item.employeeId!] =
-                    (perEmployeeItemCounts[item.employeeId!] ?? 0) +
-                    item.quantity;
-              }
-            }
-            for (final empId in perEmployeeSubtotals.keys) {
-              await _commissionService.createForSale(
-                saleId: id,
-                employeeId: empId,
-                subtotalCents: perEmployeeSubtotals[empId]!,
-                discountCents: perEmployeeDiscounts[empId] ?? 0,
-                itemCount: perEmployeeItemCounts[empId]!,
-                currencyId: currencyId,
-                saleDate: effectiveSaleDate,
-              );
-            }
-          }
+          await _recordSaleCommissions(id);
 
+          if (customerId != null) {
+            await _loyaltyPointsService.awardForSale(
+              customerId: customerId,
+              saleId: id,
+              totalCents: totalCents.toBigInt().toInt(),
+              strict: true,
+            );
+          }
           return id;
         });
         break; // success
@@ -385,7 +402,15 @@ class SaleRepositoryImpl implements SaleRepository {
                         row.idempotencyKey.equals(normalizedIdempotencyKey),
                   ))
                   .getSingleOrNull();
-          if (existing != null) return existing.id;
+          if (existing != null) {
+            await DocumentPostingScope.validate(
+              _dao.db,
+              InventoryPostingDocument.sale,
+              existing.id,
+              scope: warehouseScope,
+            );
+            return existing.id;
+          }
         }
         // Retry on UNIQUE constraint violation (concurrent invoice number)
         final isUniqueViolation = e.toString().contains(
@@ -402,46 +427,93 @@ class SaleRepositoryImpl implements SaleRepository {
       }
     }
 
-    // Phase B4 — bump the cumulative counter ONLY after a successful tx.
-    // Pro users still increment so that, if their subscription lapses, the
-    // free-tier counter accurately reflects lifetime usage.
-    await _freeQuotaService?.incrementSalesCreated();
+    await _afterCommit(() async {
+      // Phase B4 — bump the cumulative counter ONLY after a successful tx.
+      // Pro users still increment so that, if their subscription lapses, the
+      // free-tier counter accurately reflects lifetime usage.
+      await _freeQuotaService?.incrementSalesCreated();
 
-    // Award loyalty points outside transaction (non-critical) via
-    // the LoyaltyPointsService (Phase 6 SoT).
-    if (customerId != null) {
-      await _loyaltyPointsService.awardForSale(
-        customerId: customerId,
+      // Audit log outside transaction (non-critical, fire-and-forget)
+      _audit.logSaleCreated(
         saleId: saleId,
         totalCents: totalCents.toBigInt().toInt(),
+        paymentMethod: paymentMethod,
+        customerId: customerId,
+        userId: userId,
       );
-    }
 
-    // Audit log outside transaction (non-critical, fire-and-forget)
-    _audit.logSaleCreated(
-      saleId: saleId,
-      totalCents: totalCents.toBigInt().toInt(),
-      paymentMethod: paymentMethod,
-      customerId: customerId,
-      userId: userId,
-    );
-
-    // Phase 4 — e-invoice dispatch (fire-and-forget, swallows errors).
-    // Outside the accounting tx on purpose: a failed ZATCA/ETA/PEPPOL
-    // submission must never roll back a posted sale. The dispatcher
-    // records its own artifact row so operators can retry from the UI.
-    await _dispatchSaleEInvoice(
-      saleId: saleId,
-      customerId: customerId,
-      currencyId: currencyId,
-      subtotalCents: subtotalCents.toBigInt().toInt(),
-      taxCents: taxCents.toBigInt().toInt(),
-      totalCents: totalCents.toBigInt().toInt(),
-      issueDate: effectiveSaleDate,
-      items: items,
-    );
+      // Phase 4 — e-invoice dispatch (fire-and-forget, swallows errors).
+      // Outside the accounting tx on purpose: a failed ZATCA/ETA/PEPPOL
+      // submission must never roll back a posted sale. The dispatcher
+      // records its own artifact row so operators can retry from the UI.
+      await _dispatchSaleEInvoice(
+        saleId: saleId,
+        customerId: customerId,
+        currencyId: currencyId,
+        subtotalCents: subtotalCents.toBigInt().toInt(),
+        taxCents: taxCents.toBigInt().toInt(),
+        totalCents: totalCents.toBigInt().toInt(),
+        issueDate: effectiveSaleDate,
+        items: items,
+      );
+    });
 
     return saleId;
+  }
+
+  Future<void> _recordSaleCommissions(int id) async {
+    final sale = await _dao.getSaleById(id);
+    if (sale == null) throw StateError('Sale missing for commission posting');
+    final items = await _dao.getSaleItems(id);
+    final employeeId = sale.employeeId;
+    final subtotalCents = sale.subtotalCents;
+    final discountCents = sale.discountCents;
+    final currencyId = sale.currencyId;
+    final effectiveSaleDate = sale.saleDate;
+    // Create commission records for assigned salesperson(s) via the
+    // CommissionService (Phase 6 SoT).
+    final totalItemCount = items.fold<int>(0, (sum, i) => sum + i.quantity);
+    if (employeeId != null) {
+      await _commissionService.createForSale(
+        saleId: id,
+        employeeId: employeeId,
+        subtotalCents: subtotalCents.toBigInt().toInt(),
+        discountCents: discountCents.toBigInt().toInt(),
+        itemCount: totalItemCount,
+        currencyId: currencyId,
+        saleDate: effectiveSaleDate,
+      );
+    } else {
+      // Per-item salesperson commissions: aggregate subtotal, discount and
+      // item count per employee so percentage commission is computed on the
+      // post-discount base per salesperson.
+      final perEmployeeSubtotals = <int, int>{};
+      final perEmployeeDiscounts = <int, int>{};
+      final perEmployeeItemCounts = <int, int>{};
+      for (final item in items) {
+        if (item.employeeId != null) {
+          perEmployeeSubtotals[item.employeeId!] =
+              (perEmployeeSubtotals[item.employeeId!] ?? 0) +
+              item.subtotalCents.toBigInt().toInt();
+          perEmployeeDiscounts[item.employeeId!] =
+              (perEmployeeDiscounts[item.employeeId!] ?? 0) +
+              item.discountCents.toBigInt().toInt();
+          perEmployeeItemCounts[item.employeeId!] =
+              (perEmployeeItemCounts[item.employeeId!] ?? 0) + item.quantity;
+        }
+      }
+      for (final empId in perEmployeeSubtotals.keys) {
+        await _commissionService.createForSale(
+          saleId: id,
+          employeeId: empId,
+          subtotalCents: perEmployeeSubtotals[empId]!,
+          discountCents: perEmployeeDiscounts[empId] ?? 0,
+          itemCount: perEmployeeItemCounts[empId]!,
+          currencyId: currencyId,
+          saleDate: effectiveSaleDate,
+        );
+      }
+    }
   }
 
   Future<void> _persistPromotionSnapshots({
@@ -583,9 +655,8 @@ class SaleRepositoryImpl implements SaleRepository {
     // Guard: only draft/pending sales can be edited.
     // Posted/voided sales have journal entries that would become stale.
     final existing = await getSaleById(saleId);
-    if (existing != null &&
-        existing.status != 'draft' &&
-        existing.status != 'pending') {
+    if (existing == null) throw StateError('Sale not found in this warehouse.');
+    if (existing.status != 'draft' && existing.status != 'pending') {
       throw Exception(
         'Cannot edit a ${existing.status} sale. Void it and create a new one instead.',
       );
@@ -634,9 +705,20 @@ class SaleRepositoryImpl implements SaleRepository {
     // Resolve userId once before entering the transaction.
     final userId = await _currentUserId();
 
-    // ATOMIC: Wrap journal void → sale update → journal re-create → commission
-    // re-create in a single transaction. If any step fails, everything rolls back.
+    // Remove legacy draft accounting and update the draft atomically.
+    // Revenue, COGS and commissions are recognized only when posted.
     final ok = await _dao.db.transaction(() async {
+      await DocumentPostingScope.validate(
+        _dao.db,
+        InventoryPostingDocument.sale,
+        saleId,
+        scope: warehouseScope,
+      );
+      final current = await _dao.getSaleById(saleId);
+      if (current == null ||
+          (current.status != 'draft' && current.status != 'pending')) {
+        throw StateError('Only draft or pending sales can be edited.');
+      }
       // 1. Void old journal entries
       await _journalService.voidJournalEntriesForSource(
         sourceTable: 'sales',
@@ -653,62 +735,8 @@ class SaleRepositoryImpl implements SaleRepository {
       );
 
       if (updated) {
-        // 3. Re-create journal entries with new amounts
-        await _journalService.recordSaleJournalEntry(
-          saleId: saleId,
-          totalCents: totalCents.toBigInt().toInt(),
-          paidAmountCents: paidAmountCents.toBigInt().toInt(),
-          currencyId: currencyId,
-          taxCents: taxCents.toBigInt().toInt(),
-          paymentMethod: paymentMethod,
-          userId: userId,
-        );
-
-        // 4. Re-create commissions: delete old, create new if employee assigned
+        // A draft has no stock movement, revenue, COGS or earned commissions.
         await _commissionService.deleteForSale(saleId);
-        final effectiveSaleDate = saleDate ?? DateTime.now();
-        final totalItemCount = items.fold<int>(0, (sum, i) => sum + i.quantity);
-        if (employeeId != null) {
-          await _commissionService.createForSale(
-            saleId: saleId,
-            employeeId: employeeId,
-            subtotalCents: subtotalCents.toBigInt().toInt(),
-            discountCents: discountCents.toBigInt().toInt(),
-            itemCount: totalItemCount,
-            currencyId: currencyId,
-            saleDate: effectiveSaleDate,
-          );
-        } else {
-          // Per-item salesperson commissions: aggregate subtotal, discount and
-          // item count per employee.
-          final perEmployeeSubtotals = <int, int>{};
-          final perEmployeeDiscounts = <int, int>{};
-          final perEmployeeItemCounts = <int, int>{};
-          for (final item in items) {
-            if (item.employeeId != null) {
-              perEmployeeSubtotals[item.employeeId!] =
-                  (perEmployeeSubtotals[item.employeeId!] ?? 0) +
-                  item.subtotalCents.toBigInt().toInt();
-              perEmployeeDiscounts[item.employeeId!] =
-                  (perEmployeeDiscounts[item.employeeId!] ?? 0) +
-                  item.discountCents.toBigInt().toInt();
-              perEmployeeItemCounts[item.employeeId!] =
-                  (perEmployeeItemCounts[item.employeeId!] ?? 0) +
-                  item.quantity;
-            }
-          }
-          for (final empId in perEmployeeSubtotals.keys) {
-            await _commissionService.createForSale(
-              saleId: saleId,
-              employeeId: empId,
-              subtotalCents: perEmployeeSubtotals[empId]!,
-              discountCents: perEmployeeDiscounts[empId] ?? 0,
-              itemCount: perEmployeeItemCounts[empId]!,
-              currencyId: currencyId,
-              saleDate: effectiveSaleDate,
-            );
-          }
-        }
       }
 
       return updated;
@@ -732,102 +760,240 @@ class SaleRepositoryImpl implements SaleRepository {
   }
 
   @override
-  Future<void> postSale(int saleId, {bool allowNegativeStock = false}) =>
-      _dao.postSale(saleId, allowNegativeStock: allowNegativeStock);
+  Future<void> postSale(int saleId, {bool allowNegativeStock = false}) async {
+    _freeQuotaService?.guardSaleCreation();
+    final posted = await _dao.db.transaction(() async {
+      await DocumentPostingScope.validate(
+        _dao.db,
+        InventoryPostingDocument.sale,
+        saleId,
+        scope: warehouseScope,
+      );
+      final sale = await _dao.getSaleById(saleId);
+      if (sale == null ||
+          (sale.status != 'draft' && sale.status != 'pending')) {
+        throw StateError('Only a draft or pending sale can be posted');
+      }
+      if ((await _dao.getSalePayments(saleId)).isNotEmpty) {
+        throw StateError('Review legacy draft payments before posting');
+      }
+      final userId = await _currentUserId();
+      final cheque =
+          sale.paymentMethod == 'cheque' || sale.paymentMethod == 'check';
+      if (cheque &&
+          (sale.customerId == null ||
+              sale.dueDate == null ||
+              sale.paidAmountCents != Decimal.zero)) {
+        throw StateError(
+          'Cheque sales require a customer, due date and no premature settlement',
+        );
+      }
+      await _journalService.voidJournalEntriesForSource(
+        sourceTable: 'sales',
+        sourceId: saleId,
+        reason: 'Replace legacy draft accounting on posting',
+        userId: userId,
+      );
+      await _commissionService.deleteForSale(saleId);
+      await _dao.postSale(
+        saleId,
+        allowNegativeStock: allowNegativeStock,
+        scope: warehouseScope,
+      );
+      final payments = await _dao.getSalePayments(saleId);
+      await _journalService.recordSaleJournalEntry(
+        saleId: saleId,
+        totalCents: sale.totalCents.toBigInt().toInt(),
+        paidAmountCents: sale.customerId == null
+            ? sale.paidAmountCents.toBigInt().toInt()
+            : 0,
+        currencyId: sale.currencyId,
+        taxCents: sale.taxCents.toBigInt().toInt(),
+        paymentMethod: sale.customerId == null ? sale.paymentMethod : 'credit',
+        userId: userId,
+      );
+      for (final payment in payments) {
+        await _journalService.recordCustomerPaymentJournalEntry(
+          paymentId: payment.id,
+          amountCents: payment.amountCents.toBigInt().toInt(),
+          currencyId: payment.currencyId,
+          paymentMethod: payment.paymentMethod,
+          userId: userId,
+        );
+      }
+      if (cheque) {
+        await ChequeInstrumentDao(_dao.db).ensurePrimary(
+          direction: ChequeDirectionValue.incoming,
+          sourceTable: ChequeSourceTables.sale,
+          sourceId: saleId,
+          amountCents: sale.totalCents.toBigInt().toInt(),
+          currencyId: sale.currencyId,
+          dueDate: sale.dueDate!,
+          partyType: 'customer',
+          partyId: sale.customerId,
+          userId: userId,
+        );
+      }
+      await _journalService.recordSaleCOGSJournalEntry(
+        saleId: saleId,
+        costCents: await _dao.computeSaleCostCents(saleId),
+        currencyId: sale.currencyId,
+        userId: userId,
+      );
+      await _recordSaleCommissions(saleId);
+      if (sale.customerId != null) {
+        await _loyaltyPointsService.awardForSale(
+          customerId: sale.customerId!,
+          saleId: saleId,
+          totalCents: sale.totalCents.toBigInt().toInt(),
+          strict: true,
+        );
+      }
+      await _audit.log(
+        entityType: 'sale',
+        entityId: saleId,
+        action: 'post',
+        userId: userId,
+      );
+      return (sale, await _dao.getSaleItems(saleId));
+    });
+    await _afterCommit(() async {
+      await _freeQuotaService?.incrementSalesCreated();
+      await _dispatchSaleEInvoice(
+        saleId: saleId,
+        customerId: posted.$1.customerId,
+        currencyId: posted.$1.currencyId,
+        subtotalCents: posted.$1.subtotalCents.toBigInt().toInt(),
+        taxCents: posted.$1.taxCents.toBigInt().toInt(),
+        totalCents: posted.$1.totalCents.toBigInt().toInt(),
+        issueDate: posted.$1.saleDate,
+        items: posted.$2
+            .map(
+              (i) => SaleItemInput(
+                lineId: '${i.id}',
+                productId: i.productId,
+                variantId: i.variantId,
+                employeeId: i.employeeId,
+                quantity: i.quantity,
+                quantityScale: i.quantityScale,
+                measurementType: i.measurementType,
+                unitPriceCents: i.unitPriceCents,
+                subtotalCents: i.subtotalCents,
+                discountCents: i.discountCents,
+                taxCents: i.taxCents,
+                totalCents: i.totalCents,
+              ),
+            )
+            .toList(),
+      );
+    });
+  }
 
   @override
   Future<void> voidSale(int saleId, {int? actorUserId}) async {
-    final resolvedUserId = actorUserId ?? await _currentUserId();
-    // 2026-05-13 — pre-flight integrity guard. The analyzer is a side-
-    // effect-free SoT that surfaces every condition that would corrupt
-    // the books if the void went through (entangled adjustment returns,
-    // negative-stock projections). On a hard blocker we throw
-    // `VoidBlockedByImpactException` carrying the full report so the UI
-    // can render an actionable dialog instead of silently producing GL
-    // drift like the one diagnosed in `tapix_backup_20260513_121448.db`.
-    final report = await VoidImpactAnalyzer(_dao.db).analyzeSaleVoid(saleId);
-    if (report.hasBlockers) {
-      throw VoidBlockedByImpactException(report);
-    }
+    await _dao.db.transaction(() async {
+      final resolvedUserId = actorUserId ?? await _currentUserId();
+      // 2026-05-13 — pre-flight integrity guard. The analyzer is a side-
+      // effect-free SoT that surfaces every condition that would corrupt
+      // the books if the void went through (entangled adjustment returns,
+      // negative-stock projections). On a hard blocker we throw
+      // `VoidBlockedByImpactException` carrying the full report so the UI
+      // can render an actionable dialog instead of silently producing GL
+      // drift like the one diagnosed in `tapix_backup_20260513_121448.db`.
+      final report = await VoidImpactAnalyzer(
+        _dao.db,
+        warehouseScope: warehouseScope == null
+            ? null
+            : await WarehouseReadScope.resolve(
+                _dao.db,
+                warehouseId: warehouseScope!.warehouseId,
+              ),
+      ).analyzeSaleVoid(saleId);
+      if (report.hasBlockers) {
+        throw VoidBlockedByImpactException(report);
+      }
 
-    final linkedReturns =
-        await (_dao.db.select(_dao.db.saleReturns)..where(
-              (row) =>
-                  row.saleId.equals(saleId) & row.status.isNotValue('voided'),
-            ))
-            .get();
-    for (final saleReturn in linkedReturns) {
+      final linkedReturns =
+          await (_dao.db.select(_dao.db.saleReturns)..where(
+                (row) =>
+                    row.saleId.equals(saleId) & row.status.isNotValue('voided'),
+              ))
+              .get();
+      for (final saleReturn in linkedReturns) {
+        await ChequeSourceVoidService.voidForSource(
+          db: _dao.db,
+          journalService: _journalService,
+          sourceTable: ChequeSourceTables.saleReturn,
+          sourceId: saleReturn.id,
+          reason: 'Sale voided — linked return cheque cancelled',
+          userId: resolvedUserId,
+        );
+      }
       await ChequeSourceVoidService.voidForSource(
         db: _dao.db,
         journalService: _journalService,
-        sourceTable: ChequeSourceTables.saleReturn,
-        sourceId: saleReturn.id,
-        reason: 'Sale voided — linked return cheque cancelled',
+        sourceTable: ChequeSourceTables.sale,
+        sourceId: saleId,
+        reason: 'Sale voided — cheque cancelled',
         userId: resolvedUserId,
       );
-    }
-    await ChequeSourceVoidService.voidForSource(
-      db: _dao.db,
-      journalService: _journalService,
-      sourceTable: ChequeSourceTables.sale,
-      sourceId: saleId,
-      reason: 'Sale voided — cheque cancelled',
-      userId: resolvedUserId,
-    );
 
-    // Void journal entries BEFORE voiding the sale (so we can still read the data).
-    // This MUST succeed — if it fails the entire void is aborted to prevent GL drift.
-    await _journalService.voidJournalEntriesForSource(
-      sourceTable: 'sales',
-      sourceId: saleId,
-      reason: 'Sale voided',
-      userId: resolvedUserId,
-    );
-
-    // 2026-05-18 — Phase 15.2 — Reverse the GL journal entry for EVERY
-    // payment row attached to this sale (cash, cheque-cleared, card,
-    // mixed tender, customer-credit reapplications). The DAO records a
-    // `payment_reversal` customer_transaction so the sub-ledger zeroes
-    // out, but the GL payment leg (Dr Cash|Bank / Cr AR) must be reversed
-    // here or AR and Cash drift by the cleared payment amount. Symmetric
-    // to the purchase side; same root-cause class as the AP drift = 89991¢
-    // reproduced in `tapix_backup_20260518_051956.db`.
-    final paymentsForVoid = await _datasource.getSalePayments(saleId);
-    for (final p in paymentsForVoid) {
+      // Void journal entries BEFORE voiding the sale (so we can still read the data).
+      // This MUST succeed — if it fails the entire void is aborted to prevent GL drift.
       await _journalService.voidJournalEntriesForSource(
-        sourceTable: 'sale_payments',
-        sourceId: p.id,
-        reason: 'Sale voided — payment JE reversed',
+        sourceTable: 'sales',
+        sourceId: saleId,
+        reason: 'Sale voided',
         userId: resolvedUserId,
       );
-    }
 
-    // Void commissions linked to this sale
-    await _commissionService.deleteForSale(saleId);
+      // 2026-05-18 — Phase 15.2 — Reverse the GL journal entry for EVERY
+      // payment row attached to this sale (cash, cheque-cleared, card,
+      // mixed tender, customer-credit reapplications). The DAO records a
+      // `payment_reversal` customer_transaction so the sub-ledger zeroes
+      // out, but the GL payment leg (Dr Cash|Bank / Cr AR) must be reversed
+      // here or AR and Cash drift by the cleared payment amount. Symmetric
+      // to the purchase side; same root-cause class as the AP drift = 89991¢
+      // reproduced in `tapix_backup_20260518_051956.db`.
+      final paymentsForVoid = await _reader.read(
+        InventoryPostingDocument.sale,
+        saleId,
+        () => _datasource.getSalePayments(saleId),
+        <SalePaymentEntity>[],
+      );
+      for (final p in paymentsForVoid) {
+        await _journalService.voidJournalEntriesForSource(
+          sourceTable: 'sale_payments',
+          sourceId: p.id,
+          reason: 'Sale voided — payment JE reversed',
+          userId: resolvedUserId,
+        );
+      }
 
-    // Reverse loyalty points (earned + redeemed) for this sale
-    try {
+      // Void commissions linked to this sale
+      await _commissionService.deleteForSale(saleId);
+
+      // Loyalty effects must roll back with the sale and its journal entries.
       final sale = await getSaleById(saleId);
+
+      // 2026-05-13 — pass the journal service so the DAO's cascade-void of
+      // linked sale_returns also reverses their JEs (root-cause #3 fix).
+      await _dao.voidSale(
+        saleId,
+        journalEntryService: _journalService,
+        userId: resolvedUserId,
+        scope: warehouseScope,
+      );
       if (sale != null && sale.customerId != null) {
         await _reverseLoyaltyPointsForSale(saleId, sale.customerId!);
       }
-    } catch (_) {
-      // Loyalty reversal failure should not block the void
-    }
-
-    // 2026-05-13 — pass the journal service so the DAO's cascade-void of
-    // linked sale_returns also reverses their JEs (root-cause #3 fix).
-    await _dao.voidSale(
-      saleId,
-      journalEntryService: _journalService,
-      userId: resolvedUserId,
-    );
-    // Audit: log sale void (CRITICAL)
-    await _audit.logSaleVoided(
-      saleId: saleId,
-      reason: 'voided',
-      userId: resolvedUserId,
-    );
+      // Audit: log sale void (CRITICAL)
+      await _audit.logSaleVoided(
+        saleId: saleId,
+        reason: 'voided',
+        userId: resolvedUserId,
+      );
+    });
   }
 
   /// Reverse all loyalty point transactions linked to a sale
@@ -888,100 +1054,117 @@ class SaleRepositoryImpl implements SaleRepository {
     bool allowNegativeStock = false,
     bool taxInclusiveAtPost = false,
   }) async {
-    // 1. Fetch original sale to validate
-    final originalSale = await getSaleById(originalSaleId);
-    if (originalSale == null) {
-      throw StateError('Sale #$originalSaleId not found');
-    }
+    final effects = <Future<void> Function()>[];
+    final result = await runZoned(
+      () => _dao.db.transaction(() async {
+        // 1. Fetch original sale to validate
+        final originalSale = await getSaleById(originalSaleId);
+        if (originalSale == null) {
+          throw StateError('Sale #$originalSaleId not found');
+        }
 
-    // 2. Check accounting period is open for the original sale date
-    final txDate = originalSale.saleDate;
-    final periodRows = await _dao.db
-        .customSelect(
-          '''SELECT id, is_closed FROM accounting_periods
+        // 2. Check accounting period is open for the original sale date
+        final txDate = originalSale.saleDate;
+        final periodRows = await _dao.db
+            .customSelect(
+              '''SELECT id, is_closed FROM accounting_periods
          WHERE start_date <= ? AND end_date >= ?
          ORDER BY start_date DESC LIMIT 1''',
-          variables: [
-            Variable.withDateTime(txDate),
-            Variable.withDateTime(txDate),
-          ],
-          readsFrom: {_dao.db.accountingPeriods},
-        )
-        .get();
-    if (periodRows.isNotEmpty && periodRows.first.read<bool>('is_closed')) {
-      throw StateError(
-        'Cannot edit sale: the accounting period containing this '
-        'sale has been closed.',
-      );
-    }
+              variables: [
+                Variable.withDateTime(txDate),
+                Variable.withDateTime(txDate),
+              ],
+              readsFrom: {_dao.db.accountingPeriods},
+            )
+            .get();
+        if (periodRows.isNotEmpty && periodRows.first.read<bool>('is_closed')) {
+          throw StateError(
+            'Cannot edit sale: the accounting period containing this '
+            'sale has been closed.',
+          );
+        }
 
-    // 3. Check if sale has any non-voided returns - cannot edit if returns exist
-    final returns = await _dao.db
-        .customSelect(
-          'SELECT COUNT(*) as cnt FROM sale_returns WHERE sale_id = ? AND status != ?',
-          variables: [
-            Variable.withInt(originalSaleId),
-            Variable.withString('voided'),
-          ],
-          readsFrom: {_dao.db.saleReturns},
-        )
-        .getSingle();
-    if (returns.read<int>('cnt') > 0) {
-      throw StateError(
-        'Cannot edit sale: it has associated returns. '
-        'Void the returns first or create a new sale.',
-      );
-    }
+        // 3. Check if sale has any non-voided returns - cannot edit if returns exist
+        final returns = await _dao.db
+            .customSelect(
+              'SELECT COUNT(*) as cnt FROM sale_returns WHERE sale_id = ? AND status != ?',
+              variables: [
+                Variable.withInt(originalSaleId),
+                Variable.withString('voided'),
+              ],
+              readsFrom: {_dao.db.saleReturns},
+            )
+            .getSingle();
+        if (returns.read<int>('cnt') > 0) {
+          throw StateError(
+            'Cannot edit sale: it has associated returns. '
+            'Void the returns first or create a new sale.',
+          );
+        }
 
-    final userId = await _currentUserId();
+        final userId = await _currentUserId();
 
-    // 4. Void the original sale (this restores stock and reverses accounting)
-    await voidSale(originalSaleId);
+        // 4. Void the original sale (this restores stock and reverses accounting)
+        await voidSale(originalSaleId);
 
-    // 5. Create new sale with the edited data
-    final newSaleId = await createSale(
-      customerId: customerId,
-      employeeId: employeeId,
-      currencyId: currencyId,
-      subtotalCents: subtotalCents,
-      discountCents: discountCents,
-      taxCents: taxCents,
-      totalCents: totalCents,
-      paidAmountCents: paidAmountCents,
-      paymentMethod: paymentMethod,
-      items: items,
-      notes: notes != null
-          ? '$notes\n[Edited from ${originalSale.invoiceNumber}]'
-          : '[Edited from ${originalSale.invoiceNumber}]',
-      saleDate: saleDate ?? originalSale.saleDate,
-      dueDate: dueDate,
-      allowNegativeStock: allowNegativeStock,
-      taxInclusiveAtPost: taxInclusiveAtPost,
+        // 5. Create new sale with the edited data
+        final newSaleId = await createSale(
+          customerId: customerId,
+          employeeId: employeeId,
+          currencyId: currencyId,
+          subtotalCents: subtotalCents,
+          discountCents: discountCents,
+          taxCents: taxCents,
+          totalCents: totalCents,
+          paidAmountCents: paidAmountCents,
+          paymentMethod: paymentMethod,
+          items: items,
+          notes: notes != null
+              ? '$notes\n[Edited from ${originalSale.invoiceNumber}]'
+              : '[Edited from ${originalSale.invoiceNumber}]',
+          saleDate: saleDate ?? originalSale.saleDate,
+          dueDate: dueDate,
+          allowNegativeStock: allowNegativeStock,
+          taxInclusiveAtPost: taxInclusiveAtPost,
+        );
+
+        // 6. Audit log
+        await _audit.log(
+          entityType: 'sale',
+          entityId: newSaleId,
+          action: 'edit_posted_sale',
+          oldValue: {
+            'originalSaleId': originalSaleId,
+            'originalInvoiceNumber': originalSale.invoiceNumber,
+            'originalTotalCents': originalSale.totalCents.toString(),
+          },
+          newValue: {
+            'newSaleId': newSaleId,
+            'newTotalCents': totalCents.toString(),
+            'itemCount': items.length,
+          },
+          userId: userId,
+        );
+
+        return newSaleId;
+      }),
+      zoneValues: {_commitEffectsKey: effects},
     );
-
-    // 6. Audit log
-    await _audit.log(
-      entityType: 'sale',
-      entityId: newSaleId,
-      action: 'edit_posted_sale',
-      oldValue: {
-        'originalSaleId': originalSaleId,
-        'originalInvoiceNumber': originalSale.invoiceNumber,
-        'originalTotalCents': originalSale.totalCents.toString(),
-      },
-      newValue: {
-        'newSaleId': newSaleId,
-        'newTotalCents': totalCents.toString(),
-        'itemCount': items.length,
-      },
-      userId: userId,
-    );
-
-    return newSaleId;
+    // No external submission or usage increment occurs for a rolled-back edit.
+    for (final effect in effects) {
+      await effect();
+    }
+    return result;
   }
 
   @override
-  Future<void> deleteSale(int saleId) async {
+  Future<void> deleteSale(int saleId) => _dao.db.transaction(() async {
+    await DocumentPostingScope.validate(
+      _dao.db,
+      InventoryPostingDocument.sale,
+      saleId,
+      scope: warehouseScope,
+    );
     // Void any journal entries BEFORE deleting the sale record.
     // This MUST succeed — if it fails the entire delete is aborted to prevent GL drift.
     await _journalService.voidJournalEntriesForSource(
@@ -995,28 +1178,54 @@ class SaleRepositoryImpl implements SaleRepository {
     await _commissionService.deleteForSale(saleId);
 
     await _dao.deleteSale(saleId);
-  }
+  });
 
   @override
   Stream<List<SaleReturnEntity>> watchAllSaleReturns() =>
-      _datasource.watchAllSaleReturns();
+      _datasource.watchAllSaleReturns().asyncMap(
+        (rows) => _reader.filter(
+          rows,
+          (r) => r.isAdjustment
+              ? InventoryPostingDocument.saleAdjustment
+              : InventoryPostingDocument.saleReturn,
+          (r) => r.id,
+        ),
+      );
 
   @override
-  Future<SaleReturnEntity?> getSaleReturnById(int id) =>
-      _datasource.getSaleReturnById(id);
+  Future<SaleReturnEntity?> getSaleReturnById(int id) => _reader.read(
+    InventoryPostingDocument.saleReturn,
+    id,
+    () => _datasource.getSaleReturnById(id),
+    null,
+  );
 
   @override
   Stream<List<SaleReturnItemEntity>> watchSaleReturnItemsWithDetails(
     int returnId,
-  ) => _datasource.watchSaleReturnItemsWithDetails(returnId);
+  ) => _reader.gate(
+    InventoryPostingDocument.saleReturn,
+    returnId,
+    _datasource.watchSaleReturnItemsWithDetails(returnId),
+    <SaleReturnItemEntity>[],
+  );
 
   @override
   Stream<List<SaleReturnEntity>> watchSaleReturnsBySale(int saleId) =>
-      _datasource.watchSaleReturnsBySale(saleId);
+      _datasource
+          .watchSaleReturnsBySale(saleId)
+          .asyncMap(
+            (rows) => _reader.filter(
+              rows,
+              (_) => InventoryPostingDocument.saleReturn,
+              (r) => r.id,
+            ),
+          );
 
   @override
-  Stream<Set<int>> watchSaleIdsWithReturns() =>
-      _datasource.watchSaleIdsWithReturns();
+  Stream<Set<int>> watchSaleIdsWithReturns() => _datasource
+      .watchSaleIdsWithReturns()
+      .asyncMap((rows) => _reader.ids(InventoryPostingDocument.sale, rows));
 
   @override
   Future<int> createSaleReturn({
@@ -1047,7 +1256,6 @@ class SaleRepositoryImpl implements SaleRepository {
     if (isChequeRefund && dueDate == null) {
       throw ArgumentError('cheque_due_date_required');
     }
-    final returnNumber = await _datasource.generateSaleReturnNumber();
 
     // Phase 14.0 — only persist dueDate when refund method is cheque.
     // For cash/credit refunds the column stays NULL so the dashboard
@@ -1068,6 +1276,7 @@ class SaleRepositoryImpl implements SaleRepository {
     late List<SaleReturnItemInput> postedItems;
 
     final returnId = await _dao.db.transaction(() async {
+      final returnNumber = await _datasource.generateSaleReturnNumber();
       final originalSale = await _dao.getSaleById(saleId);
       if (originalSale == null) throw Exception('Sale not found');
       if (structuredSettlement) {
@@ -1204,7 +1413,7 @@ class SaleRepositoryImpl implements SaleRepository {
       final id = await _dao.createSaleReturn(returnCompanion, itemCompanions);
 
       // Auto-post return: restore stock immediately
-      await _dao.postSaleReturn(id);
+      await _dao.postSaleReturn(id, scope: warehouseScope);
 
       // Create journal entries — MANDATORY.
       // `postingDate` flows through so `ReturnPostingService` enforces
@@ -1277,6 +1486,7 @@ class SaleRepositoryImpl implements SaleRepository {
       );
       await _commissionService.reverseForReturn(
         saleId: saleId,
+        saleReturnId: id,
         saleSubtotalCents: saleSubtotalCents,
         totalSaleItemCount: totalSaleItems,
         returnSubtotalCents: postedSubtotalCents,
@@ -1285,16 +1495,15 @@ class SaleRepositoryImpl implements SaleRepository {
         returnDate: effectiveReturnDate,
       );
 
+      await _loyaltyPointsService.reverseForReturn(
+        saleId: saleId,
+        returnId: id,
+        returnTotalCents: postedTotalCents,
+        strict: true,
+      );
+
       return id;
     });
-
-    // Reverse loyalty points outside transaction (non-critical) via
-    // the LoyaltyPointsService (Phase 6 SoT).
-    await _loyaltyPointsService.reverseForReturn(
-      saleId: saleId,
-      returnId: returnId,
-      returnTotalCents: postedTotalCents,
-    );
 
     // Audit log outside transaction (non-critical)
     _audit.logSaleReturnCreated(
@@ -1354,6 +1563,7 @@ class SaleRepositoryImpl implements SaleRepository {
       );
       await _datasource.voidSaleReturn(
         returnId,
+        scope: warehouseScope,
         allowNegativeStock: allowNegativeStock,
       );
     });
@@ -1369,12 +1579,20 @@ class SaleRepositoryImpl implements SaleRepository {
   // ==================== SALE PAYMENTS ====================
 
   @override
-  Stream<List<SalePaymentEntity>> watchSalePayments(int saleId) =>
-      _datasource.watchSalePayments(saleId);
+  Stream<List<SalePaymentEntity>> watchSalePayments(int saleId) => _reader.gate(
+    InventoryPostingDocument.sale,
+    saleId,
+    _datasource.watchSalePayments(saleId),
+    <SalePaymentEntity>[],
+  );
 
   @override
-  Future<List<SalePaymentEntity>> getSalePayments(int saleId) =>
-      _datasource.getSalePayments(saleId);
+  Future<List<SalePaymentEntity>> getSalePayments(int saleId) => _reader.read(
+    InventoryPostingDocument.sale,
+    saleId,
+    () => _datasource.getSalePayments(saleId),
+    <SalePaymentEntity>[],
+  );
 
   @override
   Future<int> recordPayment({
@@ -1407,6 +1625,37 @@ class SaleRepositoryImpl implements SaleRepository {
     // ATOMIC: Wrap payment recording (which updates customer balance)
     // and journal entry creation in a single transaction.
     final paymentId = await _dao.db.transaction(() async {
+      await DocumentPostingScope.validate(
+        _dao.db,
+        InventoryPostingDocument.sale,
+        saleId,
+        scope: warehouseScope,
+      );
+      final source = await (_dao.db.select(
+        _dao.db.sales,
+      )..where((d) => d.id.equals(saleId))).getSingle();
+      if (source.status != 'completed') {
+        throw StateError('Payments require a posted sale');
+      }
+      if (cashierShiftId != null) {
+        final shift = await (_dao.db.select(
+          _dao.db.cashierShifts,
+        )..where((s) => s.id.equals(cashierShiftId))).getSingle();
+        if (shift.status != 'open' ||
+            shift.currencyId != currencyId ||
+            shift.cashierUserId != userId) {
+          throw StateError(
+            'Payment shift must be open for this cashier and currency',
+          );
+        }
+      }
+      if (source.currencyId != currencyId ||
+          amountCents <= Decimal.zero ||
+          Decimal.fromBigInt(amountCents.toBigInt()) != amountCents) {
+        throw StateError(
+          'Payment must use positive whole minor units in the invoice currency',
+        );
+      }
       final id = await _datasource.recordPayment(companion);
 
       // Post journal entry: Dr Cash/Bank, Cr Accounts Receivable
@@ -1425,7 +1674,18 @@ class SaleRepositoryImpl implements SaleRepository {
   }
 
   @override
-  Future<void> deletePayment(int paymentId) async {
+  Future<void> deletePayment(int paymentId) => _dao.db.transaction(() async {
+    final payment = await (_dao.db.select(
+      _dao.db.salePayments,
+    )..where((p) => p.id.equals(paymentId))).getSingleOrNull();
+    if (payment == null) throw StateError('Payment not found');
+    await DocumentPostingScope.validate(
+      _dao.db,
+      InventoryPostingDocument.sale,
+      payment.saleId,
+      scope: warehouseScope,
+    );
+
     // Void journal entries BEFORE deleting the payment
     await _journalService.voidJournalEntriesForSource(
       sourceTable: 'sale_payments',
@@ -1435,27 +1695,53 @@ class SaleRepositoryImpl implements SaleRepository {
     );
 
     await _datasource.deletePayment(paymentId);
-  }
+  });
 
   @override
-  Future<int> getReturnedQuantity(int saleItemId) =>
-      _datasource.getReturnedQuantity(saleItemId);
+  Future<int> getReturnedQuantity(int saleItemId) => _reader.readItem(
+    InventoryPostingDocument.sale,
+    saleItemId,
+    () => _datasource.getReturnedQuantity(saleItemId),
+    0,
+  );
 
   @override
   Future<LinkedReturnHistory> getLinkedReturnHistory(int saleItemId) =>
-      _dao.getLinkedReturnHistory(saleItemId);
+      _reader.readItem(
+        InventoryPostingDocument.sale,
+        saleItemId,
+        () => _dao.getLinkedReturnHistory(saleItemId),
+        LinkedReturnHistory.zero,
+      );
 
   @override
-  Stream<SaleDashboardStats> watchDashboardStats() =>
-      _datasource.watchDashboardStats();
+  Stream<SaleDashboardStats> watchDashboardStats() => _reader.changes.asyncMap(
+    (_) => _reader.snapshot((scope) async {
+      final stats = await _dao.getDashboardStats(warehouseScope: scope);
+      return SaleDashboardStats(
+        totalCount: stats.totalCount,
+        completedCount: stats.completedCount,
+        voidedCount: stats.voidedCount,
+        totalSalesCents: stats.totalSalesCents,
+        returnsCount: stats.returnsCount,
+        totalReturnsCents: stats.totalReturnsCents,
+        todaySalesCents: stats.todaySalesCents,
+        todayCount: stats.todayCount,
+      );
+    }),
+  );
 
   @override
   Stream<Map<int, List<String>>> watchSaleProductSearchTerms() =>
-      _datasource.watchSaleProductSearchTerms();
+      _datasource.watchSaleProductSearchTerms().asyncMap(
+        (rows) => _reader.searchTerms(InventoryPostingDocument.sale, rows),
+      );
 
   @override
   Stream<Map<String, List<String>>> watchSaleReturnProductSearchTerms() =>
-      _datasource.watchSaleReturnProductSearchTerms();
+      _datasource.watchSaleReturnProductSearchTerms().asyncMap(
+        _reader.returnSearchTerms,
+      );
 
   // ==================== PRIVATE HELPERS ====================
   //

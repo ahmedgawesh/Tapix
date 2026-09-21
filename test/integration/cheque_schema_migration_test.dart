@@ -43,7 +43,7 @@ void main() {
           .get();
       final names = columns.map((row) => row.read<String>('name')).toSet();
 
-      expect(migrated.schemaVersion, 10082);
+      expect(migrated.schemaVersion, 10091);
       expect(
         names,
         containsAll(const [
@@ -122,7 +122,7 @@ void main() {
       db = migrated;
       await migrated.customSelect('SELECT 1').get();
 
-      expect(migrated.schemaVersion, 10082);
+      expect(migrated.schemaVersion, 10091);
       final cheque = await ChequeInstrumentDao(migrated).getById(chequeId);
       expect(cheque?.settlementPaymentId, paymentId);
     } finally {
@@ -328,7 +328,7 @@ void main() {
       db = migrated;
       await migrated.customSelect('SELECT 1').get();
 
-      expect(migrated.schemaVersion, 10082);
+      expect(migrated.schemaVersion, 10091);
       final sale = await (migrated.select(
         migrated.sales,
       )..where((row) => row.id.equals(saleId))).getSingle();
@@ -483,7 +483,7 @@ void main() {
         );
         db = migrated;
         await migrated.customSelect('SELECT 1').get();
-        expect(migrated.schemaVersion, 10082);
+        expect(migrated.schemaVersion, 10091);
 
         Future<int> instrumentAccountNet(int instrumentId, String code) async {
           final row = await migrated
@@ -602,7 +602,7 @@ void main() {
       db = migrated;
       await migrated.customSelect('SELECT 1').get();
 
-      expect(migrated.schemaVersion, 10082);
+      expect(migrated.schemaVersion, 10091);
       final advance = await (migrated.select(
         migrated.partyAccountPayments,
       )..where((row) => row.chequeInstrumentId.equals(chequeId))).getSingle();

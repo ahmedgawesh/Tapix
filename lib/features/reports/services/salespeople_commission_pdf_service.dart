@@ -1,3 +1,4 @@
+import '../presentation/widgets/warehouse_report_context.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -19,7 +20,11 @@ class SalespeopleCommissionPdfService {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
-    final company = await sl<CompanyProfileService>().getProfile();
+    final reportLocation = WarehouseReportContext.maybeOf(context);
+    await reportLocation?.scope.checkAccess();
+    final loadedCompany = await sl<CompanyProfileService>().getProfile();
+    final company =
+        reportLocation?.decorateCompany(loadedCompany) ?? loadedCompany;
 
     final pdf = await _buildPdf(
       data: data,
@@ -43,7 +48,11 @@ class SalespeopleCommissionPdfService {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
-    final company = await sl<CompanyProfileService>().getProfile();
+    final reportLocation = WarehouseReportContext.maybeOf(context);
+    await reportLocation?.scope.checkAccess();
+    final loadedCompany = await sl<CompanyProfileService>().getProfile();
+    final company =
+        reportLocation?.decorateCompany(loadedCompany) ?? loadedCompany;
 
     final pdf = await _buildPdf(
       data: data,
@@ -88,6 +97,17 @@ class SalespeopleCommissionPdfService {
             pw.SizedBox(height: 8),
             pw.Text(
               '${_t('period', lang)}: ${DateFormat('dd/MM/yyyy').format(data.dateRange.startDate)} — ${DateFormat('dd/MM/yyyy').format(data.dateRange.endDate)}',
+              style: pw.TextStyle(font: fonts.regular, fontSize: 10),
+            ),
+            pw.SizedBox(height: 4),
+
+            pw.Text(
+              _t(
+                data.scope == CommissionReportScope.account
+                    ? 'scope_account'
+                    : 'scope_warehouse',
+                lang,
+              ),
               style: pw.TextStyle(font: fonts.regular, fontSize: 10),
             ),
             pw.SizedBox(height: 4),
@@ -245,6 +265,16 @@ class SalespeopleCommissionPdfService {
   // ═══════════════════════════════════════════════════════
 
   static const _translations = {
+    'scope_account': {
+      'ar': 'الحساب الكامل داخل قاعدة البيانات',
+      'en': 'Full account in this database',
+      'fr': 'Compte complet dans cette base de données',
+    },
+    'scope_warehouse': {
+      'ar': 'المخزن الرئيسي فقط',
+      'en': 'Primary warehouse only',
+      'fr': 'Entrepôt principal uniquement',
+    },
     'salespeople_commission_report': {
       'en': 'Salespeople Commission Report',
       'ar': 'تقرير عمولات مندوبي المبيعات',

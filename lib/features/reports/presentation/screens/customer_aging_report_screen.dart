@@ -34,8 +34,10 @@ class _CustomerAgingReportView extends StatelessWidget {
       appBar: AppBar(
         title: Text('reports.customer_aging_report'.tr()),
         actions: [
-          BlocBuilder<CustomerAgingReportBloc,
-              RealtimeState<CustomerAgingReportData>>(
+          BlocBuilder<
+            CustomerAgingReportBloc,
+            RealtimeState<CustomerAgingReportData>
+          >(
             builder: (context, state) {
               if (state is! RealtimeSuccess<CustomerAgingReportData>) {
                 return const SizedBox.shrink();
@@ -59,63 +61,71 @@ class _CustomerAgingReportView extends StatelessWidget {
           ),
         ],
       ),
-      body: BlocBuilder<CustomerAgingReportBloc,
-          RealtimeState<CustomerAgingReportData>>(
-        builder: (context, state) {
-          if (state is RealtimeLoading<CustomerAgingReportData>) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body:
+          BlocBuilder<
+            CustomerAgingReportBloc,
+            RealtimeState<CustomerAgingReportData>
+          >(
+            builder: (context, state) {
+              if (state is RealtimeLoading<CustomerAgingReportData>) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (state is RealtimeError<CustomerAgingReportData>) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline,
-                      size: 48, color: colorScheme.error),
-                  const SizedBox(height: 16),
-                  Text(state.error.toString(),
-                      style: theme.textTheme.bodyLarge),
-                ],
-              ),
-            );
-          }
-
-          if (state is RealtimeSuccess<CustomerAgingReportData>) {
-            return Column(
-              children: [
-                // Date range selector
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: DateRangeSelector(
-                    dateRange: state.data.dateRange,
-                    onChanged: (range) => context
-                        .read<CustomerAgingReportBloc>()
-                        .add(CustomerAgingReportDateRangeChanged(range)),
+              if (state is RealtimeError<CustomerAgingReportData>) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        state.error.toString(),
+                        style: theme.textTheme.bodyLarge,
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
+                );
+              }
 
-                // Summary cards
-                _buildSummaryCards(context, state.data),
-                const SizedBox(height: 8),
+              if (state is RealtimeSuccess<CustomerAgingReportData>) {
+                return Column(
+                  children: [
+                    // Date range selector
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: DateRangeSelector(
+                        dateRange: state.data.dateRange,
+                        onChanged: (range) => context
+                            .read<CustomerAgingReportBloc>()
+                            .add(CustomerAgingReportDateRangeChanged(range)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
 
-                // Content
-                Expanded(
-                  child: _AgingReportContent(data: state.data),
-                ),
-              ],
-            );
-          }
+                    // Summary cards
+                    _buildSummaryCards(context, state.data),
+                    const SizedBox(height: 8),
 
-          return const SizedBox.shrink();
-        },
-      ),
+                    // Content
+                    Expanded(child: _AgingReportContent(data: state.data)),
+                  ],
+                );
+              }
+
+              return const SizedBox.shrink();
+            },
+          ),
     );
   }
 
   Widget _buildSummaryCards(
-      BuildContext context, CustomerAgingReportData data) {
+    BuildContext context,
+    CustomerAgingReportData data,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final cs = sl<CurrencyService>();
@@ -151,11 +161,14 @@ class _CustomerAgingReportView extends StatelessWidget {
           if (isWide) {
             return Row(
               children: cards
-                  .map((c) => Expanded(
-                          child: Padding(
+                  .map(
+                    (c) => Expanded(
+                      child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: c,
-                      )))
+                      ),
+                    ),
+                  )
                   .toList(),
             );
           }
@@ -165,15 +178,17 @@ class _CustomerAgingReportView extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: cards[0],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: cards[0],
+                    ),
+                  ),
                   Expanded(
-                      child: Padding(
-                    padding: const EdgeInsets.only(left: 4),
-                    child: cards[1],
-                  )),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: cards[1],
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -186,7 +201,9 @@ class _CustomerAgingReportView extends StatelessWidget {
   }
 
   Future<void> _printReport(
-      BuildContext context, CustomerAgingReportData data) async {
+    BuildContext context,
+    CustomerAgingReportData data,
+  ) async {
     await CustomerAgingPdfService.printCustomerAgingReport(
       context: context,
       data: data,
@@ -199,7 +216,9 @@ class _CustomerAgingReportView extends StatelessWidget {
   }
 
   Future<void> _shareReport(
-      BuildContext context, CustomerAgingReportData data) async {
+    BuildContext context,
+    CustomerAgingReportData data,
+  ) async {
     await CustomerAgingPdfService.shareCustomerAgingReport(
       context: context,
       data: data,
@@ -289,16 +308,23 @@ class _AgingReportContent extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.checkCircle,
-                size: 48, color: theme.colorScheme.primary),
+            Icon(
+              LucideIcons.checkCircle,
+              size: 48,
+              color: theme.colorScheme.primary,
+            ),
             const SizedBox(height: 16),
-            Text('reports.no_outstanding_balances'.tr(),
-                style: theme.textTheme.bodyLarge),
+            Text(
+              'reports.no_outstanding_balances'.tr(),
+              style: theme.textTheme.bodyLarge,
+            ),
             const SizedBox(height: 8),
-            Text('reports.no_outstanding_balances_desc'.tr(),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                )),
+            Text(
+              'reports.no_outstanding_balances_desc'.tr(),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
           ],
         ),
       );
@@ -315,9 +341,12 @@ class _AgingReportContent extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('reports.customer_aging_detail'.tr(),
-                style: theme.textTheme.titleSmall
-                    ?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'reports.customer_aging_detail'.tr(),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             Text(
               'reports.customer_count'.tr(args: ['${data.customers.length}']),
               style: theme.textTheme.bodySmall?.copyWith(
@@ -348,18 +377,9 @@ class _AgingReportContent extends StatelessWidget {
                 label: Text('reports.aging_current'.tr()),
                 numeric: true,
               ),
-              DataColumn(
-                label: Text('reports.aging_30'.tr()),
-                numeric: true,
-              ),
-              DataColumn(
-                label: Text('reports.aging_60'.tr()),
-                numeric: true,
-              ),
-              DataColumn(
-                label: Text('reports.aging_90'.tr()),
-                numeric: true,
-              ),
+              DataColumn(label: Text('reports.aging_30'.tr()), numeric: true),
+              DataColumn(label: Text('reports.aging_60'.tr()), numeric: true),
+              DataColumn(label: Text('reports.aging_90'.tr()), numeric: true),
               DataColumn(
                 label: Text('reports.aging_over_90'.tr()),
                 numeric: true,
@@ -382,68 +402,92 @@ class _AgingReportContent extends StatelessWidget {
               ),
             ],
             rows: data.customers.map((item) {
-              return DataRow(cells: [
-                DataCell(
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        item.customerName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (item.phone != null && item.phone!.isNotEmpty)
+              return DataRow(
+                cells: [
+                  DataCell(
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
                         Text(
-                          item.phone!,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontSize: 11,
-                          ),
+                          item.customerName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                    ],
+                        if (item.phone != null && item.phone!.isNotEmpty)
+                          Text(
+                            item.phone!,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontSize: 11,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-                DataCell(Text(
-                  item.currentCents > 0 ? cs.formatCents(item.currentCents) : '-',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.primary,
+                  DataCell(
+                    Text(
+                      item.currentCents > 0
+                          ? cs.formatCents(item.currentCents)
+                          : '-',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
                   ),
-                )),
-                DataCell(Text(
-                  item.days30Cents > 0 ? cs.formatCents(item.days30Cents) : '-',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.tertiary,
+                  DataCell(
+                    Text(
+                      item.days30Cents > 0
+                          ? cs.formatCents(item.days30Cents)
+                          : '-',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.tertiary,
+                      ),
+                    ),
                   ),
-                )),
-                DataCell(Text(
-                  item.days60Cents > 0 ? cs.formatCents(item.days60Cents) : '-',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.error.withValues(alpha: 0.7),
+                  DataCell(
+                    Text(
+                      item.days60Cents > 0
+                          ? cs.formatCents(item.days60Cents)
+                          : '-',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.error.withValues(alpha: 0.7),
+                      ),
+                    ),
                   ),
-                )),
-                DataCell(Text(
-                  item.days90Cents > 0 ? cs.formatCents(item.days90Cents) : '-',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.error,
+                  DataCell(
+                    Text(
+                      item.days90Cents > 0
+                          ? cs.formatCents(item.days90Cents)
+                          : '-',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.error,
+                      ),
+                    ),
                   ),
-                )),
-                DataCell(Text(
-                  item.over90Cents > 0 ? cs.formatCents(item.over90Cents) : '-',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.error,
+                  DataCell(
+                    Text(
+                      item.over90Cents > 0
+                          ? cs.formatCents(item.over90Cents)
+                          : '-',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.error,
+                      ),
+                    ),
                   ),
-                )),
-                DataCell(Text(
-                  cs.formatCents(item.totalCents),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.bold,
+                  DataCell(
+                    Text(
+                      cs.formatCents(item.totalCents),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
-                )),
-              ]);
+                ],
+              );
             }).toList(),
           ),
         ),
@@ -458,8 +502,9 @@ class _AgingReportContent extends StatelessWidget {
               children: [
                 Text(
                   'reports.grand_total'.tr(),
-                  style: theme.textTheme.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.bold),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 Text(
                   cs.formatCents(data.grandTotalCents),
@@ -486,9 +531,12 @@ class _AgingReportContent extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('reports.aging_summary'.tr(),
-                style: theme.textTheme.titleSmall
-                    ?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'reports.aging_summary'.tr(),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 12),
             _AgingSummaryRow(
               label: 'reports.aging_current'.tr(),
@@ -562,9 +610,9 @@ class _AgingReportContent extends StatelessWidget {
     CustomerAgingSortType current,
   ) {
     final newSort = current == desc ? asc : desc;
-    context
-        .read<CustomerAgingReportBloc>()
-        .add(CustomerAgingReportSortChanged(newSort));
+    context.read<CustomerAgingReportBloc>().add(
+      CustomerAgingReportSortChanged(newSort),
+    );
   }
 }
 
@@ -584,16 +632,19 @@ class _AgingSummaryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = isBold
-        ? Theme.of(context)
-            .textTheme
-            .bodyMedium
-            ?.copyWith(fontWeight: FontWeight.bold, color: color)
+        ? Theme.of(context).textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: color,
+          )
         : Theme.of(context).textTheme.bodyMedium?.copyWith(color: color);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [Text(label, style: style), Text(value, style: style)],
+        children: [
+          Text(label, style: style),
+          Text(value, style: style),
+        ],
       ),
     );
   }

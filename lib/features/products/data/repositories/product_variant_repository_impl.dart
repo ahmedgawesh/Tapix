@@ -76,45 +76,54 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
     required Decimal priceCents,
     required int stockQuantity,
   }) async {
-    // A simple product still has one operational variant row so every stock
-    // movement has a stable variant id. That row is allowed to carry the
-    // product's optional colour/size; those are descriptive attributes, not
-    // evidence that the product has multiple variants. Requiring an
-    // anonymous row here used to split a simple product into two rows: the
-    // original row kept SKU/barcode/attributes while a newly-created row
-    // received stock and invoice references.
-    final active = (await _datasource.getVariantsByProduct(
-      productId,
-    )).where((variant) => variant.isActive).toList();
-    if (active.length == 1) {
-      return active.single.id;
-    }
-    if (active.length > 1) {
-      throw StateError(
-        'Simple product $productId has ${active.length} active variant rows. '
-        'Refusing to create or guess another default variant.',
+    if (stockQuantity < 0) {
+      throw ArgumentError.value(
+        stockQuantity,
+        'stockQuantity',
+        'Opening quantity must not be negative',
       );
     }
+    return _datasource.runInTransaction(() async {
+      // A simple product still has one operational variant row so every stock
+      // movement has a stable variant id. That row is allowed to carry the
+      // product's optional colour/size; those are descriptive attributes, not
+      // evidence that the product has multiple variants. Requiring an
+      // anonymous row here used to split a simple product into two rows: the
+      // original row kept SKU/barcode/attributes while a newly-created row
+      // received stock and invoice references.
+      final active = (await _datasource.getVariantsByProduct(
+        productId,
+      )).where((variant) => variant.isActive).toList();
+      if (active.length == 1) {
+        return active.single.id;
+      }
+      if (active.length > 1) {
+        throw StateError(
+          'Simple product $productId has ${active.length} active variant rows. '
+          'Refusing to create or guess another default variant.',
+        );
+      }
 
-    // Reuse an archived anonymous row instead of colliding with the unique
-    // (product, colour, size) index. Reactivation reveals its preserved
-    // stock; it never creates or removes inventory value.
-    final archived = await _datasource.getAnonymousDefaultVariantByProduct(
-      productId,
-      activeOnly: false,
-    );
-    if (archived != null) {
-      await _datasource.reactivateVariant(archived.id);
-      return archived.id;
-    }
+      // Reuse an archived anonymous row instead of colliding with the unique
+      // (product, colour, size) index. Reactivation reveals its preserved
+      // stock; it never creates or removes inventory value.
+      final archived = await _datasource.getAnonymousDefaultVariantByProduct(
+        productId,
+        activeOnly: false,
+      );
+      if (archived != null) {
+        await _datasource.reactivateVariant(archived.id);
+        return archived.id;
+      }
 
-    final id = await createVariant(
-      productId: productId,
-      costCents: costCents,
-      priceCents: priceCents,
-      stockQuantity: stockQuantity,
-    );
-    return id;
+      final id = await createVariant(
+        productId: productId,
+        costCents: costCents,
+        priceCents: priceCents,
+        stockQuantity: stockQuantity,
+      );
+      return id;
+    });
   }
 
   @override
@@ -130,55 +139,64 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
     required int stockQuantity,
     bool isActive = true,
   }) async {
-    // ── Phase 4 accounting invariant ─────────────────────────────────────
-    // A newly-created variant with a non-zero starting quantity must post
-    // an "Opening Balance" journal entry so that:
-    //   value on hand (stock × cost) ≡ balance of account 1200 Inventory.
-    //
-    // To make that possible we insert the row with stock_quantity = 0 and
-    // then call InventoryAdjustmentService.recordOpeningBalance, which:
-    //   1. writes an inventory_adjustments audit row (type = opening_balance),
-    //   2. increments stock_quantity to the requested value via StockService,
-    //   3. posts the matching JE: Dr 1200 Inventory / Cr 3100 Opening
-    //      Balance Equity for quantity × cost.
-    //
-    // Creating with stock = 0 (the default flow) skips the service call
-    // entirely and behaves as before.
-    final int id = await _datasource.createVariant(
-      db.ProductVariantsCompanion(
-        productId: Value(productId),
-        sku: Value(sku),
-        barcode: Value(barcode),
-        colorId: Value(colorId),
-        sizeId: Value(sizeId),
-        costCents: Value(costCents),
-        priceCents: Value(priceCents),
-        wholesalePriceCents: Value(wholesalePriceCents),
-        priceAdjustmentCents: Value(Decimal.zero),
-        // Start at zero; opening balance will bring it up via the service.
-        stockQuantity: const Value(0),
-        isActive: Value(isActive),
-      ),
-    );
-
-    final shouldAutoGenerate = barcode == null || barcode.trim().isEmpty;
-    if (shouldAutoGenerate) {
-      final autoBarcode = _buildAutoBarcode(id);
-      await _datasource.updateVariantBarcode(
-        variantId: id,
-        barcode: autoBarcode,
+    if (stockQuantity < 0) {
+      throw ArgumentError.value(
+        stockQuantity,
+        'stockQuantity',
+        'Opening quantity must not be negative',
       );
     }
-
-    if (stockQuantity > 0) {
-      await _adjustmentService.recordOpeningBalance(
-        productId: productId,
-        variantId: id,
-        quantity: stockQuantity,
+    return _datasource.runInTransaction(() async {
+      // ── Phase 4 accounting invariant ─────────────────────────────────────
+      // A newly-created variant with a non-zero starting quantity must post
+      // an "Opening Balance" journal entry so that:
+      //   value on hand (stock × cost) ≡ balance of account 1200 Inventory.
+      //
+      // To make that possible we insert the row with stock_quantity = 0 and
+      // then call InventoryAdjustmentService.recordOpeningBalance, which:
+      //   1. writes an inventory_adjustments audit row (type = opening_balance),
+      //   2. increments stock_quantity to the requested value via StockService,
+      //   3. posts the matching JE: Dr 1200 Inventory / Cr 3100 Opening
+      //      Balance Equity for quantity × cost.
+      //
+      // Creating with stock = 0 (the default flow) skips the service call
+      // entirely and behaves as before.
+      final int id = await _datasource.createVariant(
+        db.ProductVariantsCompanion(
+          productId: Value(productId),
+          sku: Value(sku),
+          barcode: Value(barcode),
+          colorId: Value(colorId),
+          sizeId: Value(sizeId),
+          costCents: Value(costCents),
+          priceCents: Value(priceCents),
+          wholesalePriceCents: Value(wholesalePriceCents),
+          priceAdjustmentCents: Value(Decimal.zero),
+          // Start at zero; opening balance will bring it up via the service.
+          stockQuantity: const Value(0),
+          isActive: Value(isActive),
+        ),
       );
-    }
 
-    return id;
+      final shouldAutoGenerate = barcode == null || barcode.trim().isEmpty;
+      if (shouldAutoGenerate) {
+        final autoBarcode = _buildAutoBarcode(id);
+        await _datasource.updateVariantBarcode(
+          variantId: id,
+          barcode: autoBarcode,
+        );
+      }
+
+      if (stockQuantity > 0) {
+        await _adjustmentService.recordOpeningBalance(
+          productId: productId,
+          variantId: id,
+          quantity: stockQuantity,
+        );
+      }
+
+      return id;
+    });
   }
 
   @override
@@ -241,32 +259,40 @@ class ProductVariantRepositoryImpl implements ProductVariantRepository {
     required int variantId,
     required String reason,
   }) async {
-    final variant = await _datasource.getVariantById(variantId);
-    if (variant == null) {
-      // Mirror smart-delete contract for the not-found case so callers
-      // can treat both methods uniformly.
-      return const VariantDeletionResult(wasDeleted: false, referenceCount: 0);
-    }
+    // Keep the stock settlement and deletion in one transaction. A remote
+    // warehouse balance or a failed deactivation must also undo the local
+    // shrinkage, FIFO consumption, and journal entry.
+    return _datasource.runInTransaction(() async {
+      final variant = await _datasource.getVariantById(variantId);
+      if (variant == null) {
+        // Mirror smart-delete contract for the not-found case so callers
+        // can treat both methods uniformly.
+        return const VariantDeletionResult(
+          wasDeleted: false,
+          referenceCount: 0,
+        );
+      }
 
-    // Step 1 — post a balanced shrinkage entry that drives stock to zero.
-    // This guarantees the 1200 Inventory ledger stays aligned with Σ(stock
-    // × cost) regardless of whether the row is hard- or soft-deleted next.
-    if (variant.stockQuantity > 0) {
-      await _adjustmentService.adjustForProduct(
-        productId: variant.productId,
-        variantId: variant.id,
-        type: InventoryAdjustmentType.shrinkage,
-        quantityDelta: -variant.stockQuantity,
-        reason: reason,
+      // Step 1 — post a balanced shrinkage entry that drives stock to zero.
+      // This guarantees the 1200 Inventory ledger stays aligned with Σ(stock
+      // × cost) regardless of whether the row is hard- or soft-deleted next.
+      if (variant.stockQuantity > 0) {
+        await _adjustmentService.adjustForProduct(
+          productId: variant.productId,
+          variantId: variant.id,
+          type: InventoryAdjustmentType.shrinkage,
+          quantityDelta: -variant.stockQuantity,
+          reason: reason,
+        );
+      }
+
+      // Step 2 — smart delete (hard if no refs, soft if there are any).
+      final result = await _datasource.smartDeleteVariant(variantId);
+      return VariantDeletionResult(
+        wasDeleted: result.wasDeleted,
+        referenceCount: result.referenceCount,
       );
-    }
-
-    // Step 2 — smart delete (hard if no refs, soft if there are any).
-    final result = await _datasource.smartDeleteVariant(variantId);
-    return VariantDeletionResult(
-      wasDeleted: result.wasDeleted,
-      referenceCount: result.referenceCount,
-    );
+    });
   }
 
   @override

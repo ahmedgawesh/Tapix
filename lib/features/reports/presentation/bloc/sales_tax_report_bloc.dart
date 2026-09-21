@@ -1,7 +1,10 @@
+import '../../../../core/services/business/warehouse_read_scope.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+import '../../../../core/services/business/warehouse_document_scope.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -133,7 +136,8 @@ class SalesTaxReportData {
       totalSubtotalCents: totalSubtotalCents ?? this.totalSubtotalCents,
       totalDiscountCents: totalDiscountCents ?? this.totalDiscountCents,
       totalTaxableCents: totalTaxableCents ?? this.totalTaxableCents,
-      totalTaxCollectedCents: totalTaxCollectedCents ?? this.totalTaxCollectedCents,
+      totalTaxCollectedCents:
+          totalTaxCollectedCents ?? this.totalTaxCollectedCents,
       totalSalesCents: totalSalesCents ?? this.totalSalesCents,
       returnTaxCents: returnTaxCents ?? this.returnTaxCents,
       netTaxCents: netTaxCents ?? this.netTaxCents,
@@ -150,12 +154,16 @@ class SalesTaxReportData {
 class SalesTaxReportBloc
     extends RealtimeBloc<SalesTaxReportData, SalesTaxReportEvent> {
   final AppDatabase _db;
+  final WarehouseReadScope? warehouseScope;
   ReportDateRange _dateRange;
   SalesTaxSortType _sort = SalesTaxSortType.dateDesc;
 
-  SalesTaxReportBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+  SalesTaxReportBloc(
+    this._db, {
+    String defaultDateRange = 'month',
+    this.warehouseScope,
+  }) : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+       super(const RealtimeLoading());
 
   @override
   Stream<SalesTaxReportData> get dataStream {
@@ -165,13 +173,17 @@ class SalesTaxReportBloc
         .customSelect(
           'SELECT 1',
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.customers,
             _db.sales,
             _db.saleReturns,
             _db.saleReturnAdjustments,
           },
         )
         .watch()
-        .asyncMap((_) => _loadData());
+        .asyncMap(
+          (_) => WarehouseReadScope.snapshot(_db, warehouseScope, _loadData),
+        );
   }
 
   @override
@@ -196,9 +208,11 @@ class SalesTaxReportBloc
     final current = currentData;
     if (current != null) {
       final sorted = _applySortToInvoices(current.invoices, event.sort);
-      emit(RealtimeSuccess<SalesTaxReportData>(
-        data: current.copyWith(invoices: sorted, sort: event.sort),
-      ));
+      emit(
+        RealtimeSuccess<SalesTaxReportData>(
+          data: current.copyWith(invoices: sorted, sort: event.sort),
+        ),
+      );
     }
   }
 
@@ -207,8 +221,9 @@ class SalesTaxReportBloc
     final endIso = _dateRange.endDate.toIso8601String();
 
     // Load sales invoices with tax
-    final saleRows = await _db.customSelect(
-      '''
+    final saleRows = await _db
+        .customSelect(
+          '''
       SELECT 
         s.id AS sale_id,
         s.invoice_number,
@@ -219,16 +234,24 @@ class SalesTaxReportBloc
         s.tax_cents,
         s.total_cents,
         s.status
-      FROM sales s
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s
       LEFT JOIN customers c ON c.id = s.customer_id
       WHERE s.status != 'voided'
         AND s.sale_date >= ?
         AND s.sale_date <= ?
       ORDER BY s.sale_date DESC
       ''',
-      variables: [Variable.withString(startIso), Variable.withString(endIso)],
-      readsFrom: {_db.sales, _db.customers},
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.sales,
+            _db.customers,
+          },
+        )
+        .get();
 
     final invoices = saleRows.map((row) {
       final subtotal = row.read<int>('subtotal_cents');
@@ -252,8 +275,9 @@ class SalesTaxReportBloc
     // adjustment (unlinked, product-based) returns. Tax on adjustment returns
     // is a real VAT reduction and must lower the net tax liability exactly the
     // same way a linked return does.
-    final returnRows = await _db.customSelect(
-      '''
+    final returnRows = await _db
+        .customSelect(
+          '''
       SELECT return_id, return_number, customer_name, return_date,
              subtotal_cents, discount_cents, tax_cents, total_cents
       FROM (
@@ -266,7 +290,7 @@ class SalesTaxReportBloc
           sr.discount_cents AS discount_cents,
           sr.tax_cents AS tax_cents,
           sr.total_cents AS total_cents
-        FROM sale_returns sr
+        FROM ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr
         INNER JOIN sales s ON s.id = sr.sale_id
         LEFT JOIN customers c ON c.id = s.customer_id
         WHERE sr.status = 'posted'
@@ -282,7 +306,7 @@ class SalesTaxReportBloc
           sra.discount_cents AS discount_cents,
           sra.tax_cents AS tax_cents,
           sra.total_cents AS total_cents
-        FROM sale_return_adjustments sra
+        FROM ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra
         LEFT JOIN customers c ON c.id = sra.customer_id
         WHERE sra.status = 'posted'
           AND sra.return_date >= ?
@@ -290,19 +314,21 @@ class SalesTaxReportBloc
       )
       ORDER BY return_date DESC
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {
-        _db.saleReturns,
-        _db.saleReturnAdjustments,
-        _db.sales,
-        _db.customers,
-      },
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.saleReturns,
+            _db.saleReturnAdjustments,
+            _db.sales,
+            _db.customers,
+          },
+        )
+        .get();
 
     final returns = returnRows.map((row) {
       return SalesTaxReturnItem(

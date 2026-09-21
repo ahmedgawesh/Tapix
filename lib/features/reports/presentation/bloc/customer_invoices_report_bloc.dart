@@ -1,7 +1,10 @@
+import '../../../../core/services/business/warehouse_read_scope.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+import '../../../../core/services/business/warehouse_document_scope.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -130,12 +133,16 @@ class CustomerInvoiceOption {
 class CustomerInvoicesReportBloc
     extends RealtimeBloc<CustomerInvoicesData, CustomerInvoicesReportEvent> {
   final AppDatabase _db;
+  final WarehouseReadScope? warehouseScope;
   ReportDateRange _dateRange;
   int? _customerId;
 
-  CustomerInvoicesReportBloc(this._db, {String defaultDateRange = 'month'})
-    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-      super(const RealtimeLoading());
+  CustomerInvoicesReportBloc(
+    this._db, {
+    String defaultDateRange = 'month',
+    this.warehouseScope,
+  }) : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+       super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
   int? get customerId => _customerId;
@@ -150,7 +157,18 @@ class CustomerInvoicesReportBloc
   }
 
   Stream<CustomerInvoicesData> _buildStream() {
-    return _db.select(_db.sales).watch().asyncMap((_) async => _loadData());
+    return _db
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {
+            _db.sales,
+            _db.saleItems,
+            _db.customers,
+            ...WarehouseDocumentScope.dependencies(_db),
+          },
+        )
+        .watch()
+        .asyncMap((_) async => _loadData());
   }
 
   Future<void> _onDateRangeChanged(
@@ -178,7 +196,10 @@ class CustomerInvoicesReportBloc
       FROM customers c WHERE c.is_active = 1
       ORDER BY c.name ASC
       ''',
-          readsFrom: {_db.customers},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.customers,
+          },
         )
         .get();
 
@@ -202,7 +223,10 @@ class CustomerInvoicesReportBloc
         .customSelect(
           'SELECT name, phone, address FROM customers WHERE id = ?',
           variables: [Variable.withInt(_customerId!)],
-          readsFrom: {_db.customers},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.customers,
+          },
         )
         .get();
     if (cRows.isEmpty) {
@@ -227,7 +251,7 @@ class CustomerInvoicesReportBloc
       SELECT s.id, s.invoice_number, s.subtotal_cents, s.discount_cents,
              s.tax_cents, s.total_cents, s.paid_amount_cents,
              s.payment_method, s.status, s.sale_date
-      FROM sales s
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s
       WHERE s.customer_id = ?
         AND s.status != 'voided'
         AND s.sale_date >= ?
@@ -239,7 +263,7 @@ class CustomerInvoicesReportBloc
             Variable.withString(startIso),
             Variable.withString(endIso),
           ],
-          readsFrom: {_db.sales},
+          readsFrom: {...WarehouseDocumentScope.dependencies(_db), _db.sales},
         )
         .get();
 
@@ -313,6 +337,7 @@ class CustomerInvoicesReportBloc
       ''',
           variables: [Variable.withInt(saleId)],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.saleItems,
             _db.products,
             _db.productVariants,

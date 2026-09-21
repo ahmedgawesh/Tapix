@@ -1,3 +1,4 @@
+import '../presentation/widgets/warehouse_report_context.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -19,7 +20,11 @@ class TopCustomersPdfService {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
-    final company = await sl<CompanyProfileService>().getProfile();
+    final reportLocation = WarehouseReportContext.maybeOf(context);
+    await reportLocation?.scope.checkAccess();
+    final loadedCompany = await sl<CompanyProfileService>().getProfile();
+    final company =
+        reportLocation?.decorateCompany(loadedCompany) ?? loadedCompany;
 
     final pdf = await _buildTopCustomersPdf(
       data: data,
@@ -43,7 +48,11 @@ class TopCustomersPdfService {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
     final isRtl = locale.languageCode == 'ar';
-    final company = await sl<CompanyProfileService>().getProfile();
+    final reportLocation = WarehouseReportContext.maybeOf(context);
+    await reportLocation?.scope.checkAccess();
+    final loadedCompany = await sl<CompanyProfileService>().getProfile();
+    final company =
+        reportLocation?.decorateCompany(loadedCompany) ?? loadedCompany;
 
     final pdf = await _buildTopCustomersPdf(
       data: data,

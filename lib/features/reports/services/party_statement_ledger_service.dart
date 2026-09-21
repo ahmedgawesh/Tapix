@@ -98,6 +98,12 @@ class PartyLedgerDatePolicy {
 
 /// Authoritative period snapshot for customer and supplier sub-ledgers.
 ///
+/// Scope: the complete party account in this database, across document sites.
+/// Payments and opening balances do not have warehouse ownership. Filtering
+/// invoices alone would break reconciliation, so warehouse movement reports
+/// must not reuse this snapshot as a warehouse balance. Multi-site access to
+/// this account requires its own authorization when that mode is enabled.
+///
 /// Opening balance is the immutable party opening balance plus every signed
 /// movement before the selected period. Closing balance adds only movements
 /// inside the period. The cached `balance_cents` column is deliberately not

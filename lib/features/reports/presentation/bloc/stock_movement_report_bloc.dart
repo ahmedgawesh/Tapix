@@ -1,7 +1,10 @@
+import '../../../../core/services/business/warehouse_read_scope.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+import '../../../../core/services/business/warehouse_document_scope.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -184,19 +187,49 @@ class StockMovementReportData {
 class StockMovementReportBloc
     extends RealtimeBloc<StockMovementReportData, StockMovementReportEvent> {
   final AppDatabase _db;
+  final WarehouseReadScope? warehouseScope;
   ReportDateRange _dateRange;
   String _searchQuery = '';
   int? _selectedProductId;
   StockMovementType? _movementTypeFilter;
 
-  StockMovementReportBloc(this._db, {String defaultDateRange = 'month'})
-    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-      super(const RealtimeLoading());
+  StockMovementReportBloc(
+    this._db, {
+    String defaultDateRange = 'month',
+    this.warehouseScope,
+  }) : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+       super(const RealtimeLoading());
 
   @override
   Stream<StockMovementReportData> get dataStream {
-    // Watch sales table as trigger for real-time updates
-    return _db.select(_db.sales).watch().asyncMap((_) => _loadData());
+    return _db
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.customers,
+            _db.productCategories,
+            _db.productVariants,
+            _db.products,
+            _db.purchaseItems,
+            _db.purchaseReturnAdjustmentItems,
+            _db.purchaseReturnAdjustments,
+            _db.purchaseReturnItems,
+            _db.purchaseReturns,
+            _db.purchases,
+            _db.saleItems,
+            _db.saleReturnAdjustmentItems,
+            _db.saleReturnAdjustments,
+            _db.saleReturnItems,
+            _db.saleReturns,
+            _db.sales,
+            _db.suppliers,
+          },
+        )
+        .watch()
+        .asyncMap(
+          (_) => WarehouseReadScope.snapshot(_db, warehouseScope, _loadData),
+        );
   }
 
   @override
@@ -316,7 +349,7 @@ class StockMovementReportBloc
         pi.total_cents AS total,
         s.name AS counterparty
       FROM purchase_items pi
-      INNER JOIN purchases pu ON pu.id = pi.purchase_id
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchase) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} pu ON pu.id = pi.purchase_id
       LEFT JOIN suppliers s ON s.id = pu.supplier_id
       WHERE pi.product_id = ?
         AND pu.status != 'voided'
@@ -328,7 +361,12 @@ class StockMovementReportBloc
             Variable.withString(startIso),
             Variable.withString(endIso),
           ],
-          readsFrom: {_db.purchaseItems, _db.purchases, _db.suppliers},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.purchaseItems,
+            _db.purchases,
+            _db.suppliers,
+          },
         )
         .get();
 
@@ -357,7 +395,7 @@ class StockMovementReportBloc
         si.total_cents AS total,
         c.name AS counterparty
       FROM sale_items si
-      INNER JOIN sales s ON s.id = si.sale_id
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s ON s.id = si.sale_id
       LEFT JOIN customers c ON c.id = s.customer_id
       WHERE si.product_id = ?
         AND s.status != 'voided'
@@ -369,7 +407,12 @@ class StockMovementReportBloc
             Variable.withString(startIso),
             Variable.withString(endIso),
           ],
-          readsFrom: {_db.saleItems, _db.sales, _db.customers},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.saleItems,
+            _db.sales,
+            _db.customers,
+          },
         )
         .get();
 
@@ -398,7 +441,7 @@ class StockMovementReportBloc
         sri.refund_cents AS total,
         c.name AS counterparty
       FROM sale_return_items sri
-      INNER JOIN sale_returns sr ON sr.id = sri.return_id
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr ON sr.id = sri.return_id
       INNER JOIN sale_items si ON si.id = sri.sale_item_id
       INNER JOIN sales s ON s.id = sr.sale_id
       LEFT JOIN customers c ON c.id = s.customer_id
@@ -413,6 +456,7 @@ class StockMovementReportBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.saleReturnItems,
             _db.saleReturns,
             _db.saleItems,
@@ -447,7 +491,7 @@ class StockMovementReportBloc
         srai.total_cents AS total,
         c.name AS counterparty
       FROM sale_return_adjustment_items srai
-      INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra ON sra.id = srai.return_id
       LEFT JOIN customers c ON c.id = sra.customer_id
       WHERE srai.product_id = ?
         AND sra.status = 'posted'
@@ -460,6 +504,7 @@ class StockMovementReportBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.saleReturnAdjustmentItems,
             _db.saleReturnAdjustments,
             _db.customers,
@@ -492,7 +537,7 @@ class StockMovementReportBloc
         pri.refund_cents AS total,
         sup.name AS counterparty
       FROM purchase_return_items pri
-      INNER JOIN purchase_returns pr ON pr.id = pri.return_id
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchaseReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseReturn)} pr ON pr.id = pri.return_id
       INNER JOIN purchase_items pi ON pi.id = pri.purchase_item_id
       INNER JOIN purchases pu ON pu.id = pr.purchase_id
       LEFT JOIN suppliers sup ON sup.id = pu.supplier_id
@@ -507,6 +552,7 @@ class StockMovementReportBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.purchaseReturnItems,
             _db.purchaseReturns,
             _db.purchaseItems,
@@ -541,7 +587,7 @@ class StockMovementReportBloc
         prai.total_cents AS total,
         sup.name AS counterparty
       FROM purchase_return_adjustment_items prai
-      INNER JOIN purchase_return_adjustments pra ON pra.id = prai.return_id
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchaseAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseAdjustment)} pra ON pra.id = prai.return_id
       LEFT JOIN suppliers sup ON sup.id = pra.supplier_id
       WHERE prai.product_id = ?
         AND pra.status = 'posted'
@@ -554,6 +600,7 @@ class StockMovementReportBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.purchaseReturnAdjustmentItems,
             _db.purchaseReturnAdjustments,
             _db.suppliers,

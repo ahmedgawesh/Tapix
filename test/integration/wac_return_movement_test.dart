@@ -116,7 +116,7 @@ void main() {
               paidAmountCents: Value(Decimal.fromInt(4000)),
               currencyId: currencyId,
               paymentMethod: 'cash',
-              status: const Value('posted'),
+              status: const Value('completed'),
             ),
           );
       final saleItemId = await db

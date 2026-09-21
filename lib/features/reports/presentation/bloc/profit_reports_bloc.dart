@@ -1,7 +1,10 @@
+import '../../../../core/services/business/warehouse_read_scope.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+import '../../../../core/services/business/warehouse_document_scope.dart';
 import '../../../../core/services/reporting/ratio_helper.dart';
 import '../widgets/report_date_range.dart';
 
@@ -182,6 +185,7 @@ class ProfitReportsData {
 class ProfitReportsBloc
     extends RealtimeBloc<ProfitReportsData, ProfitReportsEvent> {
   final AppDatabase _db;
+  final WarehouseReadScope? warehouseScope;
   ReportDateRange _dateRange;
 
   // Exact COGS expressions shared by every profit breakdown. FIFO reads the
@@ -232,9 +236,12 @@ class ProfitReportsBloc
     END
   ''';
 
-  ProfitReportsBloc(this._db, {String defaultDateRange = 'month'})
-    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-      super(const RealtimeLoading());
+  ProfitReportsBloc(
+    this._db, {
+    String defaultDateRange = 'month',
+    this.warehouseScope,
+  }) : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+       super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -245,6 +252,7 @@ class ProfitReportsBloc
         .customSelect(
           'SELECT 1 AS _t',
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.sales,
             _db.saleItems,
             _db.saleReturns,
@@ -256,7 +264,9 @@ class ProfitReportsBloc
           },
         )
         .watch();
-    return trigger.asyncMap((_) => _loadAll());
+    return trigger.asyncMap(
+      (_) => WarehouseReadScope.snapshot(_db, warehouseScope, _loadAll),
+    );
   }
 
   @override
@@ -336,19 +346,19 @@ class ProfitReportsBloc
           '''
       SELECT
         (SELECT COALESCE(SUM(s.tax_cents), 0)
-           FROM sales s
+           FROM ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s
           WHERE s.status = 'completed'
             AND s.sale_date >= ? AND s.sale_date <= ?)
         -
         (SELECT COALESCE(SUM(sri.tax_cents), 0)
            FROM sale_return_items sri
-           INNER JOIN sale_returns sr ON sr.id = sri.return_id
+           INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr ON sr.id = sri.return_id
           WHERE sr.status = 'posted'
             AND sr.return_date >= ? AND sr.return_date <= ?)
         -
         (SELECT COALESCE(SUM(srai.tax_cents), 0)
            FROM sale_return_adjustment_items srai
-           INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id
+           INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra ON sra.id = srai.return_id
           WHERE sra.status = 'posted'
             AND sra.return_date >= ? AND sra.return_date <= ?)
         AS total_tax
@@ -362,6 +372,7 @@ class ProfitReportsBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.sales,
             _db.saleReturnItems,
             _db.saleReturns,
@@ -414,7 +425,7 @@ class ProfitReportsBloc
           $_saleCostSql AS cost_cents,
           ('S' || s.id) AS tx_key
         FROM sale_items si
-        INNER JOIN sales s ON s.id = si.sale_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s ON s.id = si.sale_id
         INNER JOIN products pr ON pr.id = si.product_id
         LEFT JOIN product_variants pv ON pv.id = si.variant_id
         LEFT JOIN product_categories pc ON pc.id = pr.category_id
@@ -434,7 +445,7 @@ class ProfitReportsBloc
           -($_linkedReturnCostSql),
           ('LR' || sr.id)
         FROM sale_return_items sri
-        INNER JOIN sale_returns sr ON sr.id = sri.return_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr ON sr.id = sri.return_id
         INNER JOIN sale_items si ON si.id = sri.sale_item_id
         INNER JOIN products pr ON pr.id = si.product_id
         LEFT JOIN product_variants pv ON pv.id = si.variant_id
@@ -455,7 +466,7 @@ class ProfitReportsBloc
           -($_adjustmentReturnCostSql),
           ('AR' || sra.id)
         FROM sale_return_adjustment_items srai
-        INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra ON sra.id = srai.return_id
         INNER JOIN products pr ON pr.id = srai.product_id
         LEFT JOIN product_categories pc ON pc.id = pr.category_id
         WHERE sra.status = 'posted'
@@ -473,6 +484,7 @@ class ProfitReportsBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.saleItems,
             _db.sales,
             _db.products,
@@ -535,7 +547,7 @@ class ProfitReportsBloc
           $_saleCostSql AS cost_cents,
           ('S' || s.id) AS tx_key
         FROM sale_items si
-        INNER JOIN sales s ON s.id = si.sale_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s ON s.id = si.sale_id
         INNER JOIN products pr ON pr.id = si.product_id
         LEFT JOIN product_variants pv ON pv.id = si.variant_id
         LEFT JOIN product_categories pc ON pc.id = pr.category_id
@@ -554,7 +566,7 @@ class ProfitReportsBloc
           -($_linkedReturnCostSql),
           ('LR' || sr.id)
         FROM sale_return_items sri
-        INNER JOIN sale_returns sr ON sr.id = sri.return_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr ON sr.id = sri.return_id
         INNER JOIN sale_items si ON si.id = sri.sale_item_id
         INNER JOIN products pr ON pr.id = si.product_id
         LEFT JOIN product_variants pv ON pv.id = si.variant_id
@@ -574,7 +586,7 @@ class ProfitReportsBloc
           -($_adjustmentReturnCostSql),
           ('AR' || sra.id)
         FROM sale_return_adjustment_items srai
-        INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra ON sra.id = srai.return_id
         INNER JOIN products pr ON pr.id = srai.product_id
         LEFT JOIN product_categories pc ON pc.id = pr.category_id
         WHERE sra.status = 'posted'
@@ -592,6 +604,7 @@ class ProfitReportsBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.saleItems,
             _db.sales,
             _db.products,
@@ -652,7 +665,7 @@ class ProfitReportsBloc
           $_saleCostSql AS cost_cents,
           ('S' || s.id) AS tx_key
         FROM sale_items si
-        INNER JOIN sales s ON s.id = si.sale_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s ON s.id = si.sale_id
         INNER JOIN products pr ON pr.id = si.product_id
         LEFT JOIN product_variants pv ON pv.id = si.variant_id
         LEFT JOIN customers c ON c.id = s.customer_id
@@ -669,7 +682,7 @@ class ProfitReportsBloc
           -($_linkedReturnCostSql),
           ('LR' || sr.id)
         FROM sale_return_items sri
-        INNER JOIN sale_returns sr ON sr.id = sri.return_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr ON sr.id = sri.return_id
         INNER JOIN sales s ON s.id = sr.sale_id
         INNER JOIN sale_items si ON si.id = sri.sale_item_id
         INNER JOIN products pr ON pr.id = si.product_id
@@ -688,7 +701,7 @@ class ProfitReportsBloc
           -($_adjustmentReturnCostSql),
           ('AR' || sra.id)
         FROM sale_return_adjustment_items srai
-        INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra ON sra.id = srai.return_id
         INNER JOIN products pr ON pr.id = srai.product_id
         LEFT JOIN customers c ON c.id = sra.customer_id
         WHERE sra.status = 'posted'
@@ -706,6 +719,7 @@ class ProfitReportsBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.saleItems,
             _db.sales,
             _db.products,
@@ -761,7 +775,7 @@ class ProfitReportsBloc
         s.sale_date,
         s.payment_method,
         COALESCE(cost_q.total_cost, 0) AS cost_cents
-      FROM sales s
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s
       LEFT JOIN customers c ON c.id = s.customer_id
       LEFT JOIN (
         SELECT
@@ -782,6 +796,7 @@ class ProfitReportsBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.sales,
             _db.customers,
             _db.saleItems,
@@ -827,7 +842,7 @@ class ProfitReportsBloc
         -SUM($_linkedReturnCostSql) AS cost_cents,
         sr.return_date,
         sr.refund_method
-      FROM sale_returns sr
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr
       INNER JOIN sale_return_items sri ON sri.return_id = sr.id
       INNER JOIN sale_items si ON si.id = sri.sale_item_id
       INNER JOIN products pr ON pr.id = si.product_id
@@ -843,6 +858,7 @@ class ProfitReportsBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.saleReturns,
             _db.saleReturnItems,
             _db.saleItems,
@@ -891,7 +907,7 @@ class ProfitReportsBloc
         -SUM($_adjustmentReturnCostSql) AS cost_cents,
         sra.return_date,
         sra.refund_method
-      FROM sale_return_adjustments sra
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra
       INNER JOIN sale_return_adjustment_items srai ON srai.return_id = sra.id
       INNER JOIN products pr ON pr.id = srai.product_id
       LEFT JOIN customers c ON c.id = sra.customer_id
@@ -904,6 +920,7 @@ class ProfitReportsBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.saleReturnAdjustments,
             _db.saleReturnAdjustmentItems,
             _db.products,

@@ -1,3 +1,7 @@
+import '../../services/business/warehouse_document_scope.dart';
+import '../../services/business/warehouse_operation_scope.dart';
+import '../../services/business/warehouse_inventory_reader.dart';
+import '../../services/business/document_posting_scope.dart';
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../measurement/measurement.dart';
@@ -183,6 +187,13 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     with _$AdjustmentReturnDaoMixin {
   AdjustmentReturnDao(super.db);
 
+  Future<bool> _tracksInventory(int productId) async {
+    final row = await (select(
+      products,
+    )..where((p) => p.id.equals(productId))).getSingleOrNull();
+    return row?.trackInventory ?? false;
+  }
+
   /// Returns `true` when the product needs **batch-level books**.
   ///
   /// Phase B (two-layer inventory architecture): the predicate is the OR of
@@ -301,7 +312,9 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     required int? customerId,
     required int productId,
     int? variantId,
+    WarehouseOperationScope? scope,
   }) async {
+    if (scope != null) await scope.validate(attachedDatabase);
     if (customerId == null) return 0;
     final qtyExp = saleItems.quantity.sum();
     final query =
@@ -319,9 +332,24 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           // was voided. Mirror in `getSupplierProductSuppliedQty`.
           ..where(sales.status.equals('completed'))
           ..where(sales.customerId.equals(customerId))
+          ..where(
+            CustomExpression<bool>(
+              DocumentPostingScope.historyPredicate(
+                InventoryPostingDocument.sale,
+                'sales',
+                scope: scope,
+              ),
+            ),
+          )
           ..where(saleItems.productId.equals(productId));
     if (variantId != null) {
-      query.where(saleItems.variantId.equals(variantId));
+      query.where(
+        saleItems.variantId.equals(variantId) |
+            (saleItems.variantId.isNull() &
+                CustomExpression<bool>(
+                  'EXISTS (SELECT 1 FROM products p0 JOIN product_variants v0 ON v0.product_id=p0.id WHERE p0.id=sale_items.product_id AND p0.has_variants=0 AND v0.id=$variantId AND v0.is_active=1 AND (SELECT COUNT(*) FROM product_variants vx WHERE vx.product_id=p0.id AND vx.is_active=1)=1)',
+                )),
+      );
     }
     // else: no variant filter — see doc comment above.
     final row = await query.getSingleOrNull();
@@ -347,15 +375,18 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     required int? employeeId,
     required int productId,
     int? variantId,
+    WarehouseOperationScope? scope,
   }) async {
+    if (scope != null) await scope.validate(attachedDatabase);
     if (employeeId == null) return 0;
     final variantClause = variantId != null
-        ? 'AND si.variant_id = ${variantId.toString()} '
+        ? 'AND ${WarehouseDocumentScope.operationalVariant('si')} = ${variantId.toString()} '
         : '';
     final row = await customSelect(
       'SELECT COALESCE(SUM(si.quantity), 0) AS c '
       'FROM sale_items si '
       'JOIN sales s ON s.id = si.sale_id '
+      'AND ${DocumentPostingScope.historyPredicate(InventoryPostingDocument.sale, 's', scope: scope)} '
       "WHERE s.status = 'completed' "
       '  AND si.product_id = ? '
       '  AND (s.employee_id = ? OR si.employee_id = ?) '
@@ -389,7 +420,9 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     required int supplierId,
     required int productId,
     int? variantId,
+    WarehouseOperationScope? scope,
   }) async {
+    if (scope != null) await scope.validate(attachedDatabase);
     final qtyExp = purchaseItems.quantity.sum();
     final query =
         selectOnly(purchaseItems).join([
@@ -404,9 +437,24 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           // and `'voided'` rows must not feed the adjustment-return cap.
           ..where(purchases.status.equals('posted'))
           ..where(purchases.supplierId.equals(supplierId))
+          ..where(
+            CustomExpression<bool>(
+              DocumentPostingScope.historyPredicate(
+                InventoryPostingDocument.purchase,
+                'purchases',
+                scope: scope,
+              ),
+            ),
+          )
           ..where(purchaseItems.productId.equals(productId));
     if (variantId != null) {
-      query.where(purchaseItems.variantId.equals(variantId));
+      query.where(
+        purchaseItems.variantId.equals(variantId) |
+            (purchaseItems.variantId.isNull() &
+                CustomExpression<bool>(
+                  'EXISTS (SELECT 1 FROM products p0 JOIN product_variants v0 ON v0.product_id=p0.id WHERE p0.id=purchase_items.product_id AND p0.has_variants=0 AND v0.id=$variantId AND v0.is_active=1 AND (SELECT COUNT(*) FROM product_variants vx WHERE vx.product_id=p0.id AND vx.is_active=1)=1)',
+                )),
+      );
     }
     // else: no variant filter — see doc comment above.
     final row = await query.getSingleOrNull();
@@ -425,15 +473,18 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     required int? customerId,
     required int productId,
     int? variantId,
+    WarehouseOperationScope? scope,
   }) async {
+    if (scope != null) await scope.validate(attachedDatabase);
     if (customerId == null) return 0;
     final variantClause = variantId != null
-        ? 'AND si.variant_id = ${variantId.toString()} '
+        ? 'AND ${WarehouseDocumentScope.operationalVariant('si')} = ${variantId.toString()} '
         : '';
     final row = await customSelect(
       'SELECT COALESCE(SUM(si.qty_returned_linked + si.qty_returned_adjustment), 0) AS c '
       'FROM sale_items si '
       'JOIN sales s ON s.id = si.sale_id '
+      'AND ${DocumentPostingScope.historyPredicate(InventoryPostingDocument.sale, 's', scope: scope)} '
       "WHERE s.status = 'completed' AND s.customer_id = ? "
       '  AND si.product_id = ? '
       '$variantClause',
@@ -447,14 +498,17 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     required int supplierId,
     required int productId,
     int? variantId,
+    WarehouseOperationScope? scope,
   }) async {
+    if (scope != null) await scope.validate(attachedDatabase);
     final variantClause = variantId != null
-        ? 'AND pi.variant_id = ${variantId.toString()} '
+        ? 'AND ${WarehouseDocumentScope.operationalVariant('pi')} = ${variantId.toString()} '
         : '';
     final row = await customSelect(
       'SELECT COALESCE(SUM(pi.qty_returned_linked + pi.qty_returned_adjustment), 0) AS c '
       'FROM purchase_items pi '
       'JOIN purchases pu ON pu.id = pi.purchase_id '
+      'AND ${DocumentPostingScope.historyPredicate(InventoryPostingDocument.purchase, 'pu', scope: scope)} '
       "WHERE pu.status = 'posted' AND pu.supplier_id = ? "
       '  AND pi.product_id = ? '
       '$variantClause',
@@ -485,7 +539,9 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     required int? variantId,
     required int requestedQuantity,
     bool allowOverHistory = false,
+    WarehouseOperationScope? scope,
   }) async {
+    if (scope != null) await scope.validate(attachedDatabase);
     if (allowOverHistory) return;
     if (requestedQuantity <= 0) return;
 
@@ -493,11 +549,13 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     final int returned;
     if (side == 'sale') {
       invoiced = await getCustomerProductPurchasedQty(
+        scope: scope,
         customerId: partyId,
         productId: productId,
         variantId: variantId,
       );
       returned = await getCustomerProductReturnedQty(
+        scope: scope,
         customerId: partyId,
         productId: productId,
         variantId: variantId,
@@ -510,11 +568,13 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         );
       }
       invoiced = await getSupplierProductSuppliedQty(
+        scope: scope,
         supplierId: partyId,
         productId: productId,
         variantId: variantId,
       );
       returned = await getSupplierProductReturnedQty(
+        scope: scope,
         supplierId: partyId,
         productId: productId,
         variantId: variantId,
@@ -552,16 +612,19 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     required int productId,
     required int? variantId,
     required int requestedQty,
+    WarehouseOperationScope? scope,
   }) async {
+    if (scope != null) await scope.validate(attachedDatabase);
     if (requestedQty <= 0) return const [];
     final variantClause = variantId != null
-        ? 'AND si.variant_id = ${variantId.toString()} '
+        ? 'AND ${WarehouseDocumentScope.operationalVariant('si')} = ${variantId.toString()} '
         : '';
     final rows = await customSelect(
       'SELECT si.id AS item_id, si.quantity, '
       '       si.qty_returned_linked, si.qty_returned_adjustment '
       'FROM sale_items si '
       'JOIN sales s ON s.id = si.sale_id '
+      'AND ${DocumentPostingScope.historyPredicate(InventoryPostingDocument.sale, 's', scope: scope)} '
       "WHERE s.status = 'completed' AND s.customer_id = ? "
       '  AND si.product_id = ? '
       '$variantClause'
@@ -592,16 +655,19 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     required int productId,
     required int? variantId,
     required int requestedQty,
+    WarehouseOperationScope? scope,
   }) async {
+    if (scope != null) await scope.validate(attachedDatabase);
     if (requestedQty <= 0) return const [];
     final variantClause = variantId != null
-        ? 'AND pi.variant_id = ${variantId.toString()} '
+        ? 'AND ${WarehouseDocumentScope.operationalVariant('pi')} = ${variantId.toString()} '
         : '';
     final rows = await customSelect(
       'SELECT pi.id AS item_id, pi.quantity, '
       '       pi.qty_returned_linked, pi.qty_returned_adjustment '
       'FROM purchase_items pi '
       'JOIN purchases pu ON pu.id = pi.purchase_id '
+      'AND ${DocumentPostingScope.historyPredicate(InventoryPostingDocument.purchase, 'pu', scope: scope)} '
       "WHERE pu.status = 'posted' AND pu.supplier_id = ? "
       '  AND pi.product_id = ? '
       '$variantClause'
@@ -665,6 +731,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     List<PurchaseReturnAdjustmentItemsCompanion> items, {
     ReturnApprovalService? approvalService,
     bool overHistoryOverride = false,
+    WarehouseOperationScope? scope,
   }) {
     return transaction(() async {
       for (final item in items) {
@@ -672,7 +739,19 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         assert(item.productId.present, 'productId is required');
       }
 
-      final returnId = await into(purchaseReturnAdjustments).insert(returnData);
+      final operationScope =
+          scope ?? await WarehouseOperationScope.resolve(attachedDatabase);
+      await operationScope.validate(attachedDatabase);
+      if (returnData.warehouseId.present &&
+          returnData.warehouseId.value != null &&
+          returnData.warehouseId.value != operationScope.warehouseId) {
+        throw StateError(
+          'Adjustment return route differs from operation scope',
+        );
+      }
+      final returnId = await into(purchaseReturnAdjustments).insert(
+        returnData.copyWith(warehouseId: Value(operationScope.warehouseId)),
+      );
 
       // ── Phase 3: approval-policy evaluation at draft time ──
       // Centralized in `ReturnApprovalService.evaluate`. The decision is
@@ -719,6 +798,15 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           costCents = row?.read<int>('cost_cents') ?? 0;
         }
 
+        if (!operationScope.isPrimary &&
+            await _tracksInventory(item.productId.value)) {
+          costCents = (await WarehouseInventoryReader.read(
+            this,
+            operationScope,
+            item.productId.value,
+            item.variantId.value,
+          )).unitCostCents;
+        }
         final itemWithCost = item.copyWith(
           returnId: Value(returnId),
           unitCostCents: Value(Decimal.fromInt(costCents)),
@@ -752,8 +840,21 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     int? userId,
     bool allowNegativeStock = false,
     bool allowOverHistory = false,
+    WarehouseOperationScope? scope,
   }) {
     return transaction(() async {
+      final operationScope = await DocumentPostingScope.validate(
+        attachedDatabase,
+        InventoryPostingDocument.purchaseAdjustment,
+        returnId,
+        scope: scope,
+      );
+      await DocumentPostingScope.validatePostingTerms(
+        attachedDatabase,
+        InventoryPostingDocument.purchaseAdjustment,
+        returnId,
+        operationScope,
+      );
       final returnData = await getPurchaseAdjReturnById(returnId);
       if (returnData == null) throw Exception('Adjustment return not found');
       if (returnData.status == 'posted') {
@@ -801,6 +902,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         final pid = int.parse(parts[0]);
         final vid = parts[1] == 'null' ? null : int.parse(parts[1]);
         await validateAdjustmentQuantityCap(
+          scope: scope,
           side: 'purchase',
           partyId: returnData.supplierId,
           productId: pid,
@@ -883,11 +985,13 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         // The draft's cost may be older than the posting-time average.
         final wacSnapshot = await WacMovementService.capture(
           this,
+          scope: operationScope,
           productId: item.productId,
           variantId: resolvedVariantId,
         );
         final valuationSnapshot = await InventoryValuationDeltaService.capture(
           this,
+          scope: operationScope,
           productId: item.productId,
           variantId: resolvedVariantId,
         );
@@ -897,45 +1001,27 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
             item.unitCostCents.toBigInt().toInt();
         frozenUnitCostByItem[item.id] = frozenUnitCost;
 
-        // Guard against negative stock unless explicitly allowed by policy.
         if (!allowNegativeStock) {
-          if (resolvedVariantId != null) {
-            final variantRow = await customSelect(
-              'SELECT stock_quantity FROM product_variants WHERE id = ?',
-              variables: [Variable.withInt(resolvedVariantId)],
-            ).getSingleOrNull();
-            if (variantRow != null) {
-              final currentStock = variantRow.read<int>('stock_quantity');
-              if (currentStock < item.quantity) {
-                throw StockInsufficientException(
-                  variantId: resolvedVariantId,
-                  productId: item.productId,
-                  currentStock: currentStock,
-                  requestedQuantity: item.quantity,
-                );
-              }
-            }
-          } else {
-            final productRow = await customSelect(
-              'SELECT stock_quantity FROM products WHERE id = ?',
-              variables: [Variable.withInt(item.productId)],
-            ).getSingleOrNull();
-            if (productRow != null) {
-              final currentStock = productRow.read<int>('stock_quantity');
-              if (currentStock < item.quantity) {
-                throw StockInsufficientException(
-                  productId: item.productId,
-                  currentStock: currentStock,
-                  requestedQuantity: item.quantity,
-                );
-              }
-            }
+          final balance = await WarehouseInventoryReader.read(
+            this,
+            operationScope,
+            item.productId,
+            resolvedVariantId,
+          );
+          if (balance.quantity < item.quantity) {
+            throw StockInsufficientException(
+              productId: item.productId,
+              variantId: resolvedVariantId,
+              currentStock: balance.quantity,
+              requestedQuantity: item.quantity,
+            );
           }
         }
 
         // DECREASE stock (purchase return = goods leaving our warehouse)
         await StockService.adjustStock(
           this,
+          scope: operationScope,
           productId: item.productId,
           variantId: resolvedVariantId,
           quantity: item.quantity,
@@ -950,6 +1036,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           // the per-batch cost, so Σ(totalCostCents) is the exact 1200 leg.
           final consumed = await BatchService.consumeFifo(
             this,
+            scope: operationScope,
             productId: item.productId,
             variantId: resolvedVariantId,
             quantity: item.quantity,
@@ -983,6 +1070,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       for (final productId in affectedProductIds) {
         await StockService.syncProductStockFromVariants(
           this,
+          scope: operationScope,
           productId: productId,
         );
       }
@@ -993,8 +1081,9 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       // BEFORE the transaction commits — turns Phase A's documented invariant
       // into an enforced one.
       for (final productId in batchedProductIds) {
-        await BatchService.assertInvariantForProduct(
+        await WarehouseInventoryReader.assertBatches(
           this,
+          scope: operationScope,
           productId: productId,
         );
       }
@@ -1080,7 +1169,9 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         final taxOnLine = item.taxCents.toBigInt().toInt();
         // Phase 7 — tax-rate snapshot recovery via SoT.
         final taxRateBps = TaxCalculationService.recoverRateBps(
-          taxableSubtotalCents: subtotal,
+          taxableSubtotalCents: returnData.taxInclusiveAtPost == true
+              ? subtotal - taxOnLine
+              : subtotal,
           taxOnLineCents: taxOnLine,
         );
         await (update(
@@ -1180,6 +1271,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         final pid = int.parse(parts[0]);
         final vid = parts[1] == 'null' ? null : int.parse(parts[1]);
         final allocations = await _allocatePurchaseItemsForAdjustment(
+          scope: scope,
           supplierId: returnData.supplierId,
           productId: pid,
           variantId: vid,
@@ -1212,6 +1304,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     bool allowOverHistory = false,
     ReturnApprovalService? approvalService,
     List<CheckoutPaymentAllocation> settlementAllocations = const [],
+    WarehouseOperationScope? scope,
   }) {
     return transaction(() async {
       // Generate number atomically inside the transaction
@@ -1220,11 +1313,13 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       final returnId = await createPurchaseAdjReturn(
         dataWithNumber,
         items,
+        scope: scope,
         approvalService: approvalService,
         overHistoryOverride: allowOverHistory,
       );
       await postPurchaseAdjReturn(
         returnId,
+        scope: scope,
         journalEntryService: journalEntryService,
         userId: userId,
         allowNegativeStock: allowNegativeStock,
@@ -1258,8 +1353,15 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     required JournalEntryService journalEntryService,
     int? voidedBy,
     String? voidReason,
+    WarehouseOperationScope? scope,
   }) {
     return transaction(() async {
+      final operationScope = await DocumentPostingScope.validate(
+        attachedDatabase,
+        InventoryPostingDocument.purchaseAdjustment,
+        returnId,
+        scope: scope,
+      );
       final returnData = await getPurchaseAdjReturnById(returnId);
       if (returnData == null) throw Exception('Adjustment return not found');
       if (returnData.status == 'voided') {
@@ -1312,6 +1414,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           );
           final wacSnapshot = await WacMovementService.capture(
             this,
+            scope: operationScope,
             productId: item.productId,
             variantId: resolvedVariantId,
           );
@@ -1323,6 +1426,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           // INCREASE stock back (reverse the decrease)
           await StockService.adjustStock(
             this,
+            scope: operationScope,
             productId: item.productId,
             variantId: resolvedVariantId,
             quantity: item.quantity,
@@ -1344,6 +1448,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           // No-op for WAC products (no consumption rows were emitted).
           await BatchService.restoreConsumptions(
             this,
+            scope: operationScope,
             reverseConsumptionType: 'purchase_adj_return_void',
             purchaseReturnAdjustmentItemId: item.id,
           );
@@ -1356,14 +1461,16 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         for (final productId in affectedProductIds) {
           await StockService.syncProductStockFromVariants(
             this,
+            scope: operationScope,
             productId: productId,
           );
         }
 
         // I4 (Invariant I1): cross-table invariant for FIFO products.
         for (final productId in batchedProductIds) {
-          await BatchService.assertInvariantForProduct(
+          await WarehouseInventoryReader.assertBatches(
             this,
+            scope: operationScope,
             productId: productId,
           );
         }
@@ -1432,12 +1539,13 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           // newest-first (LIFO of the post path) — this gives an exact
           // inverse when no concurrent return raced in between.
           final variantClause = vid != null
-              ? 'AND pi.variant_id = ${vid.toString()} '
+              ? 'AND ${WarehouseDocumentScope.operationalVariant('pi')} = ${vid.toString()} '
               : '';
           final rows = await customSelect(
             'SELECT pi.id AS item_id, pi.qty_returned_adjustment '
             'FROM purchase_items pi '
             'JOIN purchases pu ON pu.id = pi.purchase_id '
+            'AND ${DocumentPostingScope.historyPredicate(InventoryPostingDocument.purchase, 'pu', scope: scope)} '
             "WHERE pu.status = 'posted' AND pu.supplier_id = ? "
             '  AND pi.product_id = ? '
             '$variantClause'
@@ -1576,6 +1684,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     List<SaleReturnAdjustmentItemsCompanion> items, {
     ReturnApprovalService? approvalService,
     bool overHistoryOverride = false,
+    WarehouseOperationScope? scope,
   }) {
     return transaction(() async {
       for (final item in items) {
@@ -1583,7 +1692,19 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         assert(item.productId.present, 'productId is required');
       }
 
-      final returnId = await into(saleReturnAdjustments).insert(returnData);
+      final operationScope =
+          scope ?? await WarehouseOperationScope.resolve(attachedDatabase);
+      await operationScope.validate(attachedDatabase);
+      if (returnData.warehouseId.present &&
+          returnData.warehouseId.value != null &&
+          returnData.warehouseId.value != operationScope.warehouseId) {
+        throw StateError(
+          'Adjustment return route differs from operation scope',
+        );
+      }
+      final returnId = await into(saleReturnAdjustments).insert(
+        returnData.copyWith(warehouseId: Value(operationScope.warehouseId)),
+      );
 
       // ── Phase 3: approval-policy evaluation at draft time ──
       // Same single source of truth as the purchase side.
@@ -1628,6 +1749,15 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           costCents = row?.read<int>('cost_cents') ?? 0;
         }
 
+        if (!operationScope.isPrimary &&
+            await _tracksInventory(item.productId.value)) {
+          costCents = (await WarehouseInventoryReader.read(
+            this,
+            operationScope,
+            item.productId.value,
+            item.variantId.value,
+          )).unitCostCents;
+        }
         final itemWithCost = item.copyWith(
           returnId: Value(returnId),
           unitCostCents: Value(Decimal.fromInt(costCents)),
@@ -1664,8 +1794,21 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     bool allowOverHistory = false,
     CommissionService? commissionService,
     LoyaltyPointsService? loyaltyPointsService,
+    WarehouseOperationScope? scope,
   }) {
     return transaction(() async {
+      final operationScope = await DocumentPostingScope.validate(
+        attachedDatabase,
+        InventoryPostingDocument.saleAdjustment,
+        returnId,
+        scope: scope,
+      );
+      await DocumentPostingScope.validatePostingTerms(
+        attachedDatabase,
+        InventoryPostingDocument.saleAdjustment,
+        returnId,
+        operationScope,
+      );
       final returnData = await getSaleAdjReturnById(returnId);
       if (returnData == null) throw Exception('Adjustment return not found');
       if (returnData.status == 'posted') {
@@ -1694,6 +1837,9 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
                   ..limit(1))
                 .getSingleOrNull();
         if (openShift != null) {
+          if (openShift.currencyId != returnData.currencyId) {
+            throw StateError('Cashier shift currency does not match return');
+          }
           await (update(
             saleReturnAdjustments,
           )..where((r) => r.id.equals(returnId))).write(
@@ -1745,6 +1891,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         final pid = int.parse(parts[0]);
         final vid = parts[1] == 'null' ? null : int.parse(parts[1]);
         await validateAdjustmentQuantityCap(
+          scope: scope,
           side: 'sale',
           partyId: returnData.customerId,
           productId: pid,
@@ -1804,11 +1951,13 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
 
         final wacSnapshot = await WacMovementService.capture(
           this,
+          scope: operationScope,
           productId: item.productId,
           variantId: resolvedVariantId,
         );
         final valuationSnapshot = await InventoryValuationDeltaService.capture(
           this,
+          scope: operationScope,
           productId: item.productId,
           variantId: resolvedVariantId,
         );
@@ -1816,6 +1965,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         // INCREASE stock (sale return = goods coming back to our warehouse)
         await StockService.adjustStock(
           this,
+          scope: operationScope,
           productId: item.productId,
           variantId: resolvedVariantId,
           quantity: item.quantity,
@@ -1840,14 +1990,22 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         // report and never confused with a LINKED `SR-…` return document.
         // WAC products keep their batches untouched (legacy path).
         if (await _isFifoProduct(item.productId)) {
-          await BatchService.createOpeningBatch(
+          final returnBatchId = await BatchService.createOpeningBatch(
             this,
+            scope: operationScope,
             productId: item.productId,
             variantId: resolvedVariantId,
             quantity: item.quantity,
             unitCostCents: frozenUnitCost,
             source: 'sale_return',
             documentReference: returnData.returnNumber,
+          );
+          await (update(
+            saleReturnAdjustmentItems,
+          )..where((i) => i.id.equals(item.id))).write(
+            SaleReturnAdjustmentItemsCompanion(
+              returnBatchId: Value(returnBatchId),
+            ),
           );
           batchedProductIds.add(item.productId);
         }
@@ -1870,14 +2028,16 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       for (final productId in affectedProductIds) {
         await StockService.syncProductStockFromVariants(
           this,
+          scope: operationScope,
           productId: productId,
         );
       }
 
       // I4 (Invariant I1): cross-table invariant for FIFO products.
       for (final productId in batchedProductIds) {
-        await BatchService.assertInvariantForProduct(
+        await WarehouseInventoryReader.assertBatches(
           this,
+          scope: operationScope,
           productId: productId,
         );
       }
@@ -1963,7 +2123,9 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         final taxOnLine = item.taxCents.toBigInt().toInt();
         // Phase 7 — tax-rate snapshot recovery via SoT.
         final taxRateBps = TaxCalculationService.recoverRateBps(
-          taxableSubtotalCents: subtotal,
+          taxableSubtotalCents: returnData.taxInclusiveAtPost == true
+              ? subtotal - taxOnLine
+              : subtotal,
           taxOnLineCents: taxOnLine,
         );
         await (update(
@@ -2061,6 +2223,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           final pid = int.parse(parts[0]);
           final vid = parts[1] == 'null' ? null : int.parse(parts[1]);
           final allocations = await _allocateSaleItemsForAdjustment(
+            scope: scope,
             customerId: returnData.customerId!,
             productId: pid,
             variantId: vid,
@@ -2144,6 +2307,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     CommissionService? commissionService,
     LoyaltyPointsService? loyaltyPointsService,
     List<CheckoutPaymentAllocation> settlementAllocations = const [],
+    WarehouseOperationScope? scope,
   }) {
     return transaction(() async {
       // Generate number atomically inside the transaction
@@ -2152,11 +2316,13 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       final returnId = await createSaleAdjReturn(
         dataWithNumber,
         items,
+        scope: scope,
         approvalService: approvalService,
         overHistoryOverride: allowOverHistory,
       );
       await postSaleAdjReturn(
         returnId,
+        scope: scope,
         journalEntryService: journalEntryService,
         userId: userId,
         allowOverHistory: allowOverHistory,
@@ -2202,8 +2368,15 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     String? voidReason,
     CommissionService? commissionService,
     LoyaltyPointsService? loyaltyPointsService,
+    WarehouseOperationScope? scope,
   }) {
     return transaction(() async {
+      final operationScope = await DocumentPostingScope.validate(
+        attachedDatabase,
+        InventoryPostingDocument.saleAdjustment,
+        returnId,
+        scope: scope,
+      );
       final returnData = await getSaleAdjReturnById(returnId);
       if (returnData == null) throw Exception('Adjustment return not found');
       if (returnData.status == 'voided') {
@@ -2254,6 +2427,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           );
           final wacSnapshot = await WacMovementService.capture(
             this,
+            scope: operationScope,
             productId: item.productId,
             variantId: resolvedVariantId,
           );
@@ -2262,44 +2436,27 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
               wacSnapshot?.unitCostCents ??
               item.unitCostCents.toBigInt().toInt();
 
-          // Guard against negative stock unless explicitly allowed by policy.
           if (!allowNegativeStock) {
-            if (resolvedVariantId != null) {
-              final variantRow = await customSelect(
-                'SELECT stock_quantity FROM product_variants WHERE id = ?',
-                variables: [Variable.withInt(resolvedVariantId)],
-              ).getSingleOrNull();
-              if (variantRow != null) {
-                final currentStock = variantRow.read<int>('stock_quantity');
-                if (currentStock < item.quantity) {
-                  throw Exception(
-                    'Cannot void: variant #$resolvedVariantId stock ($currentStock) '
-                    'is less than return quantity (${item.quantity}). '
-                    'Some items may have been sold.',
-                  );
-                }
-              }
-            } else {
-              final productRow = await customSelect(
-                'SELECT stock_quantity FROM products WHERE id = ?',
-                variables: [Variable.withInt(item.productId)],
-              ).getSingleOrNull();
-              if (productRow != null) {
-                final currentStock = productRow.read<int>('stock_quantity');
-                if (currentStock < item.quantity) {
-                  throw Exception(
-                    'Cannot void: product #${item.productId} stock ($currentStock) '
-                    'is less than return quantity (${item.quantity}). '
-                    'Some items may have been sold.',
-                  );
-                }
-              }
+            final balance = await WarehouseInventoryReader.read(
+              this,
+              operationScope,
+              item.productId,
+              resolvedVariantId,
+            );
+            if (balance.quantity < item.quantity) {
+              throw StockInsufficientException(
+                productId: item.productId,
+                variantId: resolvedVariantId,
+                currentStock: balance.quantity,
+                requestedQuantity: item.quantity,
+              );
             }
           }
 
           // DECREASE stock (reverse the increase)
           await StockService.adjustStock(
             this,
+            scope: operationScope,
             productId: item.productId,
             variantId: resolvedVariantId,
             quantity: item.quantity,
@@ -2315,15 +2472,18 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
             );
           }
 
-          // FIFO sync: deduct oldest batches in FIFO order, linked to this
-          // return item so the consumption can be audited / replayed. The
-          // batch we created on posting (source='sale_return') is amongst
-          // the candidates; whether it is consumed first depends on its
-          // received_date relative to other lots, which is the correct
-          // FIFO behaviour. WAC products keep their batches untouched.
+          // Undo the exact layer created by this return, not an older lot.
+          // Legacy rows need explicit source reconciliation rather than a guess.
           if (await _isFifoProduct(item.productId)) {
+            if (item.returnBatchId == null) {
+              throw StateError(
+                'Legacy FIFO adjustment return needs batch-source reconciliation before voiding',
+              );
+            }
             await BatchService.consumeFifo(
               this,
+              scope: operationScope,
+              requiredBatchId: item.returnBatchId,
               productId: item.productId,
               variantId: resolvedVariantId,
               quantity: item.quantity,
@@ -2338,14 +2498,16 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         for (final productId in affectedProductIds) {
           await StockService.syncProductStockFromVariants(
             this,
+            scope: operationScope,
             productId: productId,
           );
         }
 
         // I4 (Invariant I1): cross-table invariant for FIFO products.
         for (final productId in batchedProductIds) {
-          await BatchService.assertInvariantForProduct(
+          await WarehouseInventoryReader.assertBatches(
             this,
+            scope: operationScope,
             productId: productId,
           );
         }
@@ -2413,12 +2575,13 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
             final pid = int.parse(parts[0]);
             final vid = parts[1] == 'null' ? null : int.parse(parts[1]);
             final variantClause = vid != null
-                ? 'AND si.variant_id = ${vid.toString()} '
+                ? 'AND ${WarehouseDocumentScope.operationalVariant('si')} = ${vid.toString()} '
                 : '';
             final rows = await customSelect(
               'SELECT si.id AS item_id, si.qty_returned_adjustment '
               'FROM sale_items si '
               'JOIN sales s ON s.id = si.sale_id '
+              'AND ${DocumentPostingScope.historyPredicate(InventoryPostingDocument.sale, 's', scope: scope)} '
               "WHERE s.status = 'completed' AND s.customer_id = ? "
               '  AND si.product_id = ? '
               '$variantClause'

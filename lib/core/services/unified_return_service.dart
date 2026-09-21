@@ -11,16 +11,28 @@
 // Overflow scenario: all linkable qty goes to linked, remainder to adjustment.
 // ══════════════════════════════════════════════════════════════════════════════
 
+import 'dart:convert';
+
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../database/app_database.dart';
+import 'business/warehouse_stock_scope.dart';
+import 'business/branch_tax_policy.dart';
+import 'business/branch_tax_policy_store.dart';
+import 'business/document_posting_scope.dart';
+import 'business/warehouse_document_scope.dart';
 import '../measurement/measurement.dart';
 import '../database/daos/purchase_dao.dart';
 import '../database/daos/sale_dao.dart';
 import '../database/daos/adjustment_return_dao.dart';
 import '../pricing/pricing_snapshot.dart';
+import '../pricing/invoice_pricing_engine.dart';
+import '../pricing/line_item_pricing_engine.dart';
+import '../money/money.dart';
+import '../../features/settings/data/services/app_settings_service.dart';
+import '../../features/settings/domain/entities/app_settings.dart';
 import 'journal_entry_service.dart';
 import 'commissions/commission_service.dart';
 import 'loyalty/loyalty_points_service.dart';
@@ -50,6 +62,27 @@ enum ReturnMode { linked, adjustment }
 
 /// Whether this is a sale-side or purchase-side return.
 enum ReturnSide { sale, purchase }
+
+/// Internal preview, bound to its database, side, inputs and tax policy.
+/// This is not an authorization token or a serialized LAN contract.
+class UnifiedAdjustmentQuote {
+  const UnifiedAdjustmentQuote._(
+    this._database,
+    this._side,
+    this._fingerprint,
+    this._policy,
+    this._legacyPolicy,
+    this.pricing,
+    this.taxInclusive,
+  );
+  final AppDatabase _database;
+  final ReturnSide _side;
+  final String _fingerprint;
+  final BranchTaxPolicySnapshot? _policy;
+  final BranchTaxPolicy _legacyPolicy;
+  final InvoicePricingResult pricing;
+  final bool taxInclusive;
+}
 
 /// A single line item in the unified return form.
 class UnifiedReturnLineItem {
@@ -266,6 +299,7 @@ class UnifiedReturnService {
   final LoyaltyPointsService _loyaltyPointsService;
   final SessionService? _sessionService;
   final CashierShiftService? _cashierShiftService;
+  final AppSettingsService? _settings;
 
   UnifiedReturnService(
     this._db,
@@ -277,8 +311,10 @@ class UnifiedReturnService {
     this._loyaltyPointsService, {
     SessionService? sessionService,
     CashierShiftService? cashierShiftService,
+    AppSettingsService? settings,
   }) : _sessionService = sessionService,
-       _cashierShiftService = cashierShiftService;
+       _cashierShiftService = cashierShiftService,
+       _settings = settings;
 
   // ════════════════════════════════════════════════════════════════════════════
   // SEARCH
@@ -295,7 +331,7 @@ class UnifiedReturnService {
         .customSelect(
           'SELECT DISTINCT s.id, s.invoice_number, s.sale_date, s.total_cents, '
           '  s.customer_id, c.name AS customer_name '
-          'FROM sales s '
+          'FROM ${WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s '
           'LEFT JOIN customers c ON c.id = s.customer_id '
           'LEFT JOIN sale_items si ON si.sale_id = s.id '
           'LEFT JOIN products p ON p.id = si.product_id '
@@ -344,7 +380,7 @@ class UnifiedReturnService {
         .customSelect(
           'SELECT DISTINCT pu.id, pu.purchase_number, pu.purchase_date, pu.total_cents, '
           '  pu.supplier_id, sup.name AS supplier_name '
-          'FROM purchases pu '
+          'FROM ${WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} pu '
           'LEFT JOIN suppliers sup ON sup.id = pu.supplier_id '
           'LEFT JOIN purchase_items pi ON pi.purchase_id = pu.id '
           'LEFT JOIN products p ON p.id = pi.product_id '
@@ -406,12 +442,15 @@ class UnifiedReturnService {
         .customSelect(
           'SELECT p.id, p.name, p.sku, p.barcode, p.price_cents, p.cost_cents, '
           '  p.last_purchase_price_cents, '
-          '  p.sales_tax_rate_bps, p.purchase_tax_rate_bps, p.stock_quantity, p.measurement_type, '
+          '  p.sales_tax_rate_bps, p.purchase_tax_rate_bps, p.measurement_type, '
+          '  CASE WHEN pv.id IS NULL THEN p.stock_quantity ELSE ws.quantity END AS stock_quantity, '
+          '  (SELECT COUNT(*) FROM product_variants v WHERE v.product_id = p.id AND v.is_active = 1) AS operational_count, '
           '  pc.name AS color_name, sz.name AS size_name '
           'FROM products p '
           'LEFT JOIN product_variants pv ON pv.id = ('
           '  SELECT MIN(pv2.id) FROM product_variants pv2 '
           '  WHERE pv2.product_id = p.id AND pv2.is_active = 1) '
+          'LEFT JOIN ${WarehouseStockScope.primaryStocks} ws ON ws.variant_id = pv.id '
           'LEFT JOIN product_colors pc ON pc.id = pv.color_id '
           'LEFT JOIN sizes sz ON sz.id = pv.size_id '
           'WHERE p.is_active = 1 AND p.has_variants = 0 '
@@ -428,6 +467,11 @@ class UnifiedReturnService {
         .get();
 
     for (final row in baseRows) {
+      if (row.read<int>('operational_count') > 1) {
+        throw StateError(
+          'Ambiguous simple-product operational row in return search.',
+        );
+      }
       final productId = row.read<int>('id');
       // Purchase side MUST surface the GROSS supplier reference
       // (`last_purchase_price_cents ?? cost_cents`) — the same convention
@@ -484,10 +528,11 @@ class UnifiedReturnService {
           '  pv.id AS variant_id, pv.sku AS variant_sku, pv.barcode AS variant_barcode, '
           '  pv.price_cents AS variant_price, pv.cost_cents AS variant_cost, '
           '  pv.last_purchase_price_cents AS variant_last_purchase_price_cents, '
-          '  pv.stock_quantity AS variant_stock, '
+          '  ws.quantity AS variant_stock, '
           '  pc.name AS color_name, sz.name AS size_name '
           'FROM products p '
           'JOIN product_variants pv ON pv.product_id = p.id AND pv.is_active = 1 '
+          'LEFT JOIN ${WarehouseStockScope.primaryStocks} ws ON ws.variant_id = pv.id '
           'LEFT JOIN product_colors pc ON pc.id = pv.color_id '
           'LEFT JOIN sizes sz ON sz.id = pv.size_id '
           'WHERE p.is_active = 1 AND p.has_variants = 1 '
@@ -566,7 +611,7 @@ class UnifiedReturnService {
       final row = await _db
           .customSelect(
             'SELECT si.unit_price_cents FROM sale_items si '
-            'JOIN sales s ON s.id = si.sale_id '
+            'JOIN ${WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s ON s.id = si.sale_id '
             "WHERE s.status = 'completed' AND s.customer_id = ? "
             'AND si.product_id = ? '
             '${variantId != null ? "AND si.variant_id = $variantId " : ""}'
@@ -579,7 +624,7 @@ class UnifiedReturnService {
       final row = await _db
           .customSelect(
             'SELECT pi.unit_cost_cents FROM purchase_items pi '
-            'JOIN purchases pu ON pu.id = pi.purchase_id '
+            'JOIN ${WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} pu ON pu.id = pi.purchase_id '
             "WHERE pu.status = 'posted' AND pu.supplier_id = ? "
             'AND pi.product_id = ? '
             '${variantId != null ? "AND pi.variant_id = $variantId " : ""}'
@@ -665,7 +710,7 @@ class UnifiedReturnService {
           '    + COALESCE(si.qty_returned_adjustment, 0)'
           '  ) AS already_returned '
           'FROM sale_items si '
-          'JOIN sales s ON s.id = si.sale_id '
+          'JOIN ${WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s ON s.id = si.sale_id '
           "WHERE s.status = 'completed' AND s.customer_id = ? "
           '  AND si.product_id = ? '
           '${variantId != null ? "AND si.variant_id = $variantId " : ""}'
@@ -761,7 +806,7 @@ class UnifiedReturnService {
           '    + COALESCE(pi.qty_returned_adjustment, 0)'
           '  ) AS already_returned '
           'FROM purchase_items pi '
-          'JOIN purchases pu ON pu.id = pi.purchase_id '
+          'JOIN ${WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} pu ON pu.id = pi.purchase_id '
           "WHERE pu.status = 'posted' AND pu.supplier_id = ? "
           '  AND pi.product_id = ? '
           '${variantId != null ? "AND pi.variant_id = $variantId " : ""}'
@@ -972,6 +1017,114 @@ class UnifiedReturnService {
   // SUBMISSION
   // ════════════════════════════════════════════════════════════════════════════
 
+  /// Price only unlinked adjustments. Linked returns use their original
+  /// invoice allocations instead. A caller can use this result for preview;
+  /// posting re-reads product rules within its database transaction.
+  /// Pass this result as expectedAdjustmentQuote to reject a stale preview.
+  /// Legacy callers without a preview are priced at posting time.
+  Future<UnifiedAdjustmentQuote> priceAdjustmentItems({
+    required ReturnSide side,
+    required List<UnifiedReturnLineItem> items,
+  }) => _db.transaction(() async {
+    final policy = await BranchTaxPolicyStore(_db).read();
+    if (policy == null && (_settings?.requiresPersistedTaxPolicy ?? false)) {
+      throw StateError('Branch tax policy is missing.');
+    }
+    final deviceSettings = _settings?.current ?? const AppSettings();
+    final settings = policy?.policy.applyTo(deviceSettings) ?? deviceSettings;
+    final ids = items.map((i) => i.productId).toSet();
+    final products = await (_db.select(
+      _db.products,
+    )..where((p) => p.id.isIn(ids))).get();
+    final byId = {for (final p in products) p.id: p};
+    final inputs = <LineItemPricingInput>[];
+    for (final item in items) {
+      if (!item.isAdjustment) {
+        throw ArgumentError('Linked returns must use invoice pricing.');
+      }
+      final product = byId[item.productId];
+      if (product == null) throw StateError('Unknown adjustment product.');
+      final scale = MeasurementType.fromDb(
+        product.measurementType,
+      ).quantityScale;
+      if (item.quantityScale != scale) {
+        throw StateError('Adjustment quantity scale differs from product.');
+      }
+      inputs.add(
+        LineItemPricingInput(
+          unitPrice: Money.fromCents(item.unitPriceCents),
+          quantity: item.quantity,
+          quantityScale: scale,
+          isTaxable: product.isTaxable,
+          productTaxRateBps: side == ReturnSide.sale
+              ? product.salesTaxRateBps
+              : product.purchaseTaxRateBps,
+        ),
+      );
+    }
+    return UnifiedAdjustmentQuote._(
+      _db,
+      side,
+      jsonEncode([
+        for (final item in items)
+          [
+            item.productId,
+            item.variantId,
+            item.quantity,
+            item.quantityScale,
+            item.unitPriceCents,
+            item.measurementType,
+            byId[item.productId]!.isTaxable,
+            side == ReturnSide.sale
+                ? byId[item.productId]!.salesTaxRateBps
+                : byId[item.productId]!.purchaseTaxRateBps,
+          ],
+      ]),
+      policy,
+      BranchTaxPolicy.fromLegacy(settings),
+      InvoicePricingEngine.compute(
+        InvoicePricingInput(
+          lines: inputs,
+          enableTaxCalculations: settings.enableTaxCalculations,
+          defaultTaxRateBps:
+              ((side == ReturnSide.sale
+                          ? settings.defaultSalesTaxRate
+                          : settings.defaultPurchaseTaxRate) *
+                      100)
+                  .round(),
+          taxInclusivePricing: settings.taxInclusivePricing,
+        ),
+      ),
+      settings.taxInclusivePricing,
+    );
+  });
+
+  Future<UnifiedAdjustmentQuote?> _postingQuote(
+    ReturnSide side,
+    List<UnifiedReturnLineItem> items,
+    UnifiedAdjustmentQuote? expected,
+  ) async {
+    if (expected != null) {
+      if (!identical(expected._database, _db) ||
+          expected._side != side ||
+          items.isEmpty) {
+        throw StateError('Adjustment preview does not match this return.');
+      }
+      if (expected._policy != null) {
+        await BranchTaxPolicyStore(_db).assertCurrent(expected._policy);
+      }
+    }
+    if (items.isEmpty) return null;
+    final current = await priceAdjustmentItems(side: side, items: items);
+    if (expected != null &&
+        (expected._fingerprint != current._fingerprint ||
+            (expected._policy == null) != (current._policy == null) ||
+            !expected._legacyPolicy.hasSameValues(current._legacyPolicy))) {
+      throw StateError('Adjustment pricing changed; refresh the preview.');
+    }
+    return current;
+  }
+
   /// Submit a unified sale return. Splits items into linked and adjustment
   /// records, creates all within one transaction with shared batchId/timestamp.
   Future<String> submitSaleReturn({
@@ -982,6 +1135,7 @@ class UnifiedReturnService {
     String? notes,
     bool allowNegativeStock = false,
     bool allowOverHistory = false,
+    UnifiedAdjustmentQuote? expectedAdjustmentQuote,
   }) async {
     if (items.isEmpty) throw Exception('No items to return');
 
@@ -1000,6 +1154,11 @@ class UnifiedReturnService {
         .toList();
 
     return _db.transaction(() async {
+      final adjustmentQuote = await _postingQuote(
+        ReturnSide.sale,
+        adjustmentItems,
+        expectedAdjustmentQuote,
+      );
       final linkedHistories = <int, LinkedReturnHistory>{};
       // ── Linked returns (grouped by invoice) ──
       if (linkedItems.isNotEmpty) {
@@ -1139,10 +1298,8 @@ class UnifiedReturnService {
       if (adjustmentItems.isNotEmpty) {
         final adjReturnNumber = await _adjDao.generateSaleAdjReturnNumber();
 
-        final adjTotal = adjustmentItems.fold<int>(
-          0,
-          (sum, i) => sum + i.totalCents,
-        );
+        final quote = adjustmentQuote!;
+        final pricing = quote.pricing;
 
         final modeReasons = adjustmentItems
             .map((i) => i.modeReason.name)
@@ -1153,7 +1310,9 @@ class UnifiedReturnService {
           returnNumber: adjReturnNumber,
           customerId: Value(customerId),
           currencyId: currencyId,
-          totalCents: Decimal.fromInt(adjTotal),
+          subtotalCents: Value(Decimal.fromInt(pricing.subtotal.cents)),
+          taxCents: Value(Decimal.fromInt(pricing.tax.cents)),
+          totalCents: Decimal.fromInt(pricing.total.cents),
           status: const Value('draft'),
           refundMethod: Value(refundMethod),
           returnMode: const Value('adjustment'),
@@ -1163,9 +1322,11 @@ class UnifiedReturnService {
           returnDate: Value(now),
           createdAt: Value(now),
           updatedAt: Value(now),
-        ).withPricingSnapshot(taxInclusive: false);
+        ).withPricingSnapshot(taxInclusive: quote.taxInclusive);
 
-        final adjItemCompanions = adjustmentItems.map((item) {
+        final adjItemCompanions = adjustmentItems.asMap().entries.map((entry) {
+          final item = entry.value;
+          final line = pricing.lines[entry.key];
           return SaleReturnAdjustmentItemsCompanion.insert(
             returnId: 0, // Set by DAO
             productId: item.productId,
@@ -1174,7 +1335,9 @@ class UnifiedReturnService {
             quantityScale: Value(item.quantityScale),
             measurementType: Value(item.measurementType),
             unitPriceCents: Decimal.fromInt(item.unitPriceCents),
-            totalCents: Decimal.fromInt(item.totalCents),
+            taxCents: Value(Decimal.fromInt(line.tax.cents)),
+            taxRateBpsAtPost: Value(line.local.effectiveTaxRateBps),
+            totalCents: Decimal.fromInt(line.total.cents),
             reason: Value(item.reason),
           );
         }).toList();
@@ -1208,6 +1371,7 @@ class UnifiedReturnService {
     String? notes,
     bool allowNegativeStock = false,
     bool allowOverHistory = false,
+    UnifiedAdjustmentQuote? expectedAdjustmentQuote,
   }) async {
     if (items.isEmpty) throw Exception('No items to return');
 
@@ -1222,6 +1386,11 @@ class UnifiedReturnService {
         .toList();
 
     return _db.transaction(() async {
+      final adjustmentQuote = await _postingQuote(
+        ReturnSide.purchase,
+        adjustmentItems,
+        expectedAdjustmentQuote,
+      );
       final linkedHistories = <int, LinkedReturnHistory>{};
       // ── Linked returns (grouped by invoice) ──
       if (linkedItems.isNotEmpty) {
@@ -1343,10 +1512,8 @@ class UnifiedReturnService {
       if (adjustmentItems.isNotEmpty) {
         final adjReturnNumber = await _adjDao.generatePurchaseAdjReturnNumber();
 
-        final adjTotal = adjustmentItems.fold<int>(
-          0,
-          (sum, i) => sum + i.totalCents,
-        );
+        final quote = adjustmentQuote!;
+        final pricing = quote.pricing;
 
         final modeReasons = adjustmentItems
             .map((i) => i.modeReason.name)
@@ -1357,7 +1524,9 @@ class UnifiedReturnService {
           returnNumber: adjReturnNumber,
           supplierId: supplierId,
           currencyId: currencyId,
-          totalCents: Decimal.fromInt(adjTotal),
+          subtotalCents: Value(Decimal.fromInt(pricing.subtotal.cents)),
+          taxCents: Value(Decimal.fromInt(pricing.tax.cents)),
+          totalCents: Decimal.fromInt(pricing.total.cents),
           status: const Value('draft'),
           refundMethod: Value(refundMethod),
           returnMode: const Value('adjustment'),
@@ -1367,9 +1536,11 @@ class UnifiedReturnService {
           returnDate: Value(now),
           createdAt: Value(now),
           updatedAt: Value(now),
-        ).withPricingSnapshot(taxInclusive: false);
+        ).withPricingSnapshot(taxInclusive: quote.taxInclusive);
 
-        final adjItemCompanions = adjustmentItems.map((item) {
+        final adjItemCompanions = adjustmentItems.asMap().entries.map((entry) {
+          final item = entry.value;
+          final line = pricing.lines[entry.key];
           return PurchaseReturnAdjustmentItemsCompanion.insert(
             returnId: 0, // Set by DAO
             productId: item.productId,
@@ -1378,7 +1549,9 @@ class UnifiedReturnService {
             quantityScale: Value(item.quantityScale),
             measurementType: Value(item.measurementType),
             unitPriceCents: Decimal.fromInt(item.unitPriceCents),
-            totalCents: Decimal.fromInt(item.totalCents),
+            taxCents: Value(Decimal.fromInt(line.tax.cents)),
+            taxRateBpsAtPost: Value(line.local.effectiveTaxRateBps),
+            totalCents: Decimal.fromInt(line.total.cents),
             reason: Value(item.reason),
           );
         }).toList();

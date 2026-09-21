@@ -4,6 +4,12 @@ part of 'adjustment_return_dao.dart';
 
 // ignore_for_file: type=lint
 mixin _$AdjustmentReturnDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessOrganizationsTable get businessOrganizations =>
+      attachedDatabase.businessOrganizations;
+  $BusinessBranchesTable get businessBranches =>
+      attachedDatabase.businessBranches;
+  $BusinessWarehousesTable get businessWarehouses =>
+      attachedDatabase.businessWarehouses;
   $CurrenciesTable get currencies => attachedDatabase.currencies;
   $SuppliersTable get suppliers => attachedDatabase.suppliers;
   $UsersTable get users => attachedDatabase.users;
@@ -26,6 +32,7 @@ mixin _$AdjustmentReturnDaoMixin on DatabaseAccessor<AppDatabase> {
   $CashierShiftsTable get cashierShifts => attachedDatabase.cashierShifts;
   $SaleReturnAdjustmentsTable get saleReturnAdjustments =>
       attachedDatabase.saleReturnAdjustments;
+  $ProductBatchesTable get productBatches => attachedDatabase.productBatches;
   $SaleReturnAdjustmentItemsTable get saleReturnAdjustmentItems =>
       attachedDatabase.saleReturnAdjustmentItems;
   $SupplierTransactionsTable get supplierTransactions =>
@@ -42,6 +49,21 @@ mixin _$AdjustmentReturnDaoMixin on DatabaseAccessor<AppDatabase> {
 class AdjustmentReturnDaoManager {
   final _$AdjustmentReturnDaoMixin _db;
   AdjustmentReturnDaoManager(this._db);
+  $$BusinessOrganizationsTableTableManager get businessOrganizations =>
+      $$BusinessOrganizationsTableTableManager(
+        _db.attachedDatabase,
+        _db.businessOrganizations,
+      );
+  $$BusinessBranchesTableTableManager get businessBranches =>
+      $$BusinessBranchesTableTableManager(
+        _db.attachedDatabase,
+        _db.businessBranches,
+      );
+  $$BusinessWarehousesTableTableManager get businessWarehouses =>
+      $$BusinessWarehousesTableTableManager(
+        _db.attachedDatabase,
+        _db.businessWarehouses,
+      );
   $$CurrenciesTableTableManager get currencies =>
       $$CurrenciesTableTableManager(_db.attachedDatabase, _db.currencies);
   $$SuppliersTableTableManager get suppliers =>
@@ -94,6 +116,11 @@ class AdjustmentReturnDaoManager {
       $$SaleReturnAdjustmentsTableTableManager(
         _db.attachedDatabase,
         _db.saleReturnAdjustments,
+      );
+  $$ProductBatchesTableTableManager get productBatches =>
+      $$ProductBatchesTableTableManager(
+        _db.attachedDatabase,
+        _db.productBatches,
       );
   $$SaleReturnAdjustmentItemsTableTableManager get saleReturnAdjustmentItems =>
       $$SaleReturnAdjustmentItemsTableTableManager(

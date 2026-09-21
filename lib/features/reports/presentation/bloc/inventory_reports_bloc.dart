@@ -1,3 +1,8 @@
+import '../../../../core/services/business/warehouse_read_scope.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+import '../../../../core/services/business/warehouse_document_scope.dart';
+import '../../../../core/services/business/warehouse_batch_scope.dart';
+import '../../../../core/services/business/warehouse_stock_scope.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
@@ -299,6 +304,7 @@ class FilterOption {
 class InventoryReportsBloc
     extends RealtimeBloc<InventoryReportsData, InventoryReportsEvent> {
   final AppDatabase _db;
+  final WarehouseReadScope? warehouseScope;
   ReportDateRange _dateRange;
   StockValuationSort _sort = StockValuationSort.valueDesc;
   PriceDisplayType _priceType = PriceDisplayType.cost;
@@ -310,9 +316,12 @@ class InventoryReportsBloc
   String? _movementSupplierName;
   MovementSort _movementSort = MovementSort.mostActive;
 
-  InventoryReportsBloc(this._db, {String defaultDateRange = 'month'})
-    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-      super(const RealtimeLoading());
+  InventoryReportsBloc(
+    this._db, {
+    String defaultDateRange = 'month',
+    this.warehouseScope,
+  }) : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+       super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -336,44 +345,66 @@ class InventoryReportsBloc
     final trigger = _db
         .customSelect(
           'SELECT 1 AS _t',
-          readsFrom: {_db.products, _db.productVariants, _db.productBatches},
+          readsFrom: {
+            _db.products,
+            _db.productVariants,
+            _db.productBatches,
+            _db.purchases,
+            _db.purchaseItems,
+            _db.sales,
+            _db.saleItems,
+            _db.saleReturns,
+            _db.saleReturnItems,
+            _db.purchaseReturns,
+            _db.purchaseReturnItems,
+            _db.saleReturnAdjustments,
+            _db.saleReturnAdjustmentItems,
+            _db.purchaseReturnAdjustments,
+            _db.purchaseReturnAdjustmentItems,
+            ...WarehouseBatchScope.dependencies(_db),
+            ...WarehouseDocumentScope.dependencies(_db),
+            ...WarehouseStockScope.dependencies(_db),
+          },
         )
         .watch();
-    return trigger.asyncMap((_) async {
-      final stockValuation = await _loadStockValuation();
-      final lowStock = await _loadLowStock();
-      final movement = await _loadProductMovement();
-      final categories = await _loadAvailableCategories();
-      final suppliers = await _loadAvailableSuppliers();
+    return trigger.asyncMap(
+      (_) => _db.transaction(() async {
+        await warehouseScope?.validate(_db);
+        final stockValuation = await _loadStockValuation();
+        final lowStock = await _loadLowStock();
+        final movement = await _loadProductMovement();
+        final categories = await _loadAvailableCategories();
+        final suppliers = await _loadAvailableSuppliers();
 
-      int totalVal = 0;
-      int totalUnits = 0;
-      for (final item in stockValuation) {
-        totalVal += item.valuationCents;
-        totalUnits += item.totalStock;
-      }
+        int totalVal = 0;
+        int totalUnits = 0;
+        for (final item in stockValuation) {
+          totalVal += item.valuationCents;
+          totalUnits += item.totalStock;
+        }
 
-      final sorted = _applySortToValuation(stockValuation, _sort);
+        final sorted = _applySortToValuation(stockValuation, _sort);
 
-      return InventoryReportsData(
-        stockValuation: sorted,
-        totalValuationCents: totalVal,
-        totalStockUnits: totalUnits,
-        lowStockItems: lowStock,
-        productMovement: movement,
-        dateRange: _dateRange,
-        sort: _sort,
-        priceType: _priceType,
-        movementSearchQuery: _movementSearch,
-        movementCategoryId: _movementCategoryId,
-        movementCategoryName: _movementCategoryName,
-        movementSupplierId: _movementSupplierId,
-        movementSupplierName: _movementSupplierName,
-        movementSort: _movementSort,
-        availableCategories: categories,
-        availableSuppliers: suppliers,
-      );
-    });
+        return InventoryReportsData(
+          stockValuation: sorted,
+          totalValuationCents: totalVal,
+          totalStockUnits: totalUnits,
+          lowStockItems: lowStock,
+          productMovement: movement,
+          dateRange: _dateRange,
+          sort: _sort,
+          priceType: _priceType,
+          movementSearchQuery: _movementSearch,
+          movementCategoryId: _movementCategoryId,
+          movementCategoryName: _movementCategoryName,
+          movementSupplierId: _movementSupplierId,
+          movementSupplierName: _movementSupplierName,
+          movementSort: _movementSort,
+          availableCategories: categories,
+          availableSuppliers: suppliers,
+        );
+      }),
+    );
   }
 
   Future<void> _onDateRangeChanged(
@@ -494,15 +525,15 @@ class InventoryReportsBloc
         pc.name AS color_name,
         sz.name AS size_name,
         1 AS variant_count,
-        COALESCE(v.stock_quantity, p.stock_quantity) AS total_stock,
-        COALESCE(v.cost_cents, p.cost_cents) AS cost_cents,
+        CASE WHEN v.id IS NULL THEN p.stock_quantity ELSE ws.quantity END AS total_stock,
+        CASE WHEN v.id IS NULL THEN p.cost_cents ELSE ws.unit_cost_cents END AS cost_cents,
         COALESCE(v.price_cents, p.price_cents) AS price_cents,
         COALESCE(v.wholesale_price_cents, p.wholesale_price_cents, 0) AS wholesale_price_cents,
         CASE
           WHEN (p.inventory_tracking_type IN ('batch', 'batch_expiry')
                 OR p.costing_method = 'fifo')
            AND EXISTS (
-             SELECT 1 FROM product_batches bx
+             SELECT 1 FROM ${warehouseScope?.batches ?? WarehouseBatchScope.primaryBatches} bx
              WHERE bx.product_id = p.id AND bx.is_active = 1
                AND ((v.id IS NOT NULL AND bx.variant_id = v.id)
                  OR (v.id IS NULL AND bx.variant_id IS NULL))
@@ -514,23 +545,25 @@ class InventoryReportsBloc
                 CASE WHEN p.measurement_type = 'piece' THEN 1 ELSE 1000 END
               ) AS INTEGER)
             ), 0)
-            FROM product_batches b
+            FROM ${warehouseScope?.batches ?? WarehouseBatchScope.primaryBatches} b
             WHERE b.product_id = p.id AND b.is_active = 1
               AND ((v.id IS NOT NULL AND b.variant_id = v.id)
                 OR (v.id IS NULL AND b.variant_id IS NULL))
           )
           ELSE CAST(ROUND(
-            1.0 * COALESCE(v.stock_quantity * v.cost_cents,
-                           p.stock_quantity * p.cost_cents) /
+            1.0 * (CASE WHEN v.id IS NULL THEN p.stock_quantity * p.cost_cents
+                  ELSE ws.quantity * ws.unit_cost_cents END) /
             CASE WHEN p.measurement_type = 'piece' THEN 1 ELSE 1000 END
           ) AS INTEGER)
         END AS valuation_cents
       FROM products p
       LEFT JOIN product_variants v ON v.product_id = p.id AND v.is_active = 1
+      LEFT JOIN ${warehouseScope?.stocks ?? WarehouseStockScope.primaryStocks} ws ON ws.variant_id = v.id
       LEFT JOIN product_categories c ON c.id = p.category_id
       LEFT JOIN product_colors pc ON pc.id = v.color_id
       LEFT JOIN sizes sz ON sz.id = v.size_id
       WHERE p.is_active = 1
+        ${warehouseScope != null && !warehouseScope!.isPrimary ? 'AND ws.variant_id IS NOT NULL' : ''}
         AND p.track_inventory = 1
       ORDER BY valuation_cents DESC
       ''',
@@ -540,6 +573,10 @@ class InventoryReportsBloc
             _db.productCategories,
             _db.productColors,
             _db.sizes,
+            ...WarehouseStockScope.dependencies(_db),
+            _db.productBatches,
+            ...WarehouseBatchScope.dependencies(_db),
+            ...WarehouseDocumentScope.dependencies(_db),
           },
         )
         .get();
@@ -573,14 +610,16 @@ class InventoryReportsBloc
         c.name AS category_name,
         pc.name AS color_name,
         sz.name AS size_name,
-        COALESCE(SUM(v.stock_quantity), p.stock_quantity) AS current_stock,
+        CASE WHEN COUNT(v.id) = 0 THEN p.stock_quantity ELSE SUM(ws.quantity) END AS current_stock,
         p.min_quantity AS reorder_level
       FROM products p
       LEFT JOIN product_variants v ON v.product_id = p.id AND v.is_active = 1
+      LEFT JOIN ${warehouseScope?.stocks ?? WarehouseStockScope.primaryStocks} ws ON ws.variant_id = v.id
       LEFT JOIN product_categories c ON c.id = p.category_id
       LEFT JOIN product_colors pc ON pc.id = v.color_id
       LEFT JOIN sizes sz ON sz.id = v.size_id
       WHERE p.is_active = 1
+        ${warehouseScope != null && !warehouseScope!.isPrimary ? 'AND ws.variant_id IS NOT NULL' : ''}
         AND p.track_inventory = 1
         AND p.min_quantity > 0
       GROUP BY p.id
@@ -593,6 +632,7 @@ class InventoryReportsBloc
             _db.productCategories,
             _db.productColors,
             _db.sizes,
+            ...WarehouseStockScope.dependencies(_db),
           },
         )
         .get();
@@ -634,8 +674,8 @@ class InventoryReportsBloc
     if (_movementSupplierId != null) {
       whereClauses.add('''EXISTS (
         SELECT 1 FROM purchase_items pi2
-        INNER JOIN purchases pu2 ON pu2.id = pi2.purchase_id
-        WHERE pi2.product_id = p.id AND pu2.supplier_id = ?
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchase) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} pu2 ON pu2.id = pi2.purchase_id
+        WHERE pi2.product_id = p.id AND pu2.supplier_id = ? AND pu2.status = 'posted'
       )''');
       variables.add(Variable<int>(_movementSupplierId!));
     }
@@ -660,7 +700,8 @@ class InventoryReportsBloc
 
     // The key fix: subqueries group by BOTH product_id AND variant_id
     // to correctly attribute movements to specific variants.
-    // For products without variants, variant_id will be NULL.
+    // Normalize legacy NULL IDs before grouping to avoid splitting a simple
+    // product across its old NULL lines and its explicit operational row.
     final rows = await _db
         .customSelect(
           '''
@@ -673,9 +714,7 @@ class InventoryReportsBloc
         pc.name AS color_name,
         pc.hex_code AS color_hex,
         sz.name AS size_name,
-        (SELECT COUNT(*) FROM product_variants pv2 
-         WHERE pv2.product_id = p.id AND pv2.is_active = 1 
-         AND (pv2.color_id IS NOT NULL OR pv2.size_id IS NOT NULL)) > 0 AS has_variants,
+        p.has_variants AS has_variants,
         COALESCE(purchased.qty, 0) AS purchased_qty,
         COALESCE(sold.qty, 0) AS sold_qty,
         COALESCE(sale_ret.qty, 0) AS sale_returned_qty,
@@ -686,63 +725,51 @@ class InventoryReportsBloc
       LEFT JOIN product_colors pc ON pc.id = pv.color_id
       LEFT JOIN sizes sz ON sz.id = pv.size_id
       LEFT JOIN (
-        SELECT pi.product_id, pi.variant_id, SUM(pi.quantity) AS qty
+        SELECT pi.product_id, ${WarehouseDocumentScope.operationalVariant('pi')} AS variant_id, SUM(pi.quantity) AS qty
         FROM purchase_items pi
-        INNER JOIN purchases pu ON pu.id = pi.purchase_id AND pu.status != 'voided'
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchase) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} pu ON pu.id = pi.purchase_id AND pu.status = 'posted'
         WHERE pu.purchase_date >= ? AND pu.purchase_date <= ?
-        GROUP BY pi.product_id, pi.variant_id
+        GROUP BY 1, 2
       ) purchased ON purchased.product_id = p.id 
-        AND (purchased.variant_id = pv.id OR (purchased.variant_id IS NULL AND pv.id IS NOT NULL AND NOT EXISTS(
-          SELECT 1 FROM product_variants pv3 WHERE pv3.product_id = p.id AND pv3.is_active = 1 AND pv3.color_id IS NOT NULL
-        ) AND pv.color_id IS NULL AND pv.size_id IS NULL)
-        OR (purchased.variant_id IS NULL AND pv.id IS NULL))
+        AND (purchased.variant_id = pv.id OR (purchased.variant_id IS NULL AND pv.id IS NULL))
       LEFT JOIN (
-        SELECT si.product_id, si.variant_id, SUM(si.quantity) AS qty
+        SELECT si.product_id, ${WarehouseDocumentScope.operationalVariant('si')} AS variant_id, SUM(si.quantity) AS qty
         FROM sale_items si
-        INNER JOIN sales s ON s.id = si.sale_id AND s.status != 'voided'
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s ON s.id = si.sale_id AND s.status = 'completed'
         WHERE s.sale_date >= ? AND s.sale_date <= ?
-        GROUP BY si.product_id, si.variant_id
+        GROUP BY 1, 2
       ) sold ON sold.product_id = p.id 
-        AND (sold.variant_id = pv.id OR (sold.variant_id IS NULL AND pv.id IS NOT NULL AND NOT EXISTS(
-          SELECT 1 FROM product_variants pv3 WHERE pv3.product_id = p.id AND pv3.is_active = 1 AND pv3.color_id IS NOT NULL
-        ) AND pv.color_id IS NULL AND pv.size_id IS NULL)
-        OR (sold.variant_id IS NULL AND pv.id IS NULL))
+        AND (sold.variant_id = pv.id OR (sold.variant_id IS NULL AND pv.id IS NULL))
       LEFT JOIN (
         SELECT product_id, variant_id, SUM(qty) AS qty FROM (
-          SELECT si.product_id AS product_id, si.variant_id AS variant_id, sri.quantity AS qty
+          SELECT si.product_id AS product_id, ${WarehouseDocumentScope.operationalVariant('si')} AS variant_id, sri.quantity AS qty
           FROM sale_return_items sri
           INNER JOIN sale_items si ON si.id = sri.sale_item_id
-          INNER JOIN sale_returns sr ON sr.id = sri.return_id AND sr.status = 'posted'
+          INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr ON sr.id = sri.return_id AND sr.status = 'posted'
           WHERE sr.return_date >= ? AND sr.return_date <= ?
           UNION ALL
-          SELECT srai.product_id AS product_id, srai.variant_id AS variant_id, srai.quantity AS qty
+          SELECT srai.product_id AS product_id, ${WarehouseDocumentScope.operationalVariant('srai')} AS variant_id, srai.quantity AS qty
           FROM sale_return_adjustment_items srai
-          INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id AND sra.status = 'posted'
+          INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra ON sra.id = srai.return_id AND sra.status = 'posted'
           WHERE sra.return_date >= ? AND sra.return_date <= ?
         ) GROUP BY product_id, variant_id
       ) sale_ret ON sale_ret.product_id = p.id 
-        AND (sale_ret.variant_id = pv.id OR (sale_ret.variant_id IS NULL AND pv.id IS NOT NULL AND NOT EXISTS(
-          SELECT 1 FROM product_variants pv3 WHERE pv3.product_id = p.id AND pv3.is_active = 1 AND pv3.color_id IS NOT NULL
-        ) AND pv.color_id IS NULL AND pv.size_id IS NULL)
-        OR (sale_ret.variant_id IS NULL AND pv.id IS NULL))
+        AND (sale_ret.variant_id = pv.id OR (sale_ret.variant_id IS NULL AND pv.id IS NULL))
       LEFT JOIN (
         SELECT product_id, variant_id, SUM(qty) AS qty FROM (
-          SELECT pi.product_id AS product_id, pi.variant_id AS variant_id, pri.quantity AS qty
+          SELECT pi.product_id AS product_id, ${WarehouseDocumentScope.operationalVariant('pi')} AS variant_id, pri.quantity AS qty
           FROM purchase_return_items pri
           INNER JOIN purchase_items pi ON pi.id = pri.purchase_item_id
-          INNER JOIN purchase_returns pr ON pr.id = pri.return_id AND pr.status = 'posted'
+          INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchaseReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseReturn)} pr ON pr.id = pri.return_id AND pr.status = 'posted'
           WHERE pr.return_date >= ? AND pr.return_date <= ?
           UNION ALL
-          SELECT prai.product_id AS product_id, prai.variant_id AS variant_id, prai.quantity AS qty
+          SELECT prai.product_id AS product_id, ${WarehouseDocumentScope.operationalVariant('prai')} AS variant_id, prai.quantity AS qty
           FROM purchase_return_adjustment_items prai
-          INNER JOIN purchase_return_adjustments pra ON pra.id = prai.return_id AND pra.status = 'posted'
+          INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchaseAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseAdjustment)} pra ON pra.id = prai.return_id AND pra.status = 'posted'
           WHERE pra.return_date >= ? AND pra.return_date <= ?
         ) GROUP BY product_id, variant_id
       ) purch_ret ON purch_ret.product_id = p.id 
-        AND (purch_ret.variant_id = pv.id OR (purch_ret.variant_id IS NULL AND pv.id IS NOT NULL AND NOT EXISTS(
-          SELECT 1 FROM product_variants pv3 WHERE pv3.product_id = p.id AND pv3.is_active = 1 AND pv3.color_id IS NOT NULL
-        ) AND pv.color_id IS NULL AND pv.size_id IS NULL)
-        OR (purch_ret.variant_id IS NULL AND pv.id IS NULL))
+        AND (purch_ret.variant_id = pv.id OR (purch_ret.variant_id IS NULL AND pv.id IS NULL))
       WHERE $whereClause
         AND (COALESCE(purchased.qty, 0) + COALESCE(sold.qty, 0) + 
              COALESCE(sale_ret.qty, 0) + COALESCE(purch_ret.qty, 0)) > 0
@@ -751,6 +778,7 @@ class InventoryReportsBloc
       ''',
           variables: [...dateVars, ...variables],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.products,
             _db.productVariants,
             _db.productCategories,

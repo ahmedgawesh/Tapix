@@ -173,6 +173,7 @@ void main() {
         final apId = await accountId('2000');
         final purchaseReturnsId = await accountId('4100');
         final accounting = AccountingRepository(db);
+
         await accounting.createJournalEntry(
           entryData: JournalEntryData.simple(
             description: 'Corrupt measured sale return COGS',
@@ -376,6 +377,21 @@ void main() {
       final payableId = await accountId('2000');
       final purchaseReturnId = await accountId('4100');
       final accounting = AccountingRepository(db);
+      await db
+          .into(db.inventoryAdjustments)
+          .insert(
+            InventoryAdjustmentsCompanion.insert(
+              id: const Value(991),
+              adjustmentNumber: 'OPEN-FIXTURE-991',
+              productId: productId,
+              adjustmentType: 'opening_balance',
+              quantityDelta: 493600,
+              unitCostCents: Decimal.fromInt(1188),
+              totalValueCents: Decimal.fromInt(586397),
+              reason: 'Opening fixture source',
+              currencyId: currency.id,
+            ),
+          );
       await accounting.createJournalEntry(
         entryData: JournalEntryData.simple(
           description: 'Opening measured pool',

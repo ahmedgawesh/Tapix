@@ -1,3 +1,4 @@
+import '../../../../core/services/business/warehouse_operation_scope.dart';
 import 'dart:async';
 
 import '../../../../core/database/app_database.dart' as db;
@@ -23,7 +24,11 @@ abstract class SaleLocalDatasource {
   );
   Stream<List<SaleReturnEntity>> watchSaleReturnsBySale(int saleId);
   Stream<Set<int>> watchSaleIdsWithReturns();
-  Future<void> voidSaleReturn(int returnId, {bool allowNegativeStock = false});
+  Future<void> voidSaleReturn(
+    int returnId, {
+    bool allowNegativeStock = false,
+    WarehouseOperationScope? scope,
+  });
   Stream<List<SalePaymentEntity>> watchSalePayments(int saleId);
   Future<List<SalePaymentEntity>> getSalePayments(int saleId);
   Future<int> recordPayment(db.SalePaymentsCompanion payment);
@@ -182,7 +187,12 @@ class SaleLocalDatasourceImpl implements SaleLocalDatasource {
   Future<void> voidSaleReturn(
     int returnId, {
     bool allowNegativeStock = false,
-  }) => _dao.voidSaleReturn(returnId, allowNegativeStock: allowNegativeStock);
+    WarehouseOperationScope? scope,
+  }) => _dao.voidSaleReturn(
+    returnId,
+    allowNegativeStock: allowNegativeStock,
+    scope: scope,
+  );
 
   @override
   Stream<List<SalePaymentEntity>> watchSalePayments(int saleId) {

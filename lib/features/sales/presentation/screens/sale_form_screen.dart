@@ -58,6 +58,8 @@ import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../bloc/sale_form_bloc.dart';
 import '../services/sale_pdf_service.dart';
 
+import '../widgets/remote_customer_checkout_card.dart';
+
 part 'sale_form_dialogs.dart';
 
 class _PromotionBundleLine {

@@ -216,6 +216,24 @@ void main() {
     });
 
     group('ProductFormFieldChanged', () {
+      test('new medicine defaults to batch and expiry traceability', () async {
+        bloc.add(
+          const ProductFormFieldChanged(field: 'isMedicine', value: true),
+        );
+        await expectLater(
+          bloc.stream,
+          emits(
+            isA<ProductFormState>()
+                .having((s) => s.isMedicine, 'isMedicine', isTrue)
+                .having(
+                  (s) => s.inventoryTrackingType,
+                  'inventoryTrackingType',
+                  'batch_expiry',
+                ),
+          ),
+        );
+      });
+
       test('updates name', () async {
         bloc.add(
           const ProductFormFieldChanged(field: 'name', value: 'New Name'),

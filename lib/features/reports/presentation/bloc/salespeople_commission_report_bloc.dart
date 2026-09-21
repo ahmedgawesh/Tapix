@@ -1,9 +1,15 @@
+import '../../../../core/services/business/warehouse_read_scope.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/reporting/ratio_helper.dart';
 import '../widgets/report_date_range.dart';
+import '../../../../core/services/commissions/commission_report_scope.dart';
+import '../../../../core/services/business/warehouse_document_scope.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+export '../../../../core/services/commissions/commission_report_scope.dart'
+    show CommissionReportScope, UnresolvedCommissionSources;
 
 // ==================== EVENTS ====================
 
@@ -21,6 +27,12 @@ class SalespeopleCommissionReportSortChanged
     extends SalespeopleCommissionReportEvent {
   final SalespeopleCommissionSortType sort;
   const SalespeopleCommissionReportSortChanged(this.sort);
+}
+
+class SalespeopleCommissionReportScopeChanged
+    extends SalespeopleCommissionReportEvent {
+  final CommissionReportScope scope;
+  const SalespeopleCommissionReportScopeChanged(this.scope);
 }
 
 // ==================== ENUMS ====================
@@ -77,6 +89,7 @@ class SalespersonCommissionItem {
 }
 
 class SalespeopleCommissionReportData {
+  final CommissionReportScope scope;
   final List<SalespersonCommissionItem> salespeople;
   final int grandTotalSalesCents;
   final int grandTotalCommissionCents;
@@ -90,6 +103,7 @@ class SalespeopleCommissionReportData {
   final SalespeopleCommissionSortType sort;
 
   const SalespeopleCommissionReportData({
+    this.scope = CommissionReportScope.account,
     this.salespeople = const [],
     this.grandTotalSalesCents = 0,
     this.grandTotalCommissionCents = 0,
@@ -117,9 +131,9 @@ class SalespeopleCommissionReportData {
     SalespeopleCommissionSortType? sort,
   }) {
     return SalespeopleCommissionReportData(
+      scope: scope,
       salespeople: salespeople ?? this.salespeople,
-      grandTotalSalesCents:
-          grandTotalSalesCents ?? this.grandTotalSalesCents,
+      grandTotalSalesCents: grandTotalSalesCents ?? this.grandTotalSalesCents,
       grandTotalCommissionCents:
           grandTotalCommissionCents ?? this.grandTotalCommissionCents,
       grandTotalPendingCents:
@@ -139,16 +153,28 @@ class SalespeopleCommissionReportData {
 
 // ==================== BLOC ====================
 
-class SalespeopleCommissionReportBloc extends RealtimeBloc<
-    SalespeopleCommissionReportData, SalespeopleCommissionReportEvent> {
+class SalespeopleCommissionReportBloc
+    extends
+        RealtimeBloc<
+          SalespeopleCommissionReportData,
+          SalespeopleCommissionReportEvent
+        > {
   final AppDatabase _db;
+  final WarehouseReadScope? warehouseScope;
   ReportDateRange _dateRange;
+  CommissionReportScope _scope;
+  CommissionReportScope get scope => _scope;
   SalespeopleCommissionSortType _sort =
       SalespeopleCommissionSortType.revenueDesc;
 
-  SalespeopleCommissionReportBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+  SalespeopleCommissionReportBloc(
+    this._db, {
+    String defaultDateRange = 'month',
+    this.warehouseScope,
+    CommissionReportScope scope = CommissionReportScope.account,
+  }) : _scope = scope,
+       _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+       super(const RealtimeLoading());
 
   /// Monthly sales target in cents (configurable, default 100,000 = 1000.00)
   static const int monthlyTargetCents = 10000000; // 100,000.00
@@ -162,6 +188,10 @@ class SalespeopleCommissionReportBloc extends RealtimeBloc<
 
   @override
   void registerEventHandlers() {
+    on<SalespeopleCommissionReportScopeChanged>((event, emit) {
+      _scope = event.scope;
+      refresh();
+    });
     on<SalespeopleCommissionReportDateRangeChanged>(_onDateRangeChanged);
     on<SalespeopleCommissionReportSortChanged>(_onSortChanged);
   }
@@ -171,51 +201,63 @@ class SalespeopleCommissionReportBloc extends RealtimeBloc<
     // Commissions must be watched independently because a return-reversal
     // inserts a commission row without necessarily mutating the sales table.
     return _db
-        .customSelect('SELECT 1',
-            readsFrom: {_db.sales, _db.commissions})
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {
+            _db.employees,
+            ...CommissionSourceScope.dependencies(_db),
+          },
+        )
         .watch()
         .asyncMap((_) async {
-      final items = await _loadSalespeopleCommission();
+          final reportScope = _scope;
+          final reportRange = _dateRange;
+          final items = await WarehouseReadScope.snapshot(
+            _db,
+            warehouseScope,
+            () => _loadSalespeopleCommission(reportScope, reportRange),
+          );
 
-      int totalSales = 0;
-      int totalCommission = 0;
-      int totalPending = 0;
-      int totalPaid = 0;
-      int totalCount = 0;
-      double sumRate = 0;
-      double sumTarget = 0;
-      int withData = 0;
+          int totalSales = 0;
+          int totalCommission = 0;
+          int totalPending = 0;
+          int totalPaid = 0;
+          int totalCount = 0;
+          double sumRate = 0;
+          double sumTarget = 0;
+          int withData = 0;
 
-      for (final item in items) {
-        totalSales += item.totalSalesCents;
-        totalCommission += item.totalCommissionEarnedCents;
-        totalPending += item.pendingCommissionCents;
-        totalPaid += item.paidCommissionCents;
-        totalCount += item.salesCount;
-        sumRate += item.commissionRatePercent;
-        sumTarget += item.targetAchievementPercent;
-        withData++;
-      }
+          for (final item in items) {
+            totalSales += item.totalSalesCents;
+            totalCommission += item.totalCommissionEarnedCents;
+            totalPending += item.pendingCommissionCents;
+            totalPaid += item.paidCommissionCents;
+            totalCount += item.salesCount;
+            sumRate += item.commissionRatePercent;
+            sumTarget += item.targetAchievementPercent;
+            withData++;
+          }
 
-      final avgRate = withData > 0 ? sumRate / withData : 0.0;
-      final avgTarget = withData > 0 ? sumTarget / withData : 0.0;
+          final avgRate = withData > 0 ? sumRate / withData : 0.0;
+          final avgTarget = withData > 0 ? sumTarget / withData : 0.0;
 
-      final sorted = _applySortToSalespeople(items, _sort);
+          final sorted = _applySortToSalespeople(items, _sort);
 
-      return SalespeopleCommissionReportData(
-        salespeople: sorted,
-        grandTotalSalesCents: totalSales,
-        grandTotalCommissionCents: totalCommission,
-        grandTotalPendingCents: totalPending,
-        grandTotalPaidCents: totalPaid,
-        totalSalesCount: totalCount,
-        totalSalespeople: items.length,
-        avgCommissionRatePercent: avgRate,
-        avgTargetAchievementPercent: avgTarget,
-        dateRange: _dateRange,
-        sort: _sort,
-      );
-    });
+          return SalespeopleCommissionReportData(
+            scope: reportScope,
+            salespeople: sorted,
+            grandTotalSalesCents: totalSales,
+            grandTotalCommissionCents: totalCommission,
+            grandTotalPendingCents: totalPending,
+            grandTotalPaidCents: totalPaid,
+            totalSalesCount: totalCount,
+            totalSalespeople: items.length,
+            avgCommissionRatePercent: avgRate,
+            avgTargetAchievementPercent: avgTarget,
+            dateRange: reportRange,
+            sort: _sort,
+          );
+        });
   }
 
   Future<void> _onDateRangeChanged(
@@ -232,14 +274,15 @@ class SalespeopleCommissionReportBloc extends RealtimeBloc<
   ) {
     _sort = event.sort;
     final current = currentData;
-    if (current != null) {
+    if (state is RealtimeSuccess<SalespeopleCommissionReportData> &&
+        current != null &&
+        current.scope == _scope) {
       final sorted = _applySortToSalespeople(current.salespeople, event.sort);
-      emit(RealtimeSuccess<SalespeopleCommissionReportData>(
-        data: current.copyWith(
-          salespeople: sorted,
-          sort: event.sort,
+      emit(
+        RealtimeSuccess<SalespeopleCommissionReportData>(
+          data: current.copyWith(salespeople: sorted, sort: event.sort),
         ),
-      ));
+      );
     }
   }
 
@@ -250,23 +293,26 @@ class SalespeopleCommissionReportBloc extends RealtimeBloc<
     final list = List<SalespersonCommissionItem>.from(items);
     switch (sort) {
       case SalespeopleCommissionSortType.revenueDesc:
-        list.sort(
-            (a, b) => b.totalSalesCents.compareTo(a.totalSalesCents));
+        list.sort((a, b) => b.totalSalesCents.compareTo(a.totalSalesCents));
       case SalespeopleCommissionSortType.revenueAsc:
-        list.sort(
-            (a, b) => a.totalSalesCents.compareTo(b.totalSalesCents));
+        list.sort((a, b) => a.totalSalesCents.compareTo(b.totalSalesCents));
       case SalespeopleCommissionSortType.nameAsc:
         list.sort((a, b) => a.employeeName.compareTo(b.employeeName));
       case SalespeopleCommissionSortType.nameDesc:
         list.sort((a, b) => b.employeeName.compareTo(a.employeeName));
       case SalespeopleCommissionSortType.commissionDesc:
-        list.sort((a, b) => b.totalCommissionEarnedCents
-            .compareTo(a.totalCommissionEarnedCents));
+        list.sort(
+          (a, b) => b.totalCommissionEarnedCents.compareTo(
+            a.totalCommissionEarnedCents,
+          ),
+        );
       case SalespeopleCommissionSortType.salesCountDesc:
         list.sort((a, b) => b.salesCount.compareTo(a.salesCount));
       case SalespeopleCommissionSortType.targetAchievementDesc:
-        list.sort((a, b) => b.targetAchievementPercent
-            .compareTo(a.targetAchievementPercent));
+        list.sort(
+          (a, b) =>
+              b.targetAchievementPercent.compareTo(a.targetAchievementPercent),
+        );
     }
     return list;
   }
@@ -274,22 +320,45 @@ class SalespeopleCommissionReportBloc extends RealtimeBloc<
   /// Loads salesperson commission data by joining sales with employees
   /// and commissions tables within the date range.
   ///
-  /// Commission calculation:
-  /// - Uses actual commissions table entries if available
-  /// - Falls back to employee's defaultCommissionRateBps applied to sales total
-  /// - Commission = (totalSalesCents * commissionRateBps) / 10000
-  ///   (bps = basis points, 100 bps = 1%)
+  /// Earned commission comes only from recorded commission events. Missing
+  /// records are not estimated using today's rate or tax-inclusive sales.
+  /// Include commission-only periods and inactive employees with history.
   ///
   /// Target achievement:
   /// - Based on monthlyTargetCents constant
   /// - Prorated for non-monthly date ranges
-  Future<List<SalespersonCommissionItem>> _loadSalespeopleCommission() async {
-    final startIso = _dateRange.startDate.toIso8601String();
-    final endIso = _dateRange.endDate.toIso8601String();
+  Future<List<SalespersonCommissionItem>> _loadSalespeopleCommission(
+    CommissionReportScope scope,
+    ReportDateRange range,
+  ) async {
+    final local =
+        warehouseScope != null ||
+        scope == CommissionReportScope.primaryWarehouse;
+    if (local) {
+      await CommissionSourceScope.requireResolvedPeriod(
+        _db,
+        range.startDate,
+        range.endDate,
+      );
+    }
+    final salesSource = local
+        ? (warehouseScope?.documents(InventoryPostingDocument.sale) ??
+              WarehouseDocumentScope.primaryDocuments(
+                InventoryPostingDocument.sale,
+              ))
+        : 'sales';
+    final commissionSource = local
+        ? (warehouseScope == null
+              ? CommissionSourceScope.primary
+              : CommissionSourceScope.forWarehouse(warehouseScope!))
+        : 'commissions';
+    final startIso = range.startDate.toIso8601String();
+    final endIso = range.endDate.toIso8601String();
 
     // Get sales data grouped by employee
-    final salesRows = await _db.customSelect(
-      '''
+    final salesRows = await _db
+        .customSelect(
+          '''
       SELECT 
         e.id AS employee_id,
         e.name AS employee_name,
@@ -300,21 +369,31 @@ class SalespeopleCommissionReportBloc extends RealtimeBloc<
         COUNT(s.id) AS sales_count,
         MAX(s.sale_date) AS last_sale_at
       FROM employees e
-      INNER JOIN sales s ON s.employee_id = e.id
+      LEFT JOIN $salesSource s ON s.employee_id = e.id
         AND s.sale_date >= ?
         AND s.sale_date <= ?
-        AND s.status != 'voided'
-      WHERE e.is_active = 1
+        AND s.status = 'completed'
       GROUP BY e.id
-      HAVING sales_count > 0
+      HAVING sales_count > 0 OR EXISTS (
+        SELECT 1 FROM $commissionSource event
+        WHERE event.employee_id = e.id
+          AND COALESCE(event.effective_date, event.created_at) >= ?
+          AND COALESCE(event.effective_date, event.created_at) <= ?
+      )
       ORDER BY total_sales_cents DESC
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.employees, _db.sales},
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            _db.employees,
+            ...CommissionSourceScope.dependencies(_db),
+          },
+        )
+        .get();
 
     // Get commission data grouped by employee for the period.
     //
@@ -327,25 +406,27 @@ class SalespeopleCommissionReportBloc extends RealtimeBloc<
     // original sale's month, and it stays correct for backdated documents.
     // `COALESCE(effective_date, created_at)` defends any legacy row that
     // predates the backfill / was written without a posting date.
-    final commissionRows = await _db.customSelect(
-      '''
+    final commissionRows = await _db
+        .customSelect(
+          '''
       SELECT 
         c.employee_id,
         COALESCE(SUM(c.commission_amount_cents), 0) AS total_commission_cents,
         COALESCE(SUM(CASE WHEN c.status = 'pending' THEN c.commission_amount_cents ELSE 0 END), 0) AS pending_cents,
         COALESCE(SUM(CASE WHEN c.status = 'approved' THEN c.commission_amount_cents ELSE 0 END), 0) AS approved_cents,
         COALESCE(SUM(CASE WHEN c.status = 'paid' THEN c.commission_amount_cents ELSE 0 END), 0) AS paid_cents
-      FROM commissions c
+      FROM $commissionSource c
       WHERE COALESCE(c.effective_date, c.created_at) >= ?
         AND COALESCE(c.effective_date, c.created_at) <= ?
       GROUP BY c.employee_id
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.commissions},
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: CommissionSourceScope.dependencies(_db),
+        )
+        .get();
 
     // Build commission lookup map
     final commissionMap = <int, _CommissionBreakdown>{};
@@ -360,10 +441,8 @@ class SalespeopleCommissionReportBloc extends RealtimeBloc<
     }
 
     // Calculate target based on date range duration
-    final rangeDays =
-        _dateRange.endDate.difference(_dateRange.startDate).inDays + 1;
-    final proRatedTarget =
-        (monthlyTargetCents * rangeDays / 30).round();
+    final rangeDays = range.endDate.difference(range.startDate).inDays + 1;
+    final proRatedTarget = (monthlyTargetCents * rangeDays / 30).round();
 
     return salesRows.map((row) {
       final employeeId = row.read<int>('employee_id');
@@ -372,30 +451,16 @@ class SalespeopleCommissionReportBloc extends RealtimeBloc<
       final commissionRateBps = row.read<int>('commission_rate_bps');
       final lastSaleStr = row.readNullable<String>('last_sale_at');
 
-      // Use actual commission records if available, otherwise calculate
+      // Financial totals reflect saved events, including zero/negative sums.
+      // The current default rate is employee metadata, not historical earnings.
       final commBreakdown = commissionMap[employeeId];
-      int totalCommission;
-      int pendingComm;
-      int approvedComm;
-      int paidComm;
-
-      if (commBreakdown != null) {
-        totalCommission = commBreakdown.totalCents;
-        pendingComm = commBreakdown.pendingCents;
-        approvedComm = commBreakdown.approvedCents;
-        paidComm = commBreakdown.paidCents;
-      } else {
-        // Calculate commission from rate: (sales * bps) / 10000
-        totalCommission =
-            (totalSalesCents * commissionRateBps) ~/ 10000;
-        pendingComm = totalCommission;
-        approvedComm = 0;
-        paidComm = 0;
-      }
+      final totalCommission = commBreakdown?.totalCents ?? 0;
+      final pendingComm = commBreakdown?.pendingCents ?? 0;
+      final approvedComm = commBreakdown?.approvedCents ?? 0;
+      final paidComm = commBreakdown?.paidCents ?? 0;
 
       // avgOrderValue = totalSales / salesCount
-      final avgOrderValue =
-          salesCount > 0 ? totalSalesCents ~/ salesCount : 0;
+      final avgOrderValue = salesCount > 0 ? totalSalesCents ~/ salesCount : 0;
 
       // Phase 7 — percentage via RatioHelper SoT.
       // targetAchievement = (totalSales / proRatedTarget) * 100
@@ -418,8 +483,7 @@ class SalespeopleCommissionReportBloc extends RealtimeBloc<
         paidCommissionCents: paidComm,
         avgOrderValueCents: avgOrderValue,
         targetAchievementPercent: targetAchievement,
-        lastSaleAt:
-            lastSaleStr != null ? DateTime.tryParse(lastSaleStr) : null,
+        lastSaleAt: lastSaleStr != null ? DateTime.tryParse(lastSaleStr) : null,
       );
     }).toList();
   }

@@ -1,5 +1,3 @@
-import 'package:decimal/decimal.dart';
-import 'package:drift/drift.dart' hide Column;
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/database/database_reset.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/database_health_check_service.dart';
 
 class AdminToolsScreen extends StatefulWidget {
   const AdminToolsScreen({super.key});
@@ -44,61 +43,19 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
     try {
       final db = sl<AppDatabase>();
 
-      final currency = await (db.select(db.currencies)..limit(1)).getSingle();
-
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final sku = 'HC-$now';
-
-      final productId = await db
-          .into(db.products)
-          .insert(
-            ProductsCompanion.insert(
-              sku: Value<String?>(sku),
-              name: 'Health Check Product',
-              costCents: Decimal.fromInt(100),
-              priceCents: Decimal.fromInt(200),
-              currencyId: Value(currency.id),
-            ),
-          );
-
-      final variantId = await db
-          .into(db.productVariants)
-          .insert(
-            ProductVariantsCompanion(
-              productId: Value(productId),
-              sku: const Value<String?>(null),
-              barcode: const Value<String?>(null),
-              colorId: const Value<int?>(null),
-              sizeId: const Value<int?>(null),
-              costCents: Value(Decimal.fromInt(100)),
-              priceCents: Value(Decimal.fromInt(200)),
-              priceAdjustmentCents: Value(Decimal.zero),
-              stockQuantity: const Value(1),
-              isActive: const Value(true),
-            ),
-          );
-
-      final variant =
-          await (db.select(db.productVariants)
-                ..where((v) => v.id.equals(variantId))
-                ..limit(1))
-              .getSingle();
-
-      await (db.delete(
-        db.productVariants,
-      )..where((v) => v.id.equals(variantId))).go();
-      await (db.delete(db.products)..where((p) => p.id.equals(productId))).go();
-
-      final passed = variant.sku == null;
-
+      final passed = await DatabaseHealthCheckService(
+        db,
+      ).checkNullableVariantSku();
+      if (!mounted) return;
       setState(() {
         _healthCheckResult = passed
-            ? 'OK: Inserted product + variant with NULL sku successfully.'
-            : 'FAILED: Variant sku was not NULL after insert.';
+            ? 'admin_tools.health_check_success'.tr()
+            : 'admin_tools.health_check_failed'.tr();
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _healthCheckResult = 'FAILED: $e';
+        _healthCheckResult = '${'admin_tools.health_check_failed'.tr()}: $e';
       });
     } finally {
       if (mounted) {

@@ -45,6 +45,10 @@ abstract class ProductRepository {
     int offset = 0,
   });
 
+  /// Creates catalog metadata with zero stock. Opening quantities must be
+  /// recorded through ProductVariantRepository inside runInTransaction so
+  /// warehouse stock and the opening journal commit with the product.
+  /// A nonzero stockQuantity is rejected at runtime.
   Future<int> createProduct({
     required String name,
     String? nameAr,
@@ -153,6 +157,8 @@ abstract class ProductRepository {
   /// Bulk create products in a single transaction for performance and consistency
   /// Returns a map of row index to product ID for successful inserts
   /// Throws exception on failure with rollback
+  /// Creates zero-stock catalog rows, keyed by the caller's rowIndex.
+  /// Create variants and opening balances in the same outer transaction.
   Future<Map<int, int>> bulkCreateProducts(List<BulkProductData> products);
 
   /// Bulk update prices with history tracking in a single transaction

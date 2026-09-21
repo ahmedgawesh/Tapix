@@ -1,3 +1,5 @@
+import '../../../../core/services/business/warehouse_batch_scope.dart';
+import '../../../../core/services/business/warehouse_stock_scope.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/database/daos/accounting_dao.dart';
 
@@ -303,7 +305,7 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
               CASE WHEN p.measurement_type = 'piece' THEN 1 ELSE 1000 END
             ) AS INTEGER)
           )
-          FROM product_batches b
+          FROM ${WarehouseBatchScope.primaryBatches} b
           INNER JOIN products p ON p.id = b.product_id
           WHERE b.is_active = 1
             AND p.track_inventory = 1
@@ -314,18 +316,19 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
         COALESCE((
           SELECT SUM(
             CAST(ROUND(
-              1.0 * CAST(v.stock_quantity AS INTEGER) *
-              CAST(v.cost_cents AS INTEGER) /
+              1.0 * CAST(ws.quantity AS INTEGER) *
+              CAST(ws.unit_cost_cents AS INTEGER) /
               CASE WHEN p.measurement_type = 'piece' THEN 1 ELSE 1000 END
             ) AS INTEGER)
           )
           FROM product_variants v
+          INNER JOIN ${WarehouseStockScope.primaryStocks} ws ON ws.variant_id = v.id
           INNER JOIN products p ON p.id = v.product_id
           WHERE p.track_inventory = 1
             AND (NOT (p.inventory_tracking_type IN ('batch', 'batch_expiry')
                      OR p.costing_method = 'fifo')
              OR NOT EXISTS (
-               SELECT 1 FROM product_batches b
+               SELECT 1 FROM ${WarehouseBatchScope.primaryBatches} b
                WHERE b.variant_id = v.id AND b.is_active = 1
              ))
         ), 0)
@@ -347,14 +350,20 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
             NOT (p.inventory_tracking_type IN ('batch', 'batch_expiry')
                  OR p.costing_method = 'fifo')
             OR NOT EXISTS (
-              SELECT 1 FROM product_batches b
+              SELECT 1 FROM ${WarehouseBatchScope.primaryBatches} b
               WHERE b.product_id = p.id AND b.is_active = 1
             )
           )
         ), 0)
         AS total
       ''',
-          readsFrom: {db.products, db.productVariants, db.productBatches},
+          readsFrom: {
+            db.products,
+            db.productVariants,
+            db.productBatches,
+            ...WarehouseBatchScope.dependencies(db),
+            ...WarehouseStockScope.dependencies(db),
+          },
         )
         .getSingle();
     return row.read<int>('total');

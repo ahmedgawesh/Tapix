@@ -9,9 +9,7 @@ class SalesReportsHubScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('reports.sales_reports'.tr()),
-      ),
+      appBar: AppBar(title: Text('reports.sales_reports'.tr())),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -56,6 +54,12 @@ class SalesReportsHubScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
+          _ReportTile(
+            icon: LucideIcons.truck,
+            title: 'reports.sales_by_supplier'.tr(),
+            subtitle: 'reports.sales_by_supplier_desc'.tr(),
+            onTap: () => context.push('/reports/sales/by-supplier'),
+          ),
           // Product & Category Reports
           _SectionHeader(title: 'reports.sales_product_reports'.tr()),
           const SizedBox(height: 8),
@@ -174,13 +178,23 @@ class _ReportTile extends StatelessWidget {
           ),
           child: Icon(icon, size: 20, color: colorScheme.primary),
         ),
-        title: Text(title, style: theme.textTheme.bodyMedium?.copyWith(
-          fontWeight: FontWeight.w600,
-        )),
-        subtitle: Text(subtitle, style: theme.textTheme.bodySmall?.copyWith(
+        title: Text(
+          title,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+        trailing: Icon(
+          LucideIcons.chevronRight,
+          size: 18,
           color: colorScheme.onSurfaceVariant,
-        )),
-        trailing: Icon(LucideIcons.chevronRight, size: 18, color: colorScheme.onSurfaceVariant),
+        ),
         onTap: onTap,
       ),
     );

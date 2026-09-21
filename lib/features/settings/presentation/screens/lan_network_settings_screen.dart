@@ -1,7 +1,12 @@
 import 'dart:async';
+import 'dart:ui' as ui show TextDirection;
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:barcode_widget/barcode_widget.dart';
+import 'package:mobile_scanner/mobile_scanner.dart' hide Barcode;
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
@@ -340,10 +345,35 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
             label: 'settings.network.port'.tr(),
             value: _snapshot.port.toString(),
           ),
-          _InfoRow(
-            label: 'settings.network.pairing_code'.tr(),
-            value: _snapshot.pairingCode ?? '—',
-            prominent: true,
+          Text('settings.network.pairing_code'.tr()),
+          const SizedBox(height: 8),
+          SelectableText(
+            _snapshot.pairingCode ?? '—',
+            textDirection: ui.TextDirection.ltr,
+          ),
+          if (_snapshot.pairingCode != null)
+            Center(
+              child: Container(
+                color: Colors.white,
+                padding: const EdgeInsets.all(12),
+                child: BarcodeWidget(
+                  barcode: Barcode.qrCode(),
+                  data: _snapshot.pairingCode!,
+                  width: 180,
+                  height: 180,
+                  color: Colors.black,
+                ),
+              ),
+            ),
+          Text('settings.network.secure_pairing_hint'.tr()),
+          TextButton.icon(
+            onPressed: _snapshot.pairingCode == null
+                ? null
+                : () => Clipboard.setData(
+                    ClipboardData(text: _snapshot.pairingCode!),
+                  ),
+            icon: const Icon(Icons.copy),
+            label: Text('settings.network.copy_code'.tr()),
           ),
           _InfoRow(
             label: 'settings.network.authorized_devices'.tr(),
@@ -381,6 +411,32 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
     );
   }
 
+  Future<void> _scanPairingCode() async {
+    var captured = false;
+    final code = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (scannerContext) => Scaffold(
+          appBar: AppBar(title: Text('settings.network.scan_code'.tr())),
+          body: MobileScanner(
+            onDetect: (capture) {
+              for (final barcode in capture.barcodes) {
+                final code = barcode.rawValue?.trim().toLowerCase();
+                if (!captured &&
+                    code != null &&
+                    RegExp(r'^[0-9]{6}:[a-f0-9]{64}$').hasMatch(code)) {
+                  captured = true;
+                  Navigator.of(scannerContext).pop(code);
+                  break;
+                }
+              }
+            },
+          ),
+        ),
+      ),
+    );
+    if (mounted && code != null) _codeController.text = code;
+  }
+
   Widget _buildClientControls(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(top: 16),
@@ -411,17 +467,41 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
               Expanded(
                 child: TextField(
                   controller: _codeController,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
+                  keyboardType: TextInputType.text,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  maxLines: 3,
+                  minLines: 1,
+                  maxLength: 71,
                   decoration: InputDecoration(
                     labelText: 'settings.network.pairing_code'.tr(),
                     counterText: '',
+                    suffixIcon: IconButton(
+                      tooltip: 'settings.network.paste_code'.tr(),
+                      icon: const Icon(Icons.content_paste),
+                      onPressed: () async {
+                        final data = await Clipboard.getData(
+                          Clipboard.kTextPlain,
+                        );
+                        if (mounted && data?.text != null) {
+                          _codeController.text = data!.text!.trim();
+                        }
+                      },
+                    ),
                   ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
+          if (!kIsWeb &&
+              (defaultTargetPlatform == TargetPlatform.android ||
+                  defaultTargetPlatform == TargetPlatform.iOS))
+            TextButton.icon(
+              onPressed: _scanPairingCode,
+              icon: const Icon(Icons.qr_code_scanner),
+              label: Text('settings.network.scan_code'.tr()),
+            ),
           TextField(
             controller: _deviceNameController,
             decoration: InputDecoration(
@@ -545,15 +625,10 @@ class _RoleCard extends StatelessWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.label,
-    required this.value,
-    this.prominent = false,
-  });
+  const _InfoRow({required this.label, required this.value});
 
   final String label;
   final String value;
-  final bool prominent;
 
   @override
   Widget build(BuildContext context) {
@@ -564,11 +639,7 @@ class _InfoRow extends StatelessWidget {
           Expanded(child: Text(label)),
           SelectableText(
             value,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: prominent ? 24 : null,
-              color: prominent ? Theme.of(context).colorScheme.primary : null,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.bold),
           ),
         ],
       ),

@@ -1,7 +1,10 @@
+import '../../../../core/services/business/warehouse_read_scope.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+import '../../../../core/services/business/warehouse_document_scope.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -182,12 +185,16 @@ class CustomerSalesReturnsData {
 class CustomerSalesReturnsBloc
     extends RealtimeBloc<CustomerSalesReturnsData, CustomerSalesReturnsEvent> {
   final AppDatabase _db;
+  final WarehouseReadScope? warehouseScope;
   ReportDateRange _dateRange;
   ReturnsSortType _sort = ReturnsSortType.totalDesc;
 
-  CustomerSalesReturnsBloc(this._db, {String defaultDateRange = 'month'})
-    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-      super(const RealtimeLoading());
+  CustomerSalesReturnsBloc(
+    this._db, {
+    String defaultDateRange = 'month',
+    this.warehouseScope,
+  }) : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+       super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -208,39 +215,45 @@ class CustomerSalesReturnsBloc
     return _db
         .customSelect(
           'SELECT 1',
-          readsFrom: {_db.saleReturns, _db.saleReturnAdjustments},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.saleReturns,
+            _db.saleReturnAdjustments,
+          },
         )
         .watch()
-        .asyncMap((_) async {
-          final summaries = await _loadCustomerSummaries();
-          final details = await _loadReturnDetails();
-          final reasons = await _loadReasonBreakdown();
-          final products = await _loadReturnedProducts();
+        .asyncMap(
+          (_) => WarehouseReadScope.snapshot(_db, warehouseScope, () async {
+            final summaries = await _loadCustomerSummaries();
+            final details = await _loadReturnDetails();
+            final reasons = await _loadReasonBreakdown();
+            final products = await _loadReturnedProducts();
 
-          int totalCents = 0;
-          int totalCount = 0;
-          int totalItems = 0;
-          for (final s in summaries) {
-            totalCents += s.totalReturnedCents;
-            totalCount += s.returnCount;
-            totalItems += s.totalItemsReturned;
-          }
+            int totalCents = 0;
+            int totalCount = 0;
+            int totalItems = 0;
+            for (final s in summaries) {
+              totalCents += s.totalReturnedCents;
+              totalCount += s.returnCount;
+              totalItems += s.totalItemsReturned;
+            }
 
-          final sorted = _applySortToSummaries(summaries, _sort);
+            final sorted = _applySortToSummaries(summaries, _sort);
 
-          return CustomerSalesReturnsData(
-            customerSummaries: sorted,
-            returnDetails: details,
-            reasonBreakdown: reasons,
-            returnedProducts: products,
-            totalReturnsCents: totalCents,
-            totalReturnCount: totalCount,
-            totalItemsReturned: totalItems,
-            customersWithReturns: summaries.length,
-            dateRange: _dateRange,
-            sort: _sort,
-          );
-        });
+            return CustomerSalesReturnsData(
+              customerSummaries: sorted,
+              returnDetails: details,
+              reasonBreakdown: reasons,
+              returnedProducts: products,
+              totalReturnsCents: totalCents,
+              totalReturnCount: totalCount,
+              totalItemsReturned: totalItems,
+              customersWithReturns: summaries.length,
+              dateRange: _dateRange,
+              sort: _sort,
+            );
+          }),
+        );
   }
 
   Future<void> _onDateRangeChanged(
@@ -320,7 +333,7 @@ class CustomerSalesReturnsBloc
                sr.total_cents AS total_cents, sr.return_date AS return_date,
                (SELECT COALESCE(SUM(sri.quantity), 0) FROM sale_return_items sri
                   WHERE sri.return_id = sr.id) AS item_qty
-        FROM sale_returns sr
+        FROM ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr
         INNER JOIN sales s ON s.id = sr.sale_id
         WHERE sr.status = 'posted'
           AND sr.return_date >= ? AND sr.return_date <= ?
@@ -329,7 +342,7 @@ class CustomerSalesReturnsBloc
                sra.total_cents AS total_cents, sra.return_date AS return_date,
                (SELECT COALESCE(SUM(srai.quantity), 0) FROM sale_return_adjustment_items srai
                   WHERE srai.return_id = sra.id) AS item_qty
-        FROM sale_return_adjustments sra
+        FROM ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra
         WHERE sra.status = 'posted'
           AND sra.return_date >= ? AND sra.return_date <= ?
       ) r
@@ -344,6 +357,7 @@ class CustomerSalesReturnsBloc
             Variable<String>(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.saleReturns,
             _db.saleReturnItems,
             _db.saleReturnAdjustments,
@@ -395,7 +409,7 @@ class CustomerSalesReturnsBloc
           (SELECT COALESCE(SUM(sri.quantity), 0) FROM sale_return_items sri
              WHERE sri.return_id = sr.id) AS item_count,
           s.invoice_number AS original_invoice_number
-        FROM sale_returns sr
+        FROM ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr
         INNER JOIN sales s ON s.id = sr.sale_id
         WHERE sr.status = 'posted'
           AND sr.return_date >= ? AND sr.return_date <= ?
@@ -412,7 +426,7 @@ class CustomerSalesReturnsBloc
           (SELECT COALESCE(SUM(srai.quantity), 0) FROM sale_return_adjustment_items srai
              WHERE srai.return_id = sra.id) AS item_count,
           NULL AS original_invoice_number
-        FROM sale_return_adjustments sra
+        FROM ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra
         WHERE sra.status = 'posted'
           AND sra.return_date >= ? AND sra.return_date <= ?
       )
@@ -425,6 +439,7 @@ class CustomerSalesReturnsBloc
             Variable<String>(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.saleReturns,
             _db.saleReturnItems,
             _db.saleReturnAdjustments,
@@ -463,13 +478,13 @@ class CustomerSalesReturnsBloc
       FROM (
         SELECT COALESCE(sri.reason, 'other') AS reason, sri.refund_cents AS amount_cents
         FROM sale_return_items sri
-        INNER JOIN sale_returns sr ON sr.id = sri.return_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr ON sr.id = sri.return_id
         WHERE sr.status = 'posted'
           AND sr.return_date >= ? AND sr.return_date <= ?
         UNION ALL
         SELECT COALESCE(srai.reason, 'other') AS reason, srai.total_cents AS amount_cents
         FROM sale_return_adjustment_items srai
-        INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra ON sra.id = srai.return_id
         WHERE sra.status = 'posted'
           AND sra.return_date >= ? AND sra.return_date <= ?
       )
@@ -483,6 +498,7 @@ class CustomerSalesReturnsBloc
             Variable<String>(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.saleReturnItems,
             _db.saleReturns,
             _db.saleReturnAdjustmentItems,
@@ -523,7 +539,7 @@ class CustomerSalesReturnsBloc
           sr.return_date AS return_date,
           sri.id AS order_key
         FROM sale_return_items sri
-        INNER JOIN sale_returns sr ON sr.id = sri.return_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr ON sr.id = sri.return_id
         INNER JOIN sale_items si ON si.id = sri.sale_item_id
         INNER JOIN products p ON p.id = si.product_id
         LEFT JOIN product_variants pv ON pv.id = si.variant_id
@@ -545,7 +561,7 @@ class CustomerSalesReturnsBloc
           sra.return_date AS return_date,
           srai.id AS order_key
         FROM sale_return_adjustment_items srai
-        INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id
+        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra ON sra.id = srai.return_id
         INNER JOIN products p ON p.id = srai.product_id
         LEFT JOIN product_variants pv ON pv.id = srai.variant_id
         LEFT JOIN product_colors pc ON pc.id = pv.color_id
@@ -562,6 +578,7 @@ class CustomerSalesReturnsBloc
             Variable<String>(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.saleReturnItems,
             _db.saleReturns,
             _db.saleReturnAdjustmentItems,

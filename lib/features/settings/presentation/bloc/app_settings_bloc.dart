@@ -30,13 +30,26 @@ class AppSettingsPatched extends AppSettingsEvent {
 class AppSettingsState {
   final AppSettings settings;
   final bool isSaving;
+  final String? errorMessageKey;
 
-  const AppSettingsState({required this.settings, this.isSaving = false});
+  const AppSettingsState({
+    required this.settings,
+    this.isSaving = false,
+    this.errorMessageKey,
+  });
 
-  AppSettingsState copyWith({AppSettings? settings, bool? isSaving}) {
+  AppSettingsState copyWith({
+    AppSettings? settings,
+    bool? isSaving,
+    String? errorMessageKey,
+    bool clearError = false,
+  }) {
     return AppSettingsState(
       settings: settings ?? this.settings,
       isSaving: isSaving ?? this.isSaving,
+      errorMessageKey: clearError
+          ? null
+          : errorMessageKey ?? this.errorMessageKey,
     );
   }
 }
@@ -66,19 +79,33 @@ class AppSettingsBloc extends Bloc<AppSettingsEvent, AppSettingsState> {
     AppSettingsUpdated event,
     Emitter<AppSettingsState> emit,
   ) async {
-    emit(state.copyWith(isSaving: true));
-    await _service.update(event.settings);
-    emit(state.copyWith(settings: event.settings, isSaving: false));
+    await _save(() => _service.update(event.settings), emit);
   }
 
   Future<void> _onPatched(
     AppSettingsPatched event,
     Emitter<AppSettingsState> emit,
   ) async {
-    final patched = event.patcher(state.settings);
-    emit(state.copyWith(isSaving: true));
-    await _service.update(patched);
-    emit(state.copyWith(settings: patched, isSaving: false));
+    await _save(() => _service.patch(event.patcher), emit);
+  }
+
+  Future<void> _save(
+    Future<void> Function() action,
+    Emitter<AppSettingsState> emit,
+  ) async {
+    emit(state.copyWith(isSaving: true, clearError: true));
+    try {
+      await action();
+      emit(state.copyWith(settings: _service.current, isSaving: false));
+    } catch (_) {
+      emit(
+        state.copyWith(
+          settings: _service.current,
+          isSaving: false,
+          errorMessageKey: 'app_settings.save_error',
+        ),
+      );
+    }
   }
 
   @override

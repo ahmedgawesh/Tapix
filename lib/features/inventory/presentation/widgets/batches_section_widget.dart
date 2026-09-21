@@ -244,6 +244,13 @@ class _BatchTileState extends State<_BatchTile> {
             runSpacing: 4,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
+              if (batch.manufacturerLotNumber != null)
+                _Chip(
+                  label:
+                      '${'pharmacy.batch.lot_short'.tr()}: ${batch.manufacturerLotNumber}',
+                  icon: LucideIcons.packageSearch,
+                  color: cs.primary,
+                ),
               if (batch.variantLabel != null)
                 _Chip(
                   label: batch.variantLabel!,
@@ -304,6 +311,8 @@ class _BatchTileState extends State<_BatchTile> {
         return 'product_form.batches_source_opening'.tr();
       case 'found':
         return 'product_form.batches_source_found'.tr();
+      case 'revaluation':
+        return 'product_form.batches_source_revaluation'.tr();
       case 'sale_return':
         return 'product_form.batches_source_sale_return'.tr();
       default:

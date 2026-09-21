@@ -2,15 +2,18 @@ import 'package:drift/drift.dart';
 
 import '../../database/app_database.dart';
 import 'product_cost_service.dart';
+import '../business/warehouse_operation_scope.dart';
 
 /// Frozen pre-movement state for one concrete inventory variant.
 class WacMovementSnapshot {
+  final WarehouseOperationScope scope;
   final int productId;
   final int variantId;
   final int quantity;
   final int unitCostCents;
 
   const WacMovementSnapshot({
+    required this.scope,
     required this.productId,
     required this.variantId,
     required this.quantity,
@@ -30,6 +33,7 @@ class WacMovementService {
     DatabaseAccessor<AppDatabase> dao, {
     required int productId,
     int? variantId,
+    WarehouseOperationScope? scope,
   }) async {
     final product = await dao
         .customSelect(
@@ -58,10 +62,19 @@ class WacMovementService {
       );
     }
 
+    final operationScope =
+        scope ?? await WarehouseOperationScope.resolve(dao.attachedDatabase);
+    await operationScope.validate(dao.attachedDatabase);
     final row = await dao
         .customSelect(
-          'SELECT stock_quantity, cost_cents FROM product_variants WHERE id = ?',
-          variables: [Variable.withInt(resolvedVariantId)],
+          'SELECT s.quantity AS stock_quantity, s.unit_cost_cents AS cost_cents '
+          'FROM business_warehouse_stocks s JOIN product_variants v ON v.id = s.variant_id '
+          'WHERE s.variant_id = ? AND s.warehouse_id = ? AND v.product_id = ?',
+          variables: [
+            Variable.withInt(resolvedVariantId),
+            Variable.withString(operationScope.warehouseId),
+            Variable.withInt(productId),
+          ],
         )
         .getSingleOrNull();
     if (row == null) {
@@ -71,6 +84,7 @@ class WacMovementService {
     }
 
     return WacMovementSnapshot(
+      scope: operationScope,
       productId: productId,
       variantId: resolvedVariantId,
       quantity: row.read<int>('stock_quantity'),
@@ -93,8 +107,9 @@ class WacMovementService {
       addedQty: addedQty,
       newPaidCostCents: inboundUnitCostCents,
       costingMethod: ProductCostService.methodWac,
+      scope: snapshot.scope,
     );
-    await _syncParent(dao, snapshot.productId);
+    await _syncParent(dao, snapshot.productId, snapshot.scope);
   }
 
   /// Remove the frozen value of a previously posted inbound return after
@@ -113,18 +128,21 @@ class WacMovementService {
       removedQty: removedQty,
       removedUnitCostCents: removedUnitCostCents,
       costingMethod: ProductCostService.methodWac,
+      scope: snapshot.scope,
     );
-    await _syncParent(dao, snapshot.productId);
+    await _syncParent(dao, snapshot.productId, snapshot.scope);
   }
 
   static Future<void> _syncParent(
     DatabaseAccessor<AppDatabase> dao,
     int productId,
+    WarehouseOperationScope scope,
   ) {
     return ProductCostService.syncProductFromVariants(
       dao,
       productId: productId,
       syncPrice: false,
+      scope: scope,
     );
   }
 
@@ -132,23 +150,18 @@ class WacMovementService {
     DatabaseAccessor<AppDatabase> dao,
     int productId,
   ) async {
-    final strict = await dao
+    final rows = await dao
         .customSelect(
-          'SELECT id FROM product_variants '
-          'WHERE product_id = ? AND color_id IS NULL AND size_id IS NULL '
-          'AND is_active = 1 ORDER BY id LIMIT 1',
+          'SELECT v.id FROM product_variants v JOIN products p ON p.id = v.product_id '
+          'WHERE p.id = ? AND p.has_variants = 0 AND v.is_active = 1 LIMIT 2',
           variables: [Variable.withInt(productId)],
         )
-        .getSingleOrNull();
-    if (strict != null) return strict.read<int>('id');
-
-    final any = await dao
-        .customSelect(
-          'SELECT id FROM product_variants '
-          'WHERE product_id = ? AND is_active = 1 ORDER BY id LIMIT 1',
-          variables: [Variable.withInt(productId)],
-        )
-        .getSingleOrNull();
-    return any?.read<int>('id');
+        .get();
+    if (rows.length != 1) {
+      throw StateError(
+        'WAC requires exactly one active simple-product variant or an explicit variant.',
+      );
+    }
+    return rows.single.read<int>('id');
   }
 }

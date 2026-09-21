@@ -142,9 +142,9 @@ class _BalanceSheetView extends StatelessWidget {
                 // Date range selector
                 DateRangeSelector(
                   dateRange: state.data.dateRange,
-                  onChanged: (range) => context
-                      .read<ReportsBloc>()
-                      .add(ReportsDateRangeChanged(range)),
+                  onChanged: (range) => context.read<ReportsBloc>().add(
+                    ReportsDateRangeChanged(range),
+                  ),
                 ),
                 const SizedBox(height: 12),
 
@@ -159,7 +159,9 @@ class _BalanceSheetView extends StatelessWidget {
                       children: [
                         Icon(
                           fig.isBalanced ? Icons.check_circle : Icons.warning,
-                          color: fig.isBalanced ? colorScheme.primary : colorScheme.error,
+                          color: fig.isBalanced
+                              ? colorScheme.primary
+                              : colorScheme.error,
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -178,7 +180,9 @@ class _BalanceSheetView extends StatelessWidget {
                                 const SizedBox(height: 4),
                                 Text(
                                   'reports.balance_sheet_difference'.tr(
-                                    args: [cs.formatCents(fig.difference.abs())],
+                                    args: [
+                                      cs.formatCents(fig.difference.abs()),
+                                    ],
                                   ),
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     color: colorScheme.error,
@@ -267,7 +271,8 @@ class _BalanceSheetView extends StatelessWidget {
                         if (!fig.isBalanced) ...[
                           const Divider(height: 16),
                           _SummaryRow(
-                            label: 'reports.balance_sheet_difference_label'.tr(),
+                            label: 'reports.balance_sheet_difference_label'
+                                .tr(),
                             value: cs.formatCents(fig.difference),
                             isBold: true,
                             isError: true,
@@ -303,7 +308,9 @@ class _BalanceSheetView extends StatelessWidget {
       diagnosticHints: hints,
     );
     sl<AuditLogService>().log(
-      entityType: 'report', entityId: 0, action: 'print_balance_sheet',
+      entityType: 'report',
+      entityId: 0,
+      action: 'print_balance_sheet',
     );
   }
 
@@ -323,7 +330,9 @@ class _BalanceSheetView extends StatelessWidget {
       diagnosticHints: hints,
     );
     sl<AuditLogService>().log(
-      entityType: 'report', entityId: 0, action: 'share_balance_sheet',
+      entityType: 'report',
+      entityId: 0,
+      action: 'share_balance_sheet',
     );
   }
 
@@ -345,39 +354,48 @@ class _BalanceSheetView extends StatelessWidget {
   }
 
   List<BalanceSheetSection> _buildBsSections(
-      TrialBalance tb, CurrencyService cs, _BalanceSheetFigures fig) {
+    TrialBalance tb,
+    CurrencyService cs,
+    _BalanceSheetFigures fig,
+  ) {
     // Phase 8 — row-level natural-balance signing routes through the
     // [TrialBalanceItem.naturalBalanceCents] SoT helper (Phase 7).
     List<BalanceSheetLineItem> toAssetLineItems(List<TrialBalanceItem> items) {
       return items
           .where((i) => i.debitCents > 0 || i.creditCents > 0)
-          .map((i) => BalanceSheetLineItem(
-                code: i.accountCode,
-                name: i.accountName,
-                amountCents: i.naturalBalanceCents,
-              ))
+          .map(
+            (i) => BalanceSheetLineItem(
+              code: i.accountCode,
+              name: i.accountName,
+              amountCents: i.naturalBalanceCents,
+            ),
+          )
           .toList();
     }
 
     List<BalanceSheetLineItem> toCreditLineItems(List<TrialBalanceItem> items) {
       return items
           .where((i) => i.debitCents > 0 || i.creditCents > 0)
-          .map((i) => BalanceSheetLineItem(
-                code: i.accountCode,
-                name: i.accountName,
-                amountCents: i.naturalBalanceCents,
-              ))
+          .map(
+            (i) => BalanceSheetLineItem(
+              code: i.accountCode,
+              name: i.accountName,
+              amountCents: i.naturalBalanceCents,
+            ),
+          )
           .toList();
     }
 
     // Build equity items including net income
     final equityLineItems = toCreditLineItems(fig.equityItems);
     if (fig.netIncome != 0) {
-      equityLineItems.add(BalanceSheetLineItem(
-        code: '',
-        name: 'reports.net_income'.tr(),
-        amountCents: fig.netIncome,
-      ));
+      equityLineItems.add(
+        BalanceSheetLineItem(
+          code: '',
+          name: 'reports.net_income'.tr(),
+          amountCents: fig.netIncome,
+        ),
+      );
     }
 
     return [
@@ -455,7 +473,11 @@ class _DiagnosticPanel extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(LucideIcons.lightbulb, size: 18, color: colorScheme.tertiary),
+                Icon(
+                  LucideIcons.lightbulb,
+                  size: 18,
+                  color: colorScheme.tertiary,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'reports.diag_panel_title'.tr(),
@@ -530,7 +552,11 @@ class _DiagnosticTile extends StatelessWidget {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Icon(LucideIcons.wrench, size: 12, color: colorScheme.tertiary),
+                    Icon(
+                      LucideIcons.wrench,
+                      size: 12,
+                      color: colorScheme.tertiary,
+                    ),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
@@ -573,8 +599,9 @@ class _BalanceSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final nonZero =
-        items.where((i) => i.debitCents > 0 || i.creditCents > 0).toList();
+    final nonZero = items
+        .where((i) => i.debitCents > 0 || i.creditCents > 0)
+        .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -598,7 +625,7 @@ class _BalanceSection extends StatelessWidget {
             ),
           ],
         ),
-        if (subtitle != null) ...[  
+        if (subtitle != null) ...[
           const SizedBox(height: 4),
           Text(
             subtitle!,
@@ -628,7 +655,9 @@ class _BalanceSection extends StatelessWidget {
                   cs.formatCents(amount),
                   style: TextStyle(
                     fontWeight: FontWeight.w500,
-                    color: amount < 0 ? theme.colorScheme.error : Colors.green.shade700,
+                    color: amount < 0
+                        ? theme.colorScheme.error
+                        : Colors.green.shade700,
                   ),
                 ),
               ],
@@ -716,7 +745,9 @@ class _EquitySection extends StatelessWidget {
                   cs.formatCents(amount),
                   style: TextStyle(
                     fontWeight: FontWeight.w500,
-                    color: amount < 0 ? theme.colorScheme.error : Colors.green.shade700,
+                    color: amount < 0
+                        ? theme.colorScheme.error
+                        : Colors.green.shade700,
                   ),
                 ),
               ],
@@ -769,9 +800,9 @@ class _SummaryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final baseStyle = isBold
-        ? Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            )
+        ? Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)
         : Theme.of(context).textTheme.bodyLarge;
 
     final style = isError

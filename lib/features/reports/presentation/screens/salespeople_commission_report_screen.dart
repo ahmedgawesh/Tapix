@@ -1,3 +1,4 @@
+import '../widgets/warehouse_report_context.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -16,7 +17,9 @@ class SalespeopleCommissionReportScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => sl<SalespeopleCommissionReportBloc>(),
+      create: (_) => sl<SalespeopleCommissionReportBloc>(
+        param1: WarehouseReportContext.maybeOf(context)?.scope,
+      ),
       child: const _SalespeopleCommissionReportView(),
     );
   }
@@ -34,6 +37,23 @@ class _SalespeopleCommissionReportView extends StatelessWidget {
       appBar: AppBar(
         title: Text('reports.salespeople_commission'.tr()),
         actions: [
+          PopupMenuButton<CommissionReportScope>(
+            icon: const Icon(Icons.filter_alt_outlined),
+            tooltip: 'reports.commission_scope'.tr(),
+            onSelected: (scope) => context
+                .read<SalespeopleCommissionReportBloc>()
+                .add(SalespeopleCommissionReportScopeChanged(scope)),
+            itemBuilder: (context) => [
+              for (final scope in CommissionReportScope.values)
+                CheckedPopupMenuItem(
+                  value: scope,
+                  checked:
+                      context.read<SalespeopleCommissionReportBloc>().scope ==
+                      scope,
+                  child: Text(_scopeLabel(scope)),
+                ),
+            ],
+          ),
           BlocBuilder<
             SalespeopleCommissionReportBloc,
             RealtimeState<SalespeopleCommissionReportData>
@@ -73,20 +93,31 @@ class _SalespeopleCommissionReportView extends StatelessWidget {
 
               if (state is RealtimeError<SalespeopleCommissionReportData>) {
                 return Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.error_outline,
-                        size: 48,
-                        color: colorScheme.error,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        state.error.toString(),
-                        style: theme.textTheme.bodyLarge,
-                      ),
-                    ],
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          size: 48,
+                          color: colorScheme.error,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          state.error is UnresolvedCommissionSources
+                              ? 'reports.commission_scope_unresolved'.tr(
+                                  namedArgs: {
+                                    'count':
+                                        '${(state.error as UnresolvedCommissionSources).count}',
+                                  },
+                                )
+                              : state.error.toString(),
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyLarge,
+                        ),
+                      ],
+                    ),
                   ),
                 );
               }
@@ -94,6 +125,21 @@ class _SalespeopleCommissionReportView extends StatelessWidget {
               if (state is RealtimeSuccess<SalespeopleCommissionReportData>) {
                 return Column(
                   children: [
+                    Padding(
+                      padding: const EdgeInsetsDirectional.fromSTEB(
+                        16,
+                        8,
+                        16,
+                        0,
+                      ),
+                      child: Text(
+                        _scopeLabel(state.data.scope),
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
                     // Date range selector
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -130,6 +176,12 @@ class _SalespeopleCommissionReportView extends StatelessWidget {
           ),
     );
   }
+
+  String _scopeLabel(CommissionReportScope scope) =>
+      (scope == CommissionReportScope.account
+              ? 'reports.commission_scope_account'
+              : 'reports.commission_scope_warehouse')
+          .tr();
 
   Widget _buildSummaryCards(
     BuildContext context,

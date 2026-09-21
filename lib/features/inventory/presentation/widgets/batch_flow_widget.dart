@@ -185,7 +185,9 @@ class _SaleLineFlowRow extends StatelessWidget {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        b.batchNumber,
+                        b.manufacturerLotNumber == null
+                            ? b.batchNumber
+                            : '${'pharmacy.batch.lot_short'.tr()}: ${b.manufacturerLotNumber} • ${b.batchNumber}',
                         style: theme.textTheme.bodySmall,
                         overflow: TextOverflow.ellipsis,
                       ),

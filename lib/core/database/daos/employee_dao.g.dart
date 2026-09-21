@@ -13,6 +13,12 @@ mixin _$EmployeeDaoMixin on DatabaseAccessor<AppDatabase> {
   $PayrollsTable get payrolls => attachedDatabase.payrolls;
   $PayrollDeductionsTable get payrollDeductions =>
       attachedDatabase.payrollDeductions;
+  $BusinessOrganizationsTable get businessOrganizations =>
+      attachedDatabase.businessOrganizations;
+  $BusinessBranchesTable get businessBranches =>
+      attachedDatabase.businessBranches;
+  $BusinessWarehousesTable get businessWarehouses =>
+      attachedDatabase.businessWarehouses;
   $LoyaltyTiersTable get loyaltyTiers => attachedDatabase.loyaltyTiers;
   $CustomersTable get customers => attachedDatabase.customers;
   $CashierShiftsTable get cashierShifts => attachedDatabase.cashierShifts;
@@ -48,6 +54,21 @@ class EmployeeDaoManager {
       $$PayrollDeductionsTableTableManager(
         _db.attachedDatabase,
         _db.payrollDeductions,
+      );
+  $$BusinessOrganizationsTableTableManager get businessOrganizations =>
+      $$BusinessOrganizationsTableTableManager(
+        _db.attachedDatabase,
+        _db.businessOrganizations,
+      );
+  $$BusinessBranchesTableTableManager get businessBranches =>
+      $$BusinessBranchesTableTableManager(
+        _db.attachedDatabase,
+        _db.businessBranches,
+      );
+  $$BusinessWarehousesTableTableManager get businessWarehouses =>
+      $$BusinessWarehousesTableTableManager(
+        _db.attachedDatabase,
+        _db.businessWarehouses,
       );
   $$LoyaltyTiersTableTableManager get loyaltyTiers =>
       $$LoyaltyTiersTableTableManager(_db.attachedDatabase, _db.loyaltyTiers);

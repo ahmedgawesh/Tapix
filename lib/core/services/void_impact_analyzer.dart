@@ -1,6 +1,10 @@
+import 'business/warehouse_read_scope.dart';
 import 'package:drift/drift.dart' as drift;
 
 import '../database/app_database.dart';
+import 'business/warehouse_stock_scope.dart';
+import 'business/document_posting_scope.dart';
+import 'business/warehouse_document_scope.dart';
 
 /// ────────────────────────────────────────────────────────────────────────────
 /// VoidImpactAnalyzer — single source of truth for "what breaks if we void
@@ -33,7 +37,58 @@ import '../database/app_database.dart';
 class VoidImpactAnalyzer {
   final AppDatabase _db;
 
-  VoidImpactAnalyzer(this._db);
+  final WarehouseReadScope? warehouseScope;
+  VoidImpactAnalyzer(this._db, {this.warehouseScope});
+
+  Future<int> _currentStock(int productId, int? variantId) async {
+    if (variantId == null) {
+      final product = await _db
+          .customSelect(
+            'SELECT has_variants, stock_quantity FROM products WHERE id = ?',
+            variables: [drift.Variable.withInt(productId)],
+          )
+          .getSingleOrNull();
+      if (product == null) return 0;
+      if (product.read<bool>('has_variants')) {
+        throw StateError('Void preview requires an explicit variant.');
+      }
+      final rows = await _db
+          .customSelect(
+            'SELECT id FROM product_variants WHERE product_id = ? AND is_active = 1 LIMIT 2',
+            variables: [drift.Variable.withInt(productId)],
+          )
+          .get();
+      if (rows.length > 1) {
+        throw StateError('Ambiguous simple-product operational row.');
+      }
+      if (rows.isEmpty) {
+        if (warehouseScope != null && !warehouseScope!.isPrimary) {
+          throw StateError(
+            'Missing operational variant for selected warehouse',
+          );
+        }
+        return product.read<int>('stock_quantity');
+      }
+      variantId = rows.single.read<int>('id');
+    }
+    final row = await _db
+        .customSelect(
+          'SELECT s.quantity FROM ${warehouseScope?.stocks ?? WarehouseStockScope.primaryStocks} s '
+          'JOIN product_variants v ON v.id = s.variant_id '
+          'WHERE s.variant_id = ? AND v.product_id = ?',
+          variables: [
+            drift.Variable.withInt(variantId),
+            drift.Variable.withInt(productId),
+          ],
+        )
+        .getSingleOrNull();
+    if (row == null) {
+      throw StateError(
+        'Missing or mismatched warehouse stock for void preview.',
+      );
+    }
+    return row.read<int>('quantity');
+  }
 
   // ──────────────────────────────────────────────────────────────────────
   // Sale side
@@ -45,30 +100,50 @@ class VoidImpactAnalyzer {
   /// sale — instead the report's `documentExists` flag is `false` and all
   /// other fields are empty.
   Future<VoidImpactReport> analyzeSaleVoid(int saleId) async {
-    final sale = await (_db.select(_db.sales)
-          ..where((s) => s.id.equals(saleId)))
-        .getSingleOrNull();
+    if (!await WarehouseDocumentScope.contains(
+      _db,
+      InventoryPostingDocument.sale,
+      saleId,
+      scope: warehouseScope,
+    )) {
+      return VoidImpactReport.empty(side: 'sale', documentExists: false);
+    }
+    final sale = await (_db.select(
+      _db.sales,
+    )..where((s) => s.id.equals(saleId))).getSingleOrNull();
     if (sale == null) {
       return VoidImpactReport.empty(side: 'sale', documentExists: false);
     }
 
-    final items = await (_db.select(_db.saleItems)
-          ..where((i) => i.saleId.equals(saleId)))
-        .get();
+    final items = await (_db.select(
+      _db.saleItems,
+    )..where((i) => i.saleId.equals(saleId))).get();
 
     // ── Linked returns ────────────────────────────────────────────────
     final linkedReturns = <LinkedReturnEntry>[];
-    final linkedRows = await (_db.select(_db.saleReturns)
-          ..where((r) => r.saleId.equals(saleId)))
-        .get();
+    final linkedRows = await (_db.select(
+      _db.saleReturns,
+    )..where((r) => r.saleId.equals(saleId))).get();
     for (final r in linkedRows) {
       if (r.status == 'voided') continue;
-      linkedReturns.add(LinkedReturnEntry(
-        returnId: r.id,
-        returnNumber: r.returnNumber,
-        totalCents: r.totalCents.toBigInt().toInt(),
-        status: r.status,
-      ));
+      if (!await WarehouseDocumentScope.contains(
+        _db,
+        InventoryPostingDocument.saleReturn,
+        r.id,
+        scope: warehouseScope,
+      )) {
+        throw StateError(
+          'Linked return belongs to another location; review before voiding.',
+        );
+      }
+      linkedReturns.add(
+        LinkedReturnEntry(
+          returnId: r.id,
+          returnNumber: r.returnNumber,
+          totalCents: r.totalCents.toBigInt().toInt(),
+          status: r.status,
+        ),
+      );
     }
 
     // ── Adjustment-return entanglement ────────────────────────────────
@@ -91,19 +166,26 @@ class VoidImpactAnalyzer {
       final productIds = items.map((i) => i.productId).toSet();
       if (productIds.isNotEmpty) {
         final placeholders = List.filled(productIds.length, '?').join(',');
-        final rows = await _db.customSelect(
-          'SELECT DISTINCT sra.id AS rid, sra.return_number AS rnum, '
-          '       sra.total_cents AS total_cents, sra.refund_method AS refund '
-          'FROM sale_return_adjustments sra '
-          'JOIN sale_return_adjustment_items srai ON srai.return_id = sra.id '
-          'WHERE sra.customer_id = ? AND sra.status = \'posted\' '
-          '  AND srai.product_id IN ($placeholders) '
-          'ORDER BY sra.id ASC',
-          variables: [
-            drift.Variable.withInt(sale.customerId!),
-            ...productIds.map((id) => drift.Variable.withInt(id)),
-          ],
-        ).get();
+        final rows = await _db
+            .customSelect(
+              'SELECT DISTINCT sra.id AS rid, sra.return_number AS rnum, '
+              '       sra.total_cents AS total_cents, sra.refund_method AS refund '
+              'FROM ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra '
+              'JOIN sale_return_adjustment_items srai ON srai.return_id = sra.id '
+              'WHERE sra.customer_id = ? AND sra.status = \'posted\' '
+              '  AND srai.product_id IN ($placeholders) '
+              '  AND EXISTS (SELECT 1 FROM sale_items si '
+              '    WHERE si.sale_id = ? AND si.product_id = srai.product_id '
+              '    AND ${WarehouseDocumentScope.operationalVariant('si')} '
+              '      IS ${WarehouseDocumentScope.operationalVariant('srai')}) '
+              'ORDER BY sra.id ASC',
+              variables: [
+                drift.Variable.withInt(sale.customerId!),
+                ...productIds.map((id) => drift.Variable.withInt(id)),
+                drift.Variable.withInt(saleId),
+              ],
+            )
+            .get();
         for (final r in rows) {
           final id = r.read<int>('rid');
           entangledByReturnId[id] = EntangledAdjustmentReturn(
@@ -122,20 +204,10 @@ class VoidImpactAnalyzer {
     final negativeRisks = <NegativeStockRisk>[];
     if (sale.status == 'completed') {
       for (final item in items) {
-        int currentStock;
-        if (item.variantId != null) {
-          final r = await _db.customSelect(
-            'SELECT stock_quantity FROM product_variants WHERE id = ?',
-            variables: [drift.Variable.withInt(item.variantId!)],
-          ).getSingleOrNull();
-          currentStock = r?.read<int>('stock_quantity') ?? 0;
-        } else {
-          final r = await _db.customSelect(
-            'SELECT stock_quantity FROM products WHERE id = ?',
-            variables: [drift.Variable.withInt(item.productId)],
-          ).getSingleOrNull();
-          currentStock = r?.read<int>('stock_quantity') ?? 0;
-        }
+        final currentStock = await _currentStock(
+          item.productId,
+          item.variantId,
+        );
         // Voiding a sale RESTORES stock (increase by qty), so the risk is
         // really the inverse: voiding restores units, but adjustment-
         // returns may have already been booked against fewer units. The
@@ -146,12 +218,14 @@ class VoidImpactAnalyzer {
         // pull stock down.
         if (entangledByReturnId.isNotEmpty &&
             currentStock < item.qtyReturnedAdjustment) {
-          negativeRisks.add(NegativeStockRisk(
-            productId: item.productId,
-            variantId: item.variantId,
-            currentStock: currentStock,
-            requiredQuantity: item.qtyReturnedAdjustment,
-          ));
+          negativeRisks.add(
+            NegativeStockRisk(
+              productId: item.productId,
+              variantId: item.variantId,
+              currentStock: currentStock,
+              requiredQuantity: item.qtyReturnedAdjustment,
+            ),
+          );
         }
       }
     }
@@ -160,10 +234,10 @@ class VoidImpactAnalyzer {
     // Voiding a sale reverses Dr 1100/Cash | Cr 4000/2100 by totalCents.
     // For credit sales the customer's `customers.balance_cents` is
     // decremented by (totalCents − totalPaid). Cash/cheque sales touch 1000.
-    final estArDelta = sale.paymentMethod == 'credit' ||
-            sale.paymentMethod == 'cheque'
+    final estArDelta =
+        sale.paymentMethod == 'credit' || sale.paymentMethod == 'cheque'
         ? -(sale.totalCents.toBigInt().toInt() -
-            sale.paidAmountCents.toBigInt().toInt())
+              sale.paidAmountCents.toBigInt().toInt())
         : 0;
     final estInventoryDelta = items.fold<int>(
       0,
@@ -188,29 +262,49 @@ class VoidImpactAnalyzer {
   // ──────────────────────────────────────────────────────────────────────
 
   Future<VoidImpactReport> analyzePurchaseVoid(int purchaseId) async {
-    final purchase = await (_db.select(_db.purchases)
-          ..where((p) => p.id.equals(purchaseId)))
-        .getSingleOrNull();
+    if (!await WarehouseDocumentScope.contains(
+      _db,
+      InventoryPostingDocument.purchase,
+      purchaseId,
+      scope: warehouseScope,
+    )) {
+      return VoidImpactReport.empty(side: 'purchase', documentExists: false);
+    }
+    final purchase = await (_db.select(
+      _db.purchases,
+    )..where((p) => p.id.equals(purchaseId))).getSingleOrNull();
     if (purchase == null) {
       return VoidImpactReport.empty(side: 'purchase', documentExists: false);
     }
 
-    final items = await (_db.select(_db.purchaseItems)
-          ..where((i) => i.purchaseId.equals(purchaseId)))
-        .get();
+    final items = await (_db.select(
+      _db.purchaseItems,
+    )..where((i) => i.purchaseId.equals(purchaseId))).get();
 
     final linkedReturns = <LinkedReturnEntry>[];
-    final linkedRows = await (_db.select(_db.purchaseReturns)
-          ..where((r) => r.purchaseId.equals(purchaseId)))
-        .get();
+    final linkedRows = await (_db.select(
+      _db.purchaseReturns,
+    )..where((r) => r.purchaseId.equals(purchaseId))).get();
     for (final r in linkedRows) {
       if (r.status == 'voided') continue;
-      linkedReturns.add(LinkedReturnEntry(
-        returnId: r.id,
-        returnNumber: r.returnNumber,
-        totalCents: r.totalCents.toBigInt().toInt(),
-        status: r.status,
-      ));
+      if (!await WarehouseDocumentScope.contains(
+        _db,
+        InventoryPostingDocument.purchaseReturn,
+        r.id,
+        scope: warehouseScope,
+      )) {
+        throw StateError(
+          'Linked return belongs to another location; review before voiding.',
+        );
+      }
+      linkedReturns.add(
+        LinkedReturnEntry(
+          returnId: r.id,
+          returnNumber: r.returnNumber,
+          totalCents: r.totalCents.toBigInt().toInt(),
+          status: r.status,
+        ),
+      );
     }
 
     int adjustmentAllocatedQty = 0;
@@ -223,19 +317,26 @@ class VoidImpactAnalyzer {
       final productIds = items.map((i) => i.productId).toSet();
       if (productIds.isNotEmpty) {
         final placeholders = List.filled(productIds.length, '?').join(',');
-        final rows = await _db.customSelect(
-          'SELECT DISTINCT pra.id AS rid, pra.return_number AS rnum, '
-          '       pra.total_cents AS total_cents, pra.refund_method AS refund '
-          'FROM purchase_return_adjustments pra '
-          'JOIN purchase_return_adjustment_items prai ON prai.return_id = pra.id '
-          'WHERE pra.supplier_id = ? AND pra.status = \'posted\' '
-          '  AND prai.product_id IN ($placeholders) '
-          'ORDER BY pra.id ASC',
-          variables: [
-            drift.Variable.withInt(purchase.supplierId),
-            ...productIds.map((id) => drift.Variable.withInt(id)),
-          ],
-        ).get();
+        final rows = await _db
+            .customSelect(
+              'SELECT DISTINCT pra.id AS rid, pra.return_number AS rnum, '
+              '       pra.total_cents AS total_cents, pra.refund_method AS refund '
+              'FROM ${warehouseScope?.documents(InventoryPostingDocument.purchaseAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseAdjustment)} pra '
+              'JOIN purchase_return_adjustment_items prai ON prai.return_id = pra.id '
+              'WHERE pra.supplier_id = ? AND pra.status = \'posted\' '
+              '  AND prai.product_id IN ($placeholders) '
+              '  AND EXISTS (SELECT 1 FROM purchase_items pi '
+              '    WHERE pi.purchase_id = ? AND pi.product_id = prai.product_id '
+              '    AND ${WarehouseDocumentScope.operationalVariant('pi')} '
+              '      IS ${WarehouseDocumentScope.operationalVariant('prai')}) '
+              'ORDER BY pra.id ASC',
+              variables: [
+                drift.Variable.withInt(purchase.supplierId),
+                ...productIds.map((id) => drift.Variable.withInt(id)),
+                drift.Variable.withInt(purchaseId),
+              ],
+            )
+            .get();
         for (final r in rows) {
           final id = r.read<int>('rid');
           entangledByReturnId[id] = EntangledAdjustmentReturn(
@@ -255,38 +356,31 @@ class VoidImpactAnalyzer {
     final negativeRisks = <NegativeStockRisk>[];
     if (purchase.status == 'posted') {
       for (final item in items) {
-        int currentStock;
-        if (item.variantId != null) {
-          final r = await _db.customSelect(
-            'SELECT stock_quantity FROM product_variants WHERE id = ?',
-            variables: [drift.Variable.withInt(item.variantId!)],
-          ).getSingleOrNull();
-          currentStock = r?.read<int>('stock_quantity') ?? 0;
-        } else {
-          final r = await _db.customSelect(
-            'SELECT stock_quantity FROM products WHERE id = ?',
-            variables: [drift.Variable.withInt(item.productId)],
-          ).getSingleOrNull();
-          currentStock = r?.read<int>('stock_quantity') ?? 0;
-        }
+        final currentStock = await _currentStock(
+          item.productId,
+          item.variantId,
+        );
         if (currentStock < item.quantity) {
-          negativeRisks.add(NegativeStockRisk(
-            productId: item.productId,
-            variantId: item.variantId,
-            currentStock: currentStock,
-            requiredQuantity: item.quantity,
-          ));
+          negativeRisks.add(
+            NegativeStockRisk(
+              productId: item.productId,
+              variantId: item.variantId,
+              currentStock: currentStock,
+              requiredQuantity: item.quantity,
+            ),
+          );
         }
       }
     }
 
     // Voiding a credit purchase reverses Cr 2000 AP. For cash purchases
     // it reverses Cr 1000 / 1010.
-    final isCreditPurchase = purchase.paymentMethod == 'credit' ||
+    final isCreditPurchase =
+        purchase.paymentMethod == 'credit' ||
         purchase.paymentMethod == 'cheque';
     final estApDelta = isCreditPurchase
         ? -(purchase.totalCents.toBigInt().toInt() -
-            purchase.paidAmountCents.toBigInt().toInt())
+              purchase.paidAmountCents.toBigInt().toInt())
         : 0;
     final estInventoryDelta = -items.fold<int>(
       0,
@@ -361,18 +455,17 @@ class VoidImpactReport {
   factory VoidImpactReport.empty({
     required String side,
     required bool documentExists,
-  }) =>
-      VoidImpactReport(
-        side: side,
-        documentExists: documentExists,
-        documentStatus: '',
-        linkedReturns: const [],
-        adjustmentAllocatedQty: 0,
-        entangledAdjustmentReturns: const [],
-        negativeStockRisks: const [],
-        estimatedArAdjustmentCents: 0,
-        estimatedInventoryAdjustmentCents: 0,
-      );
+  }) => VoidImpactReport(
+    side: side,
+    documentExists: documentExists,
+    documentStatus: '',
+    linkedReturns: const [],
+    adjustmentAllocatedQty: 0,
+    entangledAdjustmentReturns: const [],
+    negativeStockRisks: const [],
+    estimatedArAdjustmentCents: 0,
+    estimatedInventoryAdjustmentCents: 0,
+  );
 
   /// True iff at least one HARD condition would corrupt the books if the
   /// void proceeded as-is. The UI must REFUSE to confirm and instead
@@ -435,7 +528,8 @@ class VoidBlockedByImpactException implements Exception {
   VoidBlockedByImpactException(this.report);
 
   @override
-  String toString() => 'VoidBlockedByImpactException: ${report.side} void '
+  String toString() =>
+      'VoidBlockedByImpactException: ${report.side} void '
       'rejected — '
       '${report.entangledAdjustmentReturns.length} entangled adjustment '
       'returns, ${report.negativeStockRisks.length} negative-stock risks.';

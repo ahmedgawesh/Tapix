@@ -4,6 +4,12 @@ part of 'inventory_adjustment_dao.dart';
 
 // ignore_for_file: type=lint
 mixin _$InventoryAdjustmentDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessOrganizationsTable get businessOrganizations =>
+      attachedDatabase.businessOrganizations;
+  $BusinessBranchesTable get businessBranches =>
+      attachedDatabase.businessBranches;
+  $BusinessWarehousesTable get businessWarehouses =>
+      attachedDatabase.businessWarehouses;
   $ProductCategoriesTable get productCategories =>
       attachedDatabase.productCategories;
   $CurrenciesTable get currencies => attachedDatabase.currencies;
@@ -22,6 +28,21 @@ mixin _$InventoryAdjustmentDaoMixin on DatabaseAccessor<AppDatabase> {
 class InventoryAdjustmentDaoManager {
   final _$InventoryAdjustmentDaoMixin _db;
   InventoryAdjustmentDaoManager(this._db);
+  $$BusinessOrganizationsTableTableManager get businessOrganizations =>
+      $$BusinessOrganizationsTableTableManager(
+        _db.attachedDatabase,
+        _db.businessOrganizations,
+      );
+  $$BusinessBranchesTableTableManager get businessBranches =>
+      $$BusinessBranchesTableTableManager(
+        _db.attachedDatabase,
+        _db.businessBranches,
+      );
+  $$BusinessWarehousesTableTableManager get businessWarehouses =>
+      $$BusinessWarehousesTableTableManager(
+        _db.attachedDatabase,
+        _db.businessWarehouses,
+      );
   $$ProductCategoriesTableTableManager get productCategories =>
       $$ProductCategoriesTableTableManager(
         _db.attachedDatabase,

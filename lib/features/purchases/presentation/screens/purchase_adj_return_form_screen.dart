@@ -21,6 +21,7 @@ import '../../../../core/widgets/inputs/select_all_on_focus.dart';
 import '../../../../core/widgets/pin_verification_dialog.dart';
 import '../../../../core/widgets/action_confirmation_dialog.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
+import '../../../settings/data/services/app_settings_service.dart';
 import '../bloc/purchase_adj_return_form_bloc.dart';
 
 class PurchaseAdjReturnFormScreen extends StatelessWidget {
@@ -60,6 +61,7 @@ class PurchaseAdjReturnFormScreen extends StatelessWidget {
           sl<AdjustmentReturnDao>(),
           sl<JournalEntryService>(),
           lan: sl<LanNetworkService>(),
+          settings: sl<AppSettingsService>(),
         );
         if (supplierId != null && supplierName != null) {
           bloc.add(
@@ -577,6 +579,7 @@ class _FormView extends StatelessWidget {
                 measurementType: product.measurementType,
                 unitPriceCents: variantReferencePrice,
                 taxRateBps: product.purchaseTaxRateBps,
+                isTaxable: product.isTaxable,
               ),
             );
           }
@@ -595,6 +598,7 @@ class _FormView extends StatelessWidget {
               measurementType: product.measurementType,
               unitPriceCents: referencePrice,
               taxRateBps: product.purchaseTaxRateBps,
+              isTaxable: product.isTaxable,
             ),
           );
         }
@@ -1348,8 +1352,11 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                               const SizedBox(height: 8),
                               _summaryRow(
                                 theme,
-                                'purchases.tax'.tr(),
-                                '+ ${curr.format(state.totalAdjustedTaxCents)}',
+                                (state.taxInclusivePricing
+                                        ? 'returns.tax_included'
+                                        : 'purchases.tax')
+                                    .tr(),
+                                '${state.taxInclusivePricing ? '' : '+ '}${curr.format(state.totalAdjustedTaxCents)}',
                                 valueColor: cs.tertiary,
                               ),
                             ],
@@ -1569,11 +1576,14 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   }) => Row(
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [
-      Text(
-        l,
-        style: (isBold ? t.textTheme.titleSmall : t.textTheme.bodyMedium)
-            ?.copyWith(color: isBold ? null : t.colorScheme.onSurfaceVariant),
+      Expanded(
+        child: Text(
+          l,
+          style: (isBold ? t.textTheme.titleSmall : t.textTheme.bodyMedium)
+              ?.copyWith(color: isBold ? null : t.colorScheme.onSurfaceVariant),
+        ),
       ),
+      const SizedBox(width: 12),
       Text(
         v,
         style: (isBold ? t.textTheme.titleMedium : t.textTheme.bodyMedium)
@@ -2025,11 +2035,13 @@ class _ItemEditSheetState extends State<_ItemEditSheet> {
     quantityScale: widget.item.quantityScale,
   );
   int get _liveDiscount => _computeDiscountCents();
-  int get _liveNet => (_liveSubtotal - _liveDiscount).clamp(0, 999999999);
-  int get _liveTax => widget.item.taxRateBps > 0
-      ? (_liveNet * widget.item.taxRateBps / 10000).round()
-      : 0;
-  int get _liveTotal => _liveNet + _liveTax;
+  AdjReturnLineItem get _liveItem => widget.item.copyWith(
+    unitPriceCents: _livePriceCents,
+    discountCents: _liveDiscount,
+    discountPercentBps: 0,
+  );
+  int get _liveTax => _liveItem.taxCents;
+  int get _liveTotal => _liveItem.totalCents;
 
   @override
   Widget build(BuildContext context) {
@@ -2229,7 +2241,10 @@ class _ItemEditSheetState extends State<_ItemEditSheet> {
                   Icon(LucideIcons.percent, size: 16, color: cs.tertiary),
                   const SizedBox(width: 8),
                   Text(
-                    'purchases.tax'.tr(),
+                    (item.taxInclusivePricing
+                            ? 'returns.tax_included'
+                            : 'purchases.tax')
+                        .tr(),
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: cs.onSurfaceVariant,
                     ),
@@ -2299,13 +2314,16 @@ class _ItemEditSheetState extends State<_ItemEditSheet> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'purchases.tax'.tr(),
+                        (item.taxInclusivePricing
+                                ? 'returns.tax_included'
+                                : 'purchases.tax')
+                            .tr(),
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: cs.onSurfaceVariant,
                         ),
                       ),
                       Text(
-                        '+${curr.format(_liveTax)}',
+                        '${item.taxInclusivePricing ? '' : '+'}${curr.format(_liveTax)}',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: cs.tertiary,
                         ),

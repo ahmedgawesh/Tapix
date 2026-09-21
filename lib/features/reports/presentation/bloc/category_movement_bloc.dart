@@ -1,7 +1,10 @@
+import '../../../../core/services/business/warehouse_read_scope.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+import '../../../../core/services/business/warehouse_document_scope.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -243,18 +246,51 @@ class CategoryMovementData {
 class CategoryMovementBloc
     extends RealtimeBloc<CategoryMovementData, CategoryMovementEvent> {
   final AppDatabase _db;
+  final WarehouseReadScope? warehouseScope;
   ReportDateRange _dateRange;
   String _searchQuery = '';
   int? _selectedCategoryId;
   CategoryMovementSort _sort = CategoryMovementSort.mostActive;
 
-  CategoryMovementBloc(this._db, {String defaultDateRange = 'month'})
-    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-      super(const RealtimeLoading());
+  CategoryMovementBloc(
+    this._db, {
+    String defaultDateRange = 'month',
+    this.warehouseScope,
+  }) : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+       super(const RealtimeLoading());
 
   @override
   Stream<CategoryMovementData> get dataStream {
-    return _db.select(_db.sales).watch().asyncMap((_) => _loadData());
+    return _db
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.customers,
+            _db.productCategories,
+            _db.productColors,
+            _db.productVariants,
+            _db.products,
+            _db.purchaseItems,
+            _db.purchaseReturnAdjustmentItems,
+            _db.purchaseReturnAdjustments,
+            _db.purchaseReturnItems,
+            _db.purchaseReturns,
+            _db.purchases,
+            _db.saleItems,
+            _db.saleReturnAdjustmentItems,
+            _db.saleReturnAdjustments,
+            _db.saleReturnItems,
+            _db.saleReturns,
+            _db.sales,
+            _db.sizes,
+            _db.suppliers,
+          },
+        )
+        .watch()
+        .asyncMap(
+          (_) => WarehouseReadScope.snapshot(_db, warehouseScope, _loadData),
+        );
   }
 
   @override
@@ -413,7 +449,7 @@ class CategoryMovementBloc
         pv.sku AS variant_sku,
         pi.variant_id AS vid
       FROM purchase_items pi
-      INNER JOIN purchases pu ON pu.id = pi.purchase_id
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchase) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} pu ON pu.id = pi.purchase_id
       INNER JOIN products p ON p.id = pi.product_id
       LEFT JOIN suppliers sup ON sup.id = pu.supplier_id
       LEFT JOIN product_variants pv ON pv.id = pi.variant_id
@@ -430,6 +466,7 @@ class CategoryMovementBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.purchaseItems,
             _db.purchases,
             _db.products,
@@ -482,7 +519,7 @@ class CategoryMovementBloc
         pv.sku AS variant_sku,
         si.variant_id AS vid
       FROM sale_items si
-      INNER JOIN sales s ON s.id = si.sale_id
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s ON s.id = si.sale_id
       INNER JOIN products p ON p.id = si.product_id
       LEFT JOIN customers c ON c.id = s.customer_id
       LEFT JOIN product_variants pv ON pv.id = si.variant_id
@@ -499,6 +536,7 @@ class CategoryMovementBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.saleItems,
             _db.sales,
             _db.products,
@@ -551,7 +589,7 @@ class CategoryMovementBloc
         pv.sku AS variant_sku,
         si.variant_id AS vid
       FROM sale_return_items sri
-      INNER JOIN sale_returns sr ON sr.id = sri.return_id
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr ON sr.id = sri.return_id
       INNER JOIN sale_items si ON si.id = sri.sale_item_id
       INNER JOIN sales s ON s.id = sr.sale_id
       INNER JOIN products p ON p.id = si.product_id
@@ -570,6 +608,7 @@ class CategoryMovementBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.saleReturnItems,
             _db.saleReturns,
             _db.saleItems,
@@ -624,7 +663,7 @@ class CategoryMovementBloc
         pv.sku AS variant_sku,
         srai.variant_id AS vid
       FROM sale_return_adjustment_items srai
-      INNER JOIN sale_return_adjustments sra ON sra.id = srai.return_id
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra ON sra.id = srai.return_id
       INNER JOIN products p ON p.id = srai.product_id
       LEFT JOIN customers c ON c.id = sra.customer_id
       LEFT JOIN product_variants pv ON pv.id = srai.variant_id
@@ -641,6 +680,7 @@ class CategoryMovementBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.saleReturnAdjustmentItems,
             _db.saleReturnAdjustments,
             _db.products,
@@ -693,7 +733,7 @@ class CategoryMovementBloc
         pv.sku AS variant_sku,
         pi.variant_id AS vid
       FROM purchase_return_items pri
-      INNER JOIN purchase_returns pr ON pr.id = pri.return_id
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchaseReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseReturn)} pr ON pr.id = pri.return_id
       INNER JOIN purchase_items pi ON pi.id = pri.purchase_item_id
       INNER JOIN purchases pu ON pu.id = pr.purchase_id
       INNER JOIN products p ON p.id = pi.product_id
@@ -712,6 +752,7 @@ class CategoryMovementBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.purchaseReturnItems,
             _db.purchaseReturns,
             _db.purchaseItems,
@@ -766,7 +807,7 @@ class CategoryMovementBloc
         pv.sku AS variant_sku,
         prai.variant_id AS vid
       FROM purchase_return_adjustment_items prai
-      INNER JOIN purchase_return_adjustments pra ON pra.id = prai.return_id
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchaseAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseAdjustment)} pra ON pra.id = prai.return_id
       INNER JOIN products p ON p.id = prai.product_id
       LEFT JOIN suppliers sup ON sup.id = pra.supplier_id
       LEFT JOIN product_variants pv ON pv.id = prai.variant_id
@@ -783,6 +824,7 @@ class CategoryMovementBloc
             Variable.withString(endIso),
           ],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.purchaseReturnAdjustmentItems,
             _db.purchaseReturnAdjustments,
             _db.products,

@@ -1,3 +1,4 @@
+import '../presentation/widgets/warehouse_report_context.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -154,9 +155,13 @@ class ProfitReportsPdfService {
   ) async {
     final lang = context.locale.languageCode;
     final isRtl = lang == 'ar';
+    final reportLocation = WarehouseReportContext.maybeOf(context);
     final fonts = await _loadFonts();
     final cs = sl<CurrencyService>();
-    final company = await sl<CompanyProfileService>().getProfile();
+    await reportLocation?.scope.checkAccess();
+    final loadedCompany = await sl<CompanyProfileService>().getProfile();
+    final company =
+        reportLocation?.decorateCompany(loadedCompany) ?? loadedCompany;
     final dir = isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr;
     final s = data.summary;
 
@@ -208,9 +213,13 @@ class ProfitReportsPdfService {
   ) async {
     final lang = context.locale.languageCode;
     final isRtl = lang == 'ar';
+    final reportLocation = WarehouseReportContext.maybeOf(context);
     final fonts = await _loadFonts();
     final cs = sl<CurrencyService>();
-    final company = await sl<CompanyProfileService>().getProfile();
+    await reportLocation?.scope.checkAccess();
+    final loadedCompany = await sl<CompanyProfileService>().getProfile();
+    final company =
+        reportLocation?.decorateCompany(loadedCompany) ?? loadedCompany;
     final dir = isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr;
 
     final pdf = pw.Document();
@@ -268,9 +277,13 @@ class ProfitReportsPdfService {
   ) async {
     final lang = context.locale.languageCode;
     final isRtl = lang == 'ar';
+    final reportLocation = WarehouseReportContext.maybeOf(context);
     final fonts = await _loadFonts();
     final cs = sl<CurrencyService>();
-    final company = await sl<CompanyProfileService>().getProfile();
+    await reportLocation?.scope.checkAccess();
+    final loadedCompany = await sl<CompanyProfileService>().getProfile();
+    final company =
+        reportLocation?.decorateCompany(loadedCompany) ?? loadedCompany;
     final dir = isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr;
 
     final pdf = pw.Document();
@@ -328,9 +341,13 @@ class ProfitReportsPdfService {
   ) async {
     final lang = context.locale.languageCode;
     final isRtl = lang == 'ar';
+    final reportLocation = WarehouseReportContext.maybeOf(context);
     final fonts = await _loadFonts();
     final cs = sl<CurrencyService>();
-    final company = await sl<CompanyProfileService>().getProfile();
+    await reportLocation?.scope.checkAccess();
+    final loadedCompany = await sl<CompanyProfileService>().getProfile();
+    final company =
+        reportLocation?.decorateCompany(loadedCompany) ?? loadedCompany;
     final dir = isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr;
 
     final pdf = pw.Document();
@@ -386,9 +403,13 @@ class ProfitReportsPdfService {
   ) async {
     final lang = context.locale.languageCode;
     final isRtl = lang == 'ar';
+    final reportLocation = WarehouseReportContext.maybeOf(context);
     final fonts = await _loadFonts();
     final cs = sl<CurrencyService>();
-    final company = await sl<CompanyProfileService>().getProfile();
+    await reportLocation?.scope.checkAccess();
+    final loadedCompany = await sl<CompanyProfileService>().getProfile();
+    final company =
+        reportLocation?.decorateCompany(loadedCompany) ?? loadedCompany;
     final dir = isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr;
 
     final pdf = pw.Document();

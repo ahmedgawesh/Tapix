@@ -253,7 +253,7 @@ class BulkProductBloc extends Bloc<BulkProductEvent, BulkProductState> {
               costCents: row.costCents,
               priceCents: row.priceCents,
               wholesalePriceCents: row.wholesalePriceCents,
-              stockQuantity: row.stockQuantity,
+              stockQuantity: 0,
               minQuantity: row.minQuantity,
               categoryId: row.categoryId,
               hasVariants: row.hasVariants,

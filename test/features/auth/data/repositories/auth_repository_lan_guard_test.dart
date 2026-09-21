@@ -25,6 +25,7 @@ void main() {
   late AuthRepository repository;
 
   setUp(() async {
+    FlutterSecureStorage.setMockInitialValues({});
     masterDb = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
     clientDb = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
     final now = DateTime.now();

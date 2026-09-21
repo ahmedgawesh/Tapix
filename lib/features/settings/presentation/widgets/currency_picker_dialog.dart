@@ -32,6 +32,7 @@ class CurrencyPickerDialog extends StatefulWidget {
 class _CurrencyPickerDialogState extends State<CurrencyPickerDialog> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
+  bool _saving = false;
 
   @override
   void dispose() {
@@ -93,7 +94,9 @@ class _CurrencyPickerDialogState extends State<CurrencyPickerDialog> {
                   IconButton(
                     icon: const Icon(LucideIcons.plus),
                     tooltip: 'currency_picker.add_custom'.tr(),
-                    onPressed: () => _showAddCustomCurrencyDialog(context),
+                    onPressed: _saving
+                        ? null
+                        : () => _showAddCustomCurrencyDialog(context),
                   ),
                 ],
               ),
@@ -133,11 +136,26 @@ class _CurrencyPickerDialogState extends State<CurrencyPickerDialog> {
             const SizedBox(height: 4),
             // Currency list
             Expanded(
-              child: BlocBuilder<CurrencyBloc, RealtimeState<Currency>>(
+              child: BlocConsumer<CurrencyBloc, RealtimeState<Currency>>(
+                listener: (context, state) {
+                  if (!_saving) return;
+                  if (state is RealtimeSuccess<Currency>) {
+                    _saving = false;
+                    Navigator.of(context).pop();
+                  } else if (state is RealtimeError<Currency>) {
+                    setState(() => _saving = false);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('currency_picker.save_failed'.tr()),
+                      ),
+                    );
+                  }
+                },
                 builder: (context, state) {
                   final currentCurrency = state is RealtimeSuccess<Currency>
                       ? state.data
-                      : Currency.supportedCurrencies.first;
+                      : context.read<CurrencyBloc>().currentData ??
+                            Currency.supportedCurrencies.first;
 
                   final currencies = _filteredCurrencies(currentCurrency.code);
 
@@ -248,12 +266,14 @@ class _CurrencyPickerDialogState extends State<CurrencyPickerDialog> {
                               )
                             : null,
                         selected: isSelected,
-                        onTap: () {
-                          context.read<CurrencyBloc>().add(
-                            CurrencyChanged(currency.code),
-                          );
-                          Navigator.of(context).pop();
-                        },
+                        onTap: _saving
+                            ? null
+                            : () {
+                                setState(() => _saving = true);
+                                context.read<CurrencyBloc>().add(
+                                  CurrencyChanged(currency.code),
+                                );
+                              },
                       );
                     },
                   );
@@ -273,12 +293,10 @@ class _CurrencyPickerDialogState extends State<CurrencyPickerDialog> {
     );
 
     if (result != null && parentContext.mounted) {
+      setState(() => _saving = true);
       parentContext.read<CurrencyBloc>().add(
         CustomCurrencyAdded(result, setAsActive: true),
       );
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
     }
   }
 }

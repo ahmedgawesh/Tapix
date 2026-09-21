@@ -1,3 +1,9 @@
+import 'dart:convert';
+import 'package:bcrypt/bcrypt.dart';
+import 'package:crypto/crypto.dart';
+import 'package:tapix/core/services/business/local_branch_scope.dart';
+import 'package:tapix/core/services/lan/lan_tls_identity.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:io';
 
 import 'package:drift/drift.dart' hide isNotNull, isNull;
@@ -51,10 +57,115 @@ void main() {
       pairingCode: master.snapshot.pairingCode!,
       deviceName: name,
     );
-    expect(result.success, isTrue);
+    expect(result.success, isTrue, reason: result.message);
+  }
+
+  Future<({int status, Map<String, dynamic> body})> rawRequest({
+    String path = '/v1/business/scope',
+    String method = 'GET',
+    Map<String, String> headers = const {},
+    Map<String, dynamic>? body,
+    String? userToken,
+    bool authorizeDevice = true,
+  }) async {
+    final http = HttpClient();
+    final fingerprint = master.snapshot.pairingCode!.split(':').last;
+    http.badCertificateCallback = (certificate, host, port) =>
+        sha256.convert(certificate.der).toString() == fingerprint;
+    try {
+      final request = await http.openUrl(
+        method,
+        Uri.parse('https://127.0.0.1:${master.snapshot.port}$path'),
+      );
+      if (authorizeDevice) {
+        final token = await SettingsDao(
+          clientDb,
+        ).getSetting('lan.client_token.v2');
+        request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+      }
+      if (userToken != null) {
+        request.headers.set('X-Tapix-User-Session', userToken);
+      }
+      headers.forEach(request.headers.set);
+      if (body != null) {
+        request.headers.contentType = ContentType.json;
+        request.write(jsonEncode(body));
+      }
+      final response = await request.close();
+      final decoded = jsonDecode(await utf8.decoder.bind(response).join());
+      return (
+        status: response.statusCode,
+        body: Map<String, dynamic>.from(decoded as Map),
+      );
+    } finally {
+      http.close(force: true);
+    }
+  }
+
+  Future<String> rawLogin() async {
+    await addMasterUser(
+      username: 'scope-manager',
+      password: 'scope-password',
+      role: 'manager',
+    );
+    final challenge = await rawRequest(
+      method: 'POST',
+      path: '/v1/auth/challenge',
+      body: {'username': 'scope-manager'},
+    );
+    expect(challenge.status, 200);
+    final id = challenge.body['challengeId'];
+    final nonce = challenge.body['nonce'];
+    final deviceId = await SettingsDao(clientDb).getSetting('lan.device_id');
+    final verifier = BCrypt.hashpw(
+      'scope-password',
+      challenge.body['salt'] as String,
+    );
+    final proof = Hmac(
+      sha256,
+      utf8.encode(verifier),
+    ).convert(utf8.encode('$id:$nonce:$deviceId')).toString();
+    final login = await rawRequest(
+      method: 'POST',
+      path: '/v1/auth/login',
+      body: {'challengeId': id, 'proof': proof},
+    );
+    expect(login.status, 200);
+    return login.body['sessionToken'] as String;
+  }
+
+  Future<void> modifyStoredBinding(
+    Object? Function(Map<String, dynamic>) update, {
+    bool legacy = false,
+  }) async {
+    await master.stop();
+    final settings = SettingsDao(masterDb);
+    final devices =
+        jsonDecode((await settings.getSetting('lan.authorized_devices.v2'))!)
+            as Map<String, dynamic>;
+    for (final value in devices.values) {
+      final device = value as Map<String, dynamic>;
+      final replacement = update(device);
+      if (replacement == null) {
+        device.remove('businessScope');
+      } else {
+        device['businessScope'] = replacement;
+      }
+    }
+    await settings.saveSetting(
+      'lan.authorized_devices.v2',
+      jsonEncode(devices),
+    );
+    if (legacy) {
+      await (masterDb.delete(
+        masterDb.appSettings,
+      )..where((s) => s.key.equals('lan.scope_binding.v1'))).go();
+    }
+    await master.initialize();
   }
 
   setUp(() async {
+    FlutterSecureStorage.setMockInitialValues({});
     masterDb = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
     clientDb = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
     final gateway = LanMasterAuthGatewayImpl(
@@ -86,6 +197,43 @@ void main() {
   });
 
   test(
+    'checkout balance and points require a paired authenticated cashier',
+    () async {
+      await pairClient();
+      expect(
+        (await rawRequest(
+          path: '/v1/customers/3/checkout',
+          authorizeDevice: false,
+        )).status,
+        401,
+      );
+      expect((await rawRequest(path: '/v1/customers/3/checkout')).status, 401);
+      final user = await addMasterUser(
+        username: 'checkout',
+        password: 'checkout-secret',
+        role: 'cashier',
+      );
+      expect(
+        (await client.loginToMaster(
+          username: 'checkout',
+          password: 'checkout-secret',
+        )).success,
+        isTrue,
+      );
+      final result = await client.fetchRemoteCustomerCheckout(3);
+      expect(result.balanceCents, 12345);
+      expect(result.pointsBalance, 765);
+      expect(result.currencyCode, 'USD');
+      await (masterDb.update(masterDb.users)..where((u) => u.id.equals(user)))
+          .write(const UsersCompanion(isActive: Value(0)));
+      await expectLater(
+        client.fetchRemoteCustomerCheckout(3),
+        throwsA(isA<LanBusinessException>()),
+      );
+    },
+  );
+
+  test(
     'master rejects a wrong code then pairs and authenticates a client device',
     () async {
       await master.startMaster(port: 0);
@@ -93,12 +241,12 @@ void main() {
       expect(master.snapshot.mode, LanMode.master);
       expect(master.snapshot.status, LanConnectionStatus.online);
       expect(master.snapshot.port, greaterThan(0));
-      expect(master.snapshot.pairingCode, hasLength(6));
+      expect(master.snapshot.pairingCode, matches(r'^[0-9]{6}:[a-f0-9]{64}$'));
 
       final rejected = await client.pairWithMaster(
         host: '127.0.0.1',
         port: master.snapshot.port,
-        pairingCode: '000000',
+        pairingCode: '000000:${master.snapshot.pairingCode!.split(':').last}',
         deviceName: 'Test cashier',
       );
       expect(rejected.success, isFalse);
@@ -112,7 +260,7 @@ void main() {
         deviceName: 'Test cashier',
       );
 
-      expect(paired.success, isTrue);
+      expect(paired.success, isTrue, reason: paired.message);
       expect(paired.masterId, isNotEmpty);
       expect(client.snapshot.mode, LanMode.client);
       expect(client.snapshot.status, LanConnectionStatus.paired);
@@ -1098,9 +1246,251 @@ void main() {
     expect(client.remoteUser, isNull);
     expect(client.hasRemoteUserSession, isFalse);
   });
+  test('certificate identity survives recreating the master service', () async {
+    await pairClient();
+    final fingerprint = master.snapshot.pairingCode!.split(':').last;
+    await master.stop();
+    master = LanNetworkService(SettingsDao(masterDb));
+    await master.initialize();
+    expect(master.snapshot.pairingCode!.split(':').last, fingerprint);
+    expect(await client.testConnection(), isTrue);
+  });
+
+  test(
+    'a replacement server cannot receive existing session credentials',
+    () async {
+      await addMasterUser(
+        username: 'tls-cashier',
+        password: 'secret-password',
+        role: 'cashier',
+      );
+      await pairClient();
+      expect(
+        (await client.loginToMaster(
+          username: 'tls-cashier',
+          password: 'secret-password',
+        )).success,
+        isTrue,
+      );
+      final port = master.snapshot.port;
+      await master.stop();
+      final identity = await LanTlsIdentity.loadOrCreate('different-device');
+      final rogue = await HttpServer.bindSecure(
+        InternetAddress.loopbackIPv4,
+        port,
+        identity.context,
+      );
+      var requests = 0;
+      rogue.listen((request) async {
+        requests++;
+        request.response.write('{}');
+        await request.response.close();
+      }, onError: (Object _) {});
+      try {
+        await expectLater(client.fetchRemoteCatalog(), throwsA(anything));
+        expect(requests, 0);
+      } finally {
+        await rogue.close(force: true);
+      }
+    },
+  );
+
+  test(
+    'paired device is bound to the master scope, not the client database',
+    () async {
+      await pairClient();
+      final masterScope = await LocalBranchScope.read(masterDb);
+      final clientScope = await LocalBranchScope.read(clientDb);
+      expect(masterScope.databaseId, isNot(clientScope.databaseId));
+      final stored =
+          jsonDecode(
+                (await SettingsDao(
+                  masterDb,
+                ).getSetting('lan.authorized_devices.v2'))!,
+              )
+              as Map;
+      expect(
+        masterScope.matchesBinding(
+          (stored.values.single as Map)['businessScope'],
+        ),
+        isTrue,
+      );
+      expect(await client.testConnection(), isTrue);
+    },
+  );
+
+  test(
+    'scope endpoint requires both device authorization and a user session',
+    () async {
+      await pairClient();
+      expect((await rawRequest(authorizeDevice: false)).status, 401);
+      expect((await rawRequest()).status, 401);
+      final token = await rawLogin();
+      final response = await rawRequest(userToken: token);
+      expect(response.status, 200);
+      expect(
+        response.body['scope'],
+        (await LocalBranchScope.read(masterDb)).toJson(),
+      );
+      final health = await rawRequest(
+        path: '/v1/health',
+        authorizeDevice: false,
+      );
+      expect(health.body.containsKey('scope'), isFalse);
+      expect(health.body.containsKey('branchId'), isFalse);
+    },
+  );
+
+  test(
+    'even a manager cannot select another scope through headers, query or JSON',
+    () async {
+      await pairClient();
+      final token = await rawLogin();
+      final scope = await LocalBranchScope.read(masterDb);
+      for (final entry in scope.toJson().entries) {
+        expect(
+          (await rawRequest(
+            path: '/v1/business/scope?${entry.key}=foreign',
+            userToken: token,
+          )).status,
+          403,
+        );
+      }
+      expect(
+        (await rawRequest(
+          headers: {'X-Tapix-Branch-Id': 'foreign'},
+          userToken: token,
+        )).status,
+        403,
+      );
+      expect(
+        (await rawRequest(
+          path:
+              '/v1/business/scope?branchId=${scope.branchId}&branchId=foreign',
+          userToken: token,
+        )).status,
+        403,
+      );
+      expect(
+        (await rawRequest(
+          method: 'POST',
+          path: '/v1/shifts/open',
+          userToken: token,
+          body: {'warehouse_id': 'foreign'},
+        )).status,
+        403,
+      );
+      expect(businessGateway.currentShift, isNull);
+      final matching = await rawRequest(
+        path: '/v1/business/scope?warehouseId=${scope.warehouseId}',
+        userToken: token,
+      );
+      expect(matching.status, 200);
+    },
+  );
+
+  test(
+    'a foreign or partial device binding is rejected without reassignment',
+    () async {
+      await pairClient();
+      await modifyStoredBinding(
+        (device) => {...device['businessScope'] as Map, 'branchId': 'foreign'},
+      );
+      expect(await client.testConnection(), isFalse);
+      final saved =
+          jsonDecode(
+                (await SettingsDao(
+                  masterDb,
+                ).getSetting('lan.authorized_devices.v2'))!,
+              )
+              as Map;
+      expect(
+        ((saved.values.single as Map)['businessScope'] as Map)['branchId'],
+        'foreign',
+      );
+    },
+  );
+
+  test('legacy TLS devices are bound once and keep their credential', () async {
+    await pairClient();
+    final token = await SettingsDao(clientDb).getSetting('lan.client_token.v2');
+    await modifyStoredBinding((_) => null, legacy: true);
+    expect(await client.testConnection(), isTrue);
+    expect(
+      await SettingsDao(clientDb).getSetting('lan.client_token.v2'),
+      token,
+    );
+    final saved =
+        jsonDecode(
+              (await SettingsDao(
+                masterDb,
+              ).getSetting('lan.authorized_devices.v2'))!,
+            )
+            as Map;
+    expect(
+      (await LocalBranchScope.read(
+        masterDb,
+      )).matchesBinding((saved.values.single as Map)['businessScope']),
+      isTrue,
+    );
+    await modifyStoredBinding((_) => null);
+    expect(await client.testConnection(), isFalse);
+  });
+
+  test(
+    'partial legacy bindings are never upgraded into authorization',
+    () async {
+      await pairClient();
+      await modifyStoredBinding((_) => {'branchId': 'partial'}, legacy: true);
+      expect(await client.testConnection(), isFalse);
+    },
+  );
+
+  test(
+    'deactivating the master warehouse stops authenticated network operations',
+    () async {
+      await pairClient();
+      final token = await rawLogin();
+      final scope = await LocalBranchScope.read(masterDb);
+      await (masterDb.update(masterDb.businessWarehouses)
+            ..where((w) => w.id.equals(scope.warehouseId)))
+          .write(const BusinessWarehousesCompanion(isActive: Value(false)));
+      expect((await rawRequest(userToken: token)).status, 503);
+      expect(await client.testConnection(), isFalse);
+      await (masterDb.update(masterDb.businessWarehouses)
+            ..where((w) => w.id.equals(scope.warehouseId)))
+          .write(const BusinessWarehousesCompanion(isActive: Value(true)));
+      expect((await rawRequest(userToken: token)).status, 200);
+    },
+  );
+
+  test(
+    'legacy plaintext device tokens are not imported into TLS authorization',
+    () async {
+      await SettingsDao(masterDb).saveSetting(
+        'lan.authorized_devices',
+        jsonEncode({
+          'legacy-device': {'tokenHash': 'legacy-hash', 'name': 'Old device'},
+        }),
+      );
+      await master.initialize();
+      await master.startMaster(port: 0);
+      expect(master.snapshot.pairedDevices, 0);
+    },
+  );
 }
 
 class _FakeBusinessGateway implements LanMasterBusinessGateway {
+  @override
+  Future<LanCustomerCheckout> fetchCustomerCheckout(int customerId) async =>
+      LanCustomerCheckout(
+        customerId: customerId,
+        currencyId: 1,
+        currencyCode: 'USD',
+        balanceCents: 12345,
+        pointsBalance: 765,
+      );
+
   final Set<String> createdKeys = <String>{};
   final Set<String> createdReturnKeys = <String>{};
   final Set<String> createdAdjustmentReturnKeys = <String>{};

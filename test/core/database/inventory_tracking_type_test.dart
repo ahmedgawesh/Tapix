@@ -32,7 +32,9 @@ void main() {
       String costingMethod = 'wac',
       int stock = 0,
     }) async {
-      final id = await db.into(db.products).insert(
+      final id = await db
+          .into(db.products)
+          .insert(
             ProductsCompanion.insert(
               name: name,
               costCents: Decimal.fromInt(1000),
@@ -50,11 +52,13 @@ void main() {
       expect(t, 'standard');
     });
 
-    test('getInventoryTrackingType — unknown product → defaults to standard',
-        () async {
-      final t = await productDao.getInventoryTrackingType(999999);
-      expect(t, 'standard');
-    });
+    test(
+      'getInventoryTrackingType — unknown product → defaults to standard',
+      () async {
+        final t = await productDao.getInventoryTrackingType(999999);
+        expect(t, 'standard');
+      },
+    );
 
     test('setInventoryTrackingType — happy path writes both columns', () async {
       final id = await insertProduct();
@@ -66,12 +70,17 @@ void main() {
       expect(lock1, isNull);
       expect(await productDao.getInventoryTrackingType(id), 'batch');
 
-      final row1 = await db.customSelect(
-        'SELECT costing_method FROM products WHERE id = ?',
-        variables: [Variable.withInt(id)],
-      ).getSingle();
-      expect(row1.read<String>('costing_method'), 'fifo',
-          reason: 'tracking=batch must keep legacy costing_method=fifo in sync');
+      final row1 = await db
+          .customSelect(
+            'SELECT costing_method FROM products WHERE id = ?',
+            variables: [Variable.withInt(id)],
+          )
+          .getSingle();
+      expect(
+        row1.read<String>('costing_method'),
+        'fifo',
+        reason: 'tracking=batch must keep legacy costing_method=fifo in sync',
+      );
 
       final lock2 = await productDao.setInventoryTrackingType(
         productId: id,
@@ -86,12 +95,17 @@ void main() {
       );
       expect(lock3, isNull);
       expect(await productDao.getInventoryTrackingType(id), 'standard');
-      final row3 = await db.customSelect(
-        'SELECT costing_method FROM products WHERE id = ?',
-        variables: [Variable.withInt(id)],
-      ).getSingle();
-      expect(row3.read<String>('costing_method'), 'wac',
-          reason: 'tracking=standard must keep legacy costing_method=wac in sync');
+      final row3 = await db
+          .customSelect(
+            'SELECT costing_method FROM products WHERE id = ?',
+            variables: [Variable.withInt(id)],
+          )
+          .getSingle();
+      expect(
+        row3.read<String>('costing_method'),
+        'wac',
+        reason: 'tracking=standard must keep legacy costing_method=wac in sync',
+      );
     });
 
     test('setInventoryTrackingType — refuses when stock > 0', () async {
@@ -101,51 +115,64 @@ void main() {
         productId: id,
         trackingType: 'batch',
       );
-      expect(lock, 'has_stock',
-          reason: 'lock must mirror setCostingMethod semantics');
+      expect(
+        lock,
+        'has_stock',
+        reason: 'lock must mirror setCostingMethod semantics',
+      );
       expect(await productDao.getInventoryTrackingType(id), 'standard');
     });
 
-    test('setInventoryTrackingType — refuses when consumptions exist',
-        () async {
-      final id = await insertProduct();
-      // Seed a batch + consumption so the lock fires on consumptions.
-      final batchId = await db.into(db.productBatches).insert(
-            ProductBatchesCompanion.insert(
-              productId: id,
-              batchNumber: 'BATCH-TEST-1',
-              receivedQuantity: 10,
-              remainingQuantity: 3,
-              unitCostCents: Decimal.fromInt(1000),
-            ),
-          );
-      await db.into(db.batchConsumptions).insert(
-            BatchConsumptionsCompanion.insert(
-              batchId: batchId,
-              consumptionType: 'sale',
-              direction: 'out',
-              quantity: 7,
-              unitCostCents: Decimal.fromInt(1000),
-            ),
-          );
+    test(
+      'setInventoryTrackingType — refuses when consumptions exist',
+      () async {
+        final id = await insertProduct();
+        // Seed a batch + consumption so the lock fires on consumptions.
+        final batchId = await db
+            .into(db.productBatches)
+            .insert(
+              ProductBatchesCompanion.insert(
+                productId: id,
+                batchNumber: 'BATCH-TEST-1',
+                receivedQuantity: 10,
+                remainingQuantity: 3,
+                unitCostCents: Decimal.fromInt(1000),
+              ),
+            );
+        await db
+            .into(db.batchConsumptions)
+            .insert(
+              BatchConsumptionsCompanion.insert(
+                batchId: batchId,
+                consumptionType: 'sale',
+                direction: 'out',
+                quantity: 7,
+                unitCostCents: Decimal.fromInt(1000),
+              ),
+            );
 
-      // Stock-flag check must not catch this case (stock = 0).
-      final lock = await productDao.setInventoryTrackingType(
-        productId: id,
-        trackingType: 'batch',
-      );
-      expect(lock, 'has_consumptions');
-    });
+        // Stock-flag check must not catch this case (stock = 0).
+        final lock = await productDao.setInventoryTrackingType(
+          productId: id,
+          trackingType: 'batch',
+        );
+        expect(lock, 'has_consumptions');
+      },
+    );
 
-    test('valid tracking types — assertions catch typos', () async {
+    test('invalid tracking types are rejected at runtime', () async {
       final id = await insertProduct();
-      expect(
-        () => productDao.setInventoryTrackingType(
+      await expectLater(
+        productDao.setInventoryTrackingType(
           productId: id,
           trackingType: 'fifo',
         ),
-        throwsA(isA<AssertionError>()),
+        throwsArgumentError,
       );
+      final product = await (db.select(
+        db.products,
+      )..where((row) => row.id.equals(id))).getSingle();
+      expect(product.inventoryTrackingType, 'standard');
     });
   });
 }

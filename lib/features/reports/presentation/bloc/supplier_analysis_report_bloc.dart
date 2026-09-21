@@ -128,16 +128,16 @@ class SupplierAnalysisReportData {
 
 // ==================== BLOC ====================
 
-class SupplierAnalysisReportBloc extends RealtimeBloc<
-    SupplierAnalysisReportData, SupplierAnalysisReportEvent> {
+class SupplierAnalysisReportBloc
+    extends
+        RealtimeBloc<SupplierAnalysisReportData, SupplierAnalysisReportEvent> {
   final AppDatabase _db;
   ReportDateRange _dateRange;
-  SupplierAnalysisSortType _sort =
-      SupplierAnalysisSortType.purchaseVolumeDesc;
+  SupplierAnalysisSortType _sort = SupplierAnalysisSortType.purchaseVolumeDesc;
 
   SupplierAnalysisReportBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+      super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
@@ -174,12 +174,15 @@ class SupplierAnalysisReportBloc extends RealtimeBloc<
         suppliersWithData++;
       }
 
-      final avgReturnRate =
-          suppliersWithData > 0 ? sumReturnRate / suppliersWithData : 0.0;
-      final avgPayDays =
-          suppliersWithData > 0 ? sumPaymentDays / suppliersWithData : 0.0;
-      final avgSettlement =
-          suppliersWithData > 0 ? sumSettlementRatio / suppliersWithData : 0.0;
+      final avgReturnRate = suppliersWithData > 0
+          ? sumReturnRate / suppliersWithData
+          : 0.0;
+      final avgPayDays = suppliersWithData > 0
+          ? sumPaymentDays / suppliersWithData
+          : 0.0;
+      final avgSettlement = suppliersWithData > 0
+          ? sumSettlementRatio / suppliersWithData
+          : 0.0;
 
       final sorted = _applySortToSuppliers(items, _sort);
 
@@ -214,12 +217,11 @@ class SupplierAnalysisReportBloc extends RealtimeBloc<
     final current = currentData;
     if (current != null) {
       final sorted = _applySortToSuppliers(current.suppliers, event.sort);
-      emit(RealtimeSuccess<SupplierAnalysisReportData>(
-        data: current.copyWith(
-          suppliers: sorted,
-          sort: event.sort,
+      emit(
+        RealtimeSuccess<SupplierAnalysisReportData>(
+          data: current.copyWith(suppliers: sorted, sort: event.sort),
         ),
-      ));
+      );
     }
   }
 
@@ -230,26 +232,30 @@ class SupplierAnalysisReportBloc extends RealtimeBloc<
     final list = List<SupplierAnalysisItem>.from(items);
     switch (sort) {
       case SupplierAnalysisSortType.purchaseVolumeDesc:
-        list.sort((a, b) =>
-            b.totalPurchasesCents.compareTo(a.totalPurchasesCents));
+        list.sort(
+          (a, b) => b.totalPurchasesCents.compareTo(a.totalPurchasesCents),
+        );
       case SupplierAnalysisSortType.purchaseVolumeAsc:
-        list.sort((a, b) =>
-            a.totalPurchasesCents.compareTo(b.totalPurchasesCents));
+        list.sort(
+          (a, b) => a.totalPurchasesCents.compareTo(b.totalPurchasesCents),
+        );
       case SupplierAnalysisSortType.nameAsc:
         list.sort((a, b) => a.supplierName.compareTo(b.supplierName));
       case SupplierAnalysisSortType.nameDesc:
         list.sort((a, b) => b.supplierName.compareTo(a.supplierName));
       case SupplierAnalysisSortType.returnRateDesc:
-        list.sort(
-            (a, b) => b.returnRatePercent.compareTo(a.returnRatePercent));
+        list.sort((a, b) => b.returnRatePercent.compareTo(a.returnRatePercent));
       case SupplierAnalysisSortType.avgPaymentDaysAsc:
         list.sort((a, b) => a.avgPaymentDays.compareTo(b.avgPaymentDays));
       case SupplierAnalysisSortType.settlementRatioDesc:
-        list.sort((a, b) =>
-            b.settlementRatioPercent.compareTo(a.settlementRatioPercent));
+        list.sort(
+          (a, b) =>
+              b.settlementRatioPercent.compareTo(a.settlementRatioPercent),
+        );
       case SupplierAnalysisSortType.avgOrderValueDesc:
-        list.sort((a, b) =>
-            b.avgOrderValueCents.compareTo(a.avgOrderValueCents));
+        list.sort(
+          (a, b) => b.avgOrderValueCents.compareTo(a.avgOrderValueCents),
+        );
     }
     return list;
   }
@@ -275,8 +281,9 @@ class SupplierAnalysisReportBloc extends RealtimeBloc<
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         s.id AS supplier_id,
         s.name AS supplier_name,
@@ -298,12 +305,13 @@ class SupplierAnalysisReportBloc extends RealtimeBloc<
       HAVING purchase_count > 0 OR return_count > 0 OR payment_count > 0
       ORDER BY total_purchases_cents DESC
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.suppliers, _db.supplierTransactions},
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {_db.suppliers, _db.supplierTransactions},
+        )
+        .get();
 
     // Calculate avg payment days per supplier from payment transactions
     final paymentDaysMap = await _calculateAvgPaymentDays(startIso, endIso);
@@ -329,8 +337,9 @@ class SupplierAnalysisReportBloc extends RealtimeBloc<
           : 0.0;
 
       // avgOrderValue = totalPurchases / purchaseCount
-      final avgOrderValue =
-          purchaseCount > 0 ? totalPurchasesCents ~/ purchaseCount : 0;
+      final avgOrderValue = purchaseCount > 0
+          ? totalPurchasesCents ~/ purchaseCount
+          : 0;
 
       // avgPaymentDays from pre-calculated map
       final avgPayDays = paymentDaysMap[supplierId] ?? 0.0;
@@ -349,8 +358,9 @@ class SupplierAnalysisReportBloc extends RealtimeBloc<
         avgPaymentDays: avgPayDays,
         settlementRatioPercent: settlementRatio,
         avgOrderValueCents: avgOrderValue,
-        lastTransactionAt:
-            lastTxStr != null ? DateTime.tryParse(lastTxStr) : null,
+        lastTransactionAt: lastTxStr != null
+            ? DateTime.tryParse(lastTxStr)
+            : null,
       );
     }).toList();
   }
@@ -360,9 +370,12 @@ class SupplierAnalysisReportBloc extends RealtimeBloc<
   /// purchase transactions and payment transactions within the date range.
   /// This is an approximation: AVG(payment_date - first_purchase_date_in_range).
   Future<Map<int, double>> _calculateAvgPaymentDays(
-      String startIso, String endIso) async {
-    final rows = await _db.customSelect(
-      '''
+    String startIso,
+    String endIso,
+  ) async {
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         st.supplier_id,
         AVG(
@@ -382,14 +395,15 @@ class SupplierAnalysisReportBloc extends RealtimeBloc<
       GROUP BY st.supplier_id
       HAVING avg_days IS NOT NULL
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.supplierTransactions},
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {_db.supplierTransactions},
+        )
+        .get();
 
     final map = <int, double>{};
     for (final row in rows) {

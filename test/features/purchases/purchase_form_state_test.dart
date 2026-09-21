@@ -281,6 +281,36 @@ void main() {
   });
 
   group('PurchaseLineItem', () {
+    test('manufacturer lot is required only for medicine batch lines', () {
+      final batchProduct = Product(
+        id: 2,
+        name: 'Batch-tracked item',
+        costCents: Decimal.fromInt(100),
+        priceCents: Decimal.fromInt(200),
+        stockQuantity: 0,
+        minQuantity: 0,
+        hasVariants: false,
+        isTaxable: false,
+        purchaseTaxRateBps: 0,
+        salesTaxRateBps: 0,
+        isActive: true,
+        trackInventory: true,
+        inventoryTrackingType: 'batch_expiry',
+      );
+      final ordinaryItem = PurchaseLineItem(
+        tempId: 'ordinary',
+        product: batchProduct,
+        quantity: 1,
+        unitCostCents: Decimal.fromInt(100),
+        originalCostCents: 100,
+        originalPriceCents: 200,
+      );
+      final medicineItem = ordinaryItem.copyWith(isMedicine: true);
+
+      expect(ordinaryItem.requiresManufacturerLot, isFalse);
+      expect(medicineItem.requiresManufacturerLot, isTrue);
+    });
+
     test('subtotalCents calculates quantity * unitCost', () {
       final item = PurchaseLineItem(
         tempId: '1',

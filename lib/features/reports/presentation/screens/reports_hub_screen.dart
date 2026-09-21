@@ -63,6 +63,15 @@ const _kSectionOrder = <String>[
 const _kAllReports = <_ReportEntry>[
   // ── Sales Reports ──
   _ReportEntry(
+    icon: LucideIcons.truck,
+    titleKey: 'reports.sales_by_supplier',
+    subtitleKey: 'reports.sales_by_supplier_desc',
+    route: '/reports/sales/by-supplier',
+    sectionKey: 'reports.sales_reports',
+    searchKeyKeys: ['reports.sales_product_reports'],
+    showInOverview: false,
+  ),
+  _ReportEntry(
     icon: LucideIcons.shoppingCart,
     titleKey: 'reports.sales_reports',
     subtitleKey: 'reports.sales_reports_desc',

@@ -1,7 +1,10 @@
+import '../../../../core/services/business/warehouse_read_scope.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+import '../../../../core/services/business/warehouse_document_scope.dart';
 import '../../../../core/measurement/measurement.dart';
 import '../widgets/report_date_range.dart';
 import 'customer_invoices_report_bloc.dart' show InvoiceLineItem;
@@ -121,12 +124,16 @@ class SupplierReturnOption {
 class SupplierReturnsReportBloc
     extends RealtimeBloc<SupplierReturnsData, SupplierReturnsReportEvent> {
   final AppDatabase _db;
+  final WarehouseReadScope? warehouseScope;
   ReportDateRange _dateRange;
   int? _supplierId;
 
-  SupplierReturnsReportBloc(this._db, {String defaultDateRange = 'month'})
-    : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-      super(const RealtimeLoading());
+  SupplierReturnsReportBloc(
+    this._db, {
+    String defaultDateRange = 'month',
+    this.warehouseScope,
+  }) : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+       super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
   int? get supplierId => _supplierId;
@@ -145,10 +152,16 @@ class SupplierReturnsReportBloc
     return _db
         .customSelect(
           'SELECT 1',
-          readsFrom: {_db.purchaseReturns, _db.purchaseReturnAdjustments},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.purchaseReturns,
+            _db.purchaseReturnAdjustments,
+          },
         )
         .watch()
-        .asyncMap((_) async => _loadData());
+        .asyncMap(
+          (_) => WarehouseReadScope.snapshot(_db, warehouseScope, _loadData),
+        );
   }
 
   Future<void> _onDateRangeChanged(
@@ -176,7 +189,10 @@ class SupplierReturnsReportBloc
       FROM suppliers s WHERE s.is_active = 1
       ORDER BY s.name ASC
       ''',
-          readsFrom: {_db.suppliers},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.suppliers,
+          },
         )
         .get();
 
@@ -200,7 +216,10 @@ class SupplierReturnsReportBloc
         .customSelect(
           'SELECT name, phone, address FROM suppliers WHERE id = ?',
           variables: [Variable.withInt(_supplierId!)],
-          readsFrom: {_db.suppliers},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.suppliers,
+          },
         )
         .get();
     if (sRows.isEmpty) {
@@ -227,7 +246,7 @@ class SupplierReturnsReportBloc
       SELECT pr.id, pr.return_number, pr.subtotal_cents, pr.discount_cents,
              pr.tax_cents, pr.total_cents, pr.refund_method, pr.status,
              pr.return_date, p.purchase_number AS original_invoice
-      FROM purchase_returns pr
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.purchaseReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseReturn)} pr
       INNER JOIN purchases p ON p.id = pr.purchase_id
       WHERE p.supplier_id = ?
         AND pr.status != 'voided'
@@ -240,7 +259,11 @@ class SupplierReturnsReportBloc
             Variable.withString(startIso),
             Variable.withString(endIso),
           ],
-          readsFrom: {_db.purchaseReturns, _db.purchases},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.purchaseReturns,
+            _db.purchases,
+          },
         )
         .get();
 
@@ -272,7 +295,7 @@ class SupplierReturnsReportBloc
       SELECT pra.id, pra.return_number, pra.subtotal_cents, pra.discount_cents,
              pra.tax_cents, pra.total_cents, pra.refund_method, pra.status,
              pra.return_date
-      FROM purchase_return_adjustments pra
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.purchaseAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseAdjustment)} pra
       WHERE pra.supplier_id = ?
         AND pra.status != 'voided'
         AND pra.return_date >= ?
@@ -284,7 +307,10 @@ class SupplierReturnsReportBloc
             Variable.withString(startIso),
             Variable.withString(endIso),
           ],
-          readsFrom: {_db.purchaseReturnAdjustments},
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.purchaseReturnAdjustments,
+          },
         )
         .get();
 
@@ -369,6 +395,7 @@ class SupplierReturnsReportBloc
       ''',
           variables: [Variable.withInt(returnId)],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.purchaseReturnItems,
             _db.purchaseItems,
             _db.products,
@@ -425,6 +452,7 @@ class SupplierReturnsReportBloc
       ''',
           variables: [Variable.withInt(returnId)],
           readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
             _db.purchaseReturnAdjustmentItems,
             _db.products,
             _db.productVariants,

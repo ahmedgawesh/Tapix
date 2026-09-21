@@ -218,6 +218,11 @@ class _SourceFilterRow extends StatelessWidget {
       icon: LucideIcons.sliders,
     ),
     (
+      value: 'revaluation',
+      labelKey: 'product_form.batches_source_revaluation',
+      icon: LucideIcons.sliders,
+    ),
+    (
       value: 'sale_return',
       labelKey: 'product_form.batches_source_sale_return',
       icon: LucideIcons.undo2,
@@ -470,6 +475,13 @@ class _BatchTile extends StatelessWidget {
                 spacing: 6,
                 runSpacing: 4,
                 children: [
+                  if (batch.manufacturerLotNumber != null)
+                    _Chip(
+                      label:
+                          '${'pharmacy.batch.lot_short'.tr()}: ${batch.manufacturerLotNumber}',
+                      icon: LucideIcons.packageSearch,
+                      color: cs.primary,
+                    ),
                   if (batch.productSku != null && batch.productSku!.isNotEmpty)
                     _Chip(
                       label: batch.productSku!,
@@ -537,6 +549,8 @@ class _BatchTile extends StatelessWidget {
         return 'product_form.batches_source_opening'.tr();
       case 'found':
         return 'product_form.batches_source_found'.tr();
+      case 'revaluation':
+        return 'product_form.batches_source_revaluation'.tr();
       case 'sale_return':
         return 'product_form.batches_source_sale_return'.tr();
       default:
@@ -594,6 +608,16 @@ class _BatchDrillDownSheet extends StatelessWidget {
                   color: cs.onSurfaceVariant,
                 ),
               ),
+              if (batch.manufacturerLotNumber != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '${'pharmacy.batch.lot_number'.tr()}: ${batch.manufacturerLotNumber}',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: cs.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               // Key facts
               Wrap(

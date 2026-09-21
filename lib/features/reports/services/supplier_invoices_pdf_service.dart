@@ -1,3 +1,4 @@
+import '../presentation/widgets/warehouse_report_context.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
@@ -36,7 +37,11 @@ class SupplierInvoicesPdfService {
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
-    final company = await sl<CompanyProfileService>().getProfile();
+    final reportLocation = WarehouseReportContext.maybeOf(context);
+    await reportLocation?.scope.checkAccess();
+    final loadedCompany = await sl<CompanyProfileService>().getProfile();
+    final company =
+        reportLocation?.decorateCompany(loadedCompany) ?? loadedCompany;
 
     final pdf = await InvoicesPdfBuilder.build(
       title: 'reports.supplier_invoices_report'.tr(),
@@ -69,7 +74,11 @@ class SupplierInvoicesPdfService {
   }) async {
     final cs = sl<CurrencyService>();
     final locale = context.locale;
-    final company = await sl<CompanyProfileService>().getProfile();
+    final reportLocation = WarehouseReportContext.maybeOf(context);
+    await reportLocation?.scope.checkAccess();
+    final loadedCompany = await sl<CompanyProfileService>().getProfile();
+    final company =
+        reportLocation?.decorateCompany(loadedCompany) ?? loadedCompany;
 
     final pdf = await InvoicesPdfBuilder.build(
       title: 'reports.supplier_invoices_report'.tr(),

@@ -1,3 +1,4 @@
+import '../widgets/warehouse_report_context.dart';
 import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
@@ -21,7 +22,9 @@ class SupplierStocktakeReportScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => sl<SupplierStocktakeReportBloc>(),
+      create: (_) => sl<SupplierStocktakeReportBloc>(
+        param1: WarehouseReportContext.maybeOf(context)?.scope,
+      ),
       child: const _SupplierStocktakeReportView(),
     );
   }

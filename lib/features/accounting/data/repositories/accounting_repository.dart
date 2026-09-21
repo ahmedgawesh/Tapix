@@ -224,6 +224,9 @@ class AccountingRepository {
     int totalCredits = 0;
 
     for (final line in entryData.lines) {
+      if (line.debitCents < 0 || line.creditCents < 0) {
+        throw AccountingException('Journal amounts cannot be negative');
+      }
       totalDebits += line.debitCents;
       totalCredits += line.creditCents;
 
@@ -369,29 +372,51 @@ class AccountingRepository {
     required int entryId,
     required int? userId,
   }) async {
-    final entry = await (_db.select(
-      _db.journalEntries,
-    )..where((e) => e.id.equals(entryId))).getSingleOrNull();
+    return _db.transaction(() async {
+      final entry = await (_db.select(
+        _db.journalEntries,
+      )..where((e) => e.id.equals(entryId))).getSingleOrNull();
 
-    if (entry == null) {
-      throw AccountingException('Journal entry not found');
-    }
+      if (entry == null) {
+        throw AccountingException('Journal entry not found');
+      }
 
-    if (entry.status != 'draft') {
-      throw AccountingException('Only draft entries can be posted');
-    }
+      if (entry.status != 'draft') {
+        throw AccountingException('Only draft entries can be posted');
+      }
 
-    // Enforce closed period lock (legacy `accounting_periods` table).
-    if (await isDateInClosedPeriod(entry.entryDate)) {
-      throw AccountingException(
-        'Cannot post journal entry: date ${entry.entryDate.toIso8601String().substring(0, 10)} falls in a closed accounting period',
+      // Enforce closed period lock (legacy `accounting_periods` table).
+      if (await isDateInClosedPeriod(entry.entryDate)) {
+        throw AccountingException(
+          'Cannot post journal entry: date ${entry.entryDate.toIso8601String().substring(0, 10)} falls in a closed accounting period',
+        );
+      }
+
+      // Phase 11.1 — fiscal-period guard (newer `fiscal_periods` table).
+      await _fiscalPeriodService?.assertOpen(entry.entryDate);
+
+      final draftLines = await (_db.select(
+        _db.journalEntryLines,
+      )..where((l) => l.journalEntryId.equals(entryId))).get();
+      final data = JournalEntryData(
+        description: entry.description,
+        lines: draftLines
+            .map(
+              (line) => JournalEntryLineData(
+                accountId: line.accountId,
+                debitCents: line.debitCents.toBigInt().toInt(),
+                creditCents: line.creditCents.toBigInt().toInt(),
+                currencyId: line.currencyId,
+              ),
+            )
+            .toList(),
       );
-    }
-
-    // Phase 11.1 — fiscal-period guard (newer `fiscal_periods` table).
-    await _fiscalPeriodService?.assertOpen(entry.entryDate);
-
-    return await _db.transaction(() async {
+      if (!data.isValid ||
+          data.lines.map((l) => l.currencyId).toSet().length != 1 ||
+          entry.totalDebitCents.toBigInt().toInt() != data.totalDebitCents ||
+          entry.totalCreditCents.toBigInt().toInt() != data.totalCreditCents) {
+        throw AccountingException('Invalid draft journal entry');
+      }
       // Update entry status
       await (_db.update(
         _db.journalEntries,

@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 
 import '../../../../core/money/money.dart';
+import '../../../../core/database/daos/pharmacy_dao.dart';
 import '../../../../core/payments/checkout_settlement.dart';
 import '../../../../core/pricing/discount.dart';
 import '../../../../core/pricing/invoice_pricing_engine.dart';
@@ -61,6 +62,7 @@ class PurchaseFormState extends Equatable {
   final bool taxInclusivePricing;
   // Editing posted purchase flag
   final bool isEditingPosted;
+  final bool pharmacyFeaturesEnabled;
 
   PurchaseFormState({
     this.purchaseId,
@@ -87,6 +89,7 @@ class PurchaseFormState extends Equatable {
     this.defaultPurchaseTaxRateBps = 0,
     this.taxInclusivePricing = false,
     this.isEditingPosted = false,
+    this.pharmacyFeaturesEnabled = false,
   }) : invoiceDiscountCents = invoiceDiscountCents ?? Decimal.zero,
        taxRatePercent = taxRatePercent ?? Decimal.zero,
        paidAmountCents = paidAmountCents ?? Decimal.zero;
@@ -228,6 +231,7 @@ class PurchaseFormState extends Equatable {
     int? defaultPurchaseTaxRateBps,
     bool? taxInclusivePricing,
     bool? isEditingPosted,
+    bool? pharmacyFeaturesEnabled,
   }) {
     return PurchaseFormState(
       purchaseId: purchaseId ?? this.purchaseId,
@@ -256,6 +260,8 @@ class PurchaseFormState extends Equatable {
           defaultPurchaseTaxRateBps ?? this.defaultPurchaseTaxRateBps,
       taxInclusivePricing: taxInclusivePricing ?? this.taxInclusivePricing,
       isEditingPosted: isEditingPosted ?? this.isEditingPosted,
+      pharmacyFeaturesEnabled:
+          pharmacyFeaturesEnabled ?? this.pharmacyFeaturesEnabled,
     );
   }
 
@@ -285,6 +291,7 @@ class PurchaseFormState extends Equatable {
     defaultPurchaseTaxRateBps,
     taxInclusivePricing,
     isEditingPosted,
+    pharmacyFeaturesEnabled,
   ];
 }
 
@@ -297,6 +304,8 @@ class PurchaseLineItem extends Equatable {
   final Decimal unitCostCents;
   final Decimal discountCents;
   final DateTime? expiryDate;
+  final String? manufacturerLotNumber;
+  final bool isMedicine;
   final String? colorName;
   final String? colorHex;
   final String? sizeName;
@@ -336,6 +345,8 @@ class PurchaseLineItem extends Equatable {
     required this.unitCostCents,
     Decimal? discountCents,
     this.expiryDate,
+    this.manufacturerLotNumber,
+    this.isMedicine = false,
     this.colorName,
     this.colorHex,
     this.sizeName,
@@ -425,6 +436,14 @@ class PurchaseLineItem extends Equatable {
     return product.name;
   }
 
+  /// Manufacturer lot numbers are a medicine receiving requirement only.
+  /// Ordinary products may still use batch tracking without being treated as
+  /// medicines when pharmacy features are enabled for the business.
+  bool get requiresManufacturerLot =>
+      isMedicine &&
+      product.trackInventory &&
+      product.inventoryTrackingType != 'standard';
+
   PurchaseLineItem copyWith({
     String? tempId,
     Product? product,
@@ -434,6 +453,9 @@ class PurchaseLineItem extends Equatable {
     Decimal? discountCents,
     DateTime? expiryDate,
     bool clearExpiry = false,
+    String? manufacturerLotNumber,
+    bool clearManufacturerLotNumber = false,
+    bool? isMedicine,
     String? colorName,
     String? colorHex,
     String? sizeName,
@@ -456,6 +478,10 @@ class PurchaseLineItem extends Equatable {
       unitCostCents: unitCostCents ?? this.unitCostCents,
       discountCents: discountCents ?? this.discountCents,
       expiryDate: clearExpiry ? null : (expiryDate ?? this.expiryDate),
+      manufacturerLotNumber: clearManufacturerLotNumber
+          ? null
+          : (manufacturerLotNumber ?? this.manufacturerLotNumber),
+      isMedicine: isMedicine ?? this.isMedicine,
       colorName: colorName ?? this.colorName,
       colorHex: colorHex ?? this.colorHex,
       sizeName: sizeName ?? this.sizeName,
@@ -488,6 +514,8 @@ class PurchaseLineItem extends Equatable {
     unitCostCents,
     discountCents,
     expiryDate,
+    manufacturerLotNumber,
+    isMedicine,
     colorName,
     colorHex,
     sizeName,
@@ -518,6 +546,7 @@ class PurchaseFormInitialized extends PurchaseFormEvent {
   final int defaultPurchaseTaxRateBps;
   final bool taxInclusivePricing;
   final bool isEditingPosted;
+  final bool pharmacyFeaturesEnabled;
 
   const PurchaseFormInitialized({
     this.purchaseId,
@@ -526,6 +555,7 @@ class PurchaseFormInitialized extends PurchaseFormEvent {
     this.defaultPurchaseTaxRateBps = 0,
     this.taxInclusivePricing = false,
     this.isEditingPosted = false,
+    this.pharmacyFeaturesEnabled = false,
   });
 
   @override
@@ -536,6 +566,7 @@ class PurchaseFormInitialized extends PurchaseFormEvent {
     defaultPurchaseTaxRateBps,
     taxInclusivePricing,
     isEditingPosted,
+    pharmacyFeaturesEnabled,
   ];
 }
 
@@ -621,6 +652,7 @@ class PurchaseLineItemAdded extends PurchaseFormEvent {
   final Decimal unitCostCents;
   final Decimal? discountCents;
   final DateTime? expiryDate;
+  final String? manufacturerLotNumber;
 
   const PurchaseLineItemAdded({
     required this.product,
@@ -629,6 +661,7 @@ class PurchaseLineItemAdded extends PurchaseFormEvent {
     required this.unitCostCents,
     this.discountCents,
     this.expiryDate,
+    this.manufacturerLotNumber,
   });
 
   @override
@@ -639,6 +672,7 @@ class PurchaseLineItemAdded extends PurchaseFormEvent {
     unitCostCents,
     discountCents,
     expiryDate,
+    manufacturerLotNumber,
   ];
 }
 
@@ -649,6 +683,8 @@ class PurchaseLineItemUpdated extends PurchaseFormEvent {
   final Decimal? discountCents;
   final DateTime? expiryDate;
   final bool clearExpiry;
+  final String? manufacturerLotNumber;
+  final bool clearManufacturerLotNumber;
   final Decimal? newSellPriceCents;
   final Decimal? newWholesalePriceCents;
 
@@ -659,6 +695,8 @@ class PurchaseLineItemUpdated extends PurchaseFormEvent {
     this.discountCents,
     this.expiryDate,
     this.clearExpiry = false,
+    this.manufacturerLotNumber,
+    this.clearManufacturerLotNumber = false,
     this.newSellPriceCents,
     this.newWholesalePriceCents,
   });
@@ -671,6 +709,8 @@ class PurchaseLineItemUpdated extends PurchaseFormEvent {
     discountCents,
     expiryDate,
     clearExpiry,
+    manufacturerLotNumber,
+    clearManufacturerLotNumber,
     newSellPriceCents,
     newWholesalePriceCents,
   ];
@@ -735,7 +775,9 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
   final PurchaseRepository _repository;
   final ProductVariantRepository _variantRepository;
   final ProductRepository _productRepository;
+  final PharmacyDao? _pharmacyDao;
   int _lineCounter = 0;
+  Set<int> _medicineProductIds = const {};
 
   // Cached color/size lookup maps
   Map<int, String> _colorNames = {};
@@ -745,8 +787,10 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
   PurchaseFormBloc(
     this._repository,
     this._variantRepository,
-    this._productRepository,
-  ) : super(PurchaseFormState(currencyId: 1, purchaseDate: DateTime.now())) {
+    this._productRepository, {
+    PharmacyDao? pharmacyDao,
+  }) : _pharmacyDao = pharmacyDao,
+       super(PurchaseFormState(currencyId: 1, purchaseDate: DateTime.now())) {
     on<PurchaseFormInitialized>(_onInitialized);
     on<PurchaseSupplierChanged>(_onSupplierChanged);
     on<PurchaseDateChanged>(_onDateChanged);
@@ -776,6 +820,20 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       final sizes = await _variantRepository.getAllSizes();
       _sizeNames = {for (final s in sizes) s.id: s.name};
     } catch (_) {}
+  }
+
+  Future<void> _loadMedicineProductIds(bool pharmacyFeaturesEnabled) async {
+    if (!pharmacyFeaturesEnabled || _pharmacyDao == null) {
+      _medicineProductIds = const {};
+      return;
+    }
+    try {
+      _medicineProductIds = await _pharmacyDao.getMedicineProductIds();
+    } catch (_) {
+      // Do not block receiving if an old/corrupt pharmacy profile cannot be
+      // read. The submit path still validates every medicine we did resolve.
+      _medicineProductIds = const {};
+    }
   }
 
   String? _resolveColorName(int? colorId) =>
@@ -812,6 +870,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
     Emitter<PurchaseFormState> emit,
   ) async {
     await _loadColorSizeLookups();
+    await _loadMedicineProductIds(event.pharmacyFeaturesEnabled);
 
     if (event.purchaseId == null) {
       // New purchase: generate next invoice number
@@ -824,6 +883,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
             enableTaxCalculations: event.enableTaxCalculations,
             defaultPurchaseTaxRateBps: event.defaultPurchaseTaxRateBps,
             taxInclusivePricing: event.taxInclusivePricing,
+            pharmacyFeaturesEnabled: event.pharmacyFeaturesEnabled,
           ),
         );
       } catch (_) {
@@ -833,6 +893,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
             enableTaxCalculations: event.enableTaxCalculations,
             defaultPurchaseTaxRateBps: event.defaultPurchaseTaxRateBps,
             taxInclusivePricing: event.taxInclusivePricing,
+            pharmacyFeaturesEnabled: event.pharmacyFeaturesEnabled,
           ),
         );
       }
@@ -847,6 +908,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
         defaultPurchaseTaxRateBps: event.defaultPurchaseTaxRateBps,
         taxInclusivePricing: event.taxInclusivePricing,
         isEditingPosted: event.isEditingPosted,
+        pharmacyFeaturesEnabled: event.pharmacyFeaturesEnabled,
       ),
     );
 
@@ -910,6 +972,8 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           salesTaxRateBps: realProduct?.salesTaxRateBps ?? 0,
           isActive: realProduct?.isActive ?? true,
           trackInventory: realProduct?.trackInventory ?? true,
+          inventoryTrackingType:
+              realProduct?.inventoryTrackingType ?? 'standard',
           measurementType: i.measurementType,
         );
 
@@ -962,6 +1026,10 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           unitCostCents: i.unitCostCents,
           discountCents: i.discountCents,
           expiryDate: i.expiryDate,
+          manufacturerLotNumber: i.manufacturerLotNumber,
+          isMedicine:
+              event.pharmacyFeaturesEnabled &&
+              _medicineProductIds.contains(i.productId),
           colorName: _resolveColorName(variant?.colorId),
           colorHex: _resolveColorHex(variant?.colorId),
           sizeName: _resolveSizeName(variant?.sizeId),
@@ -1144,6 +1212,10 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
       unitCostCents: event.unitCostCents,
       discountCents: event.discountCents,
       expiryDate: event.expiryDate,
+      manufacturerLotNumber: event.manufacturerLotNumber,
+      isMedicine:
+          state.pharmacyFeaturesEnabled &&
+          _medicineProductIds.contains(event.product.id),
       colorName: _resolveColorName(resolvedVariant?.colorId),
       colorHex: _resolveColorHex(resolvedVariant?.colorId),
       sizeName: _resolveSizeName(resolvedVariant?.sizeId),
@@ -1171,6 +1243,8 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
           discountCents: event.discountCents,
           expiryDate: event.expiryDate,
           clearExpiry: event.clearExpiry,
+          manufacturerLotNumber: event.manufacturerLotNumber,
+          clearManufacturerLotNumber: event.clearManufacturerLotNumber,
           newSellPriceCents: event.newSellPriceCents,
           newWholesalePriceCents: event.newWholesalePriceCents,
         );
@@ -1217,6 +1291,21 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
         .toList();
     if (missingExpiry.isNotEmpty) {
       emit(state.copyWith(error: 'purchases.expiry_required_submit_blocked'));
+      return;
+    }
+
+    // GS1 AI (10): only medicines in pharmacy mode require the manufacturer's
+    // lot/batch number. Ordinary stock (bags, paper, etc.) must not inherit a
+    // medicine-only requirement even if it uses generic batch tracking.
+    final missingManufacturerLot =
+        state.pharmacyFeaturesEnabled &&
+        state.items.any(
+          (it) =>
+              it.requiresManufacturerLot &&
+              (it.manufacturerLotNumber?.trim().isEmpty ?? true),
+        );
+    if (missingManufacturerLot) {
+      emit(state.copyWith(error: 'pharmacy.batch.lot_required_submit_blocked'));
       return;
     }
 
@@ -1267,6 +1356,7 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
             taxCents: Decimal.fromInt(line.tax.cents),
             totalCents: Decimal.fromInt(line.total.cents),
             expiryDate: item.expiryDate,
+            manufacturerLotNumber: item.manufacturerLotNumber?.trim(),
             // Persist the snapshot fields, NOT the display fields. When the
             // resolver determined there is no real historical value (live cost
             // is still 0 from default-init), persist `null` rather than `0` —

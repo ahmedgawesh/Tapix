@@ -50,6 +50,22 @@ void main() {
             ),
           );
       final journal = JournalEntryService(AccountingRepository(db));
+
+      await db
+          .into(db.inventoryAdjustments)
+          .insert(
+            InventoryAdjustmentsCompanion.insert(
+              id: const Value(10072001),
+              adjustmentNumber: 'OPEN-FIXTURE-10072001',
+              productId: productId,
+              adjustmentType: 'opening_balance',
+              quantityDelta: 482300,
+              unitCostCents: Decimal.fromInt(1188),
+              totalValueCents: Decimal.fromInt(575348),
+              reason: 'Opening fixture source',
+              currencyId: currencyId,
+            ),
+          );
       await journal.recordInventoryOpeningBalanceJournalEntry(
         adjustmentId: 10072001,
         valueCents: 575348,
@@ -125,7 +141,7 @@ void main() {
       );
       db = migrated;
       await migrated.customSelect('SELECT 1').get();
-      expect(migrated.schemaVersion, 10082);
+      expect(migrated.schemaVersion, 10091);
 
       final lines = await (migrated.select(
         migrated.saleItems,

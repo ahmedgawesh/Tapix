@@ -299,6 +299,37 @@ class LanCatalogProduct {
   }
 }
 
+/// Read-only, freshly loaded checkout information from the branch master.
+class LanCustomerCheckout {
+  final int customerId;
+  final int currencyId;
+  final String currencyCode;
+  final int balanceCents;
+  final int pointsBalance;
+  const LanCustomerCheckout({
+    required this.customerId,
+    required this.currencyId,
+    required this.currencyCode,
+    required this.balanceCents,
+    required this.pointsBalance,
+  });
+  Map<String, dynamic> toJson() => {
+    'customerId': customerId,
+    'currencyId': currencyId,
+    'currencyCode': currencyCode,
+    'balanceCents': balanceCents,
+    'pointsBalance': pointsBalance,
+  };
+  factory LanCustomerCheckout.fromJson(Map<String, dynamic> json) =>
+      LanCustomerCheckout(
+        customerId: (json['customerId'] as num).toInt(),
+        currencyId: (json['currencyId'] as num).toInt(),
+        currencyCode: json['currencyCode'] as String,
+        balanceCents: (json['balanceCents'] as num).toInt(),
+        pointsBalance: (json['pointsBalance'] as num).toInt(),
+      );
+}
+
 class LanCustomerSummary {
   final int id;
   final String name;
@@ -443,6 +474,7 @@ class LanCatalogPage {
   final String currencySymbol;
   final bool enableTaxCalculations;
   final int defaultSalesTaxRateBps;
+  final int? defaultPurchaseTaxRateBps;
   final bool taxInclusivePricing;
   final bool allowNegativeStock;
   final bool allowPartialPayments;
@@ -467,6 +499,7 @@ class LanCatalogPage {
     required this.currencySymbol,
     required this.enableTaxCalculations,
     required this.defaultSalesTaxRateBps,
+    this.defaultPurchaseTaxRateBps,
     required this.taxInclusivePricing,
     required this.allowNegativeStock,
     required this.allowPartialPayments,
@@ -502,6 +535,7 @@ class LanCatalogPage {
     'currencySymbol': currencySymbol,
     'enableTaxCalculations': enableTaxCalculations,
     'defaultSalesTaxRateBps': defaultSalesTaxRateBps,
+    'defaultPurchaseTaxRateBps': defaultPurchaseTaxRateBps,
     'taxInclusivePricing': taxInclusivePricing,
     'allowNegativeStock': allowNegativeStock,
     'allowPartialPayments': allowPartialPayments,
@@ -537,6 +571,8 @@ class LanCatalogPage {
       currencyCode: json['currencyCode']?.toString() ?? 'USD',
       currencySymbol: json['currencySymbol']?.toString() ?? r'$',
       enableTaxCalculations: json['enableTaxCalculations'] != false,
+      defaultPurchaseTaxRateBps: (json['defaultPurchaseTaxRateBps'] as num?)
+          ?.toInt(),
       defaultSalesTaxRateBps:
           (json['defaultSalesTaxRateBps'] as num?)?.toInt() ?? 0,
       taxInclusivePricing: json['taxInclusivePricing'] == true,
@@ -1281,6 +1317,7 @@ class LanSaleAdjustmentReturnLineRequest {
 
 class LanSaleAdjustmentReturnRequest {
   final String idempotencyKey;
+  final String? expectedPricingFingerprint;
   final int? customerId;
   final int? employeeId;
   final String refundMethod;
@@ -1295,6 +1332,7 @@ class LanSaleAdjustmentReturnRequest {
 
   const LanSaleAdjustmentReturnRequest({
     required this.idempotencyKey,
+    this.expectedPricingFingerprint,
     this.customerId,
     this.employeeId,
     required this.refundMethod,
@@ -1310,6 +1348,8 @@ class LanSaleAdjustmentReturnRequest {
 
   Map<String, dynamic> toJson() => {
     'idempotencyKey': idempotencyKey,
+    if (expectedPricingFingerprint != null)
+      'expectedPricingFingerprint': expectedPricingFingerprint,
     'customerId': customerId,
     'employeeId': employeeId,
     'refundMethod': refundMethod,
@@ -1323,32 +1363,33 @@ class LanSaleAdjustmentReturnRequest {
     'payments': payments.map((value) => value.toJson()).toList(),
   };
 
-  factory LanSaleAdjustmentReturnRequest.fromJson(Map<String, dynamic> json) =>
-      LanSaleAdjustmentReturnRequest(
-        idempotencyKey: json['idempotencyKey']?.toString() ?? '',
-        customerId: (json['customerId'] as num?)?.toInt(),
-        employeeId: (json['employeeId'] as num?)?.toInt(),
-        refundMethod: json['refundMethod']?.toString() ?? 'cash',
-        dueDate: json['dueDate'] == null
-            ? null
-            : DateTime.tryParse(json['dueDate'].toString()),
-        returnDate:
-            DateTime.tryParse(json['returnDate']?.toString() ?? '') ??
-            DateTime.now(),
-        reasonCode: json['reasonCode']?.toString() ?? '',
-        notes: json['notes']?.toString(),
-        overallDiscountCents:
-            (json['overallDiscountCents'] as num?)?.toInt() ?? 0,
-        overallDiscountIsPercent: json['overallDiscountIsPercent'] == true,
-        lines: (json['lines'] as List<dynamic>? ?? const [])
-            .whereType<Map<String, dynamic>>()
-            .map(LanSaleAdjustmentReturnLineRequest.fromJson)
-            .toList(growable: false),
-        payments: (json['payments'] as List<dynamic>? ?? const [])
-            .whereType<Map<String, dynamic>>()
-            .map(LanCheckoutPaymentRequest.fromJson)
-            .toList(growable: false),
-      );
+  factory LanSaleAdjustmentReturnRequest.fromJson(
+    Map<String, dynamic> json,
+  ) => LanSaleAdjustmentReturnRequest(
+    idempotencyKey: json['idempotencyKey']?.toString() ?? '',
+    expectedPricingFingerprint: json['expectedPricingFingerprint'] as String?,
+    customerId: (json['customerId'] as num?)?.toInt(),
+    employeeId: (json['employeeId'] as num?)?.toInt(),
+    refundMethod: json['refundMethod']?.toString() ?? 'cash',
+    dueDate: json['dueDate'] == null
+        ? null
+        : DateTime.tryParse(json['dueDate'].toString()),
+    returnDate:
+        DateTime.tryParse(json['returnDate']?.toString() ?? '') ??
+        DateTime.now(),
+    reasonCode: json['reasonCode']?.toString() ?? '',
+    notes: json['notes']?.toString(),
+    overallDiscountCents: (json['overallDiscountCents'] as num?)?.toInt() ?? 0,
+    overallDiscountIsPercent: json['overallDiscountIsPercent'] == true,
+    lines: (json['lines'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(LanSaleAdjustmentReturnLineRequest.fromJson)
+        .toList(growable: false),
+    payments: (json['payments'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(LanCheckoutPaymentRequest.fromJson)
+        .toList(growable: false),
+  );
 }
 
 class LanSupplierSummary {
@@ -1980,6 +2021,7 @@ class LanPurchaseAdjustmentReturnLineRequest {
 
 class LanPurchaseAdjustmentReturnRequest {
   final String idempotencyKey;
+  final String? expectedPricingFingerprint;
   final int supplierId;
   final String refundMethod;
   final DateTime? dueDate;
@@ -1993,6 +2035,7 @@ class LanPurchaseAdjustmentReturnRequest {
 
   const LanPurchaseAdjustmentReturnRequest({
     required this.idempotencyKey,
+    this.expectedPricingFingerprint,
     required this.supplierId,
     required this.refundMethod,
     this.dueDate,
@@ -2007,6 +2050,8 @@ class LanPurchaseAdjustmentReturnRequest {
 
   Map<String, dynamic> toJson() => {
     'idempotencyKey': idempotencyKey,
+    if (expectedPricingFingerprint != null)
+      'expectedPricingFingerprint': expectedPricingFingerprint,
     'supplierId': supplierId,
     'refundMethod': refundMethod,
     'dueDate': dueDate?.toUtc().toIso8601String(),
@@ -2023,6 +2068,7 @@ class LanPurchaseAdjustmentReturnRequest {
     Map<String, dynamic> json,
   ) => LanPurchaseAdjustmentReturnRequest(
     idempotencyKey: json['idempotencyKey']?.toString() ?? '',
+    expectedPricingFingerprint: json['expectedPricingFingerprint'] as String?,
     supplierId: (json['supplierId'] as num).toInt(),
     refundMethod: json['refundMethod']?.toString() ?? 'credit',
     dueDate: json['dueDate'] == null
@@ -2718,6 +2764,8 @@ class LanBusinessException implements Exception {
 }
 
 abstract interface class LanMasterBusinessGateway {
+  Future<LanCustomerCheckout> fetchCustomerCheckout(int customerId);
+
   Future<LanSalesPage> fetchSales({required int limit});
 
   Future<LanSaleDetails?> fetchSaleDetails({required int saleId});

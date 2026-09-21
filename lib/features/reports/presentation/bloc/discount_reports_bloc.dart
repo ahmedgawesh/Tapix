@@ -1,8 +1,11 @@
+import '../../../../core/services/business/warehouse_read_scope.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/services/reporting/ratio_helper.dart';
+import '../../../../core/services/business/document_posting_scope.dart';
+import '../../../../core/services/business/warehouse_document_scope.dart';
 import '../widgets/report_date_range.dart';
 
 // ==================== EVENTS ====================
@@ -166,17 +169,36 @@ class DiscountReportsData {
 class DiscountReportsBloc
     extends RealtimeBloc<DiscountReportsData, DiscountReportsEvent> {
   final AppDatabase _db;
+  final WarehouseReadScope? warehouseScope;
   ReportDateRange _dateRange;
 
-  DiscountReportsBloc(this._db, {String defaultDateRange = 'month'})
-      : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
-        super(const RealtimeLoading());
+  DiscountReportsBloc(
+    this._db, {
+    String defaultDateRange = 'month',
+    this.warehouseScope,
+  }) : _dateRange = ReportDateRange.fromSettingsDefault(defaultDateRange),
+       super(const RealtimeLoading());
 
   ReportDateRange get dateRange => _dateRange;
 
   @override
   Stream<DiscountReportsData> get dataStream {
-    return _db.select(_db.sales).watch().asyncMap((_) => _loadAll());
+    return _db
+        .customSelect(
+          'SELECT 1',
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.sales,
+            _db.saleItems,
+            _db.customers,
+            _db.products,
+            _db.productCategories,
+          },
+        )
+        .watch()
+        .asyncMap(
+          (_) => WarehouseReadScope.snapshot(_db, warehouseScope, _loadAll),
+        );
   }
 
   @override
@@ -243,8 +265,9 @@ class DiscountReportsBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         pr.id AS product_id,
         pr.name AS product_name,
@@ -254,7 +277,7 @@ class DiscountReportsBloc
         SUM(si.discount_cents) AS total_discount_cents,
         COUNT(DISTINCT s.id) AS invoice_count
       FROM sale_items si
-      INNER JOIN sales s ON s.id = si.sale_id
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s ON s.id = si.sale_id
       INNER JOIN products pr ON pr.id = si.product_id
       LEFT JOIN product_categories pc ON pc.id = pr.category_id
       WHERE s.status NOT IN ('voided', 'draft')
@@ -264,12 +287,19 @@ class DiscountReportsBloc
       HAVING total_discount_cents > 0
       ORDER BY total_discount_cents DESC
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.saleItems, _db.sales, _db.products, _db.productCategories},
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.saleItems,
+            _db.sales,
+            _db.products,
+            _db.productCategories,
+          },
+        )
+        .get();
 
     return rows.map((row) {
       final sales = row.read<int>('total_sales_cents');
@@ -294,8 +324,9 @@ class DiscountReportsBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         COALESCE(pc.id, 0) AS category_id,
         COALESCE(pc.name, 'Uncategorized') AS category_name,
@@ -305,7 +336,7 @@ class DiscountReportsBloc
         SUM(si.discount_cents) AS total_discount_cents,
         COUNT(DISTINCT s.id) AS invoice_count
       FROM sale_items si
-      INNER JOIN sales s ON s.id = si.sale_id
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s ON s.id = si.sale_id
       INNER JOIN products pr ON pr.id = si.product_id
       LEFT JOIN product_categories pc ON pc.id = pr.category_id
       WHERE s.status NOT IN ('voided', 'draft')
@@ -315,12 +346,19 @@ class DiscountReportsBloc
       HAVING total_discount_cents > 0
       ORDER BY total_discount_cents DESC
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.saleItems, _db.sales, _db.products, _db.productCategories},
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.saleItems,
+            _db.sales,
+            _db.products,
+            _db.productCategories,
+          },
+        )
+        .get();
 
     return rows.map((row) {
       final sales = row.read<int>('total_sales_cents');
@@ -345,15 +383,16 @@ class DiscountReportsBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         COALESCE(c.id, 0) AS customer_id,
         COALESCE(c.name, 'Walk-in') AS customer_name,
         SUM(s.subtotal_cents) AS total_sales_cents,
         SUM(s.discount_cents) AS total_discount_cents,
         COUNT(s.id) AS invoice_count
-      FROM sales s
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s
       LEFT JOIN customers c ON c.id = s.customer_id
       WHERE s.status NOT IN ('voided', 'draft')
         AND s.sale_date >= ?
@@ -362,12 +401,17 @@ class DiscountReportsBloc
       HAVING total_discount_cents > 0
       ORDER BY total_discount_cents DESC
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.sales, _db.customers},
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.sales,
+            _db.customers,
+          },
+        )
+        .get();
 
     return rows.map((row) {
       final sales = row.read<int>('total_sales_cents');
@@ -390,8 +434,9 @@ class DiscountReportsBloc
     final startIso = _dateRange.startDate.toIso8601String();
     final endIso = _dateRange.endDate.toIso8601String();
 
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT 
         s.id AS sale_id,
         s.invoice_number,
@@ -401,7 +446,7 @@ class DiscountReportsBloc
         s.total_cents,
         s.sale_date,
         s.payment_method
-      FROM sales s
+      FROM ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} s
       LEFT JOIN customers c ON c.id = s.customer_id
       WHERE s.status NOT IN ('voided', 'draft')
         AND s.discount_cents > 0
@@ -409,12 +454,17 @@ class DiscountReportsBloc
         AND s.sale_date <= ?
       ORDER BY s.discount_cents DESC
       ''',
-      variables: [
-        Variable.withString(startIso),
-        Variable.withString(endIso),
-      ],
-      readsFrom: {_db.sales, _db.customers},
-    ).get();
+          variables: [
+            Variable.withString(startIso),
+            Variable.withString(endIso),
+          ],
+          readsFrom: {
+            ...WarehouseDocumentScope.dependencies(_db),
+            _db.sales,
+            _db.customers,
+          },
+        )
+        .get();
 
     return rows.map((row) {
       final subtotal = row.read<int>('subtotal_cents');

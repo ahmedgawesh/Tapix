@@ -3327,6 +3327,40 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                           currencyService: widget.currencyService,
                         ),
                       ),
+                    if (state.customerId != null &&
+                        sl<LanNetworkService>().snapshot.mode == LanMode.client)
+                      RemoteCustomerCheckoutCard(
+                        key: ValueKey(state.customerId),
+                        customerId: state.customerId!,
+                        currencyId: state.currencyId,
+                        invoiceTotalCents: state.totalCents.toBigInt().toInt(),
+                        paidAmountCents: state.paidAmountCents
+                            .toBigInt()
+                            .toInt(),
+                        currencyService: widget.currencyService,
+                        load:
+                            sl<LanNetworkService>().fetchRemoteCustomerCheckout,
+                      ),
+                    if (state.customerId != null &&
+                        sl<LanNetworkService>().snapshot.mode !=
+                            LanMode.client &&
+                        !state.canOfferLoyaltyRedemption)
+                      StreamBuilder<Customer?>(
+                        key: ValueKey('points-${state.customerId}'),
+                        stream: sl<CustomerRepository>().watchCustomer(
+                          state.customerId!,
+                        ),
+                        builder: (context, snapshot) => snapshot.data == null
+                            ? const SizedBox.shrink()
+                            : Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8,
+                                ),
+                                child: Text(
+                                  '${'sales.loyalty_points'.tr()}: ${snapshot.data!.loyaltyPointsBalance}',
+                                ),
+                              ),
+                      ),
                     // Loyalty Points Redemption
                     if (state.canOfferLoyaltyRedemption) ...[
                       _LoyaltyRedemptionSection(

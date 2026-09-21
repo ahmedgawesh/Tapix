@@ -84,6 +84,9 @@ class Commissions extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get employeeId => integer().references(Employees, #id, onDelete: KeyAction.cascade)();
   IntColumn get saleId => integer().nullable().references(Sales, #id, onDelete: KeyAction.cascade)();
+  /// Exact source for linked-return reversal rows. Null on legacy rows whose
+  /// return cannot be recovered without guessing. Validated by DB triggers.
+  IntColumn get saleReturnId => integer().nullable()();
   /// Set on REVERSAL rows created for an unlinked (adjustment) sale return.
   /// An adjustment return has no `saleId` to prorate against, so the negative
   /// commission row is instead keyed by the adjustment-return id. This lets a
