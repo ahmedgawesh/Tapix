@@ -43,7 +43,13 @@ class ScannerState extends Equatable {
   }
 
   @override
-  List<Object?> get props => [isScanning, lastResult, foundProduct, error, isSearching];
+  List<Object?> get props => [
+    isScanning,
+    lastResult,
+    foundProduct,
+    error,
+    isSearching,
+  ];
 }
 
 // Events
@@ -63,10 +69,7 @@ class BarcodeDetected extends BarcodeScannerEvent {
   final String barcode;
   final BarcodeFormat format;
 
-  const BarcodeDetected({
-    required this.barcode,
-    required this.format,
-  });
+  const BarcodeDetected({required this.barcode, required this.format});
 }
 
 class ManualBarcodeEntered extends BarcodeScannerEvent {
@@ -80,7 +83,8 @@ class ClearScanResult extends BarcodeScannerEvent {
 }
 
 // Bloc
-class BarcodeScannerBloc extends RealtimeBloc<ScannerState, BarcodeScannerEvent> {
+class BarcodeScannerBloc
+    extends RealtimeBloc<ScannerState, BarcodeScannerEvent> {
   final ProductRepository productRepository;
   final BarcodeValidationService validationService;
 
@@ -106,9 +110,11 @@ class BarcodeScannerBloc extends RealtimeBloc<ScannerState, BarcodeScannerEvent>
     Emitter<RealtimeState<ScannerState>> emit,
   ) {
     final currentState = _getCurrentState();
-    emit(RealtimeSuccess(
-      data: currentState.copyWith(isScanning: true, clearError: true),
-    ));
+    emit(
+      RealtimeSuccess(
+        data: currentState.copyWith(isScanning: true, clearError: true),
+      ),
+    );
   }
 
   void _onStopScanning(
@@ -116,9 +122,7 @@ class BarcodeScannerBloc extends RealtimeBloc<ScannerState, BarcodeScannerEvent>
     Emitter<RealtimeState<ScannerState>> emit,
   ) {
     final currentState = _getCurrentState();
-    emit(RealtimeSuccess(
-      data: currentState.copyWith(isScanning: false),
-    ));
+    emit(RealtimeSuccess(data: currentState.copyWith(isScanning: false)));
   }
 
   Future<void> _onBarcodeDetected(
@@ -128,14 +132,19 @@ class BarcodeScannerBloc extends RealtimeBloc<ScannerState, BarcodeScannerEvent>
     final currentState = _getCurrentState();
 
     // Validate barcode
-    final validation = validationService.validateBarcode(event.barcode, event.format);
+    final validation = validationService.validateBarcode(
+      event.barcode,
+      event.format,
+    );
     if (!validation.isValid) {
-      emit(RealtimeSuccess(
-        data: currentState.copyWith(
-          error: validation.errorMessage,
-          clearProduct: true,
+      emit(
+        RealtimeSuccess(
+          data: currentState.copyWith(
+            error: validation.errorMessage,
+            clearProduct: true,
+          ),
         ),
-      ));
+      );
       return;
     }
 
@@ -146,31 +155,37 @@ class BarcodeScannerBloc extends RealtimeBloc<ScannerState, BarcodeScannerEvent>
       timestamp: DateTime.now(),
     );
 
-    emit(RealtimeSuccess(
-      data: currentState.copyWith(
-        lastResult: scanResult,
-        isSearching: true,
-        clearError: true,
-        clearProduct: true,
+    emit(
+      RealtimeSuccess(
+        data: currentState.copyWith(
+          lastResult: scanResult,
+          isSearching: true,
+          clearError: true,
+          clearProduct: true,
+        ),
       ),
-    ));
+    );
 
     // Search for product
     try {
       final product = await productRepository.findByBarcode(event.barcode);
-      emit(RealtimeSuccess(
-        data: _getCurrentState().copyWith(
-          foundProduct: product,
-          isSearching: false,
+      emit(
+        RealtimeSuccess(
+          data: _getCurrentState().copyWith(
+            foundProduct: product,
+            isSearching: false,
+          ),
         ),
-      ));
+      );
     } catch (e) {
-      emit(RealtimeSuccess(
-        data: _getCurrentState().copyWith(
-          error: 'Failed to search for product: $e',
-          isSearching: false,
+      emit(
+        RealtimeSuccess(
+          data: _getCurrentState().copyWith(
+            error: 'Failed to search for product: $e',
+            isSearching: false,
+          ),
         ),
-      ));
+      );
     }
   }
 
@@ -182,16 +197,18 @@ class BarcodeScannerBloc extends RealtimeBloc<ScannerState, BarcodeScannerEvent>
     if (barcode.isEmpty) return;
 
     final format = validationService.detectFormat(barcode);
-    
+
     // Process barcode directly instead of adding another event
     final validation = validationService.validateBarcode(barcode, format);
     if (!validation.isValid) {
-      emit(RealtimeSuccess(
-        data: _getCurrentState().copyWith(
-          error: validation.errorMessage,
-          clearProduct: true,
+      emit(
+        RealtimeSuccess(
+          data: _getCurrentState().copyWith(
+            error: validation.errorMessage,
+            clearProduct: true,
+          ),
         ),
-      ));
+      );
       return;
     }
 
@@ -201,30 +218,36 @@ class BarcodeScannerBloc extends RealtimeBloc<ScannerState, BarcodeScannerEvent>
       timestamp: DateTime.now(),
     );
 
-    emit(RealtimeSuccess(
-      data: _getCurrentState().copyWith(
-        lastResult: scanResult,
-        isSearching: true,
-        clearError: true,
-        clearProduct: true,
+    emit(
+      RealtimeSuccess(
+        data: _getCurrentState().copyWith(
+          lastResult: scanResult,
+          isSearching: true,
+          clearError: true,
+          clearProduct: true,
+        ),
       ),
-    ));
+    );
 
     try {
       final product = await productRepository.findByBarcode(barcode);
-      emit(RealtimeSuccess(
-        data: _getCurrentState().copyWith(
-          foundProduct: product,
-          isSearching: false,
+      emit(
+        RealtimeSuccess(
+          data: _getCurrentState().copyWith(
+            foundProduct: product,
+            isSearching: false,
+          ),
         ),
-      ));
+      );
     } catch (e) {
-      emit(RealtimeSuccess(
-        data: _getCurrentState().copyWith(
-          error: 'Failed to search for product: $e',
-          isSearching: false,
+      emit(
+        RealtimeSuccess(
+          data: _getCurrentState().copyWith(
+            error: 'Failed to search for product: $e',
+            isSearching: false,
+          ),
         ),
-      ));
+      );
     }
   }
 
@@ -233,13 +256,15 @@ class BarcodeScannerBloc extends RealtimeBloc<ScannerState, BarcodeScannerEvent>
     Emitter<RealtimeState<ScannerState>> emit,
   ) {
     final currentState = _getCurrentState();
-    emit(RealtimeSuccess(
-      data: currentState.copyWith(
-        clearResult: true,
-        clearProduct: true,
-        clearError: true,
+    emit(
+      RealtimeSuccess(
+        data: currentState.copyWith(
+          clearResult: true,
+          clearProduct: true,
+          clearError: true,
+        ),
       ),
-    ));
+    );
   }
 
   ScannerState _getCurrentState() {

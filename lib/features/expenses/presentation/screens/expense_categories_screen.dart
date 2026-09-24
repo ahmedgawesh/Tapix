@@ -49,101 +49,109 @@ class _CategoriesContent extends StatelessWidget {
         tooltip: 'expenses.add_category'.tr(),
         child: const Icon(LucideIcons.plus),
       ),
-      body: BlocBuilder<ExpenseCategoriesBloc,
-          RealtimeState<List<ExpenseCategory>>>(
-        builder: (context, state) {
-          if (state is RealtimeLoading<List<ExpenseCategory>>) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body:
+          BlocBuilder<
+            ExpenseCategoriesBloc,
+            RealtimeState<List<ExpenseCategory>>
+          >(
+            builder: (context, state) {
+              if (state is RealtimeLoading<List<ExpenseCategory>>) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          if (state is RealtimeError<List<ExpenseCategory>>) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(LucideIcons.alertTriangle,
-                      size: 48, color: colorScheme.error),
-                  const SizedBox(height: 16),
-                  Text('common.error'.tr()),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: () => context
-                        .read<ExpenseCategoriesBloc>()
-                        .add(const RealtimeRefreshRequested()),
-                    child: Text('common.retry'.tr()),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          if (state is RealtimeSuccess<List<ExpenseCategory>>) {
-            final categories = state.data;
-
-            if (categories.isEmpty) {
-              return Center(
-                child: SingleChildScrollView(
+              if (state is RealtimeError<List<ExpenseCategory>>) {
+                return Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(LucideIcons.tag,
-                          size: 64,
-                          color: colorScheme.onSurfaceVariant
-                              .withValues(alpha: 0.4)),
-                      const SizedBox(height: 16),
-                      Text(
-                        'expenses.no_categories'.tr(),
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: colorScheme.onSurfaceVariant,
-                                ),
+                      Icon(
+                        LucideIcons.alertTriangle,
+                        size: 48,
+                        color: colorScheme.error,
                       ),
+                      const SizedBox(height: 16),
+                      Text('common.error'.tr()),
                       const SizedBox(height: 8),
-                      Text(
-                        'expenses.no_categories_hint'.tr(),
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.onSurfaceVariant
-                                  .withValues(alpha: 0.7),
-                            ),
+                      TextButton(
+                        onPressed: () => context
+                            .read<ExpenseCategoriesBloc>()
+                            .add(const RealtimeRefreshRequested()),
+                        child: Text('common.retry'.tr()),
                       ),
                     ],
                   ),
-                ),
-              );
-            }
+                );
+              }
 
-            return ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-              itemCount: categories.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 8),
-              itemBuilder: (context, index) {
-                final category = categories[index];
-                return _CategoryCard(
-                  category: category,
-                  onEdit: () =>
-                      _showCategoryDialog(context, category: category),
-                  onToggleActive: () {
-                    context.read<ExpenseCategoriesBloc>().add(
+              if (state is RealtimeSuccess<List<ExpenseCategory>>) {
+                final categories = state.data;
+
+                if (categories.isEmpty) {
+                  return Center(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            LucideIcons.tag,
+                            size: 64,
+                            color: colorScheme.onSurfaceVariant.withValues(
+                              alpha: 0.4,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'expenses.no_categories'.tr(),
+                            style: Theme.of(context).textTheme.titleMedium
+                                ?.copyWith(color: colorScheme.onSurfaceVariant),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'expenses.no_categories_hint'.tr(),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: colorScheme.onSurfaceVariant
+                                      .withValues(alpha: 0.7),
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+                  itemCount: categories.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final category = categories[index];
+                    return _CategoryCard(
+                      category: category,
+                      onEdit: () =>
+                          _showCategoryDialog(context, category: category),
+                      onToggleActive: () {
+                        context.read<ExpenseCategoriesBloc>().add(
                           ExpenseCategoryToggleActiveRequested(category),
                         );
+                      },
+                      onDelete: () => _confirmDelete(context, category),
+                    );
                   },
-                  onDelete: () => _confirmDelete(context, category),
                 );
-              },
-            );
-          }
+              }
 
-          return const SizedBox.shrink();
-        },
-      ),
+              return const SizedBox.shrink();
+            },
+          ),
     );
   }
 
-  void _showCategoryDialog(BuildContext context,
-      {ExpenseCategory? category}) {
+  void _showCategoryDialog(BuildContext context, {ExpenseCategory? category}) {
     final nameController = TextEditingController(text: category?.name ?? '');
-    final descController =
-        TextEditingController(text: category?.description ?? '');
+    final descController = TextEditingController(
+      text: category?.description ?? '',
+    );
     final formKey = GlobalKey<FormState>();
     final isEdit = category != null;
 
@@ -207,23 +215,25 @@ class _CategoriesContent extends StatelessWidget {
                 if (isEdit) {
                   final updated = category.copyWith(
                     name: nameController.text.trim(),
-                    description: Value(descController.text.trim().isEmpty
-                        ? null
-                        : descController.text.trim()),
+                    description: Value(
+                      descController.text.trim().isEmpty
+                          ? null
+                          : descController.text.trim(),
+                    ),
                     updatedAt: DateTime.now(),
                   );
                   context.read<ExpenseCategoriesBloc>().add(
-                        ExpenseCategoryUpdateRequested(updated),
-                      );
+                    ExpenseCategoryUpdateRequested(updated),
+                  );
                 } else {
                   context.read<ExpenseCategoriesBloc>().add(
-                        ExpenseCategoryCreateRequested(
-                          name: nameController.text.trim(),
-                          description: descController.text.trim().isEmpty
-                              ? null
-                              : descController.text.trim(),
-                        ),
-                      );
+                    ExpenseCategoryCreateRequested(
+                      name: nameController.text.trim(),
+                      description: descController.text.trim().isEmpty
+                          ? null
+                          : descController.text.trim(),
+                    ),
+                  );
                 }
                 Navigator.pop(dialogContext);
               },
@@ -240,7 +250,9 @@ class _CategoriesContent extends StatelessWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text('expenses.delete_category_title'.tr()),
-        content: Text('expenses.delete_category_message'.tr(args: [category.name])),
+        content: Text(
+          'expenses.delete_category_message'.tr(args: [category.name]),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
@@ -253,8 +265,8 @@ class _CategoriesContent extends StatelessWidget {
             onPressed: () {
               Navigator.pop(dialogContext);
               context.read<ExpenseCategoriesBloc>().add(
-                    ExpenseCategoryDeleteRequested(category.id),
-                  );
+                ExpenseCategoryDeleteRequested(category.id),
+              );
             },
             child: Text('common.delete'.tr()),
           ),
@@ -287,7 +299,8 @@ class _CategoryCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-            color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -316,8 +329,8 @@ class _CategoryCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                  color: colorScheme.onSurfaceVariant,
+                ),
               )
             : null,
         trailing: PopupMenuButton<String>(

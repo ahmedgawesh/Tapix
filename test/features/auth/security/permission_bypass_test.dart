@@ -8,11 +8,7 @@ void main() {
     permissionService = PermissionService();
   });
 
-  UserEntity createUser(
-    UserRole role, {
-    bool isActive = true,
-    int id = 1,
-  }) {
+  UserEntity createUser(UserRole role, {bool isActive = true, int id = 1}) {
     return UserEntity(
       id: id,
       username: 'testuser',
@@ -104,9 +100,18 @@ void main() {
       test('inactive user cannot access any protected route', () {
         final inactiveManager = createUser(UserRole.manager, isActive: false);
 
-        expect(permissionService.canAccessRoute(inactiveManager, '/reports'), isFalse);
-        expect(permissionService.canAccessRoute(inactiveManager, '/products'), isFalse);
-        expect(permissionService.canAccessRoute(inactiveManager, '/sales'), isFalse);
+        expect(
+          permissionService.canAccessRoute(inactiveManager, '/reports'),
+          isFalse,
+        );
+        expect(
+          permissionService.canAccessRoute(inactiveManager, '/products'),
+          isFalse,
+        );
+        expect(
+          permissionService.canAccessRoute(inactiveManager, '/sales'),
+          isFalse,
+        );
       });
 
       test('inactive owner cannot promote users', () {
@@ -114,27 +119,47 @@ void main() {
         final targetUser = createUser(UserRole.salesperson, id: 2);
 
         expect(
-          permissionService.canPromoteUser(inactiveOwner, targetUser, UserRole.cashier),
+          permissionService.canPromoteUser(
+            inactiveOwner,
+            targetUser,
+            UserRole.cashier,
+          ),
           isFalse,
         );
       });
 
       test('cannot promote inactive user', () {
         final owner = createUser(UserRole.owner);
-        final inactiveTarget = createUser(UserRole.salesperson, isActive: false, id: 2);
+        final inactiveTarget = createUser(
+          UserRole.salesperson,
+          isActive: false,
+          id: 2,
+        );
 
         expect(
-          permissionService.canPromoteUser(owner, inactiveTarget, UserRole.cashier),
+          permissionService.canPromoteUser(
+            owner,
+            inactiveTarget,
+            UserRole.cashier,
+          ),
           isFalse,
         );
       });
 
       test('cannot demote inactive user', () {
         final owner = createUser(UserRole.owner);
-        final inactiveTarget = createUser(UserRole.manager, isActive: false, id: 2);
+        final inactiveTarget = createUser(
+          UserRole.manager,
+          isActive: false,
+          id: 2,
+        );
 
         expect(
-          permissionService.canDemoteUser(owner, inactiveTarget, UserRole.cashier),
+          permissionService.canDemoteUser(
+            owner,
+            inactiveTarget,
+            UserRole.cashier,
+          ),
           isFalse,
         );
       });
@@ -146,7 +171,11 @@ void main() {
         final salesperson = createUser(UserRole.salesperson, id: 2);
 
         expect(
-          permissionService.canPromoteUser(manager, salesperson, UserRole.cashier),
+          permissionService.canPromoteUser(
+            manager,
+            salesperson,
+            UserRole.cashier,
+          ),
           isFalse,
         );
       });
@@ -156,7 +185,11 @@ void main() {
         final salesperson = createUser(UserRole.salesperson, id: 2);
 
         expect(
-          permissionService.canPromoteUser(cashier, salesperson, UserRole.cashier),
+          permissionService.canPromoteUser(
+            cashier,
+            salesperson,
+            UserRole.cashier,
+          ),
           isFalse,
         );
       });
@@ -200,7 +233,10 @@ void main() {
 
       test('unknown permission string returns false', () {
         final owner = createUser(UserRole.owner);
-        expect(permissionService.hasPermission(owner, 'unknown_permission'), isFalse);
+        expect(
+          permissionService.hasPermission(owner, 'unknown_permission'),
+          isFalse,
+        );
         expect(permissionService.hasPermission(owner, 'admin'), isFalse);
         expect(permissionService.hasPermission(owner, 'root'), isFalse);
         expect(permissionService.hasPermission(owner, '*'), isFalse);
@@ -212,10 +248,7 @@ void main() {
           permissionService.hasPermission(owner, '\'; DROP TABLE users; --'),
           isFalse,
         );
-        expect(
-          permissionService.hasPermission(owner, '1=1; --'),
-          isFalse,
-        );
+        expect(permissionService.hasPermission(owner, '1=1; --'), isFalse);
       });
 
       test('hasAnyPermission with empty list returns false', () {
@@ -223,10 +256,13 @@ void main() {
         expect(permissionService.hasAnyPermission(owner, []), isFalse);
       });
 
-      test('hasAllPermissions with empty list returns true (vacuous truth)', () {
-        final owner = createUser(UserRole.owner);
-        expect(permissionService.hasAllPermissions(owner, []), isTrue);
-      });
+      test(
+        'hasAllPermissions with empty list returns true (vacuous truth)',
+        () {
+          final owner = createUser(UserRole.owner);
+          expect(permissionService.hasAllPermissions(owner, []), isTrue);
+        },
+      );
     });
 
     group('Role Hierarchy Integrity', () {
@@ -246,27 +282,72 @@ void main() {
 
         // Owner >= all roles
         expect(permissionService.isRoleAtLeast(owner, UserRole.owner), isTrue);
-        expect(permissionService.isRoleAtLeast(owner, UserRole.manager), isTrue);
-        expect(permissionService.isRoleAtLeast(owner, UserRole.cashier), isTrue);
-        expect(permissionService.isRoleAtLeast(owner, UserRole.salesperson), isTrue);
+        expect(
+          permissionService.isRoleAtLeast(owner, UserRole.manager),
+          isTrue,
+        );
+        expect(
+          permissionService.isRoleAtLeast(owner, UserRole.cashier),
+          isTrue,
+        );
+        expect(
+          permissionService.isRoleAtLeast(owner, UserRole.salesperson),
+          isTrue,
+        );
 
         // Manager >= manager, cashier, salesperson but not owner
-        expect(permissionService.isRoleAtLeast(manager, UserRole.owner), isFalse);
-        expect(permissionService.isRoleAtLeast(manager, UserRole.manager), isTrue);
-        expect(permissionService.isRoleAtLeast(manager, UserRole.cashier), isTrue);
-        expect(permissionService.isRoleAtLeast(manager, UserRole.salesperson), isTrue);
+        expect(
+          permissionService.isRoleAtLeast(manager, UserRole.owner),
+          isFalse,
+        );
+        expect(
+          permissionService.isRoleAtLeast(manager, UserRole.manager),
+          isTrue,
+        );
+        expect(
+          permissionService.isRoleAtLeast(manager, UserRole.cashier),
+          isTrue,
+        );
+        expect(
+          permissionService.isRoleAtLeast(manager, UserRole.salesperson),
+          isTrue,
+        );
 
         // Cashier >= cashier, salesperson but not manager, owner
-        expect(permissionService.isRoleAtLeast(cashier, UserRole.owner), isFalse);
-        expect(permissionService.isRoleAtLeast(cashier, UserRole.manager), isFalse);
-        expect(permissionService.isRoleAtLeast(cashier, UserRole.cashier), isTrue);
-        expect(permissionService.isRoleAtLeast(cashier, UserRole.salesperson), isTrue);
+        expect(
+          permissionService.isRoleAtLeast(cashier, UserRole.owner),
+          isFalse,
+        );
+        expect(
+          permissionService.isRoleAtLeast(cashier, UserRole.manager),
+          isFalse,
+        );
+        expect(
+          permissionService.isRoleAtLeast(cashier, UserRole.cashier),
+          isTrue,
+        );
+        expect(
+          permissionService.isRoleAtLeast(cashier, UserRole.salesperson),
+          isTrue,
+        );
 
         // Salesperson only >= salesperson
-        expect(permissionService.isRoleAtLeast(salesperson, UserRole.owner), isFalse);
-        expect(permissionService.isRoleAtLeast(salesperson, UserRole.manager), isFalse);
-        expect(permissionService.isRoleAtLeast(salesperson, UserRole.cashier), isFalse);
-        expect(permissionService.isRoleAtLeast(salesperson, UserRole.salesperson), isTrue);
+        expect(
+          permissionService.isRoleAtLeast(salesperson, UserRole.owner),
+          isFalse,
+        );
+        expect(
+          permissionService.isRoleAtLeast(salesperson, UserRole.manager),
+          isFalse,
+        );
+        expect(
+          permissionService.isRoleAtLeast(salesperson, UserRole.cashier),
+          isFalse,
+        );
+        expect(
+          permissionService.isRoleAtLeast(salesperson, UserRole.salesperson),
+          isTrue,
+        );
       });
     });
 
@@ -276,7 +357,11 @@ void main() {
         final cashier = createUser(UserRole.cashier, id: 2);
 
         expect(
-          permissionService.canDemoteUser(manager, cashier, UserRole.salesperson),
+          permissionService.canDemoteUser(
+            manager,
+            cashier,
+            UserRole.salesperson,
+          ),
           isFalse,
         );
       });

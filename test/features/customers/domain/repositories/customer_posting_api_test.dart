@@ -37,65 +37,49 @@ void main() {
 
     test('rejects zero amount with ArgumentError', () {
       expect(
-        () => repo.recordPayment(
-          customerId: 1,
-          amountCents: 0,
-          currencyId: 1,
-        ),
+        () => repo.recordPayment(customerId: 1, amountCents: 0, currencyId: 1),
         throwsArgumentError,
       );
     });
 
     test('rejects negative amount with ArgumentError', () {
       expect(
-        () => repo.recordPayment(
-          customerId: 1,
-          amountCents: -500,
-          currencyId: 1,
-        ),
+        () =>
+            repo.recordPayment(customerId: 1, amountCents: -500, currencyId: 1),
         throwsArgumentError,
       );
     });
   });
 
   group('recordDiscount', () {
-    test('forwards a negated amount, "discount" type and discountType tag',
-        () async {
-      await repo.recordDiscount(
-        customerId: 9,
-        amountCents: 250,
-        currencyId: 1,
-        discountType: 'seasonal',
-      );
-      expect(repo.lastCall!['transactionType'], 'discount');
-      expect(repo.lastCall!['amountCents'], -250);
-      expect(repo.lastCall!['discountType'], 'seasonal');
-    });
+    test(
+      'forwards a negated amount, "discount" type and discountType tag',
+      () async {
+        await repo.recordDiscount(
+          customerId: 9,
+          amountCents: 250,
+          currencyId: 1,
+          discountType: 'seasonal',
+        );
+        expect(repo.lastCall!['transactionType'], 'discount');
+        expect(repo.lastCall!['amountCents'], -250);
+        expect(repo.lastCall!['discountType'], 'seasonal');
+      },
+    );
 
     test('defaults discountType to "cash" when omitted', () async {
-      await repo.recordDiscount(
-        customerId: 9,
-        amountCents: 100,
-        currencyId: 1,
-      );
+      await repo.recordDiscount(customerId: 9, amountCents: 100, currencyId: 1);
       expect(repo.lastCall!['discountType'], 'cash');
     });
 
     test('rejects zero or negative amounts', () {
       expect(
-        () => repo.recordDiscount(
-          customerId: 1,
-          amountCents: 0,
-          currencyId: 1,
-        ),
+        () => repo.recordDiscount(customerId: 1, amountCents: 0, currencyId: 1),
         throwsArgumentError,
       );
       expect(
-        () => repo.recordDiscount(
-          customerId: 1,
-          amountCents: -1,
-          currencyId: 1,
-        ),
+        () =>
+            repo.recordDiscount(customerId: 1, amountCents: -1, currencyId: 1),
         throwsArgumentError,
       );
     });
@@ -138,8 +122,7 @@ class _RecordingCustomerRepository implements CustomerRepository {
   // ── Unused members (throw so a regression that touches them fails loudly) ──
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      throw UnimplementedError(
-        'Method ${invocation.memberName} not stubbed in test double.',
-      );
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError(
+    'Method ${invocation.memberName} not stubbed in test double.',
+  );
 }

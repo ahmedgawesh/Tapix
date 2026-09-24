@@ -7,7 +7,8 @@ class PermissionNavigator {
 
   PermissionNavigator._internal(this._permissionService);
 
-  factory PermissionNavigator() => PermissionNavigator._internal(sl<PermissionService>());
+  factory PermissionNavigator() =>
+      PermissionNavigator._internal(sl<PermissionService>());
 
   bool canNavigate(UserEntity? user, String route) {
     return _permissionService.canAccessRoute(user, route);
@@ -45,9 +46,9 @@ class PermissionNavigator {
     }
 
     if (hasAccess) {
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (context) => destination),
-      );
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute<void>(builder: (context) => destination));
     } else {
       _showAccessDenied(
         context,
@@ -71,7 +72,8 @@ class PermissionNavigator {
           requiredPermission: requiredPermission,
           requiredRole: requiredRole,
           onBack: () => Navigator.of(context).pop(),
-          onHome: () => Navigator.of(context).popUntil((route) => route.isFirst),
+          onHome: () =>
+              Navigator.of(context).popUntil((route) => route.isFirst),
         ),
       ),
     );
@@ -94,8 +96,10 @@ class PermissionRouteGuard extends StatelessWidget {
     required this.child,
     this.accessDeniedWidget,
     this.accessDeniedMessage,
-  }) : assert(requiredPermission != null || requiredRole != null,
-            'Either requiredPermission or requiredRole must be provided');
+  }) : assert(
+         requiredPermission != null || requiredRole != null,
+         'Either requiredPermission or requiredRole must be provided',
+       );
 
   @override
   Widget build(BuildContext context) {

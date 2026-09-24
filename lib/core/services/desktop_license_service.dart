@@ -92,7 +92,20 @@ rQIDAQAB
   bool get isSupported => PlatformUtils.isWindows || PlatformUtils.isLinux;
   bool get needsOnlineRefresh => _needsOnlineRefresh;
   bool _needsOnlineRefresh = false;
+  Map<String, dynamic>? _verifiedPayload;
   Future<DesktopLicenseStatus>? _initializing;
+
+  /// Features carried by the currently valid, RSA-signed desktop license.
+  /// Legacy licenses without a `features` claim remain valid for the base
+  /// product but do not acquire separately priced add-ons.
+  bool hasSignedFeature(String featureId) {
+    if (_status != DesktopLicenseStatus.valid || featureId.trim().isEmpty) {
+      return false;
+    }
+    final raw = _verifiedPayload?['features'];
+    if (raw is! List) return false;
+    return raw.whereType<String>().contains(featureId);
+  }
 
   DesktopLicenseService({
     required DeviceFingerprintService fingerprintService,
@@ -139,6 +152,9 @@ rQIDAQAB
     }
     final inspection = await _inspectEnvelope(stored);
     _needsOnlineRefresh = _isRefreshDue(inspection.payload);
+    _verifiedPayload = inspection.status == DesktopLicenseStatus.valid
+        ? inspection.payload
+        : null;
     _setStatus(inspection.status);
     return inspection.status;
   }
@@ -242,6 +258,7 @@ rQIDAQAB
       }
       await _secureStorage.write(key: _envelopeKey, value: encoded);
       _needsOnlineRefresh = false;
+      _verifiedPayload = inspection.payload;
       _setStatus(DesktopLicenseStatus.valid);
       return const DesktopActivationResult.success();
     } on DioException catch (error) {
@@ -301,6 +318,7 @@ rQIDAQAB
     );
     await _secureStorage.write(key: _activationTokenKey, value: token);
     _needsOnlineRefresh = false;
+    _verifiedPayload = inspection.payload;
     _setStatus(DesktopLicenseStatus.valid);
     return const DesktopActivationResult.success();
   }
@@ -310,6 +328,7 @@ rQIDAQAB
     await _secureStorage.delete(key: _licenseIdKey);
     await _secureStorage.delete(key: _activationTokenKey);
     _needsOnlineRefresh = false;
+    _verifiedPayload = null;
     _setStatus(
       isSupported
           ? DesktopLicenseStatus.missing

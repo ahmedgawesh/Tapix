@@ -133,20 +133,14 @@ class CustomerFormSuccess extends CustomerFormState {
   final int customerId;
   final bool isNew;
 
-  const CustomerFormSuccess({
-    required this.customerId,
-    required this.isNew,
-  });
+  const CustomerFormSuccess({required this.customerId, required this.isNew});
 }
 
 class CustomerFormError extends CustomerFormState {
   final String message;
   final CustomerFormReady previousState;
 
-  const CustomerFormError({
-    required this.message,
-    required this.previousState,
-  });
+  const CustomerFormError({required this.message, required this.previousState});
 }
 
 /// Bloc for customer form (create/edit)
@@ -156,11 +150,9 @@ class CustomerFormBloc extends Bloc<CustomerFormEvent, CustomerFormState> {
   // Replaces the legacy `(double.parse(...) * 100).round()` pattern.
   final MoneyInputParser _moneyParser;
 
-  CustomerFormBloc(
-    this._repository, {
-    MoneyInputParser? moneyParser,
-  })  : _moneyParser = moneyParser ?? sl<MoneyInputParser>(),
-        super(const CustomerFormInitial()) {
+  CustomerFormBloc(this._repository, {MoneyInputParser? moneyParser})
+    : _moneyParser = moneyParser ?? sl<MoneyInputParser>(),
+      super(const CustomerFormInitial()) {
     on<CustomerFormLoadRequested>(_onLoadRequested);
     on<CustomerFormNameChanged>(_onNameChanged);
     on<CustomerFormEmailChanged>(_onEmailChanged);
@@ -182,18 +174,21 @@ class CustomerFormBloc extends Bloc<CustomerFormEvent, CustomerFormState> {
       if (event.customerId != null) {
         final customer = await _repository.getCustomer(event.customerId!);
         if (customer != null) {
-          emit(CustomerFormReady(
-            customerId: customer.id,
-            name: customer.name,
-            email: customer.email ?? '',
-            phone: customer.phone ?? '',
-            address: customer.address ?? '',
-            segment: customer.segment,
-            balance: (customer.balanceCents.toBigInt().toInt() / 100).toStringAsFixed(2),
-            loyaltyEnabled: customer.loyaltyEnabled,
-            currencyId: customer.currencyId,
-            isEditing: true,
-          ));
+          emit(
+            CustomerFormReady(
+              customerId: customer.id,
+              name: customer.name,
+              email: customer.email ?? '',
+              phone: customer.phone ?? '',
+              address: customer.address ?? '',
+              segment: customer.segment,
+              balance: (customer.balanceCents.toBigInt().toInt() / 100)
+                  .toStringAsFixed(2),
+              loyaltyEnabled: customer.loyaltyEnabled,
+              currencyId: customer.currencyId,
+              isEditing: true,
+            ),
+          );
         } else {
           emit(const CustomerFormReady());
         }
@@ -201,10 +196,12 @@ class CustomerFormBloc extends Bloc<CustomerFormEvent, CustomerFormState> {
         emit(const CustomerFormReady());
       }
     } catch (e) {
-      emit(CustomerFormError(
-        message: e.toString(),
-        previousState: const CustomerFormReady(),
-      ));
+      emit(
+        CustomerFormError(
+          message: e.toString(),
+          previousState: const CustomerFormReady(),
+        ),
+      );
     }
   }
 
@@ -215,7 +212,7 @@ class CustomerFormBloc extends Bloc<CustomerFormEvent, CustomerFormState> {
     if (state is CustomerFormReady) {
       final currentState = state as CustomerFormReady;
       final errors = Map<String, String>.from(currentState.errors);
-      
+
       if (event.name.isEmpty) {
         errors['name'] = 'customers.name_required';
       } else {
@@ -233,7 +230,7 @@ class CustomerFormBloc extends Bloc<CustomerFormEvent, CustomerFormState> {
     if (state is CustomerFormReady) {
       final currentState = state as CustomerFormReady;
       final errors = Map<String, String>.from(currentState.errors);
-      
+
       if (event.email.isNotEmpty && !_isValidEmail(event.email)) {
         errors['email'] = 'customers.email_invalid';
       } else {
@@ -301,7 +298,7 @@ class CustomerFormBloc extends Bloc<CustomerFormEvent, CustomerFormState> {
     if (state is! CustomerFormReady) return;
 
     final currentState = state as CustomerFormReady;
-    
+
     // Validate
     final errors = <String, String>{};
     if (currentState.name.isEmpty) {
@@ -314,9 +311,12 @@ class CustomerFormBloc extends Bloc<CustomerFormEvent, CustomerFormState> {
     // Check for duplicate name
     if (currentState.name.isNotEmpty) {
       final existing = await _repository.searchCustomers(currentState.name);
-      final duplicate = existing.any((c) =>
-          c.name.trim().toLowerCase() == currentState.name.trim().toLowerCase() &&
-          c.id != currentState.customerId);
+      final duplicate = existing.any(
+        (c) =>
+            c.name.trim().toLowerCase() ==
+                currentState.name.trim().toLowerCase() &&
+            c.id != currentState.customerId,
+      );
       if (duplicate) {
         errors['name'] = 'customers.name_duplicate';
       }
@@ -335,13 +335,21 @@ class CustomerFormBloc extends Bloc<CustomerFormEvent, CustomerFormState> {
 
       if (currentState.isEditing && currentState.customerId != null) {
         // Update existing customer
-        final existingCustomer = await _repository.getCustomer(currentState.customerId!);
+        final existingCustomer = await _repository.getCustomer(
+          currentState.customerId!,
+        );
         if (existingCustomer != null) {
           final updatedCustomer = existingCustomer.copyWith(
             name: currentState.name,
-            email: Value(currentState.email.isEmpty ? null : currentState.email),
-            phone: Value(currentState.phone.isEmpty ? null : currentState.phone),
-            address: Value(currentState.address.isEmpty ? null : currentState.address),
+            email: Value(
+              currentState.email.isEmpty ? null : currentState.email,
+            ),
+            phone: Value(
+              currentState.phone.isEmpty ? null : currentState.phone,
+            ),
+            address: Value(
+              currentState.address.isEmpty ? null : currentState.address,
+            ),
             segment: currentState.segment,
             loyaltyEnabled: currentState.loyaltyEnabled,
             updatedAt: DateTime.now(),
@@ -355,10 +363,12 @@ class CustomerFormBloc extends Bloc<CustomerFormEvent, CustomerFormState> {
             desiredBalanceCents: desiredBalanceCents,
           );
 
-          emit(CustomerFormSuccess(
-            customerId: currentState.customerId!,
-            isNew: false,
-          ));
+          emit(
+            CustomerFormSuccess(
+              customerId: currentState.customerId!,
+              isNew: false,
+            ),
+          );
         }
       } else {
         // Create new customer
@@ -375,10 +385,12 @@ class CustomerFormBloc extends Bloc<CustomerFormEvent, CustomerFormState> {
         emit(CustomerFormSuccess(customerId: customerId, isNew: true));
       }
     } catch (e) {
-      emit(CustomerFormError(
-        message: e.toString(),
-        previousState: currentState.copyWith(isSubmitting: false),
-      ));
+      emit(
+        CustomerFormError(
+          message: e.toString(),
+          previousState: currentState.copyWith(isSubmitting: false),
+        ),
+      );
     }
   }
 

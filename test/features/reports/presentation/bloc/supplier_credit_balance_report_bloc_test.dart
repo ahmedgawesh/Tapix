@@ -146,9 +146,7 @@ void main() {
         dateRange: ReportDateRange.thisMonth(),
       );
 
-      final updated = original.copyWith(
-        dateRange: ReportDateRange.thisYear(),
-      );
+      final updated = original.copyWith(dateRange: ReportDateRange.thisYear());
 
       expect(updated.grandTotalPurchasesCents, 100000);
       expect(updated.grandTotalReturnsCents, 50000);
@@ -213,7 +211,8 @@ void main() {
 
     test('SupplierCreditBalanceReportSortChanged stores sort type', () {
       const event = SupplierCreditBalanceReportSortChanged(
-          SupplierCreditBalanceSortType.nameAsc);
+        SupplierCreditBalanceSortType.nameAsc,
+      );
       expect(event.sort, SupplierCreditBalanceSortType.nameAsc);
     });
   });
@@ -221,18 +220,30 @@ void main() {
   group('SupplierCreditBalanceSortType enum', () {
     test('has all expected values', () {
       expect(SupplierCreditBalanceSortType.values.length, 6);
-      expect(SupplierCreditBalanceSortType.values,
-          contains(SupplierCreditBalanceSortType.balanceDesc));
-      expect(SupplierCreditBalanceSortType.values,
-          contains(SupplierCreditBalanceSortType.balanceAsc));
-      expect(SupplierCreditBalanceSortType.values,
-          contains(SupplierCreditBalanceSortType.nameAsc));
-      expect(SupplierCreditBalanceSortType.values,
-          contains(SupplierCreditBalanceSortType.nameDesc));
-      expect(SupplierCreditBalanceSortType.values,
-          contains(SupplierCreditBalanceSortType.purchasesDesc));
-      expect(SupplierCreditBalanceSortType.values,
-          contains(SupplierCreditBalanceSortType.paymentsDesc));
+      expect(
+        SupplierCreditBalanceSortType.values,
+        contains(SupplierCreditBalanceSortType.balanceDesc),
+      );
+      expect(
+        SupplierCreditBalanceSortType.values,
+        contains(SupplierCreditBalanceSortType.balanceAsc),
+      );
+      expect(
+        SupplierCreditBalanceSortType.values,
+        contains(SupplierCreditBalanceSortType.nameAsc),
+      );
+      expect(
+        SupplierCreditBalanceSortType.values,
+        contains(SupplierCreditBalanceSortType.nameDesc),
+      );
+      expect(
+        SupplierCreditBalanceSortType.values,
+        contains(SupplierCreditBalanceSortType.purchasesDesc),
+      );
+      expect(
+        SupplierCreditBalanceSortType.values,
+        contains(SupplierCreditBalanceSortType.paymentsDesc),
+      );
     });
   });
 
@@ -272,8 +283,7 @@ void main() {
 
     test('sort by balance descending', () {
       final list = List<SupplierCreditBalanceItem>.from(suppliers);
-      list.sort(
-          (a, b) => b.creditBalanceCents.compareTo(a.creditBalanceCents));
+      list.sort((a, b) => b.creditBalanceCents.compareTo(a.creditBalanceCents));
 
       expect(list[0].supplierName, 'Apple Wholesale');
       expect(list[0].creditBalanceCents, 160000);
@@ -285,8 +295,7 @@ void main() {
 
     test('sort by balance ascending', () {
       final list = List<SupplierCreditBalanceItem>.from(suppliers);
-      list.sort(
-          (a, b) => a.creditBalanceCents.compareTo(b.creditBalanceCents));
+      list.sort((a, b) => a.creditBalanceCents.compareTo(b.creditBalanceCents));
 
       expect(list[0].supplierName, 'Mango Trading');
       expect(list[2].supplierName, 'Apple Wholesale');
@@ -313,7 +322,8 @@ void main() {
     test('sort by purchases descending', () {
       final list = List<SupplierCreditBalanceItem>.from(suppliers);
       list.sort(
-          (a, b) => b.totalPurchasesCents.compareTo(a.totalPurchasesCents));
+        (a, b) => b.totalPurchasesCents.compareTo(a.totalPurchasesCents),
+      );
 
       expect(list[0].supplierName, 'Apple Wholesale');
       expect(list[0].totalPurchasesCents, 50000);
@@ -325,8 +335,7 @@ void main() {
 
     test('sort by payments descending', () {
       final list = List<SupplierCreditBalanceItem>.from(suppliers);
-      list.sort(
-          (a, b) => b.totalPaymentsCents.compareTo(a.totalPaymentsCents));
+      list.sort((a, b) => b.totalPaymentsCents.compareTo(a.totalPaymentsCents));
 
       expect(list[0].supplierName, 'Apple Wholesale');
       expect(list[0].totalPaymentsCents, 200000);
@@ -488,9 +497,7 @@ void main() {
 
     test('copyWith preserves unchanged fields', () {
       final range = ReportDateRange.thisMonth();
-      final updated = range.copyWith(
-        preset: ReportPeriodPreset.custom,
-      );
+      final updated = range.copyWith(preset: ReportPeriodPreset.custom);
       expect(updated.startDate, range.startDate);
       expect(updated.endDate, range.endDate);
       expect(updated.preset, ReportPeriodPreset.custom);
@@ -546,8 +553,11 @@ void main() {
       ];
 
       for (final item in items) {
-        expect(item.creditBalanceCents, isPositive,
-            reason: '${item.supplierName} should have positive credit balance');
+        expect(
+          item.creditBalanceCents,
+          isPositive,
+          reason: '${item.supplierName} should have positive credit balance',
+        );
       }
     });
 
@@ -614,14 +624,17 @@ void main() {
       expect(netBalance < 0, false);
     });
 
-    test('supplier with positive balance (debit) is excluded from credit report', () {
-      const purchases = 100000;
-      const payments = -50000;
-      final netBalance = purchases + payments;
-      expect(netBalance, 50000);
-      // HAVING net_balance_cents < 0 would exclude this supplier
-      expect(netBalance < 0, false);
-    });
+    test(
+      'supplier with positive balance (debit) is excluded from credit report',
+      () {
+        const purchases = 100000;
+        const payments = -50000;
+        final netBalance = purchases + payments;
+        expect(netBalance, 50000);
+        // HAVING net_balance_cents < 0 would exclude this supplier
+        expect(netBalance < 0, false);
+      },
+    );
 
     test('credit balance is inverse of debit balance', () {
       // Same transactions, different filter

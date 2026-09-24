@@ -71,6 +71,7 @@ import '../../features/employees/presentation/screens/employee_detail_screen.dar
 import '../../features/suppliers/presentation/screens/supplier_hub_screen.dart';
 import '../../features/suppliers/presentation/screens/supplier_form_screen.dart';
 import '../../features/suppliers/presentation/screens/supplier_profile_screen.dart';
+import '../../features/consignment/presentation/screens/consignment_hub_screen.dart';
 import '../../features/expenses/presentation/screens/expenses_screen.dart';
 import '../../features/expenses/presentation/screens/expense_form_screen.dart';
 import '../../features/expenses/presentation/screens/expense_categories_screen.dart';
@@ -684,6 +685,10 @@ class AppRouter {
             ],
           ),
         ],
+      ),
+      GoRoute(
+        path: '/consignment',
+        builder: (context, state) => const ConsignmentHubScreen(),
       ),
       GoRoute(
         path: '/purchases',

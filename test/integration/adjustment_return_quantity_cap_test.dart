@@ -41,7 +41,9 @@ void main() {
     String inventoryTracking = 'standard',
     bool hasVariants = true,
   }) async {
-    final pid = await db.into(db.products).insert(
+    final pid = await db
+        .into(db.products)
+        .insert(
           ProductsCompanion.insert(
             sku: Value(sku),
             name: name,
@@ -65,7 +67,9 @@ void main() {
     int costCents = 1000,
     int priceCents = 2000,
   }) async {
-    return db.into(db.productVariants).insert(
+    return db
+        .into(db.productVariants)
+        .insert(
           ProductVariantsCompanion.insert(
             productId: productId,
             stockQuantity: const Value(0),
@@ -83,7 +87,9 @@ void main() {
     int? supplierIdOverride,
     String poNumber = 'PO-X',
   }) async {
-    final purchaseId = await db.into(db.purchases).insert(
+    final purchaseId = await db
+        .into(db.purchases)
+        .insert(
           PurchasesCompanion.insert(
             purchaseNumber: poNumber,
             supplierId: supplierIdOverride ?? supplierId,
@@ -96,7 +102,9 @@ void main() {
             paymentMethod: const Value('credit'),
           ),
         );
-    await db.into(db.purchaseItems).insert(
+    await db
+        .into(db.purchaseItems)
+        .insert(
           PurchaseItemsCompanion.insert(
             purchaseId: purchaseId,
             productId: productId,
@@ -119,7 +127,9 @@ void main() {
     int? customerIdOverride,
     String invoiceNumber = 'INV-X',
   }) async {
-    final saleId = await db.into(db.sales).insert(
+    final saleId = await db
+        .into(db.sales)
+        .insert(
           SalesCompanion.insert(
             invoiceNumber: invoiceNumber,
             customerId: Value(customerIdOverride ?? customerId),
@@ -132,7 +142,9 @@ void main() {
             status: const Value('draft'),
           ),
         );
-    await db.into(db.saleItems).insert(
+    await db
+        .into(db.saleItems)
+        .insert(
           SaleItemsCompanion.insert(
             saleId: saleId,
             productId: productId,
@@ -192,6 +204,8 @@ void main() {
       ),
       [
         SaleReturnAdjustmentItemsCompanion.insert(
+          sourceResolution: const Value('unverified'),
+          sourceResolutionReason: const Value('test fixture'),
           returnId: 0,
           productId: productId,
           variantId: Value(variantId),
@@ -204,18 +218,27 @@ void main() {
   }
 
   Future<({int linked, int adjustment})> readPurchaseItemCounters(
-      int purchaseId) async {
-    final row = await (db.select(db.purchaseItems)
-          ..where((i) => i.purchaseId.equals(purchaseId)))
-        .getSingle();
-    return (linked: row.qtyReturnedLinked, adjustment: row.qtyReturnedAdjustment);
+    int purchaseId,
+  ) async {
+    final row = await (db.select(
+      db.purchaseItems,
+    )..where((i) => i.purchaseId.equals(purchaseId))).getSingle();
+    return (
+      linked: row.qtyReturnedLinked,
+      adjustment: row.qtyReturnedAdjustment,
+    );
   }
 
-  Future<({int linked, int adjustment})> readSaleItemCounters(int saleId) async {
-    final row = await (db.select(db.saleItems)
-          ..where((i) => i.saleId.equals(saleId)))
-        .getSingle();
-    return (linked: row.qtyReturnedLinked, adjustment: row.qtyReturnedAdjustment);
+  Future<({int linked, int adjustment})> readSaleItemCounters(
+    int saleId,
+  ) async {
+    final row = await (db.select(
+      db.saleItems,
+    )..where((i) => i.saleId.equals(saleId))).getSingle();
+    return (
+      linked: row.qtyReturnedLinked,
+      adjustment: row.qtyReturnedAdjustment,
+    );
   }
 
   setUp(() async {
@@ -233,19 +256,23 @@ void main() {
       "VALUES (0, 'system', 'no-pin', 'owner', 1, $now, $now)",
     );
 
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     currencyId = usd.id;
 
-    customerId = await db.into(db.customers).insert(
+    customerId = await db
+        .into(db.customers)
+        .insert(
           CustomersCompanion.insert(
             name: 'Cap Test Customer',
             currencyId: currencyId,
             balanceCents: Value(Decimal.zero),
           ),
         );
-    supplierId = await db.into(db.suppliers).insert(
+    supplierId = await db
+        .into(db.suppliers)
+        .insert(
           SuppliersCompanion.insert(
             name: 'Cap Test Supplier',
             currencyId: currencyId,
@@ -262,11 +289,18 @@ void main() {
   group('Purchase adjustment return cap — WAC + variants', () {
     test('rejects qty > Σ purchased from supplier', () async {
       final pid = await insertProduct(
-          sku: 'CAP-WAC-1', name: 'Cap WAC 1', hasVariants: true);
+        sku: 'CAP-WAC-1',
+        name: 'Cap WAC 1',
+        hasVariants: true,
+      );
       final vid = await insertVariant(productId: pid);
 
       await postPurchase(
-          productId: pid, variantId: vid, quantity: 10, poNumber: 'PO-CAP-1');
+        productId: pid,
+        variantId: vid,
+        quantity: 10,
+        poNumber: 'PO-CAP-1',
+      );
 
       final retId = await createPurchaseAdjReturn(
         productId: pid,
@@ -280,14 +314,20 @@ void main() {
       );
     });
 
-    test('accepts qty equal to Σ purchased and bumps adjustment counter',
-        () async {
+    test('accepts qty equal to Σ purchased and bumps adjustment counter', () async {
       final pid = await insertProduct(
-          sku: 'CAP-WAC-2', name: 'Cap WAC 2', hasVariants: true);
+        sku: 'CAP-WAC-2',
+        name: 'Cap WAC 2',
+        hasVariants: true,
+      );
       final vid = await insertVariant(productId: pid);
 
       final purchaseId = await postPurchase(
-          productId: pid, variantId: vid, quantity: 10, poNumber: 'PO-CAP-2');
+        productId: pid,
+        variantId: vid,
+        quantity: 10,
+        poNumber: 'PO-CAP-2',
+      );
 
       final retId = await createPurchaseAdjReturn(
         productId: pid,
@@ -306,22 +346,32 @@ void main() {
       expect(counters.linked, equals(0));
       // Counter is updated by allocator in DAO; assert the adjustment counter
       // grew to match the qty returned.
-      expect(counters.adjustment, equals(10),
-          reason: 'adjustment counter must be bumped on post');
+      expect(
+        counters.adjustment,
+        equals(10),
+        reason: 'adjustment counter must be bumped on post',
+      );
     });
 
     test('combined linked + adjustment cannot exceed Σ purchased', () async {
       final pid = await insertProduct(
-          sku: 'CAP-WAC-3', name: 'Cap WAC 3', hasVariants: true);
+        sku: 'CAP-WAC-3',
+        name: 'Cap WAC 3',
+        hasVariants: true,
+      );
       final vid = await insertVariant(productId: pid);
 
       final purchaseId = await postPurchase(
-          productId: pid, variantId: vid, quantity: 10, poNumber: 'PO-CAP-3');
+        productId: pid,
+        variantId: vid,
+        quantity: 10,
+        poNumber: 'PO-CAP-3',
+      );
 
       // First, do a linked return of 6 via PurchaseDao directly.
-      final prItems = await (db.select(db.purchaseItems)
-            ..where((i) => i.purchaseId.equals(purchaseId)))
-          .get();
+      final prItems = await (db.select(
+        db.purchaseItems,
+      )..where((i) => i.purchaseId.equals(purchaseId))).get();
       final prItem = prItems.single;
 
       final linkedRetId = await db.purchaseDao.createPurchaseReturn(
@@ -356,8 +406,10 @@ void main() {
         returnNumber: 'PAR-CAP-3-FAIL',
       );
       expect(
-        () => adjDao.postPurchaseAdjReturn(retIdFail,
-            journalEntryService: journal),
+        () => adjDao.postPurchaseAdjReturn(
+          retIdFail,
+          journalEntryService: journal,
+        ),
         throwsA(isA<QuantityExceedsHistoryException>()),
       );
 
@@ -382,13 +434,20 @@ void main() {
   group('Purchase adjustment return cap — no variants', () {
     test('rejects qty > Σ purchased when variantId is null', () async {
       final pid = await insertProduct(
-          sku: 'CAP-NV-1', name: 'Cap NoVar 1', hasVariants: false);
+        sku: 'CAP-NV-1',
+        name: 'Cap NoVar 1',
+        hasVariants: false,
+      );
       // Products without explicit variants still need a single default
       // (color_id IS NULL, size_id IS NULL) row for the stock service.
       await insertVariant(productId: pid);
 
       await postPurchase(
-          productId: pid, variantId: null, quantity: 5, poNumber: 'PO-CAP-NV-1');
+        productId: pid,
+        variantId: null,
+        quantity: 5,
+        poNumber: 'PO-CAP-NV-1',
+      );
 
       final retId = await createPurchaseAdjReturn(
         productId: pid,
@@ -407,31 +466,38 @@ void main() {
   // 3. PURCHASE-SIDE CAP — FIFO batch tracking
   // ──────────────────────────────────────────────────────────────────────────
   group('Purchase adjustment return cap — FIFO batch', () {
-    test('cap respects history regardless of inventory_tracking_type',
-        () async {
-      final pid = await insertProduct(
-        sku: 'CAP-FIFO-1',
-        name: 'Cap FIFO 1',
-        costingMethod: 'fifo',
-        inventoryTracking: 'batch',
-        hasVariants: true,
-      );
-      final vid = await insertVariant(productId: pid);
+    test(
+      'cap respects history regardless of inventory_tracking_type',
+      () async {
+        final pid = await insertProduct(
+          sku: 'CAP-FIFO-1',
+          name: 'Cap FIFO 1',
+          costingMethod: 'fifo',
+          inventoryTracking: 'batch',
+          hasVariants: true,
+        );
+        final vid = await insertVariant(productId: pid);
 
-      await postPurchase(
-          productId: pid, variantId: vid, quantity: 8, poNumber: 'PO-CAP-FIFO-1');
+        await postPurchase(
+          productId: pid,
+          variantId: vid,
+          quantity: 8,
+          poNumber: 'PO-CAP-FIFO-1',
+        );
 
-      final retId = await createPurchaseAdjReturn(
-        productId: pid,
-        variantId: vid,
-        quantity: 9,
-      );
+        final retId = await createPurchaseAdjReturn(
+          productId: pid,
+          variantId: vid,
+          quantity: 9,
+        );
 
-      expect(
-        () => adjDao.postPurchaseAdjReturn(retId, journalEntryService: journal),
-        throwsA(isA<QuantityExceedsHistoryException>()),
-      );
-    });
+        expect(
+          () =>
+              adjDao.postPurchaseAdjReturn(retId, journalEntryService: journal),
+          throwsA(isA<QuantityExceedsHistoryException>()),
+        );
+      },
+    );
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -444,7 +510,11 @@ void main() {
 
       await postPurchase(productId: pid, variantId: vid, quantity: 20);
       await postSale(
-          productId: pid, variantId: vid, quantity: 5, invoiceNumber: 'INV-S-1');
+        productId: pid,
+        variantId: vid,
+        quantity: 5,
+        invoiceNumber: 'INV-S-1',
+      );
 
       final retId = await createSaleAdjReturn(
         productId: pid,
@@ -464,7 +534,11 @@ void main() {
 
       await postPurchase(productId: pid, variantId: vid, quantity: 20);
       final saleId = await postSale(
-          productId: pid, variantId: vid, quantity: 5, invoiceNumber: 'INV-S-2');
+        productId: pid,
+        variantId: vid,
+        quantity: 5,
+        invoiceNumber: 'INV-S-2',
+      );
 
       final retId = await createSaleAdjReturn(
         productId: pid,
@@ -483,11 +557,15 @@ void main() {
 
       await postPurchase(productId: pid, variantId: vid, quantity: 20);
       final saleId = await postSale(
-          productId: pid, variantId: vid, quantity: 10, invoiceNumber: 'INV-S-3');
+        productId: pid,
+        variantId: vid,
+        quantity: 10,
+        invoiceNumber: 'INV-S-3',
+      );
 
-      final saleItem = await (db.select(db.saleItems)
-            ..where((i) => i.saleId.equals(saleId)))
-          .getSingle();
+      final saleItem = await (db.select(
+        db.saleItems,
+      )..where((i) => i.saleId.equals(saleId))).getSingle();
 
       // Linked return of 7 first.
       final linkedRetId = await db.saleDao.createSaleReturn(
@@ -540,41 +618,45 @@ void main() {
       expect(after.adjustment, equals(3));
     });
 
-    test('walk-in (customerId=null) cash refund bypasses cap implicitly',
-        () async {
-      final pid = await insertProduct(sku: 'CAP-S-4', name: 'Cap Sale 4');
-      final vid = await insertVariant(productId: pid);
+    test(
+      'walk-in (customerId=null) cash refund bypasses cap implicitly',
+      () async {
+        final pid = await insertProduct(sku: 'CAP-S-4', name: 'Cap Sale 4');
+        final vid = await insertVariant(productId: pid);
 
-      await postPurchase(productId: pid, variantId: vid, quantity: 5);
+        await postPurchase(productId: pid, variantId: vid, quantity: 5);
 
-      // No sale to walk-in customer at all → still allow cash refund.
-      final retId = await adjDao.createSaleAdjReturn(
-        SaleReturnAdjustmentsCompanion.insert(
-          returnNumber: 'SAR-WALKIN',
-          customerId: const Value(null),
-          currencyId: currencyId,
-          totalCents: Decimal.fromInt(2000),
-          refundMethod: const Value('cash'),
-        ),
-        [
-          SaleReturnAdjustmentItemsCompanion.insert(
-            returnId: 0,
-            productId: pid,
-            variantId: Value(vid),
-            quantity: 1,
-            unitPriceCents: Decimal.fromInt(2000),
+        // No sale to walk-in customer at all → still allow cash refund.
+        final retId = await adjDao.createSaleAdjReturn(
+          SaleReturnAdjustmentsCompanion.insert(
+            returnNumber: 'SAR-WALKIN',
+            customerId: const Value(null),
+            currencyId: currencyId,
             totalCents: Decimal.fromInt(2000),
+            refundMethod: const Value('cash'),
           ),
-        ],
-      );
+          [
+            SaleReturnAdjustmentItemsCompanion.insert(
+              sourceResolution: const Value('unverified'),
+              sourceResolutionReason: const Value('test fixture'),
+              returnId: 0,
+              productId: pid,
+              variantId: Value(vid),
+              quantity: 1,
+              unitPriceCents: Decimal.fromInt(2000),
+              totalCents: Decimal.fromInt(2000),
+            ),
+          ],
+        );
 
-      // allowOverHistory: true is required for walk-in (no upstream sale).
-      await adjDao.postSaleAdjReturn(
-        retId,
-        journalEntryService: journal,
-        allowOverHistory: true,
-      );
-    });
+        // allowOverHistory: true is required for walk-in (no upstream sale).
+        await adjDao.postSaleAdjReturn(
+          retId,
+          journalEntryService: journal,
+          allowOverHistory: true,
+        );
+      },
+    );
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -587,9 +669,13 @@ void main() {
 
       // Force stock without any purchase invoice (corruption-style setup).
       await db.customStatement(
-          'UPDATE product_variants SET stock_quantity = 5 WHERE id = ?', [vid]);
+        'UPDATE product_variants SET stock_quantity = 5 WHERE id = ?',
+        [vid],
+      );
       await db.customStatement(
-          'UPDATE products SET stock_quantity = 5 WHERE id = ?', [pid]);
+        'UPDATE products SET stock_quantity = 5 WHERE id = ?',
+        [pid],
+      );
 
       final retId = await createPurchaseAdjReturn(
         productId: pid,
@@ -627,7 +713,10 @@ void main() {
       final vid = await insertVariant(productId: pid);
 
       final purchaseId = await postPurchase(
-          productId: pid, variantId: vid, quantity: 10);
+        productId: pid,
+        variantId: vid,
+        quantity: 10,
+      );
 
       final retId = await createPurchaseAdjReturn(
         productId: pid,
@@ -635,10 +724,16 @@ void main() {
         quantity: 4,
       );
       await adjDao.postPurchaseAdjReturn(retId, journalEntryService: journal);
-      expect((await readPurchaseItemCounters(purchaseId)).adjustment, equals(4));
+      expect(
+        (await readPurchaseItemCounters(purchaseId)).adjustment,
+        equals(4),
+      );
 
       await adjDao.voidPurchaseAdjReturn(retId, journalEntryService: journal);
-      expect((await readPurchaseItemCounters(purchaseId)).adjustment, equals(0));
+      expect(
+        (await readPurchaseItemCounters(purchaseId)).adjustment,
+        equals(0),
+      );
     });
 
     test('voidSaleAdjReturn decrements adjustment counter', () async {
@@ -647,7 +742,11 @@ void main() {
 
       await postPurchase(productId: pid, variantId: vid, quantity: 10);
       final saleId = await postSale(
-          productId: pid, variantId: vid, quantity: 5, invoiceNumber: 'INV-V-2');
+        productId: pid,
+        variantId: vid,
+        quantity: 5,
+        invoiceNumber: 'INV-V-2',
+      );
 
       final retId = await createSaleAdjReturn(
         productId: pid,
@@ -666,40 +765,45 @@ void main() {
   // 7. Linked path counter increments on post and decrements on void
   // ──────────────────────────────────────────────────────────────────────────
   group('Linked path counters', () {
-    test('postPurchaseReturn / voidPurchaseReturn moves linked counter',
-        () async {
-      final pid = await insertProduct(sku: 'CAP-L-1', name: 'Linked 1');
-      final vid = await insertVariant(productId: pid);
+    test(
+      'postPurchaseReturn / voidPurchaseReturn moves linked counter',
+      () async {
+        final pid = await insertProduct(sku: 'CAP-L-1', name: 'Linked 1');
+        final vid = await insertVariant(productId: pid);
 
-      final purchaseId = await postPurchase(
-          productId: pid, variantId: vid, quantity: 10);
-      final pi = await (db.select(db.purchaseItems)
-            ..where((i) => i.purchaseId.equals(purchaseId)))
-          .getSingle();
+        final purchaseId = await postPurchase(
+          productId: pid,
+          variantId: vid,
+          quantity: 10,
+        );
+        final pi = await (db.select(
+          db.purchaseItems,
+        )..where((i) => i.purchaseId.equals(purchaseId))).getSingle();
 
-      final retId = await db.purchaseDao.createPurchaseReturn(
-        PurchaseReturnsCompanion.insert(
-          returnNumber: 'PR-L-1',
-          purchaseId: purchaseId,
-          subtotalCents: Value(Decimal.fromInt(3000)),
-          totalCents: Decimal.fromInt(3000),
-          currencyId: currencyId,
-        ),
-        [
-          PurchaseReturnItemsCompanion.insert(
-            returnId: 0,
-            purchaseItemId: pi.id,
-            quantity: 3,
+        final retId = await db.purchaseDao.createPurchaseReturn(
+          PurchaseReturnsCompanion.insert(
+            returnNumber: 'PR-L-1',
+            purchaseId: purchaseId,
             subtotalCents: Value(Decimal.fromInt(3000)),
-            refundCents: Decimal.fromInt(3000),
+            totalCents: Decimal.fromInt(3000),
+            currencyId: currencyId,
           ),
-        ],
-      );
-      await db.purchaseDao.postPurchaseReturn(retId);
-      expect((await readPurchaseItemCounters(purchaseId)).linked, equals(3));
+          [
+            PurchaseReturnItemsCompanion.insert(
+              returnId: 0,
+              purchaseItemId: pi.id,
+              quantity: 3,
+              subtotalCents: Value(Decimal.fromInt(3000)),
+              refundCents: Decimal.fromInt(3000),
+            ),
+          ],
+        );
+        await db.purchaseDao.postPurchaseReturn(retId);
+        expect((await readPurchaseItemCounters(purchaseId)).linked, equals(3));
 
-      await db.purchaseDao.voidPurchaseReturn(retId);
-      expect((await readPurchaseItemCounters(purchaseId)).linked, equals(0));
-    });
+        await db.purchaseDao.voidPurchaseReturn(retId);
+        expect((await readPurchaseItemCounters(purchaseId)).linked, equals(0));
+      },
+    );
   });
 }

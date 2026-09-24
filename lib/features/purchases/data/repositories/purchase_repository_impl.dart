@@ -179,6 +179,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
         .map(
           (item) => db.PurchaseItemsCompanion(
             productId: Value(item.productId),
+            supplierIdentityRequested: Value(item.supplierIdentityRequested),
             variantId: Value(item.variantId),
             quantity: Value(item.quantity),
             quantityScale: Value(item.quantityScale),
@@ -350,6 +351,7 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
         .map(
           (item) => db.PurchaseItemsCompanion(
             productId: Value(item.productId),
+            supplierIdentityRequested: Value(item.supplierIdentityRequested),
             variantId: Value(item.variantId),
             quantity: Value(item.quantity),
             quantityScale: Value(item.quantityScale),

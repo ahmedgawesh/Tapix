@@ -427,6 +427,8 @@ class ReturnJournalPolicy {
       throw AccountingException(
         'Required account "$code" not found in Chart of Accounts. '
         'Run seedDefaultAccounts first.',
+        code: 'accounting.system_account_missing',
+        details: {'accountCode': code},
       );
     }
     return account.id;

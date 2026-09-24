@@ -67,7 +67,7 @@ class WacMovementService {
     await operationScope.validate(dao.attachedDatabase);
     final row = await dao
         .customSelect(
-          'SELECT s.quantity AS stock_quantity, s.unit_cost_cents AS cost_cents '
+          'SELECT (s.quantity - s.supplier_owned_quantity) AS stock_quantity, s.unit_cost_cents AS cost_cents '
           'FROM business_warehouse_stocks s JOIN product_variants v ON v.id = s.variant_id '
           'WHERE s.variant_id = ? AND s.warehouse_id = ? AND v.product_id = ?',
           variables: [

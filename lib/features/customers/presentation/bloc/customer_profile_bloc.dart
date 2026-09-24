@@ -12,7 +12,8 @@ class CustomerProfileLoadRequested extends CustomerProfileEvent {
   const CustomerProfileLoadRequested(this.customerId);
 }
 
-class CustomerProfileBloc extends RealtimeBloc<Customer?, CustomerProfileEvent> {
+class CustomerProfileBloc
+    extends RealtimeBloc<Customer?, CustomerProfileEvent> {
   final CustomerRepository _repository;
   int? _customerId;
 

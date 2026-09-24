@@ -19,6 +19,8 @@ import '../../services/cheque_source_void_service.dart';
 import '../../services/batch_service.dart';
 import '../../services/inventory/wac_movement_service.dart';
 import '../../services/inventory/inventory_valuation_delta_service.dart';
+import '../../services/inventory/consignment_adjustment_return_service.dart';
+import '../../services/inventory/supplier_product_identity_service.dart';
 import '../../services/document_number_service.dart';
 import '../../services/journal_entry_service.dart';
 import '../../services/commissions/commission_service.dart';
@@ -30,6 +32,36 @@ import '../../services/returns/return_approval_exceptions.dart';
 import '../../services/returns/return_approval_service.dart';
 
 part 'adjustment_return_dao.g.dart';
+
+class ConsignmentAdjustmentReturnSourceOption {
+  const ConsignmentAdjustmentReturnSourceOption({
+    required this.layerId,
+    required this.supplierId,
+    required this.supplierName,
+    required this.receiptNumber,
+    required this.receivedAt,
+    required this.productId,
+    required this.variantId,
+    required this.maximumReturnQuantity,
+    required this.quantityScale,
+    required this.measurementType,
+    this.batchNumber,
+    this.manufacturerLotNumber,
+  });
+
+  final String layerId;
+  final int supplierId;
+  final String supplierName;
+  final String receiptNumber;
+  final DateTime receivedAt;
+  final int productId;
+  final int variantId;
+  final int maximumReturnQuantity;
+  final int quantityScale;
+  final String measurementType;
+  final String? batchNumber;
+  final String? manufacturerLotNumber;
+}
 
 /// Thrown when a return cannot be processed because stock is insufficient.
 class StockInsufficientException implements Exception {
@@ -286,6 +318,70 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
       'AdjustmentReturnDao: product=$productId has no active variant. '
       'Cannot adjust stock for an adjustment return line referencing it.',
     );
+  }
+
+  /// Returns only exact consignment receipt layers that have a net sold
+  /// quantity available to receive back. The absence of a selection remains
+  /// an unattributed customer return; this method never guesses a supplier.
+  Future<List<ConsignmentAdjustmentReturnSourceOption>>
+  getConsignmentAdjustmentReturnSources({
+    required int productId,
+    int? variantId,
+    WarehouseOperationScope? scope,
+  }) async {
+    final operationScope =
+        scope ?? await WarehouseOperationScope.resolve(attachedDatabase);
+    await operationScope.validate(attachedDatabase);
+    final variables = <Variable>[
+      Variable.withString(operationScope.warehouseId),
+      Variable.withInt(productId),
+    ];
+    final variantFilter = variantId == null ? '' : 'AND l.variant_id=?';
+    if (variantId != null) variables.add(Variable.withInt(variantId));
+    final rows = await customSelect(
+      'SELECT l.id AS layer_id,l.supplier_id,s.name AS supplier_name,'
+      'r.receipt_number,r.received_at,l.product_id,l.variant_id,'
+      '(l.received_quantity-l.remaining_quantity) AS maximum_return_quantity,'
+      'l.quantity_scale,l.measurement_type,b.batch_number,'
+      'ri.manufacturer_lot_number '
+      'FROM consignment_inventory_layers l '
+      'JOIN consignment_receipt_items ri ON ri.id=l.receipt_item_id '
+      'JOIN consignment_receipts r ON r.id=ri.receipt_id '
+      'JOIN suppliers s ON s.id=l.supplier_id '
+      'LEFT JOIN product_batches b ON b.id=l.batch_id '
+      'WHERE l.warehouse_id=? AND l.product_id=? $variantFilter '
+      "AND l.status!='voided' AND r.status='posted' AND s.is_active=1 "
+      'AND l.received_quantity>l.remaining_quantity '
+      'ORDER BY r.received_at DESC,r.receipt_number DESC,l.id DESC',
+      variables: variables,
+      readsFrom: {
+        attachedDatabase.consignmentInventoryLayers,
+        attachedDatabase.consignmentReceiptItems,
+        attachedDatabase.consignmentReceipts,
+        suppliers,
+        productBatches,
+      },
+    ).get();
+    return rows
+        .map(
+          (row) => ConsignmentAdjustmentReturnSourceOption(
+            layerId: row.read<String>('layer_id'),
+            supplierId: row.read<int>('supplier_id'),
+            supplierName: row.read<String>('supplier_name'),
+            receiptNumber: row.read<String>('receipt_number'),
+            receivedAt: row.read<DateTime>('received_at'),
+            productId: row.read<int>('product_id'),
+            variantId: row.read<int>('variant_id'),
+            maximumReturnQuantity: row.read<int>('maximum_return_quantity'),
+            quantityScale: row.read<int>('quantity_scale'),
+            measurementType: row.read<String>('measurement_type'),
+            batchNumber: row.readNullable<String>('batch_number'),
+            manufacturerLotNumber: row.readNullable<String>(
+              'manufacturer_lot_number',
+            ),
+          ),
+        )
+        .toList(growable: false);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -1021,6 +1117,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         // DECREASE stock (purchase return = goods leaving our warehouse)
         await StockService.adjustStock(
           this,
+          origin: InventoryOriginIntent('purchase_adjustment', item.id),
           scope: operationScope,
           productId: item.productId,
           variantId: resolvedVariantId,
@@ -1404,7 +1501,10 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         for (final item in items) {
           final tracksInventory = trackedByProduct[item.productId] ?? true;
           if (!tracksInventory) continue;
-          affectedProductIds.add(item.productId);
+          final restoresStock =
+              ReturnDispositionX.fromWire(item.dispositionType) ==
+              ReturnDisposition.restock;
+          if (restoresStock) affectedProductIds.add(item.productId);
 
           // Defensive variant resolution mirrors the post path so legacy
           // rows that were posted before this fix can still be voided.
@@ -1426,6 +1526,11 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           // INCREASE stock back (reverse the decrease)
           await StockService.adjustStock(
             this,
+            origin: InventoryOriginIntent(
+              'purchase_adjustment_void',
+              item.id,
+              reference: 'purchase_adjustment:${item.id}',
+            ),
             scope: operationScope,
             productId: item.productId,
             variantId: resolvedVariantId,
@@ -1687,9 +1792,51 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
     WarehouseOperationScope? scope,
   }) {
     return transaction(() async {
+      final trackedByProduct = await _trackInventoryByProduct(
+        items.map((item) => item.productId.value).toSet(),
+      );
       for (final item in items) {
         assert(item.quantity.value > 0, 'quantity must be > 0');
         assert(item.productId.present, 'productId is required');
+
+        final resolution = item.sourceResolution.present
+            ? item.sourceResolution.value
+            : null;
+        final reason = item.sourceResolutionReason.present
+            ? item.sourceResolutionReason.value?.trim()
+            : null;
+        final supplierIdentityId = item.supplierIdentityId.present
+            ? item.supplierIdentityId.value
+            : null;
+        final consignmentLayerId = item.consignmentLayerId.present
+            ? item.consignmentLayerId.value
+            : null;
+        const allowedResolutions = {
+          'supplier_identity',
+          'consignment',
+          'unverified',
+          'not_applicable',
+        };
+        final tracksInventory = trackedByProduct[item.productId.value] ?? true;
+        final valid =
+            allowedResolutions.contains(resolution) &&
+            (tracksInventory
+                ? resolution != 'not_applicable'
+                : resolution == 'not_applicable') &&
+            (resolution != 'supplier_identity' ||
+                (supplierIdentityId != null && consignmentLayerId == null)) &&
+            (resolution != 'consignment' ||
+                (consignmentLayerId != null && supplierIdentityId == null)) &&
+            (resolution != 'unverified' ||
+                (supplierIdentityId == null &&
+                    consignmentLayerId == null &&
+                    reason != null &&
+                    reason.isNotEmpty)) &&
+            (resolution != 'not_applicable' ||
+                (supplierIdentityId == null && consignmentLayerId == null));
+        if (!valid) {
+          throw StateError('returns.source_decision_required');
+        }
       }
 
       final operationScope =
@@ -1931,7 +2078,10 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           actualInvCostByItem[item.id] = 0;
           continue;
         }
-        affectedProductIds.add(item.productId);
+        final restoresStock =
+            ReturnDispositionX.fromWire(item.dispositionType) ==
+            ReturnDisposition.restock;
+        if (restoresStock) affectedProductIds.add(item.productId);
 
         // Resolve a concrete variant before any stock-touching call.
         // See `_resolveVariantIdForStock` for rationale.
@@ -1949,6 +2099,23 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           );
         }
 
+        final supplierIdentity = item.supplierIdentityId == null
+            ? null
+            : await SupplierProductIdentityService(
+                attachedDatabase,
+              ).requireForLine(
+                identityId: item.supplierIdentityId!,
+                productId: item.productId,
+                variantId: resolvedVariantId,
+              );
+        final consignmentPlan =
+            await ConsignmentAdjustmentReturnService.prepare(
+              this,
+              item: returnData,
+              returnItem: item,
+              resolvedVariantId: resolvedVariantId,
+              scope: operationScope,
+            );
         final wacSnapshot = await WacMovementService.capture(
           this,
           scope: operationScope,
@@ -1962,22 +2129,51 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           variantId: resolvedVariantId,
         );
 
-        // INCREASE stock (sale return = goods coming back to our warehouse)
-        await StockService.adjustStock(
-          this,
-          scope: operationScope,
-          productId: item.productId,
-          variantId: resolvedVariantId,
-          quantity: item.quantity,
-          direction: StockDirection.increase,
-        );
-
-        if (wacSnapshot != null) {
-          await WacMovementService.applyInbound(
+        // Only resaleable goods increase on-hand stock. Damaged/scrapped
+        // goods keep their financial and supplier-source audit without
+        // becoming available to sell.
+        if (restoresStock) {
+          await StockService.adjustStock(
             this,
-            snapshot: wacSnapshot,
-            addedQty: item.quantity,
-            inboundUnitCostCents: frozenUnitCost,
+            origin: consignmentPlan == null
+                ? InventoryOriginIntent(
+                    'adjustment',
+                    item.id,
+                    supplierIdentityId: item.supplierIdentityId,
+                  )
+                : InventoryOriginIntent(
+                    'consignment_adjustment_return',
+                    item.id,
+                    reference:
+                        'consignment_receipt:${consignmentPlan.layer.receiptItemId}',
+                  ),
+            scope: operationScope,
+            productId: item.productId,
+            variantId: resolvedVariantId,
+            quantity: item.quantity,
+            direction: StockDirection.increase,
+          );
+
+          if (wacSnapshot != null && consignmentPlan == null) {
+            await WacMovementService.applyInbound(
+              this,
+              snapshot: wacSnapshot,
+              addedQty: item.quantity,
+              inboundUnitCostCents: frozenUnitCost,
+            );
+          }
+        }
+
+        if (consignmentPlan != null) {
+          await ConsignmentAdjustmentReturnService.postAfterStock(
+            this,
+            returnData: returnData,
+            item: item,
+            plan: consignmentPlan,
+            resolvedVariantId: resolvedVariantId,
+            scope: operationScope,
+            journal: journalEntryService,
+            userId: userId,
           );
         }
 
@@ -1989,7 +2185,9 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         // (via [documentReference]) so it is traceable in the Batch Management
         // report and never confused with a LINKED `SR-…` return document.
         // WAC products keep their batches untouched (legacy path).
-        if (await _isFifoProduct(item.productId)) {
+        if (restoresStock &&
+            consignmentPlan == null &&
+            await _isFifoProduct(item.productId)) {
           final returnBatchId = await BatchService.createOpeningBatch(
             this,
             scope: operationScope,
@@ -1997,6 +2195,7 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
             variantId: resolvedVariantId,
             quantity: item.quantity,
             unitCostCents: frozenUnitCost,
+            supplierId: supplierIdentity?.supplierId,
             source: 'sale_return',
             documentReference: returnData.returnNumber,
           );
@@ -2010,7 +2209,15 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           batchedProductIds.add(item.productId);
         }
 
-        final lineCost = valuationSnapshot != null
+        final lineCost = consignmentPlan != null
+            ? 0
+            : !restoresStock
+            ? MeasuredAmount.cents(
+                unitCents: frozenUnitCost,
+                quantity: item.quantity,
+                quantityScale: item.quantityScale,
+              )
+            : valuationSnapshot != null
             ? await InventoryValuationDeltaService.signedDeltaAfter(
                 this,
                 valuationSnapshot,
@@ -2417,7 +2624,10 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         for (final item in items) {
           final tracksInventory = trackedByProduct[item.productId] ?? true;
           if (!tracksInventory) continue;
-          affectedProductIds.add(item.productId);
+          final restoresStock =
+              ReturnDispositionX.fromWire(item.dispositionType) ==
+              ReturnDisposition.restock;
+          if (restoresStock) affectedProductIds.add(item.productId);
 
           // Defensive variant resolution mirrors the post path so legacy
           // rows that were posted before this fix can still be voided.
@@ -2435,62 +2645,84 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
               item.unitCostAtPostCents?.toBigInt().toInt() ??
               wacSnapshot?.unitCostCents ??
               item.unitCostCents.toBigInt().toInt();
-
-          if (!allowNegativeStock) {
-            final balance = await WarehouseInventoryReader.read(
-              this,
-              operationScope,
-              item.productId,
-              resolvedVariantId,
-            );
-            if (balance.quantity < item.quantity) {
-              throw StockInsufficientException(
-                productId: item.productId,
-                variantId: resolvedVariantId,
-                currentStock: balance.quantity,
-                requestedQuantity: item.quantity,
+          final consignmentQuantity =
+              await ConsignmentAdjustmentReturnService.prepareVoidBeforeStock(
+                this,
+                returnData: returnData,
+                item: item,
+                resolvedVariantId: resolvedVariantId,
+                scope: operationScope,
+                journal: journalEntryService,
+                userId: voidedBy,
               );
-            }
-          }
 
-          // DECREASE stock (reverse the increase)
-          await StockService.adjustStock(
-            this,
-            scope: operationScope,
-            productId: item.productId,
-            variantId: resolvedVariantId,
-            quantity: item.quantity,
-            direction: StockDirection.decrease,
-          );
-
-          if (wacSnapshot != null) {
-            await WacMovementService.reverseInbound(
-              this,
-              snapshot: wacSnapshot,
-              removedQty: item.quantity,
-              removedUnitCostCents: frozenUnitCost,
-            );
-          }
-
-          // Undo the exact layer created by this return, not an older lot.
-          // Legacy rows need explicit source reconciliation rather than a guess.
-          if (await _isFifoProduct(item.productId)) {
-            if (item.returnBatchId == null) {
-              throw StateError(
-                'Legacy FIFO adjustment return needs batch-source reconciliation before voiding',
+          if (restoresStock) {
+            if (!allowNegativeStock) {
+              final balance = await WarehouseInventoryReader.read(
+                this,
+                operationScope,
+                item.productId,
+                resolvedVariantId,
               );
+              if (balance.quantity < item.quantity) {
+                throw StockInsufficientException(
+                  productId: item.productId,
+                  variantId: resolvedVariantId,
+                  currentStock: balance.quantity,
+                  requestedQuantity: item.quantity,
+                );
+              }
             }
-            await BatchService.consumeFifo(
+
+            // DECREASE stock (reverse the resaleable increase).
+            await StockService.adjustStock(
               this,
+              origin: InventoryOriginIntent(
+                'adjustment_void',
+                item.id,
+                reference: 'adjustment:${item.id}',
+              ),
               scope: operationScope,
-              requiredBatchId: item.returnBatchId,
               productId: item.productId,
               variantId: resolvedVariantId,
               quantity: item.quantity,
-              consumptionType: 'sale_adj_return_void',
-              saleReturnAdjustmentItemId: item.id,
+              direction: StockDirection.decrease,
             );
-            batchedProductIds.add(item.productId);
+
+            final ownedRemovalQuantity = item.quantity - consignmentQuantity;
+            if (ownedRemovalQuantity < 0) {
+              throw StateError(
+                'Consignment adjustment quantity exceeds return quantity.',
+              );
+            }
+            if (wacSnapshot != null && ownedRemovalQuantity > 0) {
+              await WacMovementService.reverseInbound(
+                this,
+                snapshot: wacSnapshot,
+                removedQty: ownedRemovalQuantity,
+                removedUnitCostCents: frozenUnitCost,
+              );
+            }
+
+            // Undo the exact layer created by this return, not an older lot.
+            if (await _isFifoProduct(item.productId)) {
+              if (item.returnBatchId == null) {
+                throw StateError(
+                  'Legacy FIFO adjustment return needs batch-source reconciliation before voiding',
+                );
+              }
+              await BatchService.consumeFifo(
+                this,
+                scope: operationScope,
+                requiredBatchId: item.returnBatchId,
+                productId: item.productId,
+                variantId: resolvedVariantId,
+                quantity: item.quantity,
+                consumptionType: 'sale_adj_return_void',
+                saleReturnAdjustmentItemId: item.id,
+              );
+              batchedProductIds.add(item.productId);
+            }
           }
         }
 

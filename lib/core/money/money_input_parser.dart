@@ -22,13 +22,7 @@ class MoneyInputParseResult {
 /// Reasons a user-typed amount can fail validation. Kept as an enum so
 /// callers can localize each variant independently and so unit tests can
 /// assert the exact rejection cause.
-enum MoneyInputError {
-  empty,
-  notANumber,
-  negative,
-  tooManyDecimals,
-  overflow,
-}
+enum MoneyInputError { empty, notANumber, negative, tooManyDecimals, overflow }
 
 /// Single source of truth for converting a free-form text amount typed by a
 /// user (e.g. into a `TextField`) into the canonical integer-cents
@@ -88,7 +82,8 @@ class MoneyInputParser {
       return const MoneyInputParseResult._(0, MoneyInputError.negative);
     }
 
-    final digits = decimalDigits ?? _currencyService.getCurrency().decimalDigits;
+    final digits =
+        decimalDigits ?? _currencyService.getCurrency().decimalDigits;
     final scale = _scaleOf(parsed);
     if (scale > digits) {
       return const MoneyInputParseResult._(0, MoneyInputError.tooManyDecimals);

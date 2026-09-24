@@ -14,7 +14,8 @@ class SupplierProfileLoadRequested extends SupplierProfileEvent {
 }
 
 /// Bloc for managing a single supplier profile with real-time updates
-class SupplierProfileBloc extends RealtimeBloc<Supplier?, SupplierProfileEvent> {
+class SupplierProfileBloc
+    extends RealtimeBloc<Supplier?, SupplierProfileEvent> {
   final SupplierRepository _repository;
   int? _supplierId;
 

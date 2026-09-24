@@ -6,6 +6,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/database/migrations/business_document_locations.dart';
+import 'package:tapix/core/database/migrations/sale_source_selection.dart';
 import 'package:tapix/features/business/data/business_foundation_repository.dart';
 import 'package:uuid/uuid.dart';
 
@@ -221,7 +222,7 @@ void main() {
       legacy = AppDatabase.connect(DatabaseConnection(NativeDatabase(file)));
       addTearDown(legacy.close);
       expect(await fixtures.legacySnapshot(legacy), before);
-      expect(legacy.schemaVersion, 10091);
+      expect(legacy.schemaVersion, 10115);
       expect(
         (await legacy.select(legacy.businessContexts).get())
             .map((r) => r.toJson())
@@ -253,6 +254,20 @@ void main() {
               .map((r) => r.toJson())
               .toList();
       await removeBusinessDocumentLocationTriggers(legacy);
+      // The fixture is downgraded from the current schema. Remove guards that
+      // did not exist in 10090 before removing the columns they reference.
+      await removeSaleSourceSelectionGuards(legacy);
+      // This fixture emulates schema 10089. Consignment triggers were added
+      // later and can reference the route columns removed below.
+      for (final trigger
+          in await legacy
+              .customSelect(
+                "SELECT name FROM sqlite_master WHERE type='trigger' AND name GLOB 'consignment_*'",
+              )
+              .get()) {
+        final name = trigger.read<String>('name');
+        await legacy.customStatement('DROP TRIGGER "$name"');
+      }
       for (final table in [
         'sales',
         'purchases',
@@ -271,7 +286,7 @@ void main() {
       legacy = AppDatabase.connect(DatabaseConnection(NativeDatabase(file)));
       addTearDown(legacy.close);
       expect(await fixtures.legacySnapshot(legacy), before);
-      expect(legacy.schemaVersion, 10091);
+      expect(legacy.schemaVersion, 10115);
       expect(
         (await legacy.select(legacy.businessDocumentLocations).get())
             .map((r) => r.toJson())

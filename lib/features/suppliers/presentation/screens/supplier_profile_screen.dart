@@ -1,3 +1,4 @@
+import '../../../../core/services/inventory/supplier_identity_rules.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
@@ -33,6 +34,7 @@ class SupplierProfileScreen extends StatefulWidget {
 
 class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
   var _didBackfillAccounting = false;
+  bool _isChangingActive = false;
 
   Future<void> _backfillAccountingIfNeeded() async {
     if (_didBackfillAccounting) return;
@@ -129,6 +131,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                   itemBuilder: (context) => [
                     PopupMenuItem(
                       value: 'toggle_active',
+                      enabled: !_isChangingActive,
                       child: Row(
                         children: [
                           Icon(
@@ -170,6 +173,31 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    if (!supplier.isActive) ...[
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('suppliers.inactive_profile_hint'.tr()),
+                              const SizedBox(height: 8),
+                              FilledButton.icon(
+                                key: const ValueKey(
+                                  'reactivate_supplier_button',
+                                ),
+                                onPressed: _isChangingActive
+                                    ? null
+                                    : () => _toggleActive(context, supplier),
+                                icon: const Icon(Icons.check_circle_outline),
+                                label: Text('suppliers.activate'.tr()),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     _ProfileHeaderCard(
                       supplier: supplier,
                       balanceCents: balanceCents,
@@ -214,6 +242,16 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
                       currencyService: currencyService,
                     ),
                     const SizedBox(height: 16),
+                    if (supplier.productCode != null) ...[
+                      Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.tag),
+                          title: Text('supplier_identity.code_label'.tr()),
+                          subtitle: SelectableText(supplier.productCode!),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     _ContactInformationSection(supplier: supplier),
                     const SizedBox(height: 16),
                     _RecentTransactionsSection(
@@ -268,12 +306,25 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
               final scaffoldMessenger = ScaffoldMessenger.of(context);
               final router = GoRouter.of(context);
               navigator.pop();
-              await sl<SupplierRepository>().deleteSupplier(supplier.id);
-              if (mounted) {
-                scaffoldMessenger.showSnackBar(
-                  SnackBar(content: Text('suppliers.deleted_success'.tr())),
-                );
-                router.pop();
+              try {
+                await sl<SupplierRepository>().deleteSupplier(supplier.id);
+                if (mounted) {
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(content: Text('suppliers.deleted_success'.tr())),
+                  );
+                  router.pop();
+                }
+              } catch (error) {
+                if (mounted) {
+                  final failure = SupplierIdentityException.fromError(error);
+                  scaffoldMessenger.showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        failure?.messageKey.tr() ?? error.toString(),
+                      ),
+                    ),
+                  );
+                }
               }
             },
             style: FilledButton.styleFrom(
@@ -286,12 +337,34 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
     );
   }
 
-  void _toggleActive(BuildContext context, Supplier supplier) async {
-    final updatedSupplier = supplier.copyWith(
-      isActive: !supplier.isActive,
-      updatedAt: DateTime.now(),
-    );
-    await sl<SupplierRepository>().updateSupplier(updatedSupplier);
+  Future<void> _toggleActive(BuildContext context, Supplier supplier) async {
+    if (_isChangingActive) return;
+    setState(() => _isChangingActive = true);
+    try {
+      await sl<SupplierRepository>().setSupplierActive(
+        supplier.id,
+        !supplier.isActive,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            (supplier.isActive
+                    ? 'suppliers.deactivated_success'
+                    : 'suppliers.activated_success')
+                .tr(),
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      final failure = SupplierIdentityException.fromError(error);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text((failure?.messageKey ?? 'common.error').tr())),
+      );
+    } finally {
+      if (mounted) setState(() => _isChangingActive = false);
+    }
   }
 
   void _showPaymentDialog(BuildContext context, Supplier supplier) {

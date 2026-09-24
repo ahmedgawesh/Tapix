@@ -30,9 +30,9 @@ class TemplateSelectorWidget extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Text(
             'barcode.no_templates'.tr(),
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.outline,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: colorScheme.outline),
           ),
         ),
       );
@@ -43,7 +43,7 @@ class TemplateSelectorWidget extends StatelessWidget {
         // Calculate card width based on available space
         final availableWidth = constraints.maxWidth;
         final cardWidth = (availableWidth / 4).clamp(100.0, 140.0);
-        
+
         return ListView.builder(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -97,7 +97,9 @@ class _TemplateCard extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isSelected ? colorScheme.primary : colorScheme.outline.withValues(alpha: 0.3),
+              color: isSelected
+                  ? colorScheme.primary
+                  : colorScheme.outline.withValues(alpha: 0.3),
               width: isSelected ? 2 : 1,
             ),
           ),
@@ -113,7 +115,9 @@ class _TemplateCard extends StatelessWidget {
                     Icon(
                       _getIconForPaperSize(template.paperSize),
                       size: 16,
-                      color: isSelected ? colorScheme.primary : colorScheme.onSurface,
+                      color: isSelected
+                          ? colorScheme.primary
+                          : colorScheme.onSurface,
                     ),
                     if (template.isDefault)
                       Icon(
@@ -127,12 +131,14 @@ class _TemplateCard extends StatelessWidget {
                       child: Text(
                         template.name,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              color: isSelected
-                                  ? colorScheme.onPrimaryContainer
-                                  : colorScheme.onSurface,
-                              fontSize: 9,
-                            ),
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          color: isSelected
+                              ? colorScheme.onPrimaryContainer
+                              : colorScheme.onSurface,
+                          fontSize: 9,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
@@ -142,11 +148,13 @@ class _TemplateCard extends StatelessWidget {
                     Text(
                       '${template.widthMm.toInt()}x${template.heightMm.toInt()}mm',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: isSelected
-                                ? colorScheme.onPrimaryContainer.withValues(alpha: 0.7)
-                                : colorScheme.outline,
-                            fontSize: 8,
-                          ),
+                        color: isSelected
+                            ? colorScheme.onPrimaryContainer.withValues(
+                                alpha: 0.7,
+                              )
+                            : colorScheme.outline,
+                        fontSize: 8,
+                      ),
                     ),
                   ],
                 ),

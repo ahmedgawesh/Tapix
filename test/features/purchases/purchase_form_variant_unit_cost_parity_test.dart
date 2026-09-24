@@ -104,45 +104,54 @@ void main() {
   }
 
   group('Purchase form unit-cost parity (variant vs no-variant)', () {
-    test(
-        'auto-fill resolves to GROSS supplier reference price for variants '
+    test('auto-fill resolves to GROSS supplier reference price for variants '
         'when last_purchase_price_cents is populated', () {
       final cost = resolveAutoFillUnitCost(productWithVariants, variant);
-      expect(cost, equals(Decimal.fromInt(10000)),
-          reason: 'variant.lastPurchasePriceCents (10000) must win over '
-              'variant.costCents (9900) to match what the user typed on '
-              'the prior purchase line.');
+      expect(
+        cost,
+        equals(Decimal.fromInt(10000)),
+        reason:
+            'variant.lastPurchasePriceCents (10000) must win over '
+            'variant.costCents (9900) to match what the user typed on '
+            'the prior purchase line.',
+      );
     });
 
-    test(
-        'auto-fill resolves to product GROSS price for no-variant products '
+    test('auto-fill resolves to product GROSS price for no-variant products '
         'when last_purchase_price_cents is populated', () {
       final cost = resolveAutoFillUnitCost(productNoVariants, null);
       expect(cost, equals(Decimal.fromInt(10000)));
     });
 
     test(
-        'auto-fill falls back to costCents for legacy variants whose '
-        'last_purchase_price_cents was never stamped (pre-migration 10055)',
-        () {
-      final legacyVariant = ProductVariant(
-        id: 99,
-        productId: productWithVariants.id,
-        costCents: Decimal.fromInt(7500),
-        priceCents: Decimal.fromInt(12000),
-        priceAdjustmentCents: Decimal.zero,
-        stockQuantity: 0,
-        isActive: true,
-      );
-      final cost = resolveAutoFillUnitCost(productWithVariants, legacyVariant);
-      expect(cost, equals(Decimal.fromInt(7500)),
-          reason: 'When the GROSS column is NULL the resolver must fall '
+      'auto-fill falls back to costCents for legacy variants whose '
+      'last_purchase_price_cents was never stamped (pre-migration 10055)',
+      () {
+        final legacyVariant = ProductVariant(
+          id: 99,
+          productId: productWithVariants.id,
+          costCents: Decimal.fromInt(7500),
+          priceCents: Decimal.fromInt(12000),
+          priceAdjustmentCents: Decimal.zero,
+          stockQuantity: 0,
+          isActive: true,
+        );
+        final cost = resolveAutoFillUnitCost(
+          productWithVariants,
+          legacyVariant,
+        );
+        expect(
+          cost,
+          equals(Decimal.fromInt(7500)),
+          reason:
+              'When the GROSS column is NULL the resolver must fall '
               'back to costCents so the line still renders a meaningful '
-              'price for pre-migration data.');
-    });
+              'price for pre-migration data.',
+        );
+      },
+    );
 
-    test(
-        'auto-fill falls back to product.costCents for no-variant products '
+    test('auto-fill falls back to product.costCents for no-variant products '
         'without a stamped last_purchase_price_cents', () {
       final legacyProduct = productNoVariants.copyWith(
         lastPurchasePriceCents: null,
@@ -151,18 +160,23 @@ void main() {
       expect(cost, equals(Decimal.fromInt(10000)));
     });
 
-    test(
-        'variant line and no-variant line yield identical per-line totals '
-        'when both auto-fill from the same GROSS supplier reference price',
-        () {
-      final variantUnitCost = resolveAutoFillUnitCost(productWithVariants, variant);
+    test('variant line and no-variant line yield identical per-line totals '
+        'when both auto-fill from the same GROSS supplier reference price', () {
+      final variantUnitCost = resolveAutoFillUnitCost(
+        productWithVariants,
+        variant,
+      );
       final productUnitCost = resolveAutoFillUnitCost(productNoVariants, null);
 
       // Both lines must start from the same number — that is the
       // user-visible parity the field report demanded.
-      expect(variantUnitCost, equals(productUnitCost),
-          reason: 'Variant and no-variant auto-fill MUST agree when both '
-              'rows carry the same supplier reference price.');
+      expect(
+        variantUnitCost,
+        equals(productUnitCost),
+        reason:
+            'Variant and no-variant auto-fill MUST agree when both '
+            'rows carry the same supplier reference price.',
+      );
 
       final variantLine = PurchaseLineItem(
         tempId: 'v1',
@@ -192,8 +206,7 @@ void main() {
       expect(variantLine.taxCents, equals(Decimal.fromInt(100)));
     });
 
-    test(
-        'sub-total of a mixed-variant cart matches the no-variant baseline '
+    test('sub-total of a mixed-variant cart matches the no-variant baseline '
         '(reproduces the field-report scenario and verifies the fix)', () {
       // Replicates the user's 3-line cart with the post-fix auto-fill:
       //   line 1: variant tt55-1 of p1 → unit cost = 10000 (GROSS)
@@ -230,12 +243,18 @@ void main() {
         ),
       ];
 
-      final subtotal =
-          lines.fold<Decimal>(Decimal.zero, (acc, l) => acc + l.subtotalCents);
-      final tax =
-          lines.fold<Decimal>(Decimal.zero, (acc, l) => acc + l.taxCents);
-      final total =
-          lines.fold<Decimal>(Decimal.zero, (acc, l) => acc + l.totalCents);
+      final subtotal = lines.fold<Decimal>(
+        Decimal.zero,
+        (acc, l) => acc + l.subtotalCents,
+      );
+      final tax = lines.fold<Decimal>(
+        Decimal.zero,
+        (acc, l) => acc + l.taxCents,
+      );
+      final total = lines.fold<Decimal>(
+        Decimal.zero,
+        (acc, l) => acc + l.totalCents,
+      );
 
       // Pre-fix screen: 99 + 100 + 99 = 298 sub / 2.98 tax / 300.98 total
       // (variant lines were stuck on the NET basis). Post-fix:

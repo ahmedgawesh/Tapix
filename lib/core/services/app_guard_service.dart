@@ -55,10 +55,10 @@ class AppGuardStatus {
 
   /// Unlocked Pro user — full feature set.
   const AppGuardStatus.unlocked({this.subscriptionStatus})
-      : isUnlocked = true,
-        isFreeTier = false,
-        lockReason = AppLockReason.none,
-        requiresInternet = false;
+    : isUnlocked = true,
+      isFreeTier = false,
+      lockReason = AppLockReason.none,
+      requiresInternet = false;
 
   /// Unlocked free-tier user — app boots, Pro features are gated downstream.
   /// `lockReason` may carry a hint (e.g. `noSubscription`, `licenseExpired`,
@@ -67,16 +67,16 @@ class AppGuardStatus {
     this.subscriptionStatus,
     this.lockReason = AppLockReason.noSubscription,
     this.requiresInternet = false,
-  })  : isUnlocked = true,
-        isFreeTier = true;
+  }) : isUnlocked = true,
+       isFreeTier = true;
 
   /// Hard lock — used only for SECURITY violations.
   const AppGuardStatus.locked({
     required this.lockReason,
     this.requiresInternet = false,
     this.subscriptionStatus,
-  })  : isUnlocked = false,
-        isFreeTier = false;
+  }) : isUnlocked = false,
+       isFreeTier = false;
 }
 
 /// Central orchestrator that enforces:
@@ -114,12 +114,12 @@ class AppGuardService {
     required ConnectivityService connectivityService,
     required RemoteSecurityService remoteSecurityService,
     required CodeIntegrityService codeIntegrityService,
-  })  : _revenueCat = revenueCat,
-        _licenseService = licenseService,
-        _fingerprintService = fingerprintService,
-        _connectivityService = connectivityService,
-        _remoteSecurityService = remoteSecurityService,
-        _codeIntegrityService = codeIntegrityService;
+  }) : _revenueCat = revenueCat,
+       _licenseService = licenseService,
+       _fingerprintService = fingerprintService,
+       _connectivityService = connectivityService,
+       _remoteSecurityService = remoteSecurityService,
+       _codeIntegrityService = codeIntegrityService;
 
   /// Run the full guard sequence. Call once at app startup.
   Future<AppGuardStatus> initialize() async {
@@ -138,7 +138,9 @@ class AppGuardService {
     // 1. Code integrity check
     final integrityResult = await _codeIntegrityService.verify();
     if (integrityResult == IntegrityCheckResult.tampered) {
-      const status = AppGuardStatus.locked(lockReason: AppLockReason.codeTampered);
+      const status = AppGuardStatus.locked(
+        lockReason: AppLockReason.codeTampered,
+      );
       _emit(status);
       return status;
     }
@@ -158,19 +160,27 @@ class AppGuardService {
 
     switch (securityResult) {
       case SecurityCheckResult.deviceBlocked:
-        const status = AppGuardStatus.locked(lockReason: AppLockReason.deviceBlocked);
+        const status = AppGuardStatus.locked(
+          lockReason: AppLockReason.deviceBlocked,
+        );
         _emit(status);
         return status;
       case SecurityCheckResult.versionKilled:
-        const status = AppGuardStatus.locked(lockReason: AppLockReason.versionKilled);
+        const status = AppGuardStatus.locked(
+          lockReason: AppLockReason.versionKilled,
+        );
         _emit(status);
         return status;
       case SecurityCheckResult.versionUnsupported:
-        const status = AppGuardStatus.locked(lockReason: AppLockReason.versionUnsupported);
+        const status = AppGuardStatus.locked(
+          lockReason: AppLockReason.versionUnsupported,
+        );
         _emit(status);
         return status;
       case SecurityCheckResult.forceUpdateRequired:
-        const status = AppGuardStatus.locked(lockReason: AppLockReason.forceUpdate);
+        const status = AppGuardStatus.locked(
+          lockReason: AppLockReason.forceUpdate,
+        );
         _emit(status);
         return status;
       case SecurityCheckResult.passed:
@@ -226,7 +236,9 @@ class AppGuardService {
       _emit(status);
       return status;
     } catch (e) {
-      debugPrint('AppGuard: Online validation failed, falling back to offline: $e');
+      debugPrint(
+        'AppGuard: Online validation failed, falling back to offline: $e',
+      );
       return _offlineValidation();
     }
   }
@@ -301,40 +313,41 @@ class AppGuardService {
   void startListening() {
     // Auto-revalidate when connectivity returns.
     _connectivitySubscription?.cancel();
-    _connectivitySubscription = _connectivityService.onConnectivityChanged.listen(
-      (online) {
-        if (!online) return;
-        // If hard-locked OR currently free-tier waiting for internet,
-        // try a full revalidation to upgrade to Pro if entitled.
-        if (!_lastStatus.isUnlocked ||
-            (_lastStatus.isFreeTier && _lastStatus.requiresInternet)) {
-          revalidateOnline();
-        } else {
-          // Silently refresh license while already unlocked and stable.
-          _silentRefresh();
-        }
-      },
-    );
+    _connectivitySubscription = _connectivityService.onConnectivityChanged
+        .listen((online) {
+          if (!online) return;
+          // If hard-locked OR currently free-tier waiting for internet,
+          // try a full revalidation to upgrade to Pro if entitled.
+          if (!_lastStatus.isUnlocked ||
+              (_lastStatus.isFreeTier && _lastStatus.requiresInternet)) {
+            revalidateOnline();
+          } else {
+            // Silently refresh license while already unlocked and stable.
+            _silentRefresh();
+          }
+        });
 
     // Listen to RevenueCat customer info updates.
     if (RevenueCatConfig.isSupported && _revenueCat.isInitialized) {
       _rcSubscription?.cancel();
-      _rcSubscription = _revenueCat.subscriptionStatusStream.listen(
-        (subStatus) {
-          final wasProUnlocked =
-              _lastStatus.isUnlocked && !_lastStatus.isFreeTier;
-          if (subStatus.isPro && !wasProUnlocked) {
-            // Free → Pro upgrade (or recovery from lock). Re-run full guard.
-            revalidateOnline();
-          } else if (!subStatus.isPro && wasProUnlocked) {
-            // Subscription was revoked while app was open → demote to free.
-            _emit(AppGuardStatus.freeTier(
+      _rcSubscription = _revenueCat.subscriptionStatusStream.listen((
+        subStatus,
+      ) {
+        final wasProUnlocked =
+            _lastStatus.isUnlocked && !_lastStatus.isFreeTier;
+        if (subStatus.isPro && !wasProUnlocked) {
+          // Free → Pro upgrade (or recovery from lock). Re-run full guard.
+          revalidateOnline();
+        } else if (!subStatus.isPro && wasProUnlocked) {
+          // Subscription was revoked while app was open → demote to free.
+          _emit(
+            AppGuardStatus.freeTier(
               lockReason: AppLockReason.noSubscription,
               subscriptionStatus: subStatus,
-            ));
-          }
-        },
-      );
+            ),
+          );
+        }
+      });
     }
   }
 

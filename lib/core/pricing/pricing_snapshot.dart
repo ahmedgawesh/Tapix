@@ -44,12 +44,11 @@ class PricingSnapshot {
 extension SalesCompanionPricingSnapshot on SalesCompanion {
   /// Stamp the Phase 11.2 audit-snapshot fields onto a new sale row.
   /// Must be called BEFORE `into(sales).insert(...)`.
-  SalesCompanion withPricingSnapshot({required bool taxInclusive}) =>
-      copyWith(
-        pricingEngineVersion: const Value(PricingSnapshot.engineVersion),
-        taxInclusiveAtPost: Value(taxInclusive),
-        roundingModeAtPost: const Value(PricingSnapshot.roundingMode),
-      );
+  SalesCompanion withPricingSnapshot({required bool taxInclusive}) => copyWith(
+    pricingEngineVersion: const Value(PricingSnapshot.engineVersion),
+    taxInclusiveAtPost: Value(taxInclusive),
+    roundingModeAtPost: const Value(PricingSnapshot.roundingMode),
+  );
 }
 
 extension PurchasesCompanionPricingSnapshot on PurchasesCompanion {
@@ -84,10 +83,10 @@ extension SaleReturnAdjustmentsCompanionPricingSnapshot
   SaleReturnAdjustmentsCompanion withPricingSnapshot({
     required bool taxInclusive,
   }) => copyWith(
-        pricingEngineVersion: const Value(PricingSnapshot.engineVersion),
-        taxInclusiveAtPost: Value(taxInclusive),
-        roundingModeAtPost: const Value(PricingSnapshot.roundingMode),
-      );
+    pricingEngineVersion: const Value(PricingSnapshot.engineVersion),
+    taxInclusiveAtPost: Value(taxInclusive),
+    roundingModeAtPost: const Value(PricingSnapshot.roundingMode),
+  );
 }
 
 extension PurchaseReturnAdjustmentsCompanionPricingSnapshot
@@ -95,8 +94,8 @@ extension PurchaseReturnAdjustmentsCompanionPricingSnapshot
   PurchaseReturnAdjustmentsCompanion withPricingSnapshot({
     required bool taxInclusive,
   }) => copyWith(
-        pricingEngineVersion: const Value(PricingSnapshot.engineVersion),
-        taxInclusiveAtPost: Value(taxInclusive),
-        roundingModeAtPost: const Value(PricingSnapshot.roundingMode),
-      );
+    pricingEngineVersion: const Value(PricingSnapshot.engineVersion),
+    taxInclusiveAtPost: Value(taxInclusive),
+    roundingModeAtPost: const Value(PricingSnapshot.roundingMode),
+  );
 }

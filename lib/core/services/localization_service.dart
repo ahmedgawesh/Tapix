@@ -14,11 +14,7 @@ class LocalizationService {
 
   Stream<Locale> get localeStream => _localeController.stream;
 
-  static const supportedLocales = [
-    Locale('en'),
-    Locale('ar'),
-    Locale('fr'),
-  ];
+  static const supportedLocales = [Locale('en'), Locale('ar'), Locale('fr')];
 
   Locale getLocale() {
     final localeCode = _prefs.getString(_localeKey);

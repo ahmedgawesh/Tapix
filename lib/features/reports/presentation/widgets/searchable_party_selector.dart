@@ -52,9 +52,9 @@ class SearchablePartySelector extends StatelessWidget {
     final selected = selectedId == null
         ? null
         : options.cast<SearchablePartyOption?>().firstWhere(
-              (o) => o!.id == selectedId,
-              orElse: () => null,
-            );
+            (o) => o!.id == selectedId,
+            orElse: () => null,
+          );
 
     return InkWell(
       borderRadius: BorderRadius.circular(4),
@@ -64,8 +64,10 @@ class SearchablePartySelector extends StatelessWidget {
           labelText: labelText,
           prefixIcon: Icon(prefixIcon, color: colorScheme.primary),
           border: const OutlineInputBorder(),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 12,
+          ),
           suffixIcon: const Icon(Icons.arrow_drop_down),
         ),
         isEmpty: selected == null,
@@ -152,8 +154,8 @@ class _PartyPickerSheetState extends State<_PartyPickerSheet> {
       final phone = (o.phone ?? '').toLowerCase();
       // For phone matching, also strip non-digits so '0123-456' finds '0123456'.
       final phoneDigits = phone.replaceAll(RegExp(r'\D'), '');
-      final phoneMatch = phone.contains(q) ||
-          (digitsOnly && phoneDigits.contains(q));
+      final phoneMatch =
+          phone.contains(q) || (digitsOnly && phoneDigits.contains(q));
       return nameMatch || phoneMatch;
     }).toList();
   }
@@ -193,8 +195,9 @@ class _PartyPickerSheetState extends State<_PartyPickerSheet> {
                   Expanded(
                     child: Text(
                       widget.labelText,
-                      style: theme.textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   if (widget.selectedId != null)
@@ -226,7 +229,9 @@ class _PartyPickerSheetState extends State<_PartyPickerSheet> {
                         ),
                   border: const OutlineInputBorder(),
                   contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 8),
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                 ),
                 onChanged: (v) => setState(() => _query = v),
               ),
@@ -238,20 +243,24 @@ class _PartyPickerSheetState extends State<_PartyPickerSheet> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(LucideIcons.searchX,
-                              size: 40,
-                              color: colorScheme.onSurfaceVariant),
+                          Icon(
+                            LucideIcons.searchX,
+                            size: 40,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
                           const SizedBox(height: 8),
-                          Text('common.no_results'.tr(),
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: colorScheme.onSurfaceVariant)),
+                          Text(
+                            'common.no_results'.tr(),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
                         ],
                       ),
                     )
                   : ListView.separated(
                       itemCount: filtered.length,
-                      separatorBuilder: (_, _) =>
-                          const Divider(height: 1),
+                      separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (_, index) {
                         final o = filtered[index];
                         final selected = o.id == widget.selectedId;
@@ -281,10 +290,11 @@ class _PartyPickerSheetState extends State<_PartyPickerSheet> {
                           subtitle: (o.phone != null && o.phone!.isNotEmpty)
                               ? Row(
                                   children: [
-                                    Icon(LucideIcons.phone,
-                                        size: 12,
-                                        color:
-                                            colorScheme.onSurfaceVariant),
+                                    Icon(
+                                      LucideIcons.phone,
+                                      size: 12,
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
                                     const SizedBox(width: 4),
                                     Flexible(
                                       child: Text(
@@ -293,8 +303,9 @@ class _PartyPickerSheetState extends State<_PartyPickerSheet> {
                                         overflow: TextOverflow.ellipsis,
                                         style: theme.textTheme.bodySmall
                                             ?.copyWith(
-                                                color: colorScheme
-                                                    .onSurfaceVariant),
+                                              color:
+                                                  colorScheme.onSurfaceVariant,
+                                            ),
                                       ),
                                     ),
                                   ],

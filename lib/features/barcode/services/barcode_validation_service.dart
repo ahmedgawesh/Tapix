@@ -4,10 +4,7 @@ class ValidationResult {
   final bool isValid;
   final String? errorMessage;
 
-  const ValidationResult({
-    required this.isValid,
-    this.errorMessage,
-  });
+  const ValidationResult({required this.isValid, this.errorMessage});
 }
 
 class BarcodeValidationService {
@@ -116,7 +113,8 @@ class BarcodeValidationService {
     if (expectedChecksum != actualChecksum) {
       return ValidationResult(
         isValid: false,
-        errorMessage: 'Invalid EAN-13 checksum. Expected $expectedChecksum, got $actualChecksum',
+        errorMessage:
+            'Invalid EAN-13 checksum. Expected $expectedChecksum, got $actualChecksum',
       );
     }
 
@@ -151,7 +149,8 @@ class BarcodeValidationService {
     if (expectedChecksum != actualChecksum) {
       return ValidationResult(
         isValid: false,
-        errorMessage: 'Invalid EAN-8 checksum. Expected $expectedChecksum, got $actualChecksum',
+        errorMessage:
+            'Invalid EAN-8 checksum. Expected $expectedChecksum, got $actualChecksum',
       );
     }
 
@@ -179,7 +178,8 @@ class BarcodeValidationService {
     if (expectedChecksum != actualChecksum) {
       return ValidationResult(
         isValid: false,
-        errorMessage: 'Invalid UPC-A checksum. Expected $expectedChecksum, got $actualChecksum',
+        errorMessage:
+            'Invalid UPC-A checksum. Expected $expectedChecksum, got $actualChecksum',
       );
     }
 

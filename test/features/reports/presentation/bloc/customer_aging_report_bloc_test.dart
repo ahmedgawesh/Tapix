@@ -81,7 +81,8 @@ void main() {
         totalCents: 115000,
       );
 
-      final bucketSum = item.currentCents +
+      final bucketSum =
+          item.currentCents +
           item.days30Cents +
           item.days60Cents +
           item.days90Cents +
@@ -139,11 +140,13 @@ void main() {
 
       // Overdue = 30 + 60 + 90 + over90 (excludes current)
       expect(data.grandTotalOverdueCents, 65000);
-      expect(data.grandTotalOverdueCents,
-          data.grandTotal30Cents +
-              data.grandTotal60Cents +
-              data.grandTotal90Cents +
-              data.grandTotalOver90Cents);
+      expect(
+        data.grandTotalOverdueCents,
+        data.grandTotal30Cents +
+            data.grandTotal60Cents +
+            data.grandTotal90Cents +
+            data.grandTotalOver90Cents,
+      );
     });
 
     test('copyWith preserves unchanged fields', () {
@@ -158,9 +161,7 @@ void main() {
         dateRange: ReportDateRange.thisMonth(),
       );
 
-      final updated = original.copyWith(
-        dateRange: ReportDateRange.thisYear(),
-      );
+      final updated = original.copyWith(dateRange: ReportDateRange.thisYear());
 
       expect(updated.grandTotalCents, 500000);
       expect(updated.grandTotalCurrentCents, 200000);
@@ -225,7 +226,8 @@ void main() {
 
     test('CustomerAgingReportSortChanged stores sort type', () {
       const event = CustomerAgingReportSortChanged(
-          CustomerAgingSortType.over90Desc);
+        CustomerAgingSortType.over90Desc,
+      );
       expect(event.sort, CustomerAgingSortType.over90Desc);
     });
   });
@@ -233,18 +235,30 @@ void main() {
   group('CustomerAgingSortType enum', () {
     test('has all expected values', () {
       expect(CustomerAgingSortType.values.length, 6);
-      expect(CustomerAgingSortType.values,
-          contains(CustomerAgingSortType.totalDesc));
-      expect(CustomerAgingSortType.values,
-          contains(CustomerAgingSortType.totalAsc));
-      expect(CustomerAgingSortType.values,
-          contains(CustomerAgingSortType.over90Desc));
-      expect(CustomerAgingSortType.values,
-          contains(CustomerAgingSortType.over90Asc));
-      expect(CustomerAgingSortType.values,
-          contains(CustomerAgingSortType.nameAsc));
-      expect(CustomerAgingSortType.values,
-          contains(CustomerAgingSortType.nameDesc));
+      expect(
+        CustomerAgingSortType.values,
+        contains(CustomerAgingSortType.totalDesc),
+      );
+      expect(
+        CustomerAgingSortType.values,
+        contains(CustomerAgingSortType.totalAsc),
+      );
+      expect(
+        CustomerAgingSortType.values,
+        contains(CustomerAgingSortType.over90Desc),
+      );
+      expect(
+        CustomerAgingSortType.values,
+        contains(CustomerAgingSortType.over90Asc),
+      );
+      expect(
+        CustomerAgingSortType.values,
+        contains(CustomerAgingSortType.nameAsc),
+      );
+      expect(
+        CustomerAgingSortType.values,
+        contains(CustomerAgingSortType.nameDesc),
+      );
     });
   });
 
@@ -439,7 +453,8 @@ void main() {
         ),
       ];
 
-      final overdue = customers.first.days30Cents +
+      final overdue =
+          customers.first.days30Cents +
           customers.first.days60Cents +
           customers.first.days90Cents +
           customers.first.over90Cents;
@@ -512,9 +527,7 @@ void main() {
 
     test('copyWith preserves unchanged fields', () {
       final range = ReportDateRange.thisMonth();
-      final updated = range.copyWith(
-        preset: ReportPeriodPreset.custom,
-      );
+      final updated = range.copyWith(preset: ReportPeriodPreset.custom);
       expect(updated.startDate, range.startDate);
       expect(updated.endDate, range.endDate);
       expect(updated.preset, ReportPeriodPreset.custom);
@@ -556,8 +569,11 @@ void main() {
       // These should cover every possible day count
       const boundaries = [0, 30, 60, 90]; // bucket boundaries in days
       for (int i = 0; i < boundaries.length - 1; i++) {
-        expect(boundaries[i + 1] - boundaries[i], 30,
-            reason: 'Each bucket should span 30 days');
+        expect(
+          boundaries[i + 1] - boundaries[i],
+          30,
+          reason: 'Each bucket should span 30 days',
+        );
       }
     });
 
@@ -574,7 +590,8 @@ void main() {
         totalCents: 70000,
       );
 
-      final overdue = item.days30Cents +
+      final overdue =
+          item.days30Cents +
           item.days60Cents +
           item.days90Cents +
           item.over90Cents;

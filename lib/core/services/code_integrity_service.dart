@@ -9,11 +9,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../utils/platform_utils.dart';
 
 /// Result of a code integrity check.
-enum IntegrityCheckResult {
-  passed,
-  tampered,
-  unavailable,
-}
+enum IntegrityCheckResult { passed, tampered, unavailable }
 
 /// Service that verifies application code integrity by computing SHA256
 /// hashes of important application bundles and comparing against known values.
@@ -26,9 +22,8 @@ class CodeIntegrityService {
 
   final FlutterSecureStorage _secureStorage;
 
-  CodeIntegrityService({
-    FlutterSecureStorage? secureStorage,
-  }) : _secureStorage = secureStorage ?? const FlutterSecureStorage();
+  CodeIntegrityService({FlutterSecureStorage? secureStorage})
+    : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   /// Verify code integrity.
   ///
@@ -119,8 +114,10 @@ class CodeIntegrityService {
   Future<String?> _hashAssetBundle() async {
     try {
       // Load the AssetManifest as a proxy for code integrity
-      final manifestJson =
-          await rootBundle.loadString('AssetManifest.json', cache: false);
+      final manifestJson = await rootBundle.loadString(
+        'AssetManifest.json',
+        cache: false,
+      );
       final hash = sha256.convert(utf8.encode(manifestJson)).toString();
       return hash;
     } catch (e) {

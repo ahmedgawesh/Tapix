@@ -46,7 +46,9 @@ SaleReturnLineItem _saleLine({
       productName: 'P$id',
       quantity: origQty,
       unitPriceCents: Decimal.fromInt(100),
-      subtotalCents: Decimal.fromInt(subtotal * (origQty ~/ (returnQty == 0 ? 1 : returnQty))),
+      subtotalCents: Decimal.fromInt(
+        subtotal * (origQty ~/ (returnQty == 0 ? 1 : returnQty)),
+      ),
       discountCents: Decimal.fromInt(discount),
       taxCents: Decimal.fromInt(tax),
       totalCents: Decimal.fromInt(subtotal - discount + tax),
@@ -77,7 +79,9 @@ ReturnLineItem _purchaseLine({
       quantity: origQty,
       unitCostCents: Decimal.fromInt(100),
       discountCents: Decimal.fromInt(discount),
-      subtotalCents: Decimal.fromInt(subtotal * (origQty ~/ (returnQty == 0 ? 1 : returnQty))),
+      subtotalCents: Decimal.fromInt(
+        subtotal * (origQty ~/ (returnQty == 0 ? 1 : returnQty)),
+      ),
       taxCents: Decimal.fromInt(tax),
       totalCents: Decimal.fromInt(subtotal - discount + tax),
       createdAt: DateTime(2026, 1, 1),
@@ -172,39 +176,40 @@ void main() {
     test('multi-line: totals match a freshly-computed aggregate()', () {
       final lines = [
         _saleLine(
-            id: 1,
-            subtotal: 4000,
-            discount: 200,
-            tax: 380,
-            refund: 4180,
-            returnQty: 2),
+          id: 1,
+          subtotal: 4000,
+          discount: 200,
+          tax: 380,
+          refund: 4180,
+          returnQty: 2,
+        ),
         _saleLine(
-            id: 2,
-            subtotal: 3000,
-            discount: 0,
-            tax: 450,
-            refund: 3450,
-            returnQty: 3),
+          id: 2,
+          subtotal: 3000,
+          discount: 0,
+          tax: 450,
+          refund: 3450,
+          returnQty: 3,
+        ),
       ];
       final state = SaleReturnFormState(returnItems: lines);
 
       final expected = ReturnCalculationService.aggregate(
-        lines.map((l) => (
-              subtotalCents: l.subtotalCents.toBigInt().toInt(),
-              discountCents: l.discountCents.toBigInt().toInt(),
-              taxCents: l.taxCents.toBigInt().toInt(),
-              refundCents: l.refundCents.toBigInt().toInt(),
-              quantity: l.returnQuantity,
-            )),
+        lines.map(
+          (l) => (
+            subtotalCents: l.subtotalCents.toBigInt().toInt(),
+            discountCents: l.discountCents.toBigInt().toInt(),
+            taxCents: l.taxCents.toBigInt().toInt(),
+            refundCents: l.refundCents.toBigInt().toInt(),
+            quantity: l.returnQuantity,
+          ),
+        ),
       );
 
-      expect(state.totalSubtotalCents,
-          Decimal.fromInt(expected.subtotalCents));
-      expect(state.totalDiscountCents,
-          Decimal.fromInt(expected.discountCents));
+      expect(state.totalSubtotalCents, Decimal.fromInt(expected.subtotalCents));
+      expect(state.totalDiscountCents, Decimal.fromInt(expected.discountCents));
       expect(state.totalTaxCents, Decimal.fromInt(expected.taxCents));
-      expect(state.totalRefundCents,
-          Decimal.fromInt(expected.refundCents));
+      expect(state.totalRefundCents, Decimal.fromInt(expected.refundCents));
       expect(state.totalReturnQuantity, expected.totalQuantity);
     });
 
@@ -214,23 +219,26 @@ void main() {
       // therefore satisfy the same equation on the rollup.
       final lines = [
         _saleLine(
-            id: 1,
-            subtotal: 2000,
-            discount: 100,
-            tax: 190,
-            refund: 2090,
-            returnQty: 2),
+          id: 1,
+          subtotal: 2000,
+          discount: 100,
+          tax: 190,
+          refund: 2090,
+          returnQty: 2,
+        ),
         _saleLine(
-            id: 2,
-            subtotal: 1500,
-            discount: 0,
-            tax: 225,
-            refund: 1725,
-            returnQty: 1),
+          id: 2,
+          subtotal: 1500,
+          discount: 0,
+          tax: 225,
+          refund: 1725,
+          returnQty: 1,
+        ),
       ];
       final state = SaleReturnFormState(returnItems: lines);
 
-      final reconstructed = state.totalSubtotalCents -
+      final reconstructed =
+          state.totalSubtotalCents -
           state.totalDiscountCents +
           state.totalTaxCents;
       expect(state.totalRefundCents, reconstructed);
@@ -242,12 +250,13 @@ void main() {
       // and that no hidden state mutation creeps in across accesses).
       final lines = [
         _saleLine(
-            id: 1,
-            subtotal: 999,
-            discount: 99,
-            tax: 100,
-            refund: 1000,
-            returnQty: 5),
+          id: 1,
+          subtotal: 999,
+          discount: 99,
+          tax: 100,
+          refund: 1000,
+          returnQty: 5,
+        ),
       ];
       final s1 = SaleReturnFormState(returnItems: lines);
       final s2 = SaleReturnFormState(returnItems: lines);
@@ -278,119 +287,130 @@ void main() {
     test('multi-line: totals match a freshly-computed aggregate()', () {
       final lines = [
         _purchaseLine(
-            id: 10,
-            subtotal: 2000,
-            discount: 250,
-            tax: 175,
-            refund: 1925,
-            returnQty: 1),
+          id: 10,
+          subtotal: 2000,
+          discount: 250,
+          tax: 175,
+          refund: 1925,
+          returnQty: 1,
+        ),
         _purchaseLine(
-            id: 11,
-            subtotal: 4000,
-            discount: 0,
-            tax: 400,
-            refund: 4400,
-            returnQty: 2),
+          id: 11,
+          subtotal: 4000,
+          discount: 0,
+          tax: 400,
+          refund: 4400,
+          returnQty: 2,
+        ),
       ];
       final state = PurchaseReturnFormState(returnItems: lines);
 
       final expected = ReturnCalculationService.aggregate(
-        lines.map((l) => (
-              subtotalCents: l.subtotalCents.toBigInt().toInt(),
-              discountCents: l.discountCents.toBigInt().toInt(),
-              taxCents: l.taxCents.toBigInt().toInt(),
-              refundCents: l.refundCents.toBigInt().toInt(),
-              quantity: l.returnQuantity,
-            )),
+        lines.map(
+          (l) => (
+            subtotalCents: l.subtotalCents.toBigInt().toInt(),
+            discountCents: l.discountCents.toBigInt().toInt(),
+            taxCents: l.taxCents.toBigInt().toInt(),
+            refundCents: l.refundCents.toBigInt().toInt(),
+            quantity: l.returnQuantity,
+          ),
+        ),
       );
 
-      expect(state.totalSubtotalCents,
-          Decimal.fromInt(expected.subtotalCents));
-      expect(state.totalDiscountCents,
-          Decimal.fromInt(expected.discountCents));
+      expect(state.totalSubtotalCents, Decimal.fromInt(expected.subtotalCents));
+      expect(state.totalDiscountCents, Decimal.fromInt(expected.discountCents));
       expect(state.totalTaxCents, Decimal.fromInt(expected.taxCents));
-      expect(state.totalRefundCents,
-          Decimal.fromInt(expected.refundCents));
+      expect(state.totalRefundCents, Decimal.fromInt(expected.refundCents));
       expect(state.totalReturnQuantity, expected.totalQuantity);
     });
 
-    test('refund invariant on rollup: Σ refund == Σ subtotal − Σ discount + Σ tax',
-        () {
-      final lines = [
-        _purchaseLine(
+    test(
+      'refund invariant on rollup: Σ refund == Σ subtotal − Σ discount + Σ tax',
+      () {
+        final lines = [
+          _purchaseLine(
             id: 1,
             subtotal: 5000,
             discount: 500,
             tax: 450,
             refund: 4950,
-            returnQty: 5),
-        _purchaseLine(
+            returnQty: 5,
+          ),
+          _purchaseLine(
             id: 2,
             subtotal: 800,
             discount: 0,
             tax: 80,
             refund: 880,
-            returnQty: 1),
-      ];
-      final state = PurchaseReturnFormState(returnItems: lines);
+            returnQty: 1,
+          ),
+        ];
+        final state = PurchaseReturnFormState(returnItems: lines);
 
-      final reconstructed = state.totalSubtotalCents -
-          state.totalDiscountCents +
-          state.totalTaxCents;
-      expect(state.totalRefundCents, reconstructed);
-    });
+        final reconstructed =
+            state.totalSubtotalCents -
+            state.totalDiscountCents +
+            state.totalTaxCents;
+        expect(state.totalRefundCents, reconstructed);
+      },
+    );
   });
 
   group('Phase 5 — Cross-bloc symmetry guarantee', () {
     test(
-        'identical inputs → identical rollup totals on both sale and purchase states',
-        () {
-      // Same five numeric lines, fed through the sale-side state and the
-      // purchase-side state. Both must produce the same five rollup
-      // figures — proving the single-writer invariant for return rollups.
-      final amounts = [
-        (sub: 1000, disc: 50, tax: 95, refund: 1045, qty: 1),
-        (sub: 2500, disc: 0, tax: 250, refund: 2750, qty: 2),
-        (sub: 333, disc: 33, tax: 30, refund: 330, qty: 3),
-      ];
+      'identical inputs → identical rollup totals on both sale and purchase states',
+      () {
+        // Same five numeric lines, fed through the sale-side state and the
+        // purchase-side state. Both must produce the same five rollup
+        // figures — proving the single-writer invariant for return rollups.
+        final amounts = [
+          (sub: 1000, disc: 50, tax: 95, refund: 1045, qty: 1),
+          (sub: 2500, disc: 0, tax: 250, refund: 2750, qty: 2),
+          (sub: 333, disc: 33, tax: 30, refund: 330, qty: 3),
+        ];
 
-      final saleState = SaleReturnFormState(
-        returnItems: amounts
-            .asMap()
-            .entries
-            .map((e) => _saleLine(
+        final saleState = SaleReturnFormState(
+          returnItems: amounts
+              .asMap()
+              .entries
+              .map(
+                (e) => _saleLine(
                   id: e.key + 1,
                   subtotal: e.value.sub,
                   discount: e.value.disc,
                   tax: e.value.tax,
                   refund: e.value.refund,
                   returnQty: e.value.qty,
-                ))
-            .toList(),
-      );
-      final purchaseState = PurchaseReturnFormState(
-        returnItems: amounts
-            .asMap()
-            .entries
-            .map((e) => _purchaseLine(
+                ),
+              )
+              .toList(),
+        );
+        final purchaseState = PurchaseReturnFormState(
+          returnItems: amounts
+              .asMap()
+              .entries
+              .map(
+                (e) => _purchaseLine(
                   id: e.key + 1,
                   subtotal: e.value.sub,
                   discount: e.value.disc,
                   tax: e.value.tax,
                   refund: e.value.refund,
                   returnQty: e.value.qty,
-                ))
-            .toList(),
-      );
+                ),
+              )
+              .toList(),
+        );
 
-      expect(
-          saleState.totalSubtotalCents, purchaseState.totalSubtotalCents);
-      expect(
-          saleState.totalDiscountCents, purchaseState.totalDiscountCents);
-      expect(saleState.totalTaxCents, purchaseState.totalTaxCents);
-      expect(saleState.totalRefundCents, purchaseState.totalRefundCents);
-      expect(
-          saleState.totalReturnQuantity, purchaseState.totalReturnQuantity);
-    });
+        expect(saleState.totalSubtotalCents, purchaseState.totalSubtotalCents);
+        expect(saleState.totalDiscountCents, purchaseState.totalDiscountCents);
+        expect(saleState.totalTaxCents, purchaseState.totalTaxCents);
+        expect(saleState.totalRefundCents, purchaseState.totalRefundCents);
+        expect(
+          saleState.totalReturnQuantity,
+          purchaseState.totalReturnQuantity,
+        );
+      },
+    );
   });
 }

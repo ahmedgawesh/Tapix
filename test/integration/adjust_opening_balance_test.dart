@@ -70,9 +70,9 @@ void main() {
       AuditLogService(db),
     );
 
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     currencyId = usd.id;
   });
 
@@ -83,7 +83,9 @@ void main() {
   // ─── Helpers ────────────────────────────────────────────────────────────
 
   Future<int> seedCustomer({int balanceCents = 0}) async {
-    return db.into(db.customers).insert(
+    return db
+        .into(db.customers)
+        .insert(
           CustomersCompanion.insert(
             name: 'Test Customer',
             currencyId: currencyId,
@@ -93,7 +95,9 @@ void main() {
   }
 
   Future<int> seedSupplier({int balanceCents = 0}) async {
-    return db.into(db.suppliers).insert(
+    return db
+        .into(db.suppliers)
+        .insert(
           SuppliersCompanion.insert(
             name: 'Test Supplier',
             currencyId: currencyId,
@@ -103,27 +107,29 @@ void main() {
   }
 
   Future<int> currentCustomerBalance(int id) async {
-    final c = await (db.select(db.customers)..where((c) => c.id.equals(id)))
-        .getSingle();
+    final c = await (db.select(
+      db.customers,
+    )..where((c) => c.id.equals(id))).getSingle();
     return c.balanceCents.toBigInt().toInt();
   }
 
   Future<int> currentSupplierBalance(int id) async {
-    final s = await (db.select(db.suppliers)..where((s) => s.id.equals(id)))
-        .getSingle();
+    final s = await (db.select(
+      db.suppliers,
+    )..where((s) => s.id.equals(id))).getSingle();
     return s.balanceCents.toBigInt().toInt();
   }
 
   Future<List<CustomerTransaction>> customerTxns(int id) {
-    return (db.select(db.customerTransactions)
-          ..where((t) => t.customerId.equals(id)))
-        .get();
+    return (db.select(
+      db.customerTransactions,
+    )..where((t) => t.customerId.equals(id))).get();
   }
 
   Future<List<SupplierTransaction>> supplierTxns(int id) {
-    return (db.select(db.supplierTransactions)
-          ..where((t) => t.supplierId.equals(id)))
-        .get();
+    return (db.select(
+      db.supplierTransactions,
+    )..where((t) => t.supplierId.equals(id))).get();
   }
 
   // ─── Customer-side tests ────────────────────────────────────────────────
@@ -137,12 +143,21 @@ void main() {
         desiredBalanceCents: 5000,
       );
 
-      expect(txId, isNull,
-          reason: 'method must return null when nothing changes');
-      expect(await currentCustomerBalance(id), 5000,
-          reason: 'balance must remain untouched');
-      expect(await customerTxns(id), isEmpty,
-          reason: 'no spurious customer_transactions row');
+      expect(
+        txId,
+        isNull,
+        reason: 'method must return null when nothing changes',
+      );
+      expect(
+        await currentCustomerBalance(id),
+        5000,
+        reason: 'balance must remain untouched',
+      );
+      expect(
+        await customerTxns(id),
+        isEmpty,
+        reason: 'no spurious customer_transactions row',
+      );
     });
 
     test('positive delta posts an adjustment and increases balance', () async {
@@ -155,8 +170,11 @@ void main() {
       );
 
       expect(txId, isNotNull);
-      expect(await currentCustomerBalance(id), 7500,
-          reason: 'balance must reflect the desired value exactly');
+      expect(
+        await currentCustomerBalance(id),
+        7500,
+        reason: 'balance must reflect the desired value exactly',
+      );
 
       final txns = await customerTxns(id);
       expect(txns.length, 1);
@@ -166,23 +184,25 @@ void main() {
       expect(txns.first.description, 'opening seed');
     });
 
-    test('negative delta posts a signed adjustment and decreases balance',
-        () async {
-      final id = await seedCustomer(balanceCents: 10000);
+    test(
+      'negative delta posts a signed adjustment and decreases balance',
+      () async {
+        final id = await seedCustomer(balanceCents: 10000);
 
-      final txId = await customerRepo.adjustOpeningBalance(
-        customerId: id,
-        desiredBalanceCents: 2500,
-      );
+        final txId = await customerRepo.adjustOpeningBalance(
+          customerId: id,
+          desiredBalanceCents: 2500,
+        );
 
-      expect(txId, isNotNull);
-      expect(await currentCustomerBalance(id), 2500);
+        expect(txId, isNotNull);
+        expect(await currentCustomerBalance(id), 2500);
 
-      final txns = await customerTxns(id);
-      expect(txns.length, 1);
-      // delta = 2500 − 10000 = −7500
-      expect(txns.first.amountCents.toBigInt().toInt(), -7500);
-    });
+        final txns = await customerTxns(id);
+        expect(txns.length, 1);
+        // delta = 2500 − 10000 = −7500
+        expect(txns.first.amountCents.toBigInt().toInt(), -7500);
+      },
+    );
 
     test('throws StateError when customer does not exist', () async {
       expect(
@@ -209,13 +229,19 @@ void main() {
       // JournalEntryService.recordCustomerOpeningBalanceJournalEntry, which
       // posts with source_table='customers' / source_id=customerId (not the
       // customer_transactions row), so that idempotency works across re-edits.
-      final entries = await (db.select(db.journalEntries)
-            ..where((e) =>
-                e.sourceTable.equals('customers') & e.sourceId.equals(id)))
-          .get();
-      expect(entries, isNotEmpty,
-          reason: 'opening-balance adjustment must produce a GL entry '
-              '(otherwise customers.balance_cents drifts from 1100 AR)');
+      final entries =
+          await (db.select(db.journalEntries)..where(
+                (e) =>
+                    e.sourceTable.equals('customers') & e.sourceId.equals(id),
+              ))
+              .get();
+      expect(
+        entries,
+        isNotEmpty,
+        reason:
+            'opening-balance adjustment must produce a GL entry '
+            '(otherwise customers.balance_cents drifts from 1100 AR)',
+      );
       expect(entries.first.entryType, 'opening_balance');
     });
   });
@@ -253,22 +279,24 @@ void main() {
       expect(txns.first.amountCents.toBigInt().toInt(), 5000);
     });
 
-    test('negative delta posts a signed adjustment and decreases balance',
-        () async {
-      final id = await seedSupplier(balanceCents: 8000);
+    test(
+      'negative delta posts a signed adjustment and decreases balance',
+      () async {
+        final id = await seedSupplier(balanceCents: 8000);
 
-      final txId = await supplierRepo.adjustOpeningBalance(
-        supplierId: id,
-        desiredBalanceCents: 3000,
-      );
+        final txId = await supplierRepo.adjustOpeningBalance(
+          supplierId: id,
+          desiredBalanceCents: 3000,
+        );
 
-      expect(txId, isNotNull);
-      expect(await currentSupplierBalance(id), 3000);
+        expect(txId, isNotNull);
+        expect(await currentSupplierBalance(id), 3000);
 
-      final txns = await supplierTxns(id);
-      expect(txns.length, 1);
-      expect(txns.first.amountCents.toBigInt().toInt(), -5000);
-    });
+        final txns = await supplierTxns(id);
+        expect(txns.length, 1);
+        expect(txns.first.amountCents.toBigInt().toInt(), -5000);
+      },
+    );
 
     test('throws StateError when supplier does not exist', () async {
       expect(

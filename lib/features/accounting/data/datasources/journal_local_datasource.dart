@@ -309,6 +309,10 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
           INNER JOIN products p ON p.id = b.product_id
           WHERE b.is_active = 1
             AND p.track_inventory = 1
+            AND NOT EXISTS (
+              SELECT 1 FROM consignment_inventory_layers cl
+              WHERE cl.batch_id = b.id AND cl.status != 'voided'
+            )
             AND (p.inventory_tracking_type IN ('batch', 'batch_expiry')
                  OR p.costing_method = 'fifo')
         ), 0)
@@ -316,7 +320,7 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
         COALESCE((
           SELECT SUM(
             CAST(ROUND(
-              1.0 * CAST(ws.quantity AS INTEGER) *
+              1.0 * CAST(ws.quantity - ws.supplier_owned_quantity AS INTEGER) *
               CAST(ws.unit_cost_cents AS INTEGER) /
               CASE WHEN p.measurement_type = 'piece' THEN 1 ELSE 1000 END
             ) AS INTEGER)
@@ -361,6 +365,7 @@ class JournalLocalDatasourceImpl implements JournalLocalDatasource {
             db.products,
             db.productVariants,
             db.productBatches,
+            db.consignmentInventoryLayers,
             ...WarehouseBatchScope.dependencies(db),
             ...WarehouseStockScope.dependencies(db),
           },

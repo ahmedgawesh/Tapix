@@ -291,8 +291,7 @@ class PayrollCalculationService {
 
     final totalDeduction =
         absenceDeduction + lateDeduction + earlyDepartureDeduction;
-    final grossPay =
-        fullSalary + commissionCents + bonusCents + overtimeCents;
+    final grossPay = fullSalary + commissionCents + bonusCents + overtimeCents;
     final netPay = grossPay - totalDeduction;
 
     return PayrollCalculation(

@@ -379,6 +379,8 @@ void main() {
           .into(db.saleReturnAdjustmentItems)
           .insert(
             SaleReturnAdjustmentItemsCompanion.insert(
+              sourceResolution: const Value('unverified'),
+              sourceResolutionReason: const Value('test fixture'),
               returnId: adjustmentReturn,
               productId: serviceId,
               quantity: 1,

@@ -16,11 +16,12 @@ class InventoryAdjustmentDao extends DatabaseAccessor<AppDatabase>
   Future<String> generateAdjustmentNumber() async {
     final now = DateTime.now();
     final prefix = 'ADJ-${now.year}${now.month.toString().padLeft(2, '0')}';
-    final last = await (select(inventoryAdjustments)
-          ..where((a) => a.adjustmentNumber.like('$prefix%'))
-          ..orderBy([(a) => OrderingTerm.desc(a.adjustmentNumber)])
-          ..limit(1))
-        .getSingleOrNull();
+    final last =
+        await (select(inventoryAdjustments)
+              ..where((a) => a.adjustmentNumber.like('$prefix%'))
+              ..orderBy([(a) => OrderingTerm.desc(a.adjustmentNumber)])
+              ..limit(1))
+            .getSingleOrNull();
 
     int nextNum = 1;
     if (last != null) {
@@ -38,23 +39,26 @@ class InventoryAdjustmentDao extends DatabaseAccessor<AppDatabase>
     required int adjustmentId,
     required int journalEntryId,
   }) {
-    return (update(inventoryAdjustments)
-          ..where((a) => a.id.equals(adjustmentId)))
-        .write(InventoryAdjustmentsCompanion(
-      journalEntryId: Value(journalEntryId),
-      updatedAt: Value(DateTime.now()),
-    ));
+    return (update(
+      inventoryAdjustments,
+    )..where((a) => a.id.equals(adjustmentId))).write(
+      InventoryAdjustmentsCompanion(
+        journalEntryId: Value(journalEntryId),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   Future<InventoryAdjustment?> getById(int id) {
-    return (select(inventoryAdjustments)..where((a) => a.id.equals(id)))
-        .getSingleOrNull();
+    return (select(
+      inventoryAdjustments,
+    )..where((a) => a.id.equals(id))).getSingleOrNull();
   }
 
   Stream<List<InventoryAdjustment>> watchAll() {
-    return (select(inventoryAdjustments)
-          ..orderBy([(a) => OrderingTerm.desc(a.createdAt)]))
-        .watch();
+    return (select(
+      inventoryAdjustments,
+    )..orderBy([(a) => OrderingTerm.desc(a.createdAt)])).watch();
   }
 
   Stream<List<InventoryAdjustment>> watchByProduct(int productId) {
@@ -72,11 +76,15 @@ class InventoryAdjustmentDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<List<InventoryAdjustment>> getByDateRange(
-      DateTime start, DateTime end) {
+    DateTime start,
+    DateTime end,
+  ) {
     return (select(inventoryAdjustments)
-          ..where((a) =>
-              a.createdAt.isBiggerOrEqualValue(start) &
-              a.createdAt.isSmallerThanValue(end))
+          ..where(
+            (a) =>
+                a.createdAt.isBiggerOrEqualValue(start) &
+                a.createdAt.isSmallerThanValue(end),
+          )
           ..orderBy([(a) => OrderingTerm.desc(a.createdAt)]))
         .get();
   }

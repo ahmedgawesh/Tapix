@@ -20,6 +20,10 @@ import '../../services/journal_entry_service.dart';
 import '../../services/return_calculation_service.dart';
 import '../../services/inventory/wac_movement_service.dart';
 import '../../services/inventory/inventory_valuation_delta_service.dart';
+import '../../services/inventory/consignment_sale_allocation_service.dart';
+import '../../services/inventory/consignment_linked_return_service.dart';
+import '../../services/inventory/supplier_product_identity_service.dart';
+import '../../services/inventory/supplier_identity_rules.dart';
 import '../../services/document_number_service.dart';
 
 part 'sale_dao.g.dart';
@@ -384,6 +388,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     int saleId, {
     bool allowNegativeStock = false,
     WarehouseOperationScope? scope,
+    Future<void> Function(int saleId)? beforeCompletion,
   }) {
     return transaction(() async {
       final operationScope = await DocumentPostingScope.validate(
@@ -407,6 +412,49 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
 
       // 1. Validate stock availability BEFORE any deduction (unless allowNegativeStock)
       final items = await getSaleItems(saleId);
+      final supplierIdentitySupplierByItem = <int, int>{};
+      final consignmentBatchByItem = <int, int?>{};
+      final consignmentOriginByItem = <int, String>{};
+      final identityService = SupplierProductIdentityService(attachedDatabase);
+      for (final item in items) {
+        final identityId = item.supplierIdentityId;
+        if (identityId != null) {
+          final selection = await identityService.requireForLine(
+            identityId: identityId,
+            productId: item.productId,
+            variantId: item.variantId,
+          );
+          supplierIdentitySupplierByItem[item.id] = selection.supplierId;
+        }
+        final layerId = item.consignmentLayerId;
+        if (layerId == null) continue;
+        final layer = await customSelect(
+          '''SELECT l.batch_id,l.receipt_item_id
+             FROM consignment_inventory_layers l
+             JOIN products p ON p.id=?
+             WHERE l.id=? AND l.warehouse_id=? AND l.product_id=?
+               AND (l.variant_id=? OR (? IS NULL AND p.has_variants=0))
+               AND l.status='open' AND l.remaining_quantity>=?''',
+          variables: [
+            Variable.withInt(item.productId),
+            Variable.withString(layerId),
+            Variable.withString(operationScope.warehouseId),
+            Variable.withInt(item.productId),
+            Variable<int>(item.variantId),
+            Variable<int>(item.variantId),
+            Variable.withInt(item.quantity),
+          ],
+          readsFrom: {attachedDatabase.consignmentInventoryLayers, products},
+        ).getSingleOrNull();
+        if (layer == null) {
+          throw const SupplierIdentityException(
+            'stock_sources.source_mismatch',
+          );
+        }
+        consignmentBatchByItem[item.id] = layer.readNullable<int>('batch_id');
+        consignmentOriginByItem[item.id] =
+            'consignment_receipt:${layer.read<String>('receipt_item_id')}';
+      }
 
       // Cache per-product trackInventory once. Used everywhere below to
       // skip stock validation, stock deduction, and FIFO consumption for
@@ -445,6 +493,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       }
 
       // 2. Deduct stock (validated above) — skipped for non-tracked products.
+      final consignmentQuantityByItem = <int, int>{};
       final affectedProductIds = <int>{};
       // Freeze each standard/WAC line's exact rounded-pool delta immediately
       // after that line moves stock. Do not defer this calculation until all
@@ -459,14 +508,36 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       for (final item in items) {
         if (trackedProductIds[item.productId] == false) continue;
         affectedProductIds.add(item.productId);
+        // Capture owned value before changing either ownership or physical
+        // quantity. Then lower supplier custody before physical stock so the
+        // database bound remains valid throughout the movement.
         final valuationSnapshot = await InventoryValuationDeltaService.capture(
           this,
           scope: operationScope,
           productId: item.productId,
           variantId: item.variantId,
         );
+        final allocation =
+            await ConsignmentSaleAllocationService.allocateBeforeStock(
+              this,
+              item: item,
+              sale: sale,
+              scope: operationScope,
+            );
+        consignmentQuantityByItem[item.id] = allocation.quantity;
         await StockService.adjustStock(
           this,
+          origin: InventoryOriginIntent(
+            'sale',
+            item.id,
+            reference: consignmentOriginByItem[item.id],
+            supplierIdentityId: item.supplierIdentityId,
+            excludedSourceKind:
+                item.consignmentLayerId == null &&
+                    item.supplierIdentityId == null
+                ? 'consignment_receipt'
+                : null,
+          ),
           scope: operationScope,
           productId: item.productId,
           variantId: item.variantId,
@@ -560,18 +631,44 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             quantity: item.quantity,
             consumptionType: 'sale',
             saleItemId: item.id,
+            requiredBatchId: consignmentBatchByItem[item.id],
+            requiredSupplierId: supplierIdentitySupplierByItem[item.id],
+            excludedSource: item.consignmentLayerId == null
+                ? 'consignment_receipt'
+                : null,
           );
-          totalCogsCents = consumed.fold<int>(
-            0,
-            (sum, c) => sum + c.totalCostCents,
-          );
-          // Blended unit cost = total / qty (rounded). Used purely for the
-          // snapshot column; per-batch breakdown lives in batch_consumptions.
-          unitCost = MeasuredAmount.unitCentsFromTotal(
-            totalCents: totalCogsCents,
-            quantity: item.quantity,
-            quantityScale: item.quantityScale,
-          );
+          final consignmentBatchRows = await customSelect(
+            'SELECT l.batch_id FROM consignment_sale_allocations a '
+            'JOIN consignment_inventory_layers l ON l.id=a.layer_id '
+            'WHERE a.sale_item_id=? AND l.batch_id IS NOT NULL',
+            variables: [Variable.withInt(item.id)],
+          ).get();
+          final consignmentBatchIds = consignmentBatchRows
+              .map((row) => row.read<int>('batch_id'))
+              .toSet();
+          final consumedConsignmentQuantity = consumed
+              .where((entry) => consignmentBatchIds.contains(entry.batchId))
+              .fold<int>(0, (sum, entry) => sum + entry.quantity);
+          final expectedConsignmentQuantity =
+              consignmentQuantityByItem[item.id] ?? 0;
+          if (consumedConsignmentQuantity != expectedConsignmentQuantity) {
+            throw StateError(
+              'Batch consumption differs from consignment source allocation.',
+            );
+          }
+          totalCogsCents = consumed
+              .where((entry) => !consignmentBatchIds.contains(entry.batchId))
+              .fold<int>(0, (sum, entry) => sum + entry.totalCostCents);
+          final ownedQuantity = item.quantity - expectedConsignmentQuantity;
+          // The line cost snapshot represents enterprise-owned units only.
+          // Exact COGS remains in inventory_value_at_post_cents.
+          unitCost = ownedQuantity == 0
+              ? 0
+              : MeasuredAmount.unitCentsFromTotal(
+                  totalCents: totalCogsCents,
+                  quantity: ownedQuantity,
+                  quantityScale: item.quantityScale,
+                );
         } else {
           unitCost = (await WarehouseInventoryReader.read(
             this,
@@ -619,7 +716,12 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         );
       }
 
-      // 2d. Update status
+      // Consignment accrual journals must be posted inside the same outer
+      // transaction before the sale can become completed.
+      await beforeCompletion?.call(saleId);
+
+      // 2d. Update status. A database trigger refuses completion while a
+      // positive consignment allocation lacks its posted accrual journal.
       await updateSaleStatus(saleId, 'completed');
 
       // 3. Customer accounting (only if a customer is assigned)
@@ -776,6 +878,8 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     JournalEntryService? journalEntryService,
     int? userId,
     WarehouseOperationScope? scope,
+    Future<void> Function(int returnId)? beforeReturnCompletion,
+    Future<void> Function(int saleId)? beforeCompletion,
   }) {
     return transaction(() async {
       final operationScope = await DocumentPostingScope.validate(
@@ -812,6 +916,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             ret.id,
             allowNegativeStock: true,
             scope: operationScope,
+            beforeCompletion: beforeReturnCompletion,
           );
         }
       }
@@ -837,6 +942,11 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
               0;
           await StockService.adjustStock(
             this,
+            origin: InventoryOriginIntent(
+              'sale_void',
+              item.id,
+              reference: 'sale:${item.id}',
+            ),
             scope: operationScope,
             productId: item.productId,
             variantId: item.variantId,
@@ -844,25 +954,37 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             direction: StockDirection.increase,
           );
 
-          if (wacSnapshot != null) {
-            await WacMovementService.applyInbound(
-              this,
-              snapshot: wacSnapshot,
-              addedQty: item.quantity,
-              inboundUnitCostCents: frozenUnitCost,
-            );
-          }
-
           // 1a. FIFO restoration — for FIFO products, restore each batch the
-          //     original sale consumed at its FROZEN unit cost so future
-          //     COGS calculations stay accurate. WAC sales emit no batch_
-          //     consumptions; restoreConsumptions silently no-ops for them.
+          //     original sale consumed at its frozen unit cost. WAC sales emit
+          //     no batch consumptions and this call is a no-op for them.
           await BatchService.restoreConsumptions(
             this,
             scope: operationScope,
             reverseConsumptionType: 'void_sale_reverse',
             saleItemId: item.id,
           );
+          final consignmentRestoration =
+              await ConsignmentLinkedReturnService.restoreSaleVoidAfterStock(
+                this,
+                sale: sale,
+                saleItem: item,
+                scope: operationScope,
+              );
+          final ownedRestoredQuantity =
+              item.quantity - consignmentRestoration.quantity;
+          if (ownedRestoredQuantity < 0) {
+            throw StateError(
+              'Consignment sale-void quantity exceeds the sale quantity.',
+            );
+          }
+          if (wacSnapshot != null && ownedRestoredQuantity > 0) {
+            await WacMovementService.applyInbound(
+              this,
+              snapshot: wacSnapshot,
+              addedQty: ownedRestoredQuantity,
+              inboundUnitCostCents: frozenUnitCost,
+            );
+          }
           if (await _isFifoProduct(item.productId)) {
             voidBatchedProductIds.add(item.productId);
           }
@@ -937,6 +1059,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         }
       }
 
+      await beforeCompletion?.call(saleId);
       await updateSaleStatus(saleId, 'voided');
     });
   }
@@ -1329,7 +1452,11 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
   /// - cash: Customer already received money back → no balance change.
   /// - cheque: Refund is reclassified to issued cheques when registered.
   /// - credit: Refund applied as credit note → reduces customer balance (they owe less).
-  Future<void> postSaleReturn(int returnId, {WarehouseOperationScope? scope}) {
+  Future<void> postSaleReturn(
+    int returnId, {
+    WarehouseOperationScope? scope,
+    Future<void> Function(int returnId)? beforeCompletion,
+  }) {
     return transaction(() async {
       final operationScope = await DocumentPostingScope.validate(
         attachedDatabase,
@@ -1396,9 +1523,14 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         }
       }
 
-      // 1. Always restore stock for sale returns regardless of disposition.
-      // The goods are returning to inventory whether restocked, refunded, written off,
-      // or exchanged. Disposition only affects financial treatment.
+      // Only resaleable returns re-enter on-hand inventory. A write-off,
+      // damaged or scrapped unit still reverses the sale and its exact
+      // consignment obligation, while remaining outside sellable stock.
+      final restoresStock = !const {
+        'write_off',
+        'damaged',
+        'scrap',
+      }.contains(returnData.dispositionType);
       {
         final returnAffectedProductIds = <int>{};
         // I4: FIFO products whose batch ledger we restored to.
@@ -1416,9 +1548,11 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             );
             continue;
           }
-          returnAffectedProductIds.add(saleItem.productId);
+          if (restoresStock) {
+            returnAffectedProductIds.add(saleItem.productId);
+          }
 
-          // Freeze the value entering inventory before changing quantity.
+          // Freeze the cost basis before any inventory change.
           // A linked sale return comes back at its original sale-time cost,
           // not at whatever WAC happens to be current on the return date.
           final wacSnapshot = await WacMovementService.capture(
@@ -1447,38 +1581,63 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             ),
           );
 
-          await StockService.adjustStock(
-            this,
-            scope: operationScope,
-            productId: saleItem.productId,
-            variantId: saleItem.variantId,
-            quantity: returnItem.quantity,
-            direction: StockDirection.increase,
-          );
+          if (restoresStock) {
+            await StockService.adjustStock(
+              this,
+              origin: InventoryOriginIntent(
+                'return',
+                returnItem.id,
+                reference: 'sale:${saleItem.id}',
+              ),
+              scope: operationScope,
+              productId: saleItem.productId,
+              variantId: saleItem.variantId,
+              quantity: returnItem.quantity,
+              direction: StockDirection.increase,
+            );
 
-          if (wacSnapshot != null) {
+            // FIFO restoration writes exact returned batches. WAC writes
+            // the exact origin parts inside StockService.
+            await BatchService.restoreConsumptions(
+              this,
+              scope: operationScope,
+              reverseConsumptionType: 'sale_return_reverse',
+              saleItemId: saleItem.id,
+              saleReturnItemId: returnItem.id,
+              upToQuantity: returnItem.quantity,
+            );
+          }
+          final consignmentRestoration =
+              await ConsignmentLinkedReturnService.restoreAfterStock(
+                this,
+                sale: originalSale,
+                saleItem: saleItem,
+                returnItem: returnItem,
+                scope: operationScope,
+                usesBatches: await _isFifoProduct(saleItem.productId),
+                restoresStock: restoresStock,
+              );
+          final ownedReturnQuantity =
+              returnItem.quantity - consignmentRestoration.quantity;
+          if (ownedReturnQuantity < 0) {
+            throw StateError('Returned consignment quantity exceeds return.');
+          }
+          if (restoresStock && wacSnapshot != null && ownedReturnQuantity > 0) {
             await WacMovementService.applyInbound(
               this,
               snapshot: wacSnapshot,
-              addedQty: returnItem.quantity,
+              addedQty: ownedReturnQuantity,
               inboundUnitCostCents: frozenUnitCost,
             );
           }
 
-          // FIFO restoration — for FIFO products, push the units back into
-          // the exact batches they came from at the FROZEN unit cost. The
-          // [upToQuantity] cap matters when only a partial quantity is
-          // returned: the earliest 'out' rows are restored first so the
-          // remaining 'out' rows still represent units the customer kept.
-          await BatchService.restoreConsumptions(
-            this,
-            scope: operationScope,
-            reverseConsumptionType: 'sale_return_reverse',
-            saleItemId: saleItem.id,
-            saleReturnItemId: returnItem.id,
-            upToQuantity: returnItem.quantity,
-          );
-          final inventoryValue = valuationSnapshot != null
+          final inventoryValue = !restoresStock
+              ? MeasuredAmount.cents(
+                  unitCents: frozenUnitCost,
+                  quantity: ownedReturnQuantity,
+                  quantityScale: returnItem.quantityScale,
+                )
+              : valuationSnapshot != null
               ? await InventoryValuationDeltaService.signedDeltaAfter(
                   this,
                   valuationSnapshot,
@@ -1494,7 +1653,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
               inventoryValueAtPostCents: Value(Decimal.fromInt(inventoryValue)),
             ),
           );
-          if (await _isFifoProduct(saleItem.productId)) {
+          if (restoresStock && await _isFifoProduct(saleItem.productId)) {
             returnBatchedProductIds.add(saleItem.productId);
           }
         }
@@ -1531,7 +1690,9 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
         );
       }
 
-      // 2. Update return status to posted
+      await beforeCompletion?.call(returnId);
+
+      // 2. Update return status to posted.
       await (update(saleReturns)..where((r) => r.id.equals(returnId))).write(
         const SaleReturnsCompanion(status: Value('posted')),
       );
@@ -1601,6 +1762,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     int returnId, {
     bool allowNegativeStock = false,
     WarehouseOperationScope? scope,
+    Future<void> Function(int returnId)? beforeCompletion,
   }) {
     return transaction(() async {
       final operationScope = await DocumentPostingScope.validate(
@@ -1611,6 +1773,11 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       );
       final returnData = await getSaleReturnById(returnId);
       if (returnData == null) throw Exception('Return not found');
+      final restoresStock = !const {
+        'write_off',
+        'damaged',
+        'scrap',
+      }.contains(returnData.dispositionType);
       if (returnData.status == 'voided') {
         throw Exception('Return already voided');
       }
@@ -1644,7 +1811,7 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
           // Pre-check: guard against negative stock (unless explicitly allowed).
           // We must validate ALL lines BEFORE any deduction, so a single
           // insufficient line aborts the whole void atomically.
-          if (!allowNegativeStock) {
+          if (restoresStock && !allowNegativeStock) {
             final remaining = <int, int>{};
             for (final row in items) {
               final ri = row.readTable(saleReturnItems);
@@ -1682,7 +1849,9 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
             );
             if (!await _tracksInventory(saleItem.productId)) continue;
 
-            voidReturnAffectedProductIds.add(saleItem.productId);
+            if (restoresStock) {
+              voidReturnAffectedProductIds.add(saleItem.productId);
+            }
 
             final wacSnapshot = await WacMovementService.capture(
               this,
@@ -1695,40 +1864,53 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
                 saleItem.costCents?.toBigInt().toInt() ??
                 wacSnapshot?.unitCostCents ??
                 0;
+            final consignmentReaccrual =
+                await ConsignmentLinkedReturnService.prepareVoidBeforeStock(
+                  this,
+                  returnItem: returnItem,
+                  scope: operationScope,
+                );
 
-            await StockService.adjustStock(
-              this,
-              scope: operationScope,
-              productId: saleItem.productId,
-              variantId: saleItem.variantId,
-              quantity: returnItem.quantity,
-              direction: StockDirection.decrease,
-            );
-
-            // Remove the exact value that this return added. A normal WAC
-            // outflow leaves unit cost unchanged, but voiding an inbound
-            // return is a value-specific inverse movement.
-            if (wacSnapshot != null) {
-              await WacMovementService.reverseInbound(
+            if (restoresStock) {
+              await StockService.adjustStock(
                 this,
-                snapshot: wacSnapshot,
-                removedQty: returnItem.quantity,
-                removedUnitCostCents: frozenUnitCost,
+                origin: InventoryOriginIntent(
+                  'return_void',
+                  returnItem.id,
+                  reference: 'return:${returnItem.id}',
+                ),
+                scope: operationScope,
+                productId: saleItem.productId,
+                variantId: saleItem.variantId,
+                quantity: returnItem.quantity,
+                direction: StockDirection.decrease,
               );
-            }
 
-            // FIFO: voiding a sale return removes the units from inventory
-            // again. We mirror this by deducting from the SAME batches the
-            // return originally restored to (look up 'in' rows by
-            // saleReturnItemId, then issue an 'out' against each batch). For
-            // WAC products this is a silent no-op.
-            await _reverseRestoredFifo(
-              scope: operationScope,
-              saleReturnItemId: returnItem.id,
-              consumptionType: 'sale_return_void_reverse',
-            );
-            if (await _isFifoProduct(saleItem.productId)) {
-              voidReturnBatchedProductIds.add(saleItem.productId);
+              // Remove the exact value that this return added.
+              final ownedRemovalQuantity =
+                  returnItem.quantity - consignmentReaccrual.quantity;
+              if (ownedRemovalQuantity < 0) {
+                throw StateError(
+                  'Consignment return-void quantity exceeds the return.',
+                );
+              }
+              if (wacSnapshot != null && ownedRemovalQuantity > 0) {
+                await WacMovementService.reverseInbound(
+                  this,
+                  snapshot: wacSnapshot,
+                  removedQty: ownedRemovalQuantity,
+                  removedUnitCostCents: frozenUnitCost,
+                );
+              }
+
+              await _reverseRestoredFifo(
+                scope: operationScope,
+                saleReturnItemId: returnItem.id,
+                consumptionType: 'sale_return_void_reverse',
+              );
+              if (await _isFifoProduct(saleItem.productId)) {
+                voidReturnBatchedProductIds.add(saleItem.productId);
+              }
             }
           }
 
@@ -1802,6 +1984,8 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
       await (delete(
         db.commissions,
       )..where((c) => c.saleReturnId.equals(returnId))).go();
+
+      await beforeCompletion?.call(returnId);
 
       await (update(saleReturns)..where((r) => r.id.equals(returnId))).write(
         const SaleReturnsCompanion(status: Value('voided')),
@@ -2206,9 +2390,11 @@ class SaleDao extends DatabaseAccessor<AppDatabase> with _$SaleDaoMixin {
     final row = await customSelect(
       'SELECT CAST((COALESCE(SUM(quantity * unit_cost_cents), 0) + ?) / ? '
       'AS INTEGER) AS value_cents '
-      'FROM batch_consumptions '
-      "WHERE sale_return_item_id = ? AND direction = 'in' "
-      "AND consumption_type = 'sale_return_reverse'",
+      'FROM batch_consumptions bc '
+      "WHERE bc.sale_return_item_id = ? AND bc.direction = 'in' "
+      "AND bc.consumption_type = 'sale_return_reverse' "
+      'AND NOT EXISTS(SELECT 1 FROM consignment_inventory_layers l '
+      'WHERE l.batch_id=bc.batch_id)',
       variables: [
         Variable.withInt(quantityScale ~/ 2),
         Variable.withInt(quantityScale),

@@ -22,22 +22,34 @@ void main() {
   group('PermissionGate Logic', () {
     test('owner has manageUsers permission', () {
       final user = createUser(UserRole.owner);
-      expect(permissionService.hasPermission(user, Permissions.manageUsers), isTrue);
+      expect(
+        permissionService.hasPermission(user, Permissions.manageUsers),
+        isTrue,
+      );
     });
 
     test('cashier lacks manageUsers permission', () {
       final user = createUser(UserRole.cashier);
-      expect(permissionService.hasPermission(user, Permissions.manageUsers), isFalse);
+      expect(
+        permissionService.hasPermission(user, Permissions.manageUsers),
+        isFalse,
+      );
     });
 
     test('salesperson lacks manageUsers permission', () {
       final user = createUser(UserRole.salesperson);
-      expect(permissionService.hasPermission(user, Permissions.manageUsers), isFalse);
+      expect(
+        permissionService.hasPermission(user, Permissions.manageUsers),
+        isFalse,
+      );
     });
 
     test('inactive user has no permissions', () {
       final user = createUser(UserRole.owner, isActive: false);
-      expect(permissionService.hasPermission(user, Permissions.manageUsers), isFalse);
+      expect(
+        permissionService.hasPermission(user, Permissions.manageUsers),
+        isFalse,
+      );
     });
   });
 
@@ -64,7 +76,10 @@ void main() {
 
     test('inactive user does not meet any minRole', () {
       final user = createUser(UserRole.owner, isActive: false);
-      expect(permissionService.isRoleAtLeast(user, UserRole.salesperson), isFalse);
+      expect(
+        permissionService.isRoleAtLeast(user, UserRole.salesperson),
+        isFalse,
+      );
     });
   });
 
@@ -72,23 +87,29 @@ void main() {
     test('owner has all required permissions', () {
       final user = createUser(UserRole.owner);
       expect(
-        permissionService.hasAllPermissions(
-          user,
-          [Permissions.manageUsers, Permissions.viewReports],
-        ),
+        permissionService.hasAllPermissions(user, [
+          Permissions.manageUsers,
+          Permissions.viewReports,
+        ]),
         isTrue,
       );
     });
 
     test('manager has viewReports but not manageUsers', () {
       final user = createUser(UserRole.manager);
-      expect(permissionService.hasPermission(user, Permissions.viewReports), isTrue);
-      expect(permissionService.hasPermission(user, Permissions.manageUsers), isFalse);
       expect(
-        permissionService.hasAnyPermission(
-          user,
-          [Permissions.manageUsers, Permissions.viewReports],
-        ),
+        permissionService.hasPermission(user, Permissions.viewReports),
+        isTrue,
+      );
+      expect(
+        permissionService.hasPermission(user, Permissions.manageUsers),
+        isFalse,
+      );
+      expect(
+        permissionService.hasAnyPermission(user, [
+          Permissions.manageUsers,
+          Permissions.viewReports,
+        ]),
         isTrue,
       );
     });
@@ -96,10 +117,10 @@ void main() {
     test('salesperson lacks all admin permissions', () {
       final user = createUser(UserRole.salesperson);
       expect(
-        permissionService.hasAnyPermission(
-          user,
-          [Permissions.manageUsers, Permissions.viewReports],
-        ),
+        permissionService.hasAnyPermission(user, [
+          Permissions.manageUsers,
+          Permissions.viewReports,
+        ]),
         isFalse,
       );
     });

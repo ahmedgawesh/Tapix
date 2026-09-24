@@ -66,6 +66,7 @@ class _LanMasterDevicesSheetState extends State<_LanMasterDevicesSheet> {
     required String labelKey,
     String initialValue = '',
     bool required = true,
+    int maxLength = 160,
   }) async {
     return showDialog<String>(
       context: context,
@@ -74,6 +75,7 @@ class _LanMasterDevicesSheetState extends State<_LanMasterDevicesSheet> {
         labelKey: labelKey,
         initialValue: initialValue,
         isRequired: required,
+        maxLength: maxLength,
       ),
     );
   }
@@ -83,6 +85,7 @@ class _LanMasterDevicesSheetState extends State<_LanMasterDevicesSheet> {
       titleKey: 'settings.network.management.rename',
       labelKey: 'settings.network.management.device_name',
       initialValue: device.name,
+      maxLength: 80,
     );
     if (name == null || name == device.name) return;
     await _run(
@@ -305,6 +308,16 @@ class _LanMasterDevicesSheetState extends State<_LanMasterDevicesSheet> {
                                     value: _role(device.userRole),
                                   ),
                                   _Detail(
+                                    icon: Icons.account_tree_outlined,
+                                    label:
+                                        'settings.network.management.location_scope'
+                                            .tr(),
+                                    value: device.scopeVerified
+                                        ? '${device.branchName ?? '—'} / ${device.warehouseName ?? '—'}'
+                                        : 'settings.network.management.scope_mismatch'
+                                              .tr(),
+                                  ),
+                                  _Detail(
                                     icon: Icons.lan_outlined,
                                     label: 'settings.network.management.ip'
                                         .tr(),
@@ -396,12 +409,14 @@ class _LanTextPromptDialog extends StatefulWidget {
     required this.labelKey,
     required this.initialValue,
     required this.isRequired,
+    required this.maxLength,
   });
 
   final String titleKey;
   final String labelKey;
   final String initialValue;
   final bool isRequired;
+  final int maxLength;
 
   @override
   State<_LanTextPromptDialog> createState() => _LanTextPromptDialogState();
@@ -441,7 +456,7 @@ class _LanTextPromptDialogState extends State<_LanTextPromptDialog> {
       content: TextField(
         controller: _controller,
         autofocus: true,
-        maxLength: 160,
+        maxLength: widget.maxLength,
         decoration: InputDecoration(
           labelText: widget.labelKey.tr(),
           errorText: _error,

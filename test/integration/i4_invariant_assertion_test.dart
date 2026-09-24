@@ -48,7 +48,9 @@ void main() {
     int costCents = 1000,
     int priceCents = 2000,
   }) async {
-    final pid = await db.into(db.products).insert(
+    final pid = await db
+        .into(db.products)
+        .insert(
           ProductsCompanion.insert(
             sku: Value(sku),
             name: name,
@@ -71,15 +73,16 @@ void main() {
     required int productId,
     int costCents = 1000,
     int priceCents = 2000,
-  }) =>
-      db.into(db.productVariants).insert(
-            ProductVariantsCompanion.insert(
-              productId: productId,
-              stockQuantity: const Value(0),
-              costCents: Decimal.fromInt(costCents),
-              priceCents: Decimal.fromInt(priceCents),
-            ),
-          );
+  }) => db
+      .into(db.productVariants)
+      .insert(
+        ProductVariantsCompanion.insert(
+          productId: productId,
+          stockQuantity: const Value(0),
+          costCents: Decimal.fromInt(costCents),
+          priceCents: Decimal.fromInt(priceCents),
+        ),
+      );
 
   Future<int> postPurchase({
     required int productId,
@@ -88,7 +91,9 @@ void main() {
     required int unitCostCents,
     required String poNumber,
   }) async {
-    final purchaseId = await db.into(db.purchases).insert(
+    final purchaseId = await db
+        .into(db.purchases)
+        .insert(
           PurchasesCompanion.insert(
             purchaseNumber: poNumber,
             supplierId: supplierId,
@@ -101,7 +106,9 @@ void main() {
             paymentMethod: const Value('credit'),
           ),
         );
-    await db.into(db.purchaseItems).insert(
+    await db
+        .into(db.purchaseItems)
+        .insert(
           PurchaseItemsCompanion.insert(
             purchaseId: purchaseId,
             productId: productId,
@@ -151,19 +158,23 @@ void main() {
       "VALUES (0, 'system', 'no-pin', 'owner', 1, $now, $now)",
     );
 
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     currencyId = usd.id;
 
-    customerId = await db.into(db.customers).insert(
+    customerId = await db
+        .into(db.customers)
+        .insert(
           CustomersCompanion.insert(
             name: 'I4 Test Customer',
             currencyId: currencyId,
             balanceCents: Value(Decimal.zero),
           ),
         );
-    supplierId = await db.into(db.suppliers).insert(
+    supplierId = await db
+        .into(db.suppliers)
+        .insert(
           SuppliersCompanion.insert(
             name: 'I4 Test Supplier',
             currencyId: currencyId,
@@ -178,10 +189,10 @@ void main() {
   // Common matcher
   // ──────────────────────────────────────────────────────────────────────────
   Matcher isInvariantStateError() => isA<StateError>().having(
-        (e) => e.message,
-        'message',
-        startsWith('BatchService.assertInvariant'),
-      );
+    (e) => e.message,
+    'message',
+    startsWith('BatchService.assertInvariant'),
+  );
 
   // ──────────────────────────────────────────────────────────────────────────
   // 1. SaleDao.postSale
@@ -206,7 +217,9 @@ void main() {
     // BatchService.consumeFifo (which mutates the ledger to remaining=7),
     // then sync product, then I4's assertInvariantForProduct fires.
     // After consume: variant.stock = 12 - 3 = 9, Σ(remaining) = 7 → 9 ≠ 7.
-    final saleId = await db.into(db.sales).insert(
+    final saleId = await db
+        .into(db.sales)
+        .insert(
           SalesCompanion.insert(
             invoiceNumber: 'INV-I4-SALE',
             customerId: Value(customerId),
@@ -219,7 +232,9 @@ void main() {
             status: const Value('draft'),
           ),
         );
-    await db.into(db.saleItems).insert(
+    await db
+        .into(db.saleItems)
+        .insert(
           SaleItemsCompanion.insert(
             saleId: saleId,
             productId: pid,
@@ -231,197 +246,218 @@ void main() {
           ),
         );
 
-    expect(
-      () => db.saleDao.postSale(saleId),
-      throwsA(isInvariantStateError()),
-    );
+    expect(() => db.saleDao.postSale(saleId), throwsA(isInvariantStateError()));
   });
 
   // ──────────────────────────────────────────────────────────────────────────
   // 2. PurchaseDao.postPurchase
   // ──────────────────────────────────────────────────────────────────────────
-  test('PurchaseDao.postPurchase throws StateError when ledger is desynced',
-      () async {
-    final pid = await insertProduct(sku: 'I4-PURCH', name: 'I4 purchase prod');
-    final vid = await insertVariant(productId: pid);
+  test(
+    'PurchaseDao.postPurchase throws StateError when ledger is desynced',
+    () async {
+      final pid = await insertProduct(
+        sku: 'I4-PURCH',
+        name: 'I4 purchase prod',
+      );
+      final vid = await insertVariant(productId: pid);
 
-    // Pre-corrupt: variant.stock = 5 but Σ(remaining) = 0 (no batches yet).
-    await corruptVariantStock(variantId: vid, delta: 5);
+      // Pre-corrupt: variant.stock = 5 but Σ(remaining) = 0 (no batches yet).
+      await corruptVariantStock(variantId: vid, delta: 5);
 
-    final purchaseId = await db.into(db.purchases).insert(
-          PurchasesCompanion.insert(
-            purchaseNumber: 'PO-I4-PURCH',
-            supplierId: supplierId,
-            subtotalCents: Decimal.fromInt(700),
-            taxCents: Decimal.zero,
-            totalCents: Decimal.fromInt(700),
-            paidAmountCents: Value(Decimal.zero),
-            currencyId: currencyId,
-            status: const Value('draft'),
-            paymentMethod: const Value('credit'),
-          ),
-        );
-    await db.into(db.purchaseItems).insert(
-          PurchaseItemsCompanion.insert(
-            purchaseId: purchaseId,
-            productId: pid,
-            variantId: Value(vid),
-            quantity: 7,
-            unitCostCents: Decimal.fromInt(100),
-            subtotalCents: Decimal.fromInt(700),
-            totalCents: Decimal.fromInt(700),
-          ),
-        );
+      final purchaseId = await db
+          .into(db.purchases)
+          .insert(
+            PurchasesCompanion.insert(
+              purchaseNumber: 'PO-I4-PURCH',
+              supplierId: supplierId,
+              subtotalCents: Decimal.fromInt(700),
+              taxCents: Decimal.zero,
+              totalCents: Decimal.fromInt(700),
+              paidAmountCents: Value(Decimal.zero),
+              currencyId: currencyId,
+              status: const Value('draft'),
+              paymentMethod: const Value('credit'),
+            ),
+          );
+      await db
+          .into(db.purchaseItems)
+          .insert(
+            PurchaseItemsCompanion.insert(
+              purchaseId: purchaseId,
+              productId: pid,
+              variantId: Value(vid),
+              quantity: 7,
+              unitCostCents: Decimal.fromInt(100),
+              subtotalCents: Decimal.fromInt(700),
+              totalCents: Decimal.fromInt(700),
+            ),
+          );
 
-    // After post: stock = 5+7 = 12, Σ(remaining) = 7 → 12 ≠ 7.
-    expect(
-      () => db.purchaseDao.postPurchase(purchaseId),
-      throwsA(isInvariantStateError()),
-    );
-  });
+      // After post: stock = 5+7 = 12, Σ(remaining) = 7 → 12 ≠ 7.
+      expect(
+        () => db.purchaseDao.postPurchase(purchaseId),
+        throwsA(isInvariantStateError()),
+      );
+    },
+  );
 
   // ──────────────────────────────────────────────────────────────────────────
   // 3. AdjustmentReturnDao.postPurchaseAdjReturn
   // ──────────────────────────────────────────────────────────────────────────
   test(
-      'AdjustmentReturnDao.postPurchaseAdjReturn throws StateError on desync',
-      () async {
-    final pid = await insertProduct(sku: 'I4-PAR', name: 'I4 adj return prod');
-    final vid = await insertVariant(productId: pid);
+    'AdjustmentReturnDao.postPurchaseAdjReturn throws StateError on desync',
+    () async {
+      final pid = await insertProduct(
+        sku: 'I4-PAR',
+        name: 'I4 adj return prod',
+      );
+      final vid = await insertVariant(productId: pid);
 
-    await postPurchase(
-      productId: pid,
-      variantId: vid,
-      quantity: 10,
-      unitCostCents: 100,
-      poNumber: 'PO-I4-PAR',
-    );
+      await postPurchase(
+        productId: pid,
+        variantId: vid,
+        quantity: 10,
+        unitCostCents: 100,
+        poNumber: 'PO-I4-PAR',
+      );
 
-    // Inject desync: variant.stock = 13, Σ(remaining) = 10.
-    await corruptVariantStock(variantId: vid, delta: 3);
+      // Inject desync: variant.stock = 13, Σ(remaining) = 10.
+      await corruptVariantStock(variantId: vid, delta: 3);
 
-    final returnId = await adjReturnDao.createPurchaseAdjReturn(
-      PurchaseReturnAdjustmentsCompanion.insert(
-        returnNumber: 'PAR-I4-1',
-        supplierId: supplierId,
-        currencyId: currencyId,
-        totalCents: Decimal.fromInt(400),
-      ),
-      [
-        PurchaseReturnAdjustmentItemsCompanion.insert(
-          returnId: 0, // overwritten by DAO
-          productId: pid,
-          variantId: Value(vid),
-          quantity: 4,
-          unitPriceCents: Decimal.fromInt(100),
+      final returnId = await adjReturnDao.createPurchaseAdjReturn(
+        PurchaseReturnAdjustmentsCompanion.insert(
+          returnNumber: 'PAR-I4-1',
+          supplierId: supplierId,
+          currencyId: currencyId,
           totalCents: Decimal.fromInt(400),
         ),
-      ],
-    );
+        [
+          PurchaseReturnAdjustmentItemsCompanion.insert(
+            returnId: 0, // overwritten by DAO
+            productId: pid,
+            variantId: Value(vid),
+            quantity: 4,
+            unitPriceCents: Decimal.fromInt(100),
+            totalCents: Decimal.fromInt(400),
+          ),
+        ],
+      );
 
-    // After post: stock = 13 - 4 = 9, Σ(remaining) = 10 - 4 = 6 → 9 ≠ 6.
-    expect(
-      () => adjReturnDao.postPurchaseAdjReturn(
-        returnId,
-        journalEntryService: journal,
-      ),
-      throwsA(isInvariantStateError()),
-    );
-  });
+      // After post: stock = 13 - 4 = 9, Σ(remaining) = 10 - 4 = 6 → 9 ≠ 6.
+      expect(
+        () => adjReturnDao.postPurchaseAdjReturn(
+          returnId,
+          journalEntryService: journal,
+        ),
+        throwsA(isInvariantStateError()),
+      );
+    },
+  );
 
   // ──────────────────────────────────────────────────────────────────────────
   // 4. InventoryAdjustmentService.adjust (shrinkage)
   // ──────────────────────────────────────────────────────────────────────────
   test(
-      'InventoryAdjustmentService.adjust throws StateError on desync (shrinkage)',
-      () async {
-    final pid = await insertProduct(sku: 'I4-INV', name: 'I4 inv adj prod');
-    final vid = await insertVariant(productId: pid);
+    'InventoryAdjustmentService.adjust throws StateError on desync (shrinkage)',
+    () async {
+      final pid = await insertProduct(sku: 'I4-INV', name: 'I4 inv adj prod');
+      final vid = await insertVariant(productId: pid);
 
-    await postPurchase(
-      productId: pid,
-      variantId: vid,
-      quantity: 10,
-      unitCostCents: 100,
-      poNumber: 'PO-I4-INV',
-    );
-
-    // Inject desync: variant.stock = 14, Σ(remaining) = 10.
-    await corruptVariantStock(variantId: vid, delta: 4);
-
-    // Shrinkage of 2 → consumeFifo deducts 2 from batches (Σ=8) AND
-    // StockService decreases variant.stock by 2 (=12). 12 ≠ 8 → assertion
-    // fires inside the service's I4 hook.
-    expect(
-      () => invAdjService.adjust(
+      await postPurchase(
         productId: pid,
         variantId: vid,
-        type: InventoryAdjustmentType.shrinkage,
-        quantityDelta: -2,
-        reason: 'I4 desync test',
-        currencyId: currencyId,
-        userId: 0,
-      ),
-      throwsA(isInvariantStateError()),
-    );
-  });
+        quantity: 10,
+        unitCostCents: 100,
+        poNumber: 'PO-I4-INV',
+      );
+
+      // Inject desync: variant.stock = 14, Σ(remaining) = 10.
+      await corruptVariantStock(variantId: vid, delta: 4);
+
+      // Shrinkage of 2 → consumeFifo deducts 2 from batches (Σ=8) AND
+      // StockService decreases variant.stock by 2 (=12). 12 ≠ 8 → assertion
+      // fires inside the service's I4 hook.
+      expect(
+        () => invAdjService.adjust(
+          productId: pid,
+          variantId: vid,
+          type: InventoryAdjustmentType.shrinkage,
+          quantityDelta: -2,
+          reason: 'I4 desync test',
+          currencyId: currencyId,
+          userId: 0,
+        ),
+        throwsA(isInvariantStateError()),
+      );
+    },
+  );
 
   // ──────────────────────────────────────────────────────────────────────────
   // 5. Sanity: when ledger is in sync, the same paths succeed
   // ──────────────────────────────────────────────────────────────────────────
-  test('clean ledger: postSale+voidSale round-trip passes the I4 assertion',
-      () async {
-    final pid = await insertProduct(sku: 'I4-OK', name: 'I4 clean path');
-    final vid = await insertVariant(productId: pid);
+  test(
+    'clean ledger: postSale+voidSale round-trip passes the I4 assertion',
+    () async {
+      final pid = await insertProduct(sku: 'I4-OK', name: 'I4 clean path');
+      final vid = await insertVariant(productId: pid);
 
-    await postPurchase(
-      productId: pid,
-      variantId: vid,
-      quantity: 10,
-      unitCostCents: 100,
-      poNumber: 'PO-I4-OK',
-    );
+      await postPurchase(
+        productId: pid,
+        variantId: vid,
+        quantity: 10,
+        unitCostCents: 100,
+        poNumber: 'PO-I4-OK',
+      );
 
-    final saleId = await db.into(db.sales).insert(
-          SalesCompanion.insert(
-            invoiceNumber: 'INV-I4-OK',
-            customerId: Value(customerId),
-            subtotalCents: Decimal.fromInt(600),
-            taxCents: Decimal.zero,
-            totalCents: Decimal.fromInt(600),
-            paidAmountCents: Value(Decimal.fromInt(600)),
-            currencyId: currencyId,
-            paymentMethod: 'cash',
-            status: const Value('draft'),
-          ),
-        );
-    await db.into(db.saleItems).insert(
-          SaleItemsCompanion.insert(
-            saleId: saleId,
-            productId: pid,
-            variantId: Value(vid),
-            quantity: 3,
-            unitPriceCents: Decimal.fromInt(200),
-            subtotalCents: Decimal.fromInt(600),
-            totalCents: Decimal.fromInt(600),
-          ),
-        );
+      final saleId = await db
+          .into(db.sales)
+          .insert(
+            SalesCompanion.insert(
+              invoiceNumber: 'INV-I4-OK',
+              customerId: Value(customerId),
+              subtotalCents: Decimal.fromInt(600),
+              taxCents: Decimal.zero,
+              totalCents: Decimal.fromInt(600),
+              paidAmountCents: Value(Decimal.fromInt(600)),
+              currencyId: currencyId,
+              paymentMethod: 'cash',
+              status: const Value('draft'),
+            ),
+          );
+      await db
+          .into(db.saleItems)
+          .insert(
+            SaleItemsCompanion.insert(
+              saleId: saleId,
+              productId: pid,
+              variantId: Value(vid),
+              quantity: 3,
+              unitPriceCents: Decimal.fromInt(200),
+              subtotalCents: Decimal.fromInt(600),
+              totalCents: Decimal.fromInt(600),
+            ),
+          );
 
-    // No desync injected — both calls must complete without throwing.
-    await db.saleDao.postSale(saleId);
-    await db.saleDao.voidSale(saleId);
+      // No desync injected — both calls must complete without throwing.
+      await db.saleDao.postSale(saleId);
+      await db.saleDao.voidSale(saleId);
 
-    // Final state: variant.stock = 10, Σ(remaining) = 10.
-    final stockRow = await db.customSelect(
-      'SELECT stock_quantity FROM product_variants WHERE id = ?',
-      variables: [Variable.withInt(vid)],
-    ).getSingle();
-    final batchRow = await db.customSelect(
-      'SELECT COALESCE(SUM(remaining_quantity), 0) AS s '
-      '  FROM product_batches WHERE variant_id = ? AND is_active = 1',
-      variables: [Variable.withInt(vid)],
-    ).getSingle();
-    expect(stockRow.read<int>('stock_quantity'), equals(10));
-    expect(batchRow.read<int>('s'), equals(10));
-  });
+      // Final state: variant.stock = 10, Σ(remaining) = 10.
+      final stockRow = await db
+          .customSelect(
+            'SELECT stock_quantity FROM product_variants WHERE id = ?',
+            variables: [Variable.withInt(vid)],
+          )
+          .getSingle();
+      final batchRow = await db
+          .customSelect(
+            'SELECT COALESCE(SUM(remaining_quantity), 0) AS s '
+            '  FROM product_batches WHERE variant_id = ? AND is_active = 1',
+            variables: [Variable.withInt(vid)],
+          )
+          .getSingle();
+      expect(stockRow.read<int>('stock_quantity'), equals(10));
+      expect(batchRow.read<int>('s'), equals(10));
+    },
+  );
 }

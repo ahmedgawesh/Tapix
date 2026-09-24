@@ -11,6 +11,7 @@ enum ReturnType { linked, adjustment }
 /// Returns [ReturnType.linked] or [ReturnType.adjustment], or null if dismissed.
 Future<ReturnType?> showReturnTypeBottomSheet(
   BuildContext context, {
+
   /// 'purchase' or 'sale'
   required String returnContext,
 }) {
@@ -62,7 +63,11 @@ class _ReturnTypeSheet extends StatelessWidget {
                     ),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(LucideIcons.undo2, size: 18, color: Colors.white),
+                  child: const Icon(
+                    LucideIcons.undo2,
+                    size: 18,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -186,11 +191,16 @@ class _ReturnTypeOption extends StatelessWidget {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: badgeColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
+                      border: Border.all(
+                        color: badgeColor.withValues(alpha: 0.3),
+                      ),
                     ),
                     child: Text(
                       badgeText,
@@ -219,17 +229,25 @@ class _ReturnTypeOption extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsetsDirectional.only(start: 44),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.amber.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                      border: Border.all(
+                        color: Colors.amber.withValues(alpha: 0.3),
+                      ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(LucideIcons.alertTriangle,
-                            size: 12, color: Colors.amber.shade700),
+                        Icon(
+                          LucideIcons.alertTriangle,
+                          size: 12,
+                          color: Colors.amber.shade700,
+                        ),
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(

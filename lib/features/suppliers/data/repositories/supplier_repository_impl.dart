@@ -1,3 +1,4 @@
+import '../../../../core/services/inventory/supplier_identity_rules.dart';
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 import '../../../../core/database/app_database.dart';
@@ -15,7 +16,13 @@ class SupplierRepositoryImpl implements SupplierRepository {
   final AppDatabase _db;
   final AuditLogService _auditService;
 
-  SupplierRepositoryImpl(this._datasource, this._sessionService, this._journalService, this._db, this._auditService);
+  SupplierRepositoryImpl(
+    this._datasource,
+    this._sessionService,
+    this._journalService,
+    this._db,
+    this._auditService,
+  );
 
   Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
 
@@ -40,23 +47,42 @@ class SupplierRepositoryImpl implements SupplierRepository {
   }
 
   @override
+  Future<bool> isProductCodeAvailable(
+    String? code, {
+    int? excludingSupplierId,
+  }) => _datasource.isProductCodeAvailable(
+    code,
+    excludingSupplierId: excludingSupplierId,
+  );
+
+  @override
+  Future<bool> isProductCodeLocked(int supplierId) =>
+      _datasource.isProductCodeLocked(supplierId);
+
+  @override
   Future<int> createSupplier({
     required String name,
     String? email,
     String? phone,
     String? address,
+    String? productCode,
     required int currencyId,
     Decimal? initialBalance,
   }) async {
     final balanceCents = initialBalance ?? Decimal.zero;
     final companion = SuppliersCompanion(
       name: Value(name),
+      productCode: Value(
+        SupplierIdentityRules.normalizeSupplierCode(productCode),
+      ),
       email: Value(email),
       phone: Value(phone),
       address: Value(address),
       currencyId: Value(currencyId),
       balanceCents: Value(balanceCents),
-      openingBalanceCents: Value(balanceCents), // Store opening balance separately
+      openingBalanceCents: Value(
+        balanceCents,
+      ), // Store opening balance separately
       isActive: const Value(true),
       createdAt: Value(DateTime.now()),
       updatedAt: Value(DateTime.now()),
@@ -88,6 +114,10 @@ class SupplierRepositoryImpl implements SupplierRepository {
   Future<bool> updateSupplier(Supplier supplier) {
     return _datasource.updateSupplier(supplier);
   }
+
+  @override
+  Future<void> setSupplierActive(int supplierId, bool isActive) =>
+      _datasource.setSupplierActive(supplierId, isActive);
 
   @override
   Future<int> deleteSupplier(int id) {
@@ -122,7 +152,10 @@ class SupplierRepositoryImpl implements SupplierRepository {
   ///
   /// This prevents GL ↔ Suppliers balance mismatch.
   @override
-  Future<void> updateSupplierBalance(int supplierId, int newBalanceCents) async {
+  Future<void> updateSupplierBalance(
+    int supplierId,
+    int newBalanceCents,
+  ) async {
     throw StateError(
       'Direct supplier balance updates are DISABLED. '
       'Use recordTransaction(transactionType: "adjustment") instead, '
@@ -244,16 +277,18 @@ class SupplierRepositoryImpl implements SupplierRepository {
 
     // 2. Check accounting period is open for the transaction date
     final txDate = existing.transactionDate;
-    final periodRows = await _db.customSelect(
-      '''SELECT id, is_closed FROM accounting_periods
+    final periodRows = await _db
+        .customSelect(
+          '''SELECT id, is_closed FROM accounting_periods
          WHERE start_date <= ? AND end_date >= ?
          ORDER BY start_date DESC LIMIT 1''',
-      variables: [
-        Variable.withDateTime(txDate),
-        Variable.withDateTime(txDate),
-      ],
-      readsFrom: {_db.accountingPeriods},
-    ).get();
+          variables: [
+            Variable.withDateTime(txDate),
+            Variable.withDateTime(txDate),
+          ],
+          readsFrom: {_db.accountingPeriods},
+        )
+        .get();
     if (periodRows.isNotEmpty && periodRows.first.read<bool>('is_closed')) {
       throw StateError(
         'Cannot edit transaction: the accounting period containing this '
@@ -277,7 +312,8 @@ class SupplierRepositoryImpl implements SupplierRepository {
       await _journalService.voidJournalEntriesForSource(
         sourceTable: 'supplier_transactions',
         sourceId: transactionId,
-        reason: 'Transaction amount edited from $oldAmountCents to $absNewAmount cents',
+        reason:
+            'Transaction amount edited from $oldAmountCents to $absNewAmount cents',
         userId: userId,
       );
 
@@ -311,10 +347,7 @@ class SupplierRepositoryImpl implements SupplierRepository {
         'type': existing.transactionType,
         'supplierId': existing.supplierId,
       },
-      newValue: {
-        'amountCents': absNewAmount,
-        'description': newDescription,
-      },
+      newValue: {'amountCents': absNewAmount, 'description': newDescription},
       userId: userId,
     );
 

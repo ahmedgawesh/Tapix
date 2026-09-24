@@ -84,7 +84,8 @@ void main() {
         totalCents: 21000,
       );
 
-      final sum = item.currentCents +
+      final sum =
+          item.currentCents +
           item.days30Cents +
           item.days60Cents +
           item.days90Cents +
@@ -133,9 +134,7 @@ void main() {
 
   group('CustomerReportsData', () {
     test('default values are correct', () {
-      final data = CustomerReportsData(
-        dateRange: ReportDateRange.thisMonth(),
-      );
+      final data = CustomerReportsData(dateRange: ReportDateRange.thisMonth());
 
       expect(data.customers, isEmpty);
       expect(data.agingItems, isEmpty);
@@ -159,9 +158,7 @@ void main() {
         dateRange: ReportDateRange.thisMonth(),
       );
 
-      final updated = original.copyWith(
-        dateRange: ReportDateRange.thisYear(),
-      );
+      final updated = original.copyWith(dateRange: ReportDateRange.thisYear());
 
       expect(updated.totalReceivablesCents, 100000);
       expect(updated.totalPayablesCents, 5000);
@@ -319,7 +316,8 @@ void main() {
       int totalOverdue = 0;
       for (final item in items) {
         totalReceivables += item.totalCents;
-        totalOverdue += item.days30Cents +
+        totalOverdue +=
+            item.days30Cents +
             item.days60Cents +
             item.days90Cents +
             item.over90Cents;

@@ -36,24 +36,38 @@ class PeppolUblProvider implements EInvoiceProvider {
   ) async {
     final ubl = StringBuffer()
       ..write('<?xml version="1.0" encoding="UTF-8"?>')
-      ..write('<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2">')
-      ..write('<cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0</cbc:CustomizationID>')
+      ..write(
+        '<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2">',
+      )
+      ..write(
+        '<cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0</cbc:CustomizationID>',
+      )
       ..write('<cbc:ID>${subject.documentNumber}</cbc:ID>')
       ..write('<cbc:IssueDate>${_iso(subject.issueDate)}</cbc:IssueDate>')
-      ..write('<cbc:InvoiceTypeCode>'
-          '${subject.documentType == 'credit_note' ? '381' : '380'}'
-          '</cbc:InvoiceTypeCode>')
-      ..write('<cbc:DocumentCurrencyCode>CUR${subject.currencyId}</cbc:DocumentCurrencyCode>')
-      ..write('<cac:AccountingSupplierParty><cac:Party>'
-          '<cac:PartyName><cbc:Name>'
-          '${subject.sellerLegalName ?? sellerLegalName}'
-          '</cbc:Name></cac:PartyName>'
-          '<cac:PartyTaxScheme><cbc:CompanyID>'
-          '${subject.sellerTaxNumber ?? sellerTaxNumber}'
-          '</cbc:CompanyID></cac:PartyTaxScheme>'
-          '</cac:Party></cac:AccountingSupplierParty>')
-      ..write('<cbc:TaxAmount>${(subject.taxCents / 100).toStringAsFixed(2)}</cbc:TaxAmount>')
-      ..write('<cbc:PayableAmount>${(subject.totalCents / 100).toStringAsFixed(2)}</cbc:PayableAmount>')
+      ..write(
+        '<cbc:InvoiceTypeCode>'
+        '${subject.documentType == 'credit_note' ? '381' : '380'}'
+        '</cbc:InvoiceTypeCode>',
+      )
+      ..write(
+        '<cbc:DocumentCurrencyCode>CUR${subject.currencyId}</cbc:DocumentCurrencyCode>',
+      )
+      ..write(
+        '<cac:AccountingSupplierParty><cac:Party>'
+        '<cac:PartyName><cbc:Name>'
+        '${subject.sellerLegalName ?? sellerLegalName}'
+        '</cbc:Name></cac:PartyName>'
+        '<cac:PartyTaxScheme><cbc:CompanyID>'
+        '${subject.sellerTaxNumber ?? sellerTaxNumber}'
+        '</cbc:CompanyID></cac:PartyTaxScheme>'
+        '</cac:Party></cac:AccountingSupplierParty>',
+      )
+      ..write(
+        '<cbc:TaxAmount>${(subject.taxCents / 100).toStringAsFixed(2)}</cbc:TaxAmount>',
+      )
+      ..write(
+        '<cbc:PayableAmount>${(subject.totalCents / 100).toStringAsFixed(2)}</cbc:PayableAmount>',
+      )
       ..write('</Invoice>');
 
     final xml = ubl.toString();
@@ -68,9 +82,8 @@ class PeppolUblProvider implements EInvoiceProvider {
   }
 
   @override
-  Future<SignedArtifact> sign(PreparedArtifact prepared) async => SignedArtifact(
-        payloadXml: prepared.payloadXml,
-      );
+  Future<SignedArtifact> sign(PreparedArtifact prepared) async =>
+      SignedArtifact(payloadXml: prepared.payloadXml);
 
   @override
   Future<SubmissionResult> submit(

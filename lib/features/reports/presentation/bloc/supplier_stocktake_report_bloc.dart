@@ -121,6 +121,23 @@ class _FifoActivityLine {
   });
 }
 
+class _WacOriginActivityLine {
+  final String kind;
+  final _VariantKey key;
+  final int quantity;
+  final int netRevenueCents;
+  final int netCogsCents;
+  final Map<int, int> quantityBySource = <int, int>{};
+
+  _WacOriginActivityLine({
+    required this.kind,
+    required this.key,
+    required this.quantity,
+    required this.netRevenueCents,
+    required this.netCogsCents,
+  });
+}
+
 const int _unassignedSupplierSource = -1;
 
 /// Allocates an integer total without ever creating units/cents through
@@ -401,6 +418,8 @@ class SupplierStocktakeReportBloc
             ...WarehouseDocumentScope.dependencies(_db),
             ...WarehouseStockScope.dependencies(_db),
             _db.batchConsumptions,
+            _db.inventoryOriginStates,
+            _db.inventoryOriginEvents,
             _db.purchases,
             _db.purchaseItems,
             _db.purchaseReturns,
@@ -738,111 +757,56 @@ class SupplierStocktakeReportBloc
       }
     }
 
-    // WAC has no physical supplier-owned layers after costs are blended.
-    // Build lifetime net-purchase weights for every supplier, then allocate
-    // integer quantities/cents with a total-preserving largest remainder.
-    final sourceRows = await _db
+    // WAC valuation remains blended, but supplier attribution now comes only
+    // from the saved quantity-origin projection. Historic stock, manual gains,
+    // and unlinked customer returns are never distributed by purchase ratios.
+    final originWarehouseId =
+        warehouseScope?.warehouseId ??
+        (await WarehouseReadScope.resolve(_db)).warehouseId;
+    final originBalanceRows = await _db
         .customSelect(
-          '''
-      SELECT supplier_id, product_id, variant_id, SUM(quantity_delta) AS weight
-      FROM (
-        SELECT pu.supplier_id AS supplier_id, pi.product_id AS product_id,
-               ${resolvedVariant('pi')} AS variant_id, pi.quantity AS quantity_delta
-        FROM purchase_items pi
-        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchase) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} pu ON pu.id = pi.purchase_id
-        WHERE pu.status = 'posted'
-        UNION ALL
-        SELECT pu.supplier_id AS supplier_id, pi.product_id AS product_id,
-               ${resolvedVariant('pi')} AS variant_id, -pri.quantity AS quantity_delta
-        FROM purchase_return_items pri
-        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchaseReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseReturn)} pr ON pr.id = pri.return_id
-        INNER JOIN purchase_items pi ON pi.id = pri.purchase_item_id
-        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchase) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchase)} pu ON pu.id = pi.purchase_id
-        WHERE pr.status = 'posted'
-        UNION ALL
-        SELECT pra.supplier_id AS supplier_id, prai.product_id AS product_id,
-               ${resolvedVariant('prai')} AS variant_id, -prai.quantity AS quantity_delta
-        FROM purchase_return_adjustment_items prai
-        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.purchaseAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.purchaseAdjustment)} pra ON pra.id = prai.return_id
-        WHERE pra.status = 'posted'
-      ) source_movements
-      GROUP BY supplier_id, product_id, variant_id
-      ''',
+          '''SELECT v.product_id AS product_id,os.variant_id AS variant_id,
+                SUM(CAST(json_extract(j.value,'\$.q') AS INTEGER)) AS quantity
+         FROM inventory_origin_states os
+         JOIN product_variants v ON v.id=os.variant_id
+         JOIN json_each(os.layers) j
+         JOIN purchase_items pi
+           ON pi.id=CAST(json_extract(j.value,'\$.p') AS INTEGER)
+          AND pi.product_id=v.product_id
+          AND COALESCE(${WarehouseDocumentScope.operationalVariant('pi')},0)=os.variant_id
+          AND pi.measurement_type=os.measurement_type
+         JOIN purchases pu ON pu.id=pi.purchase_id
+          AND pu.status='posted' AND pu.supplier_id=?
+         WHERE os.warehouse_id=? AND os.dirty=0
+         GROUP BY v.product_id,os.variant_id''',
+          variables: [
+            Variable.withInt(_supplierId!),
+            Variable.withString(originWarehouseId),
+          ],
           readsFrom: {
-            ...WarehouseDocumentScope.dependencies(_db),
-            _db.purchases,
-            _db.purchaseItems,
-            _db.purchaseReturns,
-            _db.purchaseReturnItems,
-            _db.purchaseReturnAdjustments,
-            _db.purchaseReturnAdjustmentItems,
-          },
-        )
-        .get();
-    final sourceWeights = <_VariantKey, Map<int, int>>{};
-    for (final row in sourceRows) {
-      final key = (
-        productId: row.read<int>('product_id'),
-        variantId: row.read<int>('variant_id'),
-      );
-      final weight = row.read<int>('weight');
-      if (weight > 0) {
-        sourceWeights.putIfAbsent(
-          key,
-          () => <int, int>{},
-        )[row.read<int>('supplier_id')] = weight;
-      }
-    }
-
-    final unassignedRows = await _db
-        .customSelect(
-          '''
-      SELECT pb.product_id AS product_id,
-             COALESCE(pb.variant_id, (SELECT MIN(pv0.id)
-               FROM product_variants pv0 WHERE pv0.product_id = pb.product_id
-               AND pv0.is_active = 1), 0) AS variant_id,
-             SUM(pb.received_quantity) AS weight
-      FROM ${warehouseScope?.batches ?? WarehouseBatchScope.primaryBatches} pb
-      WHERE pb.is_active = 1 AND pb.supplier_id IS NULL
-        AND pb.source != 'purchase'
-      GROUP BY pb.product_id, COALESCE(pb.variant_id, 0)
-      ''',
-          readsFrom: {
-            _db.productBatches,
-            ...WarehouseBatchScope.dependencies(_db),
-            ...WarehouseDocumentScope.dependencies(_db),
+            _db.inventoryOriginStates,
             _db.productVariants,
+            _db.purchaseItems,
+            _db.purchases,
           },
         )
         .get();
-    final unassignedWeights = <_VariantKey, int>{};
-    for (final row in unassignedRows) {
+    for (final row in originBalanceRows) {
       final key = (
         productId: row.read<int>('product_id'),
         variantId: row.read<int>('variant_id'),
       );
-      unassignedWeights[key] =
-          (unassignedWeights[key] ?? 0) + row.read<int>('weight');
+      final meta = metadata[key];
+      if (meta == null || meta.usesBatchCosting) continue;
+      final quantity = row.read<int>('quantity');
+      final item = metricsFor(key);
+      item.remainingQuantity = quantity;
+      item.remainingValueCents = MeasuredAmount.cents(
+        unitCents: meta.currentCostCents,
+        quantity: quantity,
+        quantityScale: meta.quantityScale,
+      );
     }
-
-    Map<int, int> weightsFor(
-      _VariantKey key, {
-      bool coverCurrentStock = false,
-    }) {
-      final result = Map<int, int>.from(sourceWeights[key] ?? const {});
-      final unassigned = unassignedWeights[key] ?? 0;
-      if (unassigned > 0) result[_unassignedSupplierSource] = unassigned;
-      if (coverCurrentStock) {
-        final stock = metadata[key]?.currentStock ?? 0;
-        final known = result.values.fold<int>(0, (a, b) => a + b);
-        if (stock > known) {
-          result[_unassignedSupplierSource] =
-              (result[_unassignedSupplierSource] ?? 0) + stock - known;
-        }
-      }
-      return result;
-    }
-
     // Exact FIFO/batch balance: only the selected supplier's currently
     // remaining layers are counted. No current global stock is duplicated.
     final fifoBalanceRows = await _db
@@ -884,70 +848,41 @@ class SupplierStocktakeReportBloc
       item.remainingValueCents = row.read<int>('remaining_value');
     }
 
-    for (final entry in metadata.entries) {
-      if (entry.value.usesBatchCosting) continue;
-      final weights = weightsFor(entry.key, coverCurrentStock: true);
-      final allocatedStock = _allocateLargestRemainder(
-        entry.value.currentStock,
-        weights,
-        _supplierId!,
-      );
-      final item = metricsFor(entry.key);
-      item.remainingQuantity = allocatedStock;
-      item.remainingValueCents = MeasuredAmount.cents(
-        unitCents: entry.value.currentCostCents,
-        quantity: allocatedStock,
-        quantityScale: entry.value.quantityScale,
-      );
-    }
-
-    // Period WAC activity uses frozen posted costs and net-of-tax revenue.
-    // Each measure is allocated independently with the same historical source
-    // weights, so totals remain conservative even for one-unit stock/sales.
+    // Period WAC activity uses each movement's immutable origin allocation.
+    // Money remains based on frozen posting snapshots, never provenance.
     final wacActivityRows = await _db
         .customSelect(
           '''
-      SELECT product_id, variant_id,
-             SUM(sold_qty) AS sold_qty,
-             SUM(returned_qty) AS returned_qty,
-             SUM(net_revenue) AS net_revenue,
-             SUM(net_cogs) AS net_cogs
-      FROM (
-        SELECT si.product_id AS product_id, ${resolvedVariant('si')} AS variant_id,
-               si.quantity AS sold_qty, 0 AS returned_qty,
-               (si.total_cents - si.tax_cents) AS net_revenue,
-               CAST(ROUND(1.0 * si.quantity * COALESCE(si.cost_cents, pv.cost_cents, p.cost_cents, 0)
-                          / si.quantity_scale) AS INTEGER) AS net_cogs
-        FROM sale_items si
-        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} sa ON sa.id = si.sale_id
-        INNER JOIN products p ON p.id = si.product_id AND p.track_inventory = 1
-        LEFT JOIN product_variants pv ON pv.id = si.variant_id
-        WHERE sa.status = 'completed' AND sa.sale_date >= ? AND sa.sale_date <= ?
-        UNION ALL
-        SELECT si.product_id AS product_id, ${resolvedVariant('si')} AS variant_id,
-               0 AS sold_qty, sri.quantity AS returned_qty,
-               -(sri.refund_cents - sri.tax_cents) AS net_revenue,
-               -CAST(ROUND(1.0 * sri.quantity * COALESCE(sri.unit_cost_at_post_cents,
-                                         si.cost_cents, pv.cost_cents,
-                                         p.cost_cents, 0) / sri.quantity_scale) AS INTEGER) AS net_cogs
-        FROM sale_return_items sri
-        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr ON sr.id = sri.return_id
-        INNER JOIN sale_items si ON si.id = sri.sale_item_id
-        INNER JOIN products p ON p.id = si.product_id AND p.track_inventory = 1
-        LEFT JOIN product_variants pv ON pv.id = si.variant_id
-        WHERE sr.status = 'posted' AND sr.return_date >= ? AND sr.return_date <= ?
-        UNION ALL
-        SELECT srai.product_id AS product_id, ${resolvedVariant('srai')} AS variant_id,
-               0 AS sold_qty, srai.quantity AS returned_qty,
-               -(srai.total_cents - srai.tax_cents) AS net_revenue,
-               -CAST(ROUND(1.0 * srai.quantity * COALESCE(srai.unit_cost_at_post_cents,
-                                          srai.unit_cost_cents, 0) / srai.quantity_scale) AS INTEGER) AS net_cogs
-        FROM sale_return_adjustment_items srai
-        INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra ON sra.id = srai.return_id
-        INNER JOIN products p ON p.id = srai.product_id AND p.track_inventory = 1
-        WHERE sra.status = 'posted' AND sra.return_date >= ? AND sra.return_date <= ?
-      ) activity
-      GROUP BY product_id, variant_id
+      SELECT 'sale' AS kind,si.id AS line_id,si.product_id AS product_id,
+             ${resolvedVariant('si')} AS variant_id,si.quantity AS quantity,
+             (si.total_cents-si.tax_cents) AS net_revenue,
+             CAST(ROUND(1.0*si.quantity*COALESCE(si.cost_cents,pv.cost_cents,p.cost_cents,0)
+                        /si.quantity_scale) AS INTEGER) AS net_cogs
+      FROM sale_items si
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.sale) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.sale)} sa ON sa.id=si.sale_id
+      INNER JOIN products p ON p.id=si.product_id AND p.track_inventory=1
+      LEFT JOIN product_variants pv ON pv.id=si.variant_id
+      WHERE sa.status='completed' AND sa.sale_date>=? AND sa.sale_date<=?
+      UNION ALL
+      SELECT 'return',sri.id,si.product_id,${resolvedVariant('si')},sri.quantity,
+             -(sri.refund_cents-sri.tax_cents),
+             -CAST(ROUND(1.0*sri.quantity*COALESCE(sri.unit_cost_at_post_cents,
+                         si.cost_cents,pv.cost_cents,p.cost_cents,0)/sri.quantity_scale) AS INTEGER)
+      FROM sale_return_items sri
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleReturn) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleReturn)} sr ON sr.id=sri.return_id
+      INNER JOIN sale_items si ON si.id=sri.sale_item_id
+      INNER JOIN products p ON p.id=si.product_id AND p.track_inventory=1
+      LEFT JOIN product_variants pv ON pv.id=si.variant_id
+      WHERE sr.status='posted' AND sr.return_date>=? AND sr.return_date<=?
+      UNION ALL
+      SELECT 'adjustment',srai.id,srai.product_id,${resolvedVariant('srai')},srai.quantity,
+             -(srai.total_cents-srai.tax_cents),
+             -CAST(ROUND(1.0*srai.quantity*COALESCE(srai.unit_cost_at_post_cents,
+                         srai.unit_cost_cents,0)/srai.quantity_scale) AS INTEGER)
+      FROM sale_return_adjustment_items srai
+      INNER JOIN ${warehouseScope?.documents(InventoryPostingDocument.saleAdjustment) ?? WarehouseDocumentScope.primaryDocuments(InventoryPostingDocument.saleAdjustment)} sra ON sra.id=srai.return_id
+      INNER JOIN products p ON p.id=srai.product_id AND p.track_inventory=1
+      WHERE sra.status='posted' AND sra.return_date>=? AND sra.return_date<=?
       ''',
           variables: [
             Variable.withString(startIso),
@@ -970,36 +905,96 @@ class SupplierStocktakeReportBloc
           },
         )
         .get();
+    final wacLines = <String, _WacOriginActivityLine>{};
     for (final row in wacActivityRows) {
       final key = (
         productId: row.read<int>('product_id'),
         variantId: row.read<int>('variant_id'),
       );
       if (metadata[key]?.usesBatchCosting != false) continue;
-      final weights = weightsFor(key);
-      final item = metricsFor(key);
-      item.soldQuantity += _allocateLargestRemainder(
-        row.read<int>('sold_qty'),
-        weights,
-        _supplierId!,
+      final kind = row.read<String>('kind');
+      final lineId = row.read<int>('line_id');
+      wacLines['$kind:$lineId'] = _WacOriginActivityLine(
+        kind: kind,
+        key: key,
+        quantity: row.read<int>('quantity'),
+        netRevenueCents: row.read<int>('net_revenue'),
+        netCogsCents: row.read<int>('net_cogs'),
       );
-      item.saleReturnedQuantity += _allocateLargestRemainder(
-        row.read<int>('returned_qty'),
-        weights,
-        _supplierId!,
+    }
+    final eventKeys = wacLines.keys.toList();
+    for (var offset = 0; offset < eventKeys.length; offset += 400) {
+      final chunk = eventKeys.skip(offset).take(400).toList();
+      final originRows = await _db
+          .customSelect(
+            '''SELECT e.event_key,
+             CASE WHEN pu.id IS NOT NULL THEN pu.supplier_id
+                  WHEN json_extract(j.value,'\$.k')='customer_return' THEN -2
+                  ELSE -1 END AS source_id,
+             SUM(CAST(json_extract(j.value,'\$.q') AS INTEGER)) AS quantity
+           FROM inventory_origin_events e
+           JOIN json_each(e.allocations) j
+           LEFT JOIN purchase_items pi
+             ON pi.id=CAST(json_extract(j.value,'\$.p') AS INTEGER)
+            AND pi.product_id=e.product_id
+            AND COALESCE(${WarehouseDocumentScope.operationalVariant('pi')},0)=e.variant_id
+            AND pi.measurement_type=e.measurement_type
+           LEFT JOIN purchases pu ON pu.id=pi.purchase_id AND pu.status='posted'
+           WHERE e.warehouse_id=?
+             AND e.event_key IN (${List.filled(chunk.length, '?').join(',')})
+           GROUP BY e.event_key,source_id''',
+            variables: [
+              Variable.withString(originWarehouseId),
+              ...chunk.map(Variable.withString),
+            ],
+            readsFrom: {
+              _db.inventoryOriginEvents,
+              _db.purchaseItems,
+              _db.purchases,
+            },
+          )
+          .get();
+      for (final row in originRows) {
+        final line = wacLines[row.read<String>('event_key')];
+        if (line == null) continue;
+        final source = row.read<int>('source_id');
+        line.quantityBySource[source] =
+            (line.quantityBySource[source] ?? 0) + row.read<int>('quantity');
+      }
+    }
+    for (final line in wacLines.values) {
+      final attributed = line.quantityBySource.values.fold<int>(
+        0,
+        (a, b) => a + b,
       );
+      if (attributed > line.quantity) {
+        throw StateError('Origin activity exceeds posted quantity');
+      }
+      if (attributed < line.quantity) {
+        line.quantityBySource[_unassignedSupplierSource] =
+            (line.quantityBySource[_unassignedSupplierSource] ?? 0) +
+            line.quantity -
+            attributed;
+      }
+      final supplierQuantity = line.quantityBySource[_supplierId!] ?? 0;
+      if (supplierQuantity == 0) continue;
+      final item = metricsFor(line.key);
+      if (line.kind == 'sale') {
+        item.soldQuantity += supplierQuantity;
+      } else {
+        item.saleReturnedQuantity += supplierQuantity;
+      }
       item.netRevenueCents += _allocateLargestRemainder(
-        row.read<int>('net_revenue'),
-        weights,
+        line.netRevenueCents,
+        line.quantityBySource,
         _supplierId!,
       );
       item.netCogsCents += _allocateLargestRemainder(
-        row.read<int>('net_cogs'),
-        weights,
+        line.netCogsCents,
+        line.quantityBySource,
         _supplierId!,
       );
     }
-
     // FIFO sales and linked returns are attributable to the exact supplier
     // layer consumed/restored. Revenue is split per document line while the
     // cost is read exactly from batch_consumptions.

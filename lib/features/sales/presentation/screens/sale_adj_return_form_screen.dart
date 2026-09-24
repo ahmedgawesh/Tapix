@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -18,6 +20,7 @@ import '../../../../core/payments/return_cheque_settlement_dialog.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
 import '../../../../core/services/lan/lan_network_service.dart';
+import '../../../../core/services/inventory/supplier_product_identity_service.dart';
 import '../../../../core/services/commissions/commission_service.dart';
 import '../../../../core/services/loyalty/loyalty_points_service.dart';
 import '../../../auth/data/services/session_service.dart';
@@ -27,7 +30,13 @@ import '../../../../core/widgets/action_confirmation_dialog.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../../settings/data/services/app_settings_service.dart';
 import '../../../purchases/presentation/bloc/purchase_adj_return_form_bloc.dart'
-    show AdjReturnLineItem, AdjReturnPaymentMethod, AdjReturnReasonCode;
+    show
+        AdjReturnConsignmentSource,
+        AdjReturnLineItem,
+        AdjReturnPaymentMethod,
+        AdjReturnReasonCode,
+        AdjReturnSourceResolution,
+        AdjReturnSupplierIdentitySource;
 import '../bloc/sale_adj_return_form_bloc.dart';
 
 class SaleAdjReturnFormScreen extends StatelessWidget {
@@ -196,7 +205,7 @@ class _FormView extends StatelessWidget {
                           children: [
                             _buildReturnHeaderCard(context, state),
                             const SizedBox(height: 12),
-                            _buildWarningBanner(context),
+                            _buildSaleAdjustmentWarning(context),
                             const SizedBox(height: 12),
                             _buildDiscountToggle(context, state),
                             const SizedBox(height: 12),
@@ -227,51 +236,6 @@ class _FormView extends StatelessWidget {
   // ═══════════════════════════════════════════════════════
   // WARNING BANNER
   // ═══════════════════════════════════════════════════════
-  Widget _buildWarningBanner(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.amber.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            LucideIcons.alertTriangle,
-            size: 18,
-            color: Colors.amber.shade700,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'returns.adjustment_return_warning_title'.tr(),
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: Colors.amber.shade800,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'returns.sale_adjustment_return_warning_body'.tr(),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: cs.onSurfaceVariant,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   // ═══════════════════════════════════════════════════════
   // RETURN HEADER CARD (Return # + Date)
@@ -462,6 +426,11 @@ class _FormView extends StatelessWidget {
                   ),
                 ],
                 const Spacer(),
+                IconButton(
+                  tooltip: 'supplier_identity.scan_source'.tr(),
+                  onPressed: () => _scanSupplierSource(context),
+                  icon: const Icon(LucideIcons.scanBarcode, size: 20),
+                ),
                 FilledButton.tonalIcon(
                   onPressed: () => _showProductPicker(context),
                   icon: const Icon(LucideIcons.plus, size: 16),
@@ -534,6 +503,24 @@ class _FormView extends StatelessWidget {
                               discountPercentBps: bps,
                             ),
                           ),
+                      onConsignmentSourceChanged: (source) =>
+                          context.read<SaleAdjReturnFormBloc>().add(
+                            SaleAdjReturnConsignmentSourceChanged(
+                              index,
+                              source,
+                            ),
+                          ),
+                      onSupplierIdentityChanged: (source) =>
+                          context.read<SaleAdjReturnFormBloc>().add(
+                            SaleAdjReturnSupplierIdentityChanged(index, source),
+                          ),
+                      onUnverifiedSourceSelected: (reason) =>
+                          context.read<SaleAdjReturnFormBloc>().add(
+                            SaleAdjReturnUnverifiedSourceSelected(
+                              index,
+                              reason,
+                            ),
+                          ),
                       onRemove: () async {
                         final confirmed = await confirmInvoiceLineRemoval(
                           context,
@@ -552,6 +539,233 @@ class _FormView extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _scanSupplierSource(BuildContext context) async {
+    final code = await context.push<String>(
+      '/barcode-scanner',
+      extra: {'returnOnScan': true},
+    );
+    if (code == null || code.trim().isEmpty || !context.mounted) return;
+
+    try {
+      final lan = sl<LanNetworkService>();
+      AdjReturnLineItem? item;
+      if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+        final page = await lan.fetchRemoteCatalog(
+          query: code.trim(),
+          limit: 20,
+        );
+        final product = page.products
+            .where(
+              (value) =>
+                  value.matchedSupplierIdentityId != null ||
+                  value.matchedConsignmentLayerId != null,
+            )
+            .firstOrNull;
+        if (product != null) {
+          final variant = product.variants
+              .where((value) => value.id == product.matchedCanonicalVariantId)
+              .firstOrNull;
+          if (!product.hasVariants || variant != null) {
+            AdjReturnConsignmentSource? consignmentSource;
+            AdjReturnSupplierIdentitySource? supplierSource;
+            final layerId = product.matchedConsignmentLayerId;
+            if (layerId != null) {
+              final sources = await lan
+                  .fetchRemoteConsignmentAdjustmentReturnSources(
+                    productId: product.id,
+                    variantId: product.matchedCanonicalVariantId,
+                  );
+              final source = sources
+                  .where((value) => value.layerId == layerId)
+                  .firstOrNull;
+              if (source != null) {
+                consignmentSource = AdjReturnConsignmentSource(
+                  layerId: source.layerId,
+                  supplierId: source.supplierId,
+                  supplierName: source.supplierName,
+                  receiptNumber: source.receiptNumber,
+                  receivedAt: source.receivedAt,
+                  maximumReturnQuantity: source.maximumReturnQuantity,
+                  quantityScale: source.quantityScale,
+                  measurementType: source.measurementType,
+                  batchNumber: source.batchNumber,
+                  manufacturerLotNumber: source.manufacturerLotNumber,
+                );
+              }
+            } else {
+              supplierSource = AdjReturnSupplierIdentitySource(
+                identityId: product.matchedSupplierIdentityId!,
+                supplierId: 0,
+                supplierName: product.matchedSupplierName ?? '',
+                sourceSku: product.matchedSupplierSourceSku ?? code.trim(),
+              );
+            }
+            if (layerId == null || consignmentSource != null) {
+              item = AdjReturnLineItem(
+                productId: product.id,
+                variantId: product.hasVariants ? variant!.id : null,
+                productName: product.name,
+                variantSku: variant?.sku,
+                variantLabel: [variant?.colorName, variant?.sizeName]
+                    .whereType<String>()
+                    .where((v) => v.trim().isNotEmpty)
+                    .join(' / '),
+                quantity: product.quantityScale,
+                quantityScale: product.quantityScale,
+                measurementType: product.measurementType,
+                unitPriceCents: variant?.priceCents ?? product.priceCents,
+                retailPriceCents: variant?.priceCents ?? product.priceCents,
+                wholesalePriceCents:
+                    variant?.wholesalePriceCents ?? product.wholesalePriceCents,
+                taxRateBps: product.salesTaxRateBps,
+                trackInventory: product.trackInventory,
+                consignmentSource: consignmentSource,
+                supplierIdentitySource: supplierSource,
+              );
+            }
+          }
+        }
+      } else {
+        final db = sl<AppDatabase>();
+        final normalizedCode = code.trim();
+        if (normalizedCode.startsWith('C-') && normalizedCode.length == 38) {
+          final layerId = normalizedCode.substring(2);
+          final layer = await (db.select(
+            db.consignmentInventoryLayers,
+          )..where((row) => row.id.equals(layerId))).getSingleOrNull();
+          if (layer != null) {
+            final sources = await sl<AdjustmentReturnDao>()
+                .getConsignmentAdjustmentReturnSources(
+                  productId: layer.productId,
+                  variantId: layer.variantId,
+                );
+            final source = sources
+                .where((value) => value.layerId == layerId)
+                .firstOrNull;
+            if (source != null) {
+              final product = await (db.select(
+                db.products,
+              )..where((row) => row.id.equals(layer.productId))).getSingle();
+              final variant =
+                  await (db.select(db.productVariants)..where(
+                        (row) =>
+                            row.id.equals(layer.variantId) &
+                            row.isActive.equals(true),
+                      ))
+                      .getSingle();
+              final unitPrice =
+                  (product.hasVariants
+                          ? variant.priceCents
+                          : product.priceCents)
+                      .toBigInt()
+                      .toInt();
+              item = AdjReturnLineItem(
+                productId: product.id,
+                variantId: product.hasVariants ? variant.id : null,
+                productName: product.name,
+                variantSku: variant.sku,
+                quantity: product.measurementType == 'piece' ? 1 : 1000,
+                quantityScale: product.measurementType == 'piece' ? 1 : 1000,
+                measurementType: product.measurementType,
+                unitPriceCents: unitPrice,
+                unitCostCents:
+                    (product.hasVariants
+                            ? variant.costCents
+                            : product.costCents)
+                        .toBigInt()
+                        .toInt(),
+                retailPriceCents: unitPrice,
+                wholesalePriceCents:
+                    (product.hasVariants
+                            ? variant.wholesalePriceCents
+                            : product.wholesalePriceCents)
+                        ?.toBigInt()
+                        .toInt(),
+                taxRateBps: product.salesTaxRateBps,
+                trackInventory: product.trackInventory,
+                consignmentSource: AdjReturnConsignmentSource(
+                  layerId: source.layerId,
+                  supplierId: source.supplierId,
+                  supplierName: source.supplierName,
+                  receiptNumber: source.receiptNumber,
+                  receivedAt: source.receivedAt,
+                  maximumReturnQuantity: source.maximumReturnQuantity,
+                  quantityScale: source.quantityScale,
+                  measurementType: source.measurementType,
+                  batchNumber: source.batchNumber,
+                  manufacturerLotNumber: source.manufacturerLotNumber,
+                ),
+              );
+            }
+          }
+        }
+        final selection = item == null
+            ? await SupplierProductIdentityService(db).resolveSelection(code)
+            : null;
+        if (selection != null) {
+          final product = await (db.select(
+            db.products,
+          )..where((row) => row.id.equals(selection.productId))).getSingle();
+          final variant =
+              await (db.select(db.productVariants)..where(
+                    (row) =>
+                        row.id.equals(selection.canonicalVariantId) &
+                        row.isActive.equals(true),
+                  ))
+                  .getSingle();
+          item = AdjReturnLineItem(
+            productId: product.id,
+            variantId: product.hasVariants ? variant.id : null,
+            productName: product.name,
+            variantSku: variant.sku,
+            quantity: product.measurementType == 'piece' ? 1 : 1000,
+            quantityScale: product.measurementType == 'piece' ? 1 : 1000,
+            measurementType: product.measurementType,
+            unitPriceCents:
+                (product.hasVariants ? variant.priceCents : product.priceCents)
+                    .toBigInt()
+                    .toInt(),
+            unitCostCents:
+                (product.hasVariants ? variant.costCents : product.costCents)
+                    .toBigInt()
+                    .toInt(),
+            retailPriceCents:
+                (product.hasVariants ? variant.priceCents : product.priceCents)
+                    .toBigInt()
+                    .toInt(),
+            wholesalePriceCents:
+                (product.hasVariants
+                        ? variant.wholesalePriceCents
+                        : product.wholesalePriceCents)
+                    ?.toBigInt()
+                    .toInt(),
+            taxRateBps: product.salesTaxRateBps,
+            trackInventory: product.trackInventory,
+            supplierIdentitySource: AdjReturnSupplierIdentitySource(
+              identityId: selection.identityId,
+              supplierId: selection.supplierId,
+              supplierName: selection.supplierName,
+              sourceSku: selection.sourceSku,
+            ),
+          );
+        }
+      }
+      if (!context.mounted) return;
+      if (item == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('supplier_identity.source_not_found'.tr())),
+        );
+        return;
+      }
+      context.read<SaleAdjReturnFormBloc>().add(SaleAdjReturnItemAdded(item));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('supplier_identity.source_not_found'.tr())),
+      );
+    }
   }
 
   void _showProductPicker(BuildContext context) async {
@@ -739,7 +953,7 @@ class _FormView extends StatelessWidget {
       ),
       builder: (_) => BlocProvider.value(
         value: bloc,
-        child: _CheckoutSheet(currencyService: cs),
+        child: SaleAdjustmentCheckoutSheet(currencyService: cs),
       ),
     );
   }
@@ -749,15 +963,15 @@ class _FormView extends StatelessWidget {
 // CHECKOUT BOTTOM SHEET — customer, notes, financial summary, confirm
 // ═══════════════════════════════════════════════════════════
 
-class _CheckoutSheet extends StatefulWidget {
+class SaleAdjustmentCheckoutSheet extends StatefulWidget {
   final CurrencyService currencyService;
-  const _CheckoutSheet({required this.currencyService});
+  const SaleAdjustmentCheckoutSheet({super.key, required this.currencyService});
 
   @override
-  State<_CheckoutSheet> createState() => _CheckoutSheetState();
+  State<SaleAdjustmentCheckoutSheet> createState() => _CheckoutSheetState();
 }
 
-class _CheckoutSheetState extends State<_CheckoutSheet> {
+class _CheckoutSheetState extends State<SaleAdjustmentCheckoutSheet> {
   final TextEditingController _notesCtrl = TextEditingController();
   final TextEditingController _discountFixedCtrl = TextEditingController();
   final TextEditingController _discountPercentCtrl = TextEditingController();
@@ -1099,13 +1313,14 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                     children: [
                       Icon(LucideIcons.shoppingBag, size: 20, color: cs.error),
                       const SizedBox(width: 8),
-                      Text(
-                        'returns.checkout'.tr(),
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
+                      Expanded(
+                        child: Text(
+                          'returns.checkout'.tr(),
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                      const Spacer(),
                       TextButton(
                         onPressed: () => Navigator.pop(context),
                         child: Text('common.cancel'.tr()),
@@ -1118,6 +1333,15 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                     controller: scrollCtrl,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     children: [
+                      // The final confirmation starts with the same current
+                      // warnings as the form, before customer/payment fields.
+                      _buildSaleAdjustmentWarning(context),
+                      const SizedBox(height: 12),
+                      _SaleFraudWarnings(
+                        customerId: state.customerId,
+                        employeeId: state.employeeId,
+                        items: state.items,
+                      ),
                       // ── Customer Selection ──
                       _sectionHeader(
                         theme,
@@ -1594,14 +1818,6 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                       ),
                       const SizedBox(height: 16),
 
-                      // ── Fraud-prevention warnings (shown inline so the user
-                      //    sees them right before confirming the refund) ──
-                      _SaleFraudWarnings(
-                        customerId: state.customerId,
-                        employeeId: state.employeeId,
-                        items: state.items,
-                      ),
-
                       // ── Warning ──
                       Container(
                         padding: const EdgeInsets.all(10),
@@ -1845,6 +2061,10 @@ class _AdjReturnItemTile extends StatefulWidget {
   /// is non-zero the discount is treated as a live percent and recomputed
   /// against quantity changes; otherwise it is a fixed-cent discount.
   final void Function(int cents, int percentBps) onDiscountChanged;
+  final ValueChanged<AdjReturnConsignmentSource?> onConsignmentSourceChanged;
+  final ValueChanged<AdjReturnSupplierIdentitySource?>
+  onSupplierIdentityChanged;
+  final ValueChanged<String> onUnverifiedSourceSelected;
   final VoidCallback onRemove;
 
   const _AdjReturnItemTile({
@@ -1854,6 +2074,9 @@ class _AdjReturnItemTile extends StatefulWidget {
     required this.onQuantityChanged,
     required this.onPriceChanged,
     required this.onDiscountChanged,
+    required this.onConsignmentSourceChanged,
+    required this.onSupplierIdentityChanged,
+    required this.onUnverifiedSourceSelected,
     required this.onRemove,
   });
 
@@ -1864,6 +2087,8 @@ class _AdjReturnItemTile extends StatefulWidget {
 class _AdjReturnItemTileState extends State<_AdjReturnItemTile> {
   late TextEditingController _qtyCtrl;
   late MeasurementUnit _quantityUnit;
+  late Future<List<AdjReturnConsignmentSource>> _consignmentSources;
+  late Future<List<AdjReturnSupplierIdentitySource>> _supplierIdentitySources;
 
   @override
   void initState() {
@@ -1874,6 +2099,84 @@ class _AdjReturnItemTileState extends State<_AdjReturnItemTile> {
     _qtyCtrl = TextEditingController(
       text: MeasuredQuantity.editableValue(widget.item.quantity, _quantityUnit),
     );
+    _consignmentSources = _loadConsignmentSources();
+    _supplierIdentitySources = _loadSupplierIdentitySources();
+    unawaited(_autoSelectSingleSource());
+  }
+
+  Future<void> _autoSelectSingleSource() async {
+    if (!widget.item.trackInventory ||
+        widget.item.sourceResolution != AdjReturnSourceResolution.pending) {
+      return;
+    }
+    try {
+      final results = await Future.wait<dynamic>([
+        _consignmentSources,
+        _supplierIdentitySources,
+      ]);
+      if (!mounted ||
+          widget.item.sourceResolution != AdjReturnSourceResolution.pending) {
+        return;
+      }
+      final consignments = results[0] as List<AdjReturnConsignmentSource>;
+      final identities = results[1] as List<AdjReturnSupplierIdentitySource>;
+      if (consignments.length + identities.length != 1) return;
+      if (consignments.isNotEmpty) {
+        widget.onConsignmentSourceChanged(consignments.single);
+      } else {
+        widget.onSupplierIdentityChanged(identities.single);
+      }
+    } catch (_) {
+      // Keep the decision pending. The user can retry from the source chip.
+    }
+  }
+
+  Future<void> _selectUnverifiedSource({
+    BuildContext? closeSheetContext,
+  }) async {
+    if (closeSheetContext != null && closeSheetContext.mounted) {
+      Navigator.pop(closeSheetContext);
+      await Future<void>.delayed(Duration.zero);
+    }
+    if (!mounted) return;
+    final controller = TextEditingController(
+      text: widget.item.sourceResolutionReason ?? '',
+    );
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('returns.unverified_source_title'.tr()),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 3,
+          onTap: () => selectAllText(controller),
+          decoration: InputDecoration(
+            labelText: 'returns.unverified_source_reason'.tr(),
+            helperText: 'returns.unverified_source_help'.tr(),
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text('common.cancel'.tr()),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isEmpty) return;
+              Navigator.pop(dialogContext, value);
+            },
+            child: Text('common.confirm'.tr()),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (reason != null && mounted) {
+      widget.onUnverifiedSourceSelected(reason);
+    }
   }
 
   @override
@@ -1887,12 +2190,287 @@ class _AdjReturnItemTileState extends State<_AdjReturnItemTile> {
         _qtyCtrl.text != text) {
       _qtyCtrl.text = text;
     }
+    if (widget.item.productId != oldWidget.item.productId ||
+        widget.item.variantId != oldWidget.item.variantId) {
+      _consignmentSources = _loadConsignmentSources();
+      _supplierIdentitySources = _loadSupplierIdentitySources();
+      unawaited(_autoSelectSingleSource());
+    }
   }
 
   @override
   void dispose() {
     _qtyCtrl.dispose();
     super.dispose();
+  }
+
+  Future<List<AdjReturnConsignmentSource>> _loadConsignmentSources() async {
+    final lan = sl<LanNetworkService>();
+    if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+      final sources = await lan.fetchRemoteConsignmentAdjustmentReturnSources(
+        productId: widget.item.productId,
+        variantId: widget.item.variantId,
+      );
+      return sources
+          .map(
+            (source) => AdjReturnConsignmentSource(
+              layerId: source.layerId,
+              supplierId: source.supplierId,
+              supplierName: source.supplierName,
+              receiptNumber: source.receiptNumber,
+              receivedAt: source.receivedAt,
+              maximumReturnQuantity: source.maximumReturnQuantity,
+              quantityScale: source.quantityScale,
+              measurementType: source.measurementType,
+              batchNumber: source.batchNumber,
+              manufacturerLotNumber: source.manufacturerLotNumber,
+            ),
+          )
+          .toList(growable: false);
+    }
+    final sources = await sl<AdjustmentReturnDao>()
+        .getConsignmentAdjustmentReturnSources(
+          productId: widget.item.productId,
+          variantId: widget.item.variantId,
+        );
+    return sources
+        .map(
+          (source) => AdjReturnConsignmentSource(
+            layerId: source.layerId,
+            supplierId: source.supplierId,
+            supplierName: source.supplierName,
+            receiptNumber: source.receiptNumber,
+            receivedAt: source.receivedAt,
+            maximumReturnQuantity: source.maximumReturnQuantity,
+            quantityScale: source.quantityScale,
+            measurementType: source.measurementType,
+            batchNumber: source.batchNumber,
+            manufacturerLotNumber: source.manufacturerLotNumber,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<List<AdjReturnSupplierIdentitySource>>
+  _loadSupplierIdentitySources() async {
+    final selected = widget.item.supplierIdentitySource;
+    final lan = sl<LanNetworkService>();
+    if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+      final snapshot = await lan.fetchRemoteInventoryStockSources(
+        productId: widget.item.productId,
+        variantId: widget.item.variantId,
+      );
+      final sources = snapshot.sources
+          .where((source) => source.supplierIdentityId != null)
+          .map(
+            (source) => AdjReturnSupplierIdentitySource(
+              identityId: source.supplierIdentityId!,
+              supplierId: source.supplierId ?? 0,
+              supplierName: source.supplierName ?? '',
+              sourceSku: source.sourceCode ?? '',
+            ),
+          )
+          .toList(growable: true);
+      if (selected != null &&
+          !sources.any((source) => source.identityId == selected.identityId)) {
+        sources.add(selected);
+      }
+      return sources;
+    }
+    final rows = await SupplierProductIdentityService(sl<AppDatabase>())
+        .getProductSelections(
+          widget.item.productId,
+          variantId: widget.item.variantId,
+        );
+    return rows
+        .map(
+          (row) => AdjReturnSupplierIdentitySource(
+            identityId: row.identityId,
+            supplierId: row.supplierId,
+            supplierName: row.supplierName,
+            sourceSku: row.sourceSku,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<void> _showSupplierIdentityPicker(
+    BuildContext context,
+    List<AdjReturnSupplierIdentitySource> sources,
+  ) async {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 520),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+            children: [
+              Text(
+                'supplier_identity.return_source_title'.tr(),
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'supplier_identity.return_source_help'.tr(),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: cs.outlineVariant),
+                ),
+                leading: const Icon(LucideIcons.circleHelp),
+                title: Text('supplier_identity.unverified_source'.tr()),
+                selected:
+                    widget.item.sourceResolution ==
+                    AdjReturnSourceResolution.unverified,
+                onTap: () =>
+                    _selectUnverifiedSource(closeSheetContext: sheetContext),
+              ),
+              const SizedBox(height: 8),
+              ...sources.map(
+                (source) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    selected:
+                        source.identityId ==
+                        widget.item.supplierIdentitySource?.identityId,
+                    selectedTileColor: cs.primaryContainer.withValues(
+                      alpha: 0.45,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: cs.outlineVariant),
+                    ),
+                    leading: const Icon(LucideIcons.scanBarcode),
+                    title: Text(source.supplierName),
+                    subtitle: Text(source.sourceSku),
+                    onTap: () {
+                      widget.onSupplierIdentityChanged(source);
+                      Navigator.pop(sheetContext);
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showConsignmentSourcePicker(
+    BuildContext context,
+    List<AdjReturnConsignmentSource> sources,
+  ) async {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 560),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+            children: [
+              Text(
+                'returns.consignment_source_title'.tr(),
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'returns.consignment_source_help'.tr(),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: cs.outlineVariant),
+                ),
+                leading: const Icon(LucideIcons.circleHelp),
+                title: Text('returns.consignment_source_unattributed'.tr()),
+                subtitle: Text(
+                  'returns.consignment_source_unattributed_help'.tr(),
+                ),
+                selected:
+                    widget.item.sourceResolution ==
+                    AdjReturnSourceResolution.unverified,
+                onTap: () =>
+                    _selectUnverifiedSource(closeSheetContext: sheetContext),
+              ),
+              const SizedBox(height: 8),
+              ...sources.map((source) {
+                final enough =
+                    source.maximumReturnQuantity >= widget.item.quantity;
+                final selected =
+                    source.layerId == widget.item.consignmentSource?.layerId;
+                final lot = source.manufacturerLotNumber ?? source.batchNumber;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    enabled: enough,
+                    selected: selected,
+                    selectedTileColor: cs.primaryContainer.withValues(
+                      alpha: 0.45,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(
+                        color: selected ? cs.primary : cs.outlineVariant,
+                      ),
+                    ),
+                    leading: Icon(
+                      LucideIcons.handshake,
+                      color: enough ? cs.primary : cs.outline,
+                    ),
+                    title: Text(
+                      source.supplierName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      [
+                        '${'returns.consignment_receipt'.tr()}: ${source.receiptNumber}',
+                        '${'stock_sources.code'.tr()}: ${source.sourceCode}',
+                        if (lot != null && lot.isNotEmpty)
+                          '${'returns.consignment_lot'.tr()}: $lot',
+                        '${'returns.consignment_return_capacity'.tr()}: ${localizedQuantity(source.maximumReturnQuantity, source.measurementType)}',
+                      ].join(' • '),
+                    ),
+                    trailing: selected
+                        ? Icon(LucideIcons.circleCheck, color: cs.primary)
+                        : null,
+                    onTap: enough
+                        ? () {
+                            widget.onConsignmentSourceChanged(source);
+                            Navigator.pop(sheetContext);
+                          }
+                        : null,
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showEditSheet(BuildContext context) async {
@@ -2119,6 +2697,116 @@ class _AdjReturnItemTileState extends State<_AdjReturnItemTile> {
                           ),
                         ),
                     ],
+                  ),
+                  if (item.trackInventory &&
+                      (item.sourceResolution ==
+                              AdjReturnSourceResolution.pending ||
+                          item.sourceResolution ==
+                              AdjReturnSourceResolution.unverified))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: ActionChip(
+                          avatar: Icon(
+                            item.sourceResolution ==
+                                    AdjReturnSourceResolution.pending
+                                ? LucideIcons.triangleAlert
+                                : LucideIcons.circleHelp,
+                            size: 14,
+                            color: cs.error,
+                          ),
+                          label: Text(
+                            item.sourceResolution ==
+                                    AdjReturnSourceResolution.pending
+                                ? 'returns.source_decision_required'.tr()
+                                : 'returns.unverified_source_selected'.tr(
+                                    namedArgs: {
+                                      'reason':
+                                          item.sourceResolutionReason ?? '',
+                                    },
+                                  ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          side: BorderSide(color: cs.error),
+                          onPressed: () => _selectUnverifiedSource(),
+                        ),
+                      ),
+                    ),
+                  FutureBuilder<List<AdjReturnConsignmentSource>>(
+                    future: _consignmentSources,
+                    builder: (context, snapshot) {
+                      final sources = snapshot.data ?? const [];
+                      final selected = item.consignmentSource;
+                      if (sources.isEmpty && selected == null) {
+                        return const SizedBox.shrink();
+                      }
+                      final capacityExceeded =
+                          selected != null &&
+                          item.quantity > selected.maximumReturnQuantity;
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: ActionChip(
+                            avatar: Icon(
+                              capacityExceeded
+                                  ? LucideIcons.triangleAlert
+                                  : LucideIcons.handshake,
+                              size: 14,
+                              color: capacityExceeded ? cs.error : cs.tertiary,
+                            ),
+                            label: Text(
+                              selected == null
+                                  ? 'returns.choose_consignment_source'.tr()
+                                  : '${selected.supplierName} • ${selected.sourceCode}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            side: BorderSide(
+                              color: capacityExceeded
+                                  ? cs.error
+                                  : cs.tertiary.withValues(alpha: 0.45),
+                            ),
+                            onPressed: () =>
+                                _showConsignmentSourcePicker(context, sources),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  FutureBuilder<List<AdjReturnSupplierIdentitySource>>(
+                    future: _supplierIdentitySources,
+                    builder: (context, snapshot) {
+                      final sources = snapshot.data ?? const [];
+                      final selected = item.supplierIdentitySource;
+                      if (sources.isEmpty && selected == null) {
+                        return const SizedBox.shrink();
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: ActionChip(
+                            avatar: const Icon(
+                              LucideIcons.scanBarcode,
+                              size: 14,
+                            ),
+                            label: Text(
+                              selected == null
+                                  ? 'supplier_identity.choose_return_source'
+                                        .tr()
+                                  : '${selected.supplierName} • ${selected.sourceSku}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            onPressed: () =>
+                                _showSupplierIdentityPicker(context, sources),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -2855,6 +3543,7 @@ class _PickerRow {
   final int costCents;
   final int stockQuantity;
   final String measurementType;
+  final bool trackInventory;
   final int taxRateBps;
 
   /// Whether the underlying product is a variant product (`products.has_variants = 1`).
@@ -2874,6 +3563,7 @@ class _PickerRow {
     required this.costCents,
     required this.stockQuantity,
     required this.measurementType,
+    required this.trackInventory,
     required this.taxRateBps,
     required this.hasVariants,
   });
@@ -2940,6 +3630,7 @@ class _RemoteProductPickerSheetState extends State<_RemoteProductPickerSheet> {
                 costCents: 0,
                 stockQuantity: variant.stockQuantity,
                 measurementType: product.measurementType,
+                trackInventory: product.trackInventory,
                 taxRateBps: product.salesTaxRateBps,
                 hasVariants: true,
               ),
@@ -2962,6 +3653,7 @@ class _RemoteProductPickerSheetState extends State<_RemoteProductPickerSheet> {
               costCents: 0,
               stockQuantity: product.stockQuantity,
               measurementType: product.measurementType,
+              trackInventory: product.trackInventory,
               taxRateBps: product.salesTaxRateBps,
               hasVariants: false,
             ),
@@ -3074,6 +3766,7 @@ class _RemoteProductPickerSheetState extends State<_RemoteProductPickerSheet> {
                             ? 1
                             : 1000,
                         measurementType: row.measurementType,
+                        trackInventory: row.trackInventory,
                         unitPriceCents: row.priceCents,
                         retailPriceCents: row.priceCents,
                         wholesalePriceCents: row.wholesalePriceCents,
@@ -3194,6 +3887,7 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
               costCents: vr.read<int>('cost_cents'),
               stockQuantity: vr.read<int>('stock_quantity'),
               measurementType: product.measurementType,
+              trackInventory: product.trackInventory,
               taxRateBps: taxBps,
               hasVariants: true,
             ),
@@ -3214,6 +3908,7 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
             costCents: product.costCents.toBigInt().toInt(),
             stockQuantity: product.stockQuantity,
             measurementType: product.measurementType,
+            trackInventory: product.trackInventory,
             taxRateBps: taxBps,
             hasVariants: false,
           ),
@@ -3373,6 +4068,7 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                             ? 1
                             : 1000,
                         measurementType: row.measurementType,
+                        trackInventory: row.trackInventory,
                         unitPriceCents: row.priceCents,
                         unitCostCents: row.costCents,
                         retailPriceCents: row.priceCents,
@@ -3504,7 +4200,15 @@ class _SaleFraudWarnings extends StatelessWidget {
           }),
         ),
         builder: (context, snap) {
-          if (!snap.hasData) return const SizedBox.shrink();
+          if (snap.hasError) {
+            return Text(
+              'returns.validation_unavailable'.tr(),
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            );
+          }
+          if (snap.connectionState != ConnectionState.done || !snap.hasData) {
+            return const SizedBox.shrink();
+          }
           final warnings = snap.data!
               .where(
                 (w) =>
@@ -3541,11 +4245,13 @@ class _SaleFraudWarnings extends StatelessWidget {
                 color: Colors.amber.shade700,
               ),
               const SizedBox(width: 8),
-              Text(
-                'returns.fraud_warnings_title'.tr(),
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: Colors.amber.shade800,
+              Expanded(
+                child: Text(
+                  'returns.fraud_warnings_title'.tr(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.amber.shade800,
+                  ),
                 ),
               ),
             ],
@@ -3615,4 +4321,46 @@ class _ItemWarning {
     required this.historyQty,
     this.employeeSoldQty = -1,
   });
+}
+
+Widget _buildSaleAdjustmentWarning(BuildContext context) {
+  final theme = Theme.of(context);
+  final cs = theme.colorScheme;
+  return Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Colors.amber.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(LucideIcons.alertTriangle, size: 18, color: Colors.amber.shade700),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'returns.adjustment_return_warning_title'.tr(),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.amber.shade800,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'returns.sale_adjustment_return_warning_body'.tr(),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 }

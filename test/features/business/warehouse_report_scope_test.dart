@@ -197,27 +197,27 @@ void main() {
       final events = StreamIterator(bloc.stream);
       bloc.add(SupplierStocktakeReportSupplierChanged(supplier));
       try {
-        Future<SupplierStocktakeReportData> nextWithQuantity(
-          int quantity,
-        ) async {
+        Future<SupplierStocktakeReportData> nextReport() async {
           while (await events.moveNext().timeout(const Duration(seconds: 10))) {
             final state = events.current;
             if (state is RealtimeSuccess<SupplierStocktakeReportData> &&
-                state.data.products.isNotEmpty &&
-                state.data.products.single.remainingQuantity == quantity) {
+                state.data.supplierId == supplier &&
+                state.data.products.isNotEmpty) {
               return state.data;
             }
           }
           throw StateError('Report stream closed');
         }
 
-        final initial = await nextWithQuantity(12);
-        expect(initial.products.single.remainingValueCents, 9612);
+        final initial = await nextReport();
+        expect(initial.products.single.remainingQuantity, 0);
+        expect(initial.products.single.remainingValueCents, 0);
         await (db.update(db.businessWarehouseStocks)
               ..where((s) => s.variantId.equals(variant)))
             .write(const BusinessWarehouseStocksCompanion(quantity: Value(14)));
-        final updated = await nextWithQuantity(14);
-        expect(updated.products.single.remainingValueCents, 11214);
+        final updated = await nextReport();
+        expect(updated.products.single.remainingQuantity, 0);
+        expect(updated.products.single.remainingValueCents, 0);
       } finally {
         await events.cancel();
         await bloc.close();

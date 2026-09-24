@@ -12,6 +12,8 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../../../core/database/daos/product_dao.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/feature_gate_service.dart';
+import '../../../../core/services/inventory/inventory_stock_source_service.dart';
+import '../../../../core/services/lan/lan_network_service.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/widgets/theme_toggle_button.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
@@ -125,6 +127,9 @@ class _ProductFormViewState extends State<_ProductFormView>
   final _stockFocusNode = FocusNode();
   final _minStockFocusNode = FocusNode();
 
+  Future<ProductStockSourceSnapshot>? _stockSourcesFuture;
+  int? _stockSourcesProductId;
+
   @override
   void initState() {
     super.initState();
@@ -152,6 +157,107 @@ class _ProductFormViewState extends State<_ProductFormView>
   /// every generation path produces a valid checksum (scanner-compatible).
   String _generateBarcode() =>
       sl<BarcodeGenerationService>().generateRandomEan13();
+
+  Future<ProductStockSourceSnapshot> _loadStockSources(int productId) async {
+    final lan = sl<LanNetworkService>();
+    if (lan.snapshot.mode == LanMode.client && lan.hasRemoteUserSession) {
+      final remote = await lan.fetchRemoteInventoryStockSources(
+        productId: productId,
+      );
+      return ProductStockSourceSnapshot(
+        productId: remote.productId,
+        warehouseId: remote.warehouseId,
+        physicalQuantity: remote.physicalQuantity,
+        enterpriseQuantity: remote.enterpriseQuantity,
+        consignmentQuantity: remote.consignmentQuantity,
+        quantityScale: remote.quantityScale,
+        measurementType: remote.measurementType,
+        reconciled: remote.reconciled,
+        sources: remote.sources
+            .map(
+              (source) => InventoryStockSourceBalance(
+                productId: source.productId,
+                variantId: source.variantId,
+                quantity: source.quantity,
+                quantityScale: source.quantityScale,
+                measurementType: source.measurementType,
+                ownership: InventoryStockOwnership.values.firstWhere(
+                  (value) => value.name == source.ownership,
+                  orElse: () => InventoryStockOwnership.unverified,
+                ),
+                variantLabel: source.variantLabel,
+                supplierId: source.supplierId,
+                supplierName: source.supplierName,
+                supplierIdentityId: source.supplierIdentityId,
+                consignmentLayerId: source.consignmentLayerId,
+                sourceCode: source.sourceCode,
+                receiptNumber: source.receiptNumber,
+                batchNumber: source.batchNumber,
+              ),
+            )
+            .toList(growable: false),
+      );
+    }
+    return InventoryStockSourceService(sl()).loadProduct(productId);
+  }
+
+  Future<ProductStockSourceSnapshot> _stockSources(int productId) {
+    if (_stockSourcesFuture == null || _stockSourcesProductId != productId) {
+      _stockSourcesProductId = productId;
+      _stockSourcesFuture = _loadStockSources(productId);
+    }
+    return _stockSourcesFuture!;
+  }
+
+  void _refreshStockSources(int productId) {
+    setState(() {
+      _stockSourcesProductId = productId;
+      _stockSourcesFuture = _loadStockSources(productId);
+    });
+  }
+
+  Product _sourceLabelProduct(
+    ProductFormState state,
+    InventoryStockSourceBalance source,
+  ) {
+    final supplier = source.supplierName?.trim();
+    final ownership = source.isConsignment
+        ? 'stock_sources.consignment'.tr()
+        : 'stock_sources.enterprise_owned'.tr();
+    final variant = source.variantLabel.trim();
+    return Product(
+      id: state.productId!,
+      name: [
+        state.name,
+        if (variant.isNotEmpty) variant,
+        if (supplier?.isNotEmpty == true) supplier!,
+        ownership,
+      ].join(' / '),
+      nameAr: state.nameAr,
+      nameFr: state.nameFr,
+      description: state.description,
+      sku: source.sourceCode,
+      barcode: source.sourceCode,
+      costCents: state.costCents,
+      priceCents: state.priceCents,
+      wholesalePriceCents: state.wholesalePriceCents,
+      stockQuantity: source.quantity,
+      minQuantity: state.minQuantity,
+      categoryId: state.categoryId,
+      supplierId: source.supplierId,
+      currencyId: state.currencyId ?? 1,
+      imagePath: state.imagePath,
+      hasVariants: false,
+      isTaxable: state.isTaxable,
+      purchaseTaxRateBps: state.purchaseTaxRateBps,
+      salesTaxRateBps: state.salesTaxRateBps,
+      isActive: state.isActive,
+      trackInventory: state.trackInventory,
+      measurementType: state.measurementType,
+      costingMethod: state.inventoryTrackingType == 'standard' ? 'wac' : 'fifo',
+      inventoryTrackingType: state.inventoryTrackingType,
+    );
+  }
 
   void _showPrintModeChoice(BuildContext context, Product product) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -1438,6 +1544,251 @@ class _ProductFormViewState extends State<_ProductFormView>
     }
   }
 
+  Widget _buildStockSourcesCard(BuildContext context, ProductFormState state) {
+    final cs = Theme.of(context).colorScheme;
+    return FutureBuilder<ProductStockSourceSnapshot>(
+      future: _stockSources(state.productId!),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: cs.outlineVariant),
+            ),
+            child: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.hasError) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: cs.errorContainer,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'stock_sources.load_failed'.tr(),
+                  style: TextStyle(
+                    color: cs.onErrorContainer,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () => _refreshStockSources(state.productId!),
+                  icon: const Icon(LucideIcons.refreshCw),
+                  label: Text('common.retry'.tr()),
+                ),
+              ],
+            ),
+          );
+        }
+        final data = snapshot.data!;
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: cs.outlineVariant),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(LucideIcons.layers3, color: cs.primary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'stock_sources.title'.tr(),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => _refreshStockSources(state.productId!),
+                    icon: const Icon(LucideIcons.refreshCw),
+                    tooltip: 'common.refresh'.tr(),
+                  ),
+                ],
+              ),
+              Text(
+                'stock_sources.help'.tr(),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _sourceSummaryChip(
+                    'stock_sources.physical'.tr(),
+                    localizedQuantity(
+                      data.physicalQuantity,
+                      data.measurementType,
+                    ),
+                  ),
+                  _sourceSummaryChip(
+                    'stock_sources.enterprise_owned'.tr(),
+                    localizedQuantity(
+                      data.enterpriseQuantity,
+                      data.measurementType,
+                    ),
+                  ),
+                  _sourceSummaryChip(
+                    'stock_sources.consignment'.tr(),
+                    localizedQuantity(
+                      data.consignmentQuantity,
+                      data.measurementType,
+                    ),
+                  ),
+                ],
+              ),
+              if (!data.reconciled) ...[
+                const SizedBox(height: 10),
+                Text(
+                  'stock_sources.legacy_unverified_note'.tr(),
+                  style: TextStyle(color: cs.tertiary),
+                ),
+              ],
+              const SizedBox(height: 12),
+              if (data.sources.isEmpty)
+                Text(
+                  'stock_sources.empty'.tr(),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: cs.onSurfaceVariant),
+                )
+              else
+                ...data.sources.map(
+                  (source) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _stockSourceTile(context, state, source),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _sourceSummaryChip(String label, String value) {
+    return Chip(
+      visualDensity: VisualDensity.compact,
+      label: Text('$label: $value'),
+    );
+  }
+
+  Widget _stockSourceTile(
+    BuildContext context,
+    ProductFormState state,
+    InventoryStockSourceBalance source,
+  ) {
+    final cs = Theme.of(context).colorScheme;
+    final isConsignment = source.isConsignment;
+    final title = source.supplierName?.trim().isNotEmpty == true
+        ? source.supplierName!.trim()
+        : 'stock_sources.unverified'.tr();
+    final code = source.sourceCode?.trim();
+    return Material(
+      color: isConsignment
+          ? cs.tertiaryContainer.withValues(alpha: 0.45)
+          : cs.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(12, 10, 8, 10),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: isConsignment
+                  ? cs.tertiaryContainer
+                  : cs.primaryContainer,
+              child: Icon(
+                isConsignment ? LucideIcons.handshake : LucideIcons.building2,
+                color: isConsignment
+                    ? cs.onTertiaryContainer
+                    : cs.onPrimaryContainer,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  if (source.variantLabel.trim().isNotEmpty)
+                    Text(
+                      source.variantLabel,
+                      style: TextStyle(color: cs.onSurfaceVariant),
+                    ),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      Text(
+                        '${'stock_sources.quantity'.tr()}: '
+                        '${localizedQuantity(source.quantity, source.measurementType)}',
+                      ),
+                      Text(
+                        isConsignment
+                            ? 'stock_sources.consignment'.tr()
+                            : source.ownership ==
+                                  InventoryStockOwnership.unverified
+                            ? 'stock_sources.unverified'.tr()
+                            : 'stock_sources.enterprise_owned'.tr(),
+                      ),
+                      if (source.receiptNumber?.isNotEmpty == true)
+                        Text(
+                          '${'stock_sources.receipt'.tr()}: '
+                          '${source.receiptNumber}',
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    code?.isNotEmpty == true
+                        ? '${'stock_sources.code'.tr()}: $code'
+                        : 'stock_sources.no_code'.tr(),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: code?.isNotEmpty == true
+                          ? cs.primary
+                          : cs.onSurfaceVariant,
+                      fontWeight: code?.isNotEmpty == true
+                          ? FontWeight.w600
+                          : null,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (code?.isNotEmpty == true)
+              IconButton(
+                onPressed: () => _showPrintModeChoice(
+                  context,
+                  _sourceLabelProduct(state, source),
+                ),
+                icon: const Icon(LucideIcons.printer),
+                tooltip: 'stock_sources.print_source'.tr(),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildInventorySection(BuildContext context, ProductFormState state) {
     final bloc = context.read<ProductFormBloc>();
     final productId = state.productId;
@@ -1598,6 +1949,12 @@ class _ProductFormViewState extends State<_ProductFormView>
             ),
           ],
         ),
+        if (state.isEditing &&
+            state.productId != null &&
+            state.trackInventory) ...[
+          const SizedBox(height: 16),
+          _buildStockSourcesCard(context, state),
+        ],
         if (state.isEditing &&
             !state.hasVariants &&
             state.productId != null &&

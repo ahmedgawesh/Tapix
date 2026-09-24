@@ -19,15 +19,17 @@ class EmployeesScreen extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider(
-          create: (context) => EmployeesBloc(sl<EmployeeRepository>())
-            ..add(const EmployeesInitialized()),
+          create: (context) =>
+              EmployeesBloc(sl<EmployeeRepository>())
+                ..add(const EmployeesInitialized()),
         ),
         BlocProvider(
           create: (context) => EmployeeStatsBloc(sl<EmployeeRepository>()),
         ),
         BlocProvider(
-          create: (context) => RolesBloc(sl<EmployeeRepository>())
-            ..add(const RolesInitialized()),
+          create: (context) =>
+              RolesBloc(sl<EmployeeRepository>())
+                ..add(const RolesInitialized()),
         ),
       ],
       child: const _EmployeesScreenContent(),
@@ -39,7 +41,8 @@ class _EmployeesScreenContent extends StatefulWidget {
   const _EmployeesScreenContent();
 
   @override
-  State<_EmployeesScreenContent> createState() => _EmployeesScreenContentState();
+  State<_EmployeesScreenContent> createState() =>
+      _EmployeesScreenContentState();
 }
 
 class _EmployeesScreenContentState extends State<_EmployeesScreenContent> {
@@ -126,9 +129,9 @@ class _EmployeesScreenContentState extends State<_EmployeesScreenContent> {
                               icon: const Icon(Icons.clear),
                               onPressed: () {
                                 _searchController.clear();
-                                context
-                                    .read<EmployeesBloc>()
-                                    .add(const EmployeeSearchRequested(''));
+                                context.read<EmployeesBloc>().add(
+                                  const EmployeeSearchRequested(''),
+                                );
                               },
                             )
                           : null,
@@ -137,12 +140,14 @@ class _EmployeesScreenContentState extends State<_EmployeesScreenContent> {
                         borderSide: BorderSide.none,
                       ),
                       filled: true,
-                      fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                      fillColor: colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.5,
+                      ),
                     ),
                     onChanged: (value) {
-                      context
-                          .read<EmployeesBloc>()
-                          .add(EmployeeSearchRequested(value));
+                      context.read<EmployeesBloc>().add(
+                        EmployeeSearchRequested(value),
+                      );
                     },
                   ),
                 ),
@@ -179,23 +184,28 @@ class _EmployeesScreenContentState extends State<_EmployeesScreenContent> {
                                   onSelected: () {
                                     setState(() => _selectedRoleFilter = null);
                                     context.read<EmployeesBloc>().add(
-                                          const EmployeeFilterByRoleRequested(null),
-                                        );
+                                      const EmployeeFilterByRoleRequested(null),
+                                    );
                                   },
                                 ),
-                                ...roles.map((role) => _buildFilterChip(
-                                      context,
-                                      label: _localizedRoleName(context, role),
-                                      isSelected:
-                                          _selectedRoleFilter == role.id.toString(),
-                                      onSelected: () {
-                                        setState(() => _selectedRoleFilter =
-                                            role.id.toString());
-                                        context.read<EmployeesBloc>().add(
-                                              EmployeeFilterByRoleRequested(role.id),
-                                            );
-                                      },
-                                    )),
+                                ...roles.map(
+                                  (role) => _buildFilterChip(
+                                    context,
+                                    label: _localizedRoleName(context, role),
+                                    isSelected:
+                                        _selectedRoleFilter ==
+                                        role.id.toString(),
+                                    onSelected: () {
+                                      setState(
+                                        () => _selectedRoleFilter = role.id
+                                            .toString(),
+                                      );
+                                      context.read<EmployeesBloc>().add(
+                                        EmployeeFilterByRoleRequested(role.id),
+                                      );
+                                    },
+                                  ),
+                                ),
                               ],
                             ),
                           );
@@ -215,24 +225,41 @@ class _EmployeesScreenContentState extends State<_EmployeesScreenContent> {
                     runSpacing: 8,
                     children: [
                       ActionChip(
-                        avatar: Icon(Icons.person_add_outlined, size: 18, color: Colors.blue.shade400),
+                        avatar: Icon(
+                          Icons.person_add_outlined,
+                          size: 18,
+                          color: Colors.blue.shade400,
+                        ),
                         label: Text('employees.add_employee'.tr()),
                         onPressed: () => context.push('/employees/create'),
                       ),
                       ActionChip(
-                        avatar: Icon(Icons.access_time_outlined, size: 18, color: Colors.amber.shade600),
+                        avatar: Icon(
+                          Icons.access_time_outlined,
+                          size: 18,
+                          color: Colors.amber.shade600,
+                        ),
                         label: Text('employees.attendance'.tr()),
                         onPressed: () => context.push('/employees/attendance'),
                       ),
                       ActionChip(
-                        avatar: Icon(Icons.payments_outlined, size: 18, color: Colors.green.shade500),
+                        avatar: Icon(
+                          Icons.payments_outlined,
+                          size: 18,
+                          color: Colors.green.shade500,
+                        ),
                         label: Text('employees.payroll'.tr()),
                         onPressed: () => context.push('/employees/payroll'),
                       ),
                       ActionChip(
-                        avatar: Icon(Icons.event_note_outlined, size: 18, color: Colors.purple.shade400),
+                        avatar: Icon(
+                          Icons.event_note_outlined,
+                          size: 18,
+                          color: Colors.purple.shade400,
+                        ),
                         label: Text('employees.leave_requests'.tr()),
-                        onPressed: () => context.push('/employees/leave-requests'),
+                        onPressed: () =>
+                            context.push('/employees/leave-requests'),
                       ),
                     ],
                   ),
@@ -326,21 +353,17 @@ class _EmployeesScreenContentState extends State<_EmployeesScreenContent> {
                     return SliverPadding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final employee = employees[index];
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: EmployeeCard(
-                                employee: employee,
-                                onTap: () => context.push(
-                                  '/employees/${employee.id}',
-                                ),
-                              ),
-                            );
-                          },
-                          childCount: employees.length,
-                        ),
+                        delegate: SliverChildBuilderDelegate((context, index) {
+                          final employee = employees[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: EmployeeCard(
+                              employee: employee,
+                              onTap: () =>
+                                  context.push('/employees/${employee.id}'),
+                            ),
+                          );
+                        }, childCount: employees.length),
                       ),
                     );
                   }
@@ -350,9 +373,7 @@ class _EmployeesScreenContentState extends State<_EmployeesScreenContent> {
               ),
 
               // Bottom padding for FAB
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 80),
-              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 80)),
             ],
           ),
         ),

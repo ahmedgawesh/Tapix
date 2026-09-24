@@ -70,7 +70,7 @@ class ExpenseFormBloc extends RealtimeBloc<ExpenseFormData, ExpenseFormEvent> {
   int? _editingExpenseId;
 
   ExpenseFormBloc(this._repository)
-      : super(RealtimeSuccess<ExpenseFormData>(data: const ExpenseFormData()));
+    : super(RealtimeSuccess<ExpenseFormData>(data: const ExpenseFormData()));
 
   @override
   Stream<ExpenseFormData> get dataStream => const Stream.empty();
@@ -96,9 +96,11 @@ class ExpenseFormBloc extends RealtimeBloc<ExpenseFormData, ExpenseFormEvent> {
     try {
       final expense = await _repository.getExpense(event.expenseId!);
       if (expense != null) {
-        emit(RealtimeSuccess<ExpenseFormData>(
-          data: ExpenseFormData(existingExpense: expense),
-        ));
+        emit(
+          RealtimeSuccess<ExpenseFormData>(
+            data: ExpenseFormData(existingExpense: expense),
+          ),
+        );
       } else {
         emit(RealtimeError<ExpenseFormData>(error: 'Expense not found'));
       }
@@ -112,9 +114,13 @@ class ExpenseFormBloc extends RealtimeBloc<ExpenseFormData, ExpenseFormEvent> {
     Emitter<RealtimeState<ExpenseFormData>> emit,
   ) async {
     final previousData = currentData;
-    emit(RealtimeSuccess<ExpenseFormData>(
-      data: (previousData ?? const ExpenseFormData()).copyWith(isSubmitting: true),
-    ));
+    emit(
+      RealtimeSuccess<ExpenseFormData>(
+        data: (previousData ?? const ExpenseFormData()).copyWith(
+          isSubmitting: true,
+        ),
+      ),
+    );
 
     try {
       if (_editingExpenseId != null) {
@@ -144,19 +150,23 @@ class ExpenseFormBloc extends RealtimeBloc<ExpenseFormData, ExpenseFormEvent> {
         );
       }
 
-      emit(RealtimeSuccess<ExpenseFormData>(
-        data: (previousData ?? const ExpenseFormData()).copyWith(
-          isSubmitting: false,
-          isSubmitted: true,
+      emit(
+        RealtimeSuccess<ExpenseFormData>(
+          data: (previousData ?? const ExpenseFormData()).copyWith(
+            isSubmitting: false,
+            isSubmitted: true,
+          ),
         ),
-      ));
+      );
     } catch (e) {
-      emit(RealtimeSuccess<ExpenseFormData>(
-        data: (previousData ?? const ExpenseFormData()).copyWith(
-          isSubmitting: false,
-          errorMessage: e.toString(),
+      emit(
+        RealtimeSuccess<ExpenseFormData>(
+          data: (previousData ?? const ExpenseFormData()).copyWith(
+            isSubmitting: false,
+            errorMessage: e.toString(),
+          ),
         ),
-      ));
+      );
     }
   }
 }

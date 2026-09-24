@@ -23,7 +23,9 @@ void main() {
     );
 
     // Seed a currency + product so variant FKs resolve.
-    final currencyId = await db.into(db.currencies).insert(
+    final currencyId = await db
+        .into(db.currencies)
+        .insert(
           CurrenciesCompanion.insert(
             code: 'TST',
             name: 'Test',
@@ -31,7 +33,9 @@ void main() {
             exchangeRate: Decimal.fromInt(1),
           ),
         );
-    await db.into(db.products).insert(
+    await db
+        .into(db.products)
+        .insert(
           ProductsCompanion.insert(
             name: 'Prod',
             costCents: Decimal.zero,
@@ -49,7 +53,9 @@ void main() {
     final originalCreatedAt = DateTime(2024, 1, 1, 12, 0, 0);
 
     // Insert variant with a known createdAt directly via Drift.
-    final variantId = await db.into(db.productVariants).insert(
+    final variantId = await db
+        .into(db.productVariants)
+        .insert(
           ProductVariantsCompanion.insert(
             productId: 1,
             costCents: Decimal.fromInt(1000),
@@ -95,7 +101,9 @@ void main() {
 
   test('updateColor preserves original createdAt', () async {
     final originalCreatedAt = DateTime(2023, 6, 15);
-    final colorId = await db.into(db.productColors).insert(
+    final colorId = await db
+        .into(db.productColors)
+        .insert(
           ProductColorsCompanion.insert(
             name: 'Blue',
             hexCode: const Value('#0000FF'),

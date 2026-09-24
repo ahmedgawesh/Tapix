@@ -117,9 +117,7 @@ void main() {
         dateRange: ReportDateRange.thisMonth(),
       );
 
-      final updated = original.copyWith(
-        dateRange: ReportDateRange.thisYear(),
-      );
+      final updated = original.copyWith(dateRange: ReportDateRange.thisYear());
 
       expect(updated.grandTotalSalesCents, 500000);
       expect(updated.grandTotalInvoices, 50);
@@ -179,7 +177,8 @@ void main() {
 
     test('CustomerSalesReportSortChanged stores sort type', () {
       const event = CustomerSalesReportSortChanged(
-          CustomerSalesSortType.invoiceCountDesc);
+        CustomerSalesSortType.invoiceCountDesc,
+      );
       expect(event.sort, CustomerSalesSortType.invoiceCountDesc);
     });
   });
@@ -187,18 +186,30 @@ void main() {
   group('CustomerSalesSortType enum', () {
     test('has all expected values', () {
       expect(CustomerSalesSortType.values.length, 6);
-      expect(CustomerSalesSortType.values,
-          contains(CustomerSalesSortType.revenueDesc));
-      expect(CustomerSalesSortType.values,
-          contains(CustomerSalesSortType.revenueAsc));
-      expect(CustomerSalesSortType.values,
-          contains(CustomerSalesSortType.invoiceCountDesc));
-      expect(CustomerSalesSortType.values,
-          contains(CustomerSalesSortType.invoiceCountAsc));
-      expect(CustomerSalesSortType.values,
-          contains(CustomerSalesSortType.nameAsc));
-      expect(CustomerSalesSortType.values,
-          contains(CustomerSalesSortType.nameDesc));
+      expect(
+        CustomerSalesSortType.values,
+        contains(CustomerSalesSortType.revenueDesc),
+      );
+      expect(
+        CustomerSalesSortType.values,
+        contains(CustomerSalesSortType.revenueAsc),
+      );
+      expect(
+        CustomerSalesSortType.values,
+        contains(CustomerSalesSortType.invoiceCountDesc),
+      );
+      expect(
+        CustomerSalesSortType.values,
+        contains(CustomerSalesSortType.invoiceCountAsc),
+      );
+      expect(
+        CustomerSalesSortType.values,
+        contains(CustomerSalesSortType.nameAsc),
+      );
+      expect(
+        CustomerSalesSortType.values,
+        contains(CustomerSalesSortType.nameDesc),
+      );
     });
   });
 
@@ -411,9 +422,7 @@ void main() {
 
     test('copyWith preserves unchanged fields', () {
       final range = ReportDateRange.thisMonth();
-      final updated = range.copyWith(
-        preset: ReportPeriodPreset.custom,
-      );
+      final updated = range.copyWith(preset: ReportPeriodPreset.custom);
       expect(updated.startDate, range.startDate);
       expect(updated.endDate, range.endDate);
       expect(updated.preset, ReportPeriodPreset.custom);

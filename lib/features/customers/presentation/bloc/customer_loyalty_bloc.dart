@@ -37,7 +37,8 @@ class CustomerLoyaltyRedeemRewardRequested extends CustomerLoyaltyEvent {
 }
 
 /// Bloc for customer loyalty management
-class CustomerLoyaltyBloc extends RealtimeBloc<CustomerLoyaltySummary?, CustomerLoyaltyEvent> {
+class CustomerLoyaltyBloc
+    extends RealtimeBloc<CustomerLoyaltySummary?, CustomerLoyaltyEvent> {
   final LoyaltyRepository _repository;
   int? _currentCustomerId;
 

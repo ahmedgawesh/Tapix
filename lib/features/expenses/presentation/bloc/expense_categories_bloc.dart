@@ -30,7 +30,8 @@ class ExpenseCategoryToggleActiveRequested extends ExpenseCategoriesEvent {
 }
 
 /// Bloc for managing expense categories with real-time updates
-class ExpenseCategoriesBloc extends RealtimeBloc<List<ExpenseCategory>, ExpenseCategoriesEvent> {
+class ExpenseCategoriesBloc
+    extends RealtimeBloc<List<ExpenseCategory>, ExpenseCategoriesEvent> {
   final ExpenseRepository _repository;
 
   ExpenseCategoriesBloc(this._repository) : super(const RealtimeLoading());
@@ -58,7 +59,13 @@ class ExpenseCategoriesBloc extends RealtimeBloc<List<ExpenseCategory>, ExpenseC
         description: event.description,
       );
     } catch (e, st) {
-      emit(RealtimeError<List<ExpenseCategory>>(error: e, stackTrace: st, previousData: currentData));
+      emit(
+        RealtimeError<List<ExpenseCategory>>(
+          error: e,
+          stackTrace: st,
+          previousData: currentData,
+        ),
+      );
     }
   }
 
@@ -69,7 +76,13 @@ class ExpenseCategoriesBloc extends RealtimeBloc<List<ExpenseCategory>, ExpenseC
     try {
       await _repository.updateCategory(event.category);
     } catch (e, st) {
-      emit(RealtimeError<List<ExpenseCategory>>(error: e, stackTrace: st, previousData: currentData));
+      emit(
+        RealtimeError<List<ExpenseCategory>>(
+          error: e,
+          stackTrace: st,
+          previousData: currentData,
+        ),
+      );
     }
   }
 
@@ -80,7 +93,13 @@ class ExpenseCategoriesBloc extends RealtimeBloc<List<ExpenseCategory>, ExpenseC
     try {
       await _repository.deleteCategory(event.categoryId);
     } catch (e, st) {
-      emit(RealtimeError<List<ExpenseCategory>>(error: e, stackTrace: st, previousData: currentData));
+      emit(
+        RealtimeError<List<ExpenseCategory>>(
+          error: e,
+          stackTrace: st,
+          previousData: currentData,
+        ),
+      );
     }
   }
 
@@ -95,7 +114,13 @@ class ExpenseCategoriesBloc extends RealtimeBloc<List<ExpenseCategory>, ExpenseC
       );
       await _repository.updateCategory(updated);
     } catch (e, st) {
-      emit(RealtimeError<List<ExpenseCategory>>(error: e, stackTrace: st, previousData: currentData));
+      emit(
+        RealtimeError<List<ExpenseCategory>>(
+          error: e,
+          stackTrace: st,
+          previousData: currentData,
+        ),
+      );
     }
   }
 }

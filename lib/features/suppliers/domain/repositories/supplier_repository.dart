@@ -15,18 +15,29 @@ abstract class SupplierRepository {
   /// Search suppliers by name, phone, or email
   Future<List<Supplier>> searchSuppliers(String query, {bool? isActive});
 
+  /// Checks all suppliers, including inactive ones. This is an early UX check;
+  /// the database unique index is the final authority.
+  Future<bool> isProductCodeAvailable(String? code, {int? excludingSupplierId});
+
+  /// A saved document/history or issued source identity locks the prefix.
+  Future<bool> isProductCodeLocked(int supplierId);
+
   /// Create a new supplier
   Future<int> createSupplier({
     required String name,
     String? email,
     String? phone,
     String? address,
+    String? productCode,
     required int currencyId,
     Decimal? initialBalance,
   });
 
   /// Update an existing supplier
   Future<bool> updateSupplier(Supplier supplier);
+
+  /// Update the active flag only; retain the code, balance and history.
+  Future<void> setSupplierActive(int supplierId, bool isActive);
 
   /// Delete a supplier by ID
   Future<int> deleteSupplier(int id);

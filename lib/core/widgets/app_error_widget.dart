@@ -1,7 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
-/// A user-friendly error widget that replaces the default red error screen.
-/// Shows a graceful message instead of crashing the UI.
+/// A minimal fallback used while Flutter is already handling a build failure.
+///
+/// It avoids every inherited dependency and every controller so it can also be
+/// built while an overlay or route is being removed.
 class AppErrorWidget extends StatelessWidget {
   final FlutterErrorDetails details;
 
@@ -9,46 +11,35 @@ class AppErrorWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Theme.of(context).scaffoldBackgroundColor,
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.error_outline_rounded,
-              size: 64,
-              color: Theme.of(context).colorScheme.error,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Something went wrong',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
+    return ColoredBox(
+      color: const Color(0xFFF7F7FA),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: RichText(
+            textDirection: TextDirection.ltr,
+            textAlign: TextAlign.center,
+            textScaler: TextScaler.noScaling,
+            text: const TextSpan(
+              style: TextStyle(
+                inherit: false,
+                color: Color(0xFF49454F),
+                fontSize: 14,
+              ),
+              children: [
+                TextSpan(
+                  text: 'Something went wrong',
+                  style: TextStyle(
+                    inherit: false,
+                    color: Color(0xFF1D1B20),
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
                   ),
-              textAlign: TextAlign.center,
+                ),
+                TextSpan(text: '\n\nClose this screen and try again.'),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              'An unexpected error occurred. Please try again.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: () {
-                // Try to pop back or navigate to dashboard
-                if (Navigator.of(context).canPop()) {
-                  Navigator.of(context).pop();
-                }
-              },
-              icon: const Icon(Icons.arrow_back),
-              label: const Text('Go Back'),
-            ),
-          ],
+          ),
         ),
       ),
     );

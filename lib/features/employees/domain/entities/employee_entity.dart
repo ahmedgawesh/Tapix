@@ -254,7 +254,8 @@ class EmployeeEntity extends Equatable {
       roleId: roleId ?? this.roleId,
       managerId: managerId ?? this.managerId,
       salaryCents: salaryCents ?? this.salaryCents,
-      defaultCommissionRateBps: defaultCommissionRateBps ?? this.defaultCommissionRateBps,
+      defaultCommissionRateBps:
+          defaultCommissionRateBps ?? this.defaultCommissionRateBps,
       currencyId: currencyId ?? this.currencyId,
       isActive: isActive ?? this.isActive,
       hireDate: hireDate ?? this.hireDate,
@@ -267,28 +268,28 @@ class EmployeeEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        employeeCode,
-        userId,
-        name,
-        nameAr,
-        nameFr,
-        email,
-        phone,
-        position,
-        department,
-        roleId,
-        managerId,
-        salaryCents,
-        defaultCommissionRateBps,
-        currencyId,
-        isActive,
-        hireDate,
-        terminationDate,
-        notes,
-        createdAt,
-        updatedAt,
-      ];
+    id,
+    employeeCode,
+    userId,
+    name,
+    nameAr,
+    nameFr,
+    email,
+    phone,
+    position,
+    department,
+    roleId,
+    managerId,
+    salaryCents,
+    defaultCommissionRateBps,
+    currencyId,
+    isActive,
+    hireDate,
+    terminationDate,
+    notes,
+    createdAt,
+    updatedAt,
+  ];
 }
 
 /// Role entity for domain layer
@@ -345,17 +346,17 @@ class RoleEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        name,
-        nameAr,
-        nameFr,
-        description,
-        permissions,
-        isSystemRole,
-        isActive,
-        createdAt,
-        updatedAt,
-      ];
+    id,
+    name,
+    nameAr,
+    nameFr,
+    description,
+    permissions,
+    isSystemRole,
+    isActive,
+    createdAt,
+    updatedAt,
+  ];
 }
 
 /// Attendance entity for domain layer
@@ -433,20 +434,20 @@ class AttendanceEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        employeeId,
-        attendanceDate,
-        checkInTime,
-        checkOutTime,
-        status,
-        checkInMethod,
-        location,
-        overtimeMinutes,
-        notes,
-        approvedBy,
-        createdAt,
-        updatedAt,
-      ];
+    id,
+    employeeId,
+    attendanceDate,
+    checkInTime,
+    checkOutTime,
+    status,
+    checkInMethod,
+    location,
+    overtimeMinutes,
+    notes,
+    approvedBy,
+    createdAt,
+    updatedAt,
+  ];
 }
 
 /// Leave request entity for domain layer
@@ -521,20 +522,20 @@ class LeaveRequestEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        employeeId,
-        leaveType,
-        startDate,
-        endDate,
-        daysCount,
-        reason,
-        status,
-        approvedBy,
-        approvedAt,
-        rejectionReason,
-        createdAt,
-        updatedAt,
-      ];
+    id,
+    employeeId,
+    leaveType,
+    startDate,
+    endDate,
+    daysCount,
+    reason,
+    status,
+    approvedBy,
+    approvedAt,
+    rejectionReason,
+    createdAt,
+    updatedAt,
+  ];
 }
 
 /// Payroll entity for domain layer
@@ -651,24 +652,24 @@ class PayrollEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        employeeId,
-        periodStart,
-        periodEnd,
-        basicSalaryCents,
-        commissionCents,
-        bonusCents,
-        overtimeCents,
-        deductionCents,
-        netPayCents,
-        currencyId,
-        status,
-        processedAt,
-        bankReference,
-        notes,
-        createdAt,
-        updatedAt,
-      ];
+    id,
+    employeeId,
+    periodStart,
+    periodEnd,
+    basicSalaryCents,
+    commissionCents,
+    bonusCents,
+    overtimeCents,
+    deductionCents,
+    netPayCents,
+    currencyId,
+    status,
+    processedAt,
+    bankReference,
+    notes,
+    createdAt,
+    updatedAt,
+  ];
 }
 
 /// Commission entity for domain layer
@@ -717,7 +718,8 @@ class CommissionEntity extends Equatable {
       employeeId: employeeId ?? this.employeeId,
       saleId: saleId ?? this.saleId,
       commissionRateBps: commissionRateBps ?? this.commissionRateBps,
-      commissionAmountCents: commissionAmountCents ?? this.commissionAmountCents,
+      commissionAmountCents:
+          commissionAmountCents ?? this.commissionAmountCents,
       currencyId: currencyId ?? this.currencyId,
       period: period ?? this.period,
       status: status ?? this.status,
@@ -727,16 +729,16 @@ class CommissionEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        employeeId,
-        saleId,
-        commissionRateBps,
-        commissionAmountCents,
-        currencyId,
-        period,
-        status,
-        createdAt,
-      ];
+    id,
+    employeeId,
+    saleId,
+    commissionRateBps,
+    commissionAmountCents,
+    currencyId,
+    period,
+    status,
+    createdAt,
+  ];
 }
 
 /// Performance metric entity for domain layer
@@ -805,17 +807,17 @@ class PerformanceMetricEntity extends Equatable {
 
   @override
   List<Object?> get props => [
-        id,
-        employeeId,
-        metricType,
-        metricValue,
-        targetValue,
-        period,
-        periodIdentifier,
-        recordedAt,
-        recordedBy,
-        createdAt,
-      ];
+    id,
+    employeeId,
+    metricType,
+    metricValue,
+    targetValue,
+    period,
+    periodIdentifier,
+    recordedAt,
+    recordedBy,
+    createdAt,
+  ];
 }
 
 /// Employee with role for display purposes
@@ -824,11 +826,7 @@ class EmployeeWithRole {
   final RoleEntity? role;
   final EmployeeEntity? manager;
 
-  const EmployeeWithRole({
-    required this.employee,
-    this.role,
-    this.manager,
-  });
+  const EmployeeWithRole({required this.employee, this.role, this.manager});
 }
 
 /// Attendance summary for a date

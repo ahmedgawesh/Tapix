@@ -28,8 +28,9 @@ AppDatabase memoryDb() =>
     AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
 
 Future<Map<String, List<Map<String, Object?>>>> legacySnapshot(
-  AppDatabase db,
-) async {
+  AppDatabase db, {
+  bool includeOrigins = true,
+}) async {
   final names = await db
       .customSelect(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'business_%' ORDER BY name",
@@ -38,6 +39,11 @@ Future<Map<String, List<Map<String, Object?>>>> legacySnapshot(
   final result = <String, List<Map<String, Object?>>>{};
   for (final row in names) {
     final name = row.read<String>('name');
+    if (!includeOrigins &&
+        (name == 'inventory_origin_events' ||
+            name == 'inventory_origin_states')) {
+      continue;
+    }
     result[name] =
         (await db.customSelect('SELECT * FROM "$name" ORDER BY rowid').get())
             .map((r) => r.data)
@@ -172,7 +178,7 @@ void main() {
       final db = memoryDb();
       addTearDown(db.close);
       final scope = await BusinessFoundationRepository(db).getScope();
-      expect(db.schemaVersion, 10091);
+      expect(db.schemaVersion, 10115);
       expect(scope.organizationId, hasLength(36));
       expect({
         scope.organizationId,

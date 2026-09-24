@@ -27,11 +27,16 @@ class JournalEntryFormData {
 }
 
 /// Bloc for viewing journal entry details (read-only — no manual creation)
-class JournalEntryFormBloc extends RealtimeBloc<JournalEntryFormData, JournalEntryFormEvent> {
+class JournalEntryFormBloc
+    extends RealtimeBloc<JournalEntryFormData, JournalEntryFormEvent> {
   final JournalRepository _repository;
 
   JournalEntryFormBloc(this._repository)
-      : super(RealtimeSuccess<JournalEntryFormData>(data: const JournalEntryFormData()));
+    : super(
+        RealtimeSuccess<JournalEntryFormData>(
+          data: const JournalEntryFormData(),
+        ),
+      );
 
   @override
   Stream<JournalEntryFormData> get dataStream => const Stream.empty();
@@ -52,24 +57,30 @@ class JournalEntryFormBloc extends RealtimeBloc<JournalEntryFormData, JournalEnt
       final accounts = await accountsStream.first;
 
       if (event.entryId == null) {
-        emit(RealtimeSuccess<JournalEntryFormData>(
-          data: JournalEntryFormData(availableAccounts: accounts),
-        ));
+        emit(
+          RealtimeSuccess<JournalEntryFormData>(
+            data: JournalEntryFormData(availableAccounts: accounts),
+          ),
+        );
         return;
       }
 
       final entry = await _repository.getJournalEntry(event.entryId!);
       if (entry != null) {
         final lines = await _repository.getJournalEntryLines(event.entryId!);
-        emit(RealtimeSuccess<JournalEntryFormData>(
-          data: JournalEntryFormData(
-            existingEntry: entry,
-            existingLines: lines,
-            availableAccounts: accounts,
+        emit(
+          RealtimeSuccess<JournalEntryFormData>(
+            data: JournalEntryFormData(
+              existingEntry: entry,
+              existingLines: lines,
+              availableAccounts: accounts,
+            ),
           ),
-        ));
+        );
       } else {
-        emit(RealtimeError<JournalEntryFormData>(error: 'Journal entry not found'));
+        emit(
+          RealtimeError<JournalEntryFormData>(error: 'Journal entry not found'),
+        );
       }
     } catch (e, st) {
       emit(RealtimeError<JournalEntryFormData>(error: e, stackTrace: st));

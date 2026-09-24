@@ -28,6 +28,7 @@ abstract class SaleLocalDatasource {
     int returnId, {
     bool allowNegativeStock = false,
     WarehouseOperationScope? scope,
+    Future<void> Function(int returnId)? beforeCompletion,
   });
   Stream<List<SalePaymentEntity>> watchSalePayments(int saleId);
   Future<List<SalePaymentEntity>> getSalePayments(int saleId);
@@ -188,10 +189,12 @@ class SaleLocalDatasourceImpl implements SaleLocalDatasource {
     int returnId, {
     bool allowNegativeStock = false,
     WarehouseOperationScope? scope,
+    Future<void> Function(int returnId)? beforeCompletion,
   }) => _dao.voidSaleReturn(
     returnId,
     allowNegativeStock: allowNegativeStock,
     scope: scope,
+    beforeCompletion: beforeCompletion,
   );
 
   @override

@@ -13,7 +13,12 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
   final AuditLogService _auditService;
   final AppDatabase _db;
 
-  ExpenseRepositoryImpl(this._datasource, this._journalService, this._auditService, this._db);
+  ExpenseRepositoryImpl(
+    this._datasource,
+    this._journalService,
+    this._auditService,
+    this._db,
+  );
 
   // ── Expense Categories ──────────────────────────────────
 
@@ -33,10 +38,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
   }
 
   @override
-  Future<int> createCategory({
-    required String name,
-    String? description,
-  }) {
+  Future<int> createCategory({required String name, String? description}) {
     final companion = ExpenseCategoriesCompanion(
       name: Value(name),
       description: Value(description),

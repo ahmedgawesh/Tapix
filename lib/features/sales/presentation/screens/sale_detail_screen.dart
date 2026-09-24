@@ -16,6 +16,7 @@ import '../../../../core/services/currency_service.dart'
     as currency_model
     show Currency, SymbolPosition;
 import '../../../../core/services/lan/lan_network_service.dart';
+import '../../../../core/services/lan/lan_error_localizer.dart';
 import '../../../../core/services/cashier_shift_service.dart';
 import '../../../../core/services/void_impact_analyzer.dart';
 import '../../../../core/database/app_database.dart';
@@ -462,7 +463,7 @@ class _SaleDetailScreenState extends State<SaleDetailScreen> {
             if (!context.mounted) return;
             final message = error.code == 'remote_pin_required'
                 ? 'settings.network.remote_void_pin_required'.tr()
-                : error.message;
+                : localizeLanBusinessError(error);
             await showDialog<void>(
               context: context,
               builder: (ctx) => AlertDialog(

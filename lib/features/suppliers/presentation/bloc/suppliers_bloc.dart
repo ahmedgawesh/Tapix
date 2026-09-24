@@ -3,7 +3,8 @@ import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/database/app_database.dart';
 import '../../domain/repositories/supplier_repository.dart';
 
-/// Events for SuppliersBloc
+enum SupplierStatusFilter { active, inactive, all }
+
 abstract class SuppliersEvent extends RealtimeEvent {
   const SuppliersEvent();
 }
@@ -11,6 +12,11 @@ abstract class SuppliersEvent extends RealtimeEvent {
 class SuppliersSearchRequested extends SuppliersEvent {
   final String query;
   const SuppliersSearchRequested(this.query);
+}
+
+class SuppliersStatusFilterChanged extends SuppliersEvent {
+  final SupplierStatusFilter filter;
+  const SuppliersStatusFilterChanged(this.filter);
 }
 
 class SupplierDeleteRequested extends SuppliersEvent {
@@ -23,81 +29,127 @@ class SupplierToggleActiveRequested extends SuppliersEvent {
   const SupplierToggleActiveRequested(this.supplier);
 }
 
-/// State data for suppliers list
 class SuppliersData {
+  /// Suppliers visible under the current status + search filters.
   final List<Supplier> suppliers;
   final String? searchQuery;
   final bool isSearching;
+  final SupplierStatusFilter statusFilter;
+
+  /// Counts across the full list, independent of search.
+  final int activeCount;
+  final int inactiveCount;
+  final int totalCount;
 
   const SuppliersData({
     required this.suppliers,
     this.searchQuery,
     this.isSearching = false,
+    this.statusFilter = SupplierStatusFilter.active,
+    this.activeCount = 0,
+    this.inactiveCount = 0,
+    this.totalCount = 0,
   });
 
   SuppliersData copyWith({
     List<Supplier>? suppliers,
     String? searchQuery,
     bool? isSearching,
+    SupplierStatusFilter? statusFilter,
+    int? activeCount,
+    int? inactiveCount,
+    int? totalCount,
   }) {
     return SuppliersData(
       suppliers: suppliers ?? this.suppliers,
       searchQuery: searchQuery ?? this.searchQuery,
       isSearching: isSearching ?? this.isSearching,
+      statusFilter: statusFilter ?? this.statusFilter,
+      activeCount: activeCount ?? this.activeCount,
+      inactiveCount: inactiveCount ?? this.inactiveCount,
+      totalCount: totalCount ?? this.totalCount,
     );
   }
 }
 
-/// Bloc for managing suppliers list with real-time updates
+/// Watch the complete supplier list once and apply status + search together.
+/// Live DB emissions must not overwrite a search with an unfiltered list.
 class SuppliersBloc extends RealtimeBloc<SuppliersData, SuppliersEvent> {
   final SupplierRepository _repository;
   String? _currentSearchQuery;
+  SupplierStatusFilter _statusFilter = SupplierStatusFilter.active;
+  List<Supplier> _allSuppliers = const [];
+  bool _hasLoaded = false;
 
   SuppliersBloc(this._repository) : super(const RealtimeLoading());
 
   @override
-  Stream<SuppliersData> get dataStream {
-    return _repository.watchAllSuppliers(isActive: true).map(
-      (suppliers) => SuppliersData(
-        suppliers: suppliers,
-        searchQuery: _currentSearchQuery,
-        isSearching: _currentSearchQuery != null && _currentSearchQuery!.isNotEmpty,
-      ),
+  Stream<SuppliersData> get dataStream => _repository.watchAllSuppliers().map(
+    (suppliers) => SuppliersData(suppliers: suppliers),
+  );
+
+  @override
+  RealtimeState<SuppliersData> mapDataToState(SuppliersData data) {
+    _allSuppliers = List<Supplier>.unmodifiable(data.suppliers);
+    _hasLoaded = true;
+    return RealtimeSuccess<SuppliersData>(data: _filteredData());
+  }
+
+  SuppliersData _filteredData() {
+    final query = (_currentSearchQuery ?? '').toLowerCase();
+    final visible = _allSuppliers
+        .where((supplier) {
+          final matchesStatus = switch (_statusFilter) {
+            SupplierStatusFilter.active => supplier.isActive,
+            SupplierStatusFilter.inactive => !supplier.isActive,
+            SupplierStatusFilter.all => true,
+          };
+          return matchesStatus &&
+              (query.isEmpty ||
+                  supplier.name.toLowerCase().contains(query) ||
+                  (supplier.productCode ?? '').toLowerCase().contains(query) ||
+                  (supplier.phone ?? '').toLowerCase().contains(query) ||
+                  (supplier.email ?? '').toLowerCase().contains(query));
+        })
+        .toList(growable: false);
+    final active = _allSuppliers.where((s) => s.isActive).length;
+    return SuppliersData(
+      suppliers: visible,
+      searchQuery: _currentSearchQuery,
+      isSearching: query.isNotEmpty,
+      statusFilter: _statusFilter,
+      activeCount: active,
+      inactiveCount: _allSuppliers.length - active,
+      totalCount: _allSuppliers.length,
     );
   }
 
   @override
   void registerEventHandlers() {
     on<SuppliersSearchRequested>(_onSearchRequested);
+    on<SuppliersStatusFilterChanged>(_onStatusFilterChanged);
     on<SupplierDeleteRequested>(_onDeleteRequested);
     on<SupplierToggleActiveRequested>(_onToggleActiveRequested);
   }
 
-  Future<void> _onSearchRequested(
+  void _onSearchRequested(
     SuppliersSearchRequested event,
     Emitter<RealtimeState<SuppliersData>> emit,
-  ) async {
-    _currentSearchQuery = event.query.isEmpty ? null : event.query;
-
-    if (event.query.isEmpty) {
-      refresh();
-      return;
+  ) {
+    final query = event.query.trim();
+    _currentSearchQuery = query.isEmpty ? null : query;
+    if (_hasLoaded) {
+      emit(RealtimeSuccess<SuppliersData>(data: _filteredData()));
     }
+  }
 
-    final previousData = currentData;
-    emit(RealtimeLoading<SuppliersData>(previousData: previousData));
-
-    try {
-      final results = await _repository.searchSuppliers(event.query, isActive: true);
-      emit(RealtimeSuccess<SuppliersData>(
-        data: SuppliersData(
-          suppliers: results,
-          searchQuery: event.query,
-          isSearching: true,
-        ),
-      ));
-    } catch (e, st) {
-      emit(RealtimeError<SuppliersData>(error: e, stackTrace: st, previousData: previousData));
+  void _onStatusFilterChanged(
+    SuppliersStatusFilterChanged event,
+    Emitter<RealtimeState<SuppliersData>> emit,
+  ) {
+    _statusFilter = event.filter;
+    if (_hasLoaded) {
+      emit(RealtimeSuccess<SuppliersData>(data: _filteredData()));
     }
   }
 
@@ -107,8 +159,14 @@ class SuppliersBloc extends RealtimeBloc<SuppliersData, SuppliersEvent> {
   ) async {
     try {
       await _repository.deleteSupplier(event.supplierId);
-    } catch (e, st) {
-      emit(RealtimeError<SuppliersData>(error: e, stackTrace: st, previousData: currentData));
+    } catch (error, stackTrace) {
+      emit(
+        RealtimeError<SuppliersData>(
+          error: error,
+          stackTrace: stackTrace,
+          previousData: currentData,
+        ),
+      );
     }
   }
 
@@ -117,13 +175,18 @@ class SuppliersBloc extends RealtimeBloc<SuppliersData, SuppliersEvent> {
     Emitter<RealtimeState<SuppliersData>> emit,
   ) async {
     try {
-      final updatedSupplier = event.supplier.copyWith(
-        isActive: !event.supplier.isActive,
-        updatedAt: DateTime.now(),
+      await _repository.setSupplierActive(
+        event.supplier.id,
+        !event.supplier.isActive,
       );
-      await _repository.updateSupplier(updatedSupplier);
-    } catch (e, st) {
-      emit(RealtimeError<SuppliersData>(error: e, stackTrace: st, previousData: currentData));
+    } catch (error, stackTrace) {
+      emit(
+        RealtimeError<SuppliersData>(
+          error: error,
+          stackTrace: stackTrace,
+          previousData: currentData,
+        ),
+      );
     }
   }
 }

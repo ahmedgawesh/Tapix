@@ -613,7 +613,6 @@ class _RemoteAddItemSheet extends StatefulWidget {
   onSelected;
   final void Function(List<_PromotionBundleLine> lines, PromotionRule rule)
   onBundleAdded;
-
   const _RemoteAddItemSheet({
     this.initialProduct,
     required this.onSelected,
@@ -1054,14 +1053,17 @@ class _AddItemSheet extends StatefulWidget {
     ProductVariant? variant,
     int quantity,
     Decimal unitPrice,
+    InventoryStockSourceBalance? source,
   )
   onItemAdded;
   final void Function(List<_PromotionBundleLine> lines, PromotionRule rule)
   onBundleAdded;
+  final int Function(InventoryStockSourceBalance source) reservedForSource;
   const _AddItemSheet({
     this.initialProduct,
     required this.onItemAdded,
     required this.onBundleAdded,
+    required this.reservedForSource,
   });
 
   @override
@@ -1126,6 +1128,7 @@ class _AddItemSheetState extends State<_AddItemSheet> {
         .settings
         .allowNegativeStock;
     final lines = <_PromotionBundleLine>[];
+    final pendingReservations = <String, int>{};
     for (final scope in rule.qualifierScopes) {
       Product? product;
       ProductVariant? variant;
@@ -1150,6 +1153,24 @@ class _AddItemSheetState extends State<_AddItemSheet> {
       final retail = variant?.priceCents ?? product.priceCents;
       final wholesale =
           variant?.wholesalePriceCents ?? product.wholesalePriceCents;
+      InventoryStockSourceBalance? source;
+      if (product.trackInventory) {
+        var operationalVariantId = variant?.id;
+        if (operationalVariantId == null && !product.hasVariants) {
+          operationalVariantId = (await variants.getDefaultVariantByProduct(
+            product.id,
+          ))?.id;
+        }
+        source = await _chooseStockSource(
+          product: product,
+          operationalVariantId: operationalVariantId,
+          quantity: required,
+          pendingReservations: pendingReservations,
+        );
+        if (source == null || !mounted) return;
+        final key = _localSourceRef(source).reservationKey;
+        pendingReservations[key] = (pendingReservations[key] ?? 0) + required;
+      }
       lines.add(
         _PromotionBundleLine(
           product: product,
@@ -1158,6 +1179,11 @@ class _AddItemSheetState extends State<_AddItemSheet> {
           unitPriceCents: rule.priceMode == 'wholesale'
               ? (wholesale ?? retail)
               : retail,
+          stockSourceVariantId: source?.variantId,
+          supplierIdentityId: source?.supplierIdentityId,
+          supplierSourceSku: source?.sourceCode,
+          supplierName: source?.supplierName,
+          consignmentLayerId: source?.consignmentLayerId,
         ),
       );
     }
@@ -1256,11 +1282,10 @@ class _AddItemSheetState extends State<_AddItemSheet> {
       if (mounted) setState(() => _selectedProduct = product);
       return;
     }
+    ProductVariant? defaultVariant;
     try {
       final variantRepo = sl<ProductVariantRepository>();
-      final defaultVariant = await variantRepo.getDefaultVariantByProduct(
-        product.id,
-      );
+      defaultVariant = await variantRepo.getDefaultVariantByProduct(product.id);
       if (defaultVariant != null &&
           defaultVariant.stockQuantity <= 0 &&
           mounted) {
@@ -1271,13 +1296,155 @@ class _AddItemSheetState extends State<_AddItemSheet> {
       // Keep the existing POS behaviour if the stock preview cannot load.
     }
     if (mounted) {
-      widget.onItemAdded(
+      await _addWithStockSource(
         product,
         null,
-        product.quantityScale,
+        defaultVariant?.id,
         product.priceCents,
       );
     }
+  }
+
+  Future<void> _addWithStockSource(
+    Product product,
+    ProductVariant? variant,
+    int? operationalVariantId,
+    Decimal price,
+  ) async {
+    final quantity = product.quantityScale;
+    if (!product.trackInventory) {
+      widget.onItemAdded(product, variant, quantity, price, null);
+      return;
+    }
+    final selected = await _chooseStockSource(
+      product: product,
+      operationalVariantId: operationalVariantId ?? variant?.id,
+      quantity: quantity,
+    );
+    if (selected == null || !mounted) return;
+    widget.onItemAdded(product, variant, quantity, price, selected);
+  }
+
+  Future<InventoryStockSourceBalance?> _chooseStockSource({
+    required Product product,
+    required int? operationalVariantId,
+    required int quantity,
+    Map<String, int> pendingReservations = const {},
+  }) async {
+    try {
+      final snapshot = await InventoryStockSourceService(
+        sl(),
+      ).loadProduct(product.id, variantId: operationalVariantId);
+      if (!mounted) return null;
+      int remainingFor(InventoryStockSourceBalance source) {
+        final key = _localSourceRef(source).reservationKey;
+        final remaining =
+            source.quantity -
+            widget.reservedForSource(source) -
+            (pendingReservations[key] ?? 0);
+        return remaining > 0 ? remaining : 0;
+      }
+
+      final sources = snapshot.sources
+          .where((source) => remainingFor(source) >= quantity)
+          .toList(growable: false);
+      if (sources.isEmpty) {
+        await _showOutOfStock(product);
+        return null;
+      }
+      if (sources.length == 1) return sources.single;
+      return await _showStockSourcePicker(
+        product: product,
+        quantity: quantity,
+        sources: sources,
+        remainingFor: remainingFor,
+      );
+    } catch (_) {
+      if (!mounted) return null;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('stock_sources.load_failed'.tr()),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      return null;
+    }
+  }
+
+  Future<InventoryStockSourceBalance?> _showStockSourcePicker({
+    required Product product,
+    required int quantity,
+    required List<InventoryStockSourceBalance> sources,
+    required int Function(InventoryStockSourceBalance source) remainingFor,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    return showModalBottomSheet<InventoryStockSourceBalance>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 620),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          children: [
+            Text(
+              'stock_sources.choose_sale_source'.tr(),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Text(product.name, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              'stock_sources.choose_sale_source_help'.tr(),
+              style: TextStyle(color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 14),
+            ...sources.map((source) {
+              final consignment = source.isConsignment;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: BorderSide(color: cs.outlineVariant),
+                  ),
+                  tileColor: consignment
+                      ? cs.tertiaryContainer.withValues(alpha: 0.35)
+                      : cs.surfaceContainerLow,
+                  leading: Icon(
+                    consignment ? LucideIcons.handshake : LucideIcons.building2,
+                    color: consignment ? cs.tertiary : cs.primary,
+                  ),
+                  title: Text(
+                    source.supplierName?.trim().isNotEmpty == true
+                        ? source.supplierName!
+                        : 'stock_sources.unverified'.tr(),
+                  ),
+                  subtitle: Text(
+                    [
+                      consignment
+                          ? 'stock_sources.consignment'.tr()
+                          : source.ownership ==
+                                InventoryStockOwnership.unverified
+                          ? 'stock_sources.unverified'.tr()
+                          : 'stock_sources.enterprise_owned'.tr(),
+                      '${'stock_sources.available'.tr()}: ${localizedQuantity(remainingFor(source), source.measurementType)}',
+                      if (source.sourceCode?.isNotEmpty == true)
+                        '${'stock_sources.code'.tr()}: ${source.sourceCode}',
+                    ].join(' • '),
+                  ),
+                  trailing: const Icon(LucideIcons.chevronRight),
+                  onTap: () => Navigator.pop(sheetContext, source),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _showAlternatives(Product product) async {
@@ -1874,10 +2041,10 @@ class _AddItemSheetState extends State<_AddItemSheet> {
                             await _showOutOfStock(_selectedProduct!);
                             return;
                           }
-                          widget.onItemAdded(
+                          await _addWithStockSource(
                             _selectedProduct!,
                             variant,
-                            _selectedProduct!.quantityScale,
+                            variant.id,
                             variant.priceCents,
                           );
                         },
@@ -1899,7 +2066,7 @@ class _EditItemSheet extends StatefulWidget {
   final SaleLineItem item;
   final bool showSalesperson;
   final bool allowDiscounts;
-  final void Function(
+  final Future<void> Function(
     int quantity,
     Decimal unitPrice,
     Decimal discount, {
@@ -1932,6 +2099,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
   late TextEditingController _quantityCtrl;
   late MeasurementUnit _quantityUnit;
   bool _discountIsPercent = false;
+  bool _isSaving = false;
   int? _employeeId;
   String? _employeeName;
 
@@ -2554,8 +2722,13 @@ class _EditItemSheetState extends State<_EditItemSheet> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: _onSave,
-                icon: const Icon(LucideIcons.check, size: 18),
+                onPressed: _isSaving ? null : _onSave,
+                icon: _isSaving
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(LucideIcons.check, size: 18),
                 label: Text('common.save'.tr()),
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
@@ -2723,7 +2896,9 @@ class _EditItemSheetState extends State<_EditItemSheet> {
     return (val * Decimal.fromInt(100)).round().toBigInt().toInt();
   }
 
-  void _onSave() {
+  Future<void> _onSave() async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
     // Phase 3.5.4 — parse the price via Decimal so the saved value is
     // bit-identical to the preview shown by [LineItemPricingEngine].
     // Mixing `double.parse` here with the Decimal-based preview is
@@ -2736,7 +2911,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
         .toInt();
     final discountCents = _computeDiscountCents();
     final note = _noteCtrl.text.trim();
-    widget.onUpdated(
+    await widget.onUpdated(
       _quantity,
       Decimal.fromInt(priceCents),
       Decimal.fromInt(discountCents),
@@ -2745,6 +2920,7 @@ class _EditItemSheetState extends State<_EditItemSheet> {
       itemNote: note.isEmpty ? null : note,
       clearEmployee: _employeeId == null && widget.item.employeeId != null,
     );
+    if (mounted) setState(() => _isSaving = false);
   }
 }
 

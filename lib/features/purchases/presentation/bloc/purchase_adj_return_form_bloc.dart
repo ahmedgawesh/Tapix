@@ -110,6 +110,81 @@ String adjReturnReasonLabel(AdjReturnReasonCode? r) {
 
 // ==================== LINE ITEM ====================
 
+class AdjReturnConsignmentSource extends Equatable {
+  const AdjReturnConsignmentSource({
+    required this.layerId,
+    required this.supplierId,
+    required this.supplierName,
+    required this.receiptNumber,
+    required this.receivedAt,
+    required this.maximumReturnQuantity,
+    required this.quantityScale,
+    required this.measurementType,
+    this.batchNumber,
+    this.manufacturerLotNumber,
+  });
+
+  final String layerId;
+  final int supplierId;
+  final String supplierName;
+  final String receiptNumber;
+  final DateTime receivedAt;
+  final int maximumReturnQuantity;
+  final int quantityScale;
+  final String measurementType;
+  final String? batchNumber;
+  final String? manufacturerLotNumber;
+
+  String get sourceCode => 'C-$layerId';
+
+  @override
+  List<Object?> get props => [
+    layerId,
+    supplierId,
+    supplierName,
+    receiptNumber,
+    receivedAt,
+    maximumReturnQuantity,
+    quantityScale,
+    measurementType,
+    batchNumber,
+    manufacturerLotNumber,
+  ];
+}
+
+class AdjReturnSupplierIdentitySource extends Equatable {
+  const AdjReturnSupplierIdentitySource({
+    required this.identityId,
+    required this.supplierId,
+    required this.supplierName,
+    required this.sourceSku,
+  });
+
+  final int identityId;
+  final int supplierId;
+  final String supplierName;
+  final String sourceSku;
+
+  @override
+  List<Object?> get props => [identityId, supplierId, supplierName, sourceSku];
+}
+
+enum AdjReturnSourceResolution {
+  pending,
+  supplierIdentity,
+  consignment,
+  unverified,
+  notApplicable;
+
+  String get wireValue => switch (this) {
+    AdjReturnSourceResolution.pending => 'pending',
+    AdjReturnSourceResolution.supplierIdentity => 'supplier_identity',
+    AdjReturnSourceResolution.consignment => 'consignment',
+    AdjReturnSourceResolution.unverified => 'unverified',
+    AdjReturnSourceResolution.notApplicable => 'not_applicable',
+  };
+}
+
 class AdjReturnLineItem extends Equatable {
   final int productId;
   final int? variantId;
@@ -145,6 +220,11 @@ class AdjReturnLineItem extends Equatable {
   final bool? isTaxable;
   final bool taxInclusivePricing;
   final String? reason;
+  final bool trackInventory;
+  final AdjReturnConsignmentSource? consignmentSource;
+  final AdjReturnSupplierIdentitySource? supplierIdentitySource;
+  final AdjReturnSourceResolution sourceResolution;
+  final String? sourceResolutionReason;
 
   const AdjReturnLineItem({
     required this.productId,
@@ -165,7 +245,20 @@ class AdjReturnLineItem extends Equatable {
     this.isTaxable,
     this.taxInclusivePricing = false,
     this.reason,
-  });
+    this.trackInventory = true,
+    this.consignmentSource,
+    this.supplierIdentitySource,
+    AdjReturnSourceResolution? sourceResolution,
+    this.sourceResolutionReason,
+  }) : sourceResolution =
+           sourceResolution ??
+           (consignmentSource != null
+               ? AdjReturnSourceResolution.consignment
+               : supplierIdentitySource != null
+               ? AdjReturnSourceResolution.supplierIdentity
+               : trackInventory
+               ? AdjReturnSourceResolution.pending
+               : AdjReturnSourceResolution.notApplicable);
 
   // ── Engine-backed line math ────────────────────────────────────────────
   // All getters below delegate to [LineItemPricingEngine] so there is
@@ -222,6 +315,14 @@ class AdjReturnLineItem extends Equatable {
     int? taxRateBps,
     bool? taxInclusivePricing,
     String? reason,
+    bool? trackInventory,
+    AdjReturnConsignmentSource? consignmentSource,
+    bool clearConsignmentSource = false,
+    AdjReturnSupplierIdentitySource? supplierIdentitySource,
+    bool clearSupplierIdentitySource = false,
+    AdjReturnSourceResolution? sourceResolution,
+    String? sourceResolutionReason,
+    bool clearSourceResolutionReason = false,
   }) {
     return AdjReturnLineItem(
       productId: productId,
@@ -242,6 +343,17 @@ class AdjReturnLineItem extends Equatable {
       isTaxable: isTaxable,
       taxInclusivePricing: taxInclusivePricing ?? this.taxInclusivePricing,
       reason: reason ?? this.reason,
+      trackInventory: trackInventory ?? this.trackInventory,
+      consignmentSource: clearConsignmentSource
+          ? null
+          : (consignmentSource ?? this.consignmentSource),
+      supplierIdentitySource: clearSupplierIdentitySource
+          ? null
+          : (supplierIdentitySource ?? this.supplierIdentitySource),
+      sourceResolution: sourceResolution ?? this.sourceResolution,
+      sourceResolutionReason: clearSourceResolutionReason
+          ? null
+          : (sourceResolutionReason ?? this.sourceResolutionReason),
     );
   }
 
@@ -265,6 +377,11 @@ class AdjReturnLineItem extends Equatable {
     isTaxable,
     taxInclusivePricing,
     reason,
+    trackInventory,
+    consignmentSource,
+    supplierIdentitySource,
+    sourceResolution,
+    sourceResolutionReason,
   ];
 }
 

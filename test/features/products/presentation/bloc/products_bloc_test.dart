@@ -24,13 +24,16 @@ void main() {
     mockRepository = MockProductRepository();
     // Stub watchAllProducts since it's called immediately in constructor
     // Use Stream.empty() to prevent automatic state changes during tests
-    when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
-        .thenAnswer((_) => const Stream.empty());
-    when(() => mockRepository.watchFilteredProducts(
-          categoryId: any(named: 'categoryId'),
-          stockStatus: any(named: 'stockStatus'),
-          isActive: any(named: 'isActive'),
-        )).thenAnswer((_) => const Stream.empty());
+    when(
+      () => mockRepository.watchAllProducts(isActive: any(named: 'isActive')),
+    ).thenAnswer((_) => const Stream.empty());
+    when(
+      () => mockRepository.watchFilteredProducts(
+        categoryId: any(named: 'categoryId'),
+        stockStatus: any(named: 'stockStatus'),
+        isActive: any(named: 'isActive'),
+      ),
+    ).thenAnswer((_) => const Stream.empty());
     bloc = ProductsBloc(mockRepository);
   });
 
@@ -47,10 +50,17 @@ void main() {
       blocTest<ProductsBloc, RealtimeState<List<Product>>>(
         'emits loading then success with search results',
         build: () {
-          when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
-              .thenAnswer((_) => const Stream.empty());
-          when(() => mockRepository.searchProducts(any(), isActive: any(named: 'isActive')))
-              .thenAnswer((_) async => testProducts);
+          when(
+            () => mockRepository.watchAllProducts(
+              isActive: any(named: 'isActive'),
+            ),
+          ).thenAnswer((_) => const Stream.empty());
+          when(
+            () => mockRepository.searchProducts(
+              any(),
+              isActive: any(named: 'isActive'),
+            ),
+          ).thenAnswer((_) async => testProducts);
           return ProductsBloc(mockRepository);
         },
         act: (bloc) => bloc.add(const ProductSearchRequested('test')),
@@ -66,13 +76,20 @@ void main() {
       blocTest<ProductsBloc, RealtimeState<List<Product>>>(
         'clears search when query is empty',
         build: () {
-          when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
-              .thenAnswer((_) => Stream.value(testProducts));
+          when(
+            () => mockRepository.watchAllProducts(
+              isActive: any(named: 'isActive'),
+            ),
+          ).thenAnswer((_) => Stream.value(testProducts));
           return ProductsBloc(mockRepository);
         },
         act: (bloc) => bloc.add(const ProductSearchRequested('')),
         verify: (_) {
-          verify(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive'))).called(greaterThan(0));
+          verify(
+            () => mockRepository.watchAllProducts(
+              isActive: any(named: 'isActive'),
+            ),
+          ).called(greaterThan(0));
         },
       );
     });
@@ -81,26 +98,32 @@ void main() {
       blocTest<ProductsBloc, RealtimeState<List<Product>>>(
         'emits loading then success with filtered results',
         build: () {
-          when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
-              .thenAnswer((_) => const Stream.empty());
-          when(() => mockRepository.watchFilteredProducts(
-                categoryId: any(named: 'categoryId'),
-                stockStatus: any(named: 'stockStatus'),
-                isActive: any(named: 'isActive'),
-              )).thenAnswer((_) => Stream.value(testProducts));
-          when(() => mockRepository.filterProducts(
-                categoryId: any(named: 'categoryId'),
-                stockStatus: any(named: 'stockStatus'),
-                limit: any(named: 'limit'),
-                offset: any(named: 'offset'),
-                isActive: any(named: 'isActive'),
-              )).thenAnswer((_) async => testProducts);
+          when(
+            () => mockRepository.watchAllProducts(
+              isActive: any(named: 'isActive'),
+            ),
+          ).thenAnswer((_) => const Stream.empty());
+          when(
+            () => mockRepository.watchFilteredProducts(
+              categoryId: any(named: 'categoryId'),
+              stockStatus: any(named: 'stockStatus'),
+              isActive: any(named: 'isActive'),
+            ),
+          ).thenAnswer((_) => Stream.value(testProducts));
+          when(
+            () => mockRepository.filterProducts(
+              categoryId: any(named: 'categoryId'),
+              stockStatus: any(named: 'stockStatus'),
+              limit: any(named: 'limit'),
+              offset: any(named: 'offset'),
+              isActive: any(named: 'isActive'),
+            ),
+          ).thenAnswer((_) async => testProducts);
           return ProductsBloc(mockRepository);
         },
-        act: (bloc) => bloc.add(const ProductFilterRequested(
-          categoryId: 1,
-          stockStatus: 'low_stock',
-        )),
+        act: (bloc) => bloc.add(
+          const ProductFilterRequested(categoryId: 1, stockStatus: 'low_stock'),
+        ),
         expect: () => [
           isA<RealtimeLoading<List<Product>>>(),
           isA<RealtimeLoading<List<Product>>>(),
@@ -118,13 +141,18 @@ void main() {
       blocTest<ProductsBloc, RealtimeState<List<Product>>>(
         'clears all filters and refreshes',
         build: () {
-          when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
-              .thenAnswer((_) => Stream.value(testProducts));
-          when(() => mockRepository.watchFilteredProducts(
-                categoryId: any(named: 'categoryId'),
-                stockStatus: any(named: 'stockStatus'),
-                isActive: any(named: 'isActive'),
-              )).thenAnswer((_) => Stream.value(testProducts));
+          when(
+            () => mockRepository.watchAllProducts(
+              isActive: any(named: 'isActive'),
+            ),
+          ).thenAnswer((_) => Stream.value(testProducts));
+          when(
+            () => mockRepository.watchFilteredProducts(
+              categoryId: any(named: 'categoryId'),
+              stockStatus: any(named: 'stockStatus'),
+              isActive: any(named: 'isActive'),
+            ),
+          ).thenAnswer((_) => Stream.value(testProducts));
           return ProductsBloc(mockRepository);
         },
         act: (bloc) => bloc.add(const ProductFilterCleared()),
@@ -142,10 +170,14 @@ void main() {
       blocTest<ProductsBloc, RealtimeState<List<Product>>>(
         'emits loading then success with scanned product',
         build: () {
-          when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
-              .thenAnswer((_) => const Stream.empty());
-          when(() => mockRepository.findByBarcode(any()))
-              .thenAnswer((_) async => testProduct);
+          when(
+            () => mockRepository.watchAllProducts(
+              isActive: any(named: 'isActive'),
+            ),
+          ).thenAnswer((_) => const Stream.empty());
+          when(
+            () => mockRepository.findByBarcode(any()),
+          ).thenAnswer((_) async => testProduct);
           return ProductsBloc(mockRepository);
         },
         act: (bloc) => bloc.add(const ProductBarcodeScanned('123456')),
@@ -161,10 +193,14 @@ void main() {
       blocTest<ProductsBloc, RealtimeState<List<Product>>>(
         'emits empty list when barcode not found',
         build: () {
-          when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
-              .thenAnswer((_) => const Stream.empty());
-          when(() => mockRepository.findByBarcode(any()))
-              .thenAnswer((_) async => null);
+          when(
+            () => mockRepository.watchAllProducts(
+              isActive: any(named: 'isActive'),
+            ),
+          ).thenAnswer((_) => const Stream.empty());
+          when(
+            () => mockRepository.findByBarcode(any()),
+          ).thenAnswer((_) async => null);
           return ProductsBloc(mockRepository);
         },
         act: (bloc) => bloc.add(const ProductBarcodeScanned('999999')),
@@ -181,22 +217,29 @@ void main() {
       blocTest<ProductsBloc, RealtimeState<List<Product>>>(
         'loads more products and appends to list',
         build: () {
-          when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
-              .thenAnswer((_) => const Stream.empty());
-          when(() => mockRepository.watchFilteredProducts(
-                categoryId: any(named: 'categoryId'),
-                stockStatus: any(named: 'stockStatus'),
-                isActive: any(named: 'isActive'),
-              )).thenAnswer((_) => const Stream.empty());
+          when(
+            () => mockRepository.watchAllProducts(
+              isActive: any(named: 'isActive'),
+            ),
+          ).thenAnswer((_) => const Stream.empty());
+          when(
+            () => mockRepository.watchFilteredProducts(
+              categoryId: any(named: 'categoryId'),
+              stockStatus: any(named: 'stockStatus'),
+              isActive: any(named: 'isActive'),
+            ),
+          ).thenAnswer((_) => const Stream.empty());
           // Return enough products to trigger hasMoreData = true (>= pageSize)
           final manyProducts = List.generate(50, (i) => MockProduct());
-          when(() => mockRepository.filterProducts(
-                categoryId: any(named: 'categoryId'),
-                stockStatus: any(named: 'stockStatus'),
-                limit: any(named: 'limit'),
-                offset: any(named: 'offset'),
-                isActive: any(named: 'isActive'),
-              )).thenAnswer((_) async => manyProducts);
+          when(
+            () => mockRepository.filterProducts(
+              categoryId: any(named: 'categoryId'),
+              stockStatus: any(named: 'stockStatus'),
+              limit: any(named: 'limit'),
+              offset: any(named: 'offset'),
+              isActive: any(named: 'isActive'),
+            ),
+          ).thenAnswer((_) async => manyProducts);
           return ProductsBloc(mockRepository);
         },
         act: (bloc) async {
@@ -216,15 +259,20 @@ void main() {
       blocTest<ProductsBloc, RealtimeState<List<Product>>>(
         'does not load more when hasMoreData is false',
         build: () {
-          when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
-              .thenAnswer((_) => const Stream.empty());
-          when(() => mockRepository.filterProducts(
-                categoryId: any(named: 'categoryId'),
-                stockStatus: any(named: 'stockStatus'),
-                limit: any(named: 'limit'),
-                offset: any(named: 'offset'),
-                isActive: any(named: 'isActive'),
-              )).thenAnswer((_) async => []);
+          when(
+            () => mockRepository.watchAllProducts(
+              isActive: any(named: 'isActive'),
+            ),
+          ).thenAnswer((_) => const Stream.empty());
+          when(
+            () => mockRepository.filterProducts(
+              categoryId: any(named: 'categoryId'),
+              stockStatus: any(named: 'stockStatus'),
+              limit: any(named: 'limit'),
+              offset: any(named: 'offset'),
+              isActive: any(named: 'isActive'),
+            ),
+          ).thenAnswer((_) async => []);
           final bloc = ProductsBloc(mockRepository);
           bloc.add(const ProductLoadMoreRequested());
           return bloc;
@@ -240,64 +288,73 @@ void main() {
       blocTest<ProductsBloc, RealtimeState<List<Product>>>(
         'creates product successfully',
         build: () {
-          when(() => mockRepository.watchAllProducts(isActive: any(named: 'isActive')))
-              .thenAnswer((_) => const Stream.empty());
-          when(() => mockRepository.createProduct(
-                name: any(named: 'name'),
-                nameAr: any(named: 'nameAr'),
-                nameFr: any(named: 'nameFr'),
-                description: any(named: 'description'),
-                sku: any(named: 'sku'),
-                barcode: any(named: 'barcode'),
-                costCents: any(named: 'costCents'),
-                priceCents: any(named: 'priceCents'),
-                wholesalePriceCents: any(named: 'wholesalePriceCents'),
-                stockQuantity: any(named: 'stockQuantity'),
-                minQuantity: any(named: 'minQuantity'),
-                categoryId: any(named: 'categoryId'),
-                supplierId: any(named: 'supplierId'),
-                currencyId: any(named: 'currencyId'),
-                imagePath: any(named: 'imagePath'),
-                hasVariants: any(named: 'hasVariants'),
-                isTaxable: any(named: 'isTaxable'),
-                purchaseTaxRateBps: any(named: 'purchaseTaxRateBps'),
-                salesTaxRateBps: any(named: 'salesTaxRateBps'),
-                isActive: any(named: 'isActive'),
-                trackInventory: any(named: 'trackInventory'),
-              )).thenAnswer((_) async => 1);
+          when(
+            () => mockRepository.watchAllProducts(
+              isActive: any(named: 'isActive'),
+            ),
+          ).thenAnswer((_) => const Stream.empty());
+          when(
+            () => mockRepository.createProduct(
+              name: any(named: 'name'),
+              nameAr: any(named: 'nameAr'),
+              nameFr: any(named: 'nameFr'),
+              description: any(named: 'description'),
+              sku: any(named: 'sku'),
+              barcode: any(named: 'barcode'),
+              costCents: any(named: 'costCents'),
+              priceCents: any(named: 'priceCents'),
+              wholesalePriceCents: any(named: 'wholesalePriceCents'),
+              stockQuantity: any(named: 'stockQuantity'),
+              minQuantity: any(named: 'minQuantity'),
+              categoryId: any(named: 'categoryId'),
+              supplierId: any(named: 'supplierId'),
+              currencyId: any(named: 'currencyId'),
+              imagePath: any(named: 'imagePath'),
+              hasVariants: any(named: 'hasVariants'),
+              isTaxable: any(named: 'isTaxable'),
+              purchaseTaxRateBps: any(named: 'purchaseTaxRateBps'),
+              salesTaxRateBps: any(named: 'salesTaxRateBps'),
+              isActive: any(named: 'isActive'),
+              trackInventory: any(named: 'trackInventory'),
+            ),
+          ).thenAnswer((_) async => 1);
           return ProductsBloc(mockRepository);
         },
-        act: (bloc) => bloc.add(ProductCreateRequested(
-          sku: 'TEST-001',
-          name: 'Test Product',
-          costCents: Decimal.fromInt(1000),
-          priceCents: Decimal.fromInt(1500),
-          currencyId: 1,
-        )),
+        act: (bloc) => bloc.add(
+          ProductCreateRequested(
+            sku: 'TEST-001',
+            name: 'Test Product',
+            costCents: Decimal.fromInt(1000),
+            priceCents: Decimal.fromInt(1500),
+            currencyId: 1,
+          ),
+        ),
         verify: (_) {
-          verify(() => mockRepository.createProduct(
-                name: 'Test Product',
-                nameAr: any(named: 'nameAr'),
-                nameFr: any(named: 'nameFr'),
-                description: any(named: 'description'),
-                sku: 'TEST-001',
-                barcode: any(named: 'barcode'),
-                costCents: Decimal.fromInt(1000),
-                priceCents: Decimal.fromInt(1500),
-                wholesalePriceCents: any(named: 'wholesalePriceCents'),
-                stockQuantity: any(named: 'stockQuantity'),
-                minQuantity: any(named: 'minQuantity'),
-                categoryId: any(named: 'categoryId'),
-                supplierId: any(named: 'supplierId'),
-                currencyId: 1,
-                imagePath: any(named: 'imagePath'),
-                hasVariants: any(named: 'hasVariants'),
-                isTaxable: any(named: 'isTaxable'),
-                purchaseTaxRateBps: any(named: 'purchaseTaxRateBps'),
-                salesTaxRateBps: any(named: 'salesTaxRateBps'),
-                isActive: any(named: 'isActive'),
-                trackInventory: any(named: 'trackInventory'),
-              )).called(1);
+          verify(
+            () => mockRepository.createProduct(
+              name: 'Test Product',
+              nameAr: any(named: 'nameAr'),
+              nameFr: any(named: 'nameFr'),
+              description: any(named: 'description'),
+              sku: 'TEST-001',
+              barcode: any(named: 'barcode'),
+              costCents: Decimal.fromInt(1000),
+              priceCents: Decimal.fromInt(1500),
+              wholesalePriceCents: any(named: 'wholesalePriceCents'),
+              stockQuantity: any(named: 'stockQuantity'),
+              minQuantity: any(named: 'minQuantity'),
+              categoryId: any(named: 'categoryId'),
+              supplierId: any(named: 'supplierId'),
+              currencyId: 1,
+              imagePath: any(named: 'imagePath'),
+              hasVariants: any(named: 'hasVariants'),
+              isTaxable: any(named: 'isTaxable'),
+              purchaseTaxRateBps: any(named: 'purchaseTaxRateBps'),
+              salesTaxRateBps: any(named: 'salesTaxRateBps'),
+              isActive: any(named: 'isActive'),
+              trackInventory: any(named: 'trackInventory'),
+            ),
+          ).called(1);
         },
       );
     });

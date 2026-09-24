@@ -16,6 +16,7 @@ import '../../../../core/pricing/discount.dart';
 import '../../../../core/pricing/invoice_pricing_engine.dart';
 import '../../../../core/pricing/line_item_pricing_engine.dart';
 import '../../../../core/services/lan/lan_network_service.dart';
+import '../../../../core/services/lan/lan_error_localizer.dart';
 import '../../../../core/widgets/action_confirmation_dialog.dart';
 import '../../../../core/widgets/theme_toggle_button.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
@@ -151,6 +152,7 @@ class _LanRemoteSaleScreenState extends State<LanRemoteSaleScreen> {
       _cart[index] = _RemoteCartLine(
         product: product,
         variant: variant,
+        source: current.source,
         quantity: current.quantity,
         priceTier: current.priceTier,
         discountType: current.discountType,
@@ -179,7 +181,7 @@ class _LanRemoteSaleScreenState extends State<LanRemoteSaleScreen> {
         'settings.network.sale.below_cost_reason_required'.tr(),
       'discount_exceeds_max' =>
         'settings.network.sale.discount_exceeds_max'.tr(),
-      _ => error.message,
+      _ => localizeLanBusinessError(error),
     };
     setState(() {
       _loading = false;
@@ -232,7 +234,15 @@ class _LanRemoteSaleScreenState extends State<LanRemoteSaleScreen> {
         _showMessage('settings.network.sale.no_variants'.tr());
         return;
       }
-      variant = await showDialog<LanCatalogVariant>(
+      if (product.matchedCanonicalVariantId != null) {
+        for (final candidate in product.variants) {
+          if (candidate.id == product.matchedCanonicalVariantId) {
+            variant = candidate;
+            break;
+          }
+        }
+      }
+      variant ??= await showDialog<LanCatalogVariant>(
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: Text('settings.network.sale.choose_variant'.tr()),
@@ -267,13 +277,20 @@ class _LanRemoteSaleScreenState extends State<LanRemoteSaleScreen> {
       return;
     }
     final variantId = variant?.id;
+    final step = product.quantityScale;
+    LanInventoryStockSource? source;
+    if (product.trackInventory) {
+      source = await _chooseStockSource(product, variant, quantity: step);
+      if (source == null || !mounted) return;
+    }
     final existingIndex = _cart.indexWhere(
       (line) =>
           line.product.id == product.id &&
           line.variant?.id == variantId &&
+          line.source?.supplierIdentityId == source?.supplierIdentityId &&
+          line.source?.consignmentLayerId == source?.consignmentLayerId &&
           line.priceTier == _priceTier,
     );
-    final step = product.quantityScale;
     setState(() {
       if (existingIndex >= 0) {
         final current = _cart[existingIndex];
@@ -289,6 +306,7 @@ class _LanRemoteSaleScreenState extends State<LanRemoteSaleScreen> {
           _RemoteCartLine(
             product: product,
             variant: variant,
+            source: source,
             quantity: step,
             priceTier: _priceTier,
           ),
@@ -296,6 +314,140 @@ class _LanRemoteSaleScreenState extends State<LanRemoteSaleScreen> {
       }
       _invalidatePendingRequest();
     });
+  }
+
+  int _reservedForSource(LanInventoryStockSource source) {
+    return _cart
+        .where(
+          (line) =>
+              line.product.id == source.productId &&
+              line.source?.supplierIdentityId == source.supplierIdentityId &&
+              line.source?.consignmentLayerId == source.consignmentLayerId,
+        )
+        .fold(0, (total, line) => total + line.quantity);
+  }
+
+  Future<LanInventoryStockSource?> _chooseStockSource(
+    LanCatalogProduct product,
+    LanCatalogVariant? variant, {
+    required int quantity,
+  }) async {
+    try {
+      final snapshot = await _lan.fetchRemoteInventoryStockSources(
+        productId: product.id,
+        variantId: variant?.id,
+      );
+      if (!mounted) return null;
+      final available = snapshot.sources
+          .where(
+            (source) =>
+                source.quantity - _reservedForSource(source) >= quantity,
+          )
+          .toList(growable: false);
+      if (available.isEmpty) {
+        _showMessage('stock_sources.insufficient'.tr());
+        return null;
+      }
+      LanInventoryStockSource? exact;
+      for (final candidate in available) {
+        if ((product.matchedConsignmentLayerId != null &&
+                candidate.consignmentLayerId ==
+                    product.matchedConsignmentLayerId) ||
+            (product.matchedSupplierIdentityId != null &&
+                candidate.supplierIdentityId ==
+                    product.matchedSupplierIdentityId)) {
+          exact = candidate;
+          break;
+        }
+      }
+      if (exact != null) return exact;
+      if (available.length == 1) return available.single;
+      final cs = Theme.of(context).colorScheme;
+      return await showModalBottomSheet<LanInventoryStockSource>(
+        context: context,
+        useSafeArea: true,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (sheetContext) => ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 620),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+            children: [
+              Text(
+                'stock_sources.choose_sale_source'.tr(),
+                style: Theme.of(
+                  sheetContext,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                product.name,
+                style: Theme.of(sheetContext).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'stock_sources.choose_sale_source_help'.tr(),
+                style: TextStyle(color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(height: 14),
+              ...available.map((candidate) {
+                final remaining =
+                    candidate.quantity - _reservedForSource(candidate);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      side: BorderSide(color: cs.outlineVariant),
+                    ),
+                    tileColor: candidate.isConsignment
+                        ? cs.tertiaryContainer.withValues(alpha: 0.35)
+                        : cs.surfaceContainerLow,
+                    leading: Icon(
+                      candidate.isConsignment
+                          ? LucideIcons.handshake
+                          : LucideIcons.building2,
+                      color: candidate.isConsignment ? cs.tertiary : cs.primary,
+                    ),
+                    title: Text(
+                      candidate.supplierName?.trim().isNotEmpty == true
+                          ? candidate.supplierName!
+                          : 'stock_sources.unverified'.tr(),
+                    ),
+                    subtitle: Text(
+                      [
+                        candidate.isConsignment
+                            ? 'stock_sources.consignment'.tr()
+                            : candidate.ownership == 'unverified'
+                            ? 'stock_sources.unverified'.tr()
+                            : 'stock_sources.enterprise_owned'.tr(),
+                        '${'stock_sources.available'.tr()}: ${_quantityLabel(remaining, product)}',
+                        if (candidate.sourceCode?.isNotEmpty == true)
+                          '${'stock_sources.code'.tr()}: ${candidate.sourceCode}',
+                      ].join(' • '),
+                    ),
+                    trailing: const Icon(LucideIcons.chevronRight),
+                    onTap: () => Navigator.pop(sheetContext, candidate),
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      );
+    } on LanBusinessException catch (error) {
+      if (!mounted) return null;
+      final translated = error.code.tr();
+      _showMessage(
+        translated == error.code
+            ? 'stock_sources.load_failed'.tr()
+            : translated,
+      );
+      return null;
+    } catch (_) {
+      _showMessage('stock_sources.load_failed'.tr());
+      return null;
+    }
   }
 
   Future<void> _editQuantity(int index) async {
@@ -376,7 +528,27 @@ class _LanRemoteSaleScreenState extends State<LanRemoteSaleScreen> {
     controller.dispose();
     if (result == null || !mounted) return;
 
-    final available = line.variant?.stockQuantity ?? line.product.stockQuantity;
+    var available = line.variant?.stockQuantity ?? line.product.stockQuantity;
+    if (line.product.trackInventory && line.source != null) {
+      try {
+        final snapshot = await _lan.fetchRemoteInventoryStockSources(
+          productId: line.product.id,
+          variantId: line.variant?.id,
+        );
+        for (final current in snapshot.sources) {
+          if (current.supplierIdentityId == line.source!.supplierIdentityId &&
+              current.consignmentLayerId == line.source!.consignmentLayerId) {
+            final reservedElsewhere =
+                _reservedForSource(current) - line.quantity;
+            available = current.quantity - reservedElsewhere;
+            break;
+          }
+        }
+      } catch (_) {
+        _showMessage('stock_sources.load_failed'.tr());
+        return;
+      }
+    }
     if (_catalog?.allowNegativeStock != true &&
         line.product.trackInventory &&
         result > available) {
@@ -701,6 +873,8 @@ class _LanRemoteSaleScreenState extends State<LanRemoteSaleScreen> {
                   variantId: line.variant?.id,
                   quantity: line.quantity,
                   priceTier: line.priceTier,
+                  supplierIdentityId: line.source?.supplierIdentityId,
+                  consignmentLayerId: line.source?.consignmentLayerId,
                   discountType: line.discountType,
                   discountValue: line.discountValue,
                 ),
@@ -1118,6 +1292,27 @@ class _LanRemoteSaleScreenState extends State<LanRemoteSaleScreen> {
                               '${_money(_priceFor(line.product, line.variant, tier: line.priceTier))} | '
                               '${'settings.network.sale.price_${line.priceTier}'.tr()}',
                             ),
+                            if (line.source != null)
+                              Text(
+                                [
+                                  line.source!.isConsignment
+                                      ? 'stock_sources.consignment'.tr()
+                                      : 'stock_sources.enterprise_owned'.tr(),
+                                  if (line.source!.supplierName?.isNotEmpty ==
+                                      true)
+                                    line.source!.supplierName!,
+                                  if (line.source!.sourceCode?.isNotEmpty ==
+                                      true)
+                                    line.source!.sourceCode!,
+                                ].join(' • '),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                              ),
                             if (linePricing.totalLineDiscount.cents > 0)
                               Text(
                                 '${'settings.network.sale.item_discount'.tr()}: '
@@ -1368,6 +1563,7 @@ class _DiscountEditResult {
 class _RemoteCartLine {
   final LanCatalogProduct product;
   final LanCatalogVariant? variant;
+  final LanInventoryStockSource? source;
   final int quantity;
   final String priceTier;
   final String discountType;
@@ -1376,6 +1572,7 @@ class _RemoteCartLine {
   const _RemoteCartLine({
     required this.product,
     this.variant,
+    this.source,
     required this.quantity,
     this.priceTier = 'retail',
     this.discountType = 'none',
@@ -1397,6 +1594,7 @@ class _RemoteCartLine {
     return _RemoteCartLine(
       product: product,
       variant: variant,
+      source: source,
       quantity: quantity ?? this.quantity,
       priceTier: priceTier ?? this.priceTier,
       discountType: discountType ?? this.discountType,

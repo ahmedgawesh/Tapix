@@ -28,13 +28,15 @@ class AccessDeniedScreen extends StatelessWidget {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: onBack ?? () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/dashboard');
-            }
-          },
+          onPressed:
+              onBack ??
+              () {
+                if (context.canPop()) {
+                  context.pop();
+                } else {
+                  context.go('/dashboard');
+                }
+              },
           tooltip: 'common.back'.tr(),
         ),
         title: Text('common.access_denied'.tr()),
@@ -80,8 +82,12 @@ class AccessDeniedScreen extends StatelessWidget {
                   ),
                   child: Text(
                     requiredRole != null
-                        ? 'common.required_role'.tr(args: [requiredRole!.name.toUpperCase()])
-                        : 'common.required_permission'.tr(args: [requiredPermission ?? '']),
+                        ? 'common.required_role'.tr(
+                            args: [requiredRole!.name.toUpperCase()],
+                          )
+                        : 'common.required_permission'.tr(
+                            args: [requiredPermission ?? ''],
+                          ),
                     style: theme.textTheme.bodySmall?.copyWith(
                       fontFamily: 'monospace',
                     ),
@@ -153,11 +159,7 @@ class PermissionDeniedDialog extends StatelessWidget {
     final theme = Theme.of(context);
 
     return AlertDialog(
-      icon: Icon(
-        Icons.lock_outline,
-        color: theme.colorScheme.error,
-        size: 48,
-      ),
+      icon: Icon(Icons.lock_outline, color: theme.colorScheme.error, size: 48),
       title: Text(title ?? 'common.access_denied'.tr()),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -169,10 +171,7 @@ class PermissionDeniedDialog extends StatelessWidget {
           if (requiredPermission != null || requiredRole != null) ...[
             const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 6,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(6),

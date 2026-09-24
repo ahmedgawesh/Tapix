@@ -234,6 +234,60 @@ void main() {
   );
 
   test(
+    'customer directory minimizes financial data and checkout requires sales access',
+    () async {
+      await pairClient();
+      await addMasterUser(
+        username: 'directory-accountant',
+        password: 'accountant-secret',
+        role: 'accountant',
+      );
+      expect(
+        (await client.loginToMaster(
+          username: 'directory-accountant',
+          password: 'accountant-secret',
+        )).success,
+        isTrue,
+      );
+
+      final customers = await client.fetchRemoteCustomers();
+      expect(customers.single.name, 'Network Customer');
+      expect(
+        customers.single.balanceCents,
+        0,
+        reason: 'Directory DTO must not disclose the stored balance.',
+      );
+      await expectLater(
+        client.fetchRemoteCustomerCheckout(3),
+        throwsA(
+          isA<LanBusinessException>().having(
+            (error) => error.code,
+            'code',
+            'permission_denied',
+          ),
+        ),
+      );
+
+      final token = await rawLogin();
+      final directory = await rawRequest(
+        path: '/v1/customers',
+        userToken: token,
+      );
+      expect(directory.status, 200);
+      final row = (directory.body['customers'] as List).single as Map;
+      expect(row, isNot(contains('balanceCents')));
+
+      final checkout = await rawRequest(
+        path: '/v1/customers/3/checkout',
+        userToken: token,
+      );
+      expect(checkout.status, 200);
+      expect(checkout.body['balanceCents'], 12345);
+      expect(checkout.body['pointsBalance'], 765);
+    },
+  );
+
+  test(
     'master rejects a wrong code then pairs and authenticates a client device',
     () async {
       await master.startMaster(port: 0);
@@ -251,6 +305,26 @@ void main() {
       );
       expect(rejected.success, isFalse);
       expect(master.snapshot.pairedDevices, 0);
+
+      final unchangedCode = master.snapshot.pairingCode!;
+      final invalidMetadata = await rawRequest(
+        method: 'POST',
+        path: '/v1/pair',
+        authorizeDevice: false,
+        body: {
+          'pairingCode': unchangedCode,
+          'deviceId': 'invalid-name-device',
+          'deviceName': List.filled(81, 'x').join(),
+          'platform': 'linux',
+        },
+      );
+      expect(invalidMetadata.status, 400);
+      expect(master.snapshot.pairedDevices, 0);
+      expect(
+        master.snapshot.pairingCode,
+        unchangedCode,
+        reason: 'Invalid metadata must not consume a valid one-time code.',
+      );
 
       final correctCode = master.snapshot.pairingCode!;
       final paired = await client.pairWithMaster(
@@ -350,6 +424,9 @@ void main() {
       expect(device.platform, Platform.operatingSystem);
       expect(device.remoteAddress, isNotEmpty);
       expect(device.hasUserSession, isFalse);
+      expect(device.scopeVerified, isTrue);
+      expect(device.branchName, isNotEmpty);
+      expect(device.warehouseName, isNotEmpty);
 
       expect(
         (await client.loginToMaster(
@@ -434,6 +511,107 @@ void main() {
     },
   );
 
+  test(
+    'two paired clients keep isolated sessions and revocation affects only its device',
+    () async {
+      final ownerId = await addMasterUser(
+        username: 'multi-owner',
+        password: 'owner-secret',
+        role: 'owner',
+      );
+      await addMasterUser(
+        username: 'front-cashier',
+        password: 'front-secret',
+        role: 'cashier',
+      );
+      await addMasterUser(
+        username: 'back-cashier',
+        password: 'back-secret',
+        role: 'cashier',
+      );
+      await pairClient('Front register');
+
+      final secondDb = AppDatabase.connect(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      final secondClient = LanNetworkService(SettingsDao(secondDb));
+      try {
+        await secondClient.initialize();
+        final secondPair = await secondClient.pairWithMaster(
+          host: '127.0.0.1',
+          port: master.snapshot.port,
+          pairingCode: master.snapshot.pairingCode!,
+          deviceName: 'Back register',
+        );
+        expect(secondPair.success, isTrue, reason: secondPair.message);
+        expect(master.snapshot.pairedDevices, 2);
+        expect(master.getMasterDevices(), hasLength(2));
+
+        expect(
+          (await client.loginToMaster(
+            username: 'front-cashier',
+            password: 'front-secret',
+          )).success,
+          isTrue,
+        );
+        expect(
+          (await secondClient.loginToMaster(
+            username: 'back-cashier',
+            password: 'back-secret',
+          )).success,
+          isTrue,
+        );
+        await client.openOwnRemoteShift(openingCashCents: 10000);
+        await secondClient.openOwnRemoteShift(openingCashCents: 8000);
+
+        const frontSale = LanSaleRequest(
+          idempotencyKey: 'multi-client-front-sale-001',
+          paymentMethod: 'cash',
+          paidAmountCents: 250,
+          lines: [LanSaleLineRequest(productId: 7, quantity: 1)],
+        );
+        const backSale = LanSaleRequest(
+          idempotencyKey: 'multi-client-back-sale-001',
+          paymentMethod: 'cash',
+          paidAmountCents: 250,
+          lines: [LanSaleLineRequest(productId: 7, quantity: 1)],
+        );
+        await Future.wait([
+          client.submitRemoteSale(frontSale),
+          secondClient.submitRemoteSale(backSale),
+        ]);
+        expect(
+          businessGateway.createdKeys,
+          containsAll([frontSale.idempotencyKey, backSale.idempotencyKey]),
+        );
+
+        final frontDevice = master.getMasterDevices().singleWhere(
+          (device) => device.name == 'Front register',
+        );
+        expect(
+          await master.revokeMasterDevice(
+            deviceId: frontDevice.id,
+            actorUserId: ownerId,
+            actorUsername: 'multi-owner',
+            reason: 'Register removed from this branch',
+          ),
+          isTrue,
+        );
+        expect(master.getMasterDevices(), hasLength(1));
+        expect(await client.testConnection(), isFalse);
+        expect(await secondClient.testConnection(), isTrue);
+        expect(await secondClient.validateRemoteSession(), isTrue);
+
+        final replay = await secondClient.submitRemoteSale(backSale);
+        expect(replay.duplicate, isTrue);
+        expect(businessGateway.createdKeys, hasLength(2));
+      } finally {
+        await secondClient.stop();
+        await secondDb.close();
+      }
+    },
+  );
+
   test('a manager can replace a cashier session on the same device', () async {
     await addMasterUser(
       username: 'cashier-1',
@@ -500,6 +678,49 @@ void main() {
   );
 
   test(
+    'role changes refresh permissions on the next authenticated request',
+    () async {
+      final userId = await addMasterUser(
+        username: 'role-change-user',
+        password: 'role-change-secret',
+        role: 'cashier',
+      );
+      await pairClient('Role refresh register');
+      expect(
+        (await client.loginToMaster(
+          username: 'role-change-user',
+          password: 'role-change-secret',
+        )).success,
+        isTrue,
+      );
+      expect((await client.fetchRemoteCustomerCheckout(3)).balanceCents, 12345);
+
+      await (masterDb.update(
+        masterDb.users,
+      )..where((row) => row.id.equals(userId))).write(
+        UsersCompanion(
+          role: const Value('accountant'),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+      await expectLater(
+        client.fetchRemoteCustomerCheckout(3),
+        throwsA(
+          isA<LanBusinessException>().having(
+            (error) => error.code,
+            'code',
+            'permission_denied',
+          ),
+        ),
+      );
+      expect(await client.validateRemoteSession(), isTrue);
+      expect(client.remoteUser?.role, 'accountant');
+      expect(client.remoteUser?.permissions, isNot(contains('process_sales')));
+    },
+  );
+
+  test(
     'five failed passwords temporarily rate-limit the paired device',
     () async {
       await addMasterUser(
@@ -550,12 +771,24 @@ void main() {
     expect(opened.isOpen, isTrue);
     expect(opened.openingCashCents, 12500);
     expect((await client.fetchOwnRemoteShift())?.id, opened.id);
+    final retriedOpen = await client.openOwnRemoteShift(
+      openingCashCents: 12500,
+    );
+    expect(retriedOpen.id, opened.id);
 
     final closed = await client.closeOwnRemoteShift(
+      shiftId: opened.id,
       countedCashCents: 12400,
       notes: 'Counted at logout',
     );
     expect(closed.isOpen, isFalse);
+    final retriedClose = await client.closeOwnRemoteShift(
+      shiftId: opened.id,
+      countedCashCents: 12400,
+      notes: ' Counted at logout ',
+    );
+    expect(retriedClose.id, closed.id);
+    expect(retriedClose.isOpen, isFalse);
     expect(await client.fetchOwnRemoteShift(), isNull);
 
     final audit = await masterDb.select(masterDb.auditLogs).get();
@@ -592,6 +825,18 @@ void main() {
         'ibuprofen',
       );
       expect(catalog.products.single.toJson(), isNot(contains('costCents')));
+
+      final sourceSnapshot = await client.fetchRemoteInventoryStockSources(
+        productId: 7,
+      );
+      expect(sourceSnapshot.productId, 7);
+      expect(sourceSnapshot.physicalQuantity, 2);
+      expect(sourceSnapshot.consignmentQuantity, 1);
+      expect(sourceSnapshot.sources.single.isConsignment, isTrue);
+      expect(
+        sourceSnapshot.sources.single.sourceCode,
+        'C-11111111-1111-4111-8111-111111111111',
+      );
 
       final alternatives = await client.fetchRemoteMedicineAlternatives(7);
       expect(alternatives.sourceProductId, 7);
@@ -1338,6 +1583,20 @@ void main() {
       );
       expect(health.body.containsKey('scope'), isFalse);
       expect(health.body.containsKey('branchId'), isFalse);
+      expect(
+        health.body['capabilities'],
+        contains(LanNetworkService.consignmentSourceCapability),
+      );
+      expect(
+        health.body['capabilities'],
+        contains(LanNetworkService.consignmentAdjustmentReturnCapability),
+      );
+      expect(
+        client.supportsCapability(
+          LanNetworkService.consignmentAdjustmentReturnCapability,
+        ),
+        isTrue,
+      );
     },
   );
 
@@ -1478,9 +1737,154 @@ void main() {
       expect(master.snapshot.pairedDevices, 0);
     },
   );
+
+  test(
+    'warehouse transfers require owner role and preserve operation keys over TLS',
+    () async {
+      await master.stop();
+      final transferGateway = _FakeWarehouseTransferBusinessGateway();
+      master = LanNetworkService(
+        SettingsDao(masterDb),
+        authGateway: LanMasterAuthGatewayImpl(
+          database: masterDb,
+          permissionService: PermissionService(),
+          auditLogService: AuditLogService(masterDb),
+        ),
+        businessGateway: transferGateway,
+        localizationService: masterLocalization,
+      );
+      await master.initialize();
+
+      await addMasterUser(
+        username: 'transfer-cashier',
+        password: 'cashier-secret',
+        role: 'cashier',
+      );
+      await addMasterUser(
+        username: 'transfer-owner',
+        password: 'owner-secret',
+        role: 'owner',
+      );
+      await pairClient('Warehouse terminal');
+
+      expect(
+        (await client.loginToMaster(
+          username: 'transfer-cashier',
+          password: 'cashier-secret',
+        )).success,
+        isTrue,
+      );
+      await expectLater(
+        client.fetchRemoteTransferWarehouses(),
+        throwsA(
+          isA<LanBusinessException>().having(
+            (error) => error.code,
+            'code',
+            'permission_denied',
+          ),
+        ),
+      );
+      await client.logoutFromMaster();
+
+      expect(
+        (await client.loginToMaster(
+          username: 'transfer-owner',
+          password: 'owner-secret',
+        )).success,
+        isTrue,
+      );
+      expect(
+        client.supportsCapability(
+          LanNetworkService.warehouseTransfersCapability,
+        ),
+        isTrue,
+      );
+      expect(await client.fetchRemoteTransferWarehouses(), hasLength(2));
+      expect(
+        await client.fetchRemoteWarehouseTransferCatalog(
+          warehouseId: 'warehouse-main',
+        ),
+        hasLength(1),
+      );
+
+      final request = LanWarehouseTransferCreateRequest(
+        requestKey: '11111111-1111-4111-8111-111111111111',
+        sourceWarehouseId: 'warehouse-main',
+        destinationWarehouseId: 'warehouse-branch',
+        lines: const [
+          LanWarehouseTransferLineRequest(
+            productId: 7,
+            variantId: 70,
+            quantity: 2,
+          ),
+        ],
+      );
+      final created = await client.submitRemoteWarehouseTransfer(request);
+      final replayed = await client.submitRemoteWarehouseTransfer(request);
+      expect(created.id, replayed.id);
+      expect(transferGateway.createCalls, 2);
+      expect(transferGateway.uniqueCreateKeys, hasLength(1));
+
+      final dispatched = await client.dispatchRemoteWarehouseTransfer(
+        transferId: created.id,
+        requestKey: '22222222-2222-4222-8222-222222222222',
+      );
+      expect(dispatched.status, 'in_transit');
+      final pending = await client.fetchRemoteWarehouseTransferPending(
+        created.id,
+      );
+      expect(pending.single.ownerType, 'consignment');
+
+      final completed = await client.receiveRemoteWarehouseTransfer(
+        transferId: created.id,
+        request: LanWarehouseTransferReceiptRequest(
+          requestKey: '33333333-3333-4333-8333-333333333333',
+          items: [
+            LanWarehouseTransferReceiptItemRequest(
+              allocationId: pending.single.allocationId,
+              acceptedQuantity: 2,
+            ),
+          ],
+        ),
+      );
+      expect(completed.status, 'completed');
+      expect(transferGateway.lastActor?.username, 'transfer-owner');
+    },
+  );
 }
 
 class _FakeBusinessGateway implements LanMasterBusinessGateway {
+  @override
+  Future<LanProductStockSourceSnapshot> fetchInventoryStockSources({
+    required int productId,
+    int? variantId,
+  }) async => LanProductStockSourceSnapshot(
+    productId: productId,
+    warehouseId: 'warehouse-main',
+    physicalQuantity: 2,
+    enterpriseQuantity: 1,
+    consignmentQuantity: 1,
+    quantityScale: 1,
+    measurementType: 'piece',
+    reconciled: true,
+    sources: [
+      LanInventoryStockSource(
+        productId: productId,
+        variantId: variantId ?? 70,
+        quantity: 1,
+        quantityScale: 1,
+        measurementType: 'piece',
+        ownership: 'consignment',
+        variantLabel: 'Default',
+        supplierId: 3,
+        supplierName: 'Supplier',
+        consignmentLayerId: '11111111-1111-4111-8111-111111111111',
+        sourceCode: 'C-11111111-1111-4111-8111-111111111111',
+        receiptNumber: 'CR-1',
+      ),
+    ],
+  );
+
   @override
   Future<LanCustomerCheckout> fetchCustomerCheckout(int customerId) async =>
       LanCustomerCheckout(
@@ -1497,6 +1901,7 @@ class _FakeBusinessGateway implements LanMasterBusinessGateway {
   final Set<String> createdPurchaseReturnKeys = <String>{};
   final Set<String> createdPurchaseAdjustmentReturnKeys = <String>{};
   LanCashierShiftSnapshot? currentShift;
+  LanCashierShiftSnapshot? lastClosedShift;
   LanSaleRequest? lastRequest;
   LanSaleReturnRequest? lastReturnRequest;
   LanSaleAdjustmentReturnRequest? lastAdjustmentReturnRequest;
@@ -1712,7 +2117,7 @@ class _FakeBusinessGateway implements LanMasterBusinessGateway {
         id: 3,
         name: 'Network Customer',
         segment: 'retail',
-        balanceCents: 0,
+        balanceCents: 24680,
       ),
     ];
   }
@@ -1884,6 +2289,13 @@ class _FakeBusinessGateway implements LanMasterBusinessGateway {
       duplicate: duplicate,
     );
   }
+
+  @override
+  Future<List<LanConsignmentReturnSource>>
+  fetchConsignmentAdjustmentReturnSources({
+    required int productId,
+    int? variantId,
+  }) async => const [];
 
   @override
   Future<List<LanSupplierSummary>> fetchSuppliers({
@@ -2079,11 +2491,17 @@ class _FakeBusinessGateway implements LanMasterBusinessGateway {
   @override
   Future<LanCashierShiftSnapshot> closeOwnShift({
     required LanRemoteUser actor,
+    int? shiftId,
     required int countedCashCents,
     String? notes,
   }) async {
+    if (lastClosedShift != null &&
+        (shiftId == null || lastClosedShift?.id == shiftId)) {
+      return lastClosedShift!;
+    }
     final closed = _shift(actor, countedCashCents, status: 'closed');
     currentShift = null;
+    lastClosedShift = closed;
     return closed;
   }
 
@@ -2130,6 +2548,166 @@ class _FakeBusinessGateway implements LanMasterBusinessGateway {
       totalCents: 250,
       paidAmountCents: 250,
       duplicate: duplicate,
+    );
+  }
+}
+
+class _FakeWarehouseTransferBusinessGateway extends _FakeBusinessGateway
+    implements LanWarehouseTransferGateway {
+  final Set<String> uniqueCreateKeys = {};
+  int createCalls = 0;
+  LanRemoteUser? lastActor;
+  LanWarehouseTransferDocument? document;
+
+  @override
+  Future<List<LanWarehouseTransferWarehouse>> fetchTransferWarehouses({
+    required LanRemoteUser actor,
+  }) async {
+    lastActor = actor;
+    return const [
+      LanWarehouseTransferWarehouse(
+        id: 'warehouse-main',
+        code: 'MAIN',
+        name: 'Main warehouse',
+      ),
+      LanWarehouseTransferWarehouse(
+        id: 'warehouse-branch',
+        code: 'B02',
+        name: 'Branch warehouse',
+      ),
+    ];
+  }
+
+  @override
+  Future<List<LanWarehouseTransferDocument>> fetchWarehouseTransfers({
+    required LanRemoteUser actor,
+    required Set<String> statuses,
+    required int limit,
+  }) async {
+    lastActor = actor;
+    final row = document;
+    return row != null && statuses.contains(row.status) ? [row] : const [];
+  }
+
+  @override
+  Future<List<LanWarehouseTransferCatalogItem>> fetchWarehouseTransferCatalog({
+    required LanRemoteUser actor,
+    required String warehouseId,
+    required String query,
+    required int offset,
+  }) async {
+    lastActor = actor;
+    return const [
+      LanWarehouseTransferCatalogItem(
+        productId: 7,
+        variantId: 70,
+        name: 'Consignment item',
+        code: 'ITEM-7',
+        quantity: 6,
+        supplierOwnedQuantity: 6,
+        quantityScale: 1,
+        measurementType: 'piece',
+      ),
+    ];
+  }
+
+  @override
+  Future<LanWarehouseTransferDocument> createWarehouseTransfer({
+    required LanRemoteUser actor,
+    required LanWarehouseTransferCreateRequest request,
+  }) async {
+    lastActor = actor;
+    createCalls++;
+    uniqueCreateKeys.add(request.requestKey);
+    return document ??= LanWarehouseTransferDocument(
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      sourceWarehouseId: request.sourceWarehouseId,
+      destinationWarehouseId: request.destinationWarehouseId,
+      status: 'draft',
+      lineCount: request.lines.length,
+      notes: request.notes,
+      recalled: false,
+    );
+  }
+
+  @override
+  Future<LanWarehouseTransferDocument> cancelWarehouseTransfer({
+    required LanRemoteUser actor,
+    required String transferId,
+    required LanWarehouseTransferReasonRequest request,
+  }) async {
+    lastActor = actor;
+    return document = _status('cancelled');
+  }
+
+  @override
+  Future<LanWarehouseTransferDocument> dispatchWarehouseTransfer({
+    required LanRemoteUser actor,
+    required String transferId,
+    required String requestKey,
+  }) async {
+    lastActor = actor;
+    return document = _status('in_transit');
+  }
+
+  @override
+  Future<List<LanWarehouseTransferPendingAllocation>>
+  fetchWarehouseTransferPending({
+    required LanRemoteUser actor,
+    required String transferId,
+  }) async {
+    lastActor = actor;
+    return const [
+      LanWarehouseTransferPendingAllocation(
+        allocationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        remainingQuantity: 2,
+        quantityScale: 1,
+        productName: 'Consignment item',
+        code: 'ITEM-7',
+        ownerType: 'consignment',
+      ),
+    ];
+  }
+
+  @override
+  Future<LanWarehouseTransferDocument> receiveWarehouseTransfer({
+    required LanRemoteUser actor,
+    required String transferId,
+    required LanWarehouseTransferReceiptRequest request,
+  }) async {
+    lastActor = actor;
+    return document = _status('completed');
+  }
+
+  @override
+  Future<LanWarehouseTransferDocument> recallWarehouseTransfer({
+    required LanRemoteUser actor,
+    required String transferId,
+    required LanWarehouseTransferReasonRequest request,
+  }) async {
+    lastActor = actor;
+    final row = _status('cancelled');
+    return document = LanWarehouseTransferDocument(
+      id: row.id,
+      sourceWarehouseId: row.sourceWarehouseId,
+      destinationWarehouseId: row.destinationWarehouseId,
+      status: row.status,
+      lineCount: row.lineCount,
+      notes: row.notes,
+      recalled: true,
+    );
+  }
+
+  LanWarehouseTransferDocument _status(String status) {
+    final row = document!;
+    return LanWarehouseTransferDocument(
+      id: row.id,
+      sourceWarehouseId: row.sourceWarehouseId,
+      destinationWarehouseId: row.destinationWarehouseId,
+      status: status,
+      lineCount: row.lineCount,
+      notes: row.notes,
+      recalled: row.recalled,
     );
   }
 }

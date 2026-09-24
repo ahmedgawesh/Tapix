@@ -16,6 +16,13 @@ class BusinessWarehouseStocks extends Table {
   IntColumn get variantId =>
       integer().references(ProductVariants, #id, onDelete: KeyAction.cascade)();
   IntColumn get quantity => integer().withDefault(const Constant(0))();
+
+  /// Physical quantity still owned by consignment suppliers. Existing and
+  /// ordinary stock remains zero, so legacy writers keep their exact behavior.
+  IntColumn get supplierOwnedQuantity => integer()
+      .withDefault(const Constant(0))
+      .check(const CustomExpression<bool>('supplier_owned_quantity >= 0'))();
+
   IntColumn get unitCostCents => integer().withDefault(const Constant(0))();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 

@@ -279,7 +279,7 @@ void main() {
       );
       try {
         expect(await upgraded.select(upgraded.commissions).get(), before);
-        expect(upgraded.schemaVersion, 10091);
+        expect(upgraded.schemaVersion, 10115);
         expect(
           await upgraded.customSelect('PRAGMA foreign_key_check').get(),
           isEmpty,

@@ -242,7 +242,6 @@ void main() {
       );
     }
     test('${kind.name}: supplier activity ignores foreign document', () async {
-      // All WAC source weight belongs to this supplier, so allocation is exact.
       await create(InventoryPostingDocument.purchase, quantity: 20);
       final id = await create(kind);
       int amount(SupplierStocktakeReportData data) => data.products.fold(
@@ -261,8 +260,23 @@ void main() {
             },
       );
       final before = amount(await supplierReport());
+      final hasDirectSupplierFact =
+          kind == InventoryPostingDocument.purchase ||
+          kind == InventoryPostingDocument.purchaseReturn ||
+          kind == InventoryPostingDocument.purchaseAdjustment;
+      expect(
+        before,
+        hasDirectSupplierFact
+            ? (kind == InventoryPostingDocument.purchase ? 22 : 2)
+            : 0,
+      );
       await relocate(kind, id);
-      expect(amount(await supplierReport()), before - 2);
+      expect(
+        amount(await supplierReport()),
+        hasDirectSupplierFact && kind == InventoryPostingDocument.purchase
+            ? 20
+            : 0,
+      );
     });
   }
 
@@ -328,7 +342,7 @@ void main() {
   );
 
   test(
-    'foreign supplier purchases cannot dilute local WAC allocation',
+    'historic purchases cannot manufacture a WAC supplier balance',
     () async {
       await create(InventoryPostingDocument.purchase, quantity: 20);
       final localSupplier = supplier;
@@ -341,11 +355,11 @@ void main() {
         quantity: 20,
       );
       supplier = localSupplier;
-      expect((await supplierReport()).products.single.remainingQuantity, 10);
+      expect((await supplierReport()).products.single.remainingQuantity, 0);
       await relocate(InventoryPostingDocument.purchase, otherPurchase);
       final local = (await supplierReport()).products.single;
-      expect(local.remainingQuantity, 20);
-      expect(local.remainingValueCents, 10000);
+      expect(local.remainingQuantity, 0);
+      expect(local.remainingValueCents, 0);
     },
   );
 

@@ -104,9 +104,7 @@ class ReturnApprovalService {
   /// Rule precedence is *additive* — multiple rules can fire, every
   /// matching reason is included in the decision so the audit log is
   /// faithful.
-  Future<ReturnApprovalDecision> evaluate(
-    ReturnApprovalContext ctx,
-  ) async {
+  Future<ReturnApprovalDecision> evaluate(ReturnApprovalContext ctx) async {
     final threshold = await getThresholdCents();
     final reqNoInv = await getRequireWhenNoInvoice();
     final reqOverride = await getRequireOnOverride();
@@ -147,8 +145,10 @@ class ReturnApprovalService {
     throw ReturnApprovalRequiredException(
       returnId: returnId,
       currentStatus: persistedStatus,
-      reasonCodes:
-          (persistedReason ?? '').split(',').where((r) => r.isNotEmpty).toList(),
+      reasonCodes: (persistedReason ?? '')
+          .split(',')
+          .where((r) => r.isNotEmpty)
+          .toList(),
       side: side,
     );
   }

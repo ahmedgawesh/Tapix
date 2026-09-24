@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+import '../../../../core/services/inventory/supplier_identity_rules.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -17,8 +19,9 @@ class SupplierFormScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) => SupplierFormBloc(sl<SupplierRepository>())
-        ..add(SupplierFormLoadRequested(supplierId: supplierId)),
+      create: (context) =>
+          SupplierFormBloc(sl<SupplierRepository>())
+            ..add(SupplierFormLoadRequested(supplierId: supplierId)),
       child: _SupplierFormContent(supplierId: supplierId),
     );
   }
@@ -36,6 +39,7 @@ class _SupplierFormContent extends StatefulWidget {
 class _SupplierFormContentState extends State<_SupplierFormContent> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _productCodeController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
@@ -44,6 +48,7 @@ class _SupplierFormContentState extends State<_SupplierFormContent> {
   @override
   void dispose() {
     _nameController.dispose();
+    _productCodeController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
@@ -81,6 +86,9 @@ class _SupplierFormContentState extends State<_SupplierFormContent> {
           if (_nameController.text != state.name) {
             _nameController.text = state.name;
           }
+          if (_productCodeController.text != state.productCode) {
+            _productCodeController.text = state.productCode;
+          }
           if (_emailController.text != state.email) {
             _emailController.text = state.email;
           }
@@ -99,7 +107,9 @@ class _SupplierFormContentState extends State<_SupplierFormContent> {
         if (state is SupplierFormLoading) {
           return Scaffold(
             appBar: AppBar(
-              title: Text(isEditing ? 'suppliers.edit'.tr() : 'suppliers.add'.tr()),
+              title: Text(
+                isEditing ? 'suppliers.edit'.tr() : 'suppliers.add'.tr(),
+              ),
             ),
             body: const Center(child: CircularProgressIndicator()),
           );
@@ -108,7 +118,9 @@ class _SupplierFormContentState extends State<_SupplierFormContent> {
         if (state is! SupplierFormReady && state is! SupplierFormError) {
           return Scaffold(
             appBar: AppBar(
-              title: Text(isEditing ? 'suppliers.edit'.tr() : 'suppliers.add'.tr()),
+              title: Text(
+                isEditing ? 'suppliers.edit'.tr() : 'suppliers.add'.tr(),
+              ),
             ),
             body: const Center(child: CircularProgressIndicator()),
           );
@@ -120,7 +132,9 @@ class _SupplierFormContentState extends State<_SupplierFormContent> {
 
         return Scaffold(
           appBar: AppBar(
-            title: Text(isEditing ? 'suppliers.edit'.tr() : 'suppliers.add'.tr()),
+            title: Text(
+              isEditing ? 'suppliers.edit'.tr() : 'suppliers.add'.tr(),
+            ),
             actions: [
               if (formState.isSubmitting)
                 const Padding(
@@ -135,11 +149,13 @@ class _SupplierFormContentState extends State<_SupplierFormContent> {
                 TextButton(
                   onPressed: formState.isValid
                       ? () => context.read<SupplierFormBloc>().add(
-                            const SupplierFormSubmitted(),
-                          )
+                          const SupplierFormSubmitted(),
+                        )
                       : null,
                   child: Text(
-                    isEditing ? 'suppliers.update'.tr() : 'suppliers.create'.tr(),
+                    isEditing
+                        ? 'suppliers.update'.tr()
+                        : 'suppliers.create'.tr(),
                   ),
                 ),
             ],
@@ -157,10 +173,14 @@ class _SupplierFormContentState extends State<_SupplierFormContent> {
                   // Name Field
                   TextFormField(
                     controller: _nameController,
+                    enabled: !formState.isSubmitting,
                     decoration: InputDecoration(
                       labelText: 'suppliers.name'.tr(),
                       hintText: 'suppliers.name_hint'.tr(),
-                      prefixIcon: Icon(LucideIcons.building2, color: theme.colorScheme.primary),
+                      prefixIcon: Icon(
+                        LucideIcons.building2,
+                        color: theme.colorScheme.primary,
+                      ),
                       errorText: formState.errors['name']?.tr(),
                       filled: true,
                       border: OutlineInputBorder(
@@ -169,9 +189,61 @@ class _SupplierFormContentState extends State<_SupplierFormContent> {
                     ),
                     textInputAction: TextInputAction.next,
                     onChanged: (value) => context.read<SupplierFormBloc>().add(
-                          SupplierFormNameChanged(value),
-                        ),
+                      SupplierFormNameChanged(value),
+                    ),
                   ),
+                  const SizedBox(height: 24),
+
+                  // Supplier code: accepts letters AND digits, not digitsOnly.
+                  TextFormField(
+                    key: const ValueKey('supplier_product_code_field'),
+                    controller: _productCodeController,
+                    readOnly: formState.productCodeLocked,
+                    enabled: !formState.isSubmitting,
+                    textDirection: ui.TextDirection.ltr,
+                    textCapitalization: TextCapitalization.characters,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    keyboardType: TextInputType.text,
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText: 'supplier_identity.code_label'.tr(),
+                      hintText: 'N1 / ALN2026 / 007',
+                      prefixIcon: Icon(
+                        formState.productCodeLocked
+                            ? Icons.lock_outline
+                            : Icons.tag,
+                        color: theme.colorScheme.primary,
+                      ),
+                      errorText: formState.errors['productCode']?.tr(),
+                      helperText:
+                          (formState.productCodeLocked
+                                  ? 'supplier_identity.code_locked_helper'
+                                  : 'supplier_identity.code_helper')
+                              .tr(),
+                      helperMaxLines: 3,
+                      errorMaxLines: 3,
+                      filled: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onChanged: (value) => context.read<SupplierFormBloc>().add(
+                      SupplierFormProductCodeChanged(value),
+                    ),
+                  ),
+                  if (formState.productCode.trim().isNotEmpty &&
+                      !formState.errors.containsKey('productCode')) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'supplier_identity.preview'.tr(
+                        args: [
+                          '${SupplierIdentityRules.normalizeSupplierCode(formState.productCode)}-015',
+                        ],
+                      ),
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
                   const SizedBox(height: 24),
 
                   // Contact Information Section
@@ -181,10 +253,14 @@ class _SupplierFormContentState extends State<_SupplierFormContent> {
                   // Email Field
                   TextFormField(
                     controller: _emailController,
+                    enabled: !formState.isSubmitting,
                     decoration: InputDecoration(
                       labelText: 'suppliers.email'.tr(),
                       hintText: 'suppliers.email_hint'.tr(),
-                      prefixIcon: Icon(LucideIcons.mail, color: theme.colorScheme.primary),
+                      prefixIcon: Icon(
+                        LucideIcons.mail,
+                        color: theme.colorScheme.primary,
+                      ),
                       errorText: formState.errors['email']?.tr(),
                       filled: true,
                       border: OutlineInputBorder(
@@ -194,18 +270,22 @@ class _SupplierFormContentState extends State<_SupplierFormContent> {
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
                     onChanged: (value) => context.read<SupplierFormBloc>().add(
-                          SupplierFormEmailChanged(value),
-                        ),
+                      SupplierFormEmailChanged(value),
+                    ),
                   ),
                   const SizedBox(height: 16),
 
                   // Phone Field
                   TextFormField(
                     controller: _phoneController,
+                    enabled: !formState.isSubmitting,
                     decoration: InputDecoration(
                       labelText: 'suppliers.phone'.tr(),
                       hintText: 'suppliers.phone_hint'.tr(),
-                      prefixIcon: Icon(LucideIcons.phone, color: theme.colorScheme.primary),
+                      prefixIcon: Icon(
+                        LucideIcons.phone,
+                        color: theme.colorScheme.primary,
+                      ),
                       filled: true,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -214,18 +294,22 @@ class _SupplierFormContentState extends State<_SupplierFormContent> {
                     keyboardType: TextInputType.phone,
                     textInputAction: TextInputAction.next,
                     onChanged: (value) => context.read<SupplierFormBloc>().add(
-                          SupplierFormPhoneChanged(value),
-                        ),
+                      SupplierFormPhoneChanged(value),
+                    ),
                   ),
                   const SizedBox(height: 16),
 
                   // Address Field
                   TextFormField(
                     controller: _addressController,
+                    enabled: !formState.isSubmitting,
                     decoration: InputDecoration(
                       labelText: 'suppliers.address'.tr(),
                       hintText: 'suppliers.address_hint'.tr(),
-                      prefixIcon: Icon(LucideIcons.mapPin, color: theme.colorScheme.primary),
+                      prefixIcon: Icon(
+                        LucideIcons.mapPin,
+                        color: theme.colorScheme.primary,
+                      ),
                       filled: true,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -234,8 +318,8 @@ class _SupplierFormContentState extends State<_SupplierFormContent> {
                     maxLines: 2,
                     textInputAction: TextInputAction.next,
                     onChanged: (value) => context.read<SupplierFormBloc>().add(
-                          SupplierFormAddressChanged(value),
-                        ),
+                      SupplierFormAddressChanged(value),
+                    ),
                   ),
                   const SizedBox(height: 24),
 
@@ -246,24 +330,30 @@ class _SupplierFormContentState extends State<_SupplierFormContent> {
                   // Opening Balance Field
                   TextFormField(
                     controller: _balanceController,
+                    enabled: !formState.isSubmitting,
                     decoration: InputDecoration(
                       labelText: isEditing
                           ? 'suppliers.current_balance'.tr()
                           : 'suppliers.opening_balance'.tr(),
                       hintText: 'suppliers.opening_balance_hint'.tr(),
-                      prefixIcon: Icon(LucideIcons.wallet, color: theme.colorScheme.primary),
+                      prefixIcon: Icon(
+                        LucideIcons.wallet,
+                        color: theme.colorScheme.primary,
+                      ),
                       filled: true,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                       helperText: 'suppliers.opening_balance_helper'.tr(),
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     textInputAction: TextInputAction.done,
                     onTap: () => selectAllText(_balanceController),
                     onChanged: (value) => context.read<SupplierFormBloc>().add(
-                          SupplierFormBalanceChanged(value),
-                        ),
+                      SupplierFormBalanceChanged(value),
+                    ),
                   ),
                 ],
               ),

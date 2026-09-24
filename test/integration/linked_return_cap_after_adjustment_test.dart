@@ -72,28 +72,28 @@ void main() {
       adjDao,
       journal,
       CommissionService(db.employeeDao),
-      LoyaltyPointsService(
-        LoyaltyRepositoryImpl(db, journal),
-        journal,
-        db,
-      ),
+      LoyaltyPointsService(LoyaltyRepositoryImpl(db, journal), journal, db),
     );
 
     await db.customSelect('SELECT 1').get();
 
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     currencyId = usd.id;
 
-    customerId = await db.into(db.customers).insert(
+    customerId = await db
+        .into(db.customers)
+        .insert(
           CustomersCompanion.insert(
             name: 'Cap Test Customer',
             currencyId: currencyId,
             balanceCents: Value(Decimal.zero),
           ),
         );
-    supplierId = await db.into(db.suppliers).insert(
+    supplierId = await db
+        .into(db.suppliers)
+        .insert(
           SuppliersCompanion.insert(
             name: 'Cap Test Supplier',
             currencyId: currencyId,
@@ -114,7 +114,9 @@ void main() {
     int costCents = 1000,
     int priceCents = 2000,
   }) async {
-    final pid = await db.into(db.products).insert(
+    final pid = await db
+        .into(db.products)
+        .insert(
           ProductsCompanion.insert(
             sku: Value(sku),
             name: name,
@@ -125,7 +127,9 @@ void main() {
             hasVariants: const Value(true),
           ),
         );
-    final vid = await db.into(db.productVariants).insert(
+    final vid = await db
+        .into(db.productVariants)
+        .insert(
           ProductVariantsCompanion.insert(
             productId: pid,
             stockQuantity: const Value(0),
@@ -143,7 +147,9 @@ void main() {
     int unitCostCents = 1000,
     String poNumber = 'PO-X',
   }) async {
-    final pid = await db.into(db.purchases).insert(
+    final pid = await db
+        .into(db.purchases)
+        .insert(
           PurchasesCompanion.insert(
             purchaseNumber: poNumber,
             supplierId: supplierId,
@@ -155,7 +161,9 @@ void main() {
             paymentMethod: const Value('credit'),
           ),
         );
-    await db.into(db.purchaseItems).insert(
+    await db
+        .into(db.purchaseItems)
+        .insert(
           PurchaseItemsCompanion.insert(
             purchaseId: pid,
             productId: productId,
@@ -177,7 +185,9 @@ void main() {
     int unitPriceCents = 2000,
     String invoiceNumber = 'INV-X',
   }) async {
-    final sid = await db.into(db.sales).insert(
+    final sid = await db
+        .into(db.sales)
+        .insert(
           SalesCompanion.insert(
             invoiceNumber: invoiceNumber,
             customerId: Value(customerId),
@@ -190,7 +200,9 @@ void main() {
             status: const Value('draft'),
           ),
         );
-    await db.into(db.saleItems).insert(
+    await db
+        .into(db.saleItems)
+        .insert(
           SaleItemsCompanion.insert(
             saleId: sid,
             productId: productId,
@@ -251,6 +263,8 @@ void main() {
       ),
       [
         SaleReturnAdjustmentItemsCompanion.insert(
+          sourceResolution: const Value('unverified'),
+          sourceResolutionReason: const Value('test fixture'),
           returnId: 0,
           productId: productId,
           variantId: Value(variantId),
@@ -269,51 +283,59 @@ void main() {
   // ════════════════════════════════════════════════════════════════════════
 
   group('Purchase: linked-return cap AFTER an adjustment return', () {
-    test(
-        'getReturnedQuantity surfaces adjustment-allocated qty on the '
+    test('getReturnedQuantity surfaces adjustment-allocated qty on the '
         'purchase_item line', () async {
       final pv = await insertProductWithVariant(sku: 'BUG-P-1', name: 'Bug P1');
       final purchaseId = await postPurchase(
-          productId: pv.productId,
-          variantId: pv.variantId,
-          quantity: 10,
-          poNumber: 'PO-BUG-P-1');
+        productId: pv.productId,
+        variantId: pv.variantId,
+        quantity: 10,
+        poNumber: 'PO-BUG-P-1',
+      );
 
       // Adjustment return of 4 units. FIFO allocates against this PO line.
       await postPurchaseAdjReturn(
-          productId: pv.productId,
-          variantId: pv.variantId,
-          quantity: 4,
-          returnNumber: 'PAR-BUG-P-1');
+        productId: pv.productId,
+        variantId: pv.variantId,
+        quantity: 4,
+        returnNumber: 'PAR-BUG-P-1',
+      );
 
-      final piRow = await (db.select(db.purchaseItems)
-            ..where((i) => i.purchaseId.equals(purchaseId)))
-          .getSingle();
-      expect(piRow.qtyReturnedAdjustment, equals(4),
-          reason: 'allocator must bump the adjustment counter');
+      final piRow = await (db.select(
+        db.purchaseItems,
+      )..where((i) => i.purchaseId.equals(purchaseId))).getSingle();
+      expect(
+        piRow.qtyReturnedAdjustment,
+        equals(4),
+        reason: 'allocator must bump the adjustment counter',
+      );
 
       // Now query the cap-helper. Pre-fix this returned 0 (linked-only),
       // post-fix it must return 4.
       final returned = await db.purchaseDao.getReturnedQuantity(piRow.id);
-      expect(returned, equals(4),
-          reason: 'getReturnedQuantity must include qty_returned_adjustment');
+      expect(
+        returned,
+        equals(4),
+        reason: 'getReturnedQuantity must include qty_returned_adjustment',
+      );
     });
 
-    test(
-        'unified-service _getPurchaseReturnableItems exposes correct '
+    test('unified-service _getPurchaseReturnableItems exposes correct '
         'remaining qty after an adjustment return', () async {
       final pv = await insertProductWithVariant(sku: 'BUG-P-2', name: 'Bug P2');
       await postPurchase(
-          productId: pv.productId,
-          variantId: pv.variantId,
-          quantity: 10,
-          poNumber: 'PO-BUG-P-2');
+        productId: pv.productId,
+        variantId: pv.variantId,
+        quantity: 10,
+        poNumber: 'PO-BUG-P-2',
+      );
 
       await postPurchaseAdjReturn(
-          productId: pv.productId,
-          variantId: pv.variantId,
-          quantity: 7,
-          returnNumber: 'PAR-BUG-P-2');
+        productId: pv.productId,
+        variantId: pv.variantId,
+        quantity: 7,
+        returnNumber: 'PAR-BUG-P-2',
+      );
 
       // Ask the service what's still returnable. Pre-fix it would say 10;
       // post-fix it must say 3 (10 - 7).
@@ -324,31 +346,35 @@ void main() {
         partyId: supplierId,
       );
       expect(returnable, hasLength(1));
-      expect(returnable.single.remainingQuantity, equals(3),
-          reason: 'returnable qty must = original (10) − adjustment (7)');
+      expect(
+        returnable.single.remainingQuantity,
+        equals(3),
+        reason: 'returnable qty must = original (10) − adjustment (7)',
+      );
     });
 
-    test(
-        'posting a linked purchase-return after an adjustment cannot exceed '
+    test('posting a linked purchase-return after an adjustment cannot exceed '
         'the original purchased qty', () async {
       final pv = await insertProductWithVariant(sku: 'BUG-P-3', name: 'Bug P3');
       final purchaseId = await postPurchase(
-          productId: pv.productId,
-          variantId: pv.variantId,
-          quantity: 10,
-          poNumber: 'PO-BUG-P-3');
+        productId: pv.productId,
+        variantId: pv.variantId,
+        quantity: 10,
+        poNumber: 'PO-BUG-P-3',
+      );
 
       // 1) Adjustment of 7 → 3 units still linkable.
       await postPurchaseAdjReturn(
-          productId: pv.productId,
-          variantId: pv.variantId,
-          quantity: 7,
-          returnNumber: 'PAR-BUG-P-3');
+        productId: pv.productId,
+        variantId: pv.variantId,
+        quantity: 7,
+        returnNumber: 'PAR-BUG-P-3',
+      );
 
       // 2) Attempt to post a linked return for 5 units (would total 12 > 10).
-      final piRow = await (db.select(db.purchaseItems)
-            ..where((i) => i.purchaseId.equals(purchaseId)))
-          .getSingle();
+      final piRow = await (db.select(
+        db.purchaseItems,
+      )..where((i) => i.purchaseId.equals(purchaseId))).getSingle();
 
       final linkedRetId = await db.purchaseDao.createPurchaseReturn(
         PurchaseReturnsCompanion.insert(
@@ -376,56 +402,65 @@ void main() {
       );
     });
 
-    test('posting a linked purchase-return of EXACTLY the remaining qty works',
-        () async {
-      final pv = await insertProductWithVariant(sku: 'BUG-P-4', name: 'Bug P4');
-      final purchaseId = await postPurchase(
+    test(
+      'posting a linked purchase-return of EXACTLY the remaining qty works',
+      () async {
+        final pv = await insertProductWithVariant(
+          sku: 'BUG-P-4',
+          name: 'Bug P4',
+        );
+        final purchaseId = await postPurchase(
           productId: pv.productId,
           variantId: pv.variantId,
           quantity: 10,
-          poNumber: 'PO-BUG-P-4');
+          poNumber: 'PO-BUG-P-4',
+        );
 
-      await postPurchaseAdjReturn(
+        await postPurchaseAdjReturn(
           productId: pv.productId,
           variantId: pv.variantId,
           quantity: 7,
-          returnNumber: 'PAR-BUG-P-4');
+          returnNumber: 'PAR-BUG-P-4',
+        );
 
-      final piRow = await (db.select(db.purchaseItems)
-            ..where((i) => i.purchaseId.equals(purchaseId)))
-          .getSingle();
+        final piRow = await (db.select(
+          db.purchaseItems,
+        )..where((i) => i.purchaseId.equals(purchaseId))).getSingle();
 
-      // 3 units left → linked return of 3 must succeed.
-      final linkedRetId = await db.purchaseDao.createPurchaseReturn(
-        PurchaseReturnsCompanion.insert(
-          returnNumber: 'PR-BUG-P-4',
-          purchaseId: purchaseId,
-          subtotalCents: Value(Decimal.fromInt(3000)),
-          totalCents: Decimal.fromInt(3000),
-          currencyId: currencyId,
-        ),
-        [
-          PurchaseReturnItemsCompanion.insert(
-            returnId: 0,
-            purchaseItemId: piRow.id,
-            quantity: 3,
+        // 3 units left → linked return of 3 must succeed.
+        final linkedRetId = await db.purchaseDao.createPurchaseReturn(
+          PurchaseReturnsCompanion.insert(
+            returnNumber: 'PR-BUG-P-4',
+            purchaseId: purchaseId,
             subtotalCents: Value(Decimal.fromInt(3000)),
-            refundCents: Decimal.fromInt(3000),
+            totalCents: Decimal.fromInt(3000),
+            currencyId: currencyId,
           ),
-        ],
-      );
+          [
+            PurchaseReturnItemsCompanion.insert(
+              returnId: 0,
+              purchaseItemId: piRow.id,
+              quantity: 3,
+              subtotalCents: Value(Decimal.fromInt(3000)),
+              refundCents: Decimal.fromInt(3000),
+            ),
+          ],
+        );
 
-      await db.purchaseDao.postPurchaseReturn(linkedRetId);
+        await db.purchaseDao.postPurchaseReturn(linkedRetId);
 
-      final piAfter = await (db.select(db.purchaseItems)
-            ..where((i) => i.id.equals(piRow.id)))
-          .getSingle();
-      expect(piAfter.qtyReturnedLinked, equals(3));
-      expect(piAfter.qtyReturnedAdjustment, equals(7));
-      // Invariant: linked + adjustment ≤ original.
-      expect(piAfter.qtyReturnedLinked + piAfter.qtyReturnedAdjustment,
-          lessThanOrEqualTo(piAfter.quantity));
-    });
+        final piAfter = await (db.select(
+          db.purchaseItems,
+        )..where((i) => i.id.equals(piRow.id))).getSingle();
+        expect(piAfter.qtyReturnedLinked, equals(3));
+        expect(piAfter.qtyReturnedAdjustment, equals(7));
+        // Invariant: linked + adjustment ≤ original.
+        expect(
+          piAfter.qtyReturnedLinked + piAfter.qtyReturnedAdjustment,
+          lessThanOrEqualTo(piAfter.quantity),
+        );
+      },
+    );
   });
 
   // ════════════════════════════════════════════════════════════════════════
@@ -433,59 +468,66 @@ void main() {
   // ════════════════════════════════════════════════════════════════════════
 
   group('Sale: linked-return cap AFTER an adjustment return', () {
-    test(
-        'getReturnedQuantity surfaces adjustment-allocated qty on the '
+    test('getReturnedQuantity surfaces adjustment-allocated qty on the '
         'sale_item line', () async {
       final pv = await insertProductWithVariant(sku: 'BUG-S-1', name: 'Bug S1');
       // Receive stock so a sale can be posted.
       await postPurchase(
-          productId: pv.productId,
-          variantId: pv.variantId,
-          quantity: 10,
-          poNumber: 'PO-BUG-S-1');
+        productId: pv.productId,
+        variantId: pv.variantId,
+        quantity: 10,
+        poNumber: 'PO-BUG-S-1',
+      );
 
       final saleId = await postSale(
-          productId: pv.productId,
-          variantId: pv.variantId,
-          quantity: 10,
-          invoiceNumber: 'INV-BUG-S-1');
+        productId: pv.productId,
+        variantId: pv.variantId,
+        quantity: 10,
+        invoiceNumber: 'INV-BUG-S-1',
+      );
 
       await postSaleAdjReturn(
-          productId: pv.productId,
-          variantId: pv.variantId,
-          quantity: 4,
-          returnNumber: 'SAR-BUG-S-1');
+        productId: pv.productId,
+        variantId: pv.variantId,
+        quantity: 4,
+        returnNumber: 'SAR-BUG-S-1',
+      );
 
-      final siRow = await (db.select(db.saleItems)
-            ..where((i) => i.saleId.equals(saleId)))
-          .getSingle();
+      final siRow = await (db.select(
+        db.saleItems,
+      )..where((i) => i.saleId.equals(saleId))).getSingle();
       expect(siRow.qtyReturnedAdjustment, equals(4));
 
       final returned = await db.saleDao.getReturnedQuantity(siRow.id);
-      expect(returned, equals(4),
-          reason: 'getReturnedQuantity must include qty_returned_adjustment');
+      expect(
+        returned,
+        equals(4),
+        reason: 'getReturnedQuantity must include qty_returned_adjustment',
+      );
     });
 
-    test(
-        'unified-service _getSaleReturnableItems exposes correct remaining '
+    test('unified-service _getSaleReturnableItems exposes correct remaining '
         'qty after an adjustment return', () async {
       final pv = await insertProductWithVariant(sku: 'BUG-S-2', name: 'Bug S2');
       await postPurchase(
-          productId: pv.productId,
-          variantId: pv.variantId,
-          quantity: 10,
-          poNumber: 'PO-BUG-S-2');
+        productId: pv.productId,
+        variantId: pv.variantId,
+        quantity: 10,
+        poNumber: 'PO-BUG-S-2',
+      );
       await postSale(
-          productId: pv.productId,
-          variantId: pv.variantId,
-          quantity: 10,
-          invoiceNumber: 'INV-BUG-S-2');
+        productId: pv.productId,
+        variantId: pv.variantId,
+        quantity: 10,
+        invoiceNumber: 'INV-BUG-S-2',
+      );
 
       await postSaleAdjReturn(
-          productId: pv.productId,
-          variantId: pv.variantId,
-          quantity: 7,
-          returnNumber: 'SAR-BUG-S-2');
+        productId: pv.productId,
+        variantId: pv.variantId,
+        quantity: 7,
+        returnNumber: 'SAR-BUG-S-2',
+      );
 
       final returnable = await unifiedService.getReturnableInvoiceItems(
         productId: pv.productId,
@@ -494,34 +536,39 @@ void main() {
         partyId: customerId,
       );
       expect(returnable, hasLength(1));
-      expect(returnable.single.remainingQuantity, equals(3),
-          reason: 'returnable qty must = original (10) − adjustment (7)');
+      expect(
+        returnable.single.remainingQuantity,
+        equals(3),
+        reason: 'returnable qty must = original (10) − adjustment (7)',
+      );
     });
 
-    test(
-        'posting a linked sale-return after an adjustment cannot exceed '
+    test('posting a linked sale-return after an adjustment cannot exceed '
         'the original sold qty', () async {
       final pv = await insertProductWithVariant(sku: 'BUG-S-3', name: 'Bug S3');
       await postPurchase(
-          productId: pv.productId,
-          variantId: pv.variantId,
-          quantity: 10,
-          poNumber: 'PO-BUG-S-3');
+        productId: pv.productId,
+        variantId: pv.variantId,
+        quantity: 10,
+        poNumber: 'PO-BUG-S-3',
+      );
       final saleId = await postSale(
-          productId: pv.productId,
-          variantId: pv.variantId,
-          quantity: 10,
-          invoiceNumber: 'INV-BUG-S-3');
+        productId: pv.productId,
+        variantId: pv.variantId,
+        quantity: 10,
+        invoiceNumber: 'INV-BUG-S-3',
+      );
 
       await postSaleAdjReturn(
-          productId: pv.productId,
-          variantId: pv.variantId,
-          quantity: 7,
-          returnNumber: 'SAR-BUG-S-3');
+        productId: pv.productId,
+        variantId: pv.variantId,
+        quantity: 7,
+        returnNumber: 'SAR-BUG-S-3',
+      );
 
-      final siRow = await (db.select(db.saleItems)
-            ..where((i) => i.saleId.equals(saleId)))
-          .getSingle();
+      final siRow = await (db.select(
+        db.saleItems,
+      )..where((i) => i.saleId.equals(saleId))).getSingle();
 
       // Build a linked sale-return of 5 (would total 12 > 10).
       final calc = ReturnCalculationService.computeProportionalReturn(

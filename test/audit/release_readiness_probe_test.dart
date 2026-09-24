@@ -50,7 +50,14 @@ void main() {
         Uri.parse('https://127.0.0.1:${master.snapshot.port}/v1/pair'),
       );
       request.headers.contentType = ContentType.json;
-      request.write(jsonEncode({'pairingCode': code, 'deviceId': device}));
+      request.write(
+        jsonEncode({
+          'pairingCode': code,
+          'deviceId': device,
+          'deviceName': device,
+          'platform': 'test',
+        }),
+      );
       final response = await request.close();
       final body = jsonDecode(await utf8.decoder.bind(response).join());
       return (response.statusCode, body as Map<String, dynamic>);

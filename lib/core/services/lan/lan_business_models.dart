@@ -169,6 +169,15 @@ class LanCatalogProduct {
   final List<LanCatalogVariant> variants;
   final LanMedicineProfile? medicine;
 
+  /// Present only when the catalog query exactly matched a saved supplier
+  /// source code. Old clients ignore these optional fields.
+  final int? matchedSupplierIdentityId;
+  final int? matchedCanonicalVariantId;
+  final String? matchedSupplierSourceSku;
+  final String? matchedSupplierName;
+  final String? matchedConsignmentLayerId;
+  final String? matchedConsignmentSourceCode;
+
   // Management-only fields. The ordinary sales catalog never serializes
   // these, and cost is exposed only with the dedicated permission.
   final String? nameAr;
@@ -202,6 +211,12 @@ class LanCatalogProduct {
     this.hasImage = false,
     this.variants = const [],
     this.medicine,
+    this.matchedSupplierIdentityId,
+    this.matchedCanonicalVariantId,
+    this.matchedSupplierSourceSku,
+    this.matchedSupplierName,
+    this.matchedConsignmentLayerId,
+    this.matchedConsignmentSourceCode,
     this.nameAr,
     this.nameFr,
     this.description,
@@ -239,6 +254,17 @@ class LanCatalogProduct {
         .map((value) => value.toJson(includeCost: includeCost))
         .toList(),
     'medicine': medicine?.toJson(),
+    if (matchedSupplierIdentityId != null)
+      'matchedSupplierIdentityId': matchedSupplierIdentityId,
+    if (matchedCanonicalVariantId != null)
+      'matchedCanonicalVariantId': matchedCanonicalVariantId,
+    if (matchedSupplierSourceSku != null)
+      'matchedSupplierSourceSku': matchedSupplierSourceSku,
+    if (matchedSupplierName != null) 'matchedSupplierName': matchedSupplierName,
+    if (matchedConsignmentLayerId != null)
+      'matchedConsignmentLayerId': matchedConsignmentLayerId,
+    if (matchedConsignmentSourceCode != null)
+      'matchedConsignmentSourceCode': matchedConsignmentSourceCode,
     if (includeManagement) ...{
       'nameAr': nameAr,
       'nameFr': nameFr,
@@ -281,6 +307,15 @@ class LanCatalogProduct {
               json['medicine'] as Map<String, dynamic>,
             )
           : null,
+      matchedSupplierIdentityId: (json['matchedSupplierIdentityId'] as num?)
+          ?.toInt(),
+      matchedCanonicalVariantId: (json['matchedCanonicalVariantId'] as num?)
+          ?.toInt(),
+      matchedSupplierSourceSku: json['matchedSupplierSourceSku']?.toString(),
+      matchedSupplierName: json['matchedSupplierName']?.toString(),
+      matchedConsignmentLayerId: json['matchedConsignmentLayerId']?.toString(),
+      matchedConsignmentSourceCode: json['matchedConsignmentSourceCode']
+          ?.toString(),
       nameAr: json['nameAr']?.toString(),
       nameFr: json['nameFr']?.toString(),
       description: json['description']?.toString(),
@@ -345,12 +380,14 @@ class LanCustomerSummary {
     required this.balanceCents,
   });
 
-  Map<String, dynamic> toJson() => {
+  /// Directory responses intentionally omit financial balances. The live
+  /// checkout endpoint is the only LAN sales API allowed to disclose them.
+  Map<String, dynamic> toJson({bool includeBalance = false}) => {
     'id': id,
     'name': name,
     'phone': phone,
     'segment': segment,
-    'balanceCents': balanceCents,
+    if (includeBalance) 'balanceCents': balanceCents,
   };
 
   factory LanCustomerSummary.fromJson(Map<String, dynamic> json) {
@@ -399,6 +436,8 @@ class LanCashierShiftSnapshot {
   final String cashierName;
   final String currencyCode;
   final String currencySymbol;
+  final int currencyDecimalDigits;
+  final bool currencySymbolAfter;
   final int openingCashCents;
   final int expectedCashCents;
   final int salesCount;
@@ -415,6 +454,8 @@ class LanCashierShiftSnapshot {
     required this.cashierName,
     required this.currencyCode,
     required this.currencySymbol,
+    this.currencyDecimalDigits = 2,
+    this.currencySymbolAfter = false,
     required this.openingCashCents,
     required this.expectedCashCents,
     required this.salesCount,
@@ -434,6 +475,8 @@ class LanCashierShiftSnapshot {
     'cashierName': cashierName,
     'currencyCode': currencyCode,
     'currencySymbol': currencySymbol,
+    'currencyDecimalDigits': currencyDecimalDigits,
+    'currencySymbolAfter': currencySymbolAfter,
     'openingCashCents': openingCashCents,
     'expectedCashCents': expectedCashCents,
     'salesCount': salesCount,
@@ -452,6 +495,9 @@ class LanCashierShiftSnapshot {
       cashierName: json['cashierName']?.toString() ?? '',
       currencyCode: json['currencyCode']?.toString() ?? '',
       currencySymbol: json['currencySymbol']?.toString() ?? '',
+      currencyDecimalDigits:
+          (json['currencyDecimalDigits'] as num?)?.toInt() ?? 2,
+      currencySymbolAfter: json['currencySymbolAfter'] == true,
       openingCashCents: (json['openingCashCents'] as num?)?.toInt() ?? 0,
       expectedCashCents: (json['expectedCashCents'] as num?)?.toInt() ?? 0,
       salesCount: (json['salesCount'] as num?)?.toInt() ?? 0,
@@ -472,6 +518,8 @@ class LanCatalogPage {
   final int currencyId;
   final String currencyCode;
   final String currencySymbol;
+  final int currencyDecimalDigits;
+  final bool currencySymbolAfter;
   final bool enableTaxCalculations;
   final int defaultSalesTaxRateBps;
   final int? defaultPurchaseTaxRateBps;
@@ -497,6 +545,8 @@ class LanCatalogPage {
     required this.currencyId,
     required this.currencyCode,
     required this.currencySymbol,
+    this.currencyDecimalDigits = 2,
+    this.currencySymbolAfter = false,
     required this.enableTaxCalculations,
     required this.defaultSalesTaxRateBps,
     this.defaultPurchaseTaxRateBps,
@@ -533,6 +583,8 @@ class LanCatalogPage {
     'currencyId': currencyId,
     'currencyCode': currencyCode,
     'currencySymbol': currencySymbol,
+    'currencyDecimalDigits': currencyDecimalDigits,
+    'currencySymbolAfter': currencySymbolAfter,
     'enableTaxCalculations': enableTaxCalculations,
     'defaultSalesTaxRateBps': defaultSalesTaxRateBps,
     'defaultPurchaseTaxRateBps': defaultPurchaseTaxRateBps,
@@ -570,6 +622,9 @@ class LanCatalogPage {
       currencyId: (json['currencyId'] as num?)?.toInt() ?? 1,
       currencyCode: json['currencyCode']?.toString() ?? 'USD',
       currencySymbol: json['currencySymbol']?.toString() ?? r'$',
+      currencyDecimalDigits:
+          (json['currencyDecimalDigits'] as num?)?.toInt() ?? 2,
+      currencySymbolAfter: json['currencySymbolAfter'] == true,
       enableTaxCalculations: json['enableTaxCalculations'] != false,
       defaultPurchaseTaxRateBps: (json['defaultPurchaseTaxRateBps'] as num?)
           ?.toInt(),
@@ -1269,6 +1324,191 @@ class LanSaleReturnResult {
       );
 }
 
+/// A single, proven stock balance on the branch master.
+///
+/// Ownership is enterprise, consignment, or unverified. An unverified source
+/// is deliberately kept separate and cannot be assigned to a supplier by
+/// inference.
+class LanInventoryStockSource {
+  const LanInventoryStockSource({
+    required this.productId,
+    required this.variantId,
+    required this.quantity,
+    required this.quantityScale,
+    required this.measurementType,
+    required this.ownership,
+    required this.variantLabel,
+    this.supplierId,
+    this.supplierName,
+    this.supplierIdentityId,
+    this.consignmentLayerId,
+    this.sourceCode,
+    this.receiptNumber,
+    this.batchNumber,
+  });
+
+  final int productId;
+  final int variantId;
+  final int quantity;
+  final int quantityScale;
+  final String measurementType;
+  final String ownership;
+  final String variantLabel;
+  final int? supplierId;
+  final String? supplierName;
+  final int? supplierIdentityId;
+  final String? consignmentLayerId;
+  final String? sourceCode;
+  final String? receiptNumber;
+  final String? batchNumber;
+
+  bool get isConsignment => ownership == 'consignment';
+  bool get isVerified =>
+      supplierIdentityId != null || consignmentLayerId != null;
+
+  Map<String, dynamic> toJson() => {
+    'productId': productId,
+    'variantId': variantId,
+    'quantity': quantity,
+    'quantityScale': quantityScale,
+    'measurementType': measurementType,
+    'ownership': ownership,
+    'variantLabel': variantLabel,
+    'supplierId': supplierId,
+    'supplierName': supplierName,
+    'supplierIdentityId': supplierIdentityId,
+    'consignmentLayerId': consignmentLayerId,
+    'sourceCode': sourceCode,
+    'receiptNumber': receiptNumber,
+    'batchNumber': batchNumber,
+  };
+
+  factory LanInventoryStockSource.fromJson(Map<String, dynamic> json) =>
+      LanInventoryStockSource(
+        productId: (json['productId'] as num).toInt(),
+        variantId: (json['variantId'] as num).toInt(),
+        quantity: (json['quantity'] as num).toInt(),
+        quantityScale: (json['quantityScale'] as num?)?.toInt() ?? 1,
+        measurementType: json['measurementType']?.toString() ?? 'piece',
+        ownership: json['ownership']?.toString() ?? 'unverified',
+        variantLabel: json['variantLabel']?.toString() ?? '',
+        supplierId: (json['supplierId'] as num?)?.toInt(),
+        supplierName: json['supplierName']?.toString(),
+        supplierIdentityId: (json['supplierIdentityId'] as num?)?.toInt(),
+        consignmentLayerId: json['consignmentLayerId']?.toString(),
+        sourceCode: json['sourceCode']?.toString(),
+        receiptNumber: json['receiptNumber']?.toString(),
+        batchNumber: json['batchNumber']?.toString(),
+      );
+}
+
+class LanProductStockSourceSnapshot {
+  const LanProductStockSourceSnapshot({
+    required this.productId,
+    required this.warehouseId,
+    required this.physicalQuantity,
+    required this.enterpriseQuantity,
+    required this.consignmentQuantity,
+    required this.quantityScale,
+    required this.measurementType,
+    required this.sources,
+    required this.reconciled,
+  });
+
+  final int productId;
+  final String warehouseId;
+  final int physicalQuantity;
+  final int enterpriseQuantity;
+  final int consignmentQuantity;
+  final int quantityScale;
+  final String measurementType;
+  final List<LanInventoryStockSource> sources;
+  final bool reconciled;
+
+  Map<String, dynamic> toJson() => {
+    'productId': productId,
+    'warehouseId': warehouseId,
+    'physicalQuantity': physicalQuantity,
+    'enterpriseQuantity': enterpriseQuantity,
+    'consignmentQuantity': consignmentQuantity,
+    'quantityScale': quantityScale,
+    'measurementType': measurementType,
+    'sources': sources.map((source) => source.toJson()).toList(),
+    'reconciled': reconciled,
+  };
+
+  factory LanProductStockSourceSnapshot.fromJson(Map<String, dynamic> json) =>
+      LanProductStockSourceSnapshot(
+        productId: (json['productId'] as num).toInt(),
+        warehouseId: json['warehouseId']?.toString() ?? '',
+        physicalQuantity: (json['physicalQuantity'] as num?)?.toInt() ?? 0,
+        enterpriseQuantity: (json['enterpriseQuantity'] as num?)?.toInt() ?? 0,
+        consignmentQuantity:
+            (json['consignmentQuantity'] as num?)?.toInt() ?? 0,
+        quantityScale: (json['quantityScale'] as num?)?.toInt() ?? 1,
+        measurementType: json['measurementType']?.toString() ?? 'piece',
+        sources: (json['sources'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(LanInventoryStockSource.fromJson)
+            .toList(growable: false),
+        reconciled: json['reconciled'] == true,
+      );
+}
+
+class LanConsignmentReturnSource {
+  const LanConsignmentReturnSource({
+    required this.layerId,
+    required this.supplierId,
+    required this.supplierName,
+    required this.receiptNumber,
+    required this.receivedAt,
+    required this.maximumReturnQuantity,
+    required this.quantityScale,
+    required this.measurementType,
+    this.batchNumber,
+    this.manufacturerLotNumber,
+  });
+
+  final String layerId;
+  final int supplierId;
+  final String supplierName;
+  final String receiptNumber;
+  final DateTime receivedAt;
+  final int maximumReturnQuantity;
+  final int quantityScale;
+  final String measurementType;
+  final String? batchNumber;
+  final String? manufacturerLotNumber;
+
+  Map<String, dynamic> toJson() => {
+    'layerId': layerId,
+    'supplierId': supplierId,
+    'supplierName': supplierName,
+    'receiptNumber': receiptNumber,
+    'receivedAt': receivedAt.toUtc().toIso8601String(),
+    'maximumReturnQuantity': maximumReturnQuantity,
+    'quantityScale': quantityScale,
+    'measurementType': measurementType,
+    'batchNumber': batchNumber,
+    'manufacturerLotNumber': manufacturerLotNumber,
+  };
+
+  factory LanConsignmentReturnSource.fromJson(Map<String, dynamic> json) =>
+      LanConsignmentReturnSource(
+        layerId: json['layerId']?.toString() ?? '',
+        supplierId: (json['supplierId'] as num).toInt(),
+        supplierName: json['supplierName']?.toString() ?? '',
+        receiptNumber: json['receiptNumber']?.toString() ?? '',
+        receivedAt: DateTime.parse(json['receivedAt'].toString()),
+        maximumReturnQuantity:
+            (json['maximumReturnQuantity'] as num?)?.toInt() ?? 0,
+        quantityScale: (json['quantityScale'] as num?)?.toInt() ?? 1,
+        measurementType: json['measurementType']?.toString() ?? 'piece',
+        batchNumber: json['batchNumber']?.toString(),
+        manufacturerLotNumber: json['manufacturerLotNumber']?.toString(),
+      );
+}
+
 class LanSaleAdjustmentReturnLineRequest {
   final int productId;
   final int? variantId;
@@ -1277,6 +1517,10 @@ class LanSaleAdjustmentReturnLineRequest {
   final int discountCents;
   final int discountPercentBps;
   final String dispositionType;
+  final String? consignmentLayerId;
+  final int? supplierIdentityId;
+  final String sourceResolution;
+  final String? sourceResolutionReason;
   final String? reason;
 
   const LanSaleAdjustmentReturnLineRequest({
@@ -1287,6 +1531,10 @@ class LanSaleAdjustmentReturnLineRequest {
     this.discountCents = 0,
     this.discountPercentBps = 0,
     this.dispositionType = 'restock',
+    this.consignmentLayerId,
+    this.supplierIdentityId,
+    this.sourceResolution = 'pending',
+    this.sourceResolutionReason,
     this.reason,
   });
 
@@ -1298,6 +1546,11 @@ class LanSaleAdjustmentReturnLineRequest {
     'discountCents': discountCents,
     'discountPercentBps': discountPercentBps,
     'dispositionType': dispositionType,
+    if (consignmentLayerId != null) 'consignmentLayerId': consignmentLayerId,
+    if (supplierIdentityId != null) 'supplierIdentityId': supplierIdentityId,
+    'sourceResolution': sourceResolution,
+    if (sourceResolutionReason != null)
+      'sourceResolutionReason': sourceResolutionReason,
     'reason': reason,
   };
 
@@ -1311,6 +1564,10 @@ class LanSaleAdjustmentReturnLineRequest {
     discountCents: (json['discountCents'] as num?)?.toInt() ?? 0,
     discountPercentBps: (json['discountPercentBps'] as num?)?.toInt() ?? 0,
     dispositionType: json['dispositionType']?.toString() ?? 'restock',
+    consignmentLayerId: json['consignmentLayerId']?.toString(),
+    supplierIdentityId: (json['supplierIdentityId'] as num?)?.toInt(),
+    sourceResolution: json['sourceResolution']?.toString() ?? 'pending',
+    sourceResolutionReason: json['sourceResolutionReason']?.toString(),
     reason: json['reason']?.toString(),
   );
 }
@@ -1396,16 +1653,28 @@ class LanSupplierSummary {
   final int id;
   final String name;
   final String? phone;
+  final String? productCode;
 
-  const LanSupplierSummary({required this.id, required this.name, this.phone});
+  const LanSupplierSummary({
+    required this.id,
+    required this.name,
+    this.phone,
+    this.productCode,
+  });
 
-  Map<String, dynamic> toJson() => {'id': id, 'name': name, 'phone': phone};
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'phone': phone,
+    if (productCode != null) 'productCode': productCode,
+  };
 
   factory LanSupplierSummary.fromJson(Map<String, dynamic> json) =>
       LanSupplierSummary(
         id: (json['id'] as num).toInt(),
         name: json['name']?.toString() ?? '',
         phone: json['phone']?.toString(),
+        productCode: json['productCode']?.toString(),
       );
 }
 
@@ -2124,6 +2393,8 @@ class LanPurchaseReturnResult {
 class LanSaleLineRequest {
   final int productId;
   final int? variantId;
+  final int? supplierIdentityId;
+  final String? consignmentLayerId;
   final int quantity;
   final String priceTier;
   final int? salespersonId;
@@ -2133,6 +2404,8 @@ class LanSaleLineRequest {
   const LanSaleLineRequest({
     required this.productId,
     this.variantId,
+    this.supplierIdentityId,
+    this.consignmentLayerId,
     required this.quantity,
     this.priceTier = 'retail',
     this.salespersonId,
@@ -2143,6 +2416,8 @@ class LanSaleLineRequest {
   Map<String, dynamic> toJson() => {
     'productId': productId,
     'variantId': variantId,
+    if (supplierIdentityId != null) 'supplierIdentityId': supplierIdentityId,
+    if (consignmentLayerId != null) 'consignmentLayerId': consignmentLayerId,
     'quantity': quantity,
     'priceTier': priceTier,
     'salespersonId': salespersonId,
@@ -2154,6 +2429,8 @@ class LanSaleLineRequest {
     return LanSaleLineRequest(
       productId: (json['productId'] as num).toInt(),
       variantId: (json['variantId'] as num?)?.toInt(),
+      supplierIdentityId: (json['supplierIdentityId'] as num?)?.toInt(),
+      consignmentLayerId: json['consignmentLayerId']?.toString(),
       quantity: (json['quantity'] as num).toInt(),
       priceTier: json['priceTier']?.toString() ?? 'retail',
       salespersonId: (json['salespersonId'] as num?)?.toInt(),
@@ -2613,15 +2890,25 @@ class LanSaleDetails {
 class LanSaleVoidResult {
   final int saleId;
   final String status;
+  final bool duplicate;
 
-  const LanSaleVoidResult({required this.saleId, required this.status});
+  const LanSaleVoidResult({
+    required this.saleId,
+    required this.status,
+    this.duplicate = false,
+  });
 
-  Map<String, dynamic> toJson() => {'saleId': saleId, 'status': status};
+  Map<String, dynamic> toJson() => {
+    'saleId': saleId,
+    'status': status,
+    'duplicate': duplicate,
+  };
 
   factory LanSaleVoidResult.fromJson(Map<String, dynamic> json) =>
       LanSaleVoidResult(
         saleId: (json['saleId'] as num).toInt(),
         status: json['status']?.toString() ?? 'voided',
+        duplicate: json['duplicate'] == true,
       );
 }
 
@@ -2807,6 +3094,7 @@ abstract interface class LanMasterBusinessGateway {
 
   Future<LanCashierShiftSnapshot> closeOwnShift({
     required LanRemoteUser actor,
+    int? shiftId,
     required int countedCashCents,
     String? notes,
   });
@@ -2838,6 +3126,17 @@ abstract interface class LanMasterBusinessGateway {
   Future<LanSaleReturnResult> createSaleAdjustmentReturn({
     required LanRemoteUser actor,
     required LanSaleAdjustmentReturnRequest request,
+  });
+
+  Future<List<LanConsignmentReturnSource>>
+  fetchConsignmentAdjustmentReturnSources({
+    required int productId,
+    int? variantId,
+  });
+
+  Future<LanProductStockSourceSnapshot> fetchInventoryStockSources({
+    required int productId,
+    int? variantId,
   });
 
   Future<List<LanSupplierSummary>> fetchSuppliers({
@@ -2886,4 +3185,369 @@ abstract interface class LanMasterBusinessGateway {
     required LanRemoteUser actor,
     required LanSaleRequest request,
   });
+}
+
+/// Versioned LAN contract for same-branch warehouse transfers.
+///
+/// It is deliberately separate from [LanMasterBusinessGateway] so older test
+/// and integration gateways remain valid. The server advertises the matching
+/// capability only when this contract is installed.
+abstract interface class LanWarehouseTransferGateway {
+  Future<List<LanWarehouseTransferWarehouse>> fetchTransferWarehouses({
+    required LanRemoteUser actor,
+  });
+
+  Future<List<LanWarehouseTransferDocument>> fetchWarehouseTransfers({
+    required LanRemoteUser actor,
+    required Set<String> statuses,
+    required int limit,
+  });
+
+  Future<List<LanWarehouseTransferCatalogItem>> fetchWarehouseTransferCatalog({
+    required LanRemoteUser actor,
+    required String warehouseId,
+    required String query,
+    required int offset,
+  });
+
+  Future<LanWarehouseTransferDocument> createWarehouseTransfer({
+    required LanRemoteUser actor,
+    required LanWarehouseTransferCreateRequest request,
+  });
+
+  Future<LanWarehouseTransferDocument> cancelWarehouseTransfer({
+    required LanRemoteUser actor,
+    required String transferId,
+    required LanWarehouseTransferReasonRequest request,
+  });
+
+  Future<LanWarehouseTransferDocument> dispatchWarehouseTransfer({
+    required LanRemoteUser actor,
+    required String transferId,
+    required String requestKey,
+  });
+
+  Future<List<LanWarehouseTransferPendingAllocation>>
+  fetchWarehouseTransferPending({
+    required LanRemoteUser actor,
+    required String transferId,
+  });
+
+  Future<LanWarehouseTransferDocument> receiveWarehouseTransfer({
+    required LanRemoteUser actor,
+    required String transferId,
+    required LanWarehouseTransferReceiptRequest request,
+  });
+
+  Future<LanWarehouseTransferDocument> recallWarehouseTransfer({
+    required LanRemoteUser actor,
+    required String transferId,
+    required LanWarehouseTransferReasonRequest request,
+  });
+}
+
+class LanWarehouseTransferWarehouse {
+  const LanWarehouseTransferWarehouse({
+    required this.id,
+    required this.code,
+    required this.name,
+  });
+
+  final String id;
+  final String code;
+  final String name;
+
+  Map<String, dynamic> toJson() => {'id': id, 'code': code, 'name': name};
+
+  factory LanWarehouseTransferWarehouse.fromJson(Map<String, dynamic> json) =>
+      LanWarehouseTransferWarehouse(
+        id: json['id']?.toString() ?? '',
+        code: json['code']?.toString() ?? '',
+        name: json['name']?.toString() ?? '',
+      );
+}
+
+class LanWarehouseTransferCatalogItem {
+  const LanWarehouseTransferCatalogItem({
+    required this.productId,
+    required this.variantId,
+    required this.name,
+    required this.code,
+    required this.quantity,
+    required this.supplierOwnedQuantity,
+    required this.quantityScale,
+    required this.measurementType,
+  });
+
+  final int productId;
+  final int variantId;
+  final String name;
+  final String code;
+  final int quantity;
+  final int supplierOwnedQuantity;
+  final int quantityScale;
+  final String measurementType;
+
+  Map<String, dynamic> toJson() => {
+    'productId': productId,
+    'variantId': variantId,
+    'name': name,
+    'code': code,
+    'quantity': quantity,
+    'supplierOwnedQuantity': supplierOwnedQuantity,
+    'quantityScale': quantityScale,
+    'measurementType': measurementType,
+  };
+
+  factory LanWarehouseTransferCatalogItem.fromJson(Map<String, dynamic> json) =>
+      LanWarehouseTransferCatalogItem(
+        productId: (json['productId'] as num).toInt(),
+        variantId: (json['variantId'] as num).toInt(),
+        name: json['name']?.toString() ?? '',
+        code: json['code']?.toString() ?? '',
+        quantity: (json['quantity'] as num).toInt(),
+        supplierOwnedQuantity: (json['supplierOwnedQuantity'] as num).toInt(),
+        quantityScale: (json['quantityScale'] as num).toInt(),
+        measurementType: json['measurementType']?.toString() ?? 'piece',
+      );
+}
+
+class LanWarehouseTransferDocument {
+  const LanWarehouseTransferDocument({
+    required this.id,
+    required this.sourceWarehouseId,
+    required this.destinationWarehouseId,
+    required this.status,
+    required this.lineCount,
+    required this.notes,
+    required this.recalled,
+  });
+
+  final String id;
+  final String sourceWarehouseId;
+  final String destinationWarehouseId;
+  final String status;
+  final int lineCount;
+  final String notes;
+  final bool recalled;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'sourceWarehouseId': sourceWarehouseId,
+    'destinationWarehouseId': destinationWarehouseId,
+    'status': status,
+    'lineCount': lineCount,
+    'notes': notes,
+    'recalled': recalled,
+  };
+
+  factory LanWarehouseTransferDocument.fromJson(Map<String, dynamic> json) =>
+      LanWarehouseTransferDocument(
+        id: json['id']?.toString() ?? '',
+        sourceWarehouseId: json['sourceWarehouseId']?.toString() ?? '',
+        destinationWarehouseId:
+            json['destinationWarehouseId']?.toString() ?? '',
+        status: json['status']?.toString() ?? '',
+        lineCount: (json['lineCount'] as num).toInt(),
+        notes: json['notes']?.toString() ?? '',
+        recalled: json['recalled'] == true,
+      );
+}
+
+class LanWarehouseTransferLineRequest {
+  const LanWarehouseTransferLineRequest({
+    required this.productId,
+    required this.variantId,
+    required this.quantity,
+  });
+
+  final int productId;
+  final int variantId;
+  final int quantity;
+
+  Map<String, dynamic> toJson() => {
+    'productId': productId,
+    'variantId': variantId,
+    'quantity': quantity,
+  };
+
+  factory LanWarehouseTransferLineRequest.fromJson(Map<String, dynamic> json) =>
+      LanWarehouseTransferLineRequest(
+        productId: (json['productId'] as num).toInt(),
+        variantId: (json['variantId'] as num).toInt(),
+        quantity: (json['quantity'] as num).toInt(),
+      );
+}
+
+class LanWarehouseTransferCreateRequest {
+  LanWarehouseTransferCreateRequest({
+    required this.requestKey,
+    required this.sourceWarehouseId,
+    required this.destinationWarehouseId,
+    required List<LanWarehouseTransferLineRequest> lines,
+    this.notes = '',
+  }) : lines = List.unmodifiable(lines);
+
+  final String requestKey;
+  final String sourceWarehouseId;
+  final String destinationWarehouseId;
+  final List<LanWarehouseTransferLineRequest> lines;
+  final String notes;
+
+  Map<String, dynamic> toJson() => {
+    'requestKey': requestKey,
+    'sourceWarehouseId': sourceWarehouseId,
+    'destinationWarehouseId': destinationWarehouseId,
+    'lines': lines.map((line) => line.toJson()).toList(growable: false),
+    'notes': notes,
+  };
+
+  factory LanWarehouseTransferCreateRequest.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final rawLines = json['lines'];
+    if (rawLines is! List || rawLines.isEmpty || rawLines.length > 500) {
+      throw const FormatException('Transfer requires 1 to 500 lines.');
+    }
+    final lines = rawLines
+        .whereType<Map<String, dynamic>>()
+        .map(LanWarehouseTransferLineRequest.fromJson)
+        .toList(growable: false);
+    if (lines.length != rawLines.length) {
+      throw const FormatException('Transfer lines are invalid.');
+    }
+    return LanWarehouseTransferCreateRequest(
+      requestKey: json['requestKey']?.toString() ?? '',
+      sourceWarehouseId: json['sourceWarehouseId']?.toString() ?? '',
+      destinationWarehouseId: json['destinationWarehouseId']?.toString() ?? '',
+      lines: lines,
+      notes: json['notes']?.toString() ?? '',
+    );
+  }
+}
+
+class LanWarehouseTransferPendingAllocation {
+  const LanWarehouseTransferPendingAllocation({
+    required this.allocationId,
+    required this.remainingQuantity,
+    required this.quantityScale,
+    required this.productName,
+    required this.code,
+    required this.ownerType,
+  });
+
+  final String allocationId;
+  final int remainingQuantity;
+  final int quantityScale;
+  final String productName;
+  final String code;
+  final String ownerType;
+
+  Map<String, dynamic> toJson() => {
+    'allocationId': allocationId,
+    'remainingQuantity': remainingQuantity,
+    'quantityScale': quantityScale,
+    'productName': productName,
+    'code': code,
+    'ownerType': ownerType,
+  };
+
+  factory LanWarehouseTransferPendingAllocation.fromJson(
+    Map<String, dynamic> json,
+  ) => LanWarehouseTransferPendingAllocation(
+    allocationId: json['allocationId']?.toString() ?? '',
+    remainingQuantity: (json['remainingQuantity'] as num).toInt(),
+    quantityScale: (json['quantityScale'] as num).toInt(),
+    productName: json['productName']?.toString() ?? '',
+    code: json['code']?.toString() ?? '',
+    ownerType: json['ownerType']?.toString() ?? 'owned',
+  );
+}
+
+class LanWarehouseTransferReceiptItemRequest {
+  const LanWarehouseTransferReceiptItemRequest({
+    required this.allocationId,
+    this.acceptedQuantity = 0,
+    this.damagedQuantity = 0,
+    this.lostQuantity = 0,
+  });
+
+  final String allocationId;
+  final int acceptedQuantity;
+  final int damagedQuantity;
+  final int lostQuantity;
+
+  Map<String, dynamic> toJson() => {
+    'allocationId': allocationId,
+    'acceptedQuantity': acceptedQuantity,
+    'damagedQuantity': damagedQuantity,
+    'lostQuantity': lostQuantity,
+  };
+
+  factory LanWarehouseTransferReceiptItemRequest.fromJson(
+    Map<String, dynamic> json,
+  ) => LanWarehouseTransferReceiptItemRequest(
+    allocationId: json['allocationId']?.toString() ?? '',
+    acceptedQuantity: (json['acceptedQuantity'] as num? ?? 0).toInt(),
+    damagedQuantity: (json['damagedQuantity'] as num? ?? 0).toInt(),
+    lostQuantity: (json['lostQuantity'] as num? ?? 0).toInt(),
+  );
+}
+
+class LanWarehouseTransferReceiptRequest {
+  LanWarehouseTransferReceiptRequest({
+    required this.requestKey,
+    required List<LanWarehouseTransferReceiptItemRequest> items,
+    this.notes = '',
+  }) : items = List.unmodifiable(items);
+
+  final String requestKey;
+  final List<LanWarehouseTransferReceiptItemRequest> items;
+  final String notes;
+
+  Map<String, dynamic> toJson() => {
+    'requestKey': requestKey,
+    'items': items.map((item) => item.toJson()).toList(growable: false),
+    'notes': notes,
+  };
+
+  factory LanWarehouseTransferReceiptRequest.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    final rawItems = json['items'];
+    if (rawItems is! List || rawItems.isEmpty || rawItems.length > 5000) {
+      throw const FormatException('Transfer receipt requires items.');
+    }
+    final items = rawItems
+        .whereType<Map<String, dynamic>>()
+        .map(LanWarehouseTransferReceiptItemRequest.fromJson)
+        .toList(growable: false);
+    if (items.length != rawItems.length) {
+      throw const FormatException('Transfer receipt items are invalid.');
+    }
+    return LanWarehouseTransferReceiptRequest(
+      requestKey: json['requestKey']?.toString() ?? '',
+      items: items,
+      notes: json['notes']?.toString() ?? '',
+    );
+  }
+}
+
+class LanWarehouseTransferReasonRequest {
+  const LanWarehouseTransferReasonRequest({
+    required this.requestKey,
+    required this.reason,
+  });
+
+  final String requestKey;
+  final String reason;
+
+  Map<String, dynamic> toJson() => {'requestKey': requestKey, 'reason': reason};
+
+  factory LanWarehouseTransferReasonRequest.fromJson(
+    Map<String, dynamic> json,
+  ) => LanWarehouseTransferReasonRequest(
+    requestKey: json['requestKey']?.toString() ?? '',
+    reason: json['reason']?.toString() ?? '',
+  );
 }

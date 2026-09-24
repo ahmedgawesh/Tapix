@@ -15,7 +15,13 @@ class CustomerRepositoryImpl implements CustomerRepository {
   final JournalEntryService _journalService;
   final AppDatabase _db;
 
-  CustomerRepositoryImpl(this._datasource, this._auditService, this._sessionService, this._journalService, this._db);
+  CustomerRepositoryImpl(
+    this._datasource,
+    this._auditService,
+    this._sessionService,
+    this._journalService,
+    this._db,
+  );
 
   Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
 
@@ -58,7 +64,9 @@ class CustomerRepositoryImpl implements CustomerRepository {
       address: Value(address),
       currencyId: Value(currencyId),
       balanceCents: Value(balanceCents),
-      openingBalanceCents: Value(balanceCents), // Store opening balance separately
+      openingBalanceCents: Value(
+        balanceCents,
+      ), // Store opening balance separately
       segment: Value(segment),
       loyaltyEnabled: Value(loyaltyEnabled),
       isActive: const Value(true),
@@ -138,7 +146,10 @@ class CustomerRepositoryImpl implements CustomerRepository {
   /// GL ↔ Customer sub-ledger reconciliation invariant
   /// (see `reconcileBalances()`).
   @override
-  Future<void> updateCustomerBalance(int customerId, int newBalanceCents) async {
+  Future<void> updateCustomerBalance(
+    int customerId,
+    int newBalanceCents,
+  ) async {
     throw StateError(
       'Direct customer balance updates are DISABLED. '
       'Use recordTransaction(transactionType: "adjustment") instead, '
@@ -147,7 +158,10 @@ class CustomerRepositoryImpl implements CustomerRepository {
   }
 
   @override
-  Future<void> updateCustomerLoyaltyEnabled(int customerId, bool loyaltyEnabled) {
+  Future<void> updateCustomerLoyaltyEnabled(
+    int customerId,
+    bool loyaltyEnabled,
+  ) {
     return _datasource.updateCustomerLoyaltyEnabled(customerId, loyaltyEnabled);
   }
 
@@ -268,16 +282,18 @@ class CustomerRepositoryImpl implements CustomerRepository {
 
     // 2. Check accounting period is open for the transaction date
     final txDate = existing.transactionDate;
-    final periodRows = await _db.customSelect(
-      '''SELECT id, is_closed FROM accounting_periods
+    final periodRows = await _db
+        .customSelect(
+          '''SELECT id, is_closed FROM accounting_periods
          WHERE start_date <= ? AND end_date >= ?
          ORDER BY start_date DESC LIMIT 1''',
-      variables: [
-        Variable.withDateTime(txDate),
-        Variable.withDateTime(txDate),
-      ],
-      readsFrom: {_db.accountingPeriods},
-    ).get();
+          variables: [
+            Variable.withDateTime(txDate),
+            Variable.withDateTime(txDate),
+          ],
+          readsFrom: {_db.accountingPeriods},
+        )
+        .get();
     if (periodRows.isNotEmpty && periodRows.first.read<bool>('is_closed')) {
       throw StateError(
         'Cannot edit transaction: the accounting period containing this '
@@ -301,7 +317,8 @@ class CustomerRepositoryImpl implements CustomerRepository {
       await _journalService.voidJournalEntriesForSource(
         sourceTable: 'customer_transactions',
         sourceId: transactionId,
-        reason: 'Transaction amount edited from $oldAmountCents to $absNewAmount cents',
+        reason:
+            'Transaction amount edited from $oldAmountCents to $absNewAmount cents',
         userId: userId,
       );
 
@@ -335,10 +352,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
         'type': existing.transactionType,
         'customerId': existing.customerId,
       },
-      newValue: {
-        'amountCents': absNewAmount,
-        'description': newDescription,
-      },
+      newValue: {'amountCents': absNewAmount, 'description': newDescription},
       userId: userId,
     );
 
@@ -365,19 +379,17 @@ class CustomerRepositoryImpl implements CustomerRepository {
 
   @override
   Stream<List<Customer>> watchCustomersBySegment(String segment) {
-    return _datasource.watchAllCustomers(isActive: true).map(
-      (customers) => customers.where((c) => c.segment == segment).toList(),
-    );
+    return _datasource
+        .watchAllCustomers(isActive: true)
+        .map(
+          (customers) => customers.where((c) => c.segment == segment).toList(),
+        );
   }
 
   @override
   Stream<Map<String, int>> watchCustomerCountBySegment() {
     return _datasource.watchAllCustomers(isActive: true).map((customers) {
-      final counts = <String, int>{
-        'retail': 0,
-        'wholesale': 0,
-        'premium': 0,
-      };
+      final counts = <String, int>{'retail': 0, 'wholesale': 0, 'premium': 0};
       for (final customer in customers) {
         final segment = customer.segment;
         counts[segment] = (counts[segment] ?? 0) + 1;

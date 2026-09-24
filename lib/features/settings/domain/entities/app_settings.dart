@@ -42,6 +42,7 @@ class AppSettings {
   final bool enableWeightUnits;
   final bool enableVolumeUnits;
   final bool enablePharmacyFeatures;
+  final bool enableSupplierProductCodes;
   final bool enablePromotions;
 
   // ── Sales ──
@@ -113,6 +114,7 @@ class AppSettings {
     this.enableWeightUnits = false,
     this.enableVolumeUnits = false,
     this.enablePharmacyFeatures = false,
+    this.enableSupplierProductCodes = false,
     this.enablePromotions = false,
     // Sales
     this.defaultPaymentMethod = 'cash',
@@ -175,6 +177,7 @@ class AppSettings {
     bool? enableWeightUnits,
     bool? enableVolumeUnits,
     bool? enablePharmacyFeatures,
+    bool? enableSupplierProductCodes,
     bool? enablePromotions,
     String? defaultPaymentMethod,
     bool? allowPartialPayments,
@@ -238,6 +241,8 @@ class AppSettings {
       enableVolumeUnits: enableVolumeUnits ?? this.enableVolumeUnits,
       enablePharmacyFeatures:
           enablePharmacyFeatures ?? this.enablePharmacyFeatures,
+      enableSupplierProductCodes:
+          enableSupplierProductCodes ?? this.enableSupplierProductCodes,
       enablePromotions: enablePromotions ?? this.enablePromotions,
       defaultPaymentMethod: defaultPaymentMethod ?? this.defaultPaymentMethod,
       allowPartialPayments: allowPartialPayments ?? this.allowPartialPayments,
@@ -305,6 +310,7 @@ class AppSettings {
     'enableWeightUnits': enableWeightUnits,
     'enableVolumeUnits': enableVolumeUnits,
     'enablePharmacyFeatures': enablePharmacyFeatures,
+    'enableSupplierProductCodes': enableSupplierProductCodes,
     'enablePromotions': enablePromotions,
     'defaultPaymentMethod': defaultPaymentMethod,
     'allowPartialPayments': allowPartialPayments,
@@ -368,6 +374,8 @@ class AppSettings {
       enableWeightUnits: (m['enableWeightUnits'] as bool?) ?? false,
       enableVolumeUnits: (m['enableVolumeUnits'] as bool?) ?? false,
       enablePharmacyFeatures: (m['enablePharmacyFeatures'] as bool?) ?? false,
+      enableSupplierProductCodes:
+          (m['enableSupplierProductCodes'] as bool?) ?? false,
       enablePromotions: (m['enablePromotions'] as bool?) ?? false,
       defaultPaymentMethod: (m['defaultPaymentMethod'] as String?) ?? 'cash',
       allowPartialPayments: (m['allowPartialPayments'] as bool?) ?? false,

@@ -10,7 +10,7 @@ import '../../../../core/services/localization_service.dart';
 
 class WelcomeScreen extends StatefulWidget {
   final VoidCallback onComplete;
-  
+
   const WelcomeScreen({super.key, required this.onComplete});
 
   @override
@@ -26,10 +26,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     super.initState();
     // Get current values from blocs
     final themeState = context.read<ThemeBloc>().state;
-    _selectedTheme = (themeState is RealtimeSuccess<ThemeMode>) 
-        ? themeState.data 
+    _selectedTheme = (themeState is RealtimeSuccess<ThemeMode>)
+        ? themeState.data
         : ThemeMode.system;
-    
+
     _selectedLocale = context.read<LocalizationBloc>().state.locale;
   }
 
@@ -59,18 +59,20 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final screenWidth = MediaQuery.of(context).size.width;
-    
+
     // Responsive breakpoints
     final isDesktop = screenWidth >= 1024;
     final isTablet = screenWidth >= 600 && screenWidth < 1024;
-    
+
     // Responsive sizing
     final logoSize = isDesktop ? 160.0 : (isTablet ? 140.0 : 120.0);
     final maxWidth = isDesktop ? 500.0 : (isTablet ? 450.0 : 400.0);
     final padding = isDesktop ? 32.0 : (isTablet ? 28.0 : 24.0);
-    final titleStyle = isDesktop 
-        ? theme.textTheme.headlineLarge 
-        : (isTablet ? theme.textTheme.headlineMedium : theme.textTheme.headlineSmall);
+    final titleStyle = isDesktop
+        ? theme.textTheme.headlineLarge
+        : (isTablet
+              ? theme.textTheme.headlineMedium
+              : theme.textTheme.headlineSmall);
 
     return Scaffold(
       body: SafeArea(
@@ -91,7 +93,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     fit: BoxFit.contain,
                   ),
                   SizedBox(height: isDesktop ? 32 : 24),
-                  
+
                   // Welcome Title
                   Text(
                     'welcome.title',
@@ -102,7 +104,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                     textAlign: TextAlign.center,
                   ).tr(),
                   const SizedBox(height: 8),
-                  
+
                   Text(
                     'welcome.subtitle',
                     style: theme.textTheme.bodyMedium?.copyWith(
@@ -123,7 +125,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         children: [
                           Row(
                             children: [
-                              Icon(LucideIcons.languages, color: colorScheme.primary),
+                              Icon(
+                                LucideIcons.languages,
+                                color: colorScheme.primary,
+                              ),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
@@ -137,7 +142,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                           ),
                           const SizedBox(height: 16),
                           ...LocalizationService.supportedLocales.map((locale) {
-                            final isSelected = _selectedLocale.languageCode == locale.languageCode;
+                            final isSelected =
+                                _selectedLocale.languageCode ==
+                                locale.languageCode;
                             return _LanguageOption(
                               locale: locale,
                               isSelected: isSelected,
@@ -161,7 +168,10 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                         children: [
                           Row(
                             children: [
-                              Icon(LucideIcons.palette, color: colorScheme.primary),
+                              Icon(
+                                LucideIcons.palette,
+                                color: colorScheme.primary,
+                              ),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
@@ -263,7 +273,7 @@ class _LanguageOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
@@ -282,19 +292,17 @@ class _LanguageOption extends StatelessWidget {
                   child: Text(
                     _languageName,
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                      color: isSelected 
-                          ? colorScheme.onPrimaryContainer 
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                      color: isSelected
+                          ? colorScheme.onPrimaryContainer
                           : colorScheme.onSurface,
                     ),
                   ),
                 ),
                 if (isSelected)
-                  Icon(
-                    LucideIcons.check,
-                    color: colorScheme.primary,
-                    size: 20,
-                  ),
+                  Icon(LucideIcons.check, color: colorScheme.primary, size: 20),
               ],
             ),
           ),
@@ -320,7 +328,7 @@ class _ThemeOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
@@ -335,8 +343,8 @@ class _ThemeOption extends StatelessWidget {
               children: [
                 Icon(
                   icon,
-                  color: isSelected 
-                      ? colorScheme.onPrimaryContainer 
+                  color: isSelected
+                      ? colorScheme.onPrimaryContainer
                       : colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 12),
@@ -344,19 +352,17 @@ class _ThemeOption extends StatelessWidget {
                   child: Text(
                     label,
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                      color: isSelected 
-                          ? colorScheme.onPrimaryContainer 
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                      color: isSelected
+                          ? colorScheme.onPrimaryContainer
                           : colorScheme.onSurface,
                     ),
                   ),
                 ),
                 if (isSelected)
-                  Icon(
-                    LucideIcons.check,
-                    color: colorScheme.primary,
-                    size: 20,
-                  ),
+                  Icon(LucideIcons.check, color: colorScheme.primary, size: 20),
               ],
             ),
           ),

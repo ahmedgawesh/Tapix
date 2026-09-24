@@ -56,7 +56,10 @@ abstract class CustomerRepository {
   Future<void> updateCustomerBalance(int customerId, int newBalanceCents);
 
   /// Update customer loyalty enabled status
-  Future<void> updateCustomerLoyaltyEnabled(int customerId, bool loyaltyEnabled);
+  Future<void> updateCustomerLoyaltyEnabled(
+    int customerId,
+    bool loyaltyEnabled,
+  );
 
   /// Record a customer transaction (payment, discount, return, etc.).
   ///

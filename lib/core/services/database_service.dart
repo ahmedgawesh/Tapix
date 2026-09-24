@@ -11,18 +11,22 @@ final getIt = GetIt.instance;
 
 void setupDatabase() {
   final database = AppDatabase();
-  
+
   getIt.registerSingleton<AppDatabase>(database);
-  
+
   getIt.registerLazySingleton(() => database.productDao);
   getIt.registerLazySingleton(() => database.saleDao);
   getIt.registerLazySingleton(() => database.customerDao);
   getIt.registerLazySingleton(() => database.accountingDao);
-  
+
   getIt.registerLazySingleton<ProductLocalDatasource>(
     () => ProductLocalDatasourceImpl(getIt<ProductDao>()),
   );
   getIt.registerLazySingleton<ProductRepository>(
-    () => ProductRepositoryImpl(getIt<ProductLocalDatasource>(), getIt<AuditLogService>(), getIt<SessionService>()),
+    () => ProductRepositoryImpl(
+      getIt<ProductLocalDatasource>(),
+      getIt<AuditLogService>(),
+      getIt<SessionService>(),
+    ),
   );
 }

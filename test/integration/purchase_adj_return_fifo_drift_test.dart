@@ -52,42 +52,49 @@ void main() {
   tearDown(() async => db.close());
 
   Future<int> accountIdByCode(String code) async {
-    final row = await db.customSelect(
-      'SELECT id FROM accounts WHERE account_code = ?',
-      variables: [Variable.withString(code)],
-    ).getSingle();
+    final row = await db
+        .customSelect(
+          'SELECT id FROM accounts WHERE account_code = ?',
+          variables: [Variable.withString(code)],
+        )
+        .getSingle();
     return row.read<int>('id');
   }
 
   /// Net credit posted to a given account by the JE of an adjustment return.
   Future<({int debit, int credit})> ledgerLineFor(
-      String code, int returnId) async {
+    String code,
+    int returnId,
+  ) async {
     final acctId = await accountIdByCode(code);
-    final row = await db.customSelect(
-      'SELECT COALESCE(SUM(jel.debit_cents),0) AS d, '
-      '       COALESCE(SUM(jel.credit_cents),0) AS c '
-      'FROM journal_entry_lines jel '
-      'INNER JOIN journal_entries je ON je.id = jel.journal_entry_id '
-      "WHERE je.source_table = 'purchase_return_adjustments' "
-      '  AND je.source_id = ? AND je.status = ? AND jel.account_id = ?',
-      variables: [
-        Variable.withInt(returnId),
-        Variable.withString('posted'),
-        Variable.withInt(acctId),
-      ],
-    ).getSingle();
+    final row = await db
+        .customSelect(
+          'SELECT COALESCE(SUM(jel.debit_cents),0) AS d, '
+          '       COALESCE(SUM(jel.credit_cents),0) AS c '
+          'FROM journal_entry_lines jel '
+          'INNER JOIN journal_entries je ON je.id = jel.journal_entry_id '
+          "WHERE je.source_table = 'purchase_return_adjustments' "
+          '  AND je.source_id = ? AND je.status = ? AND jel.account_id = ?',
+          variables: [
+            Variable.withInt(returnId),
+            Variable.withString('posted'),
+            Variable.withInt(acctId),
+          ],
+        )
+        .getSingle();
     return (debit: row.read<int>('d'), credit: row.read<int>('c'));
   }
 
-  test(
-      'FIFO purchase adjustment return credits Inventory (1200) by the ACTUAL '
+  test('FIFO purchase adjustment return credits Inventory (1200) by the ACTUAL '
       'consumed batch cost, keeping GL == Σ(stock×cost)', () async {
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     final currencyId = usd.id;
 
-    final supplierId = await db.into(db.suppliers).insert(
+    final supplierId = await db
+        .into(db.suppliers)
+        .insert(
           SuppliersCompanion.insert(
             name: 'FIFO Drift Supplier',
             currencyId: currencyId,
@@ -97,7 +104,9 @@ void main() {
 
     // FIFO product. cost_cents is a DISPLAY value = latest paid (5000),
     // deliberately DIFFERENT from the oldest batch (3000).
-    final productId = await db.into(db.products).insert(
+    final productId = await db
+        .into(db.products)
+        .insert(
           ProductsCompanion.insert(
             name: 'FIFO Drift Product',
             costCents: Decimal.fromInt(5000),
@@ -108,7 +117,9 @@ void main() {
             stockQuantity: const Value(15),
           ),
         );
-    final variantId = await db.into(db.productVariants).insert(
+    final variantId = await db
+        .into(db.productVariants)
+        .insert(
           ProductVariantsCompanion.insert(
             productId: productId,
             costCents: Decimal.fromInt(5000), // latest paid (display)
@@ -118,24 +129,32 @@ void main() {
         );
 
     // Two lots: oldest 10 @ 3000 (FIFO-first), newest 5 @ 5000.
-    await db.into(db.productBatches).insert(ProductBatchesCompanion.insert(
-          productId: productId,
-          variantId: Value(variantId),
-          batchNumber: 'LOT-OLD',
-          receivedQuantity: 10,
-          remainingQuantity: 10,
-          unitCostCents: Decimal.fromInt(3000),
-          receivedDate: Value(DateTime(2026, 1, 1)),
-        ));
-    await db.into(db.productBatches).insert(ProductBatchesCompanion.insert(
-          productId: productId,
-          variantId: Value(variantId),
-          batchNumber: 'LOT-NEW',
-          receivedQuantity: 5,
-          remainingQuantity: 5,
-          unitCostCents: Decimal.fromInt(5000),
-          receivedDate: Value(DateTime(2026, 2, 1)),
-        ));
+    await db
+        .into(db.productBatches)
+        .insert(
+          ProductBatchesCompanion.insert(
+            productId: productId,
+            variantId: Value(variantId),
+            batchNumber: 'LOT-OLD',
+            receivedQuantity: 10,
+            remainingQuantity: 10,
+            unitCostCents: Decimal.fromInt(3000),
+            receivedDate: Value(DateTime(2026, 1, 1)),
+          ),
+        );
+    await db
+        .into(db.productBatches)
+        .insert(
+          ProductBatchesCompanion.insert(
+            productId: productId,
+            variantId: Value(variantId),
+            batchNumber: 'LOT-NEW',
+            receivedQuantity: 5,
+            remainingQuantity: 5,
+            unitCostCents: Decimal.fromInt(5000),
+            receivedDate: Value(DateTime(2026, 2, 1)),
+          ),
+        );
 
     final valueBefore = await valuationDs.getTotalInventoryValueCents();
     expect(valueBefore, 10 * 3000 + 5 * 5000); // 55,000
@@ -160,7 +179,9 @@ void main() {
           variantId: Value(variantId),
           quantity: returnQty,
           unitPriceCents: Decimal.fromInt(6000),
-          unitCostCents: Value(Decimal.fromInt(5000)), // FROZEN (wrong for FIFO)
+          unitCostCents: Value(
+            Decimal.fromInt(5000),
+          ), // FROZEN (wrong for FIFO)
           totalCents: Decimal.fromInt(returnQty * 6000),
           dispositionType: const Value('restock'),
         ),
@@ -171,17 +192,27 @@ void main() {
 
     // ── Physical valuation dropped by the OLDEST-lot cost, not product cost.
     final valueAfter = await valuationDs.getTotalInventoryValueCents();
-    expect(valueBefore - valueAfter, 12000,
-        reason: 'FIFO consumed 4 × 3000 from the oldest lot');
+    expect(
+      valueBefore - valueAfter,
+      12000,
+      reason: 'FIFO consumed 4 × 3000 from the oldest lot',
+    );
 
     // ── The Inventory (1200) GL leg must equal that same 12,000 — NOT 20,000.
     final inv = await ledgerLineFor('1200', returnId);
-    expect(inv.credit, 12000,
-        reason: 'GL(1200) must be credited by the ACTUAL FIFO batch cost, '
-            'never the frozen product cost (would be 20,000)');
+    expect(
+      inv.credit,
+      12000,
+      reason:
+          'GL(1200) must be credited by the ACTUAL FIFO batch cost, '
+          'never the frozen product cost (would be 20,000)',
+    );
 
     // ── The core invariant: GL inventory movement == physical valuation move.
-    expect(inv.credit, valueBefore - valueAfter,
-        reason: 'no drift: 1200 reduction must equal Σ(stock×cost) reduction');
+    expect(
+      inv.credit,
+      valueBefore - valueAfter,
+      reason: 'no drift: 1200 reduction must equal Σ(stock×cost) reduction',
+    );
   });
 }

@@ -212,10 +212,7 @@ abstract class EmployeeRepository {
   });
 
   /// Approve a leave request
-  Future<bool> approveLeaveRequest({
-    required int id,
-    required int approvedBy,
-  });
+  Future<bool> approveLeaveRequest({required int id, required int approvedBy});
 
   /// Reject a leave request
   Future<bool> rejectLeaveRequest({
@@ -230,7 +227,8 @@ abstract class EmployeeRepository {
   // ==================== PAYROLL ====================
 
   /// Watch payrolls for a period
-  Stream<List<Payroll>> watchPayrollsByPeriod(String period, {
+  Stream<List<Payroll>> watchPayrollsByPeriod(
+    String period, {
     PayrollStatus? status,
   });
 
@@ -334,8 +332,5 @@ abstract class EmployeeRepository {
   });
 
   /// Get average performance score for an employee
-  Future<double?> getAveragePerformanceScore(
-    int employeeId, {
-    String? period,
-  });
+  Future<double?> getAveragePerformanceScore(int employeeId, {String? period});
 }

@@ -39,7 +39,7 @@ class LocalizationBloc extends Bloc<LocalizationEvent, LocalizationState> {
   StreamSubscription<Locale>? _streamSub;
 
   LocalizationBloc(this._localizationService)
-      : super(LocalizationReady(_localizationService.getLocale())) {
+    : super(LocalizationReady(_localizationService.getLocale())) {
     on<LocaleChanged>(_onLocaleChanged);
     on<_LocaleStreamUpdated>(_onStreamUpdated);
 
@@ -49,10 +49,7 @@ class LocalizationBloc extends Bloc<LocalizationEvent, LocalizationState> {
     });
   }
 
-  void _onLocaleChanged(
-    LocaleChanged event,
-    Emitter<LocalizationState> emit,
-  ) {
+  void _onLocaleChanged(LocaleChanged event, Emitter<LocalizationState> emit) {
     // Emit immediately so UI updates instantly
     emit(LocalizationReady(event.locale));
     // Persist in background (fire-and-forget, SharedPreferences is fast)

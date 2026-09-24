@@ -17,6 +17,7 @@ import '../../../../core/pricing/pricing_snapshot.dart';
 import '../../../../core/pricing/pricing_preview_fingerprint.dart';
 import '../../../../core/measurement/measurement.dart';
 import '../../../../core/services/business/branch_tax_policy_store.dart';
+import '../../../../core/services/inventory/supplier_identity_rules.dart';
 import '../../../../core/services/tax_calculation_service.dart';
 import '../../../settings/data/services/app_settings_service.dart';
 import '../../../settings/domain/entities/app_settings.dart';
@@ -284,6 +285,36 @@ class SaleAdjReturnItemQuantityChanged extends SaleAdjReturnFormEvent {
   List<Object?> get props => [index, quantity];
 }
 
+class SaleAdjReturnConsignmentSourceChanged extends SaleAdjReturnFormEvent {
+  const SaleAdjReturnConsignmentSourceChanged(this.index, this.source);
+
+  final int index;
+  final AdjReturnConsignmentSource? source;
+
+  @override
+  List<Object?> get props => [index, source];
+}
+
+class SaleAdjReturnSupplierIdentityChanged extends SaleAdjReturnFormEvent {
+  const SaleAdjReturnSupplierIdentityChanged(this.index, this.source);
+
+  final int index;
+  final AdjReturnSupplierIdentitySource? source;
+
+  @override
+  List<Object?> get props => [index, source];
+}
+
+class SaleAdjReturnUnverifiedSourceSelected extends SaleAdjReturnFormEvent {
+  const SaleAdjReturnUnverifiedSourceSelected(this.index, this.reason);
+
+  final int index;
+  final String reason;
+
+  @override
+  List<Object?> get props => [index, reason];
+}
+
 class SaleAdjReturnItemPriceChanged extends SaleAdjReturnFormEvent {
   final int index;
   final int unitPriceCents;
@@ -426,6 +457,9 @@ class SaleAdjReturnFormBloc
     on<SaleAdjReturnItemAdded>(_onItemAdded);
     on<SaleAdjReturnItemRemoved>(_onItemRemoved);
     on<SaleAdjReturnItemQuantityChanged>(_onQuantityChanged);
+    on<SaleAdjReturnConsignmentSourceChanged>(_onConsignmentSourceChanged);
+    on<SaleAdjReturnSupplierIdentityChanged>(_onSupplierIdentityChanged);
+    on<SaleAdjReturnUnverifiedSourceSelected>(_onUnverifiedSourceSelected);
     on<SaleAdjReturnItemPriceChanged>(_onPriceChanged);
     on<SaleAdjReturnItemDiscountChanged>(_onDiscountChanged);
     on<SaleAdjReturnNotesChanged>(_onNotesChanged);
@@ -649,6 +683,59 @@ class SaleAdjReturnFormBloc
     add(const _SaleAdjReturnRecomputeLoyalty());
   }
 
+  void _onConsignmentSourceChanged(
+    SaleAdjReturnConsignmentSourceChanged event,
+    Emitter<SaleAdjReturnFormState> emit,
+  ) {
+    final updated = List<AdjReturnLineItem>.from(state.items);
+    if (event.index >= updated.length) return;
+    updated[event.index] = updated[event.index].copyWith(
+      consignmentSource: event.source,
+      clearConsignmentSource: event.source == null,
+      clearSupplierIdentitySource: event.source != null,
+      sourceResolution: event.source == null
+          ? AdjReturnSourceResolution.pending
+          : AdjReturnSourceResolution.consignment,
+      clearSourceResolutionReason: true,
+    );
+    emit(state.copyWith(items: updated, hasUnsavedChanges: true));
+  }
+
+  void _onSupplierIdentityChanged(
+    SaleAdjReturnSupplierIdentityChanged event,
+    Emitter<SaleAdjReturnFormState> emit,
+  ) {
+    final updated = List<AdjReturnLineItem>.from(state.items);
+    if (event.index >= updated.length) return;
+    updated[event.index] = updated[event.index].copyWith(
+      supplierIdentitySource: event.source,
+      clearSupplierIdentitySource: event.source == null,
+      clearConsignmentSource: event.source != null,
+      sourceResolution: event.source == null
+          ? AdjReturnSourceResolution.pending
+          : AdjReturnSourceResolution.supplierIdentity,
+      clearSourceResolutionReason: true,
+    );
+    emit(state.copyWith(items: updated, hasUnsavedChanges: true));
+  }
+
+  void _onUnverifiedSourceSelected(
+    SaleAdjReturnUnverifiedSourceSelected event,
+    Emitter<SaleAdjReturnFormState> emit,
+  ) {
+    final reason = event.reason.trim();
+    if (reason.isEmpty) return;
+    final updated = List<AdjReturnLineItem>.from(state.items);
+    if (event.index >= updated.length) return;
+    updated[event.index] = updated[event.index].copyWith(
+      clearConsignmentSource: true,
+      clearSupplierIdentitySource: true,
+      sourceResolution: AdjReturnSourceResolution.unverified,
+      sourceResolutionReason: reason,
+    );
+    emit(state.copyWith(items: updated, hasUnsavedChanges: true));
+  }
+
   void _onPriceChanged(
     SaleAdjReturnItemPriceChanged event,
     Emitter<SaleAdjReturnFormState> emit,
@@ -819,6 +906,10 @@ class SaleAdjReturnFormBloc
                   unitPriceCents: item.unitPriceCents,
                   discountCents: item.discountCents,
                   discountPercentBps: item.discountPercentBps,
+                  consignmentLayerId: item.consignmentSource?.layerId,
+                  supplierIdentityId: item.supplierIdentitySource?.identityId,
+                  sourceResolution: item.sourceResolution.wireValue,
+                  sourceResolutionReason: item.sourceResolutionReason,
                   reason: item.reason,
                 ),
               )
@@ -859,7 +950,16 @@ class SaleAdjReturnFormBloc
           );
         }
       } else {
-        emit(state.copyWith(isSubmitting: false, error: error.message));
+        emit(
+          state.copyWith(
+            isSubmitting: false,
+            error:
+                (error.code.startsWith('tracking.') ||
+                    error.code.startsWith('supplier_identity.'))
+                ? error.code.tr()
+                : error.message,
+          ),
+        );
       }
     } catch (error, stackTrace) {
       developer.log(
@@ -901,6 +1001,38 @@ class SaleAdjReturnFormBloc
     }
     if (state.reasonCode == null) {
       emit(state.copyWith(error: 'returns.reason_required'.tr()));
+      return;
+    }
+    final sourceDecisionMissing = state.items.any(
+      (item) =>
+          item.trackInventory &&
+          item.sourceResolution == AdjReturnSourceResolution.pending,
+    );
+    if (sourceDecisionMissing) {
+      emit(state.copyWith(error: 'returns.source_decision_required'.tr()));
+      return;
+    }
+    final invalidUnverifiedReason = state.items.any(
+      (item) =>
+          item.sourceResolution == AdjReturnSourceResolution.unverified &&
+          (item.sourceResolutionReason?.trim().isEmpty ?? true),
+    );
+    if (invalidUnverifiedReason) {
+      emit(
+        state.copyWith(error: 'returns.unverified_source_reason_required'.tr()),
+      );
+      return;
+    }
+    final sourceCapacityExceeded = state.items.any((item) {
+      final source = item.consignmentSource;
+      return source != null && item.quantity > source.maximumReturnQuantity;
+    });
+    if (sourceCapacityExceeded) {
+      emit(
+        state.copyWith(
+          error: 'returns.consignment_source_quantity_exceeded'.tr(),
+        ),
+      );
       return;
     }
 
@@ -970,6 +1102,8 @@ class SaleAdjReturnFormBloc
         // that net. We just persist what the engine produced — there is no
         // second arithmetic path here, which is the whole point of Phase 1.
         final pricing = submitted.pricing;
+        final actorId = await _sessionService.getCurrentUserId();
+        final resolvedAt = DateTime.now();
         final itemCompanions = <SaleReturnAdjustmentItemsCompanion>[];
         for (int idx = 0; idx < submitted.items.length; idx++) {
           final item = submitted.items[idx];
@@ -987,6 +1121,20 @@ class SaleAdjReturnFormBloc
               discountCents: Value(
                 Decimal.fromInt(line.totalLineDiscount.cents),
               ),
+              itemDiscountAtPostCents: Value(
+                Decimal.fromInt(line.local.discount.cents),
+              ),
+              invoiceDiscountAtPostCents: Value(
+                Decimal.fromInt(line.shareOfOverallDiscount.cents),
+              ),
+              consignmentLayerId: Value(item.consignmentSource?.layerId),
+              supplierIdentityId: Value(
+                item.supplierIdentitySource?.identityId,
+              ),
+              sourceResolution: Value(item.sourceResolution.wireValue),
+              sourceResolutionReason: Value(item.sourceResolutionReason),
+              sourceResolvedBy: Value(actorId),
+              sourceResolvedAt: Value(resolvedAt),
               taxCents: Value(Decimal.fromInt(line.tax.cents)),
               totalCents: Decimal.fromInt(line.total.cents),
               reason: Value(item.reason),
@@ -998,7 +1146,7 @@ class SaleAdjReturnFormBloc
           returnData,
           itemCompanions,
           journalEntryService: _journalEntryService,
-          userId: await _sessionService.getCurrentUserId(),
+          userId: actorId,
           commissionService: _commissionService,
           loyaltyPointsService: _loyaltyPointsService,
           settlementAllocations: event.settlementAllocations,
@@ -1034,6 +1182,8 @@ class SaleAdjReturnFormBloc
           ),
         ),
       );
+    } on SupplierIdentityException catch (e) {
+      emit(state.copyWith(isSubmitting: false, error: e.messageKey.tr()));
     } catch (e, st) {
       developer.log(
         'Sale adjustment return submission failed: $e',

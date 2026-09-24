@@ -165,10 +165,14 @@ class _RolesScreenContentState extends State<_RolesScreenContent> {
 
   String _permissionLabel(String permission) {
     // Convert permission_name to a readable label
-    return permission.replaceAll('_', ' ').split(' ').map((w) {
-      if (w.isEmpty) return w;
-      return w[0].toUpperCase() + w.substring(1);
-    }).join(' ');
+    return permission
+        .replaceAll('_', ' ')
+        .split(' ')
+        .map((w) {
+          if (w.isEmpty) return w;
+          return w[0].toUpperCase() + w.substring(1);
+        })
+        .join(' ');
   }
 
   @override
@@ -195,7 +199,9 @@ class _RolesScreenContentState extends State<_RolesScreenContent> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: colorScheme.primaryContainer.withValues(alpha: 0.3),
+                      color: colorScheme.primaryContainer.withValues(
+                        alpha: 0.3,
+                      ),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                         color: colorScheme.primary.withValues(alpha: 0.2),
@@ -250,10 +256,16 @@ class _RolesScreenContentState extends State<_RolesScreenContent> {
                   ...UserRole.values.map((role) {
                     final isSelected = _selectedRole == role;
                     final color = _roleColor(role);
-                    final permissions = permissionService.getPermissionsForRole(role);
+                    final permissions = permissionService.getPermissionsForRole(
+                      role,
+                    );
                     // Filter out legacy permissions
                     final cleanPermissions = permissions
-                        .where((p) => !p.contains('manage_') || Permissions.all.contains(p))
+                        .where(
+                          (p) =>
+                              !p.contains('manage_') ||
+                              Permissions.all.contains(p),
+                        )
                         .toSet()
                         .toList();
 
@@ -266,14 +278,17 @@ class _RolesScreenContentState extends State<_RolesScreenContent> {
                           side: BorderSide(
                             color: isSelected
                                 ? color.withValues(alpha: 0.6)
-                                : colorScheme.outlineVariant.withValues(alpha: 0.3),
+                                : colorScheme.outlineVariant.withValues(
+                                    alpha: 0.3,
+                                  ),
                             width: isSelected ? 2 : 1,
                           ),
                         ),
                         color: isSelected
                             ? color.withValues(alpha: 0.05)
-                            : colorScheme.surfaceContainerHighest
-                                .withValues(alpha: 0.3),
+                            : colorScheme.surfaceContainerHighest.withValues(
+                                alpha: 0.3,
+                              ),
                         child: InkWell(
                           onTap: () {
                             setState(() {
@@ -290,8 +305,9 @@ class _RolesScreenContentState extends State<_RolesScreenContent> {
                                   children: [
                                     CircleAvatar(
                                       radius: 20,
-                                      backgroundColor:
-                                          color.withValues(alpha: 0.15),
+                                      backgroundColor: color.withValues(
+                                        alpha: 0.15,
+                                      ),
                                       child: Icon(
                                         _roleIcon(role),
                                         color: color,
@@ -308,16 +324,16 @@ class _RolesScreenContentState extends State<_RolesScreenContent> {
                                             _roleLabel(role),
                                             style: theme.textTheme.titleMedium
                                                 ?.copyWith(
-                                              fontWeight: FontWeight.bold,
-                                            ),
+                                                  fontWeight: FontWeight.bold,
+                                                ),
                                           ),
                                           Text(
                                             '${cleanPermissions.length} ${'users.permissions'.tr()}',
                                             style: theme.textTheme.bodySmall
                                                 ?.copyWith(
-                                              color:
-                                                  colorScheme.onSurfaceVariant,
-                                            ),
+                                                  color: colorScheme
+                                                      .onSurfaceVariant,
+                                                ),
                                           ),
                                         ],
                                       ),
@@ -343,30 +359,28 @@ class _RolesScreenContentState extends State<_RolesScreenContent> {
                                   const SizedBox(height: 16),
                                   Text(
                                     'users.permissions_overview'.tr(),
-                                    style:
-                                        theme.textTheme.titleSmall?.copyWith(
+                                    style: theme.textTheme.titleSmall?.copyWith(
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                   const SizedBox(height: 8),
-                                  ..._permissionCategories.entries.map(
-                                    (entry) {
-                                      final categoryPerms = entry.value
-                                          .where(
-                                              (p) => cleanPermissions.contains(p))
-                                          .toList();
-                                      if (categoryPerms.isEmpty) {
-                                        return const SizedBox.shrink();
-                                      }
-                                      return _PermissionCategorySection(
-                                        icon: _categoryIcon(entry.key),
-                                        label: _categoryLabel(entry.key),
-                                        permissions: categoryPerms,
-                                        permissionLabel: _permissionLabel,
-                                        color: color,
-                                      );
-                                    },
-                                  ),
+                                  ..._permissionCategories.entries.map((entry) {
+                                    final categoryPerms = entry.value
+                                        .where(
+                                          (p) => cleanPermissions.contains(p),
+                                        )
+                                        .toList();
+                                    if (categoryPerms.isEmpty) {
+                                      return const SizedBox.shrink();
+                                    }
+                                    return _PermissionCategorySection(
+                                      icon: _categoryIcon(entry.key),
+                                      label: _categoryLabel(entry.key),
+                                      permissions: categoryPerms,
+                                      permissionLabel: _permissionLabel,
+                                      color: color,
+                                    );
+                                  }),
                                 ],
                               ],
                             ),
@@ -452,19 +466,14 @@ class _PermissionCategorySection extends StatelessWidget {
             runSpacing: 4,
             children: permissions.map((p) {
               return Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   permissionLabel(p),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: color,
-                  ),
+                  style: theme.textTheme.labelSmall?.copyWith(color: color),
                 ),
               );
             }).toList(),

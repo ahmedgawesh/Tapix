@@ -25,6 +25,8 @@ mixin _$SaleDaoMixin on DatabaseAccessor<AppDatabase> {
   $ProductColorsTable get productColors => attachedDatabase.productColors;
   $SizesTable get sizes => attachedDatabase.sizes;
   $ProductVariantsTable get productVariants => attachedDatabase.productVariants;
+  $SupplierProductIdentitiesTable get supplierProductIdentities =>
+      attachedDatabase.supplierProductIdentities;
   $SaleItemsTable get saleItems => attachedDatabase.saleItems;
   $SaleTaxBandsTable get saleTaxBands => attachedDatabase.saleTaxBands;
   $ReturnReasonCodesTable get returnReasonCodes =>
@@ -88,6 +90,11 @@ class SaleDaoManager {
       $$ProductVariantsTableTableManager(
         _db.attachedDatabase,
         _db.productVariants,
+      );
+  $$SupplierProductIdentitiesTableTableManager get supplierProductIdentities =>
+      $$SupplierProductIdentitiesTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierProductIdentities,
       );
   $$SaleItemsTableTableManager get saleItems =>
       $$SaleItemsTableTableManager(_db.attachedDatabase, _db.saleItems);

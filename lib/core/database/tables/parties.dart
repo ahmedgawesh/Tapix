@@ -10,15 +10,28 @@ class Customers extends Table {
   TextColumn get email => text().nullable()();
   TextColumn get phone => text().nullable()();
   TextColumn get address => text().nullable()();
-  IntColumn get balanceCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get balanceCents =>
+      integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+
   /// The initial balance when the customer was created (immutable after creation)
-  IntColumn get openingBalanceCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
-  IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
-  TextColumn get segment => text().withDefault(const Constant('retail'))(); // retail, wholesale, premium
-  BoolColumn get loyaltyEnabled => boolean().withDefault(const Constant(true))();
-  IntColumn get loyaltyTierId => integer().nullable().references(LoyaltyTiers, #id, onDelete: KeyAction.setNull)();
-  IntColumn get loyaltyPointsBalance => integer().withDefault(const Constant(0))();
-  IntColumn get totalSpentCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get openingBalanceCents =>
+      integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get currencyId =>
+      integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
+  TextColumn get segment => text().withDefault(
+    const Constant('retail'),
+  )(); // retail, wholesale, premium
+  BoolColumn get loyaltyEnabled =>
+      boolean().withDefault(const Constant(true))();
+  IntColumn get loyaltyTierId => integer().nullable().references(
+    LoyaltyTiers,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+  IntColumn get loyaltyPointsBalance =>
+      integer().withDefault(const Constant(0))();
+  IntColumn get totalSpentCents =>
+      integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get totalTransactions => integer().withDefault(const Constant(0))();
   DateTimeColumn get lastTransactionAt => dateTime().nullable()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
@@ -29,17 +42,21 @@ class Customers extends Table {
 @DataClassName('CustomerTransaction')
 class CustomerTransactions extends Table {
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get customerId => integer().references(Customers, #id, onDelete: KeyAction.restrict)();
+  IntColumn get customerId =>
+      integer().references(Customers, #id, onDelete: KeyAction.restrict)();
   TextColumn get transactionNumber => text().nullable()();
   TextColumn get transactionType => text()();
+
   /// For discount transactions: seasonal, volume, loyalty, promotional, early_payment, other
   TextColumn get discountType => text().nullable()();
   IntColumn get amountCents => integer().map(const MoneyConverter())();
-  IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
+  IntColumn get currencyId =>
+      integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
   TextColumn get description => text().nullable()();
   IntColumn get referenceId => integer().nullable()();
   TextColumn get referenceType => text().nullable()();
-  DateTimeColumn get transactionDate => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get transactionDate =>
+      dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
@@ -47,13 +64,31 @@ class CustomerTransactions extends Table {
 class Suppliers extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text()();
+
+  /// Optional, normalized A-Z / 0-9 prefix, unique across ALL suppliers,
+  /// including inactive ones. Schema guards prevent reassigning issued codes.
+  TextColumn get productCode => text().nullable()();
   TextColumn get email => text().nullable()();
   TextColumn get phone => text().nullable()();
   TextColumn get address => text().nullable()();
-  IntColumn get balanceCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+
+  /// UI default only. Every consignment receipt must still reference an active
+  /// agreement; this field never changes accounting by itself.
+  TextColumn get defaultSupplyMode => text()
+      .withDefault(const Constant('standard'))
+      .check(
+        const CustomExpression<bool>(
+          "default_supply_mode IN ('standard','consignment','mixed')",
+        ),
+      )();
+  IntColumn get balanceCents =>
+      integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+
   /// The initial balance when the supplier was created (immutable after creation)
-  IntColumn get openingBalanceCents => integer().map(const MoneyConverter()).withDefault(const Constant(0))();
-  IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
+  IntColumn get openingBalanceCents =>
+      integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+  IntColumn get currencyId =>
+      integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
@@ -62,16 +97,20 @@ class Suppliers extends Table {
 @DataClassName('SupplierTransaction')
 class SupplierTransactions extends Table {
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get supplierId => integer().references(Suppliers, #id, onDelete: KeyAction.restrict)();
+  IntColumn get supplierId =>
+      integer().references(Suppliers, #id, onDelete: KeyAction.restrict)();
   TextColumn get transactionNumber => text().nullable()();
   TextColumn get transactionType => text()();
+
   /// For discount transactions: seasonal, volume, loyalty, promotional, early_payment, other
   TextColumn get discountType => text().nullable()();
   IntColumn get amountCents => integer().map(const MoneyConverter())();
-  IntColumn get currencyId => integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
+  IntColumn get currencyId =>
+      integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
   TextColumn get description => text().nullable()();
   IntColumn get referenceId => integer().nullable()();
   TextColumn get referenceType => text().nullable()();
-  DateTimeColumn get transactionDate => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get transactionDate =>
+      dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }

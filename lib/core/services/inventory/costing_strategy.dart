@@ -112,7 +112,7 @@ class WeightedAverageCostingStrategy implements CostingStrategy {
     }
     final row = await dao
         .customSelect(
-          'SELECT s.quantity, s.unit_cost_cents FROM business_warehouse_stocks s '
+          'SELECT (s.quantity - s.supplier_owned_quantity) AS quantity, s.unit_cost_cents FROM business_warehouse_stocks s '
           'JOIN product_variants v ON v.id = s.variant_id '
           'WHERE s.warehouse_id = ? AND s.variant_id = ? AND v.product_id = ?',
           variables: [

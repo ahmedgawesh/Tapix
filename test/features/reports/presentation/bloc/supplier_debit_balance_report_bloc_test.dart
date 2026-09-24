@@ -48,27 +48,30 @@ void main() {
       expect(item.phone, isNull);
     });
 
-    test('debit balance equals purchases minus returns minus payments minus discounts', () {
-      const purchases = 100000;
-      const returns = 10000;
-      const payments = 30000;
-      const discounts = 5000;
-      const expectedDebit = purchases - returns - payments - discounts;
+    test(
+      'debit balance equals purchases minus returns minus payments minus discounts',
+      () {
+        const purchases = 100000;
+        const returns = 10000;
+        const payments = 30000;
+        const discounts = 5000;
+        const expectedDebit = purchases - returns - payments - discounts;
 
-      const item = SupplierDebitBalanceItem(
-        supplierId: 1,
-        supplierName: 'Test',
-        totalPurchasesCents: purchases,
-        totalReturnsCents: returns,
-        totalPaymentsCents: payments,
-        totalDiscountsCents: discounts,
-        debitBalanceCents: expectedDebit,
-        transactionCount: 5,
-      );
+        const item = SupplierDebitBalanceItem(
+          supplierId: 1,
+          supplierName: 'Test',
+          totalPurchasesCents: purchases,
+          totalReturnsCents: returns,
+          totalPaymentsCents: payments,
+          totalDiscountsCents: discounts,
+          debitBalanceCents: expectedDebit,
+          transactionCount: 5,
+        );
 
-      expect(item.debitBalanceCents, expectedDebit);
-      expect(item.debitBalanceCents, 55000);
-    });
+        expect(item.debitBalanceCents, expectedDebit);
+        expect(item.debitBalanceCents, 55000);
+      },
+    );
 
     test('integer cents prevents floating point errors', () {
       const item = SupplierDebitBalanceItem(
@@ -147,9 +150,7 @@ void main() {
         dateRange: ReportDateRange.thisMonth(),
       );
 
-      final updated = original.copyWith(
-        dateRange: ReportDateRange.thisYear(),
-      );
+      final updated = original.copyWith(dateRange: ReportDateRange.thisYear());
 
       expect(updated.grandTotalPurchasesCents, 500000);
       expect(updated.grandTotalReturnsCents, 50000);
@@ -214,7 +215,8 @@ void main() {
 
     test('SupplierDebitBalanceReportSortChanged stores sort type', () {
       const event = SupplierDebitBalanceReportSortChanged(
-          SupplierDebitBalanceSortType.nameAsc);
+        SupplierDebitBalanceSortType.nameAsc,
+      );
       expect(event.sort, SupplierDebitBalanceSortType.nameAsc);
     });
   });
@@ -222,18 +224,30 @@ void main() {
   group('SupplierDebitBalanceSortType enum', () {
     test('has all expected values', () {
       expect(SupplierDebitBalanceSortType.values.length, 6);
-      expect(SupplierDebitBalanceSortType.values,
-          contains(SupplierDebitBalanceSortType.balanceDesc));
-      expect(SupplierDebitBalanceSortType.values,
-          contains(SupplierDebitBalanceSortType.balanceAsc));
-      expect(SupplierDebitBalanceSortType.values,
-          contains(SupplierDebitBalanceSortType.nameAsc));
-      expect(SupplierDebitBalanceSortType.values,
-          contains(SupplierDebitBalanceSortType.nameDesc));
-      expect(SupplierDebitBalanceSortType.values,
-          contains(SupplierDebitBalanceSortType.purchasesDesc));
-      expect(SupplierDebitBalanceSortType.values,
-          contains(SupplierDebitBalanceSortType.paymentsDesc));
+      expect(
+        SupplierDebitBalanceSortType.values,
+        contains(SupplierDebitBalanceSortType.balanceDesc),
+      );
+      expect(
+        SupplierDebitBalanceSortType.values,
+        contains(SupplierDebitBalanceSortType.balanceAsc),
+      );
+      expect(
+        SupplierDebitBalanceSortType.values,
+        contains(SupplierDebitBalanceSortType.nameAsc),
+      );
+      expect(
+        SupplierDebitBalanceSortType.values,
+        contains(SupplierDebitBalanceSortType.nameDesc),
+      );
+      expect(
+        SupplierDebitBalanceSortType.values,
+        contains(SupplierDebitBalanceSortType.purchasesDesc),
+      );
+      expect(
+        SupplierDebitBalanceSortType.values,
+        contains(SupplierDebitBalanceSortType.paymentsDesc),
+      );
     });
   });
 
@@ -273,8 +287,7 @@ void main() {
 
     test('sort by balance descending', () {
       final list = List<SupplierDebitBalanceItem>.from(suppliers);
-      list.sort(
-          (a, b) => b.debitBalanceCents.compareTo(a.debitBalanceCents));
+      list.sort((a, b) => b.debitBalanceCents.compareTo(a.debitBalanceCents));
 
       expect(list[0].supplierName, 'Apple Wholesale');
       expect(list[0].debitBalanceCents, 150000);
@@ -286,8 +299,7 @@ void main() {
 
     test('sort by balance ascending', () {
       final list = List<SupplierDebitBalanceItem>.from(suppliers);
-      list.sort(
-          (a, b) => a.debitBalanceCents.compareTo(b.debitBalanceCents));
+      list.sort((a, b) => a.debitBalanceCents.compareTo(b.debitBalanceCents));
 
       expect(list[0].supplierName, 'Mango Trading');
       expect(list[2].supplierName, 'Apple Wholesale');
@@ -314,7 +326,8 @@ void main() {
     test('sort by purchases descending', () {
       final list = List<SupplierDebitBalanceItem>.from(suppliers);
       list.sort(
-          (a, b) => b.totalPurchasesCents.compareTo(a.totalPurchasesCents));
+        (a, b) => b.totalPurchasesCents.compareTo(a.totalPurchasesCents),
+      );
 
       expect(list[0].supplierName, 'Apple Wholesale');
       expect(list[0].totalPurchasesCents, 200000);
@@ -326,8 +339,7 @@ void main() {
 
     test('sort by payments descending', () {
       final list = List<SupplierDebitBalanceItem>.from(suppliers);
-      list.sort(
-          (a, b) => b.totalPaymentsCents.compareTo(a.totalPaymentsCents));
+      list.sort((a, b) => b.totalPaymentsCents.compareTo(a.totalPaymentsCents));
 
       expect(list[0].supplierName, 'Mango Trading');
       expect(list[0].totalPaymentsCents, 75000);
@@ -486,9 +498,7 @@ void main() {
 
     test('copyWith preserves unchanged fields', () {
       final range = ReportDateRange.thisMonth();
-      final updated = range.copyWith(
-        preset: ReportPeriodPreset.custom,
-      );
+      final updated = range.copyWith(preset: ReportPeriodPreset.custom);
       expect(updated.startDate, range.startDate);
       expect(updated.endDate, range.endDate);
       expect(updated.preset, ReportPeriodPreset.custom);
@@ -544,8 +554,11 @@ void main() {
       ];
 
       for (final item in items) {
-        expect(item.debitBalanceCents, isPositive,
-            reason: '${item.supplierName} should have positive debit balance');
+        expect(
+          item.debitBalanceCents,
+          isPositive,
+          reason: '${item.supplierName} should have positive debit balance',
+        );
       }
     });
 
@@ -598,8 +611,7 @@ void main() {
       const return1 = -10000;
       const discount1 = -5000;
 
-      final netBalance =
-          purchase1 + purchase2 + payment1 + return1 + discount1;
+      final netBalance = purchase1 + purchase2 + payment1 + return1 + discount1;
       expect(netBalance, 105000);
       expect(netBalance > 0, true); // Positive = we owe the supplier
     });
@@ -613,14 +625,17 @@ void main() {
       expect(netBalance > 0, false);
     });
 
-    test('supplier with negative balance (credit) is excluded from debit report', () {
-      const purchases = 30000;
-      const payments = -50000;
-      final netBalance = purchases + payments;
-      expect(netBalance, -20000);
-      // HAVING debit_balance_cents > 0 would exclude this supplier
-      expect(netBalance > 0, false);
-    });
+    test(
+      'supplier with negative balance (credit) is excluded from debit report',
+      () {
+        const purchases = 30000;
+        const payments = -50000;
+        final netBalance = purchases + payments;
+        expect(netBalance, -20000);
+        // HAVING debit_balance_cents > 0 would exclude this supplier
+        expect(netBalance > 0, false);
+      },
+    );
   });
 
   group('Suppliers counting', () {

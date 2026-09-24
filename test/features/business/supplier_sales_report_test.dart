@@ -23,7 +23,15 @@ void main() {
         )
         .toList(),
   );
-  Future<int> batch(int vendor, {int quantity = 5, String? warehouse}) async {
+  Future<int> batch(
+    int vendor, {
+    int quantity = 5,
+    String? warehouse,
+    int? forProduct,
+    int? forVariant,
+  }) async {
+    final batchProduct = forProduct ?? product;
+    final batchVariant = forVariant ?? variant;
     final purchase = await insert('purchases', {
       'purchase_number': 'P-${serial++}',
       'supplier_id': vendor,
@@ -37,16 +45,16 @@ void main() {
     });
     final item = await insert('purchase_items', {
       'purchase_id': purchase,
-      'product_id': product,
-      'variant_id': variant,
+      'product_id': batchProduct,
+      'variant_id': batchVariant,
       'quantity': quantity,
       'unit_cost_cents': 100,
       'subtotal_cents': 500,
       'total_cents': 500,
     });
     return insert('product_batches', {
-      'product_id': product,
-      'variant_id': variant,
+      'product_id': batchProduct,
+      'variant_id': batchVariant,
       'purchase_item_id': item,
       'supplier_id': vendor,
       'batch_number': 'B-${serial++}',
@@ -63,7 +71,11 @@ void main() {
     String status = 'completed',
     String? warehouse,
     DateTime? date,
+    int? forProduct,
+    int? forVariant,
   }) async {
+    final saleProduct = forProduct ?? product;
+    final saleVariant = forVariant ?? variant;
     final id = await insert('sales', {
       'invoice_number': 'S-${serial++}',
       'customer_id': customer,
@@ -78,8 +90,8 @@ void main() {
     });
     return insert('sale_items', {
       'sale_id': id,
-      'product_id': product,
-      'variant_id': variant,
+      'product_id': saleProduct,
+      'variant_id': saleVariant,
       'quantity': quantity,
       'unit_price_cents': 100,
       'subtotal_cents': total,
@@ -152,8 +164,103 @@ void main() {
       expect(row.soldQuantity, 2);
       expect(row.netCents, 200);
       expect(row.purchaseNumber, isNotEmpty);
+      expect(row.purchaseInvoices, hasLength(1));
     },
   );
+  test(
+    'same supplier product aggregates sales and lists every purchase invoice',
+    () async {
+      final first = await batch(supplier);
+      final secondBatch = await batch(supplier);
+      final line = await sale(quantity: 2);
+      await consume(first, line, 1);
+      await consume(secondBatch, line, 1);
+
+      final data = await report();
+      final row = data.rows.single;
+      expect(row.supplierId, supplier);
+      expect(row.soldQuantity, 2);
+      expect(row.purchasedQuantity, 10);
+      expect(row.purchaseInvoices, hasLength(2));
+      expect(
+        row.purchaseInvoices.map((invoice) => invoice.purchaseNumber).toSet(),
+        hasLength(2),
+      );
+      expect(data.products[product], contains('SHOE-40'));
+    },
+  );
+  test('product choices follow the selected supplier', () async {
+    final firstBatch = await batch(supplier);
+    final firstLine = await sale();
+    await consume(firstBatch, firstLine, 2);
+
+    final otherProduct = await insert('products', {
+      'name': 'Bag',
+      'sku': 'BAG',
+      'cost_cents': 100,
+      'price_cents': 100,
+      'currency_id': currency,
+      'category_id': category,
+      'supplier_id': second,
+    });
+    final otherVariant = await insert('product_variants', {
+      'product_id': otherProduct,
+      'sku': 'BAG-1',
+      'cost_cents': 100,
+      'price_cents': 100,
+    });
+    final secondBatch = await batch(
+      second,
+      forProduct: otherProduct,
+      forVariant: otherVariant,
+    );
+    final secondLine = await sale(
+      forProduct: otherProduct,
+      forVariant: otherVariant,
+    );
+    await consume(secondBatch, secondLine, 2);
+
+    final unsoldProduct = await insert('products', {
+      'name': 'Unsold shoe',
+      'sku': 'UNSOLD',
+      'cost_cents': 100,
+      'price_cents': 100,
+      'currency_id': currency,
+      'category_id': category,
+      'supplier_id': supplier,
+    });
+    final unsoldVariant = await insert('product_variants', {
+      'product_id': unsoldProduct,
+      'sku': 'UNSOLD-1',
+      'cost_cents': 100,
+      'price_cents': 100,
+    });
+    await batch(supplier, forProduct: unsoldProduct, forVariant: unsoldVariant);
+
+    final bloc = SupplierSalesReportBloc(db);
+    addTearDown(bloc.close);
+    final loaded = bloc.stream.firstWhere(
+      (state) =>
+          state is RealtimeSuccess<SupplierSalesReportData> &&
+          state.data.supplierId == supplier,
+    );
+    bloc.add(
+      SupplierSalesFilterChanged(
+        range: ReportDateRange.thisMonth(),
+        supplierId: supplier,
+      ),
+    );
+    final data =
+        (await loaded as RealtimeSuccess<SupplierSalesReportData>).data;
+    expect(data.products.keys, {product, unsoldProduct});
+    expect(data.products[product], contains('SHOE-40'));
+    expect(data.products[unsoldProduct], contains('UNSOLD-1'));
+    expect(
+      data.rows.map((row) => row.productId),
+      isNot(contains(unsoldProduct)),
+    );
+    expect(data.rows.every((row) => row.supplierId == supplier), isTrue);
+  });
   test(
     'two suppliers split one line once and unknown remainder is visible',
     () async {
@@ -351,7 +458,7 @@ void main() {
         'total_cents': 80,
       });
       final data = await report();
-      expect(data.rows.single.supplierId, -1);
+      expect(data.rows.single.supplierId, -2);
       expect(data.rows.single.returnedQuantity, 1);
       expect(data.netByCurrency, {'USD': -80});
     },
@@ -364,4 +471,29 @@ void main() {
       );
     }
   });
+  for (final source in ['sale_return', 'opening']) {
+    test(
+      'batch source $source is classified by saved type, never SAR name',
+      () async {
+        final lot = await insert('product_batches', {
+          'product_id': product,
+          'variant_id': variant,
+          'batch_number': 'SAR-old-name',
+          'source': source,
+          'received_quantity': 2,
+          'remaining_quantity': 1,
+          'unit_cost_cents': 100,
+        });
+        final line = await sale(quantity: 1, total: 100);
+        await consume(lot, line, 1);
+        final row = (await report()).rows.single;
+        expect(row.supplierId, source == 'sale_return' ? -2 : -1);
+        expect(
+          row.sourceQuality,
+          source == 'sale_return' ? 'customer_return' : 'unknown',
+        );
+        expect(row.netCents, 100);
+      },
+    );
+  }
 }

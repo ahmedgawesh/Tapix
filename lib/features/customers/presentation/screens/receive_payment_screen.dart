@@ -28,7 +28,7 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
   final _amountController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _searchController = TextEditingController();
-  
+
   Customer? _selectedCustomer;
   bool _isLoading = false;
   DateTime _selectedDate = DateTime.now();
@@ -42,7 +42,9 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
   }
 
   Future<void> _loadPreselectedCustomer() async {
-    final customer = await sl<CustomerRepository>().getCustomer(widget.preselectedCustomerId!);
+    final customer = await sl<CustomerRepository>().getCustomer(
+      widget.preselectedCustomerId!,
+    );
     if (mounted && customer != null) {
       setState(() {
         _selectedCustomer = customer;
@@ -66,9 +68,7 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
     return BlocProvider(
       create: (context) => CustomersBloc(sl<CustomerRepository>()),
       child: Scaffold(
-        appBar: AppBar(
-          title: Text('customers.receive_payment'.tr()),
-        ),
+        appBar: AppBar(title: Text('customers.receive_payment'.tr())),
         body: SafeArea(
           child: Form(
             key: _formKey,
@@ -90,7 +90,10 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
                         ),
                         const SizedBox(height: 12),
                         if (_selectedCustomer != null)
-                          _buildSelectedCustomerTile(context, _selectedCustomer!)
+                          _buildSelectedCustomerTile(
+                            context,
+                            _selectedCustomer!,
+                          )
                         else
                           _buildCustomerSelector(context),
                       ],
@@ -120,9 +123,13 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
                             prefixIcon: const Icon(Icons.attach_money),
                             border: const OutlineInputBorder(),
                           ),
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
                           inputFormatters: [
-                            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'^\d*\.?\d{0,2}'),
+                            ),
                           ],
                           onTap: () => selectAllText(_amountController),
                           validator: (value) {
@@ -335,7 +342,9 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               border: Border.all(
-                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+                color: Theme.of(
+                  context,
+                ).colorScheme.outline.withValues(alpha: 0.5),
               ),
               borderRadius: BorderRadius.circular(12),
             ),
@@ -433,69 +442,80 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
                 const SizedBox(height: 8),
                 // Customer list
                 Expanded(
-                  child: BlocBuilder<CustomersBloc, RealtimeState<CustomersData>>(
-                    builder: (context, state) {
-                      if (state is RealtimeLoading<CustomersData>) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
+                  child:
+                      BlocBuilder<CustomersBloc, RealtimeState<CustomersData>>(
+                        builder: (context, state) {
+                          if (state is RealtimeLoading<CustomersData>) {
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          }
 
-                      if (state is RealtimeSuccess<CustomersData>) {
-                        final customers = state.data.customers;
-                        if (customers.isEmpty) {
-                          return Center(
-                            child: Text('customers.no_results'.tr()),
-                          );
-                        }
+                          if (state is RealtimeSuccess<CustomersData>) {
+                            final customers = state.data.customers;
+                            if (customers.isEmpty) {
+                              return Center(
+                                child: Text('customers.no_results'.tr()),
+                              );
+                            }
 
-                        return ListView.builder(
-                          controller: scrollController,
-                          itemCount: customers.length,
-                          itemBuilder: (context, index) {
-                            final customer = customers[index];
-                            final balanceCents = customer.balanceCents.toBigInt().toInt();
+                            return ListView.builder(
+                              controller: scrollController,
+                              itemCount: customers.length,
+                              itemBuilder: (context, index) {
+                                final customer = customers[index];
+                                final balanceCents = customer.balanceCents
+                                    .toBigInt()
+                                    .toInt();
 
-                            return ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: colorScheme.primaryContainer,
-                                child: Text(
-                                  customer.name.isNotEmpty
-                                      ? customer.name[0].toUpperCase()
-                                      : '?',
-                                  style: TextStyle(
-                                    color: colorScheme.onPrimaryContainer,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              title: Row(
-                                children: [
-                                  Flexible(
+                                return ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor:
+                                        colorScheme.primaryContainer,
                                     child: Text(
-                                      customer.name,
-                                      overflow: TextOverflow.ellipsis,
+                                      customer.name.isNotEmpty
+                                          ? customer.name[0].toUpperCase()
+                                          : '?',
+                                      style: TextStyle(
+                                        color: colorScheme.onPrimaryContainer,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  _buildSegmentBadge(context, customer.segment),
-                                ],
-                              ),
-                              subtitle: Text(
-                                currencyService.format(balanceCents),
-                                style: TextStyle(
-                                  color: balanceCents > 0 ? Colors.red : Colors.green,
-                                ),
-                              ),
-                              onTap: () {
-                                Navigator.pop(context, customer);
+                                  title: Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          customer.name,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      _buildSegmentBadge(
+                                        context,
+                                        customer.segment,
+                                      ),
+                                    ],
+                                  ),
+                                  subtitle: Text(
+                                    currencyService.format(balanceCents),
+                                    style: TextStyle(
+                                      color: balanceCents > 0
+                                          ? Colors.red
+                                          : Colors.green,
+                                    ),
+                                  ),
+                                  onTap: () {
+                                    Navigator.pop(context, customer);
+                                  },
+                                );
                               },
                             );
-                          },
-                        );
-                      }
+                          }
 
-                      return const SizedBox.shrink();
-                    },
-                  ),
+                          return const SizedBox.shrink();
+                        },
+                      ),
                 ),
               ],
             ),
@@ -572,7 +592,11 @@ class _ReceivePaymentScreenState extends State<ReceivePaymentScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(LucideIcons.checkCircle, color: Colors.green, size: 48),
+              const Icon(
+                LucideIcons.checkCircle,
+                color: Colors.green,
+                size: 48,
+              ),
               const SizedBox(height: 20),
               Row(
                 children: [

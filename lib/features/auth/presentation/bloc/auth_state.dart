@@ -45,7 +45,10 @@ class AuthSecurityQuestionLoaded extends AuthState {
   final String username;
   final String question;
 
-  const AuthSecurityQuestionLoaded({required this.username, required this.question});
+  const AuthSecurityQuestionLoaded({
+    required this.username,
+    required this.question,
+  });
 
   @override
   List<Object?> get props => [username, question];

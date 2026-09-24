@@ -18,7 +18,8 @@ class EditTransactionDialog extends StatefulWidget {
   final int currentAmountCents;
   final String transactionType;
   final String? currentDescription;
-  final Future<void> Function(int newAmountCents, String? newDescription) onSave;
+  final Future<void> Function(int newAmountCents, String? newDescription)
+  onSave;
 
   const EditTransactionDialog({
     super.key,
@@ -35,21 +36,25 @@ class EditTransactionDialog extends StatefulWidget {
     required int currentAmountCents,
     required String transactionType,
     String? currentDescription,
-    required Future<void> Function(int newAmountCents, String? newDescription) onSave,
+    required Future<void> Function(int newAmountCents, String? newDescription)
+    onSave,
   }) async {
     // Permission check
     final authState = context.read<AuthBloc>().state;
     if (authState is! AuthAuthenticated) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('common.login_required'.tr())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('common.login_required'.tr())));
       return false;
     }
     final permissionService = sl<PermissionService>();
-    if (!permissionService.hasPermission(authState.user, Permissions.editTransactions)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('common.permission_denied'.tr())),
-      );
+    if (!permissionService.hasPermission(
+      authState.user,
+      Permissions.editTransactions,
+    )) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('common.permission_denied'.tr())));
       return false;
     }
 
@@ -80,9 +85,13 @@ class _EditTransactionDialogState extends State<EditTransactionDialog> {
     super.initState();
     final cs = sl<CurrencyService>();
     // Convert cents to display amount (e.g. 1500 → "15.00")
-    final displayAmount = (widget.currentAmountCents / 100).toStringAsFixed(cs.getCurrency().decimalDigits);
+    final displayAmount = (widget.currentAmountCents / 100).toStringAsFixed(
+      cs.getCurrency().decimalDigits,
+    );
     _amountController = TextEditingController(text: displayAmount);
-    _descriptionController = TextEditingController(text: widget.currentDescription ?? '');
+    _descriptionController = TextEditingController(
+      text: widget.currentDescription ?? '',
+    );
   }
 
   @override
@@ -116,7 +125,9 @@ class _EditTransactionDialogState extends State<EditTransactionDialog> {
               const SizedBox(height: 12),
               Text(
                 titleKey.tr(),
-                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -129,9 +140,14 @@ class _EditTransactionDialogState extends State<EditTransactionDialog> {
               const SizedBox(height: 8),
               // Show current amount as reference
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  color: colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.5,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
@@ -159,10 +175,14 @@ class _EditTransactionDialogState extends State<EditTransactionDialog> {
                 decoration: InputDecoration(
                   labelText: 'customers.new_amount'.tr(),
                   prefixIcon: const Icon(LucideIcons.badgeDollarSign),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   filled: true,
                 ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 autofocus: true,
                 onTap: () => selectAllText(_amountController),
               ),
@@ -173,7 +193,9 @@ class _EditTransactionDialogState extends State<EditTransactionDialog> {
                   labelText: 'customers.description'.tr(),
                   hintText: 'customers.edit_reason_hint'.tr(),
                   prefixIcon: const Icon(LucideIcons.fileText),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   filled: true,
                 ),
               ),
@@ -181,7 +203,9 @@ class _EditTransactionDialogState extends State<EditTransactionDialog> {
                 const SizedBox(height: 12),
                 Text(
                   _error!,
-                  style: theme.textTheme.bodySmall?.copyWith(color: colorScheme.error),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.error,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -190,10 +214,14 @@ class _EditTransactionDialogState extends State<EditTransactionDialog> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+                      onPressed: _saving
+                          ? null
+                          : () => Navigator.of(context).pop(false),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       child: Text('common.cancel'.tr()),
                     ),
@@ -204,13 +232,18 @@ class _EditTransactionDialogState extends State<EditTransactionDialog> {
                       onPressed: _saving ? null : _onSave,
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       child: _saving
                           ? const SizedBox(
                               width: 20,
                               height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
                             )
                           : Text('common.save'.tr()),
                     ),

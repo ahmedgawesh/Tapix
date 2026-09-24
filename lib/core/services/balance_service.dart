@@ -34,10 +34,12 @@ class BalanceService {
       tag: _tag,
     );
 
-    final customer = await dao.customSelect(
-      'SELECT balance_cents FROM customers WHERE id = ?',
-      variables: [Variable.withInt(customerId)],
-    ).getSingleOrNull();
+    final customer = await dao
+        .customSelect(
+          'SELECT balance_cents FROM customers WHERE id = ?',
+          variables: [Variable.withInt(customerId)],
+        )
+        .getSingleOrNull();
 
     if (customer != null) {
       final oldBalance = customer.read<int>('balance_cents');
@@ -80,10 +82,12 @@ class BalanceService {
       tag: _tag,
     );
 
-    final supplier = await dao.customSelect(
-      'SELECT balance_cents FROM suppliers WHERE id = ?',
-      variables: [Variable.withInt(supplierId)],
-    ).getSingleOrNull();
+    final supplier = await dao
+        .customSelect(
+          'SELECT balance_cents FROM suppliers WHERE id = ?',
+          variables: [Variable.withInt(supplierId)],
+        )
+        .getSingleOrNull();
 
     if (supplier != null) {
       final oldBalance = supplier.read<int>('balance_cents');

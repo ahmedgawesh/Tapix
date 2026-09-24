@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/database/migrations/business_document_locations.dart';
+import 'package:tapix/core/database/migrations/warehouse_transfers.dart';
 import 'package:tapix/core/services/batch_service.dart';
 import 'package:tapix/core/services/business/warehouse_operation_scope.dart';
 import 'package:uuid/uuid.dart';
@@ -201,6 +202,9 @@ void main() {
             .select(original.businessDocumentLocations)
             .get();
         await removeBusinessDocumentLocationTriggers(original);
+        // A true pre-routing database has no transfer triggers. This fixture
+        // starts current and removes later schema pieces to emulate one.
+        await removeWarehouseTransferGuards(original);
         await original.customStatement(
           'ALTER TABLE product_batches DROP COLUMN warehouse_id',
         );
@@ -258,7 +262,7 @@ void main() {
           expect(
             (await upgraded.customSelect('PRAGMA user_version').getSingle())
                 .read<int>('user_version'),
-            10091,
+            10115,
           );
           expect(
             await upgraded.customSelect('PRAGMA foreign_key_check').get(),
@@ -383,7 +387,7 @@ void main() {
         expect(
           (await upgraded.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          10091,
+          10115,
         );
         expect(
           await upgraded.customSelect('PRAGMA foreign_key_check').get(),

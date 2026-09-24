@@ -135,7 +135,8 @@ class EmployeeDetailState {
   }
 
   /// Net commission = earned - deducted
-  int get totalCommissionCents => earnedCommissionCents - deductedCommissionCents;
+  int get totalCommissionCents =>
+      earnedCommissionCents - deductedCommissionCents;
 
   Payroll? get latestPayroll => payrolls.isNotEmpty ? payrolls.first : null;
 
@@ -143,7 +144,8 @@ class EmployeeDetailState {
   Payroll? get periodPayroll {
     for (final p in payrolls) {
       final pStart = p.periodStart;
-      final pPeriod = '${pStart.year}-${pStart.month.toString().padLeft(2, '0')}';
+      final pPeriod =
+          '${pStart.year}-${pStart.month.toString().padLeft(2, '0')}';
       if (pPeriod == period) return p;
     }
     return null;
@@ -206,10 +208,7 @@ class EmployeeDetailBloc
   StreamSubscription<List<Commission>>? _commissionSub;
 
   EmployeeDetailBloc(this._repository, this._employeeDao)
-      : super(EmployeeDetailState(
-          employeeId: 0,
-          period: _currentPeriod(),
-        )) {
+    : super(EmployeeDetailState(employeeId: 0, period: _currentPeriod())) {
     on<EmployeeDetailInitialized>(_onInitialized);
     on<EmployeeDetailPeriodChanged>(_onPeriodChanged);
     on<_EmployeeDataReceived>(_onEmployeeDataReceived);
@@ -231,10 +230,7 @@ class EmployeeDetailBloc
     EmployeeDetailInitialized event,
     Emitter<EmployeeDetailState> emit,
   ) {
-    emit(state.copyWith(
-      employeeId: event.employeeId,
-      isLoading: true,
-    ));
+    emit(state.copyWith(employeeId: event.employeeId, isLoading: true));
     _subscribeAll(event.employeeId, state.period);
   }
 
@@ -249,14 +245,11 @@ class EmployeeDetailBloc
   void _subscribeAll(int employeeId, String period) {
     _cancelAll();
 
-    _employeeSub = _repository.watchEmployee(employeeId).listen(
-      (employee) {
-        if (employee != null) {
-          add(_EmployeeDataReceived(employee));
-        }
-      },
-      onError: (_) {},
-    );
+    _employeeSub = _repository.watchEmployee(employeeId).listen((employee) {
+      if (employee != null) {
+        add(_EmployeeDataReceived(employee));
+      }
+    }, onError: (_) {});
 
     _subscribePeriodData(employeeId, period);
   }
@@ -279,33 +272,23 @@ class EmployeeDetailBloc
           startDate: periodStart,
           endDate: periodEnd,
         )
-        .listen(
-          (data) => add(_AttendanceDataReceived(data)),
-          onError: (_) {},
-        );
+        .listen((data) => add(_AttendanceDataReceived(data)), onError: (_) {});
 
-    _payrollSub = _repository.watchEmployeePayrolls(employeeId).listen(
-      (data) => add(_PayrollDataReceived(data)),
-      onError: (_) {},
-    );
+    _payrollSub = _repository
+        .watchEmployeePayrolls(employeeId)
+        .listen((data) => add(_PayrollDataReceived(data)), onError: (_) {});
 
     _leaveSub = _repository
         .watchEmployeeLeaveRequests(employeeId)
-        .listen(
-          (data) => add(_LeaveDataReceived(data)),
-          onError: (_) {},
-        );
+        .listen((data) => add(_LeaveDataReceived(data)), onError: (_) {});
 
-    _commissionSub = _repository
-        .watchCommissionsByPeriod(period)
-        .listen(
-          (data) {
-            // Filter to only this employee's commissions
-            final filtered = data.where((c) => c.employeeId == employeeId).toList();
-            add(_CommissionDataReceived(filtered));
-          },
-          onError: (_) {},
-        );
+    _commissionSub = _repository.watchCommissionsByPeriod(period).listen((
+      data,
+    ) {
+      // Filter to only this employee's commissions
+      final filtered = data.where((c) => c.employeeId == employeeId).toList();
+      add(_CommissionDataReceived(filtered));
+    }, onError: (_) {});
 
     // Load sales statistics for this period
     _loadSalesStats(employeeId, period);
@@ -338,11 +321,9 @@ class EmployeeDetailBloc
     if (event.employee.roleId != null) {
       role = await _repository.getRole(event.employee.roleId!);
     }
-    emit(state.copyWith(
-      employee: event.employee,
-      role: role,
-      isLoading: false,
-    ));
+    emit(
+      state.copyWith(employee: event.employee, role: role, isLoading: false),
+    );
   }
 
   void _onAttendanceDataReceived(
@@ -360,13 +341,16 @@ class EmployeeDetailBloc
     for (final a in event.attendances) {
       counts[a.status] = (counts[a.status] ?? 0) + 1;
       // Sum up overtime minutes from all attendance records
-      counts['overtimeMinutes'] = (counts['overtimeMinutes'] ?? 0) + a.overtimeMinutes;
+      counts['overtimeMinutes'] =
+          (counts['overtimeMinutes'] ?? 0) + a.overtimeMinutes;
     }
-    emit(state.copyWith(
-      attendances: event.attendances,
-      attendanceCounts: counts,
-      isLoading: false,
-    ));
+    emit(
+      state.copyWith(
+        attendances: event.attendances,
+        attendanceCounts: counts,
+        isLoading: false,
+      ),
+    );
   }
 
   void _onPayrollDataReceived(
@@ -394,13 +378,15 @@ class EmployeeDetailBloc
     _SalesStatsReceived event,
     Emitter<EmployeeDetailState> emit,
   ) {
-    emit(state.copyWith(
-      salesCount: event.stats['salesCount'] ?? 0,
-      salesTotalCents: event.stats['salesTotalCents'] ?? 0,
-      returnsCount: event.stats['returnsCount'] ?? 0,
-      returnsTotalCents: event.stats['returnsTotalCents'] ?? 0,
-      isLoading: false,
-    ));
+    emit(
+      state.copyWith(
+        salesCount: event.stats['salesCount'] ?? 0,
+        salesTotalCents: event.stats['salesTotalCents'] ?? 0,
+        returnsCount: event.stats['returnsCount'] ?? 0,
+        returnsTotalCents: event.stats['returnsTotalCents'] ?? 0,
+        isLoading: false,
+      ),
+    );
   }
 
   Future<void> _onSettleAccount(
@@ -436,7 +422,8 @@ class EmployeeDetailBloc
         targetRange.start,
         targetRange.end,
       );
-      final targetPeriodNetSales = (targetPeriodStats['salesTotalCents'] ?? 0) -
+      final targetPeriodNetSales =
+          (targetPeriodStats['salesTotalCents'] ?? 0) -
           (targetPeriodStats['returnsTotalCents'] ?? 0);
       final targetBonus = PayrollCalculationService.checkSalesTargetBonus(
         employee: employee,

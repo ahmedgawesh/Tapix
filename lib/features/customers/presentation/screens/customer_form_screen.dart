@@ -16,8 +16,9 @@ class CustomerFormScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (context) => CustomerFormBloc(sl<CustomerRepository>())
-        ..add(CustomerFormLoadRequested(customerId: customerId)),
+      create: (context) =>
+          CustomerFormBloc(sl<CustomerRepository>())
+            ..add(CustomerFormLoadRequested(customerId: customerId)),
       child: _CustomerFormContent(customerId: customerId),
     );
   }
@@ -99,7 +100,9 @@ class _CustomerFormContentState extends State<_CustomerFormContent> {
         if (state is CustomerFormLoading) {
           return Scaffold(
             appBar: AppBar(
-              title: Text(isEditing ? 'customers.edit'.tr() : 'customers.add'.tr()),
+              title: Text(
+                isEditing ? 'customers.edit'.tr() : 'customers.add'.tr(),
+              ),
             ),
             body: const Center(child: CircularProgressIndicator()),
           );
@@ -108,7 +111,9 @@ class _CustomerFormContentState extends State<_CustomerFormContent> {
         if (state is! CustomerFormReady && state is! CustomerFormError) {
           return Scaffold(
             appBar: AppBar(
-              title: Text(isEditing ? 'customers.edit'.tr() : 'customers.add'.tr()),
+              title: Text(
+                isEditing ? 'customers.edit'.tr() : 'customers.add'.tr(),
+              ),
             ),
             body: const Center(child: CircularProgressIndicator()),
           );
@@ -120,7 +125,9 @@ class _CustomerFormContentState extends State<_CustomerFormContent> {
 
         return Scaffold(
           appBar: AppBar(
-            title: Text(isEditing ? 'customers.edit'.tr() : 'customers.add'.tr()),
+            title: Text(
+              isEditing ? 'customers.edit'.tr() : 'customers.add'.tr(),
+            ),
             actions: [
               if (formState.isSubmitting)
                 const Padding(
@@ -135,11 +142,13 @@ class _CustomerFormContentState extends State<_CustomerFormContent> {
                 TextButton(
                   onPressed: formState.isValid
                       ? () => context.read<CustomerFormBloc>().add(
-                            const CustomerFormSubmitted(),
-                          )
+                          const CustomerFormSubmitted(),
+                        )
                       : null,
                   child: Text(
-                    isEditing ? 'customers.update'.tr() : 'customers.create'.tr(),
+                    isEditing
+                        ? 'customers.update'.tr()
+                        : 'customers.create'.tr(),
                   ),
                 ),
             ],
@@ -153,14 +162,17 @@ class _CustomerFormContentState extends State<_CustomerFormContent> {
                   // Basic Information Section
                   _SectionHeader(title: 'customers.basic_info'.tr()),
                   const SizedBox(height: 8),
-                  
+
                   // Name Field
                   TextFormField(
                     controller: _nameController,
                     decoration: InputDecoration(
                       labelText: 'customers.name'.tr(),
                       hintText: 'customers.name_hint'.tr(),
-                      prefixIcon: Icon(Icons.person_outline, color: theme.colorScheme.primary),
+                      prefixIcon: Icon(
+                        Icons.person_outline,
+                        color: theme.colorScheme.primary,
+                      ),
                       errorText: formState.errors['name']?.tr(),
                       filled: true,
                       border: OutlineInputBorder(
@@ -169,8 +181,8 @@ class _CustomerFormContentState extends State<_CustomerFormContent> {
                     ),
                     textInputAction: TextInputAction.next,
                     onChanged: (value) => context.read<CustomerFormBloc>().add(
-                          CustomerFormNameChanged(value),
-                        ),
+                      CustomerFormNameChanged(value),
+                    ),
                   ),
                   const SizedBox(height: 16),
 
@@ -180,7 +192,10 @@ class _CustomerFormContentState extends State<_CustomerFormContent> {
                     decoration: InputDecoration(
                       labelText: 'customers.segment'.tr(),
                       hintText: 'customers.segment_hint'.tr(),
-                      prefixIcon: Icon(Icons.category_outlined, color: theme.colorScheme.primary),
+                      prefixIcon: Icon(
+                        Icons.category_outlined,
+                        color: theme.colorScheme.primary,
+                      ),
                       filled: true,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -221,8 +236,8 @@ class _CustomerFormContentState extends State<_CustomerFormContent> {
                     onChanged: (value) {
                       if (value != null) {
                         context.read<CustomerFormBloc>().add(
-                              CustomerFormSegmentChanged(value),
-                            );
+                          CustomerFormSegmentChanged(value),
+                        );
                       }
                     },
                   ),
@@ -238,7 +253,10 @@ class _CustomerFormContentState extends State<_CustomerFormContent> {
                     decoration: InputDecoration(
                       labelText: 'customers.email'.tr(),
                       hintText: 'customers.email_hint'.tr(),
-                      prefixIcon: Icon(Icons.email_outlined, color: theme.colorScheme.primary),
+                      prefixIcon: Icon(
+                        Icons.email_outlined,
+                        color: theme.colorScheme.primary,
+                      ),
                       errorText: formState.errors['email']?.tr(),
                       filled: true,
                       border: OutlineInputBorder(
@@ -248,8 +266,8 @@ class _CustomerFormContentState extends State<_CustomerFormContent> {
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
                     onChanged: (value) => context.read<CustomerFormBloc>().add(
-                          CustomerFormEmailChanged(value),
-                        ),
+                      CustomerFormEmailChanged(value),
+                    ),
                   ),
                   const SizedBox(height: 16),
 
@@ -259,7 +277,10 @@ class _CustomerFormContentState extends State<_CustomerFormContent> {
                     decoration: InputDecoration(
                       labelText: 'customers.phone'.tr(),
                       hintText: 'customers.phone_hint'.tr(),
-                      prefixIcon: Icon(Icons.phone_outlined, color: theme.colorScheme.primary),
+                      prefixIcon: Icon(
+                        Icons.phone_outlined,
+                        color: theme.colorScheme.primary,
+                      ),
                       filled: true,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -268,8 +289,8 @@ class _CustomerFormContentState extends State<_CustomerFormContent> {
                     keyboardType: TextInputType.phone,
                     textInputAction: TextInputAction.next,
                     onChanged: (value) => context.read<CustomerFormBloc>().add(
-                          CustomerFormPhoneChanged(value),
-                        ),
+                      CustomerFormPhoneChanged(value),
+                    ),
                   ),
                   const SizedBox(height: 16),
 
@@ -279,7 +300,10 @@ class _CustomerFormContentState extends State<_CustomerFormContent> {
                     decoration: InputDecoration(
                       labelText: 'customers.address'.tr(),
                       hintText: 'customers.address_hint'.tr(),
-                      prefixIcon: Icon(Icons.location_on_outlined, color: theme.colorScheme.primary),
+                      prefixIcon: Icon(
+                        Icons.location_on_outlined,
+                        color: theme.colorScheme.primary,
+                      ),
                       filled: true,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -288,8 +312,8 @@ class _CustomerFormContentState extends State<_CustomerFormContent> {
                     maxLines: 2,
                     textInputAction: TextInputAction.next,
                     onChanged: (value) => context.read<CustomerFormBloc>().add(
-                          CustomerFormAddressChanged(value),
-                        ),
+                      CustomerFormAddressChanged(value),
+                    ),
                   ),
                   const SizedBox(height: 24),
 
@@ -305,8 +329,13 @@ class _CustomerFormContentState extends State<_CustomerFormContent> {
                       labelText: isEditing
                           ? 'customers.current_balance'.tr()
                           : 'customers.opening_balance'.tr(),
-                      hintText: isEditing ? null : 'customers.opening_balance_hint'.tr(),
-                      prefixIcon: Icon(Icons.account_balance_wallet_outlined, color: theme.colorScheme.primary),
+                      hintText: isEditing
+                          ? null
+                          : 'customers.opening_balance_hint'.tr(),
+                      prefixIcon: Icon(
+                        Icons.account_balance_wallet_outlined,
+                        color: theme.colorScheme.primary,
+                      ),
                       filled: true,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -315,12 +344,14 @@ class _CustomerFormContentState extends State<_CustomerFormContent> {
                           ? 'customers.balance_edit_helper'.tr()
                           : 'customers.opening_balance_helper'.tr(),
                     ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     textInputAction: TextInputAction.done,
                     onTap: () => selectAllText(_balanceController),
                     onChanged: (value) => context.read<CustomerFormBloc>().add(
-                          CustomerFormBalanceChanged(value),
-                        ),
+                      CustomerFormBalanceChanged(value),
+                    ),
                   ),
                   const SizedBox(height: 24),
 
@@ -332,15 +363,13 @@ class _CustomerFormContentState extends State<_CustomerFormContent> {
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(
-                        color: theme.colorScheme.outlineVariant,
-                      ),
+                      side: BorderSide(color: theme.colorScheme.outlineVariant),
                     ),
                     child: SwitchListTile(
                       value: formState.loyaltyEnabled,
-                      onChanged: (value) => context.read<CustomerFormBloc>().add(
-                            CustomerFormLoyaltyEnabledChanged(value),
-                          ),
+                      onChanged: (value) => context
+                          .read<CustomerFormBloc>()
+                          .add(CustomerFormLoyaltyEnabledChanged(value)),
                       title: Text('customers.loyalty_toggle'.tr()),
                       subtitle: Text(
                         formState.loyaltyEnabled
@@ -375,7 +404,7 @@ class _SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(

@@ -20,19 +20,27 @@ void main() {
     late int currencyId;
 
     setUp(() async {
-      database = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
+      database = AppDatabase.connect(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
       realtimeService = RealtimeService(database);
-      productRepository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao), AuditLogService(database), SessionService());
+      productRepository = ProductRepositoryImpl(
+        ProductLocalDatasourceImpl(database.productDao),
+        AuditLogService(database),
+        SessionService(),
+      );
       productsBloc = ProductsBloc(productRepository);
 
-      currencyId = await database.into(database.currencies).insert(
-        CurrenciesCompanion.insert(
-          code: 'TST',
-          name: 'Test Currency',
-          symbol: 'T',
-          exchangeRate: Decimal.fromInt(1),
-        ),
-      );
+      currencyId = await database
+          .into(database.currencies)
+          .insert(
+            CurrenciesCompanion.insert(
+              code: 'TST',
+              name: 'Test Currency',
+              symbol: 'T',
+              exchangeRate: Decimal.fromInt(1),
+            ),
+          );
     });
 
     tearDown(() async {
@@ -43,21 +51,25 @@ void main() {
 
     test('Database → RealtimeService → UI flow works correctly', () async {
       final emissions = <List<Product>>[];
-      final subscription = realtimeService.watchProducts().listen(emissions.add);
+      final subscription = realtimeService.watchProducts().listen(
+        emissions.add,
+      );
 
       await Future<void>.delayed(const Duration(milliseconds: 100));
 
       expect(emissions.last, isEmpty);
 
-      await database.into(database.products).insert(
-        ProductsCompanion.insert(
-          sku: const Value<String?>('E2E-001'),
-          name: 'End-to-End Product',
-          costCents: Decimal.fromInt(100),
-          priceCents: Decimal.fromInt(200),
-          currencyId: Value(currencyId),
-        ),
-      );
+      await database
+          .into(database.products)
+          .insert(
+            ProductsCompanion.insert(
+              sku: const Value<String?>('E2E-001'),
+              name: 'End-to-End Product',
+              costCents: Decimal.fromInt(100),
+              priceCents: Decimal.fromInt(200),
+              currencyId: Value(currencyId),
+            ),
+          );
 
       await Future<void>.delayed(const Duration(milliseconds: 200));
       await subscription.cancel();
@@ -71,15 +83,17 @@ void main() {
 
       expect(productsBloc.currentData, isEmpty);
 
-      await database.into(database.products).insert(
-        ProductsCompanion.insert(
-          sku: const Value<String?>('BLOC-001'),
-          name: 'Bloc Test Product',
-          costCents: Decimal.fromInt(100),
-          priceCents: Decimal.fromInt(200),
-          currencyId: Value(currencyId),
-        ),
-      );
+      await database
+          .into(database.products)
+          .insert(
+            ProductsCompanion.insert(
+              sku: const Value<String?>('BLOC-001'),
+              name: 'Bloc Test Product',
+              costCents: Decimal.fromInt(100),
+              priceCents: Decimal.fromInt(200),
+              currencyId: Value(currencyId),
+            ),
+          );
 
       await Future<void>.delayed(const Duration(milliseconds: 200));
 
@@ -92,15 +106,17 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 100));
 
       for (int i = 1; i <= 10; i++) {
-        await database.into(database.products).insert(
-          ProductsCompanion.insert(
-            sku: Value<String?>('RAPID-$i'),
-            name: 'Rapid Product $i',
-            costCents: Decimal.fromInt(100),
-            priceCents: Decimal.fromInt(200),
-            currencyId: Value(currencyId),
-          ),
-        );
+        await database
+            .into(database.products)
+            .insert(
+              ProductsCompanion.insert(
+                sku: Value<String?>('RAPID-$i'),
+                name: 'Rapid Product $i',
+                costCents: Decimal.fromInt(100),
+                priceCents: Decimal.fromInt(200),
+                currencyId: Value(currencyId),
+              ),
+            );
       }
 
       await Future<void>.delayed(const Duration(milliseconds: 300));
@@ -109,15 +125,17 @@ void main() {
     });
 
     test('Product updates propagate to bloc state', () async {
-      final productId = await database.into(database.products).insert(
-        ProductsCompanion.insert(
-          sku: const Value<String?>('UPDATE-001'),
-          name: 'Original Name',
-          costCents: Decimal.fromInt(100),
-          priceCents: Decimal.fromInt(200),
-          currencyId: Value(currencyId),
-        ),
-      );
+      final productId = await database
+          .into(database.products)
+          .insert(
+            ProductsCompanion.insert(
+              sku: const Value<String?>('UPDATE-001'),
+              name: 'Original Name',
+              costCents: Decimal.fromInt(100),
+              priceCents: Decimal.fromInt(200),
+              currencyId: Value(currencyId),
+            ),
+          );
 
       await Future<void>.delayed(const Duration(milliseconds: 200));
 
@@ -133,15 +151,17 @@ void main() {
     });
 
     test('Product deletion propagates to bloc state', () async {
-      final productId = await database.into(database.products).insert(
-        ProductsCompanion.insert(
-          sku: const Value<String?>('DELETE-001'),
-          name: 'To Be Deleted',
-          costCents: Decimal.fromInt(100),
-          priceCents: Decimal.fromInt(200),
-          currencyId: Value(currencyId),
-        ),
-      );
+      final productId = await database
+          .into(database.products)
+          .insert(
+            ProductsCompanion.insert(
+              sku: const Value<String?>('DELETE-001'),
+              name: 'To Be Deleted',
+              costCents: Decimal.fromInt(100),
+              priceCents: Decimal.fromInt(200),
+              currencyId: Value(currencyId),
+            ),
+          );
 
       await Future<void>.delayed(const Duration(milliseconds: 200));
 
@@ -164,18 +184,26 @@ void main() {
     late int currencyId;
 
     setUp(() async {
-      database = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
-      productRepository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao), AuditLogService(database), SessionService()); // Use Impl
+      database = AppDatabase.connect(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      productRepository = ProductRepositoryImpl(
+        ProductLocalDatasourceImpl(database.productDao),
+        AuditLogService(database),
+        SessionService(),
+      ); // Use Impl
       productsBloc = ProductsBloc(productRepository);
 
-      currencyId = await database.into(database.currencies).insert(
-        CurrenciesCompanion.insert(
-          code: 'TST',
-          name: 'Test Currency',
-          symbol: 'T',
-          exchangeRate: Decimal.fromInt(1),
-        ),
-      );
+      currencyId = await database
+          .into(database.currencies)
+          .insert(
+            CurrenciesCompanion.insert(
+              code: 'TST',
+              name: 'Test Currency',
+              symbol: 'T',
+              exchangeRate: Decimal.fromInt(1),
+            ),
+          );
     });
 
     tearDown(() async {
@@ -184,15 +212,17 @@ void main() {
     });
 
     test('Update latency is under 100ms', () async {
-      await database.into(database.products).insert(
-        ProductsCompanion.insert(
-          sku: const Value<String?>('PERF-001'),
-          name: 'Performance Test',
-          costCents: Decimal.fromInt(100),
-          priceCents: Decimal.fromInt(200),
-          currencyId: Value(currencyId),
-        ),
-      );
+      await database
+          .into(database.products)
+          .insert(
+            ProductsCompanion.insert(
+              sku: const Value<String?>('PERF-001'),
+              name: 'Performance Test',
+              costCents: Decimal.fromInt(100),
+              priceCents: Decimal.fromInt(200),
+              currencyId: Value(currencyId),
+            ),
+          );
 
       await Future<void>.delayed(const Duration(milliseconds: 200));
 
@@ -222,15 +252,17 @@ void main() {
       final stopwatch = Stopwatch()..start();
 
       for (int i = 0; i < 100; i++) {
-        await database.into(database.products).insert(
-          ProductsCompanion.insert(
-            sku: Value<String?>('BULK-$i'),
-            name: 'Bulk Product $i',
-            costCents: Decimal.fromInt(100),
-            priceCents: Decimal.fromInt(200),
-            currencyId: Value(currencyId),
-          ),
-        );
+        await database
+            .into(database.products)
+            .insert(
+              ProductsCompanion.insert(
+                sku: Value<String?>('BULK-$i'),
+                name: 'Bulk Product $i',
+                costCents: Decimal.fromInt(100),
+                priceCents: Decimal.fromInt(200),
+                currencyId: Value(currencyId),
+              ),
+            );
       }
 
       await Future<void>.delayed(const Duration(milliseconds: 500));
@@ -244,29 +276,39 @@ void main() {
 
   group('Memory Leak Tests', () {
     test('No retained streams after bloc disposal', () async {
-      final database = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
+      final database = AppDatabase.connect(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
       final realtimeService = RealtimeService(database);
-      final productRepository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao), AuditLogService(database), SessionService()); // Use Impl
+      final productRepository = ProductRepositoryImpl(
+        ProductLocalDatasourceImpl(database.productDao),
+        AuditLogService(database),
+        SessionService(),
+      ); // Use Impl
       final productsBloc = ProductsBloc(productRepository);
 
-      final currencyId = await database.into(database.currencies).insert(
-        CurrenciesCompanion.insert(
-          code: 'TST',
-          name: 'Test Currency',
-          symbol: 'T',
-          exchangeRate: Decimal.fromInt(1),
-        ),
-      );
+      final currencyId = await database
+          .into(database.currencies)
+          .insert(
+            CurrenciesCompanion.insert(
+              code: 'TST',
+              name: 'Test Currency',
+              symbol: 'T',
+              exchangeRate: Decimal.fromInt(1),
+            ),
+          );
 
-      await database.into(database.products).insert(
-        ProductsCompanion.insert(
-          sku: const Value<String?>('MEM-001'),
-          name: 'Memory Test',
-          costCents: Decimal.fromInt(100),
-          priceCents: Decimal.fromInt(200),
-          currencyId: Value(currencyId),
-        ),
-      );
+      await database
+          .into(database.products)
+          .insert(
+            ProductsCompanion.insert(
+              sku: const Value<String?>('MEM-001'),
+              name: 'Memory Test',
+              costCents: Decimal.fromInt(100),
+              priceCents: Decimal.fromInt(200),
+              currencyId: Value(currencyId),
+            ),
+          );
 
       await Future<void>.delayed(const Duration(milliseconds: 200));
 
@@ -283,10 +325,16 @@ void main() {
     });
 
     test('Multiple bloc creation and disposal does not leak', () async {
-      final database = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
+      final database = AppDatabase.connect(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
 
       for (int i = 0; i < 10; i++) {
-        final productRepository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao), AuditLogService(database), SessionService()); // Use Impl
+        final productRepository = ProductRepositoryImpl(
+          ProductLocalDatasourceImpl(database.productDao),
+          AuditLogService(database),
+          SessionService(),
+        ); // Use Impl
         final bloc = ProductsBloc(productRepository);
         await Future<void>.delayed(const Duration(milliseconds: 50));
         await bloc.close();

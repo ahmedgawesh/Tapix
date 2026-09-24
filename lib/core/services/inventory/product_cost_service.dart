@@ -476,8 +476,8 @@ class ProductCostService {
         SELECT
           COALESCE(SUM(ws.quantity), 0) AS total_stock,
           CAST(ROUND(
-            CAST(SUM(ws.unit_cost_cents * ws.quantity) AS REAL)
-            / NULLIF(SUM(ws.quantity), 0)
+            CAST(SUM(ws.unit_cost_cents * (ws.quantity - ws.supplier_owned_quantity)) AS REAL)
+            / NULLIF(SUM(ws.quantity - ws.supplier_owned_quantity), 0)
           ) AS INTEGER) AS weighted_cost,
           CAST(ROUND(AVG(ws.unit_cost_cents)) AS INTEGER) AS avg_cost,
           COALESCE(MAX(price_cents), 0) AS max_price,

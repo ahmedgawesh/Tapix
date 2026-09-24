@@ -100,10 +100,12 @@ class JournalEntryData {
   bool get isValid => validate().isEmpty;
 
   /// Get total debits
-  int get totalDebitCents => lines.fold(0, (sum, line) => sum + line.debitCents);
+  int get totalDebitCents =>
+      lines.fold(0, (sum, line) => sum + line.debitCents);
 
   /// Get total credits
-  int get totalCreditCents => lines.fold(0, (sum, line) => sum + line.creditCents);
+  int get totalCreditCents =>
+      lines.fold(0, (sum, line) => sum + line.creditCents);
 }
 
 /// Data class for journal entry lines

@@ -293,9 +293,17 @@ void main() {
         try {
           expect(await stream.moveNext(), isTrue);
           expect(project(stream.current)[2], 10);
-          await db.customUpdate(
-            'UPDATE sale_items SET quantity = 12 WHERE sale_id = ?',
-            variables: [Variable.withInt(local['sales']!)],
+          // Add a free line so only the item stream changes: quantity rises
+          // while the posted sale's financial total remains exactly the same.
+          // Rewriting an existing posted line is intentionally forbidden.
+          await db.customInsert(
+            'INSERT INTO sale_items (sale_id,product_id,quantity,'
+            'unit_price_cents,subtotal_cents,discount_cents,tax_cents,'
+            'total_cents) VALUES (?,?,2,0,0,0,0,0)',
+            variables: [
+              Variable.withInt(local['sales']!),
+              Variable.withInt(product),
+            ],
             updates: {db.saleItems},
           );
           do {

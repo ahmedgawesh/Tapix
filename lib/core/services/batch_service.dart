@@ -100,6 +100,91 @@ class BatchService {
     );
   }
 
+  /// Create a physical FIFO/lot layer owned by a consignment supplier.
+  /// Its cost is operational evidence only and is excluded from enterprise
+  /// inventory valuation through consignment_inventory_layers.
+  static Future<int> createBatchFromConsignment(
+    DatabaseAccessor<AppDatabase> dao, {
+    required int productId,
+    required int variantId,
+    required String receiptItemId,
+    required int supplierId,
+    required int quantity,
+    required int operationalUnitCostCents,
+    required DateTime receivedDate,
+    DateTime? expiryDate,
+    String? manufacturerLotNumber,
+    WarehouseOperationScope? scope,
+  }) async {
+    if (quantity <= 0) throw ArgumentError.value(quantity, 'quantity');
+    if (receiptItemId.length != 36) {
+      throw ArgumentError.value(receiptItemId, 'receiptItemId');
+    }
+    final resolvedVariantId = await _resolveVariantId(
+      dao,
+      productId: productId,
+      variantId: variantId,
+    );
+    return _insertBatch(
+      dao,
+      productId: productId,
+      variantId: resolvedVariantId,
+      batchNumber: 'CON-$receiptItemId',
+      purchaseItemId: null,
+      supplierId: supplierId,
+      source: 'consignment_receipt',
+      receivedDate: receivedDate,
+      expiryDate: expiryDate,
+      manufacturerLotNumber: manufacturerLotNumber,
+      receivedQuantity: quantity,
+      unitCostCents: operationalUnitCostCents,
+      scope: scope,
+    );
+  }
+
+  /// Recreate one frozen lot slice at a transfer destination without changing
+  /// its purchase provenance. `transferAllocationId` and `originBatchId` are
+  /// independently validated by database guards against the sealed dispatch.
+  static Future<int> createBatchFromTransfer(
+    DatabaseAccessor<AppDatabase> dao, {
+    required int productId,
+    required int variantId,
+    required String transferAllocationId,
+    required ProductBatch originBatch,
+    required int receiptId,
+    required int quantity,
+    required int unitCostCents,
+    required DateTime receivedDate,
+    WarehouseOperationScope? scope,
+  }) async {
+    if (quantity <= 0) throw ArgumentError.value(quantity, 'quantity');
+    if (transferAllocationId.length != 36) {
+      throw ArgumentError.value(transferAllocationId, 'transferAllocationId');
+    }
+    if (originBatch.productId != productId ||
+        originBatch.variantId != variantId ||
+        originBatch.unitCostCents.toBigInt().toInt() != unitCostCents) {
+      throw StateError('Transferred batch source metadata changed');
+    }
+    return _insertBatch(
+      dao,
+      productId: productId,
+      variantId: variantId,
+      batchNumber: 'TRN-$transferAllocationId-R$receiptId',
+      purchaseItemId: originBatch.purchaseItemId,
+      supplierId: originBatch.supplierId,
+      source: 'warehouse_transfer',
+      receivedDate: receivedDate,
+      expiryDate: originBatch.expiryDate,
+      manufacturerLotNumber: originBatch.manufacturerLotNumber,
+      receivedQuantity: quantity,
+      unitCostCents: unitCostCents,
+      originBatchId: originBatch.id,
+      transferAllocationId: transferAllocationId,
+      scope: scope,
+    );
+  }
+
   /// Move only the still-owned quantity into a new valuation layer. The old
   /// layer keeps its original cost for historical sale returns and reversals.
   static Future<int> revalueRemainingBatch(
@@ -297,6 +382,9 @@ class BatchService {
     String? notes,
     WarehouseOperationScope? scope,
     int? requiredBatchId,
+    int? requiredSupplierId,
+    String? excludedSource,
+    String? transferAllocationId,
   }) async {
     if (quantity <= 0) throw ArgumentError.value(quantity, 'quantity');
     return dao.attachedDatabase.transaction(() async {
@@ -335,6 +423,8 @@ class BatchService {
               ' WHERE product_id = ? AND variant_id = ? '
               '   AND is_active = 1 AND remaining_quantity > 0 '
               '   AND (? IS NULL OR id = ?) '
+              '   AND (? IS NULL OR supplier_id = ?) '
+              '   AND (? IS NULL OR source <> ?) '
               '   AND ${WarehouseBatchScope.operationPredicate('product_batches')} '
               ' ORDER BY (expiry_date IS NULL) ASC, expiry_date ASC, '
               '          received_date ASC, id ASC '
@@ -344,6 +434,10 @@ class BatchService {
                 Variable.withInt(resolvedVariantId),
                 Variable<int>(requiredBatchId),
                 Variable<int>(requiredBatchId),
+                Variable<int>(requiredSupplierId),
+                Variable<int>(requiredSupplierId),
+                Variable<String>(excludedSource),
+                Variable<String>(excludedSource),
                 ...WarehouseBatchScope.operationVariables(operationScope),
               ],
             )
@@ -396,6 +490,7 @@ class BatchService {
           inventoryAdjustmentId: inventoryAdjustmentId,
           purchaseReturnAdjustmentItemId: purchaseReturnAdjustmentItemId,
           saleReturnAdjustmentItemId: saleReturnAdjustmentItemId,
+          transferAllocationId: transferAllocationId,
           notes: notes,
         );
 
@@ -533,6 +628,42 @@ class BatchService {
           )
           .get();
 
+      // A sale can have more than one partial linked return. Skip quantities
+      // already restored by earlier still-posted returns on each exact batch.
+      // Voided returns contribute an equal out row and therefore net to zero.
+      final previouslyRestoredByBatch = <int, int>{};
+      if (saleItemId != null &&
+          saleReturnItemId != null &&
+          reverseConsumptionType == 'sale_return_reverse') {
+        final priorRows = await dao
+            .customSelect(
+              'SELECT bc.batch_id,'
+              'SUM(CASE '
+              "WHEN bc.direction='in' AND bc.consumption_type='sale_return_reverse' "
+              'THEN bc.quantity '
+              "WHEN bc.direction='out' AND bc.consumption_type='sale_return_void_reverse' "
+              'THEN -bc.quantity ELSE 0 END) AS net_quantity '
+              'FROM batch_consumptions bc '
+              'LEFT JOIN sale_return_items sri ON sri.id=bc.sale_return_item_id '
+              'WHERE bc.sale_item_id=? OR sri.sale_item_id=? '
+              'GROUP BY bc.batch_id',
+              variables: [
+                Variable.withInt(saleItemId),
+                Variable.withInt(saleItemId),
+              ],
+            )
+            .get();
+        for (final row in priorRows) {
+          final net = row.read<int>('net_quantity');
+          if (net < 0) {
+            throw StateError('Sale-return batch reversal exceeds restoration.');
+          }
+          if (net > 0) {
+            previouslyRestoredByBatch[row.read<int>('batch_id')] = net;
+          }
+        }
+      }
+
       int restored = 0;
       int budget = upToQuantity ?? 1 << 30;
 
@@ -546,7 +677,16 @@ class BatchService {
         );
         final originalQty = r.read<int>('quantity');
         final unitCost = r.read<int>('unit_cost_cents');
-        final restoreQty = originalQty <= budget ? originalQty : budget;
+        final priorForBatch = previouslyRestoredByBatch[batchId] ?? 0;
+        final skipped = priorForBatch < originalQty
+            ? priorForBatch
+            : originalQty;
+        if (skipped > 0) {
+          previouslyRestoredByBatch[batchId] = priorForBatch - skipped;
+        }
+        final availableQty = originalQty - skipped;
+        if (availableQty <= 0) continue;
+        final restoreQty = availableQty <= budget ? availableQty : budget;
         budget -= restoreQty;
 
         await dao.customUpdate(
@@ -592,6 +732,185 @@ class BatchService {
   }
 
   // ────────────────────────────────────────────────────────────────────────
+  /// Restores one exact custody consumption during voiding of its immutable
+  /// document. The caller owns document idempotency; this method verifies the
+  /// original row, warehouse scope and batch capacity before mirroring it.
+  static Future<int> restoreExactCustodyConsumption(
+    DatabaseAccessor<AppDatabase> dao, {
+    required int consumptionId,
+    required String notes,
+    required WarehouseOperationScope scope,
+  }) => dao.attachedDatabase.transaction(() async {
+    await scope.validate(dao.attachedDatabase);
+    final row = await dao
+        .customSelect(
+          'SELECT batch_id,quantity,unit_cost_cents FROM batch_consumptions '
+          "WHERE id=? AND direction='out' "
+          "AND consumption_type='consignment_custody'",
+          variables: [Variable.withInt(consumptionId)],
+        )
+        .getSingleOrNull();
+    if (row == null) {
+      throw StateError('consignment.custody_batch_link_invalid');
+    }
+    final batchId = row.read<int>('batch_id');
+    final quantity = row.read<int>('quantity');
+    final unitCostCents = row.read<int>('unit_cost_cents');
+    await WarehouseBatchScope.requireBatch(
+      dao.attachedDatabase,
+      batchId,
+      scope: scope,
+    );
+    final changed = await dao.customUpdate(
+      'UPDATE product_batches '
+      'SET remaining_quantity=remaining_quantity+?, updated_at=? '
+      'WHERE id=? AND remaining_quantity+?<=received_quantity',
+      variables: [
+        Variable.withInt(quantity),
+        Variable.withString(DateTime.now().toUtc().toIso8601String()),
+        Variable.withInt(batchId),
+        Variable.withInt(quantity),
+      ],
+      updates: {dao.attachedDatabase.productBatches},
+    );
+    if (changed != 1) {
+      throw StateError('consignment.custody_batch_restore_failed');
+    }
+    await _insertConsumption(
+      dao,
+      batchId: batchId,
+      consumptionType: 'consignment_custody_void',
+      direction: 'in',
+      quantity: quantity,
+      unitCostCents: unitCostCents,
+      notes: notes,
+    );
+    return quantity;
+  });
+
+  /// Restores the exact enterprise batch quantity removed by an ownership
+  /// conversion. It is intentionally separate from sale/return restoration so
+  /// a conversion cannot claim an unrelated historical consumption.
+  static Future<int> restoreExactOwnershipConversionConsumption(
+    DatabaseAccessor<AppDatabase> dao, {
+    required int consumptionId,
+    required String notes,
+    required WarehouseOperationScope scope,
+  }) => dao.attachedDatabase.transaction(() async {
+    await scope.validate(dao.attachedDatabase);
+    final row = await dao
+        .customSelect(
+          'SELECT batch_id,quantity,unit_cost_cents FROM batch_consumptions '
+          "WHERE id=? AND direction='out' "
+          "AND consumption_type='consignment_ownership_conversion'",
+          variables: [Variable.withInt(consumptionId)],
+        )
+        .getSingleOrNull();
+    if (row == null) {
+      throw StateError('consignment.conversion_batch_link_invalid');
+    }
+    final batchId = row.read<int>('batch_id');
+    final quantity = row.read<int>('quantity');
+    final unitCostCents = row.read<int>('unit_cost_cents');
+    await WarehouseBatchScope.requireBatch(
+      dao.attachedDatabase,
+      batchId,
+      scope: scope,
+    );
+    final changed = await dao.customUpdate(
+      'UPDATE product_batches '
+      'SET remaining_quantity=remaining_quantity+?, updated_at=? '
+      'WHERE id=? AND remaining_quantity+?<=received_quantity',
+      variables: [
+        Variable.withInt(quantity),
+        Variable.withString(DateTime.now().toUtc().toIso8601String()),
+        Variable.withInt(batchId),
+        Variable.withInt(quantity),
+      ],
+      updates: {dao.attachedDatabase.productBatches},
+    );
+    if (changed != 1) {
+      throw StateError('consignment.conversion_batch_restore_failed');
+    }
+    await _insertConsumption(
+      dao,
+      batchId: batchId,
+      consumptionType: 'consignment_ownership_conversion_void',
+      direction: 'in',
+      quantity: quantity,
+      unitCostCents: unitCostCents,
+      notes: notes,
+    );
+    return quantity;
+  });
+
+  /// Restores the exact FIFO quantity removed by one sealed transfer
+  /// allocation. The allocation ID makes retry and cross-document matching
+  /// independent of free-form notes.
+  static Future<int> restoreTransferAllocation(
+    DatabaseAccessor<AppDatabase> dao, {
+    required String transferAllocationId,
+    required int expectedBatchId,
+    required int expectedQuantity,
+    required WarehouseOperationScope scope,
+  }) => dao.attachedDatabase.transaction(() async {
+    await scope.validate(dao.attachedDatabase);
+    final row = await dao
+        .customSelect(
+          '''SELECT id,batch_id,quantity,unit_cost_cents FROM batch_consumptions
+      WHERE transfer_allocation_id=? AND direction='out'
+        AND consumption_type='warehouse_transfer_dispatch' ''',
+          variables: [Variable.withString(transferAllocationId)],
+        )
+        .getSingleOrNull();
+    if (row == null ||
+        row.read<int>('batch_id') != expectedBatchId ||
+        row.read<int>('quantity') < expectedQuantity) {
+      throw StateError('Transfer batch dispatch evidence is incomplete');
+    }
+    final replay = await dao
+        .customSelect(
+          '''SELECT 1 AS found FROM batch_consumptions
+      WHERE transfer_allocation_id=? AND direction='in'
+        AND consumption_type='warehouse_transfer_recall' LIMIT 1''',
+          variables: [Variable.withString(transferAllocationId)],
+        )
+        .getSingleOrNull();
+    if (replay != null) {
+      throw StateError('Transfer batch allocation was already recalled');
+    }
+    await WarehouseBatchScope.requireBatch(
+      dao.attachedDatabase,
+      expectedBatchId,
+      scope: scope,
+    );
+    final changed = await dao.customUpdate(
+      'UPDATE product_batches SET remaining_quantity=remaining_quantity+?,'
+      'updated_at=? WHERE id=? AND remaining_quantity+?<=received_quantity',
+      variables: [
+        Variable.withInt(expectedQuantity),
+        Variable.withString(DateTime.now().toUtc().toIso8601String()),
+        Variable.withInt(expectedBatchId),
+        Variable.withInt(expectedQuantity),
+      ],
+      updates: {dao.attachedDatabase.productBatches},
+    );
+    if (changed != 1) {
+      throw StateError('Transfer source batch cannot accept the recall');
+    }
+    await _insertConsumption(
+      dao,
+      batchId: expectedBatchId,
+      consumptionType: 'warehouse_transfer_recall',
+      direction: 'in',
+      quantity: expectedQuantity,
+      unitCostCents: row.read<int>('unit_cost_cents'),
+      transferAllocationId: transferAllocationId,
+      notes: 'Recalled transfer allocation $transferAllocationId',
+    );
+    return expectedQuantity;
+  });
+
   // EXPIRY MUTATION (Invariant I7)
   // ────────────────────────────────────────────────────────────────────────
 
@@ -840,6 +1159,8 @@ class BatchService {
     required String? manufacturerLotNumber,
     required int receivedQuantity,
     required int unitCostCents,
+    int? originBatchId,
+    String? transferAllocationId,
     WarehouseOperationScope? scope,
   }) async {
     return dao.attachedDatabase.transaction(() async {
@@ -880,9 +1201,10 @@ class BatchService {
       return dao.customInsert(
         'INSERT INTO product_batches '
         '(warehouse_id, product_id, variant_id, batch_number, purchase_item_id, supplier_id, '
-        ' source, received_date, expiry_date, manufacturer_lot_number, received_quantity, '
-        ' remaining_quantity, unit_cost_cents, is_active, created_at, updated_at) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)',
+        ' origin_batch_id, transfer_allocation_id, source, received_date, expiry_date, '
+        ' manufacturer_lot_number, received_quantity, remaining_quantity, unit_cost_cents, '
+        ' is_active, created_at, updated_at) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)',
         variables: [
           Variable.withString(operationScope.warehouseId),
           Variable.withInt(productId),
@@ -896,6 +1218,14 @@ class BatchService {
             Variable.withInt(supplierId)
           else
             const Variable<int>(null),
+          if (originBatchId != null)
+            Variable.withInt(originBatchId)
+          else
+            const Variable<int>(null),
+          if (transferAllocationId != null)
+            Variable.withString(transferAllocationId)
+          else
+            const Variable<String>(null),
           Variable.withString(source),
           Variable.withString(receivedDate.toIso8601String()),
           if (expiryDate != null)
@@ -930,6 +1260,7 @@ class BatchService {
     int? inventoryAdjustmentId,
     int? purchaseReturnAdjustmentItemId,
     int? saleReturnAdjustmentItemId,
+    String? transferAllocationId,
     String? notes,
   }) async {
     return dao.customInsert(
@@ -937,8 +1268,8 @@ class BatchService {
       '(batch_id, consumption_type, direction, quantity, unit_cost_cents, '
       ' sale_item_id, sale_return_item_id, purchase_return_item_id, '
       ' inventory_adjustment_id, purchase_return_adjustment_item_id, '
-      ' sale_return_adjustment_item_id, notes, created_at) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ' sale_return_adjustment_item_id, transfer_allocation_id, notes, created_at) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       variables: [
         Variable.withInt(batchId),
         Variable.withString(consumptionType),
@@ -951,6 +1282,9 @@ class BatchService {
         _intOrNull(inventoryAdjustmentId),
         _intOrNull(purchaseReturnAdjustmentItemId),
         _intOrNull(saleReturnAdjustmentItemId),
+        transferAllocationId != null
+            ? Variable.withString(transferAllocationId)
+            : const Variable<String>(null),
         notes != null
             ? Variable.withString(notes)
             : const Variable<String>(null),

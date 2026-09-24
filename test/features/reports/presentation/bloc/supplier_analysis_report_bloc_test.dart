@@ -84,8 +84,7 @@ void main() {
       // returnRate = (totalReturns / totalPurchases) * 100
       const totalPurchasesCents = 500000;
       const totalReturnsCents = 25000;
-      final returnRate =
-          (totalReturnsCents / totalPurchasesCents) * 100;
+      final returnRate = (totalReturnsCents / totalPurchasesCents) * 100;
 
       expect(returnRate, 5.0);
 
@@ -111,8 +110,7 @@ void main() {
       // settlementRatio = (totalPayments / totalPurchases) * 100
       const totalPurchasesCents = 500000;
       const totalPaymentsCents = 400000;
-      final settlementRatio =
-          (totalPaymentsCents / totalPurchasesCents) * 100;
+      final settlementRatio = (totalPaymentsCents / totalPurchasesCents) * 100;
 
       expect(settlementRatio, 80.0);
 
@@ -172,8 +170,9 @@ void main() {
       final settlementRatio = totalPurchasesCents > 0
           ? (totalPaymentsCents / totalPurchasesCents) * 100
           : 0.0;
-      final avgOrderValue =
-          purchaseCount > 0 ? totalPurchasesCents ~/ purchaseCount : 0;
+      final avgOrderValue = purchaseCount > 0
+          ? totalPurchasesCents ~/ purchaseCount
+          : 0;
 
       expect(returnRate, 0.0);
       expect(settlementRatio, 0.0);
@@ -183,8 +182,7 @@ void main() {
     test('100% return rate when all purchases returned', () {
       const totalPurchasesCents = 100000;
       const totalReturnsCents = 100000;
-      final returnRate =
-          (totalReturnsCents / totalPurchasesCents) * 100;
+      final returnRate = (totalReturnsCents / totalPurchasesCents) * 100;
 
       expect(returnRate, 100.0);
     });
@@ -192,8 +190,7 @@ void main() {
     test('settlement ratio can exceed 100% with overpayment', () {
       const totalPurchasesCents = 100000;
       const totalPaymentsCents = 120000;
-      final settlementRatio =
-          (totalPaymentsCents / totalPurchasesCents) * 100;
+      final settlementRatio = (totalPaymentsCents / totalPurchasesCents) * 100;
 
       expect(settlementRatio, 120.0);
     });
@@ -250,9 +247,7 @@ void main() {
         dateRange: ReportDateRange.thisMonth(),
       );
 
-      final updated = original.copyWith(
-        dateRange: ReportDateRange.thisYear(),
-      );
+      final updated = original.copyWith(dateRange: ReportDateRange.thisYear());
 
       expect(updated.grandTotalPurchasesCents, 1000000);
       expect(updated.grandTotalReturnsCents, 50000);
@@ -322,7 +317,8 @@ void main() {
 
     test('SupplierAnalysisReportSortChanged stores sort type', () {
       const event = SupplierAnalysisReportSortChanged(
-          SupplierAnalysisSortType.nameAsc);
+        SupplierAnalysisSortType.nameAsc,
+      );
       expect(event.sort, SupplierAnalysisSortType.nameAsc);
     });
   });
@@ -330,22 +326,38 @@ void main() {
   group('SupplierAnalysisSortType enum', () {
     test('has all expected values', () {
       expect(SupplierAnalysisSortType.values.length, 8);
-      expect(SupplierAnalysisSortType.values,
-          contains(SupplierAnalysisSortType.purchaseVolumeDesc));
-      expect(SupplierAnalysisSortType.values,
-          contains(SupplierAnalysisSortType.purchaseVolumeAsc));
-      expect(SupplierAnalysisSortType.values,
-          contains(SupplierAnalysisSortType.nameAsc));
-      expect(SupplierAnalysisSortType.values,
-          contains(SupplierAnalysisSortType.nameDesc));
-      expect(SupplierAnalysisSortType.values,
-          contains(SupplierAnalysisSortType.returnRateDesc));
-      expect(SupplierAnalysisSortType.values,
-          contains(SupplierAnalysisSortType.avgPaymentDaysAsc));
-      expect(SupplierAnalysisSortType.values,
-          contains(SupplierAnalysisSortType.settlementRatioDesc));
-      expect(SupplierAnalysisSortType.values,
-          contains(SupplierAnalysisSortType.avgOrderValueDesc));
+      expect(
+        SupplierAnalysisSortType.values,
+        contains(SupplierAnalysisSortType.purchaseVolumeDesc),
+      );
+      expect(
+        SupplierAnalysisSortType.values,
+        contains(SupplierAnalysisSortType.purchaseVolumeAsc),
+      );
+      expect(
+        SupplierAnalysisSortType.values,
+        contains(SupplierAnalysisSortType.nameAsc),
+      );
+      expect(
+        SupplierAnalysisSortType.values,
+        contains(SupplierAnalysisSortType.nameDesc),
+      );
+      expect(
+        SupplierAnalysisSortType.values,
+        contains(SupplierAnalysisSortType.returnRateDesc),
+      );
+      expect(
+        SupplierAnalysisSortType.values,
+        contains(SupplierAnalysisSortType.avgPaymentDaysAsc),
+      );
+      expect(
+        SupplierAnalysisSortType.values,
+        contains(SupplierAnalysisSortType.settlementRatioDesc),
+      );
+      expect(
+        SupplierAnalysisSortType.values,
+        contains(SupplierAnalysisSortType.avgOrderValueDesc),
+      );
     });
   });
 
@@ -397,8 +409,9 @@ void main() {
 
     test('sort by purchase volume descending', () {
       final list = List<SupplierAnalysisItem>.from(suppliers);
-      list.sort((a, b) =>
-          b.totalPurchasesCents.compareTo(a.totalPurchasesCents));
+      list.sort(
+        (a, b) => b.totalPurchasesCents.compareTo(a.totalPurchasesCents),
+      );
 
       expect(list[0].supplierName, 'Apple Wholesale');
       expect(list[0].totalPurchasesCents, 200000);
@@ -410,8 +423,9 @@ void main() {
 
     test('sort by purchase volume ascending', () {
       final list = List<SupplierAnalysisItem>.from(suppliers);
-      list.sort((a, b) =>
-          a.totalPurchasesCents.compareTo(b.totalPurchasesCents));
+      list.sort(
+        (a, b) => a.totalPurchasesCents.compareTo(b.totalPurchasesCents),
+      );
 
       expect(list[0].supplierName, 'Zebra Supplies');
       expect(list[2].supplierName, 'Apple Wholesale');
@@ -437,8 +451,7 @@ void main() {
 
     test('sort by return rate descending', () {
       final list = List<SupplierAnalysisItem>.from(suppliers);
-      list.sort(
-          (a, b) => b.returnRatePercent.compareTo(a.returnRatePercent));
+      list.sort((a, b) => b.returnRatePercent.compareTo(a.returnRatePercent));
 
       expect(list[0].supplierName, 'Mango Trading');
       expect(list[0].returnRatePercent, 20.0);
@@ -462,8 +475,9 @@ void main() {
 
     test('sort by settlement ratio descending (best settlers first)', () {
       final list = List<SupplierAnalysisItem>.from(suppliers);
-      list.sort((a, b) =>
-          b.settlementRatioPercent.compareTo(a.settlementRatioPercent));
+      list.sort(
+        (a, b) => b.settlementRatioPercent.compareTo(a.settlementRatioPercent),
+      );
 
       expect(list[0].supplierName, 'Apple Wholesale');
       expect(list[0].settlementRatioPercent, 95.0);
@@ -475,8 +489,7 @@ void main() {
 
     test('sort by avg order value descending', () {
       final list = List<SupplierAnalysisItem>.from(suppliers);
-      list.sort((a, b) =>
-          b.avgOrderValueCents.compareTo(a.avgOrderValueCents));
+      list.sort((a, b) => b.avgOrderValueCents.compareTo(a.avgOrderValueCents));
 
       expect(list[0].supplierName, 'Mango Trading');
       expect(list[0].avgOrderValueCents, 12500);
@@ -727,16 +740,18 @@ void main() {
       expect(item.avgPaymentDays > 30, true);
     });
 
-    test('settlement color logic: >= 80% is primary, >= 50% is tertiary, < 50% is error',
-        () {
-      const good = 95.0;
-      const medium = 65.0;
-      const poor = 30.0;
+    test(
+      'settlement color logic: >= 80% is primary, >= 50% is tertiary, < 50% is error',
+      () {
+        const good = 95.0;
+        const medium = 65.0;
+        const poor = 30.0;
 
-      expect(good >= 80, true);
-      expect(medium >= 50 && medium < 80, true);
-      expect(poor < 50, true);
-    });
+        expect(good >= 80, true);
+        expect(medium >= 50 && medium < 80, true);
+        expect(poor < 50, true);
+      },
+    );
 
     test('return rate color logic: > 10% is error', () {
       const highReturn = 15.0;
@@ -802,8 +817,9 @@ void main() {
         ),
       ];
 
-      suppliers.sort((a, b) =>
-          b.totalPurchasesCents.compareTo(a.totalPurchasesCents));
+      suppliers.sort(
+        (a, b) => b.totalPurchasesCents.compareTo(a.totalPurchasesCents),
+      );
 
       expect(suppliers[0].supplierName, 'Large');
       expect(suppliers[1].supplierName, 'Medium');

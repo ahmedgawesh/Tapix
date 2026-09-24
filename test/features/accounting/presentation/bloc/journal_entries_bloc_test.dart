@@ -47,26 +47,33 @@ void main() {
     blocTest<JournalEntriesBloc, RealtimeState<JournalEntriesData>>(
       'emits RealtimeSuccess with entries from stream',
       setUp: () {
-        when(mockRepository.watchAllJournalEntries())
-            .thenAnswer((_) => Stream.value(entries));
+        when(
+          mockRepository.watchAllJournalEntries(),
+        ).thenAnswer((_) => Stream.value(entries));
       },
       build: () => JournalEntriesBloc(mockRepository),
       expect: () => [
-        isA<RealtimeSuccess<JournalEntriesData>>()
-            .having((s) => s.data.entries.length, 'entries count', 2),
+        isA<RealtimeSuccess<JournalEntriesData>>().having(
+          (s) => s.data.entries.length,
+          'entries count',
+          2,
+        ),
       ],
     );
 
     blocTest<JournalEntriesBloc, RealtimeState<JournalEntriesData>>(
       'filters by status when JournalEntriesFilterByStatusRequested',
       setUp: () {
-        when(mockRepository.watchAllJournalEntries())
-            .thenAnswer((_) => Stream.value(entries));
-        when(mockRepository.watchJournalEntriesByStatus('posted'))
-            .thenAnswer((_) => Stream.value([entries.first]));
+        when(
+          mockRepository.watchAllJournalEntries(),
+        ).thenAnswer((_) => Stream.value(entries));
+        when(
+          mockRepository.watchJournalEntriesByStatus('posted'),
+        ).thenAnswer((_) => Stream.value([entries.first]));
       },
       build: () => JournalEntriesBloc(mockRepository),
-      act: (bloc) => bloc.add(const JournalEntriesFilterByStatusRequested('posted')),
+      act: (bloc) =>
+          bloc.add(const JournalEntriesFilterByStatusRequested('posted')),
       verify: (bloc) {
         verify(mockRepository.watchJournalEntriesByStatus('posted')).called(1);
       },
@@ -75,10 +82,12 @@ void main() {
     blocTest<JournalEntriesBloc, RealtimeState<JournalEntriesData>>(
       'searches entries when JournalEntriesSearchRequested',
       setUp: () {
-        when(mockRepository.watchAllJournalEntries())
-            .thenAnswer((_) => Stream.value(entries));
-        when(mockRepository.searchJournalEntries('test'))
-            .thenAnswer((_) async => [entries.first]);
+        when(
+          mockRepository.watchAllJournalEntries(),
+        ).thenAnswer((_) => Stream.value(entries));
+        when(
+          mockRepository.searchJournalEntries('test'),
+        ).thenAnswer((_) async => [entries.first]);
       },
       build: () => JournalEntriesBloc(mockRepository),
       act: (bloc) => bloc.add(const JournalEntriesSearchRequested('test')),
@@ -90,10 +99,10 @@ void main() {
     blocTest<JournalEntriesBloc, RealtimeState<JournalEntriesData>>(
       'posts entry when JournalEntryPostRequested',
       setUp: () {
-        when(mockRepository.watchAllJournalEntries())
-            .thenAnswer((_) => Stream.value(entries));
-        when(mockRepository.postJournalEntry(1))
-            .thenAnswer((_) async {});
+        when(
+          mockRepository.watchAllJournalEntries(),
+        ).thenAnswer((_) => Stream.value(entries));
+        when(mockRepository.postJournalEntry(1)).thenAnswer((_) async {});
       },
       build: () => JournalEntriesBloc(mockRepository),
       act: (bloc) => bloc.add(const JournalEntryPostRequested(1)),
@@ -105,10 +114,12 @@ void main() {
     blocTest<JournalEntriesBloc, RealtimeState<JournalEntriesData>>(
       'emits error when post fails',
       setUp: () {
-        when(mockRepository.watchAllJournalEntries())
-            .thenAnswer((_) => Stream.value(entries));
-        when(mockRepository.postJournalEntry(1))
-            .thenThrow(StateError('Not draft'));
+        when(
+          mockRepository.watchAllJournalEntries(),
+        ).thenAnswer((_) => Stream.value(entries));
+        when(
+          mockRepository.postJournalEntry(1),
+        ).thenThrow(StateError('Not draft'));
       },
       build: () => JournalEntriesBloc(mockRepository),
       act: (bloc) => bloc.add(const JournalEntryPostRequested(1)),
@@ -121,13 +132,16 @@ void main() {
     blocTest<JournalEntriesBloc, RealtimeState<JournalEntriesData>>(
       'voids entry when JournalEntryVoidRequested',
       setUp: () {
-        when(mockRepository.watchAllJournalEntries())
-            .thenAnswer((_) => Stream.value(entries));
-        when(mockRepository.voidJournalEntry(1, reason: 'mistake'))
-            .thenAnswer((_) async => 2);
+        when(
+          mockRepository.watchAllJournalEntries(),
+        ).thenAnswer((_) => Stream.value(entries));
+        when(
+          mockRepository.voidJournalEntry(1, reason: 'mistake'),
+        ).thenAnswer((_) async => 2);
       },
       build: () => JournalEntriesBloc(mockRepository),
-      act: (bloc) => bloc.add(const JournalEntryVoidRequested(1, reason: 'mistake')),
+      act: (bloc) =>
+          bloc.add(const JournalEntryVoidRequested(1, reason: 'mistake')),
       verify: (_) {
         verify(mockRepository.voidJournalEntry(1, reason: 'mistake')).called(1);
       },

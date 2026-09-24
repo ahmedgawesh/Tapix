@@ -32,6 +32,10 @@ mixin _$AdjustmentReturnDaoMixin on DatabaseAccessor<AppDatabase> {
   $CashierShiftsTable get cashierShifts => attachedDatabase.cashierShifts;
   $SaleReturnAdjustmentsTable get saleReturnAdjustments =>
       attachedDatabase.saleReturnAdjustments;
+  $PurchasesTable get purchases => attachedDatabase.purchases;
+  $SupplierProductIdentitiesTable get supplierProductIdentities =>
+      attachedDatabase.supplierProductIdentities;
+  $PurchaseItemsTable get purchaseItems => attachedDatabase.purchaseItems;
   $ProductBatchesTable get productBatches => attachedDatabase.productBatches;
   $SaleReturnAdjustmentItemsTable get saleReturnAdjustmentItems =>
       attachedDatabase.saleReturnAdjustmentItems;
@@ -41,8 +45,6 @@ mixin _$AdjustmentReturnDaoMixin on DatabaseAccessor<AppDatabase> {
       attachedDatabase.customerTransactions;
   $SalesTable get sales => attachedDatabase.sales;
   $SaleItemsTable get saleItems => attachedDatabase.saleItems;
-  $PurchasesTable get purchases => attachedDatabase.purchases;
-  $PurchaseItemsTable get purchaseItems => attachedDatabase.purchaseItems;
   AdjustmentReturnDaoManager get managers => AdjustmentReturnDaoManager(this);
 }
 
@@ -117,6 +119,15 @@ class AdjustmentReturnDaoManager {
         _db.attachedDatabase,
         _db.saleReturnAdjustments,
       );
+  $$PurchasesTableTableManager get purchases =>
+      $$PurchasesTableTableManager(_db.attachedDatabase, _db.purchases);
+  $$SupplierProductIdentitiesTableTableManager get supplierProductIdentities =>
+      $$SupplierProductIdentitiesTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierProductIdentities,
+      );
+  $$PurchaseItemsTableTableManager get purchaseItems =>
+      $$PurchaseItemsTableTableManager(_db.attachedDatabase, _db.purchaseItems);
   $$ProductBatchesTableTableManager get productBatches =>
       $$ProductBatchesTableTableManager(
         _db.attachedDatabase,
@@ -141,8 +152,4 @@ class AdjustmentReturnDaoManager {
       $$SalesTableTableManager(_db.attachedDatabase, _db.sales);
   $$SaleItemsTableTableManager get saleItems =>
       $$SaleItemsTableTableManager(_db.attachedDatabase, _db.saleItems);
-  $$PurchasesTableTableManager get purchases =>
-      $$PurchasesTableTableManager(_db.attachedDatabase, _db.purchases);
-  $$PurchaseItemsTableTableManager get purchaseItems =>
-      $$PurchaseItemsTableTableManager(_db.attachedDatabase, _db.purchaseItems);
 }

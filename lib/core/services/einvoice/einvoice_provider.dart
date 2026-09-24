@@ -71,8 +71,10 @@ class EInvoiceChainContext {
   });
 
   /// Chain context for the first invoice of a brand-new jurisdiction.
-  static const EInvoiceChainContext genesis =
-      EInvoiceChainContext(nextIcv: 1, previousHash: null);
+  static const EInvoiceChainContext genesis = EInvoiceChainContext(
+    nextIcv: 1,
+    previousHash: null,
+  );
 }
 
 class PreparedArtifact {
@@ -124,17 +126,17 @@ class SubmissionResult {
   });
 
   const SubmissionResult.cleared(String response)
-      : status = EInvoiceStatus.cleared,
-        responsePayload = response,
-        lastError = null;
+    : status = EInvoiceStatus.cleared,
+      responsePayload = response,
+      lastError = null;
 
   const SubmissionResult.reported(String response)
-      : status = EInvoiceStatus.reported,
-        responsePayload = response,
-        lastError = null;
+    : status = EInvoiceStatus.reported,
+      responsePayload = response,
+      lastError = null;
 
   const SubmissionResult.rejected(String error, {String? response})
-      : status = EInvoiceStatus.rejected,
-        responsePayload = response,
-        lastError = error;
+    : status = EInvoiceStatus.rejected,
+      responsePayload = response,
+      lastError = error;
 }

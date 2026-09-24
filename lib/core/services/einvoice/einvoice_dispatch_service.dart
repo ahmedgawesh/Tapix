@@ -40,9 +40,9 @@ class EInvoiceDispatchService {
     required EInvoiceProviderRegistry registry,
     required EInvoiceArtifactRepository artifactRepository,
     required SettingsDao settingsDao,
-  })  : _registry = registry,
-        _repo = artifactRepository,
-        _settings = settingsDao;
+  }) : _registry = registry,
+       _repo = artifactRepository,
+       _settings = settingsDao;
 
   static const String _keyJurisdiction = 'einvoice_jurisdiction';
   static const String _keyEnabled = 'einvoice_enabled';
@@ -76,7 +76,8 @@ class EInvoiceDispatchService {
         return existing.status;
       }
 
-      final int artifactId = existing?.id ??
+      final int artifactId =
+          existing?.id ??
           await _repo.insertDraft(
             sourceTable: subject.sourceTable,
             sourceId: subject.sourceId,

@@ -96,6 +96,13 @@ class UnifiedReturnLineItem {
   final int unitPriceCents;
   final String? reason;
 
+  /// Explicit source decision required when [mode] is adjustment on the sale
+  /// side. Linked lines derive their source from the original invoice.
+  final String sourceResolution;
+  final String? sourceResolutionReason;
+  final int? supplierIdentityId;
+  final String? consignmentLayerId;
+
   /// Resolved by the service — not set by the user.
   final ReturnMode mode;
   final ReturnModeReason modeReason;
@@ -114,6 +121,10 @@ class UnifiedReturnLineItem {
     this.measurementType = 'piece',
     required this.unitPriceCents,
     this.reason,
+    this.sourceResolution = 'pending',
+    this.sourceResolutionReason,
+    this.supplierIdentityId,
+    this.consignmentLayerId,
     required this.mode,
     required this.modeReason,
     this.linkedAllocations = const [],
@@ -123,6 +134,10 @@ class UnifiedReturnLineItem {
     int? quantity,
     int? unitPriceCents,
     String? reason,
+    String? sourceResolution,
+    String? sourceResolutionReason,
+    int? supplierIdentityId,
+    String? consignmentLayerId,
     ReturnMode? mode,
     ReturnModeReason? modeReason,
     List<InvoiceItemAllocation>? linkedAllocations,
@@ -137,6 +152,11 @@ class UnifiedReturnLineItem {
       measurementType: measurementType,
       unitPriceCents: unitPriceCents ?? this.unitPriceCents,
       reason: reason ?? this.reason,
+      sourceResolution: sourceResolution ?? this.sourceResolution,
+      sourceResolutionReason:
+          sourceResolutionReason ?? this.sourceResolutionReason,
+      supplierIdentityId: supplierIdentityId ?? this.supplierIdentityId,
+      consignmentLayerId: consignmentLayerId ?? this.consignmentLayerId,
       mode: mode ?? this.mode,
       modeReason: modeReason ?? this.modeReason,
       linkedAllocations: linkedAllocations ?? this.linkedAllocations,
@@ -1339,6 +1359,12 @@ class UnifiedReturnService {
             taxRateBpsAtPost: Value(line.local.effectiveTaxRateBps),
             totalCents: Decimal.fromInt(line.total.cents),
             reason: Value(item.reason),
+            consignmentLayerId: Value(item.consignmentLayerId),
+            supplierIdentityId: Value(item.supplierIdentityId),
+            sourceResolution: Value(item.sourceResolution),
+            sourceResolutionReason: Value(item.sourceResolutionReason),
+            sourceResolvedBy: Value(userId),
+            sourceResolvedAt: Value(now),
           );
         }).toList();
 

@@ -3,7 +3,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/database/daos/size_dao.dart';
 import 'package:tapix/features/products/data/repositories/size_repository_impl.dart';
-import 'package:tapix/features/products/domain/entities/size_entity.dart' as domain;
+import 'package:tapix/features/products/domain/entities/size_entity.dart'
+    as domain;
 
 class MockAppDatabase extends Mock implements AppDatabase {}
 
@@ -50,8 +51,9 @@ void main() {
   group('SizeRepositoryImpl', () {
     group('watchAllSizes', () {
       test('returns stream of sizes from DAO', () async {
-        when(() => mockSizeDao.watchAllSizes())
-            .thenAnswer((_) => Stream.value([tDriftSize]));
+        when(
+          () => mockSizeDao.watchAllSizes(),
+        ).thenAnswer((_) => Stream.value([tDriftSize]));
 
         final result = repository.watchAllSizes();
 
@@ -65,8 +67,9 @@ void main() {
 
     group('watchSizesBySearch', () {
       test('filters sizes by search query', () async {
-        when(() => mockSizeDao.watchAllSizes())
-            .thenAnswer((_) => Stream.value([tDriftSize]));
+        when(
+          () => mockSizeDao.watchAllSizes(),
+        ).thenAnswer((_) => Stream.value([tDriftSize]));
 
         final result = repository.watchSizesBySearch('Small');
 
@@ -77,8 +80,9 @@ void main() {
       });
 
       test('returns empty list when no sizes match', () async {
-        when(() => mockSizeDao.watchAllSizes())
-            .thenAnswer((_) => Stream.value([tDriftSize]));
+        when(
+          () => mockSizeDao.watchAllSizes(),
+        ).thenAnswer((_) => Stream.value([tDriftSize]));
 
         final result = repository.watchSizesBySearch('XL');
 
@@ -91,8 +95,9 @@ void main() {
 
     group('getAllSizes', () {
       test('returns list of sizes from DAO', () async {
-        when(() => mockSizeDao.getAllSizes())
-            .thenAnswer((_) async => [tDriftSize]);
+        when(
+          () => mockSizeDao.getAllSizes(),
+        ).thenAnswer((_) async => [tDriftSize]);
 
         final result = await repository.getAllSizes();
 
@@ -104,8 +109,9 @@ void main() {
 
     group('getSizeById', () {
       test('returns size when found', () async {
-        when(() => mockSizeDao.getSizeById(1))
-            .thenAnswer((_) async => tDriftSize);
+        when(
+          () => mockSizeDao.getSizeById(1),
+        ).thenAnswer((_) async => tDriftSize);
 
         final result = await repository.getSizeById(1);
 
@@ -115,8 +121,7 @@ void main() {
       });
 
       test('returns null when size not found', () async {
-        when(() => mockSizeDao.getSizeById(999))
-            .thenAnswer((_) async => null);
+        when(() => mockSizeDao.getSizeById(999)).thenAnswer((_) async => null);
 
         final result = await repository.getSizeById(999);
 
@@ -127,8 +132,7 @@ void main() {
 
     group('createSize', () {
       test('creates size successfully', () async {
-        when(() => mockSizeDao.createSize(any()))
-            .thenAnswer((_) async => 1);
+        when(() => mockSizeDao.createSize(any())).thenAnswer((_) async => 1);
 
         final result = await repository.createSize(tSizeEntity);
 
@@ -139,10 +143,10 @@ void main() {
 
     group('updateSize', () {
       test('updates size successfully', () async {
-        when(() => mockSizeDao.getSizeById(1))
-            .thenAnswer((_) async => tDriftSize);
-        when(() => mockSizeDao.updateSize(any()))
-            .thenAnswer((_) async => true);
+        when(
+          () => mockSizeDao.getSizeById(1),
+        ).thenAnswer((_) async => tDriftSize);
+        when(() => mockSizeDao.updateSize(any())).thenAnswer((_) async => true);
 
         final result = await repository.updateSize(tSizeEntity);
 
@@ -152,8 +156,7 @@ void main() {
       });
 
       test('returns false when size not found', () async {
-        when(() => mockSizeDao.getSizeById(999))
-            .thenAnswer((_) async => null);
+        when(() => mockSizeDao.getSizeById(999)).thenAnswer((_) async => null);
 
         final result = await repository.updateSize(
           const domain.Size(
@@ -172,8 +175,7 @@ void main() {
 
     group('deleteSize', () {
       test('deletes size successfully', () async {
-        when(() => mockSizeDao.deleteSize(1))
-            .thenAnswer((_) async => 1);
+        when(() => mockSizeDao.deleteSize(1)).thenAnswer((_) async => 1);
 
         final result = await repository.deleteSize(1);
 
@@ -184,13 +186,17 @@ void main() {
 
     group('hasProducts', () {
       test('returns true when size has products', () async {
-        when(() => mockSizeDao.getProductCountBySize(1)).thenAnswer((_) async => 5);
+        when(
+          () => mockSizeDao.getProductCountBySize(1),
+        ).thenAnswer((_) async => 5);
         final result = await repository.hasProducts(1);
         expect(result, true);
       });
 
       test('returns false when size has no products', () async {
-        when(() => mockSizeDao.getProductCountBySize(1)).thenAnswer((_) async => 0);
+        when(
+          () => mockSizeDao.getProductCountBySize(1),
+        ).thenAnswer((_) async => 0);
         final result = await repository.hasProducts(1);
         expect(result, false);
       });
@@ -198,7 +204,9 @@ void main() {
 
     group('getProductCountBySize', () {
       test('returns correct product count', () async {
-        when(() => mockSizeDao.getProductCountBySize(1)).thenAnswer((_) async => 10);
+        when(
+          () => mockSizeDao.getProductCountBySize(1),
+        ).thenAnswer((_) async => 10);
         final result = await repository.getProductCountBySize(1);
         expect(result, 10);
       });

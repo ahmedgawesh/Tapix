@@ -39,7 +39,10 @@ class VoidImpactDialog extends StatelessWidget {
 
   /// Convenience: shows the dialog and returns `true` only when the user
   /// confirms a non-blocked void.
-  static Future<bool> show(BuildContext context, VoidImpactReport report) async {
+  static Future<bool> show(
+    BuildContext context,
+    VoidImpactReport report,
+  ) async {
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => VoidImpactDialog(report: report),
@@ -95,10 +98,12 @@ class VoidImpactDialog extends StatelessWidget {
                   title: 'void_impact.entangled_returns_title'.tr(),
                   description: 'void_impact.entangled_returns_description'.tr(),
                   rows: report.entangledAdjustmentReturns
-                      .map((e) => _Row(
-                            label: e.returnNumber,
-                            value: cs.formatCents(e.totalCents),
-                          ))
+                      .map(
+                        (e) => _Row(
+                          label: e.returnNumber,
+                          value: cs.formatCents(e.totalCents),
+                        ),
+                      )
                       .toList(),
                 ),
 
@@ -109,20 +114,22 @@ class VoidImpactDialog extends StatelessWidget {
                   title: 'void_impact.negative_stock_title'.tr(),
                   description: 'void_impact.negative_stock_description'.tr(),
                   rows: report.negativeStockRisks
-                      .map((r) => _Row(
-                            label: 'void_impact.product_label'.tr(
-                              namedArgs: {
-                                'pid': r.productId.toString(),
-                                'vid': r.variantId?.toString() ?? '—',
-                              },
-                            ),
-                            value: 'void_impact.stock_short_value'.tr(
-                              namedArgs: {
-                                'have': r.currentStock.toString(),
-                                'need': r.requiredQuantity.toString(),
-                              },
-                            ),
-                          ))
+                      .map(
+                        (r) => _Row(
+                          label: 'void_impact.product_label'.tr(
+                            namedArgs: {
+                              'pid': r.productId.toString(),
+                              'vid': r.variantId?.toString() ?? '—',
+                            },
+                          ),
+                          value: 'void_impact.stock_short_value'.tr(
+                            namedArgs: {
+                              'have': r.currentStock.toString(),
+                              'need': r.requiredQuantity.toString(),
+                            },
+                          ),
+                        ),
+                      )
                       .toList(),
                 ),
 
@@ -134,10 +141,12 @@ class VoidImpactDialog extends StatelessWidget {
                   title: 'void_impact.linked_cascade_title'.tr(),
                   description: 'void_impact.linked_cascade_description'.tr(),
                   rows: report.linkedReturns
-                      .map((e) => _Row(
-                            label: e.returnNumber,
-                            value: cs.formatCents(e.totalCents),
-                          ))
+                      .map(
+                        (e) => _Row(
+                          label: e.returnNumber,
+                          value: cs.formatCents(e.totalCents),
+                        ),
+                      )
                       .toList(),
                 ),
 
@@ -156,7 +165,10 @@ class VoidImpactDialog extends StatelessWidget {
                   ),
                   _Row(
                     label: 'void_impact.gl_inventory_label'.tr(),
-                    value: _signed(cs, report.estimatedInventoryAdjustmentCents),
+                    value: _signed(
+                      cs,
+                      report.estimatedInventoryAdjustmentCents,
+                    ),
                   ),
                 ],
               ),
@@ -174,9 +186,7 @@ class VoidImpactDialog extends StatelessWidget {
           onPressed: hasBlockers ? null : () => Navigator.pop(context, true),
           style: FilledButton.styleFrom(backgroundColor: scheme.error),
           label: Text(
-            isSale
-                ? 'sales.void_sale'.tr()
-                : 'purchases.void_purchase'.tr(),
+            isSale ? 'sales.void_sale'.tr() : 'purchases.void_purchase'.tr(),
           ),
         ),
       ],
@@ -227,8 +237,10 @@ class _Section extends StatelessWidget {
                 Expanded(
                   child: Text(
                     title,
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(color: color, fontWeight: FontWeight.w700),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],
@@ -240,10 +252,7 @@ class _Section extends StatelessWidget {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            if (rows.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              ...rows,
-            ],
+            if (rows.isNotEmpty) ...[const SizedBox(height: 8), ...rows],
           ],
         ),
       ),

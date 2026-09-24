@@ -44,29 +44,40 @@ void main() {
   group('AccountsBloc', () {
     final accounts = [
       _makeAccount(),
-      _makeAccount(id: 2, code: '20100', name: 'Accounts Payable', type: 'liability'),
+      _makeAccount(
+        id: 2,
+        code: '20100',
+        name: 'Accounts Payable',
+        type: 'liability',
+      ),
     ];
 
     blocTest<AccountsBloc, RealtimeState<AccountsData>>(
       'emits RealtimeSuccess with accounts from stream',
       setUp: () {
-        when(mockRepository.watchAllAccounts())
-            .thenAnswer((_) => Stream.value(accounts));
+        when(
+          mockRepository.watchAllAccounts(),
+        ).thenAnswer((_) => Stream.value(accounts));
       },
       build: () => AccountsBloc(mockRepository),
       expect: () => [
-        isA<RealtimeSuccess<AccountsData>>()
-            .having((s) => s.data.accounts.length, 'accounts count', 2),
+        isA<RealtimeSuccess<AccountsData>>().having(
+          (s) => s.data.accounts.length,
+          'accounts count',
+          2,
+        ),
       ],
     );
 
     blocTest<AccountsBloc, RealtimeState<AccountsData>>(
       'filters by type when AccountFilterByTypeRequested',
       setUp: () {
-        when(mockRepository.watchAllAccounts())
-            .thenAnswer((_) => Stream.value(accounts));
-        when(mockRepository.watchAccountsByType('asset'))
-            .thenAnswer((_) => Stream.value([accounts.first]));
+        when(
+          mockRepository.watchAllAccounts(),
+        ).thenAnswer((_) => Stream.value(accounts));
+        when(
+          mockRepository.watchAccountsByType('asset'),
+        ).thenAnswer((_) => Stream.value([accounts.first]));
       },
       build: () => AccountsBloc(mockRepository),
       act: (bloc) => bloc.add(const AccountFilterByTypeRequested('asset')),
@@ -78,69 +89,83 @@ void main() {
     blocTest<AccountsBloc, RealtimeState<AccountsData>>(
       'creates account when AccountCreateRequested',
       setUp: () {
-        when(mockRepository.watchAllAccounts())
-            .thenAnswer((_) => Stream.value(accounts));
-        when(mockRepository.createAccount(
-          accountCode: anyNamed('accountCode'),
-          accountName: anyNamed('accountName'),
-          accountType: anyNamed('accountType'),
-          currencyId: anyNamed('currencyId'),
-        )).thenAnswer((_) async => 3);
+        when(
+          mockRepository.watchAllAccounts(),
+        ).thenAnswer((_) => Stream.value(accounts));
+        when(
+          mockRepository.createAccount(
+            accountCode: anyNamed('accountCode'),
+            accountName: anyNamed('accountName'),
+            accountType: anyNamed('accountType'),
+            currencyId: anyNamed('currencyId'),
+          ),
+        ).thenAnswer((_) async => 3);
       },
       build: () => AccountsBloc(mockRepository),
-      act: (bloc) => bloc.add(const AccountCreateRequested(
-        accountCode: '10500',
-        accountName: 'Petty Cash',
-        accountType: 'asset',
-        currencyId: 1,
-      )),
-      verify: (_) {
-        verify(mockRepository.createAccount(
+      act: (bloc) => bloc.add(
+        const AccountCreateRequested(
           accountCode: '10500',
           accountName: 'Petty Cash',
           accountType: 'asset',
           currencyId: 1,
-        )).called(1);
+        ),
+      ),
+      verify: (_) {
+        verify(
+          mockRepository.createAccount(
+            accountCode: '10500',
+            accountName: 'Petty Cash',
+            accountType: 'asset',
+            currencyId: 1,
+          ),
+        ).called(1);
       },
     );
 
     blocTest<AccountsBloc, RealtimeState<AccountsData>>(
       'emits error when create fails',
       setUp: () {
-        when(mockRepository.watchAllAccounts())
-            .thenAnswer((_) => Stream.value(accounts));
-        when(mockRepository.createAccount(
-          accountCode: anyNamed('accountCode'),
-          accountName: anyNamed('accountName'),
-          accountType: anyNamed('accountType'),
-          currencyId: anyNamed('currencyId'),
-        )).thenThrow(Exception('Duplicate code'));
+        when(
+          mockRepository.watchAllAccounts(),
+        ).thenAnswer((_) => Stream.value(accounts));
+        when(
+          mockRepository.createAccount(
+            accountCode: anyNamed('accountCode'),
+            accountName: anyNamed('accountName'),
+            accountType: anyNamed('accountType'),
+            currencyId: anyNamed('currencyId'),
+          ),
+        ).thenThrow(Exception('Duplicate code'));
       },
       build: () => AccountsBloc(mockRepository),
-      act: (bloc) => bloc.add(const AccountCreateRequested(
-        accountCode: '10100',
-        accountName: 'Duplicate',
-        accountType: 'asset',
-        currencyId: 1,
-      )),
-      verify: (bloc) {
-        // Verify the create was attempted (it throws)
-        verify(mockRepository.createAccount(
+      act: (bloc) => bloc.add(
+        const AccountCreateRequested(
           accountCode: '10100',
           accountName: 'Duplicate',
           accountType: 'asset',
           currencyId: 1,
-        )).called(1);
+        ),
+      ),
+      verify: (bloc) {
+        // Verify the create was attempted (it throws)
+        verify(
+          mockRepository.createAccount(
+            accountCode: '10100',
+            accountName: 'Duplicate',
+            accountType: 'asset',
+            currencyId: 1,
+          ),
+        ).called(1);
       },
     );
 
     blocTest<AccountsBloc, RealtimeState<AccountsData>>(
       'deletes account when AccountDeleteRequested',
       setUp: () {
-        when(mockRepository.watchAllAccounts())
-            .thenAnswer((_) => Stream.value(accounts));
-        when(mockRepository.deleteAccount(1))
-            .thenAnswer((_) async => 1);
+        when(
+          mockRepository.watchAllAccounts(),
+        ).thenAnswer((_) => Stream.value(accounts));
+        when(mockRepository.deleteAccount(1)).thenAnswer((_) async => 1);
       },
       build: () => AccountsBloc(mockRepository),
       act: (bloc) => bloc.add(const AccountDeleteRequested(1)),

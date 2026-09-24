@@ -9,6 +9,7 @@ import '../../../../core/di/injection_container.dart';
 import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/promotions/promotion_sale_snapshot.dart';
 import '../../../../core/services/lan/lan_network_service.dart';
+import '../../../../core/services/lan/lan_error_localizer.dart';
 
 /// Read-only sale-return details loaded from the authenticated LAN master.
 ///
@@ -62,8 +63,8 @@ class _LanSaleReturnDetailScreenState extends State<LanSaleReturnDetailScreen> {
       if (!mounted) return;
       setState(() {
         _error = error is LanBusinessException
-            ? error.message
-            : error.toString();
+            ? localizeLanBusinessError(error)
+            : 'settings.network.request_failed'.tr();
         _loading = false;
       });
     }

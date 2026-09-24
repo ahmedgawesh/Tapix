@@ -3,9 +3,9 @@ import 'package:drift/drift.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/money/money_input_parser.dart';
+import '../../../../core/services/inventory/supplier_identity_rules.dart';
 import '../../domain/repositories/supplier_repository.dart';
 
-/// Events for SupplierFormBloc
 abstract class SupplierFormEvent {
   const SupplierFormEvent();
 }
@@ -18,6 +18,11 @@ class SupplierFormLoadRequested extends SupplierFormEvent {
 class SupplierFormNameChanged extends SupplierFormEvent {
   final String name;
   const SupplierFormNameChanged(this.name);
+}
+
+class SupplierFormProductCodeChanged extends SupplierFormEvent {
+  final String code;
+  const SupplierFormProductCodeChanged(this.code);
 }
 
 class SupplierFormEmailChanged extends SupplierFormEvent {
@@ -44,7 +49,6 @@ class SupplierFormSubmitted extends SupplierFormEvent {
   const SupplierFormSubmitted();
 }
 
-/// States for SupplierFormBloc
 abstract class SupplierFormState {
   const SupplierFormState();
 }
@@ -60,6 +64,8 @@ class SupplierFormLoading extends SupplierFormState {
 class SupplierFormReady extends SupplierFormState {
   final int? supplierId;
   final String name;
+  final String productCode;
+  final bool productCodeLocked;
   final String email;
   final String phone;
   final String address;
@@ -72,6 +78,8 @@ class SupplierFormReady extends SupplierFormState {
   const SupplierFormReady({
     this.supplierId,
     this.name = '',
+    this.productCode = '',
+    this.productCodeLocked = false,
     this.email = '',
     this.phone = '',
     this.address = '',
@@ -85,6 +93,8 @@ class SupplierFormReady extends SupplierFormState {
   SupplierFormReady copyWith({
     int? supplierId,
     String? name,
+    String? productCode,
+    bool? productCodeLocked,
     String? email,
     String? phone,
     String? address,
@@ -93,59 +103,46 @@ class SupplierFormReady extends SupplierFormState {
     bool? isEditing,
     Map<String, String>? errors,
     bool? isSubmitting,
-  }) {
-    return SupplierFormReady(
-      supplierId: supplierId ?? this.supplierId,
-      name: name ?? this.name,
-      email: email ?? this.email,
-      phone: phone ?? this.phone,
-      address: address ?? this.address,
-      balance: balance ?? this.balance,
-      currencyId: currencyId ?? this.currencyId,
-      isEditing: isEditing ?? this.isEditing,
-      errors: errors ?? this.errors,
-      isSubmitting: isSubmitting ?? this.isSubmitting,
-    );
-  }
+  }) => SupplierFormReady(
+    supplierId: supplierId ?? this.supplierId,
+    name: name ?? this.name,
+    productCode: productCode ?? this.productCode,
+    productCodeLocked: productCodeLocked ?? this.productCodeLocked,
+    email: email ?? this.email,
+    phone: phone ?? this.phone,
+    address: address ?? this.address,
+    balance: balance ?? this.balance,
+    currencyId: currencyId ?? this.currencyId,
+    isEditing: isEditing ?? this.isEditing,
+    errors: errors ?? this.errors,
+    isSubmitting: isSubmitting ?? this.isSubmitting,
+  );
 
-  bool get isValid => name.isNotEmpty && errors.isEmpty;
+  bool get isValid => name.trim().isNotEmpty && errors.isEmpty;
 }
 
 class SupplierFormSuccess extends SupplierFormState {
   final int supplierId;
   final bool isNew;
-
-  const SupplierFormSuccess({
-    required this.supplierId,
-    required this.isNew,
-  });
+  const SupplierFormSuccess({required this.supplierId, required this.isNew});
 }
 
 class SupplierFormError extends SupplierFormState {
   final String message;
   final SupplierFormReady previousState;
-
-  const SupplierFormError({
-    required this.message,
-    required this.previousState,
-  });
+  const SupplierFormError({required this.message, required this.previousState});
 }
 
-/// Bloc for supplier form (create/edit)
 class SupplierFormBloc extends Bloc<SupplierFormEvent, SupplierFormState> {
   final SupplierRepository _repository;
-
-  // Phase 8 — sole source of truth for text→cents conversion.
-  // Replaces the legacy `(double.parse(...) * 100).round()` pattern.
   final MoneyInputParser _moneyParser;
 
-  SupplierFormBloc(
-    this._repository, {
-    MoneyInputParser? moneyParser,
-  })  : _moneyParser = moneyParser ?? sl<MoneyInputParser>(),
-        super(const SupplierFormInitial()) {
+  SupplierFormBloc(this._repository, {MoneyInputParser? moneyParser})
+    : _moneyParser = moneyParser ?? sl<MoneyInputParser>(),
+      super(const SupplierFormInitial()) {
     on<SupplierFormLoadRequested>(_onLoadRequested);
     on<SupplierFormNameChanged>(_onNameChanged);
+    on<SupplierFormProductCodeChanged>(_onProductCodeChanged);
     on<SupplierFormEmailChanged>(_onEmailChanged);
     on<SupplierFormPhoneChanged>(_onPhoneChanged);
     on<SupplierFormAddressChanged>(_onAddressChanged);
@@ -153,37 +150,53 @@ class SupplierFormBloc extends Bloc<SupplierFormEvent, SupplierFormState> {
     on<SupplierFormSubmitted>(_onSubmitted);
   }
 
+  SupplierFormReady? get _editableState {
+    final value = switch (state) {
+      SupplierFormReady ready => ready,
+      SupplierFormError error => error.previousState,
+      _ => null,
+    };
+    return value == null || value.isSubmitting ? null : value;
+  }
+
   Future<void> _onLoadRequested(
     SupplierFormLoadRequested event,
     Emitter<SupplierFormState> emit,
   ) async {
     emit(const SupplierFormLoading());
-
     try {
-      if (event.supplierId != null) {
-        final supplier = await _repository.getSupplier(event.supplierId!);
-        if (supplier != null) {
-          emit(SupplierFormReady(
-            supplierId: supplier.id,
-            name: supplier.name,
-            email: supplier.email ?? '',
-            phone: supplier.phone ?? '',
-            address: supplier.address ?? '',
-            balance: (supplier.balanceCents.toBigInt().toInt() / 100).toStringAsFixed(2),
-            currencyId: supplier.currencyId,
-            isEditing: true,
-          ));
-        } else {
-          emit(const SupplierFormReady());
-        }
-      } else {
+      if (event.supplierId == null) {
         emit(const SupplierFormReady());
+        return;
       }
-    } catch (e) {
-      emit(SupplierFormError(
-        message: e.toString(),
-        previousState: const SupplierFormReady(),
-      ));
+      final supplier = await _repository.getSupplier(event.supplierId!);
+      if (supplier == null) {
+        emit(const SupplierFormReady());
+        return;
+      }
+      final locked = await _repository.isProductCodeLocked(supplier.id);
+      emit(
+        SupplierFormReady(
+          supplierId: supplier.id,
+          name: supplier.name,
+          productCode: supplier.productCode ?? '',
+          productCodeLocked: locked,
+          email: supplier.email ?? '',
+          phone: supplier.phone ?? '',
+          address: supplier.address ?? '',
+          balance: (supplier.balanceCents.toBigInt().toInt() / 100)
+              .toStringAsFixed(2),
+          currencyId: supplier.currencyId,
+          isEditing: true,
+        ),
+      );
+    } catch (error) {
+      emit(
+        SupplierFormError(
+          message: error.toString(),
+          previousState: const SupplierFormReady(),
+        ),
+      );
     }
   }
 
@@ -191,157 +204,195 @@ class SupplierFormBloc extends Bloc<SupplierFormEvent, SupplierFormState> {
     SupplierFormNameChanged event,
     Emitter<SupplierFormState> emit,
   ) {
-    if (state is SupplierFormReady) {
-      final currentState = state as SupplierFormReady;
-      final errors = Map<String, String>.from(currentState.errors);
+    final current = _editableState;
+    if (current == null) return;
+    final errors = Map<String, String>.of(current.errors)..remove('name');
+    if (event.name.trim().isEmpty) errors['name'] = 'suppliers.name_required';
+    emit(current.copyWith(name: event.name, errors: errors));
+  }
 
-      if (event.name.isEmpty) {
-        errors['name'] = 'suppliers.name_required';
-      } else {
-        errors.remove('name');
-      }
-
-      emit(currentState.copyWith(name: event.name, errors: errors));
+  void _onProductCodeChanged(
+    SupplierFormProductCodeChanged event,
+    Emitter<SupplierFormState> emit,
+  ) {
+    final current = _editableState;
+    if (current == null || current.productCodeLocked) return;
+    final errors = Map<String, String>.of(current.errors)
+      ..remove('productCode');
+    try {
+      SupplierIdentityRules.normalizeSupplierCode(event.code);
+    } on SupplierIdentityException catch (error) {
+      errors['productCode'] = error.messageKey;
     }
+    // Keep the text while editing, normalize on submit (no cursor jumps).
+    emit(current.copyWith(productCode: event.code, errors: errors));
   }
 
   void _onEmailChanged(
     SupplierFormEmailChanged event,
     Emitter<SupplierFormState> emit,
   ) {
-    if (state is SupplierFormReady) {
-      final currentState = state as SupplierFormReady;
-      final errors = Map<String, String>.from(currentState.errors);
-
-      if (event.email.isNotEmpty && !_isValidEmail(event.email)) {
-        errors['email'] = 'suppliers.email_invalid';
-      } else {
-        errors.remove('email');
-      }
-
-      emit(currentState.copyWith(email: event.email, errors: errors));
+    final current = _editableState;
+    if (current == null) return;
+    final errors = Map<String, String>.of(current.errors)..remove('email');
+    if (event.email.isNotEmpty && !_isValidEmail(event.email)) {
+      errors['email'] = 'suppliers.email_invalid';
     }
+    emit(current.copyWith(email: event.email, errors: errors));
   }
 
   void _onPhoneChanged(
     SupplierFormPhoneChanged event,
     Emitter<SupplierFormState> emit,
   ) {
-    if (state is SupplierFormReady) {
-      final currentState = state as SupplierFormReady;
-      emit(currentState.copyWith(phone: event.phone));
-    }
+    final current = _editableState;
+    if (current != null) emit(current.copyWith(phone: event.phone));
   }
 
   void _onAddressChanged(
     SupplierFormAddressChanged event,
     Emitter<SupplierFormState> emit,
   ) {
-    if (state is SupplierFormReady) {
-      final currentState = state as SupplierFormReady;
-      emit(currentState.copyWith(address: event.address));
-    }
+    final current = _editableState;
+    if (current != null) emit(current.copyWith(address: event.address));
   }
 
   void _onBalanceChanged(
     SupplierFormBalanceChanged event,
     Emitter<SupplierFormState> emit,
   ) {
-    if (state is SupplierFormReady) {
-      final currentState = state as SupplierFormReady;
-      emit(currentState.copyWith(balance: event.balance));
-    }
+    final current = _editableState;
+    if (current != null) emit(current.copyWith(balance: event.balance));
   }
 
   Future<void> _onSubmitted(
     SupplierFormSubmitted event,
     Emitter<SupplierFormState> emit,
   ) async {
-    if (state is! SupplierFormReady) return;
-
-    final currentState = state as SupplierFormReady;
-
-    // Validate
-    final errors = <String, String>{};
-    if (currentState.name.isEmpty) {
-      errors['name'] = 'suppliers.name_required';
-    }
-    if (currentState.email.isNotEmpty && !_isValidEmail(currentState.email)) {
-      errors['email'] = 'suppliers.email_invalid';
-    }
-
-    // Check for duplicate name
-    if (currentState.name.isNotEmpty) {
-      final existing = await _repository.searchSuppliers(currentState.name);
-      final duplicate = existing.any((s) =>
-          s.name.trim().toLowerCase() == currentState.name.trim().toLowerCase() &&
-          s.id != currentState.supplierId);
-      if (duplicate) {
-        errors['name'] = 'suppliers.name_duplicate';
-      }
-    }
-
-    if (errors.isNotEmpty) {
-      emit(currentState.copyWith(errors: errors));
-      return;
-    }
-
-    emit(currentState.copyWith(isSubmitting: true));
-
+    final current = _editableState;
+    if (current == null) return;
+    // Set before the first await: two rapid taps must not create two suppliers.
+    emit(current.copyWith(isSubmitting: true));
     try {
-      final balanceCents = _parseBalance(currentState.balance);
-
-      if (currentState.isEditing && currentState.supplierId != null) {
-        final existingSupplier = await _repository.getSupplier(currentState.supplierId!);
-        if (existingSupplier != null) {
-          final updatedSupplier = existingSupplier.copyWith(
-            name: currentState.name,
-            email: Value(currentState.email.isEmpty ? null : currentState.email),
-            phone: Value(currentState.phone.isEmpty ? null : currentState.phone),
-            address: Value(currentState.address.isEmpty ? null : currentState.address),
-            updatedAt: DateTime.now(),
-          );
-          await _repository.updateSupplier(updatedSupplier);
-
-          // Phase 1.4: read-current → compute-delta → recordTransaction is
-          // now a single atomic repository call. No-op when balance unchanged.
-          await _repository.adjustOpeningBalance(
-            supplierId: existingSupplier.id,
-            desiredBalanceCents: balanceCents.toBigInt().toInt(),
-          );
-
-          emit(SupplierFormSuccess(
-            supplierId: currentState.supplierId!,
-            isNew: false,
-          ));
+      final errors = <String, String>{};
+      if (current.name.trim().isEmpty) {
+        errors['name'] = 'suppliers.name_required';
+      }
+      if (current.email.isNotEmpty && !_isValidEmail(current.email)) {
+        errors['email'] = 'suppliers.email_invalid';
+      }
+      String? normalizedCode;
+      try {
+        normalizedCode = SupplierIdentityRules.normalizeSupplierCode(
+          current.productCode,
+        );
+      } on SupplierIdentityException catch (error) {
+        errors['productCode'] = error.messageKey;
+      }
+      if (current.name.trim().isNotEmpty) {
+        final existing = await _repository.searchSuppliers(current.name.trim());
+        if (existing.any(
+          (s) =>
+              s.name.trim().toLowerCase() ==
+                  current.name.trim().toLowerCase() &&
+              s.id != current.supplierId,
+        )) {
+          errors['name'] = 'suppliers.name_duplicate';
         }
+      }
+      if (normalizedCode != null &&
+          !await _repository.isProductCodeAvailable(
+            normalizedCode,
+            excludingSupplierId: current.supplierId,
+          )) {
+        errors['productCode'] = 'supplier_identity.code_in_use';
+      }
+      if (errors.isNotEmpty) {
+        emit(current.copyWith(errors: errors, isSubmitting: false));
+        return;
+      }
+      final balanceCents = _parseBalance(current.balance);
+      if (current.isEditing && current.supplierId != null) {
+        final existing = await _repository.getSupplier(current.supplierId!);
+        if (existing == null) {
+          throw const SupplierIdentityException(
+            'supplier_identity.source_mismatch',
+          );
+        }
+        final updated = existing.copyWith(
+          name: current.name,
+          productCode: Value(normalizedCode),
+          email: Value(current.email.isEmpty ? null : current.email),
+          phone: Value(current.phone.isEmpty ? null : current.phone),
+          address: Value(current.address.isEmpty ? null : current.address),
+          updatedAt: DateTime.now(),
+        );
+        if (!await _repository.updateSupplier(updated)) {
+          throw const SupplierIdentityException(
+            'supplier_identity.source_mismatch',
+          );
+        }
+        // Preserve the existing journal-backed balance API.
+        await _repository.adjustOpeningBalance(
+          supplierId: existing.id,
+          desiredBalanceCents: balanceCents.toBigInt().toInt(),
+        );
+        emit(SupplierFormSuccess(supplierId: existing.id, isNew: false));
       } else {
-        final supplierId = await _repository.createSupplier(
-          name: currentState.name,
-          email: currentState.email.isEmpty ? null : currentState.email,
-          phone: currentState.phone.isEmpty ? null : currentState.phone,
-          address: currentState.address.isEmpty ? null : currentState.address,
-          currencyId: currentState.currencyId,
+        final id = await _repository.createSupplier(
+          name: current.name,
+          productCode: normalizedCode,
+          email: current.email.isEmpty ? null : current.email,
+          phone: current.phone.isEmpty ? null : current.phone,
+          address: current.address.isEmpty ? null : current.address,
+          currencyId: current.currencyId,
           initialBalance: balanceCents,
         );
-        emit(SupplierFormSuccess(supplierId: supplierId, isNew: true));
+        emit(SupplierFormSuccess(supplierId: id, isNew: true));
       }
-    } catch (e) {
-      emit(SupplierFormError(
-        message: e.toString(),
-        previousState: currentState.copyWith(isSubmitting: false),
-      ));
+    } catch (error) {
+      final failure = SupplierIdentityException.fromError(error);
+      if (failure != null) {
+        // Includes a concurrent save that won the DB reservation after the
+        // early check. No raw SQL details or another supplier's name leak.
+        var savedCode = current.productCode;
+        var locked = current.productCodeLocked;
+        if (failure.messageKey == 'supplier_identity.code_locked' &&
+            current.supplierId != null) {
+          // A document may be saved while this edit form is already open.
+          // Do not freeze the rejected draft value inside the text field.
+          try {
+            final saved = await _repository.getSupplier(current.supplierId!);
+            if (saved != null) {
+              savedCode = saved.productCode ?? '';
+              locked = true;
+            }
+          } catch (_) {
+            // Preserve the retryable form; the database still enforces the lock.
+          }
+        }
+        emit(
+          current.copyWith(
+            productCode: savedCode,
+            errors: {'productCode': failure.messageKey},
+            productCodeLocked: locked,
+            isSubmitting: false,
+          ),
+        );
+      } else {
+        emit(
+          SupplierFormError(
+            message: error.toString(),
+            previousState: current.copyWith(isSubmitting: false),
+          ),
+        );
+      }
     }
   }
 
-  bool _isValidEmail(String email) {
-    return RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email);
-  }
+  bool _isValidEmail(String email) =>
+      RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email);
 
-  // Phase 8 — delegates to the canonical signed-text parser. The supplier
-  // opening-balance field legitimately accepts a negative magnitude (a
-  // prepaid advance on file), which is why we use the signed variant
-  // rather than [MoneyInputParser.parseOrZero].
   Decimal _parseBalance(String balance) =>
       Decimal.fromInt(_moneyParser.parseSignedOrZero(balance));
 }

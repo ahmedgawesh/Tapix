@@ -85,8 +85,7 @@ class CustomerCreditNotes extends Table {
       integer().references(Currencies, #id, onDelete: KeyAction.restrict)();
 
   /// Original face value of the credit note (cents).
-  IntColumn get originalAmountCents =>
-      integer().map(const MoneyConverter())();
+  IntColumn get originalAmountCents => integer().map(const MoneyConverter())();
 
   /// Open balance remaining for application (cents). Decreases as the
   /// note is applied to subsequent sales. `0` once fully consumed.
@@ -125,10 +124,10 @@ class CustomerCreditNoteApplications extends Table {
   IntColumn get id => integer().autoIncrement()();
 
   IntColumn get creditNoteId => integer().references(
-        CustomerCreditNotes,
-        #id,
-        onDelete: KeyAction.restrict,
-      )();
+    CustomerCreditNotes,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
 
   /// The sale this application is being credited against. Soft pointer
   /// (no FK) so the application audit trail survives a sale void.

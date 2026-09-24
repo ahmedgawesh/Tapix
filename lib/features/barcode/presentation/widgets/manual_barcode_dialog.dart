@@ -65,10 +65,7 @@ class _ManualBarcodeDialogState extends State<ManualBarcodeDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: Text('common.cancel'.tr()),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: Text('common.search'.tr()),
-        ),
+        FilledButton(onPressed: _submit, child: Text('common.search'.tr())),
       ],
     );
   }

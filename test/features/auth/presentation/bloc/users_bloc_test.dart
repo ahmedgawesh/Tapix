@@ -49,21 +49,26 @@ void main() {
     blocTest<UsersBloc, RealtimeState<List<UserEntity>>>(
       'emits RealtimeSuccess when stream emits users',
       setUp: () {
-        when(() => mockRepository.watchAllUsers())
-            .thenAnswer((_) => Stream.value(testUsers));
+        when(
+          () => mockRepository.watchAllUsers(),
+        ).thenAnswer((_) => Stream.value(testUsers));
       },
       build: () => UsersBloc(mockRepository),
       expect: () => [
-        isA<RealtimeSuccess<List<UserEntity>>>()
-            .having((s) => s.data.length, 'data.length', 3),
+        isA<RealtimeSuccess<List<UserEntity>>>().having(
+          (s) => s.data.length,
+          'data.length',
+          3,
+        ),
       ],
     );
 
     blocTest<UsersBloc, RealtimeState<List<UserEntity>>>(
       'filters users by role when UserFilterByRoleRequested is added',
       setUp: () {
-        when(() => mockRepository.watchAllUsers())
-            .thenAnswer((_) => Stream.value(testUsers));
+        when(
+          () => mockRepository.watchAllUsers(),
+        ).thenAnswer((_) => Stream.value(testUsers));
       },
       build: () => UsersBloc(mockRepository),
       act: (bloc) async {
@@ -82,8 +87,9 @@ void main() {
     blocTest<UsersBloc, RealtimeState<List<UserEntity>>>(
       'filters users by search query when UserSearchRequested is added',
       setUp: () {
-        when(() => mockRepository.watchAllUsers())
-            .thenAnswer((_) => Stream.value(testUsers));
+        when(
+          () => mockRepository.watchAllUsers(),
+        ).thenAnswer((_) => Stream.value(testUsers));
       },
       build: () => UsersBloc(mockRepository),
       act: (bloc) async {
@@ -104,8 +110,9 @@ void main() {
       'clears filter when null role is requested',
       setUp: () {
         filterController = StreamController<List<UserEntity>>.broadcast();
-        when(() => mockRepository.watchAllUsers())
-            .thenAnswer((_) => filterController.stream);
+        when(
+          () => mockRepository.watchAllUsers(),
+        ).thenAnswer((_) => filterController.stream);
         // Emit data once after a short delay
         Future<void>.delayed(const Duration(milliseconds: 10), () {
           filterController.add(testUsers);
@@ -122,21 +129,29 @@ void main() {
       skip: 1, // skip initial data load
       expect: () => [
         // First: filtered to owner only
-        isA<RealtimeSuccess<List<UserEntity>>>()
-            .having((s) => s.data.length, 'data.length', 1),
+        isA<RealtimeSuccess<List<UserEntity>>>().having(
+          (s) => s.data.length,
+          'data.length',
+          1,
+        ),
         // Then: cleared filter, all users
-        isA<RealtimeSuccess<List<UserEntity>>>()
-            .having((s) => s.data.length, 'data.length', 3),
+        isA<RealtimeSuccess<List<UserEntity>>>().having(
+          (s) => s.data.length,
+          'data.length',
+          3,
+        ),
       ],
     );
 
     blocTest<UsersBloc, RealtimeState<List<UserEntity>>>(
       'calls toggleUserActive on repository when UserToggleActiveRequested',
       setUp: () {
-        when(() => mockRepository.watchAllUsers())
-            .thenAnswer((_) => Stream.value(testUsers));
-        when(() => mockRepository.toggleUserActive(1, false))
-            .thenAnswer((_) async {});
+        when(
+          () => mockRepository.watchAllUsers(),
+        ).thenAnswer((_) => Stream.value(testUsers));
+        when(
+          () => mockRepository.toggleUserActive(1, false),
+        ).thenAnswer((_) async {});
       },
       build: () => UsersBloc(mockRepository),
       act: (bloc) async {

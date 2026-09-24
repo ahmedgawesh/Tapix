@@ -36,6 +36,5 @@ class NullEInvoiceProvider implements EInvoiceProvider {
   Future<SubmissionResult> submit(
     PreparedArtifact prepared,
     SignedArtifact signed,
-  ) async =>
-      const SubmissionResult(status: EInvoiceStatus.cleared);
+  ) async => const SubmissionResult(status: EInvoiceStatus.cleared);
 }

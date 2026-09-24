@@ -37,6 +37,14 @@ void main() {
     });
   }
 
+  test('document currency formatting ignores the device currency', () async {
+    await service.setCurrency('USD');
+
+    expect(service.formatForCode(12345, 'KWD', showSymbol: false), '12.345');
+    expect(service.minorUnitsToDecimalStringForCode(12345, 'KWD'), '12.345');
+    expect(service.decimalDigitsForCode('KWD'), 3);
+  });
+
   test(
     'decimal editor conversion preserves large integer minor units',
     () async {

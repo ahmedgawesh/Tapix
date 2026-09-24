@@ -10,8 +10,7 @@ void main() {
     repo = _RecordingSupplierRepository();
   });
 
-  test('recordPayment forwards a negated amount and "payment" type',
-      () async {
+  test('recordPayment forwards a negated amount and "payment" type', () async {
     await repo.recordPayment(
       supplierId: 3,
       amountCents: 9999,
@@ -24,18 +23,20 @@ void main() {
     expect(repo.lastCall!['description'], 'Wire to vendor');
   });
 
-  test('recordDiscount forwards "discount" type and discountType tag',
-      () async {
-    await repo.recordDiscount(
-      supplierId: 3,
-      amountCents: 50,
-      currencyId: 1,
-      discountType: 'volume',
-    );
-    expect(repo.lastCall!['transactionType'], 'discount');
-    expect(repo.lastCall!['amountCents'], -50);
-    expect(repo.lastCall!['discountType'], 'volume');
-  });
+  test(
+    'recordDiscount forwards "discount" type and discountType tag',
+    () async {
+      await repo.recordDiscount(
+        supplierId: 3,
+        amountCents: 50,
+        currencyId: 1,
+        discountType: 'volume',
+      );
+      expect(repo.lastCall!['transactionType'], 'discount');
+      expect(repo.lastCall!['amountCents'], -50);
+      expect(repo.lastCall!['discountType'], 'volume');
+    },
+  );
 
   test('recordPayment rejects non-positive amounts', () {
     expect(
@@ -86,8 +87,7 @@ class _RecordingSupplierRepository implements SupplierRepository {
   }
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      throw UnimplementedError(
-        'Method ${invocation.memberName} not stubbed in test double.',
-      );
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError(
+    'Method ${invocation.memberName} not stubbed in test double.',
+  );
 }

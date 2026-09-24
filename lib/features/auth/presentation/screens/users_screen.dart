@@ -19,8 +19,9 @@ class UsersScreen extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider(
-          create: (context) => UsersBloc(sl<UserRepositoryInterface>())
-            ..add(const UsersInitialized()),
+          create: (context) =>
+              UsersBloc(sl<UserRepositoryInterface>())
+                ..add(const UsersInitialized()),
         ),
         BlocProvider(
           create: (context) => UserStatsBloc(sl<UserRepositoryInterface>()),
@@ -122,9 +123,9 @@ class _UsersScreenContentState extends State<_UsersScreenContent> {
                               icon: const Icon(Icons.clear),
                               onPressed: () {
                                 _searchController.clear();
-                                context
-                                    .read<UsersBloc>()
-                                    .add(const UserSearchRequested(''));
+                                context.read<UsersBloc>().add(
+                                  const UserSearchRequested(''),
+                                );
                                 setState(() {});
                               },
                             )
@@ -134,13 +135,12 @@ class _UsersScreenContentState extends State<_UsersScreenContent> {
                         borderSide: BorderSide.none,
                       ),
                       filled: true,
-                      fillColor: colorScheme.surfaceContainerHighest
-                          .withValues(alpha: 0.5),
+                      fillColor: colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.5,
+                      ),
                     ),
                     onChanged: (value) {
-                      context
-                          .read<UsersBloc>()
-                          .add(UserSearchRequested(value));
+                      context.read<UsersBloc>().add(UserSearchRequested(value));
                       setState(() {});
                     },
                   ),
@@ -172,22 +172,23 @@ class _UsersScreenContentState extends State<_UsersScreenContent> {
                               onSelected: () {
                                 setState(() => _selectedRoleFilter = null);
                                 context.read<UsersBloc>().add(
-                                      const UserFilterByRoleRequested(null),
-                                    );
+                                  const UserFilterByRoleRequested(null),
+                                );
                               },
                             ),
                             _buildFilterChip(
                               context,
                               label: 'users.role_owner'.tr(),
-                              isSelected:
-                                  _selectedRoleFilter == UserRole.owner,
+                              isSelected: _selectedRoleFilter == UserRole.owner,
                               onSelected: () {
-                                setState(() =>
-                                    _selectedRoleFilter = UserRole.owner);
+                                setState(
+                                  () => _selectedRoleFilter = UserRole.owner,
+                                );
                                 context.read<UsersBloc>().add(
-                                      const UserFilterByRoleRequested(
-                                          UserRole.owner),
-                                    );
+                                  const UserFilterByRoleRequested(
+                                    UserRole.owner,
+                                  ),
+                                );
                               },
                             ),
                             _buildFilterChip(
@@ -196,12 +197,14 @@ class _UsersScreenContentState extends State<_UsersScreenContent> {
                               isSelected:
                                   _selectedRoleFilter == UserRole.manager,
                               onSelected: () {
-                                setState(() =>
-                                    _selectedRoleFilter = UserRole.manager);
+                                setState(
+                                  () => _selectedRoleFilter = UserRole.manager,
+                                );
                                 context.read<UsersBloc>().add(
-                                      const UserFilterByRoleRequested(
-                                          UserRole.manager),
-                                    );
+                                  const UserFilterByRoleRequested(
+                                    UserRole.manager,
+                                  ),
+                                );
                               },
                             ),
                             _buildFilterChip(
@@ -210,12 +213,14 @@ class _UsersScreenContentState extends State<_UsersScreenContent> {
                               isSelected:
                                   _selectedRoleFilter == UserRole.cashier,
                               onSelected: () {
-                                setState(() =>
-                                    _selectedRoleFilter = UserRole.cashier);
+                                setState(
+                                  () => _selectedRoleFilter = UserRole.cashier,
+                                );
                                 context.read<UsersBloc>().add(
-                                      const UserFilterByRoleRequested(
-                                          UserRole.cashier),
-                                    );
+                                  const UserFilterByRoleRequested(
+                                    UserRole.cashier,
+                                  ),
+                                );
                               },
                             ),
                             _buildFilterChip(
@@ -224,12 +229,15 @@ class _UsersScreenContentState extends State<_UsersScreenContent> {
                               isSelected:
                                   _selectedRoleFilter == UserRole.salesperson,
                               onSelected: () {
-                                setState(() =>
-                                    _selectedRoleFilter = UserRole.salesperson);
+                                setState(
+                                  () => _selectedRoleFilter =
+                                      UserRole.salesperson,
+                                );
                                 context.read<UsersBloc>().add(
-                                      const UserFilterByRoleRequested(
-                                          UserRole.salesperson),
-                                    );
+                                  const UserFilterByRoleRequested(
+                                    UserRole.salesperson,
+                                  ),
+                                );
                               },
                             ),
                           ],
@@ -297,16 +305,15 @@ class _UsersScreenContentState extends State<_UsersScreenContent> {
                                   const SizedBox(height: 16),
                                   Text(
                                     'users.empty'.tr(),
-                                    style:
-                                        theme.textTheme.titleMedium?.copyWith(
-                                      color: colorScheme.onSurfaceVariant,
-                                    ),
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(
+                                          color: colorScheme.onSurfaceVariant,
+                                        ),
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
                                     'users.empty_hint'.tr(),
-                                    style:
-                                        theme.textTheme.bodyMedium?.copyWith(
+                                    style: theme.textTheme.bodyMedium?.copyWith(
                                       color: colorScheme.onSurfaceVariant,
                                     ),
                                     textAlign: TextAlign.center,
@@ -322,37 +329,34 @@ class _UsersScreenContentState extends State<_UsersScreenContent> {
                     return SliverPadding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final user = users[index];
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: UserCard(
-                                user: user,
-                                onTap: () =>
-                                    context.push('/users/${user.id}/edit'),
-                                onToggleActive: () {
-                                  context.read<UsersBloc>().add(
-                                        UserToggleActiveRequested(
-                                          user.id,
-                                          !user.isActive,
-                                        ),
-                                      );
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        user.isActive
-                                            ? 'users.deactivated_success'.tr()
-                                            : 'users.activated_success'.tr(),
-                                      ),
+                        delegate: SliverChildBuilderDelegate((context, index) {
+                          final user = users[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: UserCard(
+                              user: user,
+                              onTap: () =>
+                                  context.push('/users/${user.id}/edit'),
+                              onToggleActive: () {
+                                context.read<UsersBloc>().add(
+                                  UserToggleActiveRequested(
+                                    user.id,
+                                    !user.isActive,
+                                  ),
+                                );
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      user.isActive
+                                          ? 'users.deactivated_success'.tr()
+                                          : 'users.activated_success'.tr(),
                                     ),
-                                  );
-                                },
-                              ),
-                            );
-                          },
-                          childCount: users.length,
-                        ),
+                                  ),
+                                );
+                              },
+                            ),
+                          );
+                        }, childCount: users.length),
                       ),
                     );
                   }
@@ -362,9 +366,7 @@ class _UsersScreenContentState extends State<_UsersScreenContent> {
               ),
 
               // Bottom padding for FAB
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 80),
-              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 80)),
             ],
           ),
         ),

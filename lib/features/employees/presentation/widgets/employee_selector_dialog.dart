@@ -58,20 +58,19 @@ class _EmployeeSelectorDialogState extends State<EmployeeSelectorDialog> {
     return MultiBlocProvider(
       providers: [
         BlocProvider(
-          create: (context) => EmployeesBloc(sl<EmployeeRepository>())
-            ..add(const EmployeesInitialized()),
+          create: (context) =>
+              EmployeesBloc(sl<EmployeeRepository>())
+                ..add(const EmployeesInitialized()),
         ),
         BlocProvider(
-          create: (context) => RolesBloc(sl<EmployeeRepository>())
-            ..add(const RolesInitialized()),
+          create: (context) =>
+              RolesBloc(sl<EmployeeRepository>())
+                ..add(const RolesInitialized()),
         ),
       ],
       child: Dialog(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(
-            maxWidth: 500,
-            maxHeight: 600,
-          ),
+          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -139,15 +138,17 @@ class _EmployeeSelectorDialogState extends State<EmployeeSelectorDialog> {
                                 setState(() => _selectedRoleFilter = null);
                               },
                             ),
-                            ...roles.map((role) => _buildFilterChip(
-                                  label: _localizedRoleName(context, role),
-                                  isSelected:
-                                      _selectedRoleFilter == role.name,
-                                  onSelected: () {
-                                    setState(
-                                        () => _selectedRoleFilter = role.name);
-                                  },
-                                )),
+                            ...roles.map(
+                              (role) => _buildFilterChip(
+                                label: _localizedRoleName(context, role),
+                                isSelected: _selectedRoleFilter == role.name,
+                                onSelected: () {
+                                  setState(
+                                    () => _selectedRoleFilter = role.name,
+                                  );
+                                },
+                              ),
+                            ),
                           ],
                         ),
                       );
@@ -159,90 +160,100 @@ class _EmployeeSelectorDialogState extends State<EmployeeSelectorDialog> {
 
               // Employee List
               Expanded(
-                child: BlocBuilder<EmployeesBloc, RealtimeState<List<Employee>>>(
-                  builder: (context, state) {
-                    if (state is RealtimeLoading) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
+                child:
+                    BlocBuilder<EmployeesBloc, RealtimeState<List<Employee>>>(
+                      builder: (context, state) {
+                        if (state is RealtimeLoading) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
 
-                    if (state is RealtimeError) {
-                      return Center(
-                        child: Text('common.error'.tr()),
-                      );
-                    }
+                        if (state is RealtimeError) {
+                          return Center(child: Text('common.error'.tr()));
+                        }
 
-                    if (state is RealtimeSuccess<List<Employee>>) {
-                      var employees = state.data;
+                        if (state is RealtimeSuccess<List<Employee>>) {
+                          var employees = state.data;
 
-                      // Apply search filter
-                      if (_searchQuery.isNotEmpty) {
-                        employees = employees.where((e) {
-                          return e.name.toLowerCase().contains(_searchQuery) ||
-                              (e.phone?.toLowerCase().contains(_searchQuery) ??
-                                  false) ||
-                              (e.email?.toLowerCase().contains(_searchQuery) ??
-                                  false);
-                        }).toList();
-                      }
+                          // Apply search filter
+                          if (_searchQuery.isNotEmpty) {
+                            employees = employees.where((e) {
+                              return e.name.toLowerCase().contains(
+                                    _searchQuery,
+                                  ) ||
+                                  (e.phone?.toLowerCase().contains(
+                                        _searchQuery,
+                                      ) ??
+                                      false) ||
+                                  (e.email?.toLowerCase().contains(
+                                        _searchQuery,
+                                      ) ??
+                                      false);
+                            }).toList();
+                          }
 
-                      if (employees.isEmpty) {
-                        return Center(
-                          child: Text('employees.no_employees'.tr()),
-                        );
-                      }
+                          if (employees.isEmpty) {
+                            return Center(
+                              child: Text('employees.no_employees'.tr()),
+                            );
+                          }
 
-                      return ListView.builder(
-                        itemCount: employees.length,
-                        itemBuilder: (context, index) {
-                          final employee = employees[index];
-                          return ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: colorScheme.primaryContainer,
-                              child: Text(
-                                _getInitials(employee.name),
-                                style: TextStyle(
-                                  color: colorScheme.onPrimaryContainer,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            title: Text(employee.name),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (employee.phone != null)
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        Icons.phone_outlined,
-                                        size: 14,
-                                        color: colorScheme.onSurfaceVariant,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        employee.phone!,
-                                        style: theme.textTheme.bodySmall,
-                                      ),
-                                    ],
-                                  ),
-                                if (employee.position != null)
-                                  Text(
-                                    employee.position!,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: colorScheme.onSurfaceVariant,
+                          return ListView.builder(
+                            itemCount: employees.length,
+                            itemBuilder: (context, index) {
+                              final employee = employees[index];
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: colorScheme.primaryContainer,
+                                  child: Text(
+                                    _getInitials(employee.name),
+                                    style: TextStyle(
+                                      color: colorScheme.onPrimaryContainer,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                              ],
-                            ),
-                            onTap: () => Navigator.of(context).pop(employee),
+                                ),
+                                title: Text(employee.name),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (employee.phone != null)
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            Icons.phone_outlined,
+                                            size: 14,
+                                            color: colorScheme.onSurfaceVariant,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            employee.phone!,
+                                            style: theme.textTheme.bodySmall,
+                                          ),
+                                        ],
+                                      ),
+                                    if (employee.position != null)
+                                      Text(
+                                        employee.position!,
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color:
+                                                  colorScheme.onSurfaceVariant,
+                                            ),
+                                      ),
+                                  ],
+                                ),
+                                onTap: () =>
+                                    Navigator.of(context).pop(employee),
+                              );
+                            },
                           );
-                        },
-                      );
-                    }
+                        }
 
-                    return const SizedBox.shrink();
-                  },
-                ),
+                        return const SizedBox.shrink();
+                      },
+                    ),
               ),
             ],
           ),

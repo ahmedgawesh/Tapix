@@ -76,7 +76,8 @@ void main() {
         totalCents: 115000,
       );
 
-      final bucketSum = item.currentCents +
+      final bucketSum =
+          item.currentCents +
           item.days30Cents +
           item.days60Cents +
           item.days90Cents +
@@ -114,7 +115,8 @@ void main() {
         totalCents: 3888888885,
       );
 
-      final bucketSum = item.currentCents +
+      final bucketSum =
+          item.currentCents +
           item.days30Cents +
           item.days60Cents +
           item.days90Cents +
@@ -154,11 +156,13 @@ void main() {
 
       // Overdue = 30 + 60 + 90 + over90 (excludes current)
       expect(data.grandTotalOverdueCents, 65000);
-      expect(data.grandTotalOverdueCents,
-          data.grandTotal30Cents +
-              data.grandTotal60Cents +
-              data.grandTotal90Cents +
-              data.grandTotalOver90Cents);
+      expect(
+        data.grandTotalOverdueCents,
+        data.grandTotal30Cents +
+            data.grandTotal60Cents +
+            data.grandTotal90Cents +
+            data.grandTotalOver90Cents,
+      );
     });
 
     test('grandTotalOverdueCents is zero when no overdue', () {
@@ -187,9 +191,7 @@ void main() {
         dateRange: ReportDateRange.thisMonth(),
       );
 
-      final updated = original.copyWith(
-        dateRange: ReportDateRange.thisYear(),
-      );
+      final updated = original.copyWith(dateRange: ReportDateRange.thisYear());
 
       expect(updated.grandTotalCents, 500000);
       expect(updated.grandTotalCurrentCents, 200000);
@@ -282,7 +284,8 @@ void main() {
 
     test('SupplierAgingReportSortChanged stores sort type', () {
       const event = SupplierAgingReportSortChanged(
-          SupplierAgingSortType.over90Desc);
+        SupplierAgingSortType.over90Desc,
+      );
       expect(event.sort, SupplierAgingSortType.over90Desc);
     });
 
@@ -309,18 +312,30 @@ void main() {
   group('SupplierAgingSortType enum', () {
     test('has all expected values', () {
       expect(SupplierAgingSortType.values.length, 6);
-      expect(SupplierAgingSortType.values,
-          contains(SupplierAgingSortType.totalDesc));
-      expect(SupplierAgingSortType.values,
-          contains(SupplierAgingSortType.totalAsc));
-      expect(SupplierAgingSortType.values,
-          contains(SupplierAgingSortType.over90Desc));
-      expect(SupplierAgingSortType.values,
-          contains(SupplierAgingSortType.over90Asc));
-      expect(SupplierAgingSortType.values,
-          contains(SupplierAgingSortType.nameAsc));
-      expect(SupplierAgingSortType.values,
-          contains(SupplierAgingSortType.nameDesc));
+      expect(
+        SupplierAgingSortType.values,
+        contains(SupplierAgingSortType.totalDesc),
+      );
+      expect(
+        SupplierAgingSortType.values,
+        contains(SupplierAgingSortType.totalAsc),
+      );
+      expect(
+        SupplierAgingSortType.values,
+        contains(SupplierAgingSortType.over90Desc),
+      );
+      expect(
+        SupplierAgingSortType.values,
+        contains(SupplierAgingSortType.over90Asc),
+      );
+      expect(
+        SupplierAgingSortType.values,
+        contains(SupplierAgingSortType.nameAsc),
+      );
+      expect(
+        SupplierAgingSortType.values,
+        contains(SupplierAgingSortType.nameDesc),
+      );
     });
   });
 
@@ -540,7 +555,8 @@ void main() {
         ),
       ];
 
-      final overdue = suppliers.first.days30Cents +
+      final overdue =
+          suppliers.first.days30Cents +
           suppliers.first.days60Cents +
           suppliers.first.days90Cents +
           suppliers.first.over90Cents;
@@ -629,9 +645,7 @@ void main() {
 
     test('copyWith preserves unchanged fields', () {
       final range = ReportDateRange.thisMonth();
-      final updated = range.copyWith(
-        preset: ReportPeriodPreset.custom,
-      );
+      final updated = range.copyWith(preset: ReportPeriodPreset.custom);
       expect(updated.startDate, range.startDate);
       expect(updated.endDate, range.endDate);
       expect(updated.preset, ReportPeriodPreset.custom);
@@ -702,8 +716,11 @@ void main() {
       // These should cover every possible day count
       const boundaries = [0, 30, 60, 90]; // bucket boundaries in days
       for (int i = 0; i < boundaries.length - 1; i++) {
-        expect(boundaries[i + 1] - boundaries[i], 30,
-            reason: 'Each bucket should span 30 days');
+        expect(
+          boundaries[i + 1] - boundaries[i],
+          30,
+          reason: 'Each bucket should span 30 days',
+        );
       }
     });
 
@@ -719,7 +736,8 @@ void main() {
         totalCents: 70000,
       );
 
-      final overdue = item.days30Cents +
+      final overdue =
+          item.days30Cents +
           item.days60Cents +
           item.days90Cents +
           item.over90Cents;
@@ -768,16 +786,25 @@ void main() {
 
       // A transaction from 15 days ago should be in "current" bucket
       final tx15DaysAgo = today.subtract(const Duration(days: 15));
-      expect(tx15DaysAgo.isAfter(days30) || tx15DaysAgo.isAtSameMomentAs(days30), true);
+      expect(
+        tx15DaysAgo.isAfter(days30) || tx15DaysAgo.isAtSameMomentAs(days30),
+        true,
+      );
 
       // A transaction from 45 days ago should be in "1-30" bucket
       final tx45DaysAgo = today.subtract(const Duration(days: 45));
-      expect(tx45DaysAgo.isAfter(days60) || tx45DaysAgo.isAtSameMomentAs(days60), true);
+      expect(
+        tx45DaysAgo.isAfter(days60) || tx45DaysAgo.isAtSameMomentAs(days60),
+        true,
+      );
       expect(tx45DaysAgo.isBefore(days30), true);
 
       // A transaction from 75 days ago should be in "31-60" bucket
       final tx75DaysAgo = today.subtract(const Duration(days: 75));
-      expect(tx75DaysAgo.isAfter(days90) || tx75DaysAgo.isAtSameMomentAs(days90), true);
+      expect(
+        tx75DaysAgo.isAfter(days90) || tx75DaysAgo.isAtSameMomentAs(days90),
+        true,
+      );
       expect(tx75DaysAgo.isBefore(days60), true);
 
       // A transaction from 120 days ago should be in "91+" bucket
@@ -833,13 +860,17 @@ void main() {
 
       // Verify each supplier's buckets sum to their total
       for (final s in suppliers) {
-        final bucketSum = s.currentCents +
+        final bucketSum =
+            s.currentCents +
             s.days30Cents +
             s.days60Cents +
             s.days90Cents +
             s.over90Cents;
-        expect(bucketSum, s.totalCents,
-            reason: '${s.supplierName} buckets should sum to total');
+        expect(
+          bucketSum,
+          s.totalCents,
+          reason: '${s.supplierName} buckets should sum to total',
+        );
       }
 
       // Verify grand totals

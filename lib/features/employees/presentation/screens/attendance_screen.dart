@@ -20,12 +20,14 @@ class AttendanceScreen extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider(
-          create: (context) => AttendanceBloc(sl<EmployeeRepository>(), sl<AttendanceService>())
-            ..add(AttendanceInitialized(DateTime.now())),
+          create: (context) =>
+              AttendanceBloc(sl<EmployeeRepository>(), sl<AttendanceService>())
+                ..add(AttendanceInitialized(DateTime.now())),
         ),
         BlocProvider(
-          create: (context) => EmployeesBloc(sl<EmployeeRepository>())
-            ..add(const EmployeesInitialized()),
+          create: (context) =>
+              EmployeesBloc(sl<EmployeeRepository>())
+                ..add(const EmployeesInitialized()),
         ),
       ],
       child: const _AttendanceScreenContent(),
@@ -37,7 +39,8 @@ class _AttendanceScreenContent extends StatefulWidget {
   const _AttendanceScreenContent();
 
   @override
-  State<_AttendanceScreenContent> createState() => _AttendanceScreenContentState();
+  State<_AttendanceScreenContent> createState() =>
+      _AttendanceScreenContentState();
 }
 
 class _AttendanceScreenContentState extends State<_AttendanceScreenContent> {
@@ -63,7 +66,9 @@ class _AttendanceScreenContentState extends State<_AttendanceScreenContent> {
                 _DateNavigator(
                   selectedDate: state.selectedDate,
                   onDateChanged: (date) {
-                    context.read<AttendanceBloc>().add(AttendanceDateChanged(date));
+                    context.read<AttendanceBloc>().add(
+                      AttendanceDateChanged(date),
+                    );
                   },
                 ),
 
@@ -78,11 +83,11 @@ class _AttendanceScreenContentState extends State<_AttendanceScreenContent> {
                   child: state.isLoading
                       ? const Center(child: CircularProgressIndicator())
                       : state.attendances.isEmpty
-                          ? _EmptyState()
-                          : _AttendanceList(
-                              attendances: state.attendances,
-                              employeeNames: state.employeeNames,
-                            ),
+                      ? _EmptyState()
+                      : _AttendanceList(
+                          attendances: state.attendances,
+                          employeeNames: state.employeeNames,
+                        ),
                 ),
               ],
             );
@@ -120,12 +125,12 @@ class _AttendanceScreenContentState extends State<_AttendanceScreenContent> {
     if (result != null && context.mounted) {
       context.read<AttendanceBloc>().add(AttendanceDateChanged(result.date));
       context.read<AttendanceBloc>().add(
-            AttendanceCheckInRequested(
-              employeeId: result.employeeId,
-              checkInMethod: 'manual',
-              checkInTime: result.dateTime,
-            ),
-          );
+        AttendanceCheckInRequested(
+          employeeId: result.employeeId,
+          checkInMethod: 'manual',
+          checkInTime: result.dateTime,
+        ),
+      );
     }
   }
 
@@ -135,12 +140,12 @@ class _AttendanceScreenContentState extends State<_AttendanceScreenContent> {
     if (result != null && context.mounted) {
       context.read<AttendanceBloc>().add(AttendanceDateChanged(result.date));
       context.read<AttendanceBloc>().add(
-            AttendanceMarkLateRequested(
-              employeeId: result.employeeId,
-              notes: result.notes,
-              checkInTime: result.dateTime,
-            ),
-          );
+        AttendanceMarkLateRequested(
+          employeeId: result.employeeId,
+          notes: result.notes,
+          checkInTime: result.dateTime,
+        ),
+      );
     }
   }
 
@@ -150,11 +155,11 @@ class _AttendanceScreenContentState extends State<_AttendanceScreenContent> {
     if (result != null && context.mounted) {
       context.read<AttendanceBloc>().add(AttendanceDateChanged(result.date));
       context.read<AttendanceBloc>().add(
-            AttendanceMarkAbsentRequested(
-              employeeId: result.employeeId,
-              notes: result.notes,
-            ),
-          );
+        AttendanceMarkAbsentRequested(
+          employeeId: result.employeeId,
+          notes: result.notes,
+        ),
+      );
     }
   }
 
@@ -200,14 +205,18 @@ class _AttendanceScreenContentState extends State<_AttendanceScreenContent> {
           result.checkOutTime!.minute,
         );
       }
-      bloc.add(AttendanceCheckOutRequested(
-        employeeId: result.attendance.employeeId,
-        checkOutTime: checkOutTime,
-      ));
+      bloc.add(
+        AttendanceCheckOutRequested(
+          employeeId: result.attendance.employeeId,
+          checkOutTime: checkOutTime,
+        ),
+      );
     }
   }
 
-  Future<_AttendanceActionResult?> _promptAttendanceAction(_AttendanceAction action) async {
+  Future<_AttendanceActionResult?> _promptAttendanceAction(
+    _AttendanceAction action,
+  ) async {
     final employee = await showDialog<Employee>(
       context: context,
       useRootNavigator: true,
@@ -220,10 +229,8 @@ class _AttendanceScreenContentState extends State<_AttendanceScreenContent> {
     return showDialog<_AttendanceActionResult>(
       context: context,
       useRootNavigator: true,
-      builder: (context) => _AttendanceActionDialog(
-        action: action,
-        initialEmployee: employee,
-      ),
+      builder: (context) =>
+          _AttendanceActionDialog(action: action, initialEmployee: employee),
     );
   }
 }
@@ -254,10 +261,14 @@ class _AttendanceActionDialog extends StatefulWidget {
   final _AttendanceAction action;
   final Employee initialEmployee;
 
-  const _AttendanceActionDialog({required this.action, required this.initialEmployee});
+  const _AttendanceActionDialog({
+    required this.action,
+    required this.initialEmployee,
+  });
 
   @override
-  State<_AttendanceActionDialog> createState() => _AttendanceActionDialogState();
+  State<_AttendanceActionDialog> createState() =>
+      _AttendanceActionDialogState();
 }
 
 class _AttendanceActionDialogState extends State<_AttendanceActionDialog> {
@@ -357,11 +368,7 @@ class _AttendanceActionDialogState extends State<_AttendanceActionDialog> {
                   ),
                   child: Row(
                     children: [
-                      Expanded(
-                        child: Text(
-                          _selectedEmployee.name,
-                        ),
-                      ),
+                      Expanded(child: Text(_selectedEmployee.name)),
                       const Icon(Icons.expand_more),
                     ],
                   ),
@@ -440,8 +447,14 @@ class _AttendanceActionDialogState extends State<_AttendanceActionDialog> {
             Navigator.of(context).pop(
               _AttendanceActionResult(
                 employeeId: _selectedEmployee.id,
-                date: DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day),
-                notes: _notesController.text.isEmpty ? null : _notesController.text,
+                date: DateTime(
+                  _selectedDate.year,
+                  _selectedDate.month,
+                  _selectedDate.day,
+                ),
+                notes: _notesController.text.isEmpty
+                    ? null
+                    : _notesController.text,
                 time: _selectedTime,
               ),
             );
@@ -466,7 +479,10 @@ class _DateNavigator extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final dateFormat = DateFormat('EEEE, MMM d, yyyy', context.locale.toString());
+    final dateFormat = DateFormat(
+      'EEEE, MMM d, yyyy',
+      context.locale.toString(),
+    );
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -563,7 +579,10 @@ class _AttendanceList extends StatelessWidget {
   final List<Attendance> attendances;
   final Map<int, String> employeeNames;
 
-  const _AttendanceList({required this.attendances, required this.employeeNames});
+  const _AttendanceList({
+    required this.attendances,
+    required this.employeeNames,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -597,13 +616,17 @@ class _AttendanceCard extends StatelessWidget {
 
     final hasCheckedIn = attendance.checkInTime != null;
     final hasCheckedOut = attendance.checkOutTime != null;
-    final canCheckOut = hasCheckedIn && !hasCheckedOut &&
+    final canCheckOut =
+        hasCheckedIn &&
+        !hasCheckedOut &&
         (attendance.status == 'present' || attendance.status == 'late');
 
     // Calculate hours worked
     String? hoursWorkedText;
     if (hasCheckedIn && hasCheckedOut) {
-      final duration = attendance.checkOutTime!.difference(attendance.checkInTime!);
+      final duration = attendance.checkOutTime!.difference(
+        attendance.checkInTime!,
+      );
       final hours = duration.inHours;
       final minutes = duration.inMinutes % 60;
       hoursWorkedText = '${hours}h ${minutes}m';
@@ -632,7 +655,11 @@ class _AttendanceCard extends StatelessWidget {
                   Row(
                     children: [
                       if (hasCheckedIn) ...[
-                        Icon(Icons.login, size: 14, color: Colors.green.shade600),
+                        Icon(
+                          Icons.login,
+                          size: 14,
+                          color: Colors.green.shade600,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           timeFormat.format(attendance.checkInTime!),
@@ -643,7 +670,11 @@ class _AttendanceCard extends StatelessWidget {
                       ],
                       if (hasCheckedOut) ...[
                         const SizedBox(width: 12),
-                        Icon(Icons.logout, size: 14, color: Colors.red.shade600),
+                        Icon(
+                          Icons.logout,
+                          size: 14,
+                          color: Colors.red.shade600,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           timeFormat.format(attendance.checkOutTime!),
@@ -658,7 +689,11 @@ class _AttendanceCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Row(
                       children: [
-                        Icon(Icons.schedule, size: 14, color: theme.colorScheme.primary),
+                        Icon(
+                          Icons.schedule,
+                          size: 14,
+                          color: theme.colorScheme.primary,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           hoursWorkedText,
@@ -670,7 +705,10 @@ class _AttendanceCard extends StatelessWidget {
                         if (attendance.overtimeMinutes > 0) ...[
                           const SizedBox(width: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.orange.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
@@ -694,7 +732,10 @@ class _AttendanceCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
@@ -744,8 +785,11 @@ class _AttendanceCard extends StatelessWidget {
                           final bloc = context.read<AttendanceBloc>();
                           final date = bloc.state.selectedDate;
                           final checkOutTime = DateTime(
-                            date.year, date.month, date.day,
-                            time.hour, time.minute,
+                            date.year,
+                            date.month,
+                            date.day,
+                            time.hour,
+                            time.minute,
                           );
                           bloc.add(
                             AttendanceCheckOutRequested(
@@ -893,8 +937,12 @@ class _EditAttendanceDialogState extends State<_EditAttendanceDialog> {
   void initState() {
     super.initState();
     final a = widget.attendance;
-    _checkIn = a.checkInTime != null ? TimeOfDay.fromDateTime(a.checkInTime!) : null;
-    _checkOut = a.checkOutTime != null ? TimeOfDay.fromDateTime(a.checkOutTime!) : null;
+    _checkIn = a.checkInTime != null
+        ? TimeOfDay.fromDateTime(a.checkInTime!)
+        : null;
+    _checkOut = a.checkOutTime != null
+        ? TimeOfDay.fromDateTime(a.checkOutTime!)
+        : null;
     _status = AttendanceStatus.fromString(a.status);
     if (!_selectableStatuses.contains(_status)) {
       _status = AttendanceStatus.present;
@@ -1001,10 +1049,12 @@ class _EditAttendanceDialogState extends State<_EditAttendanceDialog> {
                   ),
                 ),
                 items: _selectableStatuses
-                    .map((s) => DropdownMenuItem(
-                          value: s,
-                          child: Text(_statusLabel(s)),
-                        ))
+                    .map(
+                      (s) => DropdownMenuItem(
+                        value: s,
+                        child: Text(_statusLabel(s)),
+                      ),
+                    )
                     .toList(),
                 onChanged: (value) {
                   if (value != null) setState(() => _status = value);
@@ -1095,10 +1145,7 @@ class _EditAttendanceDialogState extends State<_EditAttendanceDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: Text('common.cancel'.tr()),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: Text('common.save'.tr()),
-        ),
+        FilledButton(onPressed: _submit, child: Text('common.save'.tr())),
       ],
     );
   }
@@ -1115,10 +1162,14 @@ class _CheckOutSelectorDialog extends StatefulWidget {
   final List<Attendance> attendances;
   final Map<int, String> employeeNames;
 
-  const _CheckOutSelectorDialog({required this.attendances, required this.employeeNames});
+  const _CheckOutSelectorDialog({
+    required this.attendances,
+    required this.employeeNames,
+  });
 
   @override
-  State<_CheckOutSelectorDialog> createState() => _CheckOutSelectorDialogState();
+  State<_CheckOutSelectorDialog> createState() =>
+      _CheckOutSelectorDialogState();
 }
 
 class _CheckOutSelectorDialogState extends State<_CheckOutSelectorDialog> {
@@ -1177,34 +1228,42 @@ class _CheckOutSelectorDialogState extends State<_CheckOutSelectorDialog> {
               ),
             ),
             const SizedBox(height: 12),
-            ...widget.attendances.map((a) => Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: a.status == 'late'
-                      ? Colors.orange.withValues(alpha: 0.1)
-                      : Colors.green.withValues(alpha: 0.1),
-                  child: Icon(
-                    Icons.person_outline,
-                    color: a.status == 'late' ? Colors.orange : Colors.green,
+            ...widget.attendances.map(
+              (a) => Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: a.status == 'late'
+                        ? Colors.orange.withValues(alpha: 0.1)
+                        : Colors.green.withValues(alpha: 0.1),
+                    child: Icon(
+                      Icons.person_outline,
+                      color: a.status == 'late' ? Colors.orange : Colors.green,
+                    ),
                   ),
-                ),
-                title: Text(widget.employeeNames[a.employeeId] ?? 'Employee #${a.employeeId}'),
-                subtitle: a.checkInTime != null
-                    ? Text(
-                        '${'employees.check_in'.tr()}: ${timeFormat.format(a.checkInTime!)}',
-                        style: theme.textTheme.bodySmall,
-                      )
-                    : null,
-                trailing: FilledButton.tonalIcon(
-                  onPressed: () => Navigator.of(context).pop(
-                    _CheckOutResult(attendance: a, checkOutTime: _checkOutTime),
+                  title: Text(
+                    widget.employeeNames[a.employeeId] ??
+                        'Employee #${a.employeeId}',
                   ),
-                  icon: const Icon(Icons.logout, size: 16),
-                  label: Text('employees.check_out'.tr()),
+                  subtitle: a.checkInTime != null
+                      ? Text(
+                          '${'employees.check_in'.tr()}: ${timeFormat.format(a.checkInTime!)}',
+                          style: theme.textTheme.bodySmall,
+                        )
+                      : null,
+                  trailing: FilledButton.tonalIcon(
+                    onPressed: () => Navigator.of(context).pop(
+                      _CheckOutResult(
+                        attendance: a,
+                        checkOutTime: _checkOutTime,
+                      ),
+                    ),
+                    icon: const Icon(Icons.logout, size: 16),
+                    label: Text('employees.check_out'.tr()),
+                  ),
                 ),
               ),
-            )),
+            ),
           ],
         ),
       ),

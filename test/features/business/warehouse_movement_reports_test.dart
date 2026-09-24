@@ -268,31 +268,28 @@ void main() {
         '$kind isolates $mode movements and preserves disabled history',
         () async {
           if (mode != 'simple') {
+            // Build the final document shape before posting. Posted sale lines
+            // are immutable because changing their product/variant would break
+            // the saved stock-source allocation.
+            category = await insert('product_categories', {
+              'name': 'Category $mode',
+            });
+            product = await insert('products', {
+              'name': 'Product $mode',
+              'category_id': category,
+              'cost_cents': 500,
+              'price_cents': 1000,
+              if (mode == 'variants') 'has_variants': 1,
+            });
             final size = await insert('sizes', {'name': 'Large'});
             variant = await insert('product_variants', {
               'product_id': product,
               'size_id': size,
-              'sku': 'LOCAL-L',
+              'sku': 'LOCAL-L-$mode',
               'cost_cents': 500,
               'price_cents': 1000,
             });
-            if (mode == 'variants') {
-              await db.customStatement(
-                'UPDATE products SET has_variants = 1 WHERE id = ?',
-                [product],
-              );
-            }
-            for (final table in [
-              'sale_items',
-              'purchase_items',
-              'sale_return_adjustment_items',
-              'purchase_return_adjustment_items',
-            ]) {
-              await db.customStatement(
-                'UPDATE $table SET variant_id = ? WHERE product_id = ?',
-                [variant, product],
-              );
-            }
+            local = await seed('LOCAL-$mode');
           }
           final dynamic bloc = await open(kind);
           try {

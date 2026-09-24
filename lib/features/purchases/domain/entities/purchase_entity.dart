@@ -95,6 +95,9 @@ class PurchaseItemEntity extends Equatable {
   final int? variantId;
   final String? productName;
   final String? variantSku;
+  final bool supplierIdentityRequested;
+  final int? supplierIdentityId;
+  final String? supplierSourceSku;
 
   /// Per-variant attributes resolved at the DAO level. They MUST come from
   /// joins on `productColors`/`sizes` keyed by the line's own `variantId`
@@ -132,6 +135,9 @@ class PurchaseItemEntity extends Equatable {
     this.variantId,
     this.productName,
     this.variantSku,
+    this.supplierIdentityRequested = false,
+    this.supplierIdentityId,
+    this.supplierSourceSku,
     this.colorName,
     this.colorHex,
     this.sizeName,
@@ -182,6 +188,9 @@ class PurchaseItemEntity extends Equatable {
     variantId,
     productName,
     variantSku,
+    supplierIdentityRequested,
+    supplierIdentityId,
+    supplierSourceSku,
     colorName,
     colorHex,
     sizeName,

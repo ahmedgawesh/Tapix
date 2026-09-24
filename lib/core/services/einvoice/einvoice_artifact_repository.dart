@@ -18,10 +18,13 @@ class EInvoiceArtifactRepository {
     required String sourceTable,
     required int sourceId,
   }) async {
-    final row = await (_db.select(_db.eInvoiceDocuments)
-          ..where((t) =>
-              t.sourceTable.equals(sourceTable) & t.sourceId.equals(sourceId)))
-        .getSingleOrNull();
+    final row =
+        await (_db.select(_db.eInvoiceDocuments)..where(
+              (t) =>
+                  t.sourceTable.equals(sourceTable) &
+                  t.sourceId.equals(sourceId),
+            ))
+            .getSingleOrNull();
     return row == null ? null : _fromRow(row);
   }
 
@@ -30,11 +33,12 @@ class EInvoiceArtifactRepository {
   Future<EInvoiceDocumentRecord?> findChainHead(
     EInvoiceJurisdiction jurisdiction,
   ) async {
-    final row = await (_db.select(_db.eInvoiceDocuments)
-          ..where((t) => t.jurisdiction.equals(jurisdiction.wireValue))
-          ..orderBy([(t) => OrderingTerm.desc(t.icv)])
-          ..limit(1))
-        .getSingleOrNull();
+    final row =
+        await (_db.select(_db.eInvoiceDocuments)
+              ..where((t) => t.jurisdiction.equals(jurisdiction.wireValue))
+              ..orderBy([(t) => OrderingTerm.desc(t.icv)])
+              ..limit(1))
+            .getSingleOrNull();
     return row == null ? null : _fromRow(row);
   }
 
@@ -46,7 +50,9 @@ class EInvoiceArtifactRepository {
     required int sourceId,
     required EInvoiceJurisdiction jurisdiction,
   }) async {
-    return _db.into(_db.eInvoiceDocuments).insert(
+    return _db
+        .into(_db.eInvoiceDocuments)
+        .insert(
           EInvoiceDocumentsCompanion.insert(
             sourceTable: sourceTable,
             sourceId: sourceId,
@@ -66,28 +72,34 @@ class EInvoiceArtifactRepository {
     String? payloadJson,
     String? qrCodeBase64,
   }) async {
-    await (_db.update(_db.eInvoiceDocuments)..where((t) => t.id.equals(id)))
-        .write(EInvoiceDocumentsCompanion(
-      status: Value(EInvoiceStatus.prepared.wireValue),
-      icv: Value(icv),
-      documentUuid: Value(documentUuid),
-      documentHash: Value(documentHash),
-      previousHash: Value(previousHash),
-      payloadXml: Value(payloadXml),
-      payloadJson: Value(payloadJson),
-      qrCodeBase64: Value(qrCodeBase64),
-      preparedAt: Value(DateTime.now()),
-      updatedAt: Value(DateTime.now()),
-    ));
+    await (_db.update(
+      _db.eInvoiceDocuments,
+    )..where((t) => t.id.equals(id))).write(
+      EInvoiceDocumentsCompanion(
+        status: Value(EInvoiceStatus.prepared.wireValue),
+        icv: Value(icv),
+        documentUuid: Value(documentUuid),
+        documentHash: Value(documentHash),
+        previousHash: Value(previousHash),
+        payloadXml: Value(payloadXml),
+        payloadJson: Value(payloadJson),
+        qrCodeBase64: Value(qrCodeBase64),
+        preparedAt: Value(DateTime.now()),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   /// Persist the results of `provider.sign()`.
   Future<void> recordSigned({required int id, String? signature}) async {
-    await (_db.update(_db.eInvoiceDocuments)..where((t) => t.id.equals(id)))
-        .write(EInvoiceDocumentsCompanion(
-      status: Value(EInvoiceStatus.signed.wireValue),
-      updatedAt: Value(DateTime.now()),
-    ));
+    await (_db.update(
+      _db.eInvoiceDocuments,
+    )..where((t) => t.id.equals(id))).write(
+      EInvoiceDocumentsCompanion(
+        status: Value(EInvoiceStatus.signed.wireValue),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   /// Persist the outcome of `provider.submit()`.
@@ -98,19 +110,23 @@ class EInvoiceArtifactRepository {
     String? lastError,
   }) async {
     final now = DateTime.now();
-    await (_db.update(_db.eInvoiceDocuments)..where((t) => t.id.equals(id)))
-        .write(EInvoiceDocumentsCompanion(
-      status: Value(status.wireValue),
-      responsePayload: Value(responsePayload),
-      lastError: Value(lastError),
-      submittedAt: Value(now),
-      clearedAt: status == EInvoiceStatus.cleared ||
-              status == EInvoiceStatus.reported
-          ? Value(now)
-          : const Value.absent(),
-      attemptCount: const Value.absent(), // bumped separately
-      updatedAt: Value(now),
-    ));
+    await (_db.update(
+      _db.eInvoiceDocuments,
+    )..where((t) => t.id.equals(id))).write(
+      EInvoiceDocumentsCompanion(
+        status: Value(status.wireValue),
+        responsePayload: Value(responsePayload),
+        lastError: Value(lastError),
+        submittedAt: Value(now),
+        clearedAt:
+            status == EInvoiceStatus.cleared ||
+                status == EInvoiceStatus.reported
+            ? Value(now)
+            : const Value.absent(),
+        attemptCount: const Value.absent(), // bumped separately
+        updatedAt: Value(now),
+      ),
+    );
     // Bump attempt_count atomically.
     await _db.customUpdate(
       'UPDATE e_invoice_documents SET attempt_count = attempt_count + 1 WHERE id = ?',
@@ -120,25 +136,25 @@ class EInvoiceArtifactRepository {
   }
 
   EInvoiceDocumentRecord _fromRow(EInvoiceDocument r) => EInvoiceDocumentRecord(
-        id: r.id,
-        sourceTable: r.sourceTable,
-        sourceId: r.sourceId,
-        jurisdiction: EInvoiceJurisdiction.fromWire(r.jurisdiction),
-        status: EInvoiceStatus.fromWire(r.status),
-        icv: r.icv,
-        documentUuid: r.documentUuid,
-        documentHash: r.documentHash,
-        previousHash: r.previousHash,
-        payloadXml: r.payloadXml,
-        payloadJson: r.payloadJson,
-        qrCodeBase64: r.qrCodeBase64,
-        responsePayload: r.responsePayload,
-        lastError: r.lastError,
-        attemptCount: r.attemptCount,
-        preparedAt: r.preparedAt,
-        submittedAt: r.submittedAt,
-        clearedAt: r.clearedAt,
-        createdAt: r.createdAt,
-        updatedAt: r.updatedAt,
-      );
+    id: r.id,
+    sourceTable: r.sourceTable,
+    sourceId: r.sourceId,
+    jurisdiction: EInvoiceJurisdiction.fromWire(r.jurisdiction),
+    status: EInvoiceStatus.fromWire(r.status),
+    icv: r.icv,
+    documentUuid: r.documentUuid,
+    documentHash: r.documentHash,
+    previousHash: r.previousHash,
+    payloadXml: r.payloadXml,
+    payloadJson: r.payloadJson,
+    qrCodeBase64: r.qrCodeBase64,
+    responsePayload: r.responsePayload,
+    lastError: r.lastError,
+    attemptCount: r.attemptCount,
+    preparedAt: r.preparedAt,
+    submittedAt: r.submittedAt,
+    clearedAt: r.clearedAt,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  );
 }

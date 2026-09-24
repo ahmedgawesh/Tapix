@@ -26,13 +26,13 @@ class DeviceLicense {
   });
 
   Map<String, dynamic> toJson() => {
-        'userId': userId,
-        'deviceFingerprint': deviceFingerprint,
-        'subscriptionType': subscriptionType,
-        'expiryDate': expiryDate.toIso8601String(),
-        'lastOnlineValidation': lastOnlineValidation.toIso8601String(),
-        'integrityHash': integrityHash,
-      };
+    'userId': userId,
+    'deviceFingerprint': deviceFingerprint,
+    'subscriptionType': subscriptionType,
+    'expiryDate': expiryDate.toIso8601String(),
+    'lastOnlineValidation': lastOnlineValidation.toIso8601String(),
+    'integrityHash': integrityHash,
+  };
 
   factory DeviceLicense.fromJson(Map<String, dynamic> json) {
     return DeviceLicense(
@@ -40,17 +40,17 @@ class DeviceLicense {
       deviceFingerprint: json['deviceFingerprint'] as String,
       subscriptionType: json['subscriptionType'] as String,
       expiryDate: DateTime.parse(json['expiryDate'] as String),
-      lastOnlineValidation:
-          DateTime.parse(json['lastOnlineValidation'] as String),
+      lastOnlineValidation: DateTime.parse(
+        json['lastOnlineValidation'] as String,
+      ),
       integrityHash: json['integrityHash'] as String,
     );
   }
 
-  SubscriptionType get type =>
-      SubscriptionType.values.firstWhere(
-        (t) => t.name == subscriptionType,
-        orElse: () => SubscriptionType.none,
-      );
+  SubscriptionType get type => SubscriptionType.values.firstWhere(
+    (t) => t.name == subscriptionType,
+    orElse: () => SubscriptionType.none,
+  );
 
   bool get isExpired => DateTime.now().isAfter(expiryDate);
 
@@ -85,8 +85,8 @@ class LicenseService {
   LicenseService({
     required DeviceFingerprintService fingerprintService,
     FlutterSecureStorage? secureStorage,
-  })  : _fingerprintService = fingerprintService,
-        _secureStorage = secureStorage ?? const FlutterSecureStorage();
+  }) : _fingerprintService = fingerprintService,
+       _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   /// Create and store a license after successful subscription validation.
   Future<DeviceLicense> createLicense({
@@ -124,7 +124,9 @@ class LicenseService {
 
     await _storeLicense(signedLicense);
     _cachedLicense = signedLicense;
-    debugPrint('LicenseService: License created for $userId (${subscriptionType.name})');
+    debugPrint(
+      'LicenseService: License created for $userId (${subscriptionType.name})',
+    );
     return signedLicense;
   }
 
@@ -199,13 +201,16 @@ class LicenseService {
     // Verify integrity hash
     final expectedHash = _computeIntegrityHash(license);
     if (license.integrityHash != expectedHash) {
-      debugPrint('LicenseService: Integrity hash mismatch – possible tampering');
+      debugPrint(
+        'LicenseService: Integrity hash mismatch – possible tampering',
+      );
       return LicenseValidationResult.integrityFailed;
     }
 
     // Verify device fingerprint
-    final fingerprintValid =
-        await _fingerprintService.verifyFingerprint(license.deviceFingerprint);
+    final fingerprintValid = await _fingerprintService.verifyFingerprint(
+      license.deviceFingerprint,
+    );
     if (!fingerprintValid) {
       debugPrint('LicenseService: Device fingerprint mismatch');
       return LicenseValidationResult.deviceMismatch;
@@ -245,7 +250,8 @@ class LicenseService {
 
   /// Compute HMAC-SHA256 over the license data fields (excluding the hash).
   String _computeIntegrityHash(DeviceLicense license) {
-    final payload = '${license.userId}'
+    final payload =
+        '${license.userId}'
         '|${license.deviceFingerprint}'
         '|${license.subscriptionType}'
         '|${license.expiryDate.toIso8601String()}'

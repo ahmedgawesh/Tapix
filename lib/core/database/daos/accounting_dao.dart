@@ -5,8 +5,18 @@ import '../tables/settings.dart';
 
 part 'accounting_dao.g.dart';
 
-@DriftAccessor(tables: [Accounts, JournalEntries, JournalEntryLines, AccountingPeriods, Expenses, ExpenseCategories])
-class AccountingDao extends DatabaseAccessor<AppDatabase> with _$AccountingDaoMixin {
+@DriftAccessor(
+  tables: [
+    Accounts,
+    JournalEntries,
+    JournalEntryLines,
+    AccountingPeriods,
+    Expenses,
+    ExpenseCategories,
+  ],
+)
+class AccountingDao extends DatabaseAccessor<AppDatabase>
+    with _$AccountingDaoMixin {
   AccountingDao(super.db);
 
   // ── Accounts ──────────────────────────────────────────────
@@ -19,11 +29,15 @@ class AccountingDao extends DatabaseAccessor<AppDatabase> with _$AccountingDaoMi
   }
 
   Stream<Account?> watchAccount(int id) {
-    return (select(accounts)..where((a) => a.id.equals(id))).watchSingleOrNull();
+    return (select(
+      accounts,
+    )..where((a) => a.id.equals(id))).watchSingleOrNull();
   }
 
   Future<Account?> findByCode(String code) {
-    return (select(accounts)..where((a) => a.accountCode.equals(code))).getSingleOrNull();
+    return (select(
+      accounts,
+    )..where((a) => a.accountCode.equals(code))).getSingleOrNull();
   }
 
   Future<int> createAccount(AccountsCompanion account) {
@@ -43,22 +57,24 @@ class AccountingDao extends DatabaseAccessor<AppDatabase> with _$AccountingDaoMi
   Future<int> deleteAccount(int id) async {
     final existing = await getAccount(id);
     if (existing?.isSystemAccount ?? false) {
-      throw StateError(
-        'System posting accounts cannot be deleted.',
-      );
+      throw StateError('System posting accounts cannot be deleted.');
     }
     return (delete(accounts)..where((a) => a.id.equals(id))).go();
   }
 
   Stream<List<Account>> watchAccountsByType(String accountType) {
     return (select(accounts)
-          ..where((a) => a.accountType.equals(accountType) & a.isActive.equals(true))
+          ..where(
+            (a) => a.accountType.equals(accountType) & a.isActive.equals(true),
+          )
           ..orderBy([(a) => OrderingTerm(expression: a.accountCode)]))
         .watch();
   }
 
   Future<List<Account>> getChildAccounts(int parentId) {
-    return (select(accounts)..where((a) => a.parentAccountId.equals(parentId))).get();
+    return (select(
+      accounts,
+    )..where((a) => a.parentAccountId.equals(parentId))).get();
   }
 
   Future<Account?> getAccount(int id) {
@@ -89,45 +105,75 @@ class AccountingDao extends DatabaseAccessor<AppDatabase> with _$AccountingDaoMi
   }
 
   Future<int> deleteJournalEntryLines(int entryId) {
-    return (delete(journalEntryLines)..where((l) => l.journalEntryId.equals(entryId))).go();
+    return (delete(
+      journalEntryLines,
+    )..where((l) => l.journalEntryId.equals(entryId))).go();
   }
 
   Stream<List<JournalEntry>> watchJournalEntries() {
-    return (select(journalEntries)..orderBy([(j) => OrderingTerm(expression: j.entryDate, mode: OrderingMode.desc)])).watch();
+    return (select(journalEntries)..orderBy([
+          (j) => OrderingTerm(expression: j.entryDate, mode: OrderingMode.desc),
+        ]))
+        .watch();
   }
 
-  Stream<List<JournalEntry>> watchJournalEntriesByDateRange(DateTime start, DateTime end) {
+  Stream<List<JournalEntry>> watchJournalEntriesByDateRange(
+    DateTime start,
+    DateTime end,
+  ) {
     return (select(journalEntries)
-          ..where((j) => j.entryDate.isBiggerOrEqualValue(start) & j.entryDate.isSmallerOrEqualValue(end))
-          ..orderBy([(j) => OrderingTerm(expression: j.entryDate, mode: OrderingMode.desc)]))
+          ..where(
+            (j) =>
+                j.entryDate.isBiggerOrEqualValue(start) &
+                j.entryDate.isSmallerOrEqualValue(end),
+          )
+          ..orderBy([
+            (j) =>
+                OrderingTerm(expression: j.entryDate, mode: OrderingMode.desc),
+          ]))
         .watch();
   }
 
   Stream<List<JournalEntry>> watchJournalEntriesByType(String entryType) {
     return (select(journalEntries)
           ..where((j) => j.entryType.equals(entryType))
-          ..orderBy([(j) => OrderingTerm(expression: j.entryDate, mode: OrderingMode.desc)]))
+          ..orderBy([
+            (j) =>
+                OrderingTerm(expression: j.entryDate, mode: OrderingMode.desc),
+          ]))
         .watch();
   }
 
   Stream<List<JournalEntry>> watchJournalEntriesByStatus(String status) {
     return (select(journalEntries)
           ..where((j) => j.status.equals(status))
-          ..orderBy([(j) => OrderingTerm(expression: j.entryDate, mode: OrderingMode.desc)]))
+          ..orderBy([
+            (j) =>
+                OrderingTerm(expression: j.entryDate, mode: OrderingMode.desc),
+          ]))
         .watch();
   }
 
   Future<JournalEntry?> getJournalEntry(int id) {
-    return (select(journalEntries)..where((j) => j.id.equals(id))).getSingleOrNull();
+    return (select(
+      journalEntries,
+    )..where((j) => j.id.equals(id))).getSingleOrNull();
   }
 
   Future<JournalEntry?> findJournalEntryByNumber(String entryNumber) {
-    return (select(journalEntries)..where((j) => j.entryNumber.equals(entryNumber))).getSingleOrNull();
+    return (select(
+      journalEntries,
+    )..where((j) => j.entryNumber.equals(entryNumber))).getSingleOrNull();
   }
 
-  Future<JournalEntry?> findJournalEntryBySource(String sourceTable, int sourceId) {
-    return (select(journalEntries)
-          ..where((j) => j.sourceTable.equals(sourceTable) & j.sourceId.equals(sourceId)))
+  Future<JournalEntry?> findJournalEntryBySource(
+    String sourceTable,
+    int sourceId,
+  ) {
+    return (select(journalEntries)..where(
+          (j) =>
+              j.sourceTable.equals(sourceTable) & j.sourceId.equals(sourceId),
+        ))
         .getSingleOrNull();
   }
 
@@ -166,15 +212,19 @@ class AccountingDao extends DatabaseAccessor<AppDatabase> with _$AccountingDaoMi
         mode: OrderingMode.asc,
       ),
     ]);
-    return query
-        .map((row) => row.readTable(journalEntryLines))
-        .watch();
+    return query.map((row) => row.readTable(journalEntryLines)).watch();
   }
 
   Future<List<JournalEntry>> searchJournalEntries(String query) {
     return (select(journalEntries)
-          ..where((j) => j.description.like('%$query%') | j.entryNumber.like('%$query%'))
-          ..orderBy([(j) => OrderingTerm(expression: j.entryDate, mode: OrderingMode.desc)]))
+          ..where(
+            (j) =>
+                j.description.like('%$query%') | j.entryNumber.like('%$query%'),
+          )
+          ..orderBy([
+            (j) =>
+                OrderingTerm(expression: j.entryDate, mode: OrderingMode.desc),
+          ]))
         .get();
   }
 
@@ -198,15 +248,19 @@ class AccountingDao extends DatabaseAccessor<AppDatabase> with _$AccountingDaoMi
   // ── Accounting Periods ──────────────────────────────────
 
   Stream<List<AccountingPeriod>> watchAccountingPeriods() {
-    return (select(accountingPeriods)
-          ..orderBy([(p) => OrderingTerm(expression: p.startDate, mode: OrderingMode.desc)]))
+    return (select(accountingPeriods)..orderBy([
+          (p) => OrderingTerm(expression: p.startDate, mode: OrderingMode.desc),
+        ]))
         .watch();
   }
 
   Future<AccountingPeriod?> getActiveAccountingPeriod() {
     return (select(accountingPeriods)
           ..where((p) => p.isClosed.equals(false))
-          ..orderBy([(p) => OrderingTerm(expression: p.startDate, mode: OrderingMode.desc)]))
+          ..orderBy([
+            (p) =>
+                OrderingTerm(expression: p.startDate, mode: OrderingMode.desc),
+          ]))
         .getSingleOrNull();
   }
 
@@ -234,8 +288,8 @@ class AccountingDao extends DatabaseAccessor<AppDatabase> with _$AccountingDaoMi
     ]);
     query.where(
       journalEntries.status.equals('posted') &
-      journalEntries.entryDate.isBiggerOrEqualValue(startDate) &
-      journalEntries.entryDate.isSmallerOrEqualValue(endDate),
+          journalEntries.entryDate.isBiggerOrEqualValue(startDate) &
+          journalEntries.entryDate.isSmallerOrEqualValue(endDate),
     );
     query.orderBy([OrderingTerm(expression: journalEntries.entryDate)]);
     return query.watch().map(
@@ -257,9 +311,9 @@ class AccountingDao extends DatabaseAccessor<AppDatabase> with _$AccountingDaoMi
     ]);
     query.where(
       journalEntryLines.accountId.equals(accountId) &
-      journalEntries.status.equals('posted') &
-      journalEntries.entryDate.isBiggerOrEqualValue(startDate) &
-      journalEntries.entryDate.isSmallerOrEqualValue(endDate),
+          journalEntries.status.equals('posted') &
+          journalEntries.entryDate.isBiggerOrEqualValue(startDate) &
+          journalEntries.entryDate.isSmallerOrEqualValue(endDate),
     );
     query.orderBy([OrderingTerm(expression: journalEntries.entryDate)]);
     return query.watch().map(
@@ -277,17 +331,18 @@ class AccountingDao extends DatabaseAccessor<AppDatabase> with _$AccountingDaoMi
   }
 
   Future<List<JournalEntry>> getPostedJournalEntries() {
-    return (select(journalEntries)
-          ..where((e) => e.status.equals('posted')))
-        .get();
+    return (select(
+      journalEntries,
+    )..where((e) => e.status.equals('posted'))).get();
   }
 
   Future<bool> isDateInClosedPeriod(DateTime date) async {
-    final closedPeriods = await (select(accountingPeriods)
-          ..where((p) => p.isClosed.equals(true))
-          ..where((p) => p.startDate.isSmallerOrEqualValue(date))
-          ..where((p) => p.endDate.isBiggerOrEqualValue(date)))
-        .get();
+    final closedPeriods =
+        await (select(accountingPeriods)
+              ..where((p) => p.isClosed.equals(true))
+              ..where((p) => p.startDate.isSmallerOrEqualValue(date))
+              ..where((p) => p.endDate.isBiggerOrEqualValue(date)))
+            .get();
     return closedPeriods.isNotEmpty;
   }
 
@@ -303,11 +358,15 @@ class AccountingDao extends DatabaseAccessor<AppDatabase> with _$AccountingDaoMi
   }
 
   Future<ExpenseCategory?> getExpenseCategory(int id) {
-    return (select(expenseCategories)..where((c) => c.id.equals(id))).getSingleOrNull();
+    return (select(
+      expenseCategories,
+    )..where((c) => c.id.equals(id))).getSingleOrNull();
   }
 
   Future<ExpenseCategory?> findExpenseCategoryByName(String name) {
-    return (select(expenseCategories)..where((c) => c.name.equals(name))).getSingleOrNull();
+    return (select(
+      expenseCategories,
+    )..where((c) => c.name.equals(name))).getSingleOrNull();
   }
 
   Future<int> createExpenseCategory(ExpenseCategoriesCompanion category) {
@@ -350,27 +409,50 @@ class AccountingDao extends DatabaseAccessor<AppDatabase> with _$AccountingDaoMi
   }
 
   Stream<List<Expense>> watchExpenses() {
-    return (select(expenses)..orderBy([(e) => OrderingTerm(expression: e.expenseDate, mode: OrderingMode.desc)])).watch();
+    return (select(expenses)..orderBy([
+          (e) =>
+              OrderingTerm(expression: e.expenseDate, mode: OrderingMode.desc),
+        ]))
+        .watch();
   }
 
   Stream<List<Expense>> watchExpensesByCategory(int categoryId) {
     return (select(expenses)
           ..where((e) => e.categoryId.equals(categoryId))
-          ..orderBy([(e) => OrderingTerm(expression: e.expenseDate, mode: OrderingMode.desc)]))
+          ..orderBy([
+            (e) => OrderingTerm(
+              expression: e.expenseDate,
+              mode: OrderingMode.desc,
+            ),
+          ]))
         .watch();
   }
 
   Stream<List<Expense>> watchExpensesByDateRange(DateTime start, DateTime end) {
     return (select(expenses)
-          ..where((e) => e.expenseDate.isBiggerOrEqualValue(start) & e.expenseDate.isSmallerOrEqualValue(end))
-          ..orderBy([(e) => OrderingTerm(expression: e.expenseDate, mode: OrderingMode.desc)]))
+          ..where(
+            (e) =>
+                e.expenseDate.isBiggerOrEqualValue(start) &
+                e.expenseDate.isSmallerOrEqualValue(end),
+          )
+          ..orderBy([
+            (e) => OrderingTerm(
+              expression: e.expenseDate,
+              mode: OrderingMode.desc,
+            ),
+          ]))
         .watch();
   }
 
   Future<List<Expense>> searchExpenses(String query) {
     return (select(expenses)
           ..where((e) => e.description.like('%$query%'))
-          ..orderBy([(e) => OrderingTerm(expression: e.expenseDate, mode: OrderingMode.desc)]))
+          ..orderBy([
+            (e) => OrderingTerm(
+              expression: e.expenseDate,
+              mode: OrderingMode.desc,
+            ),
+          ]))
         .get();
   }
 

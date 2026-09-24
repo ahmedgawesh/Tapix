@@ -5,7 +5,7 @@ void main() {
   group('BulkProductFormScreen', () {
     testWidgets('BulkProductRowData can be created', (tester) async {
       final rowData = BulkProductRowData.empty(0);
-      
+
       expect(rowData.rowIndex, 0);
       expect(rowData.name, '');
     });
@@ -15,18 +15,20 @@ void main() {
         rows: [BulkProductRowData.empty(0)],
         validationErrors: const {},
       );
-      
+
       expect(state.rows.length, 1);
       expect(state.hasValidationErrors, false);
     });
 
-    testWidgets('BulkProductSubmitting calculates progress correctly', (tester) async {
+    testWidgets('BulkProductSubmitting calculates progress correctly', (
+      tester,
+    ) async {
       const state = BulkProductSubmitting(
         totalCount: 5,
         currentIndex: 2,
         rows: [],
       );
-      
+
       expect(state.progress, 0.4);
     });
   });

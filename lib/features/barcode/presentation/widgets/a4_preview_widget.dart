@@ -38,12 +38,17 @@ class A4PreviewWidget extends StatelessWidget {
     final a4Height = a4HeightMm * 3.78 * scale;
 
     final pagePaddingPx = settings.pageMarginMm * 3.78 * scale;
-    final usableWidth = (a4Width - (pagePaddingPx * 2)).clamp(1.0, double.infinity);
+    final usableWidth = (a4Width - (pagePaddingPx * 2)).clamp(
+      1.0,
+      double.infinity,
+    );
 
     final labelScale = scale * 0.8;
     final labelWidthPx = settings.labelWidthMm * 3.78 * labelScale;
     final hGapPx = settings.horizontalGapMm * 3.78 * scale;
-    final rowWidthPx = (settings.labelsPerRow * labelWidthPx) + ((settings.labelsPerRow - 1) * hGapPx);
+    final rowWidthPx =
+        (settings.labelsPerRow * labelWidthPx) +
+        ((settings.labelsPerRow - 1) * hGapPx);
     final isRowTooWide = rowWidthPx > usableWidth;
 
     // Calculate how many labels fit
@@ -72,7 +77,11 @@ class A4PreviewWidget extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 children: [
-                  Icon(Icons.picture_as_pdf, size: 16 * scale, color: colorScheme.primary),
+                  Icon(
+                    Icons.picture_as_pdf,
+                    size: 16 * scale,
+                    color: colorScheme.primary,
+                  ),
                   SizedBox(width: 4 * scale),
                   Text(
                     'barcode.a4_preview'.tr(),
@@ -105,7 +114,11 @@ class A4PreviewWidget extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.warning_amber_rounded, size: 14 * scale, color: colorScheme.onErrorContainer),
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      size: 14 * scale,
+                      color: colorScheme.onErrorContainer,
+                    ),
                     SizedBox(width: 6 * scale),
                     Expanded(
                       child: Text(
@@ -128,54 +141,54 @@ class A4PreviewWidget extends StatelessWidget {
             Expanded(
               child: SingleChildScrollView(
                 child: Column(
-                  children: List.generate(
-                    rowsToShow,
-                    (rowIndex) {
-                      final startIndex = rowIndex * labelsPerRow;
-                      if (startIndex >= labelsToShow) {
-                        return const SizedBox.shrink();
-                      }
-                      final labelsInRow = (startIndex + labelsPerRow) <= labelsToShow
-                          ? labelsPerRow
-                          : (labelsToShow - startIndex);
+                  children: List.generate(rowsToShow, (rowIndex) {
+                    final startIndex = rowIndex * labelsPerRow;
+                    if (startIndex >= labelsToShow) {
+                      return const SizedBox.shrink();
+                    }
+                    final labelsInRow =
+                        (startIndex + labelsPerRow) <= labelsToShow
+                        ? labelsPerRow
+                        : (labelsToShow - startIndex);
 
-                      return Padding(
-                        padding: EdgeInsets.only(
-                          bottom: settings.verticalGapMm * 3.78 * scale,
-                        ),
-                        child: Align(
-                          alignment: Alignment.topCenter,
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: List.generate(
-                                  labelsInRow,
-                                  (colIndex) => Padding(
-                                    padding: EdgeInsets.only(
-                                      right: colIndex < labelsInRow - 1
-                                          ? settings.horizontalGapMm * 3.78 * scale
-                                          : 0,
-                                    ),
-                                    child: BarcodePreviewWidget(
-                                      product: product,
-                                      settings: settings,
-                                      companyProfile: companyProfile,
-                                      variantInfo: variantInfo,
-                                      scale: labelScale, // Smaller for grid
-                                    ),
+                    return Padding(
+                      padding: EdgeInsets.only(
+                        bottom: settings.verticalGapMm * 3.78 * scale,
+                      ),
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: List.generate(
+                                labelsInRow,
+                                (colIndex) => Padding(
+                                  padding: EdgeInsets.only(
+                                    right: colIndex < labelsInRow - 1
+                                        ? settings.horizontalGapMm *
+                                              3.78 *
+                                              scale
+                                        : 0,
+                                  ),
+                                  child: BarcodePreviewWidget(
+                                    product: product,
+                                    settings: settings,
+                                    companyProfile: companyProfile,
+                                    variantInfo: variantInfo,
+                                    scale: labelScale, // Smaller for grid
                                   ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    );
+                  }),
                 ),
               ),
             ),
@@ -183,7 +196,9 @@ class A4PreviewWidget extends StatelessWidget {
               SizedBox(height: 4 * scale),
               Center(
                 child: Text(
-                  'barcode.more_rows'.tr(args: [(labelsPerColumn - 6).toString()]),
+                  'barcode.more_rows'.tr(
+                    args: [(labelsPerColumn - 6).toString()],
+                  ),
                   style: TextStyle(
                     fontSize: 8 * scale,
                     color: Colors.grey.shade600,
@@ -226,12 +241,17 @@ class A4BatchPreviewWidget extends StatelessWidget {
     final a4Height = a4HeightMm * 3.78 * scale;
 
     final pagePaddingPx = settings.pageMarginMm * 3.78 * scale;
-    final usableWidth = (a4Width - (pagePaddingPx * 2)).clamp(1.0, double.infinity);
+    final usableWidth = (a4Width - (pagePaddingPx * 2)).clamp(
+      1.0,
+      double.infinity,
+    );
 
     final labelScale = scale * 0.8;
     final labelWidthPx = settings.labelWidthMm * 3.78 * labelScale;
     final hGapPx = settings.horizontalGapMm * 3.78 * scale;
-    final rowWidthPx = (settings.labelsPerRow * labelWidthPx) + ((settings.labelsPerRow - 1) * hGapPx);
+    final rowWidthPx =
+        (settings.labelsPerRow * labelWidthPx) +
+        ((settings.labelsPerRow - 1) * hGapPx);
     final isRowTooWide = rowWidthPx > usableWidth;
 
     final labelsPerRow = settings.labelsPerRow;
@@ -239,7 +259,10 @@ class A4BatchPreviewWidget extends StatelessWidget {
     final labelsPerPage = labelsPerRow * labelsPerColumn;
 
     final labelsToShow = labels.take(labelsPerPage).toList(growable: false);
-    final rowsToShow = ((labelsToShow.length / labelsPerRow).ceil()).clamp(1, 6);
+    final rowsToShow = ((labelsToShow.length / labelsPerRow).ceil()).clamp(
+      1,
+      6,
+    );
 
     return Card(
       elevation: 4,
@@ -259,7 +282,11 @@ class A4BatchPreviewWidget extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 children: [
-                  Icon(Icons.picture_as_pdf, size: 16 * scale, color: colorScheme.primary),
+                  Icon(
+                    Icons.picture_as_pdf,
+                    size: 16 * scale,
+                    color: colorScheme.primary,
+                  ),
                   SizedBox(width: 4 * scale),
                   Text(
                     'barcode.a4_preview'.tr(),
@@ -292,7 +319,11 @@ class A4BatchPreviewWidget extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.warning_amber_rounded, size: 14 * scale, color: colorScheme.onErrorContainer),
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      size: 14 * scale,
+                      color: colorScheme.onErrorContainer,
+                    ),
                     SizedBox(width: 6 * scale),
                     Expanded(
                       child: Text(
@@ -314,57 +345,55 @@ class A4BatchPreviewWidget extends StatelessWidget {
             Expanded(
               child: SingleChildScrollView(
                 child: Column(
-                  children: List.generate(
-                    rowsToShow,
-                    (rowIndex) {
-                      final startIndex = rowIndex * labelsPerRow;
-                      if (startIndex >= labelsToShow.length) {
-                        return const SizedBox.shrink();
-                      }
-                      final labelsInRow = (startIndex + labelsPerRow) <= labelsToShow.length
-                          ? labelsPerRow
-                          : (labelsToShow.length - startIndex);
+                  children: List.generate(rowsToShow, (rowIndex) {
+                    final startIndex = rowIndex * labelsPerRow;
+                    if (startIndex >= labelsToShow.length) {
+                      return const SizedBox.shrink();
+                    }
+                    final labelsInRow =
+                        (startIndex + labelsPerRow) <= labelsToShow.length
+                        ? labelsPerRow
+                        : (labelsToShow.length - startIndex);
 
-                      return Padding(
-                        padding: EdgeInsets.only(
-                          bottom: settings.verticalGapMm * 3.78 * scale,
-                        ),
-                        child: Align(
-                          alignment: Alignment.topCenter,
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: List.generate(
-                                  labelsInRow,
-                                  (colIndex) {
-                                    final label = labelsToShow[startIndex + colIndex];
-                                    return Padding(
-                                      padding: EdgeInsets.only(
-                                        right: colIndex < labelsInRow - 1
-                                            ? settings.horizontalGapMm * 3.78 * scale
-                                            : 0,
-                                      ),
-                                      child: BarcodePreviewWidget(
-                                        product: label.product,
-                                        settings: settings,
-                                        companyProfile: companyProfile,
-                                        variantInfo: label.variantInfo,
-                                        scale: labelScale,
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
+                    return Padding(
+                      padding: EdgeInsets.only(
+                        bottom: settings.verticalGapMm * 3.78 * scale,
+                      ),
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: List.generate(labelsInRow, (colIndex) {
+                                final label =
+                                    labelsToShow[startIndex + colIndex];
+                                return Padding(
+                                  padding: EdgeInsets.only(
+                                    right: colIndex < labelsInRow - 1
+                                        ? settings.horizontalGapMm *
+                                              3.78 *
+                                              scale
+                                        : 0,
+                                  ),
+                                  child: BarcodePreviewWidget(
+                                    product: label.product,
+                                    settings: settings,
+                                    companyProfile: companyProfile,
+                                    variantInfo: label.variantInfo,
+                                    scale: labelScale,
+                                  ),
+                                );
+                              }),
                             ),
                           ),
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    );
+                  }),
                 ),
               ),
             ),
@@ -372,7 +401,9 @@ class A4BatchPreviewWidget extends StatelessWidget {
               SizedBox(height: 4 * scale),
               Center(
                 child: Text(
-                  'barcode.more_rows'.tr(args: [(labelsPerColumn - 6).toString()]),
+                  'barcode.more_rows'.tr(
+                    args: [(labelsPerColumn - 6).toString()],
+                  ),
                   style: TextStyle(
                     fontSize: 8 * scale,
                     color: Colors.grey.shade600,

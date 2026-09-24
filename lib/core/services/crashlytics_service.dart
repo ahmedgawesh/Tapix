@@ -46,7 +46,10 @@ class CrashlyticsService {
 
     // Attach platform info as custom keys
     await _crashlytics!.setCustomKey('platform', Platform.operatingSystem);
-    await _crashlytics!.setCustomKey('os_version', Platform.operatingSystemVersion);
+    await _crashlytics!.setCustomKey(
+      'os_version',
+      Platform.operatingSystemVersion,
+    );
     await _crashlytics!.setCustomKey('dart_version', Platform.version);
     await _crashlytics!.setCustomKey('app_version', _appVersion);
 
@@ -64,10 +67,7 @@ class CrashlyticsService {
 
   /// Set the authenticated user's identifier and role for crash reports.
   /// Called on login. Uses the numeric user ID (no PII).
-  Future<void> setUser({
-    required int userId,
-    required String role,
-  }) async {
+  Future<void> setUser({required int userId, required String role}) async {
     if (!_isActive) return;
     await _crashlytics!.setUserIdentifier(userId.toString());
     await _crashlytics!.setCustomKey('user_id', userId);
@@ -93,7 +93,10 @@ class CrashlyticsService {
 
   /// Log a named user action.
   /// These breadcrumb messages appear in the Crashlytics log trail.
-  Future<void> logAction(String actionName, [Map<String, String>? extras]) async {
+  Future<void> logAction(
+    String actionName, [
+    Map<String, String>? extras,
+  ]) async {
     if (!_isActive) return;
     final buffer = StringBuffer('action: $actionName');
     if (extras != null && extras.isNotEmpty) {
@@ -162,7 +165,9 @@ class CrashlyticsService {
   /// Record a fatal Flutter error.
   Future<void> recordFlutterFatalError(FlutterErrorDetails details) async {
     if (!_isActive) {
-      debugPrint('CrashlyticsService.recordFlutterFatalError: ${details.exception}');
+      debugPrint(
+        'CrashlyticsService.recordFlutterFatalError: ${details.exception}',
+      );
       return;
     }
 

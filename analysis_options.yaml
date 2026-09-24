@@ -19,6 +19,7 @@ analyzer:
     - "_bmad-output/**"
     - "_bmad/**"
     - build/**
+    - test/generated_migrations/**
     - android/**
     - ios/**
     - web/**

@@ -124,8 +124,12 @@ class PartyBalanceClassifier {
   PartyBalanceStatus statusOf(int balanceCents, PartyKind kind) {
     if (balanceCents == 0) return PartyBalanceStatus.settled;
     final positiveMeansOwedToUs = kind == PartyKind.customer;
-    final isReceivable = positiveMeansOwedToUs ? balanceCents > 0 : balanceCents < 0;
-    return isReceivable ? PartyBalanceStatus.receivable : PartyBalanceStatus.payable;
+    final isReceivable = positiveMeansOwedToUs
+        ? balanceCents > 0
+        : balanceCents < 0;
+    return isReceivable
+        ? PartyBalanceStatus.receivable
+        : PartyBalanceStatus.payable;
   }
 
   /// Classify and aggregate a list of raw signed balances.
@@ -217,9 +221,6 @@ class PartyBalanceClassifier {
     Iterable<Decimal> balances,
     PartyKind kind,
   ) {
-    return classify(
-      balances.map((d) => d.toBigInt().toInt()),
-      kind,
-    );
+    return classify(balances.map((d) => d.toBigInt().toInt()), kind);
   }
 }

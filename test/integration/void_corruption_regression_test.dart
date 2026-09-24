@@ -60,7 +60,9 @@ void main() {
     int priceCents = 2000,
     bool hasVariants = true,
   }) async {
-    return db.into(db.products).insert(
+    return db
+        .into(db.products)
+        .insert(
           ProductsCompanion.insert(
             sku: Value(sku),
             name: name,
@@ -78,7 +80,9 @@ void main() {
     int costCents = 1000,
     int priceCents = 2000,
   }) async {
-    return db.into(db.productVariants).insert(
+    return db
+        .into(db.productVariants)
+        .insert(
           ProductVariantsCompanion.insert(
             productId: productId,
             stockQuantity: const Value(0),
@@ -96,7 +100,9 @@ void main() {
     int? supplierIdOverride,
     String poNumber = 'PO-X',
   }) async {
-    final purchaseId = await db.into(db.purchases).insert(
+    final purchaseId = await db
+        .into(db.purchases)
+        .insert(
           PurchasesCompanion.insert(
             purchaseNumber: poNumber,
             supplierId: supplierIdOverride ?? supplierId,
@@ -109,7 +115,9 @@ void main() {
             paymentMethod: const Value('credit'),
           ),
         );
-    await db.into(db.purchaseItems).insert(
+    await db
+        .into(db.purchaseItems)
+        .insert(
           PurchaseItemsCompanion.insert(
             purchaseId: purchaseId,
             productId: productId,
@@ -134,21 +142,26 @@ void main() {
     String paymentMethod = 'cash',
   }) async {
     final total = Decimal.fromInt(quantity * unitPriceCents);
-    final saleId = await db.into(db.sales).insert(
+    final saleId = await db
+        .into(db.sales)
+        .insert(
           SalesCompanion.insert(
             invoiceNumber: invoiceNumber,
             customerId: Value(customerIdOverride ?? customerId),
             subtotalCents: total,
             taxCents: Decimal.zero,
             totalCents: total,
-            paidAmountCents:
-                Value(paymentMethod == 'cash' ? total : Decimal.zero),
+            paidAmountCents: Value(
+              paymentMethod == 'cash' ? total : Decimal.zero,
+            ),
             currencyId: currencyId,
             paymentMethod: paymentMethod,
             status: const Value('draft'),
           ),
         );
-    await db.into(db.saleItems).insert(
+    await db
+        .into(db.saleItems)
+        .insert(
           SaleItemsCompanion.insert(
             saleId: saleId,
             productId: productId,
@@ -179,19 +192,23 @@ void main() {
       "VALUES (0, 'system', 'no-pin', 'owner', 1, $now, $now)",
     );
 
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     currencyId = usd.id;
 
-    customerId = await db.into(db.customers).insert(
+    customerId = await db
+        .into(db.customers)
+        .insert(
           CustomersCompanion.insert(
             name: 'Test Customer',
             currencyId: currencyId,
             balanceCents: Value(Decimal.zero),
           ),
         );
-    supplierId = await db.into(db.suppliers).insert(
+    supplierId = await db
+        .into(db.suppliers)
+        .insert(
           SuppliersCompanion.insert(
             name: 'Test Supplier',
             currencyId: currencyId,
@@ -208,104 +225,135 @@ void main() {
   // counted as invoiced and the cap permits over-returns.
   // ──────────────────────────────────────────────────────────────────────
   group('Fix A — voided/draft invoices excluded from cap history', () {
-    test('voided sale: customer cannot return its quantity via adjustment',
-        () async {
-      final pid =
-          await insertProduct(sku: 'A1-S', name: 'A1-S', hasVariants: true);
-      final vid = await insertVariant(productId: pid);
+    test(
+      'voided sale: customer cannot return its quantity via adjustment',
+      () async {
+        final pid = await insertProduct(
+          sku: 'A1-S',
+          name: 'A1-S',
+          hasVariants: true,
+        );
+        final vid = await insertVariant(productId: pid);
 
-      await postPurchase(
-          productId: pid, variantId: vid, quantity: 50, poNumber: 'PO-A1');
+        await postPurchase(
+          productId: pid,
+          variantId: vid,
+          quantity: 50,
+          poNumber: 'PO-A1',
+        );
 
-      // Sell 5, then VOID it.
-      final saleId = await postSale(
+        // Sell 5, then VOID it.
+        final saleId = await postSale(
           productId: pid,
           variantId: vid,
           quantity: 5,
-          invoiceNumber: 'INV-A1');
-      await db.saleDao.voidSale(saleId);
+          invoiceNumber: 'INV-A1',
+        );
+        await db.saleDao.voidSale(saleId);
 
-      // After void: customer has invoiced=0 sold-and-completed, returned=0.
-      // Trying to adjust-return any positive qty MUST be capped.
-      final retId = await adjDao.createSaleAdjReturn(
-        SaleReturnAdjustmentsCompanion.insert(
-          returnNumber: 'SAR-A1',
-          customerId: Value(customerId),
-          currencyId: currencyId,
-          totalCents: Decimal.fromInt(2000),
-          refundMethod: const Value('cash'),
-        ),
-        [
-          SaleReturnAdjustmentItemsCompanion.insert(
-            returnId: 0,
-            productId: pid,
-            variantId: Value(vid),
-            quantity: 1,
-            unitPriceCents: Decimal.fromInt(2000),
+        // After void: customer has invoiced=0 sold-and-completed, returned=0.
+        // Trying to adjust-return any positive qty MUST be capped.
+        final retId = await adjDao.createSaleAdjReturn(
+          SaleReturnAdjustmentsCompanion.insert(
+            returnNumber: 'SAR-A1',
+            customerId: Value(customerId),
+            currencyId: currencyId,
             totalCents: Decimal.fromInt(2000),
+            refundMethod: const Value('cash'),
           ),
-        ],
-      );
+          [
+            SaleReturnAdjustmentItemsCompanion.insert(
+              sourceResolution: const Value('unverified'),
+              sourceResolutionReason: const Value('test fixture'),
+              returnId: 0,
+              productId: pid,
+              variantId: Value(vid),
+              quantity: 1,
+              unitPriceCents: Decimal.fromInt(2000),
+              totalCents: Decimal.fromInt(2000),
+            ),
+          ],
+        );
 
-      expect(
-        () => adjDao.postSaleAdjReturn(retId, journalEntryService: journal),
-        throwsA(isA<QuantityExceedsHistoryException>()),
-        reason:
-            'Voided sales must not feed the cap as invoiced — otherwise the '
-            'customer can return quantity that was never delivered.',
-      );
-    });
+        expect(
+          () => adjDao.postSaleAdjReturn(retId, journalEntryService: journal),
+          throwsA(isA<QuantityExceedsHistoryException>()),
+          reason:
+              'Voided sales must not feed the cap as invoiced — otherwise the '
+              'customer can return quantity that was never delivered.',
+        );
+      },
+    );
 
-    test('voided purchase: supplier cannot have its qty adjustment-returned',
-        () async {
-      final pid =
-          await insertProduct(sku: 'A1-P', name: 'A1-P', hasVariants: true);
-      final vid = await insertVariant(productId: pid);
+    test(
+      'voided purchase: supplier cannot have its qty adjustment-returned',
+      () async {
+        final pid = await insertProduct(
+          sku: 'A1-P',
+          name: 'A1-P',
+          hasVariants: true,
+        );
+        final vid = await insertVariant(productId: pid);
 
-      // Post a purchase, then void it via the DAO.
-      final purchaseId = await postPurchase(
-          productId: pid, variantId: vid, quantity: 5, poNumber: 'PO-A1-P');
-      await db.purchaseDao.voidPurchase(purchaseId);
+        // Post a purchase, then void it via the DAO.
+        final purchaseId = await postPurchase(
+          productId: pid,
+          variantId: vid,
+          quantity: 5,
+          poNumber: 'PO-A1-P',
+        );
+        await db.purchaseDao.voidPurchase(purchaseId);
 
-      final retId = await adjDao.createPurchaseAdjReturn(
-        PurchaseReturnAdjustmentsCompanion.insert(
-          returnNumber: 'PAR-A1',
-          supplierId: supplierId,
-          currencyId: currencyId,
-          totalCents: Decimal.fromInt(1000),
-        ),
-        [
-          PurchaseReturnAdjustmentItemsCompanion.insert(
-            returnId: 0,
-            productId: pid,
-            variantId: Value(vid),
-            quantity: 1,
-            unitPriceCents: Decimal.fromInt(1000),
+        final retId = await adjDao.createPurchaseAdjReturn(
+          PurchaseReturnAdjustmentsCompanion.insert(
+            returnNumber: 'PAR-A1',
+            supplierId: supplierId,
+            currencyId: currencyId,
             totalCents: Decimal.fromInt(1000),
           ),
-        ],
-      );
+          [
+            PurchaseReturnAdjustmentItemsCompanion.insert(
+              returnId: 0,
+              productId: pid,
+              variantId: Value(vid),
+              quantity: 1,
+              unitPriceCents: Decimal.fromInt(1000),
+              totalCents: Decimal.fromInt(1000),
+            ),
+          ],
+        );
 
-      expect(
-        () => adjDao.postPurchaseAdjReturn(retId, journalEntryService: journal),
-        throwsA(isA<QuantityExceedsHistoryException>()),
-        reason:
-            'Voided purchases must not feed the cap as supplied — otherwise '
-            'an adjustment return can return goods that were never received.',
-      );
-    });
+        expect(
+          () =>
+              adjDao.postPurchaseAdjReturn(retId, journalEntryService: journal),
+          throwsA(isA<QuantityExceedsHistoryException>()),
+          reason:
+              'Voided purchases must not feed the cap as supplied — otherwise '
+              'an adjustment return can return goods that were never received.',
+        );
+      },
+    );
 
     test('draft sale: never delivered, must not count as invoiced', () async {
-      final pid =
-          await insertProduct(sku: 'A1-D', name: 'A1-D', hasVariants: true);
+      final pid = await insertProduct(
+        sku: 'A1-D',
+        name: 'A1-D',
+        hasVariants: true,
+      );
       final vid = await insertVariant(productId: pid);
 
       // Stock it via a posted purchase so the eventual sale could otherwise
       // succeed, but DO NOT post the sale.
       await postPurchase(
-          productId: pid, variantId: vid, quantity: 50, poNumber: 'PO-A1-D');
+        productId: pid,
+        variantId: vid,
+        quantity: 50,
+        poNumber: 'PO-A1-D',
+      );
       // Insert a draft sale with items but never call postSale.
-      final draftId = await db.into(db.sales).insert(
+      final draftId = await db
+          .into(db.sales)
+          .insert(
             SalesCompanion.insert(
               invoiceNumber: 'INV-A1-D',
               customerId: Value(customerId),
@@ -318,7 +366,9 @@ void main() {
               status: const Value('draft'),
             ),
           );
-      await db.into(db.saleItems).insert(
+      await db
+          .into(db.saleItems)
+          .insert(
             SaleItemsCompanion.insert(
               saleId: draftId,
               productId: pid,
@@ -340,6 +390,8 @@ void main() {
         ),
         [
           SaleReturnAdjustmentItemsCompanion.insert(
+            sourceResolution: const Value('unverified'),
+            sourceResolutionReason: const Value('test fixture'),
             returnId: 0,
             productId: pid,
             variantId: Value(vid),
@@ -363,12 +415,15 @@ void main() {
   // ──────────────────────────────────────────────────────────────────────
   group('Fix B — cascade-void of linked returns reverses their JEs', () {
     test('voiding a sale via repo flow leaves NO orphan posted JEs', () async {
-      final pid =
-          await insertProduct(sku: 'B1', name: 'B1', hasVariants: true);
+      final pid = await insertProduct(sku: 'B1', name: 'B1', hasVariants: true);
       final vid = await insertVariant(productId: pid);
 
       await postPurchase(
-          productId: pid, variantId: vid, quantity: 20, poNumber: 'PO-B1');
+        productId: pid,
+        variantId: vid,
+        quantity: 20,
+        poNumber: 'PO-B1',
+      );
       final saleId = await postSale(
         productId: pid,
         variantId: vid,
@@ -388,9 +443,9 @@ void main() {
       );
 
       // Create + post a linked return for 2 units.
-      final saleItem = await (db.select(db.saleItems)
-            ..where((i) => i.saleId.equals(saleId)))
-          .getSingle();
+      final saleItem = await (db.select(
+        db.saleItems,
+      )..where((i) => i.saleId.equals(saleId))).getSingle();
       final returnId = await db.saleDao.createSaleReturn(
         SaleReturnsCompanion.insert(
           returnNumber: 'SR-B1',
@@ -434,106 +489,129 @@ void main() {
       // After: there must be NO `sale_returns` JE that is still posted +
       // not reversed. If any remains, the cascade left a financial leg
       // orphan (the bug we are fixing).
-      final orphanRows = await db.customSelect(
-        'SELECT COUNT(*) AS c FROM journal_entries '
-        "WHERE source_table = 'sale_returns' AND source_id = ? "
-        "AND status = 'posted' AND is_reversed = 0",
-        variables: [Variable.withInt(returnId)],
-      ).getSingle();
-      expect(orphanRows.read<int>('c'), equals(0),
-          reason: 'Cascade-voided sale_return must have its JEs reversed.');
-    });
-
-    test('voiding a purchase reverses cascade-voided purchase_return JEs',
-        () async {
-      final pid =
-          await insertProduct(sku: 'B2', name: 'B2', hasVariants: true);
-      final vid = await insertVariant(productId: pid);
-
-      final purchaseId = await postPurchase(
-          productId: pid, variantId: vid, quantity: 10, poNumber: 'PO-B2');
-      // Post the purchase's JE.
-      await journal.recordPurchaseJournalEntry(
-        purchaseId: purchaseId,
-        totalCents: 10000,
-        paidAmountCents: 0,
-        currencyId: currencyId,
-        taxCents: 0,
-        paymentMethod: 'credit',
-      );
-
-      // Linked purchase return for 3 units.
-      final pItem = await (db.select(db.purchaseItems)
-            ..where((i) => i.purchaseId.equals(purchaseId)))
+      final orphanRows = await db
+          .customSelect(
+            'SELECT COUNT(*) AS c FROM journal_entries '
+            "WHERE source_table = 'sale_returns' AND source_id = ? "
+            "AND status = 'posted' AND is_reversed = 0",
+            variables: [Variable.withInt(returnId)],
+          )
           .getSingle();
-      final returnId = await db.purchaseDao.createPurchaseReturn(
-        PurchaseReturnsCompanion.insert(
-          returnNumber: 'PR-B2',
-          purchaseId: purchaseId,
-          subtotalCents: Value(Decimal.fromInt(3000)),
-          totalCents: Decimal.fromInt(3000),
-          currencyId: currencyId,
-        ),
-        [
-          PurchaseReturnItemsCompanion.insert(
-            returnId: 0,
-            purchaseItemId: pItem.id,
-            quantity: 3,
-            subtotalCents: Value(Decimal.fromInt(3000)),
-            refundCents: Decimal.fromInt(3000),
-          ),
-        ],
+      expect(
+        orphanRows.read<int>('c'),
+        equals(0),
+        reason: 'Cascade-voided sale_return must have its JEs reversed.',
       );
-      await db.purchaseDao.postPurchaseReturn(returnId);
-      await journal.recordPurchaseReturnJournalEntry(
-        returnId: returnId,
-        totalCents: 3000,
-        currencyId: currencyId,
-        taxCents: 0,
-        refundMethod: 'credit',
-      );
-
-      // Repo-like void: JE void → dao.voidPurchase (cascades). The repo
-      // passes the journal service so the cascade also reverses the
-      // linked-return JE inside the same transaction.
-      await journal.voidJournalEntriesForSource(
-        sourceTable: 'purchases',
-        sourceId: purchaseId,
-        reason: 'Purchase voided',
-      );
-      await db.purchaseDao.voidPurchase(purchaseId,
-          journalEntryService: journal);
-
-      final orphanRows = await db.customSelect(
-        'SELECT COUNT(*) AS c FROM journal_entries '
-        "WHERE source_table = 'purchase_returns' AND source_id = ? "
-        "AND status = 'posted' AND is_reversed = 0",
-        variables: [Variable.withInt(returnId)],
-      ).getSingle();
-      expect(orphanRows.read<int>('c'), equals(0),
-          reason:
-              'Cascade-voided purchase_return must have its JEs reversed.');
     });
+
+    test(
+      'voiding a purchase reverses cascade-voided purchase_return JEs',
+      () async {
+        final pid = await insertProduct(
+          sku: 'B2',
+          name: 'B2',
+          hasVariants: true,
+        );
+        final vid = await insertVariant(productId: pid);
+
+        final purchaseId = await postPurchase(
+          productId: pid,
+          variantId: vid,
+          quantity: 10,
+          poNumber: 'PO-B2',
+        );
+        // Post the purchase's JE.
+        await journal.recordPurchaseJournalEntry(
+          purchaseId: purchaseId,
+          totalCents: 10000,
+          paidAmountCents: 0,
+          currencyId: currencyId,
+          taxCents: 0,
+          paymentMethod: 'credit',
+        );
+
+        // Linked purchase return for 3 units.
+        final pItem = await (db.select(
+          db.purchaseItems,
+        )..where((i) => i.purchaseId.equals(purchaseId))).getSingle();
+        final returnId = await db.purchaseDao.createPurchaseReturn(
+          PurchaseReturnsCompanion.insert(
+            returnNumber: 'PR-B2',
+            purchaseId: purchaseId,
+            subtotalCents: Value(Decimal.fromInt(3000)),
+            totalCents: Decimal.fromInt(3000),
+            currencyId: currencyId,
+          ),
+          [
+            PurchaseReturnItemsCompanion.insert(
+              returnId: 0,
+              purchaseItemId: pItem.id,
+              quantity: 3,
+              subtotalCents: Value(Decimal.fromInt(3000)),
+              refundCents: Decimal.fromInt(3000),
+            ),
+          ],
+        );
+        await db.purchaseDao.postPurchaseReturn(returnId);
+        await journal.recordPurchaseReturnJournalEntry(
+          returnId: returnId,
+          totalCents: 3000,
+          currencyId: currencyId,
+          taxCents: 0,
+          refundMethod: 'credit',
+        );
+
+        // Repo-like void: JE void → dao.voidPurchase (cascades). The repo
+        // passes the journal service so the cascade also reverses the
+        // linked-return JE inside the same transaction.
+        await journal.voidJournalEntriesForSource(
+          sourceTable: 'purchases',
+          sourceId: purchaseId,
+          reason: 'Purchase voided',
+        );
+        await db.purchaseDao.voidPurchase(
+          purchaseId,
+          journalEntryService: journal,
+        );
+
+        final orphanRows = await db
+            .customSelect(
+              'SELECT COUNT(*) AS c FROM journal_entries '
+              "WHERE source_table = 'purchase_returns' AND source_id = ? "
+              "AND status = 'posted' AND is_reversed = 0",
+              variables: [Variable.withInt(returnId)],
+            )
+            .getSingle();
+        expect(
+          orphanRows.read<int>('c'),
+          equals(0),
+          reason: 'Cascade-voided purchase_return must have its JEs reversed.',
+        );
+      },
+    );
   });
 
   // ──────────────────────────────────────────────────────────────────────
   // FIX C — VoidImpactAnalyzer + VoidBlocked exception.
   // ──────────────────────────────────────────────────────────────────────
   group('Fix C — VoidImpactAnalyzer detects entanglement', () {
-    test(
-        'analyzeSaleVoid reports adjustment-return allocations attributed to '
+    test('analyzeSaleVoid reports adjustment-return allocations attributed to '
         'this sale and marks them as a BLOCKER', () async {
-      final pid =
-          await insertProduct(sku: 'C1', name: 'C1', hasVariants: true);
+      final pid = await insertProduct(sku: 'C1', name: 'C1', hasVariants: true);
       final vid = await insertVariant(productId: pid);
 
       await postPurchase(
-          productId: pid, variantId: vid, quantity: 20, poNumber: 'PO-C1');
+        productId: pid,
+        variantId: vid,
+        quantity: 20,
+        poNumber: 'PO-C1',
+      );
       final saleId = await postSale(
-          productId: pid,
-          variantId: vid,
-          quantity: 10,
-          invoiceNumber: 'INV-C1');
+        productId: pid,
+        variantId: vid,
+        quantity: 10,
+        invoiceNumber: 'INV-C1',
+      );
 
       // Post an adjustment return that FIFO-allocates 4 units onto this sale.
       final retId = await adjDao.createSaleAdjReturn(
@@ -546,6 +624,8 @@ void main() {
         ),
         [
           SaleReturnAdjustmentItemsCompanion.insert(
+            sourceResolution: const Value('unverified'),
+            sourceResolutionReason: const Value('test fixture'),
             returnId: 0,
             productId: pid,
             variantId: Value(vid),
@@ -563,66 +643,87 @@ void main() {
       expect(report.adjustmentAllocatedQty, equals(4));
       expect(report.entangledAdjustmentReturns, isNotEmpty);
       expect(report.entangledAdjustmentReturns.first.returnId, equals(retId));
-      expect(report.hasBlockers, isTrue,
-          reason:
-              'Adjustment-return entanglement is a hard blocker; the user '
-              'must void the adjustment return first.');
-    });
-
-    test('analyzeSaleVoid with no entanglement returns hasBlockers=false',
-        () async {
-      final pid =
-          await insertProduct(sku: 'C2', name: 'C2', hasVariants: true);
-      final vid = await insertVariant(productId: pid);
-
-      await postPurchase(
-          productId: pid, variantId: vid, quantity: 20, poNumber: 'PO-C2');
-      final saleId = await postSale(
-          productId: pid,
-          variantId: vid,
-          quantity: 5,
-          invoiceNumber: 'INV-C2');
-
-      final report = await voidImpactAnalyzer.analyzeSaleVoid(saleId);
-      expect(report.hasBlockers, isFalse);
-      expect(report.adjustmentAllocatedQty, equals(0));
-      expect(report.entangledAdjustmentReturns, isEmpty);
+      expect(
+        report.hasBlockers,
+        isTrue,
+        reason:
+            'Adjustment-return entanglement is a hard blocker; the user '
+            'must void the adjustment return first.',
+      );
     });
 
     test(
-        'analyzePurchaseVoid reports entangled purchase adjustment returns',
-        () async {
-      final pid =
-          await insertProduct(sku: 'C3', name: 'C3', hasVariants: true);
-      final vid = await insertVariant(productId: pid);
+      'analyzeSaleVoid with no entanglement returns hasBlockers=false',
+      () async {
+        final pid = await insertProduct(
+          sku: 'C2',
+          name: 'C2',
+          hasVariants: true,
+        );
+        final vid = await insertVariant(productId: pid);
 
-      final purchaseId = await postPurchase(
-          productId: pid, variantId: vid, quantity: 10, poNumber: 'PO-C3');
+        await postPurchase(
+          productId: pid,
+          variantId: vid,
+          quantity: 20,
+          poNumber: 'PO-C2',
+        );
+        final saleId = await postSale(
+          productId: pid,
+          variantId: vid,
+          quantity: 5,
+          invoiceNumber: 'INV-C2',
+        );
 
-      final retId = await adjDao.createPurchaseAdjReturn(
-        PurchaseReturnAdjustmentsCompanion.insert(
-          returnNumber: 'PAR-C3',
-          supplierId: supplierId,
-          currencyId: currencyId,
-          totalCents: Decimal.fromInt(3000),
-        ),
-        [
-          PurchaseReturnAdjustmentItemsCompanion.insert(
-            returnId: 0,
-            productId: pid,
-            variantId: Value(vid),
-            quantity: 3,
-            unitPriceCents: Decimal.fromInt(1000),
+        final report = await voidImpactAnalyzer.analyzeSaleVoid(saleId);
+        expect(report.hasBlockers, isFalse);
+        expect(report.adjustmentAllocatedQty, equals(0));
+        expect(report.entangledAdjustmentReturns, isEmpty);
+      },
+    );
+
+    test(
+      'analyzePurchaseVoid reports entangled purchase adjustment returns',
+      () async {
+        final pid = await insertProduct(
+          sku: 'C3',
+          name: 'C3',
+          hasVariants: true,
+        );
+        final vid = await insertVariant(productId: pid);
+
+        final purchaseId = await postPurchase(
+          productId: pid,
+          variantId: vid,
+          quantity: 10,
+          poNumber: 'PO-C3',
+        );
+
+        final retId = await adjDao.createPurchaseAdjReturn(
+          PurchaseReturnAdjustmentsCompanion.insert(
+            returnNumber: 'PAR-C3',
+            supplierId: supplierId,
+            currencyId: currencyId,
             totalCents: Decimal.fromInt(3000),
           ),
-        ],
-      );
-      await adjDao.postPurchaseAdjReturn(retId, journalEntryService: journal);
+          [
+            PurchaseReturnAdjustmentItemsCompanion.insert(
+              returnId: 0,
+              productId: pid,
+              variantId: Value(vid),
+              quantity: 3,
+              unitPriceCents: Decimal.fromInt(1000),
+              totalCents: Decimal.fromInt(3000),
+            ),
+          ],
+        );
+        await adjDao.postPurchaseAdjReturn(retId, journalEntryService: journal);
 
-      final report = await voidImpactAnalyzer.analyzePurchaseVoid(purchaseId);
-      expect(report.adjustmentAllocatedQty, equals(3));
-      expect(report.hasBlockers, isTrue);
-      expect(report.entangledAdjustmentReturns.first.returnId, equals(retId));
-    });
+        final report = await voidImpactAnalyzer.analyzePurchaseVoid(purchaseId);
+        expect(report.adjustmentAllocatedQty, equals(3));
+        expect(report.hasBlockers, isTrue);
+        expect(report.entangledAdjustmentReturns.first.returnId, equals(retId));
+      },
+    );
   });
 }

@@ -28,8 +28,9 @@ class BarcodeTemplateDao extends DatabaseAccessor<AppDatabase>
 
   /// Get template by ID
   Future<BarcodeTemplate?> getTemplateById(int id) {
-    return (select(barcodeTemplates)..where((t) => t.id.equals(id)))
-        .getSingleOrNull();
+    return (select(
+      barcodeTemplates,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
   }
 
   /// Get default template
@@ -60,8 +61,7 @@ class BarcodeTemplateDao extends DatabaseAccessor<AppDatabase>
   Future<void> setDefaultTemplate(int templateId) async {
     await transaction(() async {
       // Unset all defaults
-      await (update(barcodeTemplates)
-            ..where((t) => t.isDefault.equals(true)))
+      await (update(barcodeTemplates)..where((t) => t.isDefault.equals(true)))
           .write(const BarcodeTemplatesCompanion(isDefault: Value(false)));
       // Set new default
       await (update(barcodeTemplates)..where((t) => t.id.equals(templateId)))
@@ -71,8 +71,9 @@ class BarcodeTemplateDao extends DatabaseAccessor<AppDatabase>
 
   /// Soft delete a template
   Future<int> deleteTemplate(int id) {
-    return (update(barcodeTemplates)..where((t) => t.id.equals(id)))
-        .write(const BarcodeTemplatesCompanion(isActive: Value(false)));
+    return (update(barcodeTemplates)..where((t) => t.id.equals(id))).write(
+      const BarcodeTemplatesCompanion(isActive: Value(false)),
+    );
   }
 
   /// Log a print operation

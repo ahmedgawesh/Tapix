@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import '../converters/money_converter.dart';
 import 'settings.dart';
 import 'products.dart';
+import 'supplier_product_identities.dart';
 import 'parties.dart';
 import 'people.dart';
 import 'users.dart';
@@ -105,6 +106,19 @@ class SaleItems extends Table {
     #id,
     onDelete: KeyAction.restrict,
   )();
+
+  /// Exact supplier/product identity selected by scanning or explicit source
+  /// selection. Null keeps the normal allocation policy and never implies the
+  /// product card's preferred supplier.
+  IntColumn get supplierIdentityId => integer().nullable().references(
+    SupplierProductIdentities,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
+
+  /// Exact supplier-owned custody layer chosen by the operator. Null keeps the
+  /// normal issue policy. It is mutually exclusive with [supplierIdentityId].
+  TextColumn get consignmentLayerId => text().nullable()();
   @ReferenceName('saleItemsAsEmployee')
   IntColumn get employeeId => integer().nullable().references(
     Employees,
@@ -119,6 +133,14 @@ class SaleItems extends Table {
   IntColumn get subtotalCents => integer().map(const MoneyConverter())();
   IntColumn get discountCents =>
       integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+
+  /// Immutable split of the displayed line discount for new postings.
+  /// Legacy rows stay NULL because their two components cannot be proven.
+  IntColumn get itemDiscountAtPostCents =>
+      integer().nullable().map(const MoneyConverter())();
+  IntColumn get invoiceDiscountAtPostCents =>
+      integer().nullable().map(const MoneyConverter())();
+
   IntColumn get taxCents =>
       integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get totalCents => integer().map(const MoneyConverter())();
@@ -438,6 +460,16 @@ class PurchaseItems extends Table {
   IntColumn get qtyReturnedAdjustment =>
       integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+
+  /// Opt-in captured when this purchase line is saved. Not inferred later
+  /// from a supplier's current prefix or from a global settings change.
+  BoolColumn get supplierIdentityRequested =>
+      boolean().withDefault(const Constant(false))();
+  IntColumn get supplierIdentityId => integer().nullable().references(
+    SupplierProductIdentities,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
 }
 
 @DataClassName('PurchaseReturn')
@@ -872,6 +904,8 @@ class SaleReturnAdjustments extends Table {
 
 @DataClassName('SaleReturnAdjustmentItem')
 class SaleReturnAdjustmentItems extends Table {
+  /// Receipt code read from the returned goods; not an invoice-sale link.
+
   /// Exact FIFO layer created by this inbound adjustment. Legacy rows are null.
   IntColumn get returnBatchId => integer().nullable().references(
     ProductBatches,
@@ -903,6 +937,36 @@ class SaleReturnAdjustmentItems extends Table {
       integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get discountCents =>
       integer().map(const MoneyConverter()).withDefault(const Constant(0))();
+
+  /// Frozen split used by consignment percentage settlements. Legacy rows
+  /// remain null and cannot be attributed to consignment without review.
+  IntColumn get itemDiscountAtPostCents =>
+      integer().nullable().map(const MoneyConverter())();
+  IntColumn get invoiceDiscountAtPostCents =>
+      integer().nullable().map(const MoneyConverter())();
+
+  /// Explicit supplier-owned source selected by the operator for a standalone
+  /// return. Null means enterprise-owned or unresolved; it is never inferred.
+  TextColumn get consignmentLayerId => text().nullable()();
+
+  /// Verified ordinary-purchase supplier identity for a standalone customer
+  /// return. It is mutually exclusive with [consignmentLayerId]. Null means
+  /// the source remains unverified and must not be guessed from the customer
+  /// or the product's preferred supplier.
+  IntColumn get supplierIdentityId => integer().nullable().references(
+    SupplierProductIdentities,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
+
+  /// Explicit operator decision for source attribution. Legacy rows remain
+  /// NULL; new settlement returns persist one of supplier_identity,
+  /// consignment, unverified, or not_applicable.
+  TextColumn get sourceResolution => text().nullable()();
+  TextColumn get sourceResolutionReason => text().nullable()();
+  IntColumn get sourceResolvedBy => integer().nullable()();
+  DateTimeColumn get sourceResolvedAt => dateTime().nullable()();
+
   IntColumn get taxCents =>
       integer().map(const MoneyConverter()).withDefault(const Constant(0))();
   IntColumn get totalCents => integer().map(const MoneyConverter())();

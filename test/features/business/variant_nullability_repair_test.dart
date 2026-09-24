@@ -268,7 +268,7 @@ void main() {
         final raw = sqlite.sqlite3.open(file.path);
         try {
           for (final trigger in raw.select(
-            "SELECT name FROM sqlite_master WHERE type = 'trigger' AND (name GLOB 'business_stock_*' OR name GLOB 'commission_return_source_*' OR name GLOB 'business_location_*')",
+            "SELECT name FROM sqlite_master WHERE type = 'trigger' AND (name GLOB 'business_stock_*' OR name GLOB 'commission_return_source_*' OR name GLOB 'business_location_*' OR name GLOB 'consignment_*')",
           )) {
             raw.execute('DROP TRIGGER "${trigger['name']}"');
           }
@@ -354,7 +354,7 @@ void main() {
           expect(
             (await upgraded.customSelect('PRAGMA user_version').getSingle())
                 .read<int>('user_version'),
-            10091,
+            10115,
           );
         } finally {
           await upgraded.close();

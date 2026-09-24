@@ -20,12 +20,14 @@ class LeaveRequestsScreen extends StatelessWidget {
     return MultiBlocProvider(
       providers: [
         BlocProvider(
-          create: (context) => LeaveRequestsBloc(sl<EmployeeRepository>())
-            ..add(const LeaveRequestsInitialized()),
+          create: (context) =>
+              LeaveRequestsBloc(sl<EmployeeRepository>())
+                ..add(const LeaveRequestsInitialized()),
         ),
         BlocProvider(
-          create: (context) => EmployeesBloc(sl<EmployeeRepository>())
-            ..add(const EmployeesInitialized()),
+          create: (context) =>
+              EmployeesBloc(sl<EmployeeRepository>())
+                ..add(const EmployeesInitialized()),
         ),
       ],
       child: const _LeaveRequestsScreenContent(),
@@ -93,67 +95,67 @@ class _LeaveRequestsScreenContentState
         ),
       ),
       body: SafeArea(
-        child: BlocBuilder<LeaveRequestsBloc,
-            RealtimeState<List<LeaveRequest>>>(
-          builder: (context, state) {
-            if (state is RealtimeLoading) {
-              return const Center(child: CircularProgressIndicator());
-            }
+        child:
+            BlocBuilder<LeaveRequestsBloc, RealtimeState<List<LeaveRequest>>>(
+              builder: (context, state) {
+                if (state is RealtimeLoading) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-            if (state is RealtimeError) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.error_outline,
-                      size: 48,
-                      color: colorScheme.error,
+                if (state is RealtimeError) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          size: 48,
+                          color: colorScheme.error,
+                        ),
+                        const SizedBox(height: 16),
+                        Text('common.error'.tr()),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: () =>
+                              context.read<LeaveRequestsBloc>().refresh(),
+                          child: Text('common.retry'.tr()),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 16),
-                    Text('common.error'.tr()),
-                    const SizedBox(height: 8),
-                    TextButton(
-                      onPressed: () =>
-                          context.read<LeaveRequestsBloc>().refresh(),
-                      child: Text('common.retry'.tr()),
-                    ),
-                  ],
-                ),
-              );
-            }
-
-            if (state is RealtimeSuccess<List<LeaveRequest>>) {
-              final requests = state.data;
-
-              if (requests.isEmpty) {
-                return _EmptyState();
-              }
-
-              return ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: requests.length,
-                itemBuilder: (context, index) {
-                  final request = requests[index];
-                  return LeaveRequestCard(
-                    request: request,
-                    onApprove: request.status == 'pending'
-                        ? () => _approveRequest(request)
-                        : null,
-                    onReject: request.status == 'pending'
-                        ? () => _rejectRequest(request)
-                        : null,
-                    onCancel: request.status == 'pending'
-                        ? () => _cancelRequest(request)
-                        : null,
                   );
-                },
-              );
-            }
+                }
 
-            return const SizedBox.shrink();
-          },
-        ),
+                if (state is RealtimeSuccess<List<LeaveRequest>>) {
+                  final requests = state.data;
+
+                  if (requests.isEmpty) {
+                    return _EmptyState();
+                  }
+
+                  return ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: requests.length,
+                    itemBuilder: (context, index) {
+                      final request = requests[index];
+                      return LeaveRequestCard(
+                        request: request,
+                        onApprove: request.status == 'pending'
+                            ? () => _approveRequest(request)
+                            : null,
+                        onReject: request.status == 'pending'
+                            ? () => _rejectRequest(request)
+                            : null,
+                        onCancel: request.status == 'pending'
+                            ? () => _cancelRequest(request)
+                            : null,
+                      );
+                    },
+                  );
+                }
+
+                return const SizedBox.shrink();
+              },
+            ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showCreateDialog,
@@ -171,15 +173,15 @@ class _LeaveRequestsScreenContentState
 
     if (result != null && mounted) {
       context.read<LeaveRequestsBloc>().add(
-            LeaveRequestCreateRequested(
-              employeeId: result['employeeId'] as int,
-              leaveType: result['leaveType'] as LeaveType,
-              startDate: result['startDate'] as DateTime,
-              endDate: result['endDate'] as DateTime,
-              daysCount: result['daysCount'] as int,
-              reason: result['reason'] as String?,
-            ),
-          );
+        LeaveRequestCreateRequested(
+          employeeId: result['employeeId'] as int,
+          leaveType: result['leaveType'] as LeaveType,
+          startDate: result['startDate'] as DateTime,
+          endDate: result['endDate'] as DateTime,
+          daysCount: result['daysCount'] as int,
+          reason: result['reason'] as String?,
+        ),
+      );
     }
   }
 
@@ -188,18 +190,15 @@ class _LeaveRequestsScreenContentState
     if (!mounted) return;
 
     if (currentUser == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('common.error'.tr())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('common.error'.tr())));
       return;
     }
 
     context.read<LeaveRequestsBloc>().add(
-          LeaveRequestApproveRequested(
-            id: request.id,
-            approvedBy: currentUser.id,
-          ),
-        );
+      LeaveRequestApproveRequested(id: request.id, approvedBy: currentUser.id),
+    );
   }
 
   Future<void> _rejectRequest(LeaveRequest request) async {
@@ -207,9 +206,9 @@ class _LeaveRequestsScreenContentState
     if (!mounted) return;
 
     if (currentUser == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('common.error'.tr())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('common.error'.tr())));
       return;
     }
 
@@ -221,9 +220,7 @@ class _LeaveRequestsScreenContentState
           title: Text('employees.reject'.tr()),
           content: TextField(
             controller: reasonController,
-            decoration: InputDecoration(
-              labelText: 'employees.reason'.tr(),
-            ),
+            decoration: InputDecoration(labelText: 'employees.reason'.tr()),
             autofocus: true,
             maxLines: 3,
           ),
@@ -249,18 +246,18 @@ class _LeaveRequestsScreenContentState
     if (rejectionReason == null) return;
 
     context.read<LeaveRequestsBloc>().add(
-          LeaveRequestRejectRequested(
-            id: request.id,
-            rejectedBy: currentUser.id,
-            rejectionReason: rejectionReason,
-          ),
-        );
+      LeaveRequestRejectRequested(
+        id: request.id,
+        rejectedBy: currentUser.id,
+        rejectionReason: rejectionReason,
+      ),
+    );
   }
 
   void _cancelRequest(LeaveRequest request) {
     context.read<LeaveRequestsBloc>().add(
-          LeaveRequestCancelRequested(request.id),
-        );
+      LeaveRequestCancelRequested(request.id),
+    );
   }
 }
 

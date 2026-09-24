@@ -56,9 +56,15 @@ class _EmployeeSalesDetailScreenState extends State<EmployeeSalesDetailScreen> {
     final dao = sl<EmployeeDao>();
     return _isReturns
         ? dao.getEmployeeReturnsLineDetails(
-            widget.employeeId, periodStart, periodEnd)
+            widget.employeeId,
+            periodStart,
+            periodEnd,
+          )
         : dao.getEmployeeSalesLineDetails(
-            widget.employeeId, periodStart, periodEnd);
+            widget.employeeId,
+            periodStart,
+            periodEnd,
+          );
   }
 
   @override
@@ -66,8 +72,10 @@ class _EmployeeSalesDetailScreenState extends State<EmployeeSalesDetailScreen> {
     final theme = Theme.of(context);
     final accent = _isReturns ? Colors.red : Colors.green;
     final parts = widget.period.split('-');
-    final periodLabel = DateFormat('MMMM yyyy', context.locale.toString())
-        .format(DateTime(int.parse(parts[0]), int.parse(parts[1])));
+    final periodLabel = DateFormat(
+      'MMMM yyyy',
+      context.locale.toString(),
+    ).format(DateTime(int.parse(parts[0]), int.parse(parts[1])));
 
     return Scaffold(
       appBar: AppBar(
@@ -103,8 +111,10 @@ class _EmployeeSalesDetailScreenState extends State<EmployeeSalesDetailScreen> {
           }
 
           final cs = sl<CurrencyService>();
-          final totalCents =
-              items.fold<int>(0, (sum, e) => sum + e.lineTotalCents);
+          final totalCents = items.fold<int>(
+            0,
+            (sum, e) => sum + e.lineTotalCents,
+          );
           final totalQty = items.fold<int>(0, (sum, e) => sum + e.quantity);
 
           return Column(
@@ -167,9 +177,7 @@ class _SummaryBar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${'employees.detail_items_count'.tr(args: [
-                        lineCount.toString()
-                      ])} · ${'employees.detail_qty'.tr()}: $totalQty',
+                  '${'employees.detail_items_count'.tr(args: [lineCount.toString()])} · ${'employees.detail_qty'.tr()}: $totalQty',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -211,15 +219,19 @@ class _LineCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final cs = sl<CurrencyService>();
-    final dateLabel = DateFormat('yMMMd', context.locale.toString())
-        .format(detail.documentDate);
+    final dateLabel = DateFormat(
+      'yMMMd',
+      context.locale.toString(),
+    ).format(detail.documentDate);
     final variant = detail.variantLabel;
 
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: colorScheme.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -243,7 +255,9 @@ class _LineCard extends StatelessWidget {
                         const SizedBox(height: 4),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: colorScheme.surfaceContainerHighest
                                 .withValues(alpha: 0.5),
@@ -288,7 +302,9 @@ class _LineCard extends StatelessWidget {
               label: isReturns
                   ? 'employees.detail_return_no'.tr()
                   : 'employees.detail_invoice'.tr(),
-              value: detail.documentNumber.isEmpty ? '—' : detail.documentNumber,
+              value: detail.documentNumber.isEmpty
+                  ? '—'
+                  : detail.documentNumber,
             ),
             const SizedBox(height: 6),
             _MetaRow(
@@ -300,8 +316,8 @@ class _LineCard extends StatelessWidget {
             _MetaRow(
               icon: Icons.person_outline,
               label: 'employees.detail_customer'.tr(),
-              value: (detail.customerName == null ||
-                      detail.customerName!.isEmpty)
+              value:
+                  (detail.customerName == null || detail.customerName!.isEmpty)
                   ? 'employees.detail_no_customer'.tr()
                   : detail.customerName!,
             ),

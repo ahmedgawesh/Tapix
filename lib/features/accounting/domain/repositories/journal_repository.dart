@@ -52,7 +52,10 @@ abstract class JournalRepository {
   Stream<List<JournalEntry>> watchAllJournalEntries();
 
   /// Watch journal entries filtered by date range
-  Stream<List<JournalEntry>> watchJournalEntriesByDateRange(DateTime start, DateTime end);
+  Stream<List<JournalEntry>> watchJournalEntriesByDateRange(
+    DateTime start,
+    DateTime end,
+  );
 
   /// Watch journal entries filtered by type
   Stream<List<JournalEntry>> watchJournalEntriesByType(String entryType);
@@ -67,7 +70,10 @@ abstract class JournalRepository {
   Future<JournalEntry?> findJournalEntryByNumber(String entryNumber);
 
   /// Find journal entry by source document
-  Future<JournalEntry?> findJournalEntryBySource(String sourceTable, int sourceId);
+  Future<JournalEntry?> findJournalEntryBySource(
+    String sourceTable,
+    int sourceId,
+  );
 
   /// Search journal entries by description or entry number
   Future<List<JournalEntry>> searchJournalEntries(String query);
@@ -87,7 +93,11 @@ abstract class JournalRepository {
   Future<void> postJournalEntry(int entryId, {int? postedBy});
 
   /// Void a posted journal entry (creates reversal)
-  Future<int> voidJournalEntry(int entryId, {required String reason, int? createdBy});
+  Future<int> voidJournalEntry(
+    int entryId, {
+    required String reason,
+    int? createdBy,
+  });
 
   /// Watch journal entry count
   Stream<int> watchJournalEntryCount({String? status});
@@ -126,11 +136,16 @@ abstract class JournalRepository {
 
   /// Watch posted journal entry lines within a date range
   Stream<List<JournalEntryLine>> watchPostedLinesByDateRange(
-    DateTime startDate, DateTime endDate);
+    DateTime startDate,
+    DateTime endDate,
+  );
 
   /// Watch posted journal entry lines for a specific account within a date range
   Stream<List<JournalEntryLine>> watchPostedLinesByAccountAndDateRange(
-    int accountId, DateTime startDate, DateTime endDate);
+    int accountId,
+    DateTime startDate,
+    DateTime endDate,
+  );
 }
 
 /// Input model for creating journal entry lines

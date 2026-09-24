@@ -5,7 +5,8 @@ import '../tables/products.dart';
 part 'category_dao.g.dart';
 
 @DriftAccessor(tables: [ProductCategories])
-class CategoryDao extends DatabaseAccessor<AppDatabase> with _$CategoryDaoMixin {
+class CategoryDao extends DatabaseAccessor<AppDatabase>
+    with _$CategoryDaoMixin {
   CategoryDao(super.db);
 
   Stream<List<ProductCategory>> watchAllCategories() {
@@ -30,7 +31,9 @@ class CategoryDao extends DatabaseAccessor<AppDatabase> with _$CategoryDaoMixin 
   }
 
   Future<ProductCategory?> getCategoryById(int id) {
-    return (select(productCategories)..where((c) => c.id.equals(id))).getSingleOrNull();
+    return (select(
+      productCategories,
+    )..where((c) => c.id.equals(id))).getSingleOrNull();
   }
 
   Future<List<ProductCategory>> getSubcategories(int parentId) {
@@ -56,16 +59,19 @@ class CategoryDao extends DatabaseAccessor<AppDatabase> with _$CategoryDaoMixin 
   }
 
   Future<int> deleteCategory(int id) {
-    return (update(productCategories)
-          ..where((c) => c.id.equals(id)))
-        .write(const ProductCategoriesCompanion(isActive: Value(false)));
+    return (update(productCategories)..where((c) => c.id.equals(id))).write(
+      const ProductCategoriesCompanion(isActive: Value(false)),
+    );
   }
 
   Future<int> getProductCountByCategory(int categoryId) async {
     final query = selectOnly(db.products)
       ..addColumns([db.products.id.count()])
-      ..where(db.products.categoryId.equals(categoryId) & db.products.isActive.equals(true));
-    
+      ..where(
+        db.products.categoryId.equals(categoryId) &
+            db.products.isActive.equals(true),
+      );
+
     final result = await query.getSingleOrNull();
     return result?.read(db.products.id.count()) ?? 0;
   }

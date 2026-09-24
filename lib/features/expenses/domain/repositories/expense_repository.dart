@@ -15,10 +15,7 @@ abstract class ExpenseRepository {
   Future<ExpenseCategory?> findCategoryByName(String name);
 
   /// Create a new expense category
-  Future<int> createCategory({
-    required String name,
-    String? description,
-  });
+  Future<int> createCategory({required String name, String? description});
 
   /// Update an existing expense category
   Future<bool> updateCategory(ExpenseCategory category);

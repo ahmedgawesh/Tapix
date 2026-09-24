@@ -1,4 +1,5 @@
 import '../app_database.dart';
+import 'business_foundation.dart';
 
 /// Closed list, also constrained in the table schema. Never interpolate input
 /// supplied by a client into trigger SQL or table names.
@@ -39,6 +40,24 @@ String _journalOrigin(String alias) =>
           WHEN event.sale_return_adjustment_id IS NOT NULL THEN 'sale_return_adjustments'
           ELSE 'sales' END
         AND l.source_id = COALESCE(event.sale_return_id, event.sale_return_adjustment_id, event.sale_id)))
+  UNION ALL
+  SELECT t.organization_id, t.branch_id, t.source_warehouse_id
+  FROM warehouse_transfer_dispatches d
+  JOIN warehouse_transfers t ON t.id=d.transfer_id
+  WHERE $alias.source_table='warehouse_transfer_dispatches'
+    AND d.id=$alias.source_id
+  UNION ALL
+  SELECT t.organization_id, t.branch_id, t.destination_warehouse_id
+  FROM warehouse_transfer_receipts r
+  JOIN warehouse_transfers t ON t.id=r.transfer_id
+  WHERE $alias.source_table='warehouse_transfer_receipts'
+    AND r.id=$alias.source_id
+  UNION ALL
+  SELECT t.organization_id, t.branch_id, t.source_warehouse_id
+  FROM warehouse_transfer_recalls recall
+  JOIN warehouse_transfers t ON t.id=recall.transfer_id
+  WHERE $alias.source_table='warehouse_transfer_recalls'
+    AND recall.id=$alias.source_id
 )""";
 
 // SQLite built-ins work on native and Web without registering a connection-
@@ -70,7 +89,15 @@ Future<void> removeBusinessDocumentLocationTriggers(AppDatabase db) async {
 /// are connected; internal scoped documents retain their accounting location.
 Future<void> installBusinessDocumentLocations(AppDatabase db) async {
   await db.transaction(() async {
-    final context = await db.select(db.businessContexts).get();
+    var context = await db.select(db.businessContexts).get();
+    if (context.isEmpty) {
+      // A legacy snapshot or interrupted pre-10084 upgrade can legitimately
+      // contain no business identity. Bootstrap the one default scope only in
+      // that exact case. The initializer still refuses partial or ambiguous
+      // ownership, so existing documents are never assigned by guessing.
+      await initializeBusinessFoundation(db);
+      context = await db.select(db.businessContexts).get();
+    }
     if (context.length != 1 || context.single.id != 1) {
       throw StateError('Cannot assign documents without one business context.');
     }
@@ -137,6 +164,20 @@ Future<void> installBusinessDocumentLocations(AppDatabase db) async {
                 AND (pi.variant_id IS NULL OR pi.variant_id = NEW.variant_id)
                 AND l.organization_id = c.organization_id AND l.branch_id = c.branch_id
                 AND l.warehouse_id = NEW.warehouse_id)
+            AND NOT (
+              NEW.source = 'warehouse_transfer'
+              AND NEW.origin_batch_id IS NOT NULL
+              AND NEW.transfer_allocation_id IS NOT NULL
+              AND EXISTS (
+                SELECT 1 FROM warehouse_transfer_allocations a
+                JOIN warehouse_transfer_dispatches d ON d.id=a.dispatch_id AND d.sealed=1
+                JOIN warehouse_transfer_lines tl ON tl.id=a.line_id
+                JOIN warehouse_transfers t ON t.id=tl.transfer_id
+                JOIN product_batches source ON source.id=a.source_batch_id
+                WHERE a.id=NEW.transfer_allocation_id
+                  AND a.source_batch_id=NEW.origin_batch_id
+                  AND t.destination_warehouse_id=NEW.warehouse_id
+                  AND source.purchase_item_id=NEW.purchase_item_id))
             THEN RAISE(ABORT, 'Purchase source and batch warehouse differ') END;
 
       """

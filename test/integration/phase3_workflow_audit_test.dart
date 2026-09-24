@@ -92,12 +92,14 @@ void main() {
       "VALUES (7, 'manager', 'no-pin', 'owner', 1, $now, $now)",
     );
 
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     currencyId = usd.id;
 
-    productId = await db.into(db.products).insert(
+    productId = await db
+        .into(db.products)
+        .insert(
           ProductsCompanion.insert(
             sku: const Value<String?>('P3-TEST-001'),
             name: 'Phase 3 Product',
@@ -107,7 +109,9 @@ void main() {
             stockQuantity: const Value(100),
           ),
         );
-    variantId = await db.into(db.productVariants).insert(
+    variantId = await db
+        .into(db.productVariants)
+        .insert(
           ProductVariantsCompanion.insert(
             productId: productId,
             stockQuantity: const Value(100),
@@ -115,14 +119,18 @@ void main() {
             priceCents: Decimal.fromInt(5000),
           ),
         );
-    customerId = await db.into(db.customers).insert(
+    customerId = await db
+        .into(db.customers)
+        .insert(
           CustomersCompanion.insert(
             name: 'P3 Customer',
             currencyId: currencyId,
             balanceCents: Value(Decimal.fromInt(100000)),
           ),
         );
-    supplierId = await db.into(db.suppliers).insert(
+    supplierId = await db
+        .into(db.suppliers)
+        .insert(
           SuppliersCompanion.insert(
             name: 'P3 Supplier',
             currencyId: currencyId,
@@ -144,12 +152,14 @@ void main() {
       await approvalService.setRequireWhenNoInvoice(false);
       await approvalService.setRequireOnOverride(false);
 
-      final d = await approvalService.evaluate(const ReturnApprovalContext(
-        totalCents: 999999,
-        linked: false,
-        overHistoryOverride: true,
-        side: 'sale',
-      ));
+      final d = await approvalService.evaluate(
+        const ReturnApprovalContext(
+          totalCents: 999999,
+          linked: false,
+          overHistoryOverride: true,
+          side: 'sale',
+        ),
+      );
       expect(d.outcome, ReturnApprovalOutcome.autoApproved);
       expect(d.reasonCodes, isEmpty);
       expect(d.persistedStatus, ApprovalStatus.autoApproved);
@@ -160,23 +170,27 @@ void main() {
       await approvalService.setRequireWhenNoInvoice(false);
       await approvalService.setRequireOnOverride(false);
 
-      final hit = await approvalService.evaluate(const ReturnApprovalContext(
-        totalCents: 10000,
-        linked: true,
-        overHistoryOverride: false,
-        side: 'sale',
-      ));
+      final hit = await approvalService.evaluate(
+        const ReturnApprovalContext(
+          totalCents: 10000,
+          linked: true,
+          overHistoryOverride: false,
+          side: 'sale',
+        ),
+      );
       expect(hit.outcome, ReturnApprovalOutcome.requiresApproval);
       expect(hit.reasonCodes, contains(ApprovalReasonCode.thresholdExceeded));
       expect(hit.thresholdCents, 10000);
       expect(hit.persistedStatus, ApprovalStatus.pending);
 
-      final miss = await approvalService.evaluate(const ReturnApprovalContext(
-        totalCents: 9999,
-        linked: true,
-        overHistoryOverride: false,
-        side: 'sale',
-      ));
+      final miss = await approvalService.evaluate(
+        const ReturnApprovalContext(
+          totalCents: 9999,
+          linked: true,
+          overHistoryOverride: false,
+          side: 'sale',
+        ),
+      );
       expect(miss.outcome, ReturnApprovalOutcome.autoApproved);
     });
 
@@ -185,20 +199,24 @@ void main() {
       await approvalService.setRequireWhenNoInvoice(true);
       await approvalService.setRequireOnOverride(false);
 
-      final adj = await approvalService.evaluate(const ReturnApprovalContext(
-        totalCents: 100,
-        linked: false,
-        overHistoryOverride: false,
-        side: 'sale',
-      ));
+      final adj = await approvalService.evaluate(
+        const ReturnApprovalContext(
+          totalCents: 100,
+          linked: false,
+          overHistoryOverride: false,
+          side: 'sale',
+        ),
+      );
       expect(adj.reasonCodes, contains(ApprovalReasonCode.noInvoice));
 
-      final linked = await approvalService.evaluate(const ReturnApprovalContext(
-        totalCents: 100,
-        linked: true,
-        overHistoryOverride: false,
-        side: 'sale',
-      ));
+      final linked = await approvalService.evaluate(
+        const ReturnApprovalContext(
+          totalCents: 100,
+          linked: true,
+          overHistoryOverride: false,
+          side: 'sale',
+        ),
+      );
       expect(linked.outcome, ReturnApprovalOutcome.autoApproved);
     });
 
@@ -207,74 +225,89 @@ void main() {
       await approvalService.setRequireWhenNoInvoice(false);
       await approvalService.setRequireOnOverride(true);
 
-      final fired = await approvalService.evaluate(const ReturnApprovalContext(
-        totalCents: 100,
-        linked: true,
-        overHistoryOverride: true,
-        side: 'purchase',
-      ));
+      final fired = await approvalService.evaluate(
+        const ReturnApprovalContext(
+          totalCents: 100,
+          linked: true,
+          overHistoryOverride: true,
+          side: 'purchase',
+        ),
+      );
       expect(fired.reasonCodes, contains(ApprovalReasonCode.overrideUsed));
     });
 
-    test('multiple rules accumulate reason codes (additive precedence)',
-        () async {
-      await approvalService.setThresholdCents(5000);
-      await approvalService.setRequireWhenNoInvoice(true);
-      await approvalService.setRequireOnOverride(true);
+    test(
+      'multiple rules accumulate reason codes (additive precedence)',
+      () async {
+        await approvalService.setThresholdCents(5000);
+        await approvalService.setRequireWhenNoInvoice(true);
+        await approvalService.setRequireOnOverride(true);
 
-      final d = await approvalService.evaluate(const ReturnApprovalContext(
-        totalCents: 10000,
-        linked: false,
-        overHistoryOverride: true,
-        side: 'sale',
-      ));
-      expect(d.outcome, ReturnApprovalOutcome.requiresApproval);
-      expect(d.reasonCodes, containsAll(<String>[
-        ApprovalReasonCode.thresholdExceeded,
-        ApprovalReasonCode.noInvoice,
-        ApprovalReasonCode.overrideUsed,
-      ]));
-    });
+        final d = await approvalService.evaluate(
+          const ReturnApprovalContext(
+            totalCents: 10000,
+            linked: false,
+            overHistoryOverride: true,
+            side: 'sale',
+          ),
+        );
+        expect(d.outcome, ReturnApprovalOutcome.requiresApproval);
+        expect(
+          d.reasonCodes,
+          containsAll(<String>[
+            ApprovalReasonCode.thresholdExceeded,
+            ApprovalReasonCode.noInvoice,
+            ApprovalReasonCode.overrideUsed,
+          ]),
+        );
+      },
+    );
   });
 
   // ──────────────────────────────────────────────────────────────────────
   // 2. DAO persists policy decision atomically with draft creation
   // ──────────────────────────────────────────────────────────────────────
   group('Phase 3.5 — DAO persists approval decision on draft creation', () {
-    test('draft above threshold lands as pending with persisted reason',
-        () async {
-      await approvalService.setThresholdCents(4000);
-      await approvalService.setRequireWhenNoInvoice(false);
-      await approvalService.setRequireOnOverride(false);
+    test(
+      'draft above threshold lands as pending with persisted reason',
+      () async {
+        await approvalService.setThresholdCents(4000);
+        await approvalService.setRequireWhenNoInvoice(false);
+        await approvalService.setRequireOnOverride(false);
 
-      final returnId = await adjDao.createSaleAdjReturn(
-        SaleReturnAdjustmentsCompanion.insert(
-          returnNumber: 'SAR-P3-001',
-          customerId: Value(customerId),
-          currencyId: currencyId,
-          totalCents: Decimal.fromInt(5000),
-          refundMethod: const Value('cash'),
-        ),
-        [
-          SaleReturnAdjustmentItemsCompanion.insert(
-            returnId: 0,
-            productId: productId,
-            variantId: Value(variantId),
-            quantity: 1,
-            unitPriceCents: Decimal.fromInt(5000),
+        final returnId = await adjDao.createSaleAdjReturn(
+          SaleReturnAdjustmentsCompanion.insert(
+            returnNumber: 'SAR-P3-001',
+            customerId: Value(customerId),
+            currencyId: currencyId,
             totalCents: Decimal.fromInt(5000),
+            refundMethod: const Value('cash'),
           ),
-        ],
-        approvalService: approvalService,
-      );
+          [
+            SaleReturnAdjustmentItemsCompanion.insert(
+              sourceResolution: const Value('unverified'),
+              sourceResolutionReason: const Value('test fixture'),
+              returnId: 0,
+              productId: productId,
+              variantId: Value(variantId),
+              quantity: 1,
+              unitPriceCents: Decimal.fromInt(5000),
+              totalCents: Decimal.fromInt(5000),
+            ),
+          ],
+          approvalService: approvalService,
+        );
 
-      final row = await adjDao.getSaleAdjReturnById(returnId);
-      expect(row, isNotNull);
-      expect(row!.approvalStatus, ApprovalStatus.pending);
-      expect(row.approvalRequired, isTrue);
-      expect(row.approvalReason,
-          contains(ApprovalReasonCode.thresholdExceeded));
-    });
+        final row = await adjDao.getSaleAdjReturnById(returnId);
+        expect(row, isNotNull);
+        expect(row!.approvalStatus, ApprovalStatus.pending);
+        expect(row.approvalRequired, isTrue);
+        expect(
+          row.approvalReason,
+          contains(ApprovalReasonCode.thresholdExceeded),
+        );
+      },
+    );
 
     test('draft below all rules lands as auto_approved', () async {
       await approvalService.setThresholdCents(100000);
@@ -311,8 +344,7 @@ void main() {
   // 3. Single chokepoint enforcement — pending must not post
   // ──────────────────────────────────────────────────────────────────────
   group('Phase 3.5 — ReturnPostingService rejects pending', () {
-    test('postSaleAdjReturn while pending throws ApprovalRequired',
-        () async {
+    test('postSaleAdjReturn while pending throws ApprovalRequired', () async {
       await approvalService.setThresholdCents(1);
       await approvalService.setRequireWhenNoInvoice(false);
       await approvalService.setRequireOnOverride(false);
@@ -327,6 +359,8 @@ void main() {
         ),
         [
           SaleReturnAdjustmentItemsCompanion.insert(
+            sourceResolution: const Value('unverified'),
+            sourceResolutionReason: const Value('test fixture'),
             returnId: 0,
             productId: productId,
             variantId: Value(variantId),
@@ -453,6 +487,8 @@ void main() {
         ),
         [
           SaleReturnAdjustmentItemsCompanion.insert(
+            sourceResolution: const Value('unverified'),
+            sourceResolutionReason: const Value('test fixture'),
             returnId: 0,
             productId: productId,
             variantId: Value(variantId),
@@ -493,16 +529,15 @@ void main() {
       expect(all.where((r) => r.isSystem).length, greaterThan(0));
     });
 
-    test('side filter returns sale + both, excludes purchase-only',
-        () async {
+    test('side filter returns sale + both, excludes purchase-only', () async {
       final sale = await reasonCodeService.listActive(side: 'sale');
       expect(sale.every((r) => r.side == 'sale' || r.side == 'both'), isTrue);
     });
 
-    test('delete on a system row throws SystemReasonCodeProtected',
-        () async {
-      final sys = (await reasonCodeService.listAll())
-          .firstWhere((r) => r.isSystem);
+    test('delete on a system row throws SystemReasonCodeProtected', () async {
+      final sys = (await reasonCodeService.listAll()).firstWhere(
+        (r) => r.isSystem,
+      );
       await expectLater(
         () => reasonCodeService.delete(sys.id),
         throwsA(isA<SystemReasonCodeProtectedException>()),

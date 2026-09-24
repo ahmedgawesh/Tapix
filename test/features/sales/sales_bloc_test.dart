@@ -86,14 +86,18 @@ void main() {
     statsStreamController = StreamController<SaleDashboardStats>.broadcast();
     returnIdsStreamController = StreamController<Set<int>>.broadcast();
 
-    when(() => mockRepository.watchAllSales())
-        .thenAnswer((_) => salesStreamController.stream);
-    when(() => mockRepository.watchDashboardStats())
-        .thenAnswer((_) => statsStreamController.stream);
-    when(() => mockRepository.watchSaleIdsWithReturns())
-        .thenAnswer((_) => returnIdsStreamController.stream);
-    when(() => mockRepository.watchSaleProductSearchTerms())
-        .thenAnswer((_) => Stream<Map<int, List<String>>>.value(const {}));
+    when(
+      () => mockRepository.watchAllSales(),
+    ).thenAnswer((_) => salesStreamController.stream);
+    when(
+      () => mockRepository.watchDashboardStats(),
+    ).thenAnswer((_) => statsStreamController.stream);
+    when(
+      () => mockRepository.watchSaleIdsWithReturns(),
+    ).thenAnswer((_) => returnIdsStreamController.stream);
+    when(
+      () => mockRepository.watchSaleProductSearchTerms(),
+    ).thenAnswer((_) => Stream<Map<int, List<String>>>.value(const {}));
   });
 
   tearDown(() {
@@ -177,8 +181,11 @@ void main() {
       ),
       act: (bloc) => bloc.add(const SalesSearchRequested('')),
       expect: () => [
-        isA<RealtimeSuccess<SalesHubData>>()
-            .having((s) => s.data.searchQuery, 'search query', isNull),
+        isA<RealtimeSuccess<SalesHubData>>().having(
+          (s) => s.data.searchQuery,
+          'search query',
+          isNull,
+        ),
       ],
     );
 
@@ -204,8 +211,9 @@ void main() {
     blocTest<SalesBloc, RealtimeState<SalesHubData>>(
       'emits error state when void sale fails',
       build: () {
-        when(() => mockRepository.voidSale(any()))
-            .thenThrow(Exception('Void failed'));
+        when(
+          () => mockRepository.voidSale(any()),
+        ).thenThrow(Exception('Void failed'));
         return SalesBloc(mockRepository);
       },
       seed: () => RealtimeSuccess(
@@ -217,8 +225,11 @@ void main() {
       ),
       act: (bloc) => bloc.add(const SaleVoidRequested(1)),
       expect: () => [
-        isA<RealtimeError<SalesHubData>>()
-            .having((s) => s.previousData, 'has previous data', isNotNull),
+        isA<RealtimeError<SalesHubData>>().having(
+          (s) => s.previousData,
+          'has previous data',
+          isNotNull,
+        ),
       ],
     );
 
@@ -244,8 +255,9 @@ void main() {
     blocTest<SalesBloc, RealtimeState<SalesHubData>>(
       'emits error state when delete sale fails',
       build: () {
-        when(() => mockRepository.deleteSale(any()))
-            .thenThrow(Exception('Delete failed'));
+        when(
+          () => mockRepository.deleteSale(any()),
+        ).thenThrow(Exception('Delete failed'));
         return SalesBloc(mockRepository);
       },
       seed: () => RealtimeSuccess(
@@ -257,8 +269,11 @@ void main() {
       ),
       act: (bloc) => bloc.add(const SaleDeleteRequested(2)),
       expect: () => [
-        isA<RealtimeError<SalesHubData>>()
-            .having((s) => s.previousData, 'has previous data', isNotNull),
+        isA<RealtimeError<SalesHubData>>().having(
+          (s) => s.previousData,
+          'has previous data',
+          isNotNull,
+        ),
       ],
     );
   });

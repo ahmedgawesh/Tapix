@@ -62,7 +62,9 @@ class ProductResultCard extends StatelessWidget {
                         Text(
                           scanResult!.barcode,
                           style: TextStyle(
-                            color: colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+                            color: colorScheme.onPrimaryContainer.withValues(
+                              alpha: 0.7,
+                            ),
                             fontFamily: 'monospace',
                             fontSize: 12,
                           ),
@@ -109,7 +111,9 @@ class ProductResultCard extends StatelessWidget {
                       context,
                       icon: LucideIcons.dollarSign,
                       label: 'products.price'.tr(),
-                      value: currencyService.format(product.priceCents.toBigInt().toInt()),
+                      value: currencyService.format(
+                        product.priceCents.toBigInt().toInt(),
+                      ),
                       valueStyle: TextStyle(
                         color: colorScheme.onPrimaryContainer,
                         fontWeight: FontWeight.bold,
@@ -166,10 +170,8 @@ class ProductResultCard extends StatelessWidget {
         Expanded(
           child: Text(
             value,
-            style: valueStyle ??
-                TextStyle(
-                  color: colorScheme.onPrimaryContainer,
-                ),
+            style:
+                valueStyle ?? TextStyle(color: colorScheme.onPrimaryContainer),
           ),
         ),
       ],

@@ -160,6 +160,29 @@ class MockCurrencyService extends _i1.Mock implements _i2.CurrencyService {
           as String);
 
   @override
+  String formatForCode(
+    int? minorUnits,
+    String? currencyCode, {
+    bool? showSymbol = true,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #formatForCode,
+              [minorUnits, currencyCode],
+              {#showSymbol: showSymbol},
+            ),
+            returnValue: _i6.dummyValue<String>(
+              this,
+              Invocation.method(
+                #formatForCode,
+                [minorUnits, currencyCode],
+                {#showSymbol: showSymbol},
+              ),
+            ),
+          )
+          as String);
+
+  @override
   String formatCents(int? cents, {bool? showSymbol = true}) =>
       (super.noSuchMethod(
             Invocation.method(#formatCents, [cents], {#showSymbol: showSymbol}),
@@ -184,6 +207,34 @@ class MockCurrencyService extends _i1.Mock implements _i2.CurrencyService {
             ),
           )
           as String);
+
+  @override
+  String minorUnitsToDecimalStringForCode(
+    int? minorUnits,
+    String? currencyCode,
+  ) =>
+      (super.noSuchMethod(
+            Invocation.method(#minorUnitsToDecimalStringForCode, [
+              minorUnits,
+              currencyCode,
+            ]),
+            returnValue: _i6.dummyValue<String>(
+              this,
+              Invocation.method(#minorUnitsToDecimalStringForCode, [
+                minorUnits,
+                currencyCode,
+              ]),
+            ),
+          )
+          as String);
+
+  @override
+  int decimalDigitsForCode(String? currencyCode) =>
+      (super.noSuchMethod(
+            Invocation.method(#decimalDigitsForCode, [currencyCode]),
+            returnValue: 0,
+          )
+          as int);
 
   @override
   int decimalStringToCents(String? decimalString) =>

@@ -616,6 +616,8 @@ void main() {
           ),
           [
             SaleReturnAdjustmentItemsCompanion.insert(
+              sourceResolution: const Value('unverified'),
+              sourceResolutionReason: const Value('test fixture'),
               returnId: 0,
               productId: pid,
               variantId: Value(vid),
@@ -698,6 +700,8 @@ void main() {
           ),
           [
             SaleReturnAdjustmentItemsCompanion.insert(
+              sourceResolution: const Value('unverified'),
+              sourceResolutionReason: const Value('test fixture'),
               returnId: 0,
               productId: pid,
               variantId: Value(vid),

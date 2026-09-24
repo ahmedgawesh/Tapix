@@ -164,9 +164,7 @@ void main() {
         dateRange: ReportDateRange.thisMonth(),
       );
 
-      final updated = original.copyWith(
-        dateRange: ReportDateRange.thisYear(),
-      );
+      final updated = original.copyWith(dateRange: ReportDateRange.thisYear());
 
       expect(updated.totalReturnsCents, 50000);
       expect(updated.totalReturnCount, 10);
@@ -197,9 +195,7 @@ void main() {
       );
 
       // Set to a value
-      final withCustomer = original.copyWith(
-        selectedCustomerId: () => 42,
-      );
+      final withCustomer = original.copyWith(selectedCustomerId: () => 42);
       expect(withCustomer.selectedCustomerId, 42);
 
       // Set back to null
@@ -228,8 +224,9 @@ void main() {
     });
 
     test('CustomerSalesReturnsSortChanged stores sort type', () {
-      const event =
-          CustomerSalesReturnsSortChanged(ReturnsSortType.customerAsc);
+      const event = CustomerSalesReturnsSortChanged(
+        ReturnsSortType.customerAsc,
+      );
       expect(event.sort, ReturnsSortType.customerAsc);
     });
   });
@@ -237,10 +234,8 @@ void main() {
   group('ReturnsSortType', () {
     test('enum has all expected values', () {
       expect(ReturnsSortType.values.length, 6);
-      expect(
-          ReturnsSortType.values, contains(ReturnsSortType.customerAsc));
-      expect(
-          ReturnsSortType.values, contains(ReturnsSortType.customerDesc));
+      expect(ReturnsSortType.values, contains(ReturnsSortType.customerAsc));
+      expect(ReturnsSortType.values, contains(ReturnsSortType.customerDesc));
       expect(ReturnsSortType.values, contains(ReturnsSortType.totalDesc));
       expect(ReturnsSortType.values, contains(ReturnsSortType.totalAsc));
       expect(ReturnsSortType.values, contains(ReturnsSortType.countDesc));
@@ -311,7 +306,8 @@ void main() {
       ];
 
       items.sort(
-          (a, b) => b.totalReturnedCents.compareTo(a.totalReturnedCents));
+        (a, b) => b.totalReturnedCents.compareTo(a.totalReturnedCents),
+      );
 
       expect(items[0].totalReturnedCents, 15000);
       expect(items[1].totalReturnedCents, 5000);
@@ -445,7 +441,11 @@ void main() {
       const reasons = [
         ReturnReasonBreakdown(reason: 'defective', count: 5, totalCents: 12500),
         ReturnReasonBreakdown(reason: 'wrong_size', count: 3, totalCents: 7500),
-        ReturnReasonBreakdown(reason: 'changed_mind', count: 2, totalCents: 5000),
+        ReturnReasonBreakdown(
+          reason: 'changed_mind',
+          count: 2,
+          totalCents: 5000,
+        ),
       ];
 
       int grandTotalCount = 0;
@@ -463,7 +463,11 @@ void main() {
       const reasons = [
         ReturnReasonBreakdown(reason: 'defective', count: 5, totalCents: 12500),
         ReturnReasonBreakdown(reason: 'wrong_size', count: 3, totalCents: 7500),
-        ReturnReasonBreakdown(reason: 'changed_mind', count: 2, totalCents: 5000),
+        ReturnReasonBreakdown(
+          reason: 'changed_mind',
+          count: 2,
+          totalCents: 5000,
+        ),
       ];
 
       int grandTotalCount = 0;
@@ -491,7 +495,7 @@ void main() {
         'write_off',
         'exchange',
         'store_credit',
-        'refund'
+        'refund',
       ];
       for (final type in validTypes) {
         final item = ReturnDetailItem(
@@ -531,7 +535,7 @@ void main() {
         'defective',
         'wrong_item',
         'changed_mind',
-        'other'
+        'other',
       ];
       for (final reason in validReasons) {
         final item = ReturnDetailItem(

@@ -58,7 +58,9 @@ void main() {
     String inventoryTrackingType = 'standard',
     bool trackInventory = true,
   }) async {
-    return db.into(db.products).insert(
+    return db
+        .into(db.products)
+        .insert(
           ProductsCompanion.insert(
             sku: Value(sku),
             name: name,
@@ -79,7 +81,9 @@ void main() {
     int costCents = 10000,
     int priceCents = 15000,
   }) async {
-    return db.into(db.productVariants).insert(
+    return db
+        .into(db.productVariants)
+        .insert(
           ProductVariantsCompanion.insert(
             productId: productId,
             stockQuantity: const Value(0),
@@ -99,7 +103,9 @@ void main() {
     int paidAmountCents = 0,
   }) async {
     final total = Decimal.fromInt(quantity * unitCostCents);
-    final purchaseId = await db.into(db.purchases).insert(
+    final purchaseId = await db
+        .into(db.purchases)
+        .insert(
           PurchasesCompanion.insert(
             purchaseNumber: poNumber,
             supplierId: supplierId,
@@ -112,7 +118,9 @@ void main() {
             paymentMethod: Value(paymentMethod),
           ),
         );
-    await db.into(db.purchaseItems).insert(
+    await db
+        .into(db.purchaseItems)
+        .insert(
           PurchaseItemsCompanion.insert(
             purchaseId: purchaseId,
             productId: productId,
@@ -137,7 +145,9 @@ void main() {
     int paidAmountCents = 0,
   }) async {
     final total = Decimal.fromInt(quantity * unitPriceCents);
-    final saleId = await db.into(db.sales).insert(
+    final saleId = await db
+        .into(db.sales)
+        .insert(
           SalesCompanion.insert(
             invoiceNumber: invoiceNumber,
             customerId: Value(customerId),
@@ -150,7 +160,9 @@ void main() {
             status: const Value('draft'),
           ),
         );
-    await db.into(db.saleItems).insert(
+    await db
+        .into(db.saleItems)
+        .insert(
           SaleItemsCompanion.insert(
             saleId: saleId,
             productId: productId,
@@ -179,19 +191,23 @@ void main() {
       "VALUES (0, 'system', 'no-pin', 'owner', 1, $now, $now)",
     );
 
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     currencyId = usd.id;
 
-    customerId = await db.into(db.customers).insert(
+    customerId = await db
+        .into(db.customers)
+        .insert(
           CustomersCompanion.insert(
             name: 'Test Customer',
             currencyId: currencyId,
             balanceCents: Value(Decimal.zero),
           ),
         );
-    supplierId = await db.into(db.suppliers).insert(
+    supplierId = await db
+        .into(db.suppliers)
+        .insert(
           SuppliersCompanion.insert(
             name: 'Test Supplier',
             currencyId: currencyId,
@@ -206,11 +222,13 @@ void main() {
   // R1 — Payment JE reversal on void
   // ──────────────────────────────────────────────────────────────────────
   group('R1 — purchase_payments / sale_payments JE reversal on void', () {
-    test(
-        'voiding a purchase whose cheque-cleared payment JE is posted leaves '
+    test('voiding a purchase whose cheque-cleared payment JE is posted leaves '
         'NO orphan posted purchase_payments JE', () async {
-      final pid =
-          await insertProduct(sku: 'R1-P', name: 'R1-P', hasVariants: true);
+      final pid = await insertProduct(
+        sku: 'R1-P',
+        name: 'R1-P',
+        hasVariants: true,
+      );
       final vid = await insertVariant(productId: pid);
 
       // Stock-only purchase to seed the supplier balance.
@@ -233,7 +251,9 @@ void main() {
       );
 
       // Cheque clears → record a payment + its JE.
-      final paymentId = await db.into(db.purchasePayments).insert(
+      final paymentId = await db
+          .into(db.purchasePayments)
+          .insert(
             PurchasePaymentsCompanion.insert(
               purchaseId: purchaseId,
               amountCents: Decimal.fromInt(90000),
@@ -250,12 +270,14 @@ void main() {
       );
 
       // Pre-void: exactly one posted, non-reversed JE for this payment.
-      final preCount = await db.customSelect(
-        'SELECT COUNT(*) AS c FROM journal_entries '
-        "WHERE source_table = 'purchase_payments' AND source_id = ? "
-        "AND status = 'posted' AND is_reversed = 0",
-        variables: [Variable.withInt(paymentId)],
-      ).getSingle();
+      final preCount = await db
+          .customSelect(
+            'SELECT COUNT(*) AS c FROM journal_entries '
+            "WHERE source_table = 'purchase_payments' AND source_id = ? "
+            "AND status = 'posted' AND is_reversed = 0",
+            variables: [Variable.withInt(paymentId)],
+          )
+          .getSingle();
       expect(preCount.read<int>('c'), equals(1));
 
       // Simulate the repo-level void flow exactly:
@@ -275,27 +297,36 @@ void main() {
           reason: 'Purchase voided — payment JE reversed',
         );
       }
-      await db.purchaseDao
-          .voidPurchase(purchaseId, journalEntryService: journal);
+      await db.purchaseDao.voidPurchase(
+        purchaseId,
+        journalEntryService: journal,
+      );
 
       // Post-void: NO posted, non-reversed payment JE may remain.
-      final postCount = await db.customSelect(
-        'SELECT COUNT(*) AS c FROM journal_entries '
-        "WHERE source_table = 'purchase_payments' AND source_id = ? "
-        "AND status = 'posted' AND is_reversed = 0",
-        variables: [Variable.withInt(paymentId)],
-      ).getSingle();
-      expect(postCount.read<int>('c'), equals(0),
-          reason:
-              'Cheque-cleared payment JE must be reversed on purchase void, '
-              'otherwise AP and Cash/Bank silently drift by the payment amount.');
+      final postCount = await db
+          .customSelect(
+            'SELECT COUNT(*) AS c FROM journal_entries '
+            "WHERE source_table = 'purchase_payments' AND source_id = ? "
+            "AND status = 'posted' AND is_reversed = 0",
+            variables: [Variable.withInt(paymentId)],
+          )
+          .getSingle();
+      expect(
+        postCount.read<int>('c'),
+        equals(0),
+        reason:
+            'Cheque-cleared payment JE must be reversed on purchase void, '
+            'otherwise AP and Cash/Bank silently drift by the payment amount.',
+      );
     });
 
-    test(
-        'voiding a sale whose cheque-cleared payment JE is posted leaves '
+    test('voiding a sale whose cheque-cleared payment JE is posted leaves '
         'NO orphan posted sale_payments JE', () async {
-      final pid =
-          await insertProduct(sku: 'R1-S', name: 'R1-S', hasVariants: true);
+      final pid = await insertProduct(
+        sku: 'R1-S',
+        name: 'R1-S',
+        hasVariants: true,
+      );
       final vid = await insertVariant(productId: pid);
 
       // Seed stock so the sale can post.
@@ -324,7 +355,9 @@ void main() {
       );
 
       // Cheque clears → record a payment + its JE.
-      final paymentId = await db.into(db.salePayments).insert(
+      final paymentId = await db
+          .into(db.salePayments)
+          .insert(
             SalePaymentsCompanion.insert(
               saleId: saleId,
               amountCents: Decimal.fromInt(100000),
@@ -340,12 +373,14 @@ void main() {
         paymentMethod: 'cheque',
       );
 
-      final preCount = await db.customSelect(
-        'SELECT COUNT(*) AS c FROM journal_entries '
-        "WHERE source_table = 'sale_payments' AND source_id = ? "
-        "AND status = 'posted' AND is_reversed = 0",
-        variables: [Variable.withInt(paymentId)],
-      ).getSingle();
+      final preCount = await db
+          .customSelect(
+            'SELECT COUNT(*) AS c FROM journal_entries '
+            "WHERE source_table = 'sale_payments' AND source_id = ? "
+            "AND status = 'posted' AND is_reversed = 0",
+            variables: [Variable.withInt(paymentId)],
+          )
+          .getSingle();
       expect(preCount.read<int>('c'), equals(1));
 
       // Repo-level void flow.
@@ -364,39 +399,49 @@ void main() {
       }
       await db.saleDao.voidSale(saleId, journalEntryService: journal);
 
-      final postCount = await db.customSelect(
-        'SELECT COUNT(*) AS c FROM journal_entries '
-        "WHERE source_table = 'sale_payments' AND source_id = ? "
-        "AND status = 'posted' AND is_reversed = 0",
-        variables: [Variable.withInt(paymentId)],
-      ).getSingle();
-      expect(postCount.read<int>('c'), equals(0),
-          reason:
-              'Cheque-cleared payment JE must be reversed on sale void, '
-              'otherwise AR and Cash/Bank silently drift by the payment amount.');
+      final postCount = await db
+          .customSelect(
+            'SELECT COUNT(*) AS c FROM journal_entries '
+            "WHERE source_table = 'sale_payments' AND source_id = ? "
+            "AND status = 'posted' AND is_reversed = 0",
+            variables: [Variable.withInt(paymentId)],
+          )
+          .getSingle();
+      expect(
+        postCount.read<int>('c'),
+        equals(0),
+        reason:
+            'Cheque-cleared payment JE must be reversed on sale void, '
+            'otherwise AR and Cash/Bank silently drift by the payment amount.',
+      );
     });
 
-    test(
-        'AP GL balance after purchase void with cleared cheque matches '
+    test('AP GL balance after purchase void with cleared cheque matches '
         'pre-purchase balance (zero net AP / Cash movement)', () async {
-      final pid =
-          await insertProduct(sku: 'R1-AP', name: 'R1-AP', hasVariants: true);
+      final pid = await insertProduct(
+        sku: 'R1-AP',
+        name: 'R1-AP',
+        hasVariants: true,
+      );
       final vid = await insertVariant(productId: pid);
 
-      final apAccountId = await (db.select(db.accounts)
-            ..where((a) => a.accountCode.equals('2000')))
-          .getSingle()
-          .then((a) => a.id);
+      final apAccountId =
+          await (db.select(db.accounts)
+                ..where((a) => a.accountCode.equals('2000')))
+              .getSingle()
+              .then((a) => a.id);
 
       Future<int> apBalance() async {
-        final row = await db.customSelect(
-          'SELECT COALESCE(SUM(jel.debit_cents), 0) AS dr, '
-          '       COALESCE(SUM(jel.credit_cents), 0) AS cr '
-          'FROM journal_entry_lines jel '
-          'INNER JOIN journal_entries je ON je.id = jel.journal_entry_id '
-          "WHERE jel.account_id = ? AND je.status = 'posted'",
-          variables: [Variable.withInt(apAccountId)],
-        ).getSingle();
+        final row = await db
+            .customSelect(
+              'SELECT COALESCE(SUM(jel.debit_cents), 0) AS dr, '
+              '       COALESCE(SUM(jel.credit_cents), 0) AS cr '
+              'FROM journal_entry_lines jel '
+              'INNER JOIN journal_entries je ON je.id = jel.journal_entry_id '
+              "WHERE jel.account_id = ? AND je.status = 'posted'",
+              variables: [Variable.withInt(apAccountId)],
+            )
+            .getSingle();
         // AP is a liability → balance = Cr − Dr.
         return row.read<int>('cr') - row.read<int>('dr');
       }
@@ -421,7 +466,9 @@ void main() {
       );
 
       // Cheque cleared → payment + JE.
-      final paymentId = await db.into(db.purchasePayments).insert(
+      final paymentId = await db
+          .into(db.purchasePayments)
+          .insert(
             PurchasePaymentsCompanion.insert(
               purchaseId: purchaseId,
               amountCents: Decimal.fromInt(90000),
@@ -453,26 +500,29 @@ void main() {
           reason: 'Purchase voided — payment JE reversed',
         );
       }
-      await db.purchaseDao
-          .voidPurchase(purchaseId, journalEntryService: journal);
+      await db.purchaseDao.voidPurchase(
+        purchaseId,
+        journalEntryService: journal,
+      );
 
       // After void: AP must STILL equal pre-purchase balance (zero net effect).
       // Pre-Phase-15.2 this returned `apBefore - 90000` (= the AP drift).
-      expect(await apBalance(), equals(apBefore),
-          reason:
-              'Voiding a fully-paid cheque purchase must leave AP at its '
-              'pre-purchase balance — both the invoice JE AND the cleared '
-              'payment JE must be reversed.');
+      expect(
+        await apBalance(),
+        equals(apBefore),
+        reason:
+            'Voiding a fully-paid cheque purchase must leave AP at its '
+            'pre-purchase balance — both the invoice JE AND the cleared '
+            'payment JE must be reversed.',
+      );
     });
   });
 
   // ──────────────────────────────────────────────────────────────────────
   // R2 — Symmetric batch deactivation on void for ALL tracked products
   // ──────────────────────────────────────────────────────────────────────
-  group('R2 — purchase void deactivates batches for WAC/standard products',
-      () {
-    test(
-        'voiding a purchase of a tracked WAC/standard product deactivates '
+  group('R2 — purchase void deactivates batches for WAC/standard products', () {
+    test('voiding a purchase of a tracked WAC/standard product deactivates '
         'the batch row created on post', () async {
       // Reproduce product 2 (WAC, standard) from the field backup.
       final pid = await insertProduct(
@@ -493,17 +543,22 @@ void main() {
       );
 
       // Post created exactly one active batch on this line.
-      final pItem = await (db.select(db.purchaseItems)
-            ..where((i) => i.purchaseId.equals(purchaseId)))
-          .getSingle();
-      final batchesBefore = await (db.select(db.productBatches)
-            ..where((b) =>
-                b.purchaseItemId.equals(pItem.id) & b.isActive.equals(true)))
-          .get();
-      expect(batchesBefore, hasLength(1),
-          reason:
-              'postPurchase creates a batch for every tracked product, '
-              'including WAC. (Phase 6.4 unified ledger.)');
+      final pItem = await (db.select(
+        db.purchaseItems,
+      )..where((i) => i.purchaseId.equals(purchaseId))).getSingle();
+      final batchesBefore =
+          await (db.select(db.productBatches)..where(
+                (b) =>
+                    b.purchaseItemId.equals(pItem.id) & b.isActive.equals(true),
+              ))
+              .get();
+      expect(
+        batchesBefore,
+        hasLength(1),
+        reason:
+            'postPurchase creates a batch for every tracked product, '
+            'including WAC. (Phase 6.4 unified ledger.)',
+      );
       expect(batchesBefore.first.remainingQuantity, equals(3));
 
       // Void the purchase.
@@ -513,53 +568,56 @@ void main() {
       // Pre-Phase-15.2 the batch stayed active because the void path
       // gated batch deactivation on `_isFifoProduct`, leaving an orphan
       // `is_active=1` row that inflated Σ(active batch × cost).
-      final batchesAfter = await (db.select(db.productBatches)
-            ..where((b) => b.purchaseItemId.equals(pItem.id)))
-          .get();
+      final batchesAfter = await (db.select(
+        db.productBatches,
+      )..where((b) => b.purchaseItemId.equals(pItem.id))).get();
       expect(batchesAfter, hasLength(1));
-      expect(batchesAfter.first.isActive, isFalse,
-          reason:
-              'WAC/standard tracked batches must be deactivated on void to '
-              'keep Σ(active batch remaining × cost) in sync with GL.');
+      expect(
+        batchesAfter.first.isActive,
+        isFalse,
+        reason:
+            'WAC/standard tracked batches must be deactivated on void to '
+            'keep Σ(active batch remaining × cost) in sync with GL.',
+      );
       expect(batchesAfter.first.remainingQuantity, equals(0));
     });
 
     test(
-        'voiding a purchase of a tracked FIFO/batch_expiry product still '
-        'deactivates its batch (regression guard for the original path)',
-        () async {
-      final pid = await insertProduct(
-        sku: 'R2-FIFO',
-        name: 'FIFO tracked product',
-        hasVariants: true,
-        costingMethod: 'fifo',
-        inventoryTrackingType: 'batch_expiry',
-      );
-      final vid = await insertVariant(productId: pid);
+      'voiding a purchase of a tracked FIFO/batch_expiry product still '
+      'deactivates its batch (regression guard for the original path)',
+      () async {
+        final pid = await insertProduct(
+          sku: 'R2-FIFO',
+          name: 'FIFO tracked product',
+          hasVariants: true,
+          costingMethod: 'fifo',
+          inventoryTrackingType: 'batch_expiry',
+        );
+        final vid = await insertVariant(productId: pid);
 
-      final purchaseId = await postPurchaseLine(
-        productId: pid,
-        variantId: vid,
-        quantity: 10,
-        unitCostCents: 9900,
-        poNumber: 'PO-R2-FIFO',
-      );
+        final purchaseId = await postPurchaseLine(
+          productId: pid,
+          variantId: vid,
+          quantity: 10,
+          unitCostCents: 9900,
+          poNumber: 'PO-R2-FIFO',
+        );
 
-      await db.purchaseDao.voidPurchase(purchaseId);
+        await db.purchaseDao.voidPurchase(purchaseId);
 
-      final pItem = await (db.select(db.purchaseItems)
-            ..where((i) => i.purchaseId.equals(purchaseId)))
-          .getSingle();
-      final batchesAfter = await (db.select(db.productBatches)
-            ..where((b) => b.purchaseItemId.equals(pItem.id)))
-          .get();
-      expect(batchesAfter, hasLength(1));
-      expect(batchesAfter.first.isActive, isFalse);
-      expect(batchesAfter.first.remainingQuantity, equals(0));
-    });
+        final pItem = await (db.select(
+          db.purchaseItems,
+        )..where((i) => i.purchaseId.equals(purchaseId))).getSingle();
+        final batchesAfter = await (db.select(
+          db.productBatches,
+        )..where((b) => b.purchaseItemId.equals(pItem.id))).get();
+        expect(batchesAfter, hasLength(1));
+        expect(batchesAfter.first.isActive, isFalse);
+        expect(batchesAfter.first.remainingQuantity, equals(0));
+      },
+    );
 
-    test(
-        'after voiding a tracked-WAC purchase, Σ(active batch remaining × '
+    test('after voiding a tracked-WAC purchase, Σ(active batch remaining × '
         'cost) for the variant matches variant.stock × variant.cost', () async {
       // This is the exact field-report invariant: the inventory valuation
       // formula in `getTotalInventoryValueCents` (Phase 15.0) must agree
@@ -592,23 +650,28 @@ void main() {
       await db.purchaseDao.voidPurchase(voidableId);
 
       // Sum active batches for this variant.
-      final batchSum = await db.customSelect(
-        'SELECT COALESCE(SUM(remaining_quantity * unit_cost_cents), 0) AS total '
-        'FROM product_batches WHERE variant_id = ? AND is_active = 1',
-        variables: [Variable.withInt(vid)],
-      ).getSingle();
+      final batchSum = await db
+          .customSelect(
+            'SELECT COALESCE(SUM(remaining_quantity * unit_cost_cents), 0) AS total '
+            'FROM product_batches WHERE variant_id = ? AND is_active = 1',
+            variables: [Variable.withInt(vid)],
+          )
+          .getSingle();
 
       // Pre-Phase-15.2: batchSum = 10*10000 + 3*9900 = 129700 (stale batch
       // not deactivated). Post-fix: batchSum = 10*10000 = 100000.
-      expect(batchSum.read<int>('total'), equals(100000),
-          reason:
-              'Stale WAC batch from a voided purchase must NOT contribute '
-              'to the inventory valuation sum.');
+      expect(
+        batchSum.read<int>('total'),
+        equals(100000),
+        reason:
+            'Stale WAC batch from a voided purchase must NOT contribute '
+            'to the inventory valuation sum.',
+      );
 
       // Variant stock returned to 10 units.
-      final variantRow = await (db.select(db.productVariants)
-            ..where((v) => v.id.equals(vid)))
-          .getSingle();
+      final variantRow = await (db.select(
+        db.productVariants,
+      )..where((v) => v.id.equals(vid))).getSingle();
       expect(variantRow.stockQuantity, equals(10));
     });
   });

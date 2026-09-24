@@ -221,6 +221,34 @@ class InventoryAdjustmentService {
           scope ?? await WarehouseOperationScope.resolve(_db);
       await operationScope.validate(_db);
       final now = DateTime.now();
+
+      // A generic stock adjustment cannot prove whether a counted, damaged or
+      // revalued unit belongs to the business or to a consignment supplier.
+      // Require the source-aware custody workflow whenever this SKU currently
+      // contains supplier-owned stock. This prevents revaluation, shrinkage or
+      // gains from silently changing supplier custody or Inventory Asset.
+      final custody = await _db
+          .customSelect(
+            'SELECT COALESCE(SUM(s.supplier_owned_quantity),0) AS quantity '
+            'FROM business_warehouse_stocks s '
+            'JOIN product_variants v ON v.id=s.variant_id '
+            'WHERE s.warehouse_id=? AND v.product_id=? '
+            'AND (? IS NULL OR v.id=?)',
+            variables: [
+              Variable.withString(operationScope.warehouseId),
+              Variable.withInt(productId),
+              Variable<int>(variantId),
+              Variable<int>(variantId),
+            ],
+          )
+          .getSingle();
+      if (custody.read<int>('quantity') > 0) {
+        throw const InventoryAdjustmentException(
+          'This stock contains supplier-owned units. Use a source-aware '
+          'consignment custody adjustment.',
+        );
+      }
+
       final adjustmentNumber = await _dao.generateAdjustmentNumber();
 
       // Hard-stop adjustments on non-tracked products — they have no

@@ -76,9 +76,7 @@ void main() {
 
   group('InventoryReportsData', () {
     test('default values are correct', () {
-      final data = InventoryReportsData(
-        dateRange: ReportDateRange.thisMonth(),
-      );
+      final data = InventoryReportsData(dateRange: ReportDateRange.thisMonth());
 
       expect(data.stockValuation, isEmpty);
       expect(data.totalValuationCents, 0);
@@ -97,9 +95,7 @@ void main() {
         dateRange: ReportDateRange.thisMonth(),
       );
 
-      final updated = original.copyWith(
-        dateRange: ReportDateRange.thisYear(),
-      );
+      final updated = original.copyWith(dateRange: ReportDateRange.thisYear());
 
       expect(updated.totalValuationCents, 5000);
       expect(updated.totalStockUnits, 100);
@@ -155,16 +151,34 @@ void main() {
     test('sort by name ascending works on data list', () {
       final items = [
         const StockValuationItem(
-          productId: 1, productName: 'Zebra', variantCount: 1,
-          totalStock: 10, costCents: 100, priceCents: 200, wholesalePriceCents: 150, valuationCents: 1000,
+          productId: 1,
+          productName: 'Zebra',
+          variantCount: 1,
+          totalStock: 10,
+          costCents: 100,
+          priceCents: 200,
+          wholesalePriceCents: 150,
+          valuationCents: 1000,
         ),
         const StockValuationItem(
-          productId: 2, productName: 'Apple', variantCount: 1,
-          totalStock: 20, costCents: 200, priceCents: 400, wholesalePriceCents: 300, valuationCents: 4000,
+          productId: 2,
+          productName: 'Apple',
+          variantCount: 1,
+          totalStock: 20,
+          costCents: 200,
+          priceCents: 400,
+          wholesalePriceCents: 300,
+          valuationCents: 4000,
         ),
         const StockValuationItem(
-          productId: 3, productName: 'Mango', variantCount: 1,
-          totalStock: 5, costCents: 300, priceCents: 600, wholesalePriceCents: 450, valuationCents: 1500,
+          productId: 3,
+          productName: 'Mango',
+          variantCount: 1,
+          totalStock: 5,
+          costCents: 300,
+          priceCents: 600,
+          wholesalePriceCents: 450,
+          valuationCents: 1500,
         ),
       ];
 
@@ -178,16 +192,34 @@ void main() {
     test('sort by value descending works on data list', () {
       final items = [
         const StockValuationItem(
-          productId: 1, productName: 'A', variantCount: 1,
-          totalStock: 10, costCents: 100, priceCents: 200, wholesalePriceCents: 150, valuationCents: 1000,
+          productId: 1,
+          productName: 'A',
+          variantCount: 1,
+          totalStock: 10,
+          costCents: 100,
+          priceCents: 200,
+          wholesalePriceCents: 150,
+          valuationCents: 1000,
         ),
         const StockValuationItem(
-          productId: 2, productName: 'B', variantCount: 1,
-          totalStock: 20, costCents: 200, priceCents: 400, wholesalePriceCents: 300, valuationCents: 4000,
+          productId: 2,
+          productName: 'B',
+          variantCount: 1,
+          totalStock: 20,
+          costCents: 200,
+          priceCents: 400,
+          wholesalePriceCents: 300,
+          valuationCents: 4000,
         ),
         const StockValuationItem(
-          productId: 3, productName: 'C', variantCount: 1,
-          totalStock: 5, costCents: 300, priceCents: 600, wholesalePriceCents: 450, valuationCents: 1500,
+          productId: 3,
+          productName: 'C',
+          variantCount: 1,
+          totalStock: 5,
+          costCents: 300,
+          priceCents: 600,
+          wholesalePriceCents: 450,
+          valuationCents: 1500,
         ),
       ];
 
@@ -201,16 +233,34 @@ void main() {
     test('sort by stock ascending works on data list', () {
       final items = [
         const StockValuationItem(
-          productId: 1, productName: 'A', variantCount: 1,
-          totalStock: 10, costCents: 100, priceCents: 200, wholesalePriceCents: 150, valuationCents: 1000,
+          productId: 1,
+          productName: 'A',
+          variantCount: 1,
+          totalStock: 10,
+          costCents: 100,
+          priceCents: 200,
+          wholesalePriceCents: 150,
+          valuationCents: 1000,
         ),
         const StockValuationItem(
-          productId: 2, productName: 'B', variantCount: 1,
-          totalStock: 20, costCents: 200, priceCents: 400, wholesalePriceCents: 300, valuationCents: 4000,
+          productId: 2,
+          productName: 'B',
+          variantCount: 1,
+          totalStock: 20,
+          costCents: 200,
+          priceCents: 400,
+          wholesalePriceCents: 300,
+          valuationCents: 4000,
         ),
         const StockValuationItem(
-          productId: 3, productName: 'C', variantCount: 1,
-          totalStock: 5, costCents: 300, priceCents: 600, wholesalePriceCents: 450, valuationCents: 1500,
+          productId: 3,
+          productName: 'C',
+          variantCount: 1,
+          totalStock: 5,
+          costCents: 300,
+          priceCents: 600,
+          wholesalePriceCents: 450,
+          valuationCents: 1500,
         ),
       ];
 
@@ -262,7 +312,13 @@ void main() {
         netMovement: 75,
       );
       expect(item.netMovement, 75);
-      expect(item.netMovement, item.purchasedQty - item.soldQty + item.saleReturnedQty - item.purchaseReturnedQty);
+      expect(
+        item.netMovement,
+        item.purchasedQty -
+            item.soldQty +
+            item.saleReturnedQty -
+            item.purchaseReturnedQty,
+      );
     });
 
     test('negative net movement when sales exceed purchases', () {
@@ -276,7 +332,13 @@ void main() {
         netMovement: -35,
       );
       expect(item.netMovement, -35);
-      expect(item.netMovement, item.purchasedQty - item.soldQty + item.saleReturnedQty - item.purchaseReturnedQty);
+      expect(
+        item.netMovement,
+        item.purchasedQty -
+            item.soldQty +
+            item.saleReturnedQty -
+            item.purchaseReturnedQty,
+      );
     });
 
     test('zero net movement when balanced', () {
@@ -324,12 +386,27 @@ void main() {
       // Verify the translation map structure is complete
       // This tests the static data used by InventoryPdfService
       const expectedKeys = [
-        'stock_valuation', 'low_stock', 'product_movement',
-        'total_valuation', 'total_stock_units', 'period',
-        'sku', 'product', 'category', 'stock', 'unit_cost',
-        'valuation', 'current_stock', 'reorder_level', 'deficit',
-        'low_stock_alert', 'purchased', 'sold', 'returned',
-        'net_movement', 'printed_on',
+        'stock_valuation',
+        'low_stock',
+        'product_movement',
+        'total_valuation',
+        'total_stock_units',
+        'period',
+        'sku',
+        'product',
+        'category',
+        'stock',
+        'unit_cost',
+        'valuation',
+        'current_stock',
+        'reorder_level',
+        'deficit',
+        'low_stock_alert',
+        'purchased',
+        'sold',
+        'returned',
+        'net_movement',
+        'printed_on',
       ];
       // Just verify the count of expected keys
       expect(expectedKeys.length, 21);
@@ -346,8 +423,14 @@ void main() {
 
     test('priceByType returns correct price for each type', () {
       const item = StockValuationItem(
-        productId: 1, productName: 'Test', variantCount: 1,
-        totalStock: 10, costCents: 1000, priceCents: 2000, wholesalePriceCents: 1500, valuationCents: 10000,
+        productId: 1,
+        productName: 'Test',
+        variantCount: 1,
+        totalStock: 10,
+        costCents: 1000,
+        priceCents: 2000,
+        wholesalePriceCents: 1500,
+        valuationCents: 10000,
       );
       expect(item.priceByType(PriceDisplayType.cost), 1000);
       expect(item.priceByType(PriceDisplayType.sale), 2000);
@@ -356,8 +439,14 @@ void main() {
 
     test('valuationByType computes stock × selected price', () {
       const item = StockValuationItem(
-        productId: 1, productName: 'Test', variantCount: 1,
-        totalStock: 5, costCents: 1000, priceCents: 2000, wholesalePriceCents: 1500, valuationCents: 5000,
+        productId: 1,
+        productName: 'Test',
+        variantCount: 1,
+        totalStock: 5,
+        costCents: 1000,
+        priceCents: 2000,
+        wholesalePriceCents: 1500,
+        valuationCents: 5000,
       );
       // stock=5, cost=1000 → 5000
       expect(item.valuationByType(PriceDisplayType.cost), 5000);
@@ -371,40 +460,72 @@ void main() {
   group('variantLabel', () {
     test('StockValuationItem with color and size', () {
       const item = StockValuationItem(
-        productId: 1, productName: 'T', colorName: 'Red', sizeName: 'L',
-        variantCount: 1, totalStock: 1, costCents: 0, priceCents: 0, wholesalePriceCents: 0, valuationCents: 0,
+        productId: 1,
+        productName: 'T',
+        colorName: 'Red',
+        sizeName: 'L',
+        variantCount: 1,
+        totalStock: 1,
+        costCents: 0,
+        priceCents: 0,
+        wholesalePriceCents: 0,
+        valuationCents: 0,
       );
       expect(item.variantLabel, 'Red / L');
     });
 
     test('StockValuationItem with color only', () {
       const item = StockValuationItem(
-        productId: 1, productName: 'T', colorName: 'Blue',
-        variantCount: 1, totalStock: 1, costCents: 0, priceCents: 0, wholesalePriceCents: 0, valuationCents: 0,
+        productId: 1,
+        productName: 'T',
+        colorName: 'Blue',
+        variantCount: 1,
+        totalStock: 1,
+        costCents: 0,
+        priceCents: 0,
+        wholesalePriceCents: 0,
+        valuationCents: 0,
       );
       expect(item.variantLabel, 'Blue');
     });
 
     test('StockValuationItem with no variant', () {
       const item = StockValuationItem(
-        productId: 1, productName: 'T',
-        variantCount: 1, totalStock: 1, costCents: 0, priceCents: 0, wholesalePriceCents: 0, valuationCents: 0,
+        productId: 1,
+        productName: 'T',
+        variantCount: 1,
+        totalStock: 1,
+        costCents: 0,
+        priceCents: 0,
+        wholesalePriceCents: 0,
+        valuationCents: 0,
       );
       expect(item.variantLabel, '');
     });
 
     test('LowStockItem variantLabel', () {
       const item = LowStockItem(
-        productId: 1, productName: 'T', colorName: 'Green', sizeName: 'M',
-        currentStock: 1, reorderLevel: 5, deficit: 4,
+        productId: 1,
+        productName: 'T',
+        colorName: 'Green',
+        sizeName: 'M',
+        currentStock: 1,
+        reorderLevel: 5,
+        deficit: 4,
       );
       expect(item.variantLabel, 'Green / M');
     });
 
     test('ProductMovementItem variantLabel', () {
       const item = ProductMovementItem(
-        productId: 1, productName: 'T', colorName: 'Black',
-        purchasedQty: 10, soldQty: 5, saleReturnedQty: 0, purchaseReturnedQty: 0, netMovement: 5,
+        productId: 1,
+        productName: 'T',
+        colorName: 'Black',
+        purchasedQty: 10,
+        soldQty: 5,
+        saleReturnedQty: 0,
+        purchaseReturnedQty: 0,
+        netMovement: 5,
       );
       expect(item.variantLabel, 'Black');
     });

@@ -1,4 +1,25 @@
+import '../accounting/system_accounts.dart';
+import 'migrations/consignment_foundation.dart';
+import 'migrations/consignment_inventory.dart';
+import 'migrations/consignment_sales.dart';
+import 'migrations/consignment_adjustment_returns.dart';
+import 'migrations/consignment_settlements.dart';
+import 'migrations/consignment_custody.dart';
+import 'migrations/consignment_ownership_conversion.dart';
+import 'tables/consignment.dart';
+import 'migrations/purchase_supplier_sources.dart';
+import 'migrations/supplier_identity_movements.dart';
+import 'migrations/sale_source_selection.dart';
+import 'tables/supplier_product_code_locks.dart';
+import 'migrations/supplier_product_code_locks.dart';
+import 'tables/supplier_product_identities.dart';
+import 'migrations/supplier_product_identities.dart';
+import 'tables/inventory_origins.dart';
+import 'migrations/inventory_origins.dart';
+import 'tables/warehouse_transfers.dart';
+import 'migrations/warehouse_transfers.dart';
 import 'migrations/inventory_revaluation_audit.dart';
+import 'migrations/lan_request_receipts.dart';
 import 'dart:developer' as developer;
 
 import 'package:drift/drift.dart';
@@ -63,7 +84,7 @@ import 'database_native.dart' if (dart.library.html) 'database_web.dart';
 
 part 'app_database.g.dart';
 
-const _currentDatabaseSchemaVersion = 10091;
+const _currentDatabaseSchemaVersion = 10115;
 
 @DriftDatabase(
   tables: [
@@ -73,6 +94,17 @@ const _currentDatabaseSchemaVersion = 10091;
     BusinessContexts,
     BusinessDocumentLocations,
     BusinessWarehouseStocks,
+    WarehouseTransfers,
+    WarehouseTransferLines,
+    WarehouseTransferDispatches,
+    WarehouseTransferAllocations,
+    WarehouseTransferReceipts,
+    WarehouseTransferReceiptItems,
+    WarehouseTransferRecalls,
+    WarehouseTransferRecallItems,
+    WarehouseTransferEvents,
+    InventoryOriginStates,
+    InventoryOriginEvents,
     Users,
     Currencies,
     AppSettings,
@@ -104,6 +136,25 @@ const _currentDatabaseSchemaVersion = 10091;
     CustomerRewardRedemptions,
     LoyaltySettingsTable,
     Suppliers,
+    ConsignmentAgreements,
+    ConsignmentAgreementItems,
+    ConsignmentReceipts,
+    ConsignmentReceiptItems,
+    ConsignmentInventoryLayers,
+    ConsignmentReceiptEvents,
+    ConsignmentSaleAllocations,
+    ConsignmentObligationEvents,
+    ConsignmentAdjustmentReturnEvents,
+    ConsignmentCustodyDocuments,
+    ConsignmentCustodyItems,
+    ConsignmentCustodyEvents,
+    ConsignmentOwnershipConversions,
+    ConsignmentOwnershipConversionItems,
+    ConsignmentSettlementStatements,
+    ConsignmentSettlementItems,
+    ConsignmentSettlementPayments,
+    SupplierProductIdentities,
+    SupplierProductCodeLocks,
     SupplierTransactions,
     Roles,
     Employees,
@@ -496,13 +547,25 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  Future<void> _safeAddColumn(String table, String column, String type) async {
+  Future<bool> _tableExists(String table) async {
     final result = await customSelect(
-      "SELECT COUNT(*) as cnt FROM pragma_table_info('$table') WHERE name = '$column'",
+      'SELECT COUNT(*) AS cnt FROM sqlite_master '
+      "WHERE type='table' AND name=?",
+      variables: [Variable.withString(table)],
     ).getSingle();
+    return result.read<int>('cnt') > 0;
+  }
 
-    final exists = result.read<int>('cnt') > 0;
-    if (!exists) {
+  Future<bool> _columnExists(String table, String column) async {
+    final result = await customSelect(
+      "SELECT COUNT(*) AS cnt FROM pragma_table_info('$table') WHERE name=?",
+      variables: [Variable.withString(column)],
+    ).getSingle();
+    return result.read<int>('cnt') > 0;
+  }
+
+  Future<void> _safeAddColumn(String table, String column, String type) async {
+    if (!await _columnExists(table, column)) {
       debugPrint('DB schema fix: adding missing column $table.$column ($type)');
       await customStatement('ALTER TABLE $table ADD COLUMN $column $type');
     }
@@ -2940,12 +3003,30 @@ END
     return MigrationStrategy(
       onCreate: (Migrator m) async {
         await m.createAll();
+        await installConsignmentFoundationGuards(this);
+        await installSupplierProductIdentityGuards(this);
+        await installSupplierProductCodeLocks(this);
+        await installPurchaseSupplierSourceGuards(this);
+        await installSupplierIdentityMovementGuards(this);
+        await installSaleSourceSelectionGuards(this);
+        await installInventoryOrigins(this);
+        await installWarehouseTransferGuards(this);
         await installInventoryRevaluationAudit(this);
         await initializeBusinessFoundation(this);
         await installBusinessDocumentLocations(this);
         await installBusinessWarehouseStock(this);
+        // The warehouse installer deliberately replaces every
+        // `business_stock_*` trigger. Install the consignment ownership
+        // bounds afterwards so they cannot be removed on a fresh database.
+        await installConsignmentInventoryGuards(this);
+        await installConsignmentSalesGuards(this);
+        await installConsignmentAdjustmentReturnGuards(this);
+        await installConsignmentCustodyGuards(this);
+        await installConsignmentOwnershipConversionGuards(this);
+        await installConsignmentSettlementGuards(this);
         await installCommissionReturnSource(this);
         await _ensureDocumentSequencesTable();
+        await installLanRequestReceiptLedger(this);
         await _createIndexes();
         await _installProductBatchesIntegrityTriggers();
         await _installPartyAccountPaymentTriggers();
@@ -4992,7 +5073,7 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
             await _safeAddColumn(
               'sale_return_adjustment_items',
               'return_batch_id',
-              'INTEGER REFERENCES product_batches(id) ON DELETE RESTRICT',
+              'INTEGER NULL REFERENCES product_batches(id) ON DELETE RESTRICT',
             );
             for (final table in [
               'sale_return_adjustments',
@@ -5047,6 +5128,47 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
             await m.createTable(businessWarehouseStocks);
             await installBusinessWarehouseStock(this);
           }
+          if (from < 10092) {
+            final transferTables = <TableInfo<Table, dynamic>>[
+              warehouseTransfers,
+              warehouseTransferLines,
+              warehouseTransferEvents,
+            ];
+
+            // Validate every target name before creating the first table. This
+            // prevents a legacy view or other conflicting SQLite object from
+            // leaving a partially-created transfer foundation when upgrade
+            // must stop.
+            for (final table in transferTables) {
+              final objects = await customSelect(
+                'SELECT type FROM sqlite_master WHERE name=?',
+                variables: [Variable.withString(table.actualTableName)],
+              ).get();
+              if (objects.isNotEmpty &&
+                  objects.single.read<String>('type') != 'table') {
+                throw StateError(
+                  'Schema object ${table.actualTableName} must be a table',
+                );
+              }
+            }
+
+            for (final table in transferTables) {
+              final existing = await customSelect(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                variables: [Variable.withString(table.actualTableName)],
+              ).get();
+              if (existing.isEmpty) {
+                await m.createTable(table);
+              }
+            }
+            // The complete guard set references dispatch, receipt,
+            // provenance and recall objects introduced through 10115. No user
+            // writes can run mid-migration, so install it after the final
+            // additive transfer step.
+          }
+          if (from < 10093) {
+            await installInventoryOrigins(this);
+          }
         });
 
         if (from < 10087) {
@@ -5072,6 +5194,418 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
             'ON product_batches(product_id, manufacturer_lot_number) '
             'WHERE manufacturer_lot_number IS NOT NULL',
           );
+        }
+
+        // Additive only: old suppliers receive NULL, no product SKU,
+        // inventory quantity, receipt, cost or financial entry is rewritten.
+        if (from < 10095) {
+          await transaction(() async {
+            await _safeAddColumn('suppliers', 'product_code', 'TEXT');
+            final existing = await customSelect(
+              "SELECT name FROM sqlite_master WHERE type='table' "
+              "AND name='supplier_product_identities'",
+            ).get();
+            if (existing.isEmpty) {
+              await customStatement(createSupplierProductIdentityTableSql);
+            }
+            await installSupplierProductIdentityGuards(this);
+          });
+        }
+
+        // v10096 must also execute on phones already upgraded to v10095.
+        // It adds durable code locks only; no balances or stock are rewritten.
+        if (from < 10096) {
+          await transaction(() => installSupplierProductCodeLocks(this));
+        }
+
+        // Stage 2 receipts: opt-in only. Existing rows receive false/NULL.
+        if (from < 10097) {
+          await transaction(() async {
+            await _safeAddColumn(
+              'purchase_items',
+              'supplier_identity_requested',
+              'INTEGER NOT NULL DEFAULT 0 CHECK (supplier_identity_requested IN (0,1))',
+            );
+            await _safeAddColumn(
+              'purchase_items',
+              'supplier_identity_id',
+              'INTEGER REFERENCES supplier_product_identities(id) ON DELETE RESTRICT',
+            );
+            await installPurchaseSupplierSourceGuards(this);
+          });
+        }
+
+        // Consignment C1: additive, disabled by default and without stock or
+        // accounting effects. Historical suppliers remain standard.
+        if (from < 10098) {
+          await transaction(() async {
+            await _safeAddColumn(
+              'suppliers',
+              'default_supply_mode',
+              "TEXT NOT NULL DEFAULT 'standard' CHECK (default_supply_mode IN ('standard','consignment','mixed'))",
+            );
+            await m.createTable(consignmentAgreements);
+            await m.createTable(consignmentAgreementItems);
+            await installConsignmentFoundationGuards(this);
+          });
+        }
+
+        // Consignment C2 foundation: existing stock remains enterprise-owned
+        // because supplier_owned_quantity starts at zero. Receipt drafts and
+        // source layers are additive and cannot post through ordinary purchase.
+        if (from < 10099) {
+          await transaction(() async {
+            await _safeAddColumn(
+              'business_warehouse_stocks',
+              'supplier_owned_quantity',
+              'INTEGER NOT NULL DEFAULT 0 CHECK (supplier_owned_quantity>=0)',
+            );
+            await m.createTable(consignmentReceipts);
+            await m.createTable(consignmentReceiptItems);
+            await m.createTable(consignmentInventoryLayers);
+            await m.createTable(consignmentReceiptEvents);
+            // The current layer guards reference transfer custody columns and
+            // tables introduced in 10106. Install them after that shape exists.
+          });
+        }
+
+        // Consignment C3: preserve the two discount components and add the
+        // immutable sale-allocation and accrued-obligation ledgers.
+        if (from < 10100) {
+          await transaction(() async {
+            await _safeAddColumn(
+              'sale_items',
+              'item_discount_at_post_cents',
+              'INTEGER NULL',
+            );
+            await _safeAddColumn(
+              'sale_items',
+              'invoice_discount_at_post_cents',
+              'INTEGER NULL',
+            );
+            await m.createTable(consignmentSaleAllocations);
+            await m.createTable(consignmentObligationEvents);
+            await installConsignmentSalesGuards(this);
+          });
+        }
+
+        // Consignment C4: standalone sale returns can carry one explicit
+        // supplier-owned source. Unknown legacy/current returns stay unresolved.
+        if (from < 10101) {
+          await transaction(() async {
+            await _safeAddColumn(
+              'sale_return_adjustment_items',
+              'item_discount_at_post_cents',
+              'INTEGER NULL',
+            );
+            await _safeAddColumn(
+              'sale_return_adjustment_items',
+              'invoice_discount_at_post_cents',
+              'INTEGER NULL',
+            );
+            await _safeAddColumn(
+              'sale_return_adjustment_items',
+              'consignment_layer_id',
+              'TEXT NULL',
+            );
+            await m.createTable(consignmentAdjustmentReturnEvents);
+            await installConsignmentAdjustmentReturnGuards(this);
+          });
+        }
+
+        // Consignment C5: reviewed supplier settlement statements transfer
+        // accrued obligations to AP. Existing agreements default to zero tax.
+        if (from < 10102) {
+          await transaction(() async {
+            await _safeAddColumn(
+              'consignment_agreements',
+              'settlement_tax_rate_bps',
+              'INTEGER NOT NULL DEFAULT 0 CHECK (settlement_tax_rate_bps BETWEEN 0 AND 10000)',
+            );
+            await _safeAddColumn(
+              'consignment_agreements',
+              'settlement_tax_inclusive',
+              'INTEGER NOT NULL DEFAULT 0 CHECK (settlement_tax_inclusive IN (0,1))',
+            );
+            await m.createTable(consignmentSettlementStatements);
+            await m.createTable(consignmentSettlementItems);
+            await m.createTable(consignmentSettlementPayments);
+            await customStatement(
+              'DROP TRIGGER IF EXISTS consignment_agreements_active_terms_guard',
+            );
+            await installConsignmentFoundationGuards(this);
+            await installConsignmentSettlementGuards(this);
+          });
+        }
+
+        // Consignment C6: enforce settlement/payment state machines at
+        // the database boundary for local, LAN and retry-safe callers.
+        if (from < 10103) {
+          await installConsignmentSettlementGuards(this);
+        }
+
+        // Consignment C7: preserve the financial reversal for damaged/scrap
+        // customer returns without making those units sellable again.
+        if (from < 10104) {
+          await transaction(() async {
+            await _safeAddColumn(
+              'consignment_obligation_events',
+              'restores_stock',
+              'INTEGER NOT NULL DEFAULT 1 CHECK (restores_stock IN (0,1))',
+            );
+            await _safeAddColumn(
+              'consignment_adjustment_return_events',
+              'restores_stock',
+              'INTEGER NOT NULL DEFAULT 1 CHECK (restores_stock IN (0,1))',
+            );
+            await installConsignmentSalesGuards(this);
+            await installConsignmentAdjustmentReturnGuards(this);
+          });
+        }
+
+        // Consignment C7 hardening: zero-value agreements still require an
+        // immutable quantity-provenance event before a sale can complete.
+        // Reinstalling the trigger makes the rule effective on existing 10104
+        // databases without rewriting business data.
+        if (from < 10105) {
+          await transaction(() => installConsignmentSalesGuards(this));
+        }
+
+        // Station 3: a transfer now owns immutable dispatch allocations and
+        // partial receipt documents. Rebuild the two existing headers so their
+        // CHECK constraints accept the new lifecycle states/kinds. The
+        // consignment layer rebuild removes the old one-layer-per-receipt-line
+        // uniqueness and adds explicit custody provenance for warehouse moves.
+        if (from < 10106) {
+          await transaction(() async {
+            await removeWarehouseTransferGuards(this);
+            await customStatement(
+              'DROP TRIGGER IF EXISTS consignment_layers_insert_guard',
+            );
+            await customStatement(
+              'DROP TRIGGER IF EXISTS consignment_layers_identity_guard',
+            );
+            await m.alterTable(TableMigration(warehouseTransfers));
+            await m.alterTable(TableMigration(warehouseTransferEvents));
+            await m.alterTable(
+              TableMigration(
+                consignmentInventoryLayers,
+                newColumns: [
+                  consignmentInventoryLayers.originLayerId,
+                  consignmentInventoryLayers.transferAllocationId,
+                ],
+              ),
+            );
+            await m.createTable(warehouseTransferDispatches);
+            await m.createTable(warehouseTransferAllocations);
+            await m.createTable(warehouseTransferReceipts);
+            await m.createTable(warehouseTransferReceiptItems);
+            await installConsignmentInventoryGuards(this);
+          });
+        }
+
+        // Supplier identity completion: preserve an exact, optional source on
+        // sales and standalone customer returns. Existing rows stay NULL.
+        if (from < 10107) {
+          await transaction(() async {
+            await _safeAddColumn(
+              'sale_items',
+              'supplier_identity_id',
+              'INTEGER NULL REFERENCES supplier_product_identities(id) ON DELETE RESTRICT',
+            );
+            await _safeAddColumn(
+              'sale_return_adjustment_items',
+              'supplier_identity_id',
+              'INTEGER NULL REFERENCES supplier_product_identities(id) ON DELETE RESTRICT',
+            );
+            await installSupplierIdentityMovementGuards(this);
+          });
+        }
+
+        // Repair release: a short-lived 10107 build could stamp the version
+        // before the transfer-custody expansion had reached the device. Inspect
+        // the physical schema instead of trusting user_version, then complete
+        // the interrupted expansion without changing business rows.
+        if (from < 10108) {
+          await transaction(() async {
+            final hasOriginLayer = await _columnExists(
+              'consignment_inventory_layers',
+              'origin_layer_id',
+            );
+            final hasTransferAllocation = await _columnExists(
+              'consignment_inventory_layers',
+              'transfer_allocation_id',
+            );
+            final missingTransferTables =
+                !await _tableExists('warehouse_transfer_dispatches') ||
+                !await _tableExists('warehouse_transfer_allocations') ||
+                !await _tableExists('warehouse_transfer_receipts') ||
+                !await _tableExists('warehouse_transfer_receipt_items');
+
+            if (!hasOriginLayer ||
+                !hasTransferAllocation ||
+                missingTransferTables) {
+              await removeWarehouseTransferGuards(this);
+              await customStatement(
+                'DROP TRIGGER IF EXISTS consignment_layers_insert_guard',
+              );
+              await customStatement(
+                'DROP TRIGGER IF EXISTS consignment_layers_identity_guard',
+              );
+              await customStatement(
+                'DROP TRIGGER IF EXISTS consignment_layers_no_delete',
+              );
+
+              // The incomplete build still has the pre-custody CHECK
+              // constraints on these two headers.
+              await m.alterTable(TableMigration(warehouseTransfers));
+              await m.alterTable(TableMigration(warehouseTransferEvents));
+
+              final newLayerColumns = <GeneratedColumn>[
+                if (!hasOriginLayer) consignmentInventoryLayers.originLayerId,
+                if (!hasTransferAllocation)
+                  consignmentInventoryLayers.transferAllocationId,
+              ];
+              await m.alterTable(
+                TableMigration(
+                  consignmentInventoryLayers,
+                  newColumns: newLayerColumns,
+                ),
+              );
+
+              if (!await _tableExists('warehouse_transfer_dispatches')) {
+                await m.createTable(warehouseTransferDispatches);
+              }
+              if (!await _tableExists('warehouse_transfer_allocations')) {
+                await m.createTable(warehouseTransferAllocations);
+              }
+              if (!await _tableExists('warehouse_transfer_receipts')) {
+                await m.createTable(warehouseTransferReceipts);
+              }
+              if (!await _tableExists('warehouse_transfer_receipt_items')) {
+                await m.createTable(warehouseTransferReceiptItems);
+              }
+
+              await installConsignmentInventoryGuards(this);
+            }
+          });
+        }
+
+        // Explicit sale source selection: preserves the chosen consignment
+        // custody layer while old and automatic sales remain NULL.
+        if (from < 10109) {
+          await transaction(() async {
+            await _safeAddColumn(
+              'sale_items',
+              'consignment_layer_id',
+              'TEXT NULL',
+            );
+            await installSaleSourceSelectionGuards(this);
+          });
+        }
+
+        // Explicit settlement-return source decision and audit metadata.
+        // Existing rows stay NULL and are reported as legacy unresolved;
+        // every new UI/LAN submission writes a concrete resolution.
+        if (from < 10110) {
+          await transaction(() async {
+            await _safeAddColumn(
+              'sale_return_adjustment_items',
+              'source_resolution',
+              'TEXT NULL',
+            );
+            await _safeAddColumn(
+              'sale_return_adjustment_items',
+              'source_resolution_reason',
+              'TEXT NULL',
+            );
+            await _safeAddColumn(
+              'sale_return_adjustment_items',
+              'source_resolved_by',
+              'INTEGER NULL',
+            );
+            await _safeAddColumn(
+              'sale_return_adjustment_items',
+              'source_resolved_at',
+              'TEXT NULL',
+            );
+          });
+        }
+
+        // Supplier-owned custody dispositions: return-to-supplier, loss and
+        // damage are independent posted documents with immutable audit events.
+        if (from < 10111) {
+          await transaction(() async {
+            await customStatement(
+              'DROP TRIGGER IF EXISTS consignment_statement_item_insert_guard',
+            );
+            await customStatement(
+              'DROP TRIGGER IF EXISTS consignment_statement_item_immutable',
+            );
+            await customStatement(
+              'DROP TRIGGER IF EXISTS consignment_statement_item_no_delete',
+            );
+            await m.alterTable(TableMigration(consignmentSettlementItems));
+            await m.createTable(consignmentCustodyDocuments);
+            await m.createTable(consignmentCustodyItems);
+            await m.createTable(consignmentCustodyEvents);
+            await installConsignmentCustodyGuards(this);
+            await installConsignmentSettlementGuards(this);
+          });
+        }
+
+        // Explicit ownership conversion of already-recorded enterprise stock.
+        // Physical quantity is preserved; the immutable document ties the
+        // consignment receipt, exact prior source and accounting reversal.
+        if (from < 10112) {
+          await transaction(() async {
+            await m.createTable(consignmentOwnershipConversions);
+            await m.createTable(consignmentOwnershipConversionItems);
+            await installConsignmentOwnershipConversionGuards(this);
+          });
+        }
+
+        // Station 3 dispatch accounting: route the dispatch journal to the
+        // source warehouse and future receipt journals to the destination.
+        // This migration changes triggers and canonical account seed data only;
+        // it does not rewrite stock, transfers or historical journals.
+        // Reinstalled after all Station 3 document tables exist below.
+
+        // Station 3 receipt provenance: destination FIFO lots retain their
+        // immediate source batch and immutable dispatch allocation. Reinstall
+        // the evolving guards after both nullable columns exist.
+        if (from < 10114) {
+          await transaction(() async {
+            await _safeAddColumn(
+              'product_batches',
+              'origin_batch_id',
+              'INTEGER NULL REFERENCES product_batches(id) ON DELETE RESTRICT',
+            );
+            await _safeAddColumn(
+              'product_batches',
+              'transfer_allocation_id',
+              'TEXT NULL',
+            );
+            await installConsignmentInventoryGuards(this);
+          });
+        }
+
+        // Station 3 in-transit recall: closes the remaining dispatched
+        // quantity with an immutable reverse document instead of editing or
+        // deleting dispatch/receipt history. FIFO ledger rows gain the exact
+        // allocation identity used by dispatch and recall.
+        if (from < 10115) {
+          await transaction(() async {
+            await _safeAddColumn(
+              'batch_consumptions',
+              'transfer_allocation_id',
+              'TEXT NULL',
+            );
+            await m.createTable(warehouseTransferRecalls);
+            await m.createTable(warehouseTransferRecallItems);
+            await installWarehouseTransferGuards(this);
+            await installBusinessDocumentLocations(this);
+          });
         }
 
         await _createIndexes();
@@ -6441,281 +6975,7 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
     final currencyId = defaultCurrencyRow.id;
 
     // STRICT Chart of Accounts — matches JournalEntryService requirements
-    final defaultAccounts = <Map<String, dynamic>>[
-      // ── Assets (1xxx) ──
-      {
-        'code': '1000',
-        'name': 'Cash',
-        'type': 'asset',
-        'system': true,
-        'order': 1,
-      },
-      {
-        'code': '1010',
-        'name': 'Bank',
-        'type': 'asset',
-        'system': true,
-        'order': 2,
-      },
-      {
-        'code': '1020',
-        'name': 'Cheques in Hand',
-        'type': 'asset',
-        'system': true,
-        'order': 3,
-      },
-      {
-        'code': '1030',
-        'name': 'Dishonoured Cheques Receivable',
-        'type': 'asset',
-        'system': true,
-        'order': 4,
-      },
-      {
-        'code': '1100',
-        'name': 'Accounts Receivable',
-        'type': 'asset',
-        'system': true,
-        'order': 3,
-      },
-      {
-        'code': '1200',
-        'name': 'Inventory',
-        'type': 'asset',
-        'system': true,
-        'order': 4,
-      },
-      // 1290 Returns in Transit — asset-class clearing account for the
-      // `send_back` disposition on purchase returns. Goods have physically
-      // left but the supplier credit memo is still pending; inventory
-      // value parks here until reconciled. See seedDefaultAccounts doc.
-      {
-        'code': '1290',
-        'name': 'Returns in Transit',
-        'type': 'asset',
-        'system': true,
-        'order': 6,
-      },
-      {
-        'code': '1300',
-        'name': 'VAT Receivable',
-        'type': 'asset',
-        'system': true,
-        'order': 7,
-      },
-      {
-        'code': '1500',
-        'name': 'Fixed Assets',
-        'type': 'asset',
-        'system': true,
-        'order': 8,
-      },
-      {
-        'code': '1510',
-        'name': 'Furniture and Fixtures',
-        'type': 'asset',
-        'system': true,
-        'order': 9,
-      },
-      {
-        'code': '1520',
-        'name': 'Equipment and Air Conditioners',
-        'type': 'asset',
-        'system': true,
-        'order': 10,
-      },
-      {
-        'code': '1590',
-        'name': 'Accumulated Depreciation',
-        'type': 'asset',
-        'system': true,
-        'order': 11,
-      },
-      // ── Liabilities (2xxx) ──
-      {
-        'code': '2000',
-        'name': 'Accounts Payable',
-        'type': 'liability',
-        'system': true,
-        'order': 10,
-      },
-      {
-        'code': '2020',
-        'name': 'Cheques Issued',
-        'type': 'liability',
-        'system': true,
-        'order': 11,
-      },
-      {
-        'code': '2100',
-        'name': 'VAT Payable',
-        'type': 'liability',
-        'system': true,
-        'order': 11,
-      },
-      {
-        'code': '2200',
-        'name': 'Owner Loan Payable',
-        'type': 'liability',
-        'system': true,
-        'order': 12,
-      },
-      {
-        'code': '2300',
-        'name': 'Loyalty Points Liability',
-        'type': 'liability',
-        'system': true,
-        'order': 12,
-      },
-      // 2400 Customer Credit Liability — holds on-account refunds for
-      // unlinked sale returns (returns without an original invoice).
-      // Keeps 1100 AR clean and prevents orphaned negative-AR balances.
-      {
-        'code': '2400',
-        'name': 'Customer Credit Liability',
-        'type': 'liability',
-        'system': true,
-        'order': 13,
-      },
-      // ── Equity (3xxx) ──
-      {
-        'code': '3000',
-        'name': 'Owner Capital',
-        'type': 'equity',
-        'system': true,
-        'order': 20,
-      },
-      {
-        'code': '3100',
-        'name': 'Opening Balance Equity',
-        'type': 'equity',
-        'system': true,
-        'order': 21,
-      },
-      {
-        'code': '3200',
-        'name': 'Owner Drawings',
-        'type': 'equity',
-        'system': true,
-        'order': 22,
-      },
-      // ── Income (4xxx) ──
-      {
-        'code': '4000',
-        'name': 'Sales Revenue',
-        'type': 'revenue',
-        'system': true,
-        'order': 30,
-      },
-      // 5700 Sales Return Adjustment is a CONTRA-REVENUE account: classified
-      // as `revenue` so its debit balance auto-reduces gross sales on the
-      // income statement (IFRS/GAAP "Net Sales" presentation).
-      {
-        'code': '5700',
-        'name': 'Sales Return Adjustment',
-        'type': 'revenue',
-        'system': true,
-        'order': 33,
-      },
-      {
-        'code': '4200',
-        'name': 'Inventory Gain',
-        'type': 'revenue',
-        'system': true,
-        'order': 32,
-      },
-      // 4900 Purchase Discounts Earned — revenue / "other income" account
-      // for after-the-fact, unallocated supplier discounts recorded from
-      // the supplier profile screen (transaction_type='discount'). The
-      // historical posting was Dr AP / Cr Inventory which silently credited
-      // Inventory without any matching stock-side movement, producing a
-      // permanent GL ↔ Σ(stock×cost) drift. Routing the credit here keeps
-      // Inventory equal to the on-hand carrying value and recognises the
-      // discount as income in the period received (IFRS/GAAP treatment of
-      // unallocated supplier rebates that cannot be allocated back to
-      // specific PO lines without a landed-cost recalculation).
-      {
-        'code': '4900',
-        'name': 'Purchase Discounts Earned',
-        'type': 'revenue',
-        'system': true,
-        'order': 34,
-      },
-      // ── Expenses (5xxx) ──
-      // 4100 Purchase Return Adjustment is a CONTRA-EXPENSE account:
-      // classified as `expense` so its credit balance auto-reduces gross
-      // COGS on the income statement (IFRS/GAAP "Net Cost of Sales").
-      {
-        'code': '4100',
-        'name': 'Purchase Return Adjustment',
-        'type': 'expense',
-        'system': true,
-        'order': 40,
-      },
-      {
-        'code': '5100',
-        'name': 'Expenses',
-        'type': 'expense',
-        'system': true,
-        'order': 41,
-      },
-      {
-        'code': '5200',
-        'name': 'Salaries Expense',
-        'type': 'expense',
-        'system': true,
-        'order': 42,
-      },
-      {
-        'code': '5300',
-        'name': 'Cost of Goods Sold',
-        'type': 'expense',
-        'system': true,
-        'order': 43,
-      },
-      {
-        'code': '5500',
-        'name': 'Discounts Given',
-        'type': 'expense',
-        'system': true,
-        'order': 44,
-      },
-      {
-        'code': '5600',
-        'name': 'Commissions Expense',
-        'type': 'expense',
-        'system': true,
-        'order': 45,
-      },
-      {
-        'code': '5800',
-        'name': 'Inventory Shrinkage',
-        'type': 'expense',
-        'system': true,
-        'order': 47,
-      },
-      {
-        'code': '5900',
-        'name': 'Inventory Revaluation',
-        'type': 'expense',
-        'system': true,
-        'order': 48,
-      },
-      {
-        'code': '6100',
-        'name': 'Depreciation Expense',
-        'type': 'expense',
-        'system': true,
-        'order': 49,
-      },
-      {
-        'code': '6200',
-        'name': 'Bad Debt Expense',
-        'type': 'expense',
-        'system': true,
-        'order': 50,
-      },
-    ];
+    final defaultAccounts = systemAccountDefinitions;
 
     // Idempotent and self-healing: legacy databases may already contain the
     // required codes but with is_system_account=false (older seed versions).

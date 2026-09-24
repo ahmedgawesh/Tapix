@@ -13,7 +13,9 @@ void main() {
     late CompanyProfileService service;
 
     setUp(() {
-      database = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
+      database = AppDatabase.connect(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
       settingsDao = SettingsDao(database);
       service = CompanyProfileService(settingsDao);
     });

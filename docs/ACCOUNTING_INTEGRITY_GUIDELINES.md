@@ -671,3 +671,12 @@ Phase 15.4 is UI-only. Existing posted PAR / SAR rows are unaffected; the next t
 ---
 
 **Remember: Money is sacred. Every cent must be accounted for. No exceptions.**
+
+
+## Supplier sales provenance — schema10093 (2026-09-22)
+
+Quantity provenance and financial valuation are separate. Standard WAC/last-cost movements may record receipt-order allocations in `inventory_origin_events` and maintain `inventory_origin_states`, in the same transaction as stock. These tables must NEVER drive COGS, GL inventory valuation, or WAC batch depletion. The Phase15.3 prohibition on using stale WAC `product_batches.remaining_quantity` remains in force.
+
+Report receipt allocations as `allocated`, separately from saved batch links (`verified`). Never backfill supplier attribution from current preferred vendor, old WAC batch balances, SAR names, or purchase proportions. Unverified customer returns are their own source category. Restore linked returns from saved sale allocations and reverse their claims on cancellation. Direct stock edits invalidate the quantity projection instead of silently keeping stale source shares.
+
+Transfer dispatch/receipt must explicitly preserve these source portions in addition to financial values; merely calling StockService without transfer provenance creates an unidentified movement. Details and verification: `business/INVENTORY_ORIGIN_VERIFICATION_AR.md`.

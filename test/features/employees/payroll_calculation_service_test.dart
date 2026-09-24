@@ -24,10 +24,12 @@ Employee buildEmployee({
     salaryCents: salaryCents == null ? null : Decimal.fromInt(salaryCents),
     defaultCommissionRateBps: 0,
     commissionType: 'percentage',
-    salesTargetCents:
-        salesTargetCents == null ? null : Decimal.fromInt(salesTargetCents),
-    targetBonusCents:
-        targetBonusCents == null ? null : Decimal.fromInt(targetBonusCents),
+    salesTargetCents: salesTargetCents == null
+        ? null
+        : Decimal.fromInt(salesTargetCents),
+    targetBonusCents: targetBonusCents == null
+        ? null
+        : Decimal.fromInt(targetBonusCents),
     targetPeriod: targetPeriod,
     payPeriodType: 'monthly',
     workingDaysPerPeriod: workingDaysPerPeriod,
@@ -151,7 +153,10 @@ void main() {
   group('targetPeriodRange', () {
     test('monthly target: any month is a closing month', () {
       final r = PayrollCalculationService.targetPeriodRange(
-          targetPeriod: 'monthly', year: 2026, month: 5);
+        targetPeriod: 'monthly',
+        year: 2026,
+        month: 5,
+      );
       expect(r.start, DateTime(2026, 5, 1));
       expect(r.end, DateTime(2026, 5, 31, 23, 59, 59));
       expect(r.isClosingMonth, true);
@@ -159,11 +164,20 @@ void main() {
 
     test('quarterly target: Q1 closing is March', () {
       final jan = PayrollCalculationService.targetPeriodRange(
-          targetPeriod: 'quarterly', year: 2026, month: 1);
+        targetPeriod: 'quarterly',
+        year: 2026,
+        month: 1,
+      );
       final feb = PayrollCalculationService.targetPeriodRange(
-          targetPeriod: 'quarterly', year: 2026, month: 2);
+        targetPeriod: 'quarterly',
+        year: 2026,
+        month: 2,
+      );
       final mar = PayrollCalculationService.targetPeriodRange(
-          targetPeriod: 'quarterly', year: 2026, month: 3);
+        targetPeriod: 'quarterly',
+        year: 2026,
+        month: 3,
+      );
       expect(jan.start, DateTime(2026, 1, 1));
       expect(jan.end, DateTime(2026, 3, 31, 23, 59, 59));
       expect(jan.isClosingMonth, false);
@@ -173,7 +187,10 @@ void main() {
 
     test('quarterly target: Q4 spans Oct–Dec with Dec as closing', () {
       final dec = PayrollCalculationService.targetPeriodRange(
-          targetPeriod: 'quarterly', year: 2026, month: 12);
+        targetPeriod: 'quarterly',
+        year: 2026,
+        month: 12,
+      );
       expect(dec.start, DateTime(2026, 10, 1));
       expect(dec.end, DateTime(2026, 12, 31, 23, 59, 59));
       expect(dec.isClosingMonth, true);
@@ -182,11 +199,17 @@ void main() {
     test('yearly target: only December is a closing month', () {
       for (var m = 1; m <= 11; m++) {
         final r = PayrollCalculationService.targetPeriodRange(
-            targetPeriod: 'yearly', year: 2026, month: m);
+          targetPeriod: 'yearly',
+          year: 2026,
+          month: m,
+        );
         expect(r.isClosingMonth, false, reason: 'month $m');
       }
       final dec = PayrollCalculationService.targetPeriodRange(
-          targetPeriod: 'yearly', year: 2026, month: 12);
+        targetPeriod: 'yearly',
+        year: 2026,
+        month: 12,
+      );
       expect(dec.isClosingMonth, true);
       expect(dec.start, DateTime(2026, 1, 1));
       expect(dec.end, DateTime(2026, 12, 31, 23, 59, 59));
@@ -231,59 +254,65 @@ void main() {
     });
 
     test(
-        'quarterly: target achieved in Feb yields no payout — must wait until March',
-        () {
-      final emp = buildEmployee(
-        salesTargetCents: 100000,
-        targetBonusCents: 5000,
-        targetPeriod: 'quarterly',
-      );
-      // Feb: target met but not payout month.
-      final feb = PayrollCalculationService.checkSalesTargetBonus(
-        employee: emp,
-        actualSalesCents: 120000,
-        periodYear: 2026,
-        periodMonth: 2,
-      );
-      expect(feb.achieved, true);
-      expect(feb.targetBonusCents, 0,
-          reason: 'Bonus must accrue until quarter-close');
-      expect(feb.isPayoutMonth, false);
+      'quarterly: target achieved in Feb yields no payout — must wait until March',
+      () {
+        final emp = buildEmployee(
+          salesTargetCents: 100000,
+          targetBonusCents: 5000,
+          targetPeriod: 'quarterly',
+        );
+        // Feb: target met but not payout month.
+        final feb = PayrollCalculationService.checkSalesTargetBonus(
+          employee: emp,
+          actualSalesCents: 120000,
+          periodYear: 2026,
+          periodMonth: 2,
+        );
+        expect(feb.achieved, true);
+        expect(
+          feb.targetBonusCents,
+          0,
+          reason: 'Bonus must accrue until quarter-close',
+        );
+        expect(feb.isPayoutMonth, false);
 
-      // March: payout month — bonus released.
-      final mar = PayrollCalculationService.checkSalesTargetBonus(
-        employee: emp,
-        actualSalesCents: 120000,
-        periodYear: 2026,
-        periodMonth: 3,
-      );
-      expect(mar.achieved, true);
-      expect(mar.targetBonusCents, 5000);
-      expect(mar.isPayoutMonth, true);
-    });
+        // March: payout month — bonus released.
+        final mar = PayrollCalculationService.checkSalesTargetBonus(
+          employee: emp,
+          actualSalesCents: 120000,
+          periodYear: 2026,
+          periodMonth: 3,
+        );
+        expect(mar.achieved, true);
+        expect(mar.targetBonusCents, 5000);
+        expect(mar.isPayoutMonth, true);
+      },
+    );
 
-    test('yearly: bonus withheld until December regardless of early achievement',
-        () {
-      final emp = buildEmployee(
-        salesTargetCents: 1000000,
-        targetBonusCents: 12000,
-        targetPeriod: 'yearly',
-      );
-      final jun = PayrollCalculationService.checkSalesTargetBonus(
-        employee: emp,
-        actualSalesCents: 1500000,
-        periodYear: 2026,
-        periodMonth: 6,
-      );
-      expect(jun.targetBonusCents, 0);
-      final dec = PayrollCalculationService.checkSalesTargetBonus(
-        employee: emp,
-        actualSalesCents: 1500000,
-        periodYear: 2026,
-        periodMonth: 12,
-      );
-      expect(dec.targetBonusCents, 12000);
-    });
+    test(
+      'yearly: bonus withheld until December regardless of early achievement',
+      () {
+        final emp = buildEmployee(
+          salesTargetCents: 1000000,
+          targetBonusCents: 12000,
+          targetPeriod: 'yearly',
+        );
+        final jun = PayrollCalculationService.checkSalesTargetBonus(
+          employee: emp,
+          actualSalesCents: 1500000,
+          periodYear: 2026,
+          periodMonth: 6,
+        );
+        expect(jun.targetBonusCents, 0);
+        final dec = PayrollCalculationService.checkSalesTargetBonus(
+          employee: emp,
+          actualSalesCents: 1500000,
+          periodYear: 2026,
+          periodMonth: 12,
+        );
+        expect(dec.targetBonusCents, 12000);
+      },
+    );
 
     test('returns zero bonus when target or bonus not configured', () {
       final empNoTarget = buildEmployee(
@@ -312,7 +341,10 @@ void main() {
       final calc = PayrollCalculationService.calculate(
         employee: emp,
         attendanceCounts: {
-          'present': 26, 'late': 0, 'absent': 0, 'leave': 0,
+          'present': 26,
+          'late': 0,
+          'absent': 0,
+          'leave': 0,
           'early_departure': 0,
         },
       );
@@ -328,7 +360,10 @@ void main() {
       final calc = PayrollCalculationService.calculate(
         employee: emp,
         attendanceCounts: {
-          'present': 20, 'late': 0, 'absent': 6, 'leave': 0,
+          'present': 20,
+          'late': 0,
+          'absent': 6,
+          'leave': 0,
           'early_departure': 0,
         },
       );
@@ -346,7 +381,10 @@ void main() {
       final calc = PayrollCalculationService.calculate(
         employee: emp,
         attendanceCounts: {
-          'present': 20, 'late': 0, 'absent': 6, 'leave': 0,
+          'present': 20,
+          'late': 0,
+          'absent': 6,
+          'leave': 0,
           'early_departure': 0,
         },
       );
@@ -362,7 +400,10 @@ void main() {
       final calc = PayrollCalculationService.calculate(
         employee: emp,
         attendanceCounts: {
-          'present': 10, 'late': 0, 'absent': 0, 'leave': 0,
+          'present': 10,
+          'late': 0,
+          'absent': 0,
+          'leave': 0,
           'early_departure': 0,
         },
       );
@@ -376,13 +417,19 @@ void main() {
       final calc = PayrollCalculationService.calculate(
         employee: emp,
         attendanceCounts: {
-          'present': 23, 'late': 3, 'absent': 0, 'leave': 0,
+          'present': 23,
+          'late': 3,
+          'absent': 0,
+          'leave': 0,
           'early_departure': 0,
         },
       );
       expect(calc.lateDeductionCents, 7500);
-      expect(calc.absenceDeductionCents, 0,
-          reason: 'Late days count as paid days');
+      expect(
+        calc.absenceDeductionCents,
+        0,
+        reason: 'Late days count as paid days',
+      );
       expect(calc.netPayCents, 260000 - 7500);
     });
 
@@ -391,7 +438,10 @@ void main() {
       final calc = PayrollCalculationService.calculate(
         employee: emp,
         attendanceCounts: {
-          'present': 20, 'late': 0, 'absent': 0, 'leave': 4,
+          'present': 20,
+          'late': 0,
+          'absent': 0,
+          'leave': 4,
           'early_departure': 2,
         },
       );
@@ -402,32 +452,40 @@ void main() {
       expect(calc.netPayCents, 260000 - 5000);
     });
 
-    test('gross = basic + commission + bonus + overtime; net subtracts dedns',
-        () {
-      final emp = buildEmployee(salaryCents: 260000);
-      final calc = PayrollCalculationService.calculate(
-        employee: emp,
-        attendanceCounts: {
-          'present': 25, 'late': 1, 'absent': 0, 'leave': 0,
-          'early_departure': 0,
-        },
-        commissionCents: 20000,
-        bonusCents: 10000,
-        overtimeCents: 5000,
-      );
-      expect(calc.grossPayCents, 260000 + 20000 + 10000 + 5000);
-      // Late 1 day × 100 × 25% = 25 SAR deduction.
-      expect(calc.lateDeductionCents, 2500);
-      expect(calc.totalDeductionCents, 2500);
-      expect(calc.netPayCents, calc.grossPayCents - 2500);
-    });
+    test(
+      'gross = basic + commission + bonus + overtime; net subtracts dedns',
+      () {
+        final emp = buildEmployee(salaryCents: 260000);
+        final calc = PayrollCalculationService.calculate(
+          employee: emp,
+          attendanceCounts: {
+            'present': 25,
+            'late': 1,
+            'absent': 0,
+            'leave': 0,
+            'early_departure': 0,
+          },
+          commissionCents: 20000,
+          bonusCents: 10000,
+          overtimeCents: 5000,
+        );
+        expect(calc.grossPayCents, 260000 + 20000 + 10000 + 5000);
+        // Late 1 day × 100 × 25% = 25 SAR deduction.
+        expect(calc.lateDeductionCents, 2500);
+        expect(calc.totalDeductionCents, 2500);
+        expect(calc.netPayCents, calc.grossPayCents - 2500);
+      },
+    );
 
     test('zero salary yields zero payroll — graceful degradation', () {
       final emp = buildEmployee(salaryCents: 0);
       final calc = PayrollCalculationService.calculate(
         employee: emp,
         attendanceCounts: {
-          'present': 26, 'late': 0, 'absent': 0, 'leave': 0,
+          'present': 26,
+          'late': 0,
+          'absent': 0,
+          'leave': 0,
           'early_departure': 0,
         },
       );
@@ -441,7 +499,10 @@ void main() {
       final calc = PayrollCalculationService.calculate(
         employee: emp,
         attendanceCounts: {
-          'present': 26, 'late': 0, 'absent': 0, 'leave': 0,
+          'present': 26,
+          'late': 0,
+          'absent': 0,
+          'leave': 0,
           'early_departure': 0,
         },
       );

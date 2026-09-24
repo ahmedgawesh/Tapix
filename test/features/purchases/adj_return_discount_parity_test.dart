@@ -16,27 +16,33 @@ import 'package:tapix/features/purchases/presentation/bloc/purchase_adj_return_f
 /// jacket 30 SAR x10 + skirt 50 SAR x10, all lines @ 1% tax, 1% discount.
 void main() {
   // Two lines, each with 1% tax (taxRateBps = 100).
-  AdjReturnLineItem jacket({int qty = 10, int discountCents = 0, int discountPercentBps = 0}) =>
-      AdjReturnLineItem(
-        productId: 1,
-        productName: 'Jacket',
-        quantity: qty,
-        unitPriceCents: 3000, // 30.00
-        taxRateBps: 100, // 1%
-        discountCents: discountCents,
-        discountPercentBps: discountPercentBps,
-      );
+  AdjReturnLineItem jacket({
+    int qty = 10,
+    int discountCents = 0,
+    int discountPercentBps = 0,
+  }) => AdjReturnLineItem(
+    productId: 1,
+    productName: 'Jacket',
+    quantity: qty,
+    unitPriceCents: 3000, // 30.00
+    taxRateBps: 100, // 1%
+    discountCents: discountCents,
+    discountPercentBps: discountPercentBps,
+  );
 
-  AdjReturnLineItem skirt({int qty = 10, int discountCents = 0, int discountPercentBps = 0}) =>
-      AdjReturnLineItem(
-        productId: 2,
-        productName: 'Skirt',
-        quantity: qty,
-        unitPriceCents: 5000, // 50.00
-        taxRateBps: 100, // 1%
-        discountCents: discountCents,
-        discountPercentBps: discountPercentBps,
-      );
+  AdjReturnLineItem skirt({
+    int qty = 10,
+    int discountCents = 0,
+    int discountPercentBps = 0,
+  }) => AdjReturnLineItem(
+    productId: 2,
+    productName: 'Skirt',
+    quantity: qty,
+    unitPriceCents: 5000, // 50.00
+    taxRateBps: 100, // 1%
+    discountCents: discountCents,
+    discountPercentBps: discountPercentBps,
+  );
 
   group('Bug #1 — overall % discount equals per-item %', () {
     test('1% per-item discount matches 1% invoice-level discount', () {
@@ -52,8 +58,9 @@ void main() {
       // Invoice-level: lines are clean, overall discount = 1% (100 bps)
       // applied via the percent-cents conversion the UI layer performs against
       // the *net before tax* base — see _CheckoutSheet._syncDiscountFromPercent.
-      final overallNet =
-          PurchaseAdjReturnFormState(items: [jacket(), skirt()]).totalNetBeforeOverallDiscountCents;
+      final overallNet = PurchaseAdjReturnFormState(
+        items: [jacket(), skirt()],
+      ).totalNetBeforeOverallDiscountCents;
       final overallPercentCents = (overallNet * 100 / 10000).round(); // 1%
       final overall = PurchaseAdjReturnFormState(
         items: [jacket(), skirt()],
@@ -79,7 +86,10 @@ void main() {
 
   group('Bug #2 — per-item % survives external quantity changes', () {
     test('changing quantity re-applies the saved percent', () {
-      final original = jacket(qty: 10, discountPercentBps: 100); // 1% of 300 = 3.00
+      final original = jacket(
+        qty: 10,
+        discountPercentBps: 100,
+      ); // 1% of 300 = 3.00
       expect(original.effectiveDiscountCents, 300);
       expect(original.netCents, 30000 - 300);
 

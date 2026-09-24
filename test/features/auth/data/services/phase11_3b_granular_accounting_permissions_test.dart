@@ -26,13 +26,13 @@ void main() {
   final svc = PermissionService();
 
   UserEntity user(UserRole role, {bool isActive = true}) => UserEntity(
-        id: 1,
-        username: 'u-${role.name}',
-        role: role,
-        isActive: isActive,
-        createdAt: DateTime(2026, 1, 1),
-        updatedAt: DateTime(2026, 1, 1),
-      );
+    id: 1,
+    username: 'u-${role.name}',
+    role: role,
+    isActive: isActive,
+    createdAt: DateTime(2026, 1, 1),
+    updatedAt: DateTime(2026, 1, 1),
+  );
 
   group('Phase 11.3b — granular accounting permissions', () {
     test('three constants exist and are unique strings', () {
@@ -69,7 +69,10 @@ void main() {
       () {
         final manager = user(UserRole.manager);
         // Sanity: manager DOES hold the coarse void permission.
-        expect(svc.hasPermission(manager, Permissions.voidTransactions), isTrue);
+        expect(
+          svc.hasPermission(manager, Permissions.voidTransactions),
+          isTrue,
+        );
         // But NOT any of the granular accounting ones.
         expect(
           svc.hasPermission(manager, Permissions.voidJournalEntry),
@@ -115,12 +118,21 @@ void main() {
     test('cashier and salesperson hold none of the three', () {
       for (final role in [UserRole.cashier, UserRole.salesperson]) {
         final u = user(role);
-        expect(svc.hasPermission(u, Permissions.voidJournalEntry), isFalse,
-            reason: '${role.name} must not void JEs');
-        expect(svc.hasPermission(u, Permissions.closeFiscalPeriod), isFalse,
-            reason: '${role.name} must not close periods');
-        expect(svc.hasPermission(u, Permissions.reopenFiscalPeriod), isFalse,
-            reason: '${role.name} must not reopen periods');
+        expect(
+          svc.hasPermission(u, Permissions.voidJournalEntry),
+          isFalse,
+          reason: '${role.name} must not void JEs',
+        );
+        expect(
+          svc.hasPermission(u, Permissions.closeFiscalPeriod),
+          isFalse,
+          reason: '${role.name} must not close periods',
+        );
+        expect(
+          svc.hasPermission(u, Permissions.reopenFiscalPeriod),
+          isFalse,
+          reason: '${role.name} must not reopen periods',
+        );
       }
     });
 

@@ -5,10 +5,7 @@ import '../../domain/entities/employee_entity.dart';
 class AttendanceStatusCards extends StatelessWidget {
   final AttendanceSummary summary;
 
-  const AttendanceStatusCards({
-    super.key,
-    required this.summary,
-  });
+  const AttendanceStatusCards({super.key, required this.summary});
 
   @override
   Widget build(BuildContext context) {
@@ -77,18 +74,12 @@ class _StatusCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withValues(alpha: isDark ? 0.15 : 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: color.withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            color: color,
-            size: 24,
-          ),
+          Icon(icon, color: color, size: 24),
           const SizedBox(height: 4),
           Text(
             count.toString(),

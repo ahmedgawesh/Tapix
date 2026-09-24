@@ -10,7 +10,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:decimal/decimal.dart';
 
-import '../../../../core/database/app_database.dart' show Customer, Employee;
+import '../../../../core/database/app_database.dart'
+    show AppDatabase, Customer, Employee;
 import '../../../../core/database/daos/pharmacy_dao.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/feature_gate_service.dart';
@@ -18,6 +19,8 @@ import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/services/below_cost_sale_service.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/lan/lan_network_service.dart';
+import '../../../../core/services/inventory/supplier_product_identity_service.dart';
+import '../../../../core/services/inventory/inventory_stock_source_service.dart';
 import '../../../../core/services/pricing/discount_converter.dart';
 import '../../../../core/services/parties/party_balance_classifier.dart';
 import '../../../../core/widgets/inputs/select_all_on_focus.dart';
@@ -51,6 +54,7 @@ import '../../../products/presentation/bloc/products_bloc.dart';
 import '../../../products/presentation/bloc/variant_previews_bloc.dart';
 import '../../../products/presentation/bloc/product_variants_bloc.dart';
 import '../../../products/presentation/widgets/medicine_alternatives_dialog.dart';
+import '../../domain/services/sale_stock_source_reservation.dart';
 import '../../../customers/domain/repositories/customer_repository.dart';
 import '../../../customers/presentation/bloc/customers_bloc.dart';
 import '../../../employees/domain/repositories/employee_repository.dart';
@@ -62,17 +66,63 @@ import '../widgets/remote_customer_checkout_card.dart';
 
 part 'sale_form_dialogs.dart';
 
+SaleStockSourceRef _localSourceRef(InventoryStockSourceBalance source) =>
+    SaleStockSourceRef(
+      productId: source.productId,
+      variantId: source.variantId,
+      supplierIdentityId: source.supplierIdentityId,
+      consignmentLayerId: source.consignmentLayerId,
+    );
+
+SaleStockSourceRef _remoteSourceRef(LanInventoryStockSource source) =>
+    SaleStockSourceRef(
+      productId: source.productId,
+      variantId: source.variantId,
+      supplierIdentityId: source.supplierIdentityId,
+      consignmentLayerId: source.consignmentLayerId,
+    );
+
+SaleStockSourceRef _saleLineSourceRef(SaleLineItem item) => SaleStockSourceRef(
+  productId: item.product.id,
+  variantId: item.stockSourceVariantId ?? item.variant?.id ?? -item.product.id,
+  supplierIdentityId: item.supplierIdentityId,
+  consignmentLayerId: item.consignmentLayerId,
+);
+
+List<SaleStockSourceReservation> _saleSourceReservations(
+  Iterable<SaleLineItem> items,
+) => items
+    .where((item) => item.product.trackInventory)
+    .map(
+      (item) => SaleStockSourceReservation(
+        lineId: item.tempId,
+        source: _saleLineSourceRef(item),
+        quantity: item.quantity,
+      ),
+    )
+    .toList(growable: false);
+
 class _PromotionBundleLine {
   final Product product;
   final ProductVariant? variant;
   final int quantity;
   final Decimal unitPriceCents;
+  final int? stockSourceVariantId;
+  final int? supplierIdentityId;
+  final String? supplierSourceSku;
+  final String? supplierName;
+  final String? consignmentLayerId;
 
   const _PromotionBundleLine({
     required this.product,
     required this.variant,
     required this.quantity,
     required this.unitPriceCents,
+    this.stockSourceVariantId,
+    this.supplierIdentityId,
+    this.supplierSourceSku,
+    this.supplierName,
+    this.consignmentLayerId,
   });
 }
 
@@ -809,6 +859,58 @@ class _SaleFormView extends StatelessWidget {
         try {
           final page = await lan.fetchRemoteCatalog(query: result, limit: 50);
           if (!context.mounted) return;
+          final sourceMatch = page.products
+              .where(
+                (product) =>
+                    product.matchedSupplierIdentityId != null ||
+                    product.matchedConsignmentLayerId != null,
+              )
+              .firstOrNull;
+          if (sourceMatch != null) {
+            final variant = sourceMatch.hasVariants
+                ? sourceMatch.variants
+                      .where(
+                        (value) =>
+                            value.id == sourceMatch.matchedCanonicalVariantId,
+                      )
+                      .firstOrNull
+                : null;
+            if (!sourceMatch.hasVariants || variant != null) {
+              final layerId = sourceMatch.matchedConsignmentLayerId;
+              final identityId = sourceMatch.matchedSupplierIdentityId;
+              final snapshot = await lan.fetchRemoteInventoryStockSources(
+                productId: sourceMatch.id,
+                variantId: sourceMatch.matchedCanonicalVariantId,
+              );
+              if (!context.mounted) return;
+              final exactSource = snapshot.sources
+                  .where(
+                    (source) =>
+                        (layerId != null &&
+                            source.consignmentLayerId == layerId) ||
+                        (identityId != null &&
+                            source.supplierIdentityId == identityId),
+                  )
+                  .firstOrNull;
+              if (exactSource == null ||
+                  _remainingRemoteSource(context, exactSource) <
+                      sourceMatch.quantityScale) {
+                _showSourceInsufficient(context);
+                return;
+              }
+              _addRemoteCatalogLine(
+                context,
+                sourceMatch,
+                variant,
+                stockSourceVariantId: exactSource.variantId,
+                supplierIdentityId: identityId,
+                supplierSourceSku: exactSource.sourceCode,
+                supplierName: exactSource.supplierName,
+                consignmentLayerId: layerId,
+              );
+              return;
+            }
+          }
           LanCatalogProduct? productMatch;
           LanCatalogProduct? variantProduct;
           LanCatalogVariant? variantMatch;
@@ -830,14 +932,22 @@ class _SaleFormView extends StatelessWidget {
             }
           }
           if (variantMatch != null && variantProduct != null) {
-            _addRemoteCatalogLine(context, variantProduct, variantMatch);
+            await _addRemoteCatalogLineWithSource(
+              context,
+              variantProduct,
+              variantMatch,
+            );
             return;
           }
           if (productMatch != null) {
             if (productMatch.hasVariants) {
               _showRemoteAddItemSheet(context, initial: productMatch);
             } else {
-              _addRemoteCatalogLine(context, productMatch, null);
+              await _addRemoteCatalogLineWithSource(
+                context,
+                productMatch,
+                null,
+              );
             }
             return;
           }
@@ -860,9 +970,97 @@ class _SaleFormView extends StatelessWidget {
         return;
       }
 
+      final productRepository = sl<ProductRepository>();
+      final variantRepository = sl<ProductVariantRepository>();
+      final consignmentSource = await InventoryStockSourceService(
+        sl<AppDatabase>(),
+      ).resolveConsignmentCode(result);
+      if (consignmentSource != null) {
+        final product = await productRepository.getProductById(
+          consignmentSource.productId,
+        );
+        final variant = await variantRepository.getVariantById(
+          consignmentSource.variantId,
+        );
+        if (product != null &&
+            product.isActive &&
+            variant != null &&
+            variant.isActive &&
+            context.mounted) {
+          if (_remainingLocalSource(context, consignmentSource) <
+              product.quantityScale) {
+            _showSourceInsufficient(context);
+            return;
+          }
+          context.read<SaleFormBloc>().add(
+            SaleLineItemAdded(
+              product: product,
+              variant: product.hasVariants ? variant : null,
+              stockSourceVariantId: consignmentSource.variantId,
+              consignmentLayerId: consignmentSource.consignmentLayerId,
+              supplierSourceSku: consignmentSource.sourceCode,
+              supplierName: consignmentSource.supplierName,
+              quantity: product.quantityScale,
+              unitPriceCents: product.hasVariants
+                  ? variant.priceCents
+                  : product.priceCents,
+            ),
+          );
+          return;
+        }
+      }
+      final identity = await SupplierProductIdentityService(
+        sl<AppDatabase>(),
+      ).resolveSelection(result);
+      if (identity != null) {
+        final product = await productRepository.getProductById(
+          identity.productId,
+        );
+        final variant = await variantRepository.getVariantById(
+          identity.canonicalVariantId,
+        );
+        if (product != null &&
+            product.isActive &&
+            variant != null &&
+            variant.isActive &&
+            context.mounted) {
+          final snapshot = await InventoryStockSourceService(sl<AppDatabase>())
+              .loadProduct(
+                identity.productId,
+                variantId: identity.canonicalVariantId,
+              );
+          if (!context.mounted) return;
+          final exactSource = snapshot.sources
+              .where(
+                (source) => source.supplierIdentityId == identity.identityId,
+              )
+              .firstOrNull;
+          if (exactSource == null ||
+              _remainingLocalSource(context, exactSource) <
+                  product.quantityScale) {
+            _showSourceInsufficient(context);
+            return;
+          }
+          context.read<SaleFormBloc>().add(
+            SaleLineItemAdded(
+              product: product,
+              variant: product.hasVariants ? variant : null,
+              stockSourceVariantId: exactSource.variantId,
+              supplierIdentityId: identity.identityId,
+              supplierSourceSku: identity.sourceSku,
+              supplierName: identity.supplierName,
+              quantity: product.quantityScale,
+              unitPriceCents: product.hasVariants
+                  ? variant.priceCents
+                  : product.priceCents,
+            ),
+          );
+          return;
+        }
+      }
       final resolver = ProductBarcodeResolver(
-        productRepository: sl<ProductRepository>(),
-        variantRepository: sl<ProductVariantRepository>(),
+        productRepository: productRepository,
+        variantRepository: variantRepository,
       );
 
       try {
@@ -871,25 +1069,17 @@ class _SaleFormView extends StatelessWidget {
 
         switch (resolution.type) {
           case ProductBarcodeResolutionType.variant:
-            final product = resolution.product!;
-            final variant = resolution.variant!;
-            context.read<SaleFormBloc>().add(
-              SaleLineItemAdded(
-                product: product,
-                variant: variant,
-                quantity: product.quantityScale,
-                unitPriceCents: variant.priceCents,
-              ),
+            await _addScannedLocalLineWithSource(
+              context,
+              resolution.product!,
+              resolution.variant!,
             );
             return;
           case ProductBarcodeResolutionType.simpleProduct:
-            final product = resolution.product!;
-            context.read<SaleFormBloc>().add(
-              SaleLineItemAdded(
-                product: product,
-                quantity: product.quantityScale,
-                unitPriceCents: product.priceCents,
-              ),
+            await _addScannedLocalLineWithSource(
+              context,
+              resolution.product!,
+              null,
             );
             return;
           case ProductBarcodeResolutionType.variantParent:
@@ -1087,6 +1277,31 @@ class _SaleFormView extends StatelessWidget {
                     const SizedBox(height: 4),
                     if (item.colorHex != null || item.sizeName != null)
                       _variantChips(item, cs),
+                    if (item.supplierIdentityId != null ||
+                        item.consignmentLayerId != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Chip(
+                          visualDensity: VisualDensity.compact,
+                          avatar: Icon(
+                            item.consignmentLayerId != null
+                                ? LucideIcons.handshake
+                                : LucideIcons.scanBarcode,
+                            size: 14,
+                          ),
+                          label: Text(
+                            [
+                              if (item.consignmentLayerId != null)
+                                'stock_sources.consignment'.tr(),
+                              if (item.supplierName?.trim().isNotEmpty == true)
+                                item.supplierName!.trim(),
+                              if (item.supplierSourceSku?.trim().isNotEmpty ==
+                                  true)
+                                item.supplierSourceSku!.trim(),
+                            ].join(' • '),
+                          ),
+                        ),
+                      ),
                     if (lineOffers.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 4),
@@ -1532,11 +1747,171 @@ class _SaleFormView extends StatelessWidget {
     );
   }
 
+  int _remainingLocalSource(
+    BuildContext context,
+    InventoryStockSourceBalance source, {
+    String? excludingLineId,
+  }) {
+    return SaleStockSourceReservationLedger.remainingQuantity(
+      availableQuantity: source.quantity,
+      reservations: _saleSourceReservations(
+        context.read<SaleFormBloc>().state.items,
+      ),
+      source: _localSourceRef(source),
+      excludingLineId: excludingLineId,
+    );
+  }
+
+  int _remainingRemoteSource(
+    BuildContext context,
+    LanInventoryStockSource source, {
+    String? excludingLineId,
+  }) {
+    return SaleStockSourceReservationLedger.remainingQuantity(
+      availableQuantity: source.quantity,
+      reservations: _saleSourceReservations(
+        context.read<SaleFormBloc>().state.items,
+      ),
+      source: _remoteSourceRef(source),
+      excludingLineId: excludingLineId,
+    );
+  }
+
+  void _showSourceInsufficient(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('stock_sources.insufficient'.tr()),
+        backgroundColor: Theme.of(context).colorScheme.error,
+      ),
+    );
+  }
+
+  Future<void> _addScannedLocalLineWithSource(
+    BuildContext context,
+    Product product,
+    ProductVariant? selectedVariant,
+  ) async {
+    if (!product.trackInventory) {
+      context.read<SaleFormBloc>().add(
+        SaleLineItemAdded(
+          product: product,
+          variant: selectedVariant,
+          quantity: product.quantityScale,
+          unitPriceCents: selectedVariant?.priceCents ?? product.priceCents,
+        ),
+      );
+      return;
+    }
+
+    final operationalVariant =
+        selectedVariant ??
+        await sl<ProductVariantRepository>().getDefaultVariantByProduct(
+          product.id,
+        );
+    if (operationalVariant == null) {
+      if (context.mounted) _showSourceInsufficient(context);
+      return;
+    }
+    if (!context.mounted) return;
+    final snapshot = await InventoryStockSourceService(
+      sl<AppDatabase>(),
+    ).loadProduct(product.id, variantId: operationalVariant.id);
+    if (!context.mounted) return;
+    final sources = snapshot.sources
+        .where(
+          (source) =>
+              _remainingLocalSource(context, source) >= product.quantityScale,
+        )
+        .toList(growable: false);
+    if (sources.isEmpty) {
+      _showSourceInsufficient(context);
+      return;
+    }
+
+    InventoryStockSourceBalance? source;
+    if (sources.length == 1) {
+      source = sources.single;
+    } else {
+      final cs = Theme.of(context).colorScheme;
+      source = await showModalBottomSheet<InventoryStockSourceBalance>(
+        context: context,
+        useSafeArea: true,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (sheetContext) => ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 620),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+            children: [
+              Text(
+                'stock_sources.choose_sale_source'.tr(),
+                style: Theme.of(
+                  sheetContext,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              Text(product.name),
+              const SizedBox(height: 14),
+              ...sources.map(
+                (value) => ListTile(
+                  leading: Icon(
+                    value.isConsignment
+                        ? LucideIcons.handshake
+                        : LucideIcons.building2,
+                    color: value.isConsignment ? cs.tertiary : cs.primary,
+                  ),
+                  title: Text(
+                    value.supplierName?.trim().isNotEmpty == true
+                        ? value.supplierName!
+                        : 'stock_sources.unverified'.tr(),
+                  ),
+                  subtitle: Text(
+                    [
+                      value.isConsignment
+                          ? 'stock_sources.consignment'.tr()
+                          : 'stock_sources.enterprise_owned'.tr(),
+                      localizedQuantity(
+                        _remainingLocalSource(context, value),
+                        value.measurementType,
+                      ),
+                      if (value.sourceCode?.isNotEmpty == true)
+                        value.sourceCode!,
+                    ].join(' • '),
+                  ),
+                  onTap: () => Navigator.pop(sheetContext, value),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (source == null || !context.mounted) return;
+    context.read<SaleFormBloc>().add(
+      SaleLineItemAdded(
+        product: product,
+        variant: selectedVariant,
+        stockSourceVariantId: source.variantId,
+        supplierIdentityId: source.supplierIdentityId,
+        consignmentLayerId: source.consignmentLayerId,
+        supplierSourceSku: source.sourceCode,
+        supplierName: source.supplierName,
+        quantity: product.quantityScale,
+        unitPriceCents: selectedVariant?.priceCents ?? product.priceCents,
+      ),
+    );
+  }
+
   void _addRemoteCatalogLine(
     BuildContext context,
     LanCatalogProduct remoteProduct,
-    LanCatalogVariant? remoteVariant,
-  ) {
+    LanCatalogVariant? remoteVariant, {
+    int? stockSourceVariantId,
+    int? supplierIdentityId,
+    String? supplierSourceSku,
+    String? supplierName,
+    String? consignmentLayerId,
+  }) {
     final product = _productFromLan(remoteProduct);
     final variant = remoteVariant == null
         ? null
@@ -1545,6 +1920,11 @@ class _SaleFormView extends StatelessWidget {
       SaleLineItemAdded(
         product: product,
         variant: variant,
+        supplierIdentityId: supplierIdentityId,
+        stockSourceVariantId: stockSourceVariantId ?? remoteVariant?.id,
+        supplierSourceSku: supplierSourceSku,
+        supplierName: supplierName,
+        consignmentLayerId: consignmentLayerId,
         quantity: product.quantityScale,
         unitPriceCents: Decimal.fromInt(
           remoteVariant?.priceCents ?? remoteProduct.priceCents,
@@ -1552,6 +1932,176 @@ class _SaleFormView extends StatelessWidget {
         colorName: remoteVariant?.colorName,
         sizeName: remoteVariant?.sizeName,
       ),
+    );
+  }
+
+  Future<LanInventoryStockSource?> _chooseRemoteStockSource(
+    BuildContext context, {
+    required int productId,
+    required int? variantId,
+    required int quantity,
+    required String productName,
+    Map<String, int> pendingReservations = const {},
+  }) async {
+    try {
+      final snapshot = await sl<LanNetworkService>()
+          .fetchRemoteInventoryStockSources(
+            productId: productId,
+            variantId: variantId,
+          );
+      if (!context.mounted) return null;
+      final reservations = _saleSourceReservations(
+        context.read<SaleFormBloc>().state.items,
+      );
+      int remainingFor(LanInventoryStockSource source) {
+        final ref = _remoteSourceRef(source);
+        return SaleStockSourceReservationLedger.remainingQuantity(
+          availableQuantity: source.quantity,
+          reservations: reservations,
+          source: ref,
+          pendingQuantity: pendingReservations[ref.reservationKey] ?? 0,
+        );
+      }
+
+      final sources = snapshot.sources
+          .where((source) => remainingFor(source) >= quantity)
+          .toList(growable: false);
+      if (sources.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('stock_sources.insufficient'.tr()),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+        return null;
+      }
+      if (sources.length == 1) return sources.single;
+      final cs = Theme.of(context).colorScheme;
+      return await showModalBottomSheet<LanInventoryStockSource>(
+        context: context,
+        useSafeArea: true,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (sheetContext) => ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 620),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+            children: [
+              Text(
+                'stock_sources.choose_sale_source'.tr(),
+                style: Theme.of(
+                  sheetContext,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                productName,
+                style: Theme.of(sheetContext).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'stock_sources.choose_sale_source_help'.tr(),
+                style: TextStyle(color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(height: 14),
+              ...sources.map((source) {
+                final consignment = source.isConsignment;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      side: BorderSide(color: cs.outlineVariant),
+                    ),
+                    tileColor: consignment
+                        ? cs.tertiaryContainer.withValues(alpha: 0.35)
+                        : cs.surfaceContainerLow,
+                    leading: Icon(
+                      consignment
+                          ? LucideIcons.handshake
+                          : LucideIcons.building2,
+                      color: consignment ? cs.tertiary : cs.primary,
+                    ),
+                    title: Text(
+                      source.supplierName?.trim().isNotEmpty == true
+                          ? source.supplierName!
+                          : 'stock_sources.unverified'.tr(),
+                    ),
+                    subtitle: Text(
+                      [
+                        consignment
+                            ? 'stock_sources.consignment'.tr()
+                            : source.ownership == 'unverified'
+                            ? 'stock_sources.unverified'.tr()
+                            : 'stock_sources.enterprise_owned'.tr(),
+                        '${'stock_sources.available'.tr()}: ${localizedQuantity(remainingFor(source), source.measurementType)}',
+                        if (source.sourceCode?.isNotEmpty == true)
+                          '${'stock_sources.code'.tr()}: ${source.sourceCode}',
+                      ].join(' • '),
+                    ),
+                    trailing: const Icon(LucideIcons.chevronRight),
+                    onTap: () => Navigator.pop(sheetContext, source),
+                  ),
+                );
+              }),
+            ],
+          ),
+        ),
+      );
+    } on LanBusinessException catch (error) {
+      if (context.mounted) {
+        final translated = error.code.tr();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              translated == error.code
+                  ? 'stock_sources.load_failed'.tr()
+                  : translated,
+            ),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+      return null;
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('stock_sources.load_failed'.tr()),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+      return null;
+    }
+  }
+
+  Future<void> _addRemoteCatalogLineWithSource(
+    BuildContext context,
+    LanCatalogProduct product,
+    LanCatalogVariant? variant,
+  ) async {
+    if (!product.trackInventory) {
+      _addRemoteCatalogLine(context, product, variant);
+      return;
+    }
+    final source = await _chooseRemoteStockSource(
+      context,
+      productId: product.id,
+      variantId: variant?.id,
+      quantity: product.quantityScale,
+      productName: product.name,
+    );
+    if (source == null || !context.mounted) return;
+    _addRemoteCatalogLine(
+      context,
+      product,
+      variant,
+      stockSourceVariantId: source.variantId,
+      supplierIdentityId: source.supplierIdentityId,
+      supplierSourceSku: source.sourceCode,
+      supplierName: source.supplierName,
+      consignmentLayerId: source.consignmentLayerId,
     );
   }
 
@@ -1615,23 +2165,54 @@ class _SaleFormView extends StatelessWidget {
       ),
       builder: (sheetContext) => _RemoteAddItemSheet(
         initialProduct: initial,
-        onSelected: (product, variant) {
-          _addRemoteCatalogLine(ctx, product, variant);
+        onSelected: (product, variant) async {
           Navigator.pop(sheetContext);
+          await _addRemoteCatalogLineWithSource(ctx, product, variant);
         },
-        onBundleAdded: (lines, rule) {
-          final bloc = ctx.read<SaleFormBloc>();
+        onBundleAdded: (lines, rule) async {
+          Navigator.pop(sheetContext);
+          final resolved =
+              <
+                ({_PromotionBundleLine line, LanInventoryStockSource? source})
+              >[];
+          final pendingReservations = <String, int>{};
           for (final line in lines) {
+            LanInventoryStockSource? source;
+            if (line.product.trackInventory) {
+              source = await _chooseRemoteStockSource(
+                ctx,
+                productId: line.product.id,
+                variantId: line.variant?.id,
+                quantity: line.quantity,
+                productName: line.product.name,
+                pendingReservations: pendingReservations,
+              );
+              if (source == null || !ctx.mounted) return;
+              final key = _remoteSourceRef(source).reservationKey;
+              pendingReservations[key] =
+                  (pendingReservations[key] ?? 0) + line.quantity;
+            }
+            resolved.add((line: line, source: source));
+          }
+          if (!ctx.mounted) return;
+          final bloc = ctx.read<SaleFormBloc>();
+          for (final item in resolved) {
+            final line = item.line;
+            final source = item.source;
             bloc.add(
               SaleLineItemAdded(
                 product: line.product,
                 variant: line.variant,
+                supplierIdentityId: source?.supplierIdentityId,
+                stockSourceVariantId: source?.variantId,
+                supplierSourceSku: source?.sourceCode,
+                supplierName: source?.supplierName,
+                consignmentLayerId: source?.consignmentLayerId,
                 quantity: line.quantity,
                 unitPriceCents: line.unitPriceCents,
               ),
             );
           }
-          Navigator.pop(sheetContext);
           ScaffoldMessenger.of(ctx).showSnackBar(
             SnackBar(
               content: Text(
@@ -1672,11 +2253,21 @@ class _SaleFormView extends StatelessWidget {
         ],
         child: _AddItemSheet(
           initialProduct: initialProduct,
-          onItemAdded: (product, variant, qty, price) {
+          reservedForSource: (source) =>
+              SaleStockSourceReservationLedger.reservedQuantity(
+                _saleSourceReservations(bloc.state.items),
+                _localSourceRef(source),
+              ),
+          onItemAdded: (product, variant, qty, price, source) {
             bloc.add(
               SaleLineItemAdded(
                 product: product,
                 variant: variant,
+                supplierIdentityId: source?.supplierIdentityId,
+                consignmentLayerId: source?.consignmentLayerId,
+                stockSourceVariantId: source?.variantId,
+                supplierSourceSku: source?.sourceCode,
+                supplierName: source?.supplierName,
                 quantity: qty,
                 unitPriceCents: price,
               ),
@@ -1689,6 +2280,11 @@ class _SaleFormView extends StatelessWidget {
                 SaleLineItemAdded(
                   product: line.product,
                   variant: line.variant,
+                  supplierIdentityId: line.supplierIdentityId,
+                  stockSourceVariantId: line.stockSourceVariantId,
+                  supplierSourceSku: line.supplierSourceSku,
+                  supplierName: line.supplierName,
+                  consignmentLayerId: line.consignmentLayerId,
                   quantity: line.quantity,
                   unitPriceCents: line.unitPriceCents,
                 ),
@@ -1709,6 +2305,67 @@ class _SaleFormView extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<bool> _validateSaleLineQuantity(
+    BuildContext context,
+    SaleLineItem item,
+    int requestedQuantity,
+  ) async {
+    if (!item.product.trackInventory) return true;
+    try {
+      final variantId = item.stockSourceVariantId ?? item.variant?.id;
+      final target = _saleLineSourceRef(item);
+      final reservations = _saleSourceReservations(
+        context.read<SaleFormBloc>().state.items,
+      );
+      int availableQuantity;
+      if (_usesRemoteMaster) {
+        final snapshot = await sl<LanNetworkService>()
+            .fetchRemoteInventoryStockSources(
+              productId: item.product.id,
+              variantId: variantId,
+            );
+        availableQuantity = snapshot.sources
+            .where(
+              (source) =>
+                  _remoteSourceRef(source).reservationKey ==
+                  target.reservationKey,
+            )
+            .fold<int>(0, (sum, source) => sum + source.quantity);
+      } else {
+        final snapshot = await InventoryStockSourceService(
+          sl<AppDatabase>(),
+        ).loadProduct(item.product.id, variantId: variantId);
+        availableQuantity = snapshot.sources
+            .where(
+              (source) =>
+                  _localSourceRef(source).reservationKey ==
+                  target.reservationKey,
+            )
+            .fold<int>(0, (sum, source) => sum + source.quantity);
+      }
+      if (!context.mounted) return false;
+      final remaining = SaleStockSourceReservationLedger.remainingQuantity(
+        availableQuantity: availableQuantity,
+        reservations: reservations,
+        source: target,
+        excludingLineId: item.tempId,
+      );
+      if (requestedQuantity <= remaining) return true;
+      _showSourceInsufficient(context);
+      return false;
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('stock_sources.load_failed'.tr()),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+      return false;
+    }
   }
 
   void _showEditItemSheet(BuildContext ctx, SaleLineItem item) {
@@ -1741,7 +2398,9 @@ class _SaleFormView extends StatelessWidget {
                 String? employeeName,
                 String? itemNote,
                 bool clearEmployee = false,
-              }) {
+              }) async {
+                final valid = await _validateSaleLineQuantity(sc, item, qty);
+                if (!valid || !sc.mounted) return;
                 bloc.add(
                   SaleLineItemUpdated(
                     tempId: item.tempId,

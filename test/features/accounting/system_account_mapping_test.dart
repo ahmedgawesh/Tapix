@@ -1,41 +1,14 @@
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
+import 'package:decimal/decimal.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tapix/core/accounting/system_accounts.dart';
 import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/database/daos/accounting_dao.dart';
 
-const _expectedSystemAccounts = <String, String>{
-  '1000': 'asset',
-  '1010': 'asset',
-  '1100': 'asset',
-  '1200': 'asset',
-  '1290': 'asset',
-  '1300': 'asset',
-  '1500': 'asset',
-  '1510': 'asset',
-  '1520': 'asset',
-  '1590': 'asset',
-  '2000': 'liability',
-  '2100': 'liability',
-  '2200': 'liability',
-  '2300': 'liability',
-  '2400': 'liability',
-  '3000': 'equity',
-  '3100': 'equity',
-  '3200': 'equity',
-  '4000': 'revenue',
-  '4100': 'expense',
-  '4200': 'revenue',
-  '4900': 'revenue',
-  '5100': 'expense',
-  '5200': 'expense',
-  '5300': 'expense',
-  '5500': 'expense',
-  '5600': 'expense',
-  '5700': 'revenue',
-  '5800': 'expense',
-  '5900': 'expense',
-  '6100': 'expense',
+final _expectedSystemAccounts = <String, String>{
+  for (final account in systemAccountDefinitions)
+    account['code']! as String: account['type']! as String,
 };
 
 void main() {
@@ -70,6 +43,33 @@ void main() {
         expect(account.isSystemAccount, isTrue, reason: 'account ${entry.key}');
         expect(account.isActive, isTrue, reason: 'account ${entry.key}');
       }
+    },
+  );
+
+  test(
+    'opening repair restores a missing consignment accrued account',
+    () async {
+      await (db.delete(
+        db.accounts,
+      )..where((account) => account.accountCode.equals('2050'))).go();
+
+      expect(
+        await (db.select(db.accounts)
+              ..where((account) => account.accountCode.equals('2050')))
+            .getSingleOrNull(),
+        isNull,
+      );
+
+      await db.seedDefaultAccountsForTest();
+
+      final restored = await (db.select(
+        db.accounts,
+      )..where((account) => account.accountCode.equals('2050'))).getSingle();
+      expect(restored.accountName, 'Accrued Consignment Payable');
+      expect(restored.accountType, 'liability');
+      expect(restored.isSystemAccount, isTrue);
+      expect(restored.isActive, isTrue);
+      expect(restored.balanceCents, Decimal.zero);
     },
   );
 

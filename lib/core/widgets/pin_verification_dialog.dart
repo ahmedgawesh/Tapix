@@ -17,7 +17,11 @@ Future<bool> showPinVerificationDialog(BuildContext context) async {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        icon: Icon(Icons.info_outline, color: Theme.of(ctx).colorScheme.primary, size: 32),
+        icon: Icon(
+          Icons.info_outline,
+          color: Theme.of(ctx).colorScheme.primary,
+          size: 32,
+        ),
         title: Text('security.pin_not_set_title'.tr()),
         content: Text('security.pin_not_set_message'.tr()),
         actions: [
@@ -146,12 +150,10 @@ class _PinVerificationDialogContentState
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                'security.pin_attempts_remaining'
-                    .tr(args: ['${_maxAttempts - _attempts}']),
-                style: TextStyle(
-                  color: colorScheme.error,
-                  fontSize: 12,
+                'security.pin_attempts_remaining'.tr(
+                  args: ['${_maxAttempts - _attempts}'],
                 ),
+                style: TextStyle(color: colorScheme.error, fontSize: 12),
               ),
             ),
         ],

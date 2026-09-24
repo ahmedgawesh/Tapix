@@ -236,6 +236,7 @@ abstract class PurchaseRepository {
 /// Input for creating/updating a purchase item
 class PurchaseItemInput {
   final int productId;
+  final bool supplierIdentityRequested;
   final int? variantId;
   final int quantity;
   final int quantityScale;
@@ -255,6 +256,7 @@ class PurchaseItemInput {
 
   PurchaseItemInput({
     required this.productId,
+    this.supplierIdentityRequested = false,
     this.variantId,
     required this.quantity,
     this.quantityScale = 1,

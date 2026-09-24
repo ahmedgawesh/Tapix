@@ -32,24 +32,23 @@ class ReturnReasonCodeService {
 
   /// All rows (active + inactive) — for the admin Reason-Codes screen.
   Future<List<ReturnReasonCode>> listAll() {
-    return (_db.select(_db.returnReasonCodes)
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.isSystem, mode: OrderingMode.desc),
-            (t) => OrderingTerm(expression: t.code),
-          ]))
+    return (_db.select(_db.returnReasonCodes)..orderBy([
+          (t) => OrderingTerm(expression: t.isSystem, mode: OrderingMode.desc),
+          (t) => OrderingTerm(expression: t.code),
+        ]))
         .get();
   }
 
   Future<ReturnReasonCode?> findByCode(String code) {
-    return (_db.select(_db.returnReasonCodes)
-          ..where((t) => t.code.equals(code)))
-        .getSingleOrNull();
+    return (_db.select(
+      _db.returnReasonCodes,
+    )..where((t) => t.code.equals(code))).getSingleOrNull();
   }
 
   Future<ReturnReasonCode?> findById(int id) {
-    return (_db.select(_db.returnReasonCodes)
-          ..where((t) => t.id.equals(id)))
-        .getSingleOrNull();
+    return (_db.select(
+      _db.returnReasonCodes,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
   }
 
   /// Create a new operator-defined reason code. System codes are seeded
@@ -68,18 +67,22 @@ class ReturnReasonCodeService {
       if (existing.isSystem) {
         throw SystemReasonCodeProtectedException(code);
       }
-      await (_db.update(_db.returnReasonCodes)
-            ..where((t) => t.id.equals(existing.id)))
-          .write(ReturnReasonCodesCompanion(
-        labelEn: Value(labelEn),
-        labelAr: Value(labelAr),
-        side: Value(side),
-        description: Value(description),
-        updatedAt: Value(DateTime.now()),
-      ));
+      await (_db.update(
+        _db.returnReasonCodes,
+      )..where((t) => t.id.equals(existing.id))).write(
+        ReturnReasonCodesCompanion(
+          labelEn: Value(labelEn),
+          labelAr: Value(labelAr),
+          side: Value(side),
+          description: Value(description),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
       return existing.id;
     }
-    return _db.into(_db.returnReasonCodes).insert(
+    return _db
+        .into(_db.returnReasonCodes)
+        .insert(
           ReturnReasonCodesCompanion.insert(
             code: code,
             labelEn: labelEn,
@@ -93,12 +96,14 @@ class ReturnReasonCodeService {
   /// Toggle `isActive`. System codes may be deactivated (operator choice)
   /// but cannot be deleted.
   Future<void> setActive(int id, bool active) async {
-    await (_db.update(_db.returnReasonCodes)
-          ..where((t) => t.id.equals(id)))
-        .write(ReturnReasonCodesCompanion(
-      isActive: Value(active),
-      updatedAt: Value(DateTime.now()),
-    ));
+    await (_db.update(
+      _db.returnReasonCodes,
+    )..where((t) => t.id.equals(id))).write(
+      ReturnReasonCodesCompanion(
+        isActive: Value(active),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   /// Rename labels. Code-string is immutable to keep historical FK joins
@@ -109,16 +114,18 @@ class ReturnReasonCodeService {
     String? labelAr,
     String? description,
   }) async {
-    await (_db.update(_db.returnReasonCodes)
-          ..where((t) => t.id.equals(id)))
-        .write(ReturnReasonCodesCompanion(
-      labelEn: labelEn == null ? const Value.absent() : Value(labelEn),
-      labelAr: labelAr == null ? const Value.absent() : Value(labelAr),
-      description: description == null
-          ? const Value.absent()
-          : Value(description),
-      updatedAt: Value(DateTime.now()),
-    ));
+    await (_db.update(
+      _db.returnReasonCodes,
+    )..where((t) => t.id.equals(id))).write(
+      ReturnReasonCodesCompanion(
+        labelEn: labelEn == null ? const Value.absent() : Value(labelEn),
+        labelAr: labelAr == null ? const Value.absent() : Value(labelAr),
+        description: description == null
+            ? const Value.absent()
+            : Value(description),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   /// Hard-delete a non-system row. Throws
@@ -129,8 +136,8 @@ class ReturnReasonCodeService {
     if (row.isSystem) {
       throw SystemReasonCodeProtectedException(row.code);
     }
-    await (_db.delete(_db.returnReasonCodes)
-          ..where((t) => t.id.equals(id)))
-        .go();
+    await (_db.delete(
+      _db.returnReasonCodes,
+    )..where((t) => t.id.equals(id))).go();
   }
 }

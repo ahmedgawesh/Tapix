@@ -47,8 +47,9 @@ void main() {
     blocTest<ExpenseFormBloc, RealtimeState<ExpenseFormData>>(
       'loads existing expense when ExpenseFormLoadRequested is added',
       build: () {
-        when(() => mockRepository.getExpense(1))
-            .thenAnswer((_) async => tExpense);
+        when(
+          () => mockRepository.getExpense(1),
+        ).thenAnswer((_) async => tExpense);
         return ExpenseFormBloc(mockRepository);
       },
       act: (bloc) => bloc.add(const ExpenseFormLoadRequested(expenseId: 1)),
@@ -63,8 +64,9 @@ void main() {
     blocTest<ExpenseFormBloc, RealtimeState<ExpenseFormData>>(
       'emits error when expense not found',
       build: () {
-        when(() => mockRepository.getExpense(999))
-            .thenAnswer((_) async => null);
+        when(
+          () => mockRepository.getExpense(999),
+        ).thenAnswer((_) async => null);
         return ExpenseFormBloc(mockRepository);
       },
       act: (bloc) => bloc.add(const ExpenseFormLoadRequested(expenseId: 999)),
@@ -77,68 +79,84 @@ void main() {
     blocTest<ExpenseFormBloc, RealtimeState<ExpenseFormData>>(
       'creates new expense when ExpenseFormSubmitRequested is added (no edit id)',
       build: () {
-        when(() => mockRepository.createExpense(
-              categoryId: any(named: 'categoryId'),
-              description: any(named: 'description'),
-              amountCents: any(named: 'amountCents'),
-              currencyId: any(named: 'currencyId'),
-              accountId: any(named: 'accountId'),
-              expenseDate: any(named: 'expenseDate'),
-              receiptPath: any(named: 'receiptPath'),
-            )).thenAnswer((_) async => 1);
+        when(
+          () => mockRepository.createExpense(
+            categoryId: any(named: 'categoryId'),
+            description: any(named: 'description'),
+            amountCents: any(named: 'amountCents'),
+            currencyId: any(named: 'currencyId'),
+            accountId: any(named: 'accountId'),
+            expenseDate: any(named: 'expenseDate'),
+            receiptPath: any(named: 'receiptPath'),
+          ),
+        ).thenAnswer((_) async => 1);
         return ExpenseFormBloc(mockRepository);
       },
-      act: (bloc) => bloc.add(ExpenseFormSubmitRequested(
-        categoryId: 1,
-        description: 'New expense',
-        amountCents: Decimal.fromInt(3000),
-        currencyId: 1,
-        expenseDate: DateTime(2026, 2, 1),
-      )),
+      act: (bloc) => bloc.add(
+        ExpenseFormSubmitRequested(
+          categoryId: 1,
+          description: 'New expense',
+          amountCents: Decimal.fromInt(3000),
+          currencyId: 1,
+          expenseDate: DateTime(2026, 2, 1),
+        ),
+      ),
       expect: () => [
         // isSubmitting = true
-        isA<RealtimeSuccess<ExpenseFormData>>()
-            .having((s) => s.data.isSubmitting, 'isSubmitting', true),
+        isA<RealtimeSuccess<ExpenseFormData>>().having(
+          (s) => s.data.isSubmitting,
+          'isSubmitting',
+          true,
+        ),
         // isSubmitted = true
         isA<RealtimeSuccess<ExpenseFormData>>()
             .having((s) => s.data.isSubmitted, 'isSubmitted', true)
             .having((s) => s.data.isSubmitting, 'isSubmitting', false),
       ],
       verify: (_) {
-        verify(() => mockRepository.createExpense(
-              categoryId: 1,
-              description: 'New expense',
-              amountCents: Decimal.fromInt(3000),
-              currencyId: 1,
-              expenseDate: DateTime(2026, 2, 1),
-            )).called(1);
+        verify(
+          () => mockRepository.createExpense(
+            categoryId: 1,
+            description: 'New expense',
+            amountCents: Decimal.fromInt(3000),
+            currencyId: 1,
+            expenseDate: DateTime(2026, 2, 1),
+          ),
+        ).called(1);
       },
     );
 
     blocTest<ExpenseFormBloc, RealtimeState<ExpenseFormData>>(
       'emits error message when create fails',
       build: () {
-        when(() => mockRepository.createExpense(
-              categoryId: any(named: 'categoryId'),
-              description: any(named: 'description'),
-              amountCents: any(named: 'amountCents'),
-              currencyId: any(named: 'currencyId'),
-              accountId: any(named: 'accountId'),
-              expenseDate: any(named: 'expenseDate'),
-              receiptPath: any(named: 'receiptPath'),
-            )).thenThrow(Exception('DB error'));
+        when(
+          () => mockRepository.createExpense(
+            categoryId: any(named: 'categoryId'),
+            description: any(named: 'description'),
+            amountCents: any(named: 'amountCents'),
+            currencyId: any(named: 'currencyId'),
+            accountId: any(named: 'accountId'),
+            expenseDate: any(named: 'expenseDate'),
+            receiptPath: any(named: 'receiptPath'),
+          ),
+        ).thenThrow(Exception('DB error'));
         return ExpenseFormBloc(mockRepository);
       },
-      act: (bloc) => bloc.add(ExpenseFormSubmitRequested(
-        categoryId: 1,
-        description: 'Failing expense',
-        amountCents: Decimal.fromInt(1000),
-        currencyId: 1,
-        expenseDate: DateTime(2026, 2, 1),
-      )),
+      act: (bloc) => bloc.add(
+        ExpenseFormSubmitRequested(
+          categoryId: 1,
+          description: 'Failing expense',
+          amountCents: Decimal.fromInt(1000),
+          currencyId: 1,
+          expenseDate: DateTime(2026, 2, 1),
+        ),
+      ),
       expect: () => [
-        isA<RealtimeSuccess<ExpenseFormData>>()
-            .having((s) => s.data.isSubmitting, 'isSubmitting', true),
+        isA<RealtimeSuccess<ExpenseFormData>>().having(
+          (s) => s.data.isSubmitting,
+          'isSubmitting',
+          true,
+        ),
         isA<RealtimeSuccess<ExpenseFormData>>()
             .having((s) => s.data.isSubmitting, 'isSubmitting', false)
             .having((s) => s.data.errorMessage, 'errorMessage', isNotNull),
@@ -150,8 +168,11 @@ void main() {
       build: () => ExpenseFormBloc(mockRepository),
       act: (bloc) => bloc.add(const ExpenseFormLoadRequested()),
       expect: () => [
-        isA<RealtimeSuccess<ExpenseFormData>>()
-            .having((s) => s.data.existingExpense, 'expense', isNull),
+        isA<RealtimeSuccess<ExpenseFormData>>().having(
+          (s) => s.data.existingExpense,
+          'expense',
+          isNull,
+        ),
       ],
     );
   });

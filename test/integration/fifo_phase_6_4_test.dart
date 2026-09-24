@@ -511,7 +511,7 @@ void main() {
         //     unlinked-sale-return batches from SR- to SAR-; v10059 added
         //     adjustment-return commission reversal)
         //   - no batch rows exist for an empty seed (sanity)
-        expect(db.schemaVersion, equals(10091));
+        expect(db.schemaVersion, equals(10115));
 
         final any = await db
             .customSelect('SELECT COUNT(*) AS c FROM product_batches')

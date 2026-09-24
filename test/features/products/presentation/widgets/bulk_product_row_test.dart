@@ -12,7 +12,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tapix/core/bloc/currency_bloc.dart';
 import 'package:tapix/core/services/currency_service.dart';
 import 'package:tapix/features/products/domain/entities/product_color_entity.dart';
-import 'package:tapix/features/products/domain/entities/size_entity.dart' as size_entity;
+import 'package:tapix/features/products/domain/entities/size_entity.dart'
+    as size_entity;
 import 'package:tapix/features/products/domain/repositories/product_variant_repository.dart';
 import 'package:tapix/features/products/domain/repositories/product_color_repository.dart';
 import 'package:tapix/features/products/domain/repositories/size_repository.dart';
@@ -33,19 +34,23 @@ class _TestAssetLoader extends AssetLoader {
 
   @override
   Future<Map<String, dynamic>> load(String path, Locale locale) async {
-    return _translationsByLocale[locale.languageCode] ?? const <String, dynamic>{};
+    return _translationsByLocale[locale.languageCode] ??
+        const <String, dynamic>{};
   }
 }
 
 class _FakeSizeRepository implements SizeRepository {
   @override
-  Stream<List<size_entity.Size>> watchAllSizes() => Stream.value(const <size_entity.Size>[]);
+  Stream<List<size_entity.Size>> watchAllSizes() =>
+      Stream.value(const <size_entity.Size>[]);
 
   @override
-  Stream<List<size_entity.Size>> watchSizesBySearch(String query) => Stream.value(const <size_entity.Size>[]);
+  Stream<List<size_entity.Size>> watchSizesBySearch(String query) =>
+      Stream.value(const <size_entity.Size>[]);
 
   @override
-  Future<List<size_entity.Size>> getAllSizes() async => const <size_entity.Size>[];
+  Future<List<size_entity.Size>> getAllSizes() async =>
+      const <size_entity.Size>[];
 
   @override
   Future<size_entity.Size?> getSizeById(int id) async => null;
@@ -68,10 +73,12 @@ class _FakeSizeRepository implements SizeRepository {
 
 class _FakeCategoryRepository implements CategoryRepository {
   @override
-  Stream<List<Category>> watchAllCategories() => Stream.value(const <Category>[]);
+  Stream<List<Category>> watchAllCategories() =>
+      Stream.value(const <Category>[]);
 
   @override
-  Stream<List<Category>> watchCategoriesBySearch(String query) => Stream.value(const <Category>[]);
+  Stream<List<Category>> watchCategoriesBySearch(String query) =>
+      Stream.value(const <Category>[]);
 
   @override
   Future<List<Category>> getAllCategories() async => const <Category>[];
@@ -95,16 +102,23 @@ class _FakeCategoryRepository implements CategoryRepository {
   Future<int> getProductCountByCategory(int categoryId) async => 0;
 
   @override
-  Future<bool> hasCircularReference(int categoryId, int? parentId) async => false;
+  Future<bool> hasCircularReference(int categoryId, int? parentId) async =>
+      false;
 
   @override
-  Future<List<Category>> getSubcategories(int parentId) async => const <Category>[];
+  Future<List<Category>> getSubcategories(int parentId) async =>
+      const <Category>[];
 
   @override
-  Stream<List<Category>> watchSubcategories(int parentId) => Stream.value(const <Category>[]);
+  Stream<List<Category>> watchSubcategories(int parentId) =>
+      Stream.value(const <Category>[]);
 }
 
-@GenerateMocks([CurrencyService, ProductVariantRepository, ProductColorRepository])
+@GenerateMocks([
+  CurrencyService,
+  ProductVariantRepository,
+  ProductColorRepository,
+])
 void main() {
   late MockCurrencyService mockCurrencyService;
   late MockProductColorRepository mockColorRepository;
@@ -137,20 +151,22 @@ void main() {
     mockColorRepository = MockProductColorRepository();
     sizeRepository = _FakeSizeRepository();
     categoryRepository = _FakeCategoryRepository();
-    
+
     // Stub CurrencyService
     when(mockCurrencyService.currencyCode).thenReturn('USD');
     when(mockCurrencyService.currencySymbol).thenReturn('\$');
-    when(mockCurrencyService.getCurrency()).thenReturn(Currency.fromCode('USD'));
-    when(mockCurrencyService.currencyStream).thenAnswer(
-      (_) => Stream.value(Currency.fromCode('USD')),
-    );
-    
+    when(
+      mockCurrencyService.getCurrency(),
+    ).thenReturn(Currency.fromCode('USD'));
+    when(
+      mockCurrencyService.currencyStream,
+    ).thenAnswer((_) => Stream.value(Currency.fromCode('USD')));
+
     // Stub ProductColorRepository for ColorsBloc
-    when(mockColorRepository.watchAllColors()).thenAnswer(
-      (_) => Stream.value(<ProductColor>[]),
-    );
-    
+    when(
+      mockColorRepository.watchAllColors(),
+    ).thenAnswer((_) => Stream.value(<ProductColor>[]));
+
     // _FakeSizeRepository already returns empty sizes stream.
   });
 
@@ -237,9 +253,9 @@ void main() {
       tester.view.physicalSize = const ui.Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
-      
+
       final rowData = BulkProductRowData.empty(0);
-      
+
       await tester.pumpWidget(createWidget(rowData: rowData));
       await pumpUntilFound(tester, find.byType(BulkProductRow));
 
@@ -257,13 +273,15 @@ void main() {
       tester.view.physicalSize = const ui.Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
-      
+
       final rowData = BulkProductRowData.empty(0);
-      
-      await tester.pumpWidget(createWidget(
-        rowData: rowData,
-        errors: ['name_required', 'price_required'],
-      ));
+
+      await tester.pumpWidget(
+        createWidget(
+          rowData: rowData,
+          errors: ['name_required', 'price_required'],
+        ),
+      );
       await pumpUntilFound(tester, find.byType(BulkProductRow));
 
       // The widget should render with errors - just verify it renders
@@ -283,21 +301,20 @@ void main() {
       tester.view.physicalSize = const ui.Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
-      
+
       final rowData = BulkProductRowData.empty(0);
       bool removeCalled = false;
-      
-      await tester.pumpWidget(createWidget(
-        rowData: rowData,
-        onRemove: () => removeCalled = true,
-      ));
+
+      await tester.pumpWidget(
+        createWidget(rowData: rowData, onRemove: () => removeCalled = true),
+      );
 
       await pumpUntilFound(tester, find.byType(BulkProductRow));
       await pumpUntilFound(tester, find.byIcon(Icons.delete_outline));
 
       await tester.tap(find.byIcon(Icons.delete_outline));
       await tester.pump();
-      
+
       expect(removeCalled, isTrue);
 
       await tester.pumpWidget(const SizedBox.shrink());

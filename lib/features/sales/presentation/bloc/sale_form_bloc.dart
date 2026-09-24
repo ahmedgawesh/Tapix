@@ -16,8 +16,10 @@ import '../../../../core/services/audit_log_service.dart';
 import '../../../../core/services/below_cost_sale_service.dart';
 import '../../../../core/services/crashlytics_service.dart';
 import '../../../../core/services/free_quota_service.dart';
+import '../../../../core/services/inventory/supplier_identity_rules.dart';
 import '../../../../core/services/lan/lan_network_service.dart';
 import '../../domain/repositories/sale_repository.dart';
+import '../../../accounting/domain/exceptions/accounting_exception.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../customers/domain/repositories/loyalty_repository.dart';
 import '../../../products/domain/entities/product_entity.dart';
@@ -549,6 +551,15 @@ class SaleLineItem extends Equatable {
   final String tempId;
   final Product product;
   final ProductVariant? variant;
+  final int? supplierIdentityId;
+  final String? consignmentLayerId;
+  final String? supplierSourceSku;
+  final String? supplierName;
+
+  /// Operational variant used by the selected stock source. This remains
+  /// available for simple products on LAN clients where [variant] is not
+  /// materialized locally.
+  final int? stockSourceVariantId;
   final int quantity;
   final Decimal unitPriceCents;
   final Decimal discountCents;
@@ -563,6 +574,11 @@ class SaleLineItem extends Equatable {
     required this.tempId,
     required this.product,
     this.variant,
+    this.supplierIdentityId,
+    this.consignmentLayerId,
+    this.supplierSourceSku,
+    this.supplierName,
+    this.stockSourceVariantId,
     required this.quantity,
     required this.unitPriceCents,
     Decimal? discountCents,
@@ -655,6 +671,12 @@ class SaleLineItem extends Equatable {
     String? tempId,
     Product? product,
     ProductVariant? variant,
+    int? supplierIdentityId,
+    String? consignmentLayerId,
+    String? supplierSourceSku,
+    String? supplierName,
+    int? stockSourceVariantId,
+    bool clearSupplierIdentity = false,
     int? quantity,
     Decimal? unitPriceCents,
     Decimal? discountCents,
@@ -670,6 +692,19 @@ class SaleLineItem extends Equatable {
       tempId: tempId ?? this.tempId,
       product: product ?? this.product,
       variant: variant ?? this.variant,
+      supplierIdentityId: clearSupplierIdentity
+          ? null
+          : (supplierIdentityId ?? this.supplierIdentityId),
+      consignmentLayerId: clearSupplierIdentity
+          ? null
+          : (consignmentLayerId ?? this.consignmentLayerId),
+      supplierSourceSku: clearSupplierIdentity
+          ? null
+          : (supplierSourceSku ?? this.supplierSourceSku),
+      supplierName: clearSupplierIdentity
+          ? null
+          : (supplierName ?? this.supplierName),
+      stockSourceVariantId: stockSourceVariantId ?? this.stockSourceVariantId,
       quantity: quantity ?? this.quantity,
       unitPriceCents: unitPriceCents ?? this.unitPriceCents,
       discountCents: discountCents ?? this.discountCents,
@@ -687,6 +722,11 @@ class SaleLineItem extends Equatable {
     tempId,
     product,
     variant,
+    supplierIdentityId,
+    consignmentLayerId,
+    supplierSourceSku,
+    supplierName,
+    stockSourceVariantId,
     quantity,
     unitPriceCents,
     discountCents,
@@ -837,6 +877,11 @@ class SaleInvoiceDiscountChanged extends SaleFormEvent {
 class SaleLineItemAdded extends SaleFormEvent {
   final Product product;
   final ProductVariant? variant;
+  final int? supplierIdentityId;
+  final String? consignmentLayerId;
+  final String? supplierSourceSku;
+  final String? supplierName;
+  final int? stockSourceVariantId;
   final int quantity;
   final Decimal unitPriceCents;
   final Decimal? discountCents;
@@ -846,6 +891,11 @@ class SaleLineItemAdded extends SaleFormEvent {
   const SaleLineItemAdded({
     required this.product,
     this.variant,
+    this.supplierIdentityId,
+    this.consignmentLayerId,
+    this.supplierSourceSku,
+    this.supplierName,
+    this.stockSourceVariantId,
     required this.quantity,
     required this.unitPriceCents,
     this.discountCents,
@@ -857,6 +907,11 @@ class SaleLineItemAdded extends SaleFormEvent {
   List<Object?> get props => [
     product,
     variant,
+    supplierIdentityId,
+    consignmentLayerId,
+    supplierSourceSku,
+    supplierName,
+    stockSourceVariantId,
     quantity,
     unitPriceCents,
     discountCents,
@@ -1294,6 +1349,9 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
           tempId: _generateTempId(),
           product: product,
           variant: variant,
+          supplierIdentityId: i.supplierIdentityId,
+          consignmentLayerId: i.consignmentLayerId,
+          stockSourceVariantId: variant?.id,
           quantity: i.quantity,
           unitPriceCents: i.unitPriceCents,
           discountCents: i.discountCents,
@@ -1433,6 +1491,11 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
       tempId: _generateTempId(),
       product: event.product,
       variant: resolvedVariant,
+      supplierIdentityId: event.supplierIdentityId,
+      consignmentLayerId: event.consignmentLayerId,
+      supplierSourceSku: event.supplierSourceSku,
+      supplierName: event.supplierName,
+      stockSourceVariantId: event.stockSourceVariantId ?? resolvedVariant?.id,
       quantity: event.quantity,
       unitPriceCents: event.unitPriceCents,
       discountCents: event.discountCents,
@@ -1713,6 +1776,8 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
             lineId: item.tempId,
             productId: item.product.id,
             variantId: item.variant?.id,
+            supplierIdentityId: item.supplierIdentityId,
+            consignmentLayerId: item.consignmentLayerId,
             quantity: item.quantity,
             quantityScale: item.product.quantityScale,
             measurementType: item.product.measurementType,
@@ -1721,6 +1786,10 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
             // Total per-line discount = entered line discount + share of
             // the invoice-level discount (zero in `perItem` mode).
             discountCents: Decimal.fromInt(line.totalLineDiscount.cents),
+            itemDiscountAtPostCents: Decimal.fromInt(line.local.discount.cents),
+            invoiceDiscountAtPostCents: Decimal.fromInt(
+              line.shareOfOverallDiscount.cents,
+            ),
             taxCents: Decimal.fromInt(line.tax.cents),
             totalCents: Decimal.fromInt(line.total.cents),
             employeeId: item.employeeId,
@@ -1788,6 +1857,8 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
             LanSaleLineRequest(
               productId: item.product.id,
               variantId: item.variant?.id,
+              supplierIdentityId: item.supplierIdentityId,
+              consignmentLayerId: item.consignmentLayerId,
               quantity: item.quantity,
               priceTier: priceTier,
               salespersonId: item.employeeId,
@@ -1992,14 +2063,38 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
         );
         return;
       }
-      final errorKey = switch (e.code) {
-        'sale_below_cost' => 'settings.network.sale.below_cost_rejected',
-        'sale_below_cost_reason_required' =>
-          'settings.network.sale.below_cost_reason_required',
-        'discount_exceeds_max' => 'settings.network.sale.discount_exceeds_max',
-        _ => e.message,
-      };
+      final errorKey = e.code.startsWith('supplier_identity.')
+          ? e.code
+          : switch (e.code) {
+              'sale_below_cost' => 'settings.network.sale.below_cost_rejected',
+              'sale_below_cost_reason_required' =>
+                'settings.network.sale.below_cost_reason_required',
+              'discount_exceeds_max' =>
+                'settings.network.sale.discount_exceeds_max',
+              _ => e.message,
+            };
       emit(state.copyWith(isSubmitting: false, error: errorKey));
+    } on SupplierIdentityException catch (e, st) {
+      CrashlyticsService.instance.recordError(
+        e,
+        stackTrace: st,
+        reason: 'SaleFormBloc._onSubmitted supplier source rejected',
+      );
+      emit(state.copyWith(isSubmitting: false, error: e.messageKey));
+    } on AccountingException catch (e, st) {
+      CrashlyticsService.instance.recordError(
+        e,
+        stackTrace: st,
+        reason: 'SaleFormBloc._onSubmitted accounting posting failed',
+      );
+      emit(
+        state.copyWith(
+          isSubmitting: false,
+          error: e.code == 'accounting.system_account_missing'
+              ? e.code
+              : e.toString(),
+        ),
+      );
     } catch (e, st) {
       CrashlyticsService.instance.recordError(
         e,

@@ -28,10 +28,17 @@ String supplierSalesMoney(int cents, String code) {
   return '${cents < 0 ? '-' : ''}$value $code';
 }
 
+String supplierSalesSourceName(int id, String name) => id == -2
+    ? 'supplier_sales.customer_return'.tr()
+    : id < 0
+    ? 'supplier_sales.unknown'.tr()
+    : name;
+
 class SupplierSalesExportService {
   static List<String> get headers => [
     'supplier',
-    'purchase',
+    'purchase_invoices',
+    'consignment_receipts',
     'product',
     'purchased',
     'sold',
@@ -43,10 +50,18 @@ class SupplierSalesExportService {
     'discount',
   ].map((key) => 'supplier_sales.$key'.tr()).toList();
   static List<String> cells(SupplierSalesRow r) => [
-    r.supplierId < 0 ? 'supplier_sales.unknown'.tr() : r.supplierName,
-    r.purchaseNumber.isEmpty ? '—' : r.purchaseNumber,
+    '${supplierSalesSourceName(r.supplierId, r.supplierName)} • ${'supplier_sales.quality_${r.sourceQuality}'.tr()}',
+    r.purchaseInvoices.isEmpty
+        ? '—'
+        : r.purchaseInvoices
+              .map(
+                (invoice) =>
+                    '${invoice.purchaseNumber} (${localizedQuantity(invoice.quantity, r.measurementType)})',
+              )
+              .join('، '),
+    r.consignmentReceipts.isEmpty ? '—' : r.consignmentReceipts.join('، '),
     '${r.productName}${r.variantName.isEmpty ? '' : ' • ${r.variantName}'}',
-    r.purchaseItemId < 0
+    r.purchaseInvoices.isEmpty
         ? '—'
         : localizedQuantity(r.purchasedQuantity, r.measurementType),
     localizedQuantity(r.soldQuantity, r.measurementType),
@@ -59,11 +74,7 @@ class SupplierSalesExportService {
   ];
   static String filters(SupplierSalesReportData data) => [
     '${DateFormat('yyyy-MM-dd').format(data.range.startDate)} — ${DateFormat('yyyy-MM-dd').format(data.range.endDate)}',
-    '${'supplier_sales.supplier'.tr()}: ${data.supplierId == null
-        ? 'supplier_sales.all'.tr()
-        : data.supplierId == -1
-        ? 'supplier_sales.unknown'.tr()
-        : data.suppliers[data.supplierId] ?? ''}',
+    '${'supplier_sales.supplier'.tr()}: ${data.supplierId == null ? 'supplier_sales.all'.tr() : supplierSalesSourceName(data.supplierId!, data.suppliers[data.supplierId] ?? '')}',
     '${'supplier_sales.category'.tr()}: ${data.categoryId == null ? 'supplier_sales.all'.tr() : data.categories[data.categoryId] ?? ''}',
     '${'supplier_sales.product'.tr()}: ${data.productId == null ? 'supplier_sales.all'.tr() : data.products[data.productId] ?? ''}',
   ].join(' • ');

@@ -171,6 +171,74 @@ void main() {
     permissions: const ['create_sales', 'process_sales'],
   );
 
+  test(
+    'cashier shift retries are idempotent and conflict on changed money',
+    () async {
+      final initial = await shiftService.getOpenShiftForUser(actorId);
+      await shiftService.closeShift(
+        shiftId: initial!.shift.id,
+        closedByUserId: actorId,
+        countedClosingCashCents: 0,
+      );
+
+      final opened = await gateway.openOwnShift(
+        actor: actor(),
+        openingCashCents: 12500,
+        notes: 'Morning till',
+      );
+      final retriedOpen = await gateway.openOwnShift(
+        actor: actor(),
+        openingCashCents: 12500,
+        notes: ' Morning till ',
+      );
+      expect(retriedOpen.id, opened.id);
+      expect(
+        () => gateway.openOwnShift(
+          actor: actor(),
+          openingCashCents: 12600,
+          notes: 'Morning till',
+        ),
+        throwsA(
+          isA<LanBusinessException>().having(
+            (error) => error.code,
+            'code',
+            'shift_open_conflict',
+          ),
+        ),
+      );
+
+      final closed = await gateway.closeOwnShift(
+        actor: actor(),
+        shiftId: opened.id,
+        countedCashCents: 12400,
+        notes: 'Counted at logout',
+      );
+      final retriedClose = await gateway.closeOwnShift(
+        actor: actor(),
+        shiftId: opened.id,
+        countedCashCents: 12400,
+        notes: ' Counted at logout ',
+      );
+      expect(retriedClose.id, closed.id);
+      expect(retriedClose.status, 'closed');
+      expect(
+        () => gateway.closeOwnShift(
+          actor: actor(),
+          shiftId: opened.id,
+          countedCashCents: 12300,
+          notes: 'Counted at logout',
+        ),
+        throwsA(
+          isA<LanBusinessException>().having(
+            (error) => error.code,
+            'code',
+            'shift_close_conflict',
+          ),
+        ),
+      );
+    },
+  );
+
   group('configured currency identity', () {
     test(
       'checkout snapshot reads current master balances and refuses inactive customers',
@@ -230,6 +298,52 @@ void main() {
       },
     );
 
+    test(
+      'LAN shift and catalog preserve configured currency precision',
+      () async {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('currency_code', 'KWD');
+        final stored = await (db.select(
+          db.currencies,
+        )..where((row) => row.code.equals('KWD'))).getSingleOrNull();
+        if (stored == null) {
+          await db
+              .into(db.currencies)
+              .insert(
+                CurrenciesCompanion.insert(
+                  code: 'KWD',
+                  name: 'Kuwaiti Dinar',
+                  symbol: 'د.ك',
+                  exchangeRate: Decimal.fromInt(1),
+                ),
+              );
+        }
+        final initial = await shiftService.getOpenShiftForUser(actorId);
+        await shiftService.closeShift(
+          shiftId: initial!.shift.id,
+          closedByUserId: actorId,
+          countedClosingCashCents: 0,
+        );
+
+        final opened = await gateway.openOwnShift(
+          actor: actor(),
+          openingCashCents: 1234,
+        );
+        final catalog = await gateway.fetchCatalog(
+          query: '',
+          offset: 0,
+          limit: 1,
+        );
+
+        expect(opened.currencyCode, 'KWD');
+        expect(opened.currencyDecimalDigits, 3);
+        expect(opened.currencySymbolAfter, isTrue);
+        expect(catalog.currencyCode, 'KWD');
+        expect(catalog.currencyDecimalDigits, 3);
+        expect(catalog.currencySymbolAfter, isTrue);
+      },
+    );
+
     for (final missing in [false, true]) {
       test(
         'unavailable configured currency cannot silently post as base: missing=$missing',
@@ -279,6 +393,92 @@ void main() {
         },
       );
     }
+  });
+
+  test(
+    'concurrent sale retry posts one document and one stock movement',
+    () async {
+      const request = LanSaleRequest(
+        idempotencyKey: 'concurrent-identical-sale-001',
+        paymentMethod: 'cash',
+        paidAmountCents: 600,
+        lines: [LanSaleLineRequest(productId: 1, variantId: 1, quantity: 500)],
+      );
+      final before = await (db.select(
+        db.productVariants,
+      )..where((row) => row.id.equals(variantId))).getSingle();
+
+      final results = await Future.wait([
+        gateway.createSale(actor: actor(), request: request),
+        gateway.createSale(actor: actor(), request: request),
+      ]);
+
+      expect(results[0].saleId, results[1].saleId);
+      final stored =
+          await (db.select(db.sales)..where(
+                (row) => row.idempotencyKey.equals(request.idempotencyKey),
+              ))
+              .get();
+      expect(stored, hasLength(1));
+      final after = await (db.select(
+        db.productVariants,
+      )..where((row) => row.id.equals(variantId))).getSingle();
+      expect(after.stockQuantity, before.stockQuantity - 500);
+      final journalLines = await db
+          .customSelect(
+            'SELECT jl.debit_cents, jl.credit_cents '
+            'FROM journal_entry_lines jl '
+            'JOIN journal_entries je ON je.id = jl.journal_entry_id '
+            "WHERE je.source_table = 'sales' AND je.source_id = ?",
+            variables: [Variable.withInt(stored.single.id)],
+          )
+          .get();
+      expect(journalLines, isNotEmpty);
+      expect(
+        journalLines.fold<int>(
+          0,
+          (sum, row) => sum + row.read<int>('debit_cents'),
+        ),
+        journalLines.fold<int>(
+          0,
+          (sum, row) => sum + row.read<int>('credit_cents'),
+        ),
+      );
+    },
+  );
+
+  test('sale void retry returns the same terminal result once', () async {
+    final created = await gateway.createSale(
+      actor: actor(),
+      request: LanSaleRequest(
+        idempotencyKey: 'idempotent-sale-void-001',
+        paymentMethod: 'cash',
+        paidAmountCents: 600,
+        lines: [
+          LanSaleLineRequest(
+            productId: productId,
+            variantId: variantId,
+            quantity: 500,
+          ),
+        ],
+      ),
+    );
+
+    final first = await gateway.voidSale(
+      actor: actor(),
+      saleId: created.saleId,
+    );
+    final retried = await gateway.voidSale(
+      actor: actor(),
+      saleId: created.saleId,
+    );
+
+    expect(first.status, 'voided');
+    expect(first.duplicate, isFalse);
+    expect(retried.status, 'voided');
+    expect(retried.duplicate, isTrue);
+    final sale = await repository.getSaleById(created.saleId);
+    expect(sale?.isVoided, isTrue);
   });
 
   test(
@@ -1276,6 +1476,15 @@ void main() {
         (s) => s.items.length == 1,
       );
       await event(
+        const SaleAdjReturnUnverifiedSourceSelected(
+          0,
+          'Acceptance fixture has no documented inventory source.',
+        ),
+        (s) =>
+            s.items.single.sourceResolution ==
+            AdjReturnSourceResolution.unverified,
+      );
+      await event(
         const SaleAdjReturnOverallDiscountChanged(100, false),
         (s) => s.overallDiscountCents == 100,
       );
@@ -1382,6 +1591,9 @@ void main() {
               quantity: 1000,
               unitPriceCents: 1500,
               discountCents: 200,
+              sourceResolution: 'unverified',
+              sourceResolutionReason:
+                  'Acceptance fixture has no documented inventory source.',
             ),
           ],
         ),
@@ -1416,6 +1628,9 @@ void main() {
             productId: productId,
             quantity: 500,
             unitPriceCents: 1200,
+            sourceResolution: 'unverified',
+            sourceResolutionReason:
+                'Acceptance fixture has no documented inventory source.',
           ),
         ],
       );
@@ -1507,6 +1722,9 @@ void main() {
             productId: productId,
             quantity: 500,
             unitPriceCents: 1200,
+            sourceResolution: 'unverified',
+            sourceResolutionReason:
+                'Acceptance fixture has no documented inventory source.',
           ),
         ],
       ),
@@ -1848,6 +2066,29 @@ void main() {
         (sum, row) => sum + row.read<int>('credit_cents'),
       );
       expect(debits, credits);
+
+      await gateway.voidPurchaseReturn(
+        actor: actor(),
+        returnId: created.returnId,
+        adjustment: false,
+      );
+      await gateway.voidPurchaseReturn(
+        actor: actor(),
+        returnId: created.returnId,
+        adjustment: false,
+      );
+      final voided = await (db.select(
+        db.purchaseReturns,
+      )..where((row) => row.id.equals(created.returnId))).getSingle();
+      final restored = await (db.select(
+        db.productVariants,
+      )..where((row) => row.id.equals(variantId))).getSingle();
+      final restoredSupplier = await (db.select(
+        db.suppliers,
+      )..where((row) => row.id.equals(supplierId))).getSingle();
+      expect(voided.status, 'voided');
+      expect(restored.stockQuantity, before.stockQuantity);
+      expect(restoredSupplier.balanceCents, Decimal.fromInt(800));
     },
   );
 
@@ -2338,6 +2579,29 @@ void main() {
         (sum, row) => sum + row.read<int>('credit_cents'),
       );
       expect(debits, credits);
+
+      await gateway.voidPurchaseReturn(
+        actor: actor(),
+        returnId: created.returnId,
+        adjustment: true,
+      );
+      await gateway.voidPurchaseReturn(
+        actor: actor(),
+        returnId: created.returnId,
+        adjustment: true,
+      );
+      final voided = await (db.select(
+        db.purchaseReturnAdjustments,
+      )..where((row) => row.id.equals(created.returnId))).getSingle();
+      final restored = await (db.select(
+        db.productVariants,
+      )..where((row) => row.id.equals(variantId))).getSingle();
+      final restoredSupplier = await (db.select(
+        db.suppliers,
+      )..where((row) => row.id.equals(supplierId))).getSingle();
+      expect(voided.status, 'voided');
+      expect(restored.stockQuantity, before.stockQuantity);
+      expect(restoredSupplier.balanceCents, Decimal.fromInt(800));
     },
   );
 

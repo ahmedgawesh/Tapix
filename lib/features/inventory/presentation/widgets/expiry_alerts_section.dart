@@ -71,10 +71,7 @@ class _ExpiryAlertsSectionViewState extends State<_ExpiryAlertsSectionView> {
   Future<void> _dismissIds(Iterable<String> ids) async {
     final prefs = sl<SharedPreferences>();
     _dismissed.addAll(ids);
-    await prefs.setStringList(
-      _kDismissedNotificationsKey,
-      _dismissed.toList(),
-    );
+    await prefs.setStringList(_kDismissedNotificationsKey, _dismissed.toList());
     if (mounted) setState(() {});
   }
 
@@ -93,7 +90,9 @@ class _ExpiryAlertsSectionViewState extends State<_ExpiryAlertsSectionView> {
         // Filter out dismissed batches. New batches (different batchId)
         // surface again automatically — same UX rule as StockAlertsSection.
         final visibleItems = snapshot.items
-            .where((it) => !_dismissed.contains(_expiryNotificationId(it.batchId)))
+            .where(
+              (it) => !_dismissed.contains(_expiryNotificationId(it.batchId)),
+            )
             .toList(growable: false);
         if (visibleItems.isEmpty) {
           return const SizedBox.shrink();
@@ -148,10 +147,7 @@ class _ExpiryAlertsCard extends StatelessWidget {
   final ExpiryAlertSnapshot snapshot;
   final VoidCallback onDismiss;
 
-  const _ExpiryAlertsCard({
-    required this.snapshot,
-    required this.onDismiss,
-  });
+  const _ExpiryAlertsCard({required this.snapshot, required this.onDismiss});
 
   @override
   Widget build(BuildContext context) {
@@ -187,8 +183,7 @@ class _ExpiryAlertsCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: accent.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
@@ -210,102 +205,111 @@ class _ExpiryAlertsCard extends StatelessWidget {
             direction: DismissDirection.horizontal,
             onDismissed: (_) => onDismiss(),
             background: _buildDismissBackground(context, Alignment.centerLeft),
-            secondaryBackground:
-                _buildDismissBackground(context, Alignment.centerRight),
-            child: Card(
-            elevation: 0,
-            color: bg,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-              side: BorderSide(color: accent.withValues(alpha: 0.2)),
+            secondaryBackground: _buildDismissBackground(
+              context,
+              Alignment.centerRight,
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Bucket pills row.
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (summary.expiredCount > 0)
-                        _BucketPill(
-                          label: 'reports.expiry_alerts_count_expired'
-                              .tr(args: ['${summary.expiredCount}']),
-                          color: colorScheme.error,
-                        ),
-                      if (summary.in30DaysCount > 0)
-                        _BucketPill(
-                          label: 'reports.expiry_alerts_count_30'
-                              .tr(args: ['${summary.in30DaysCount}']),
-                          color: Colors.orange,
-                        ),
-                      if (summary.in60DaysCount > 0)
-                        _BucketPill(
-                          label: 'reports.expiry_alerts_count_60'
-                              .tr(args: ['${summary.in60DaysCount}']),
-                          color: Colors.amber.shade700,
-                        ),
-                      if (summary.in90DaysCount > 0)
-                        _BucketPill(
-                          label: 'reports.expiry_alerts_count_90'
-                              .tr(args: ['${summary.in90DaysCount}']),
-                          color: Colors.blueGrey,
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
+            child: Card(
+              elevation: 0,
+              color: bg,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: BorderSide(color: accent.withValues(alpha: 0.2)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Bucket pills row.
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (summary.expiredCount > 0)
+                          _BucketPill(
+                            label: 'reports.expiry_alerts_count_expired'.tr(
+                              args: ['${summary.expiredCount}'],
+                            ),
+                            color: colorScheme.error,
+                          ),
+                        if (summary.in30DaysCount > 0)
+                          _BucketPill(
+                            label: 'reports.expiry_alerts_count_30'.tr(
+                              args: ['${summary.in30DaysCount}'],
+                            ),
+                            color: Colors.orange,
+                          ),
+                        if (summary.in60DaysCount > 0)
+                          _BucketPill(
+                            label: 'reports.expiry_alerts_count_60'.tr(
+                              args: ['${summary.in60DaysCount}'],
+                            ),
+                            color: Colors.amber.shade700,
+                          ),
+                        if (summary.in90DaysCount > 0)
+                          _BucketPill(
+                            label: 'reports.expiry_alerts_count_90'.tr(
+                              args: ['${summary.in90DaysCount}'],
+                            ),
+                            color: Colors.blueGrey,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
 
-                  // Potential write-off line (only when there's already-
-                  // expired stock — otherwise the figure is misleading).
-                  if (summary.expiredCount > 0)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        'reports.expiry_alerts_potential_writeoff'.tr(args: [
-                          sl<CurrencyService>()
-                              .format(summary.expiredCostCents),
-                        ]),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.error,
-                          fontWeight: FontWeight.w600,
+                    // Potential write-off line (only when there's already-
+                    // expired stock — otherwise the figure is misleading).
+                    if (summary.expiredCount > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          'reports.expiry_alerts_potential_writeoff'.tr(
+                            args: [
+                              sl<CurrencyService>().format(
+                                summary.expiredCostCents,
+                              ),
+                            ],
+                          ),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.error,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                    ),
 
-                  // Preview rows.
-                  ...preview.map((item) => _ExpiryAlertRow(item: item)),
+                    // Preview rows.
+                    ...preview.map((item) => _ExpiryAlertRow(item: item)),
 
-                  if (snapshot.items.length > preview.length)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        'dashboard.and_more'.tr(args: [
-                          '${snapshot.items.length - preview.length}',
-                        ]),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                          fontStyle: FontStyle.italic,
+                    if (snapshot.items.length > preview.length)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          'dashboard.and_more'.tr(
+                            args: ['${snapshot.items.length - preview.length}'],
+                          ),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            fontStyle: FontStyle.italic,
+                          ),
                         ),
                       ),
-                    ),
 
-                  const SizedBox(height: 8),
+                    const SizedBox(height: 8),
 
-                  // Footer link.
-                  Align(
-                    alignment: AlignmentDirectional.centerEnd,
-                    child: TextButton.icon(
-                      onPressed: () => context.push('/reports/expiry'),
-                      icon: const Icon(LucideIcons.fileText, size: 16),
-                      label: Text('reports.expiry_alerts_view_all'.tr()),
+                    // Footer link.
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: TextButton.icon(
+                        onPressed: () => context.push('/reports/expiry'),
+                        icon: const Icon(LucideIcons.fileText, size: 16),
+                        label: Text('reports.expiry_alerts_view_all'.tr()),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
           ),
         ],
       ),
@@ -317,10 +321,7 @@ class _ExpiryAlertsCard extends StatelessWidget {
     final isLeft = alignment == Alignment.centerLeft;
     return Container(
       alignment: alignment,
-      padding: EdgeInsets.only(
-        left: isLeft ? 20 : 0,
-        right: isLeft ? 0 : 20,
-      ),
+      padding: EdgeInsets.only(left: isLeft ? 20 : 0, right: isLeft ? 0 : 20),
       decoration: BoxDecoration(
         color: theme.colorScheme.errorContainer,
         borderRadius: BorderRadius.circular(14),

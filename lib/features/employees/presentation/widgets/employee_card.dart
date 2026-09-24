@@ -5,11 +5,7 @@ class EmployeeCard extends StatelessWidget {
   final Employee employee;
   final VoidCallback? onTap;
 
-  const EmployeeCard({
-    super.key,
-    required this.employee,
-    this.onTap,
-  });
+  const EmployeeCard({super.key, required this.employee, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -118,10 +114,7 @@ class EmployeeCard extends StatelessWidget {
               ),
 
               // Arrow
-              Icon(
-                Icons.chevron_right,
-                color: colorScheme.onSurfaceVariant,
-              ),
+              Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant),
             ],
           ),
         ),
@@ -172,18 +165,18 @@ class EmployeeListTile extends StatelessWidget {
       subtitle: employee.position != null
           ? Text(employee.position!)
           : employee.phone != null
-              ? Row(
-                  children: [
-                    Icon(
-                      Icons.phone_outlined,
-                      size: 14,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(employee.phone!),
-                  ],
-                )
-              : null,
+          ? Row(
+              children: [
+                Icon(
+                  Icons.phone_outlined,
+                  size: 14,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 4),
+                Text(employee.phone!),
+              ],
+            )
+          : null,
       trailing: trailing ?? const Icon(Icons.chevron_right),
       onTap: onTap,
     );

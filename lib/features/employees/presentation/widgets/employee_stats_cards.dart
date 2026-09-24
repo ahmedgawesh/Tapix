@@ -20,7 +20,7 @@ class EmployeeStatsCards extends StatelessWidget {
         return LayoutBuilder(
           builder: (context, constraints) {
             final isWide = constraints.maxWidth > 600;
-            
+
             if (isWide) {
               return Row(
                 children: [
@@ -119,18 +119,12 @@ class _StatCard extends StatelessWidget {
             ? iconColor.withValues(alpha: 0.15)
             : iconColor.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: iconColor.withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: iconColor.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            icon,
-            color: iconColor,
-            size: 24,
-          ),
+          Icon(icon, color: iconColor, size: 24),
           const SizedBox(height: 8),
           Text(
             value,
@@ -143,9 +137,7 @@ class _StatCard extends StatelessWidget {
           Text(
             label,
             style: theme.textTheme.bodySmall?.copyWith(
-              color: isDark
-                  ? Colors.white70
-                  : colorScheme.onSurfaceVariant,
+              color: isDark ? Colors.white70 : colorScheme.onSurfaceVariant,
             ),
           ),
         ],

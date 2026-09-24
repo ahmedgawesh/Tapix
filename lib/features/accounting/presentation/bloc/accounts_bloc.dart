@@ -50,10 +50,7 @@ class AccountsData {
   final List<Account> accounts;
   final String? filterType;
 
-  const AccountsData({
-    required this.accounts,
-    this.filterType,
-  });
+  const AccountsData({required this.accounts, this.filterType});
 }
 
 /// Bloc for managing accounts list with real-time updates
@@ -66,12 +63,14 @@ class AccountsBloc extends RealtimeBloc<AccountsData, AccountsEvent> {
   @override
   Stream<AccountsData> get dataStream {
     if (_currentFilterType != null) {
-      return _repository.watchAccountsByType(_currentFilterType!).map(
-        (accounts) => AccountsData(
-          accounts: accounts,
-          filterType: _currentFilterType,
-        ),
-      );
+      return _repository
+          .watchAccountsByType(_currentFilterType!)
+          .map(
+            (accounts) => AccountsData(
+              accounts: accounts,
+              filterType: _currentFilterType,
+            ),
+          );
     }
     return _repository.watchAllAccounts().map(
       (accounts) => AccountsData(accounts: accounts),
@@ -108,7 +107,13 @@ class AccountsBloc extends RealtimeBloc<AccountsData, AccountsEvent> {
         description: event.description,
       );
     } catch (e, st) {
-      emit(RealtimeError<AccountsData>(error: e, stackTrace: st, previousData: currentData));
+      emit(
+        RealtimeError<AccountsData>(
+          error: e,
+          stackTrace: st,
+          previousData: currentData,
+        ),
+      );
     }
   }
 
@@ -119,7 +124,13 @@ class AccountsBloc extends RealtimeBloc<AccountsData, AccountsEvent> {
     try {
       await _repository.updateAccount(event.account);
     } catch (e, st) {
-      emit(RealtimeError<AccountsData>(error: e, stackTrace: st, previousData: currentData));
+      emit(
+        RealtimeError<AccountsData>(
+          error: e,
+          stackTrace: st,
+          previousData: currentData,
+        ),
+      );
     }
   }
 
@@ -130,7 +141,13 @@ class AccountsBloc extends RealtimeBloc<AccountsData, AccountsEvent> {
     try {
       await _repository.deleteAccount(event.accountId);
     } catch (e, st) {
-      emit(RealtimeError<AccountsData>(error: e, stackTrace: st, previousData: currentData));
+      emit(
+        RealtimeError<AccountsData>(
+          error: e,
+          stackTrace: st,
+          previousData: currentData,
+        ),
+      );
     }
   }
 }

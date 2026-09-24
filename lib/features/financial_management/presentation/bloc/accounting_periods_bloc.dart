@@ -53,14 +53,13 @@ class AccountingPeriodsBloc
     this._audit,
     this._closeService,
     this._sessionService,
-  )
-      : super(const RealtimeLoading());
+  ) : super(const RealtimeLoading());
 
   @override
   Stream<AccountingPeriodsData> get dataStream {
     return _repository.watchAccountingPeriods().map(
-          (periods) => AccountingPeriodsData(periods: periods),
-        );
+      (periods) => AccountingPeriodsData(periods: periods),
+    );
   }
 
   @override
@@ -110,11 +109,13 @@ class AccountingPeriodsBloc
         ),
       );
     } catch (e, st) {
-      emit(RealtimeError<AccountingPeriodsData>(
-        error: e,
-        stackTrace: st,
-        previousData: currentData,
-      ));
+      emit(
+        RealtimeError<AccountingPeriodsData>(
+          error: e,
+          stackTrace: st,
+          previousData: currentData,
+        ),
+      );
     }
   }
 
@@ -129,10 +130,12 @@ class AccountingPeriodsBloc
       }
 
       // Get period name before closing for audit
-      final periods = await (_db.select(_db.accountingPeriods)
-            ..where((p) => p.id.equals(event.periodId)))
-          .get();
-      final periodName = periods.isNotEmpty ? periods.first.periodName : 'Unknown';
+      final periods = await (_db.select(
+        _db.accountingPeriods,
+      )..where((p) => p.id.equals(event.periodId))).get();
+      final periodName = periods.isNotEmpty
+          ? periods.first.periodName
+          : 'Unknown';
 
       final result = await _closeService.closePeriod(
         periodId: event.periodId,
@@ -150,11 +153,13 @@ class AccountingPeriodsBloc
         userId: userId,
       );
     } catch (e, st) {
-      emit(RealtimeError<AccountingPeriodsData>(
-        error: e,
-        stackTrace: st,
-        previousData: currentData,
-      ));
+      emit(
+        RealtimeError<AccountingPeriodsData>(
+          error: e,
+          stackTrace: st,
+          previousData: currentData,
+        ),
+      );
     }
   }
 }

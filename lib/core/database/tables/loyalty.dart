@@ -12,12 +12,17 @@ class LoyaltyTiers extends Table {
   RealColumn get discountPercent => real().withDefault(const Constant(0.0))();
   BoolColumn get freeShipping => boolean().withDefault(const Constant(false))();
   IntColumn get freeShippingMinOrderCents => integer().nullable()();
-  BoolColumn get prioritySupport => boolean().withDefault(const Constant(false))();
+  BoolColumn get prioritySupport =>
+      boolean().withDefault(const Constant(false))();
   IntColumn get earlyAccessDays => integer().withDefault(const Constant(0))();
-  BoolColumn get exclusiveOffers => boolean().withDefault(const Constant(false))();
-  BoolColumn get birthdayBonus => boolean().withDefault(const Constant(false))();
-  IntColumn get birthdayBonusPoints => integer().withDefault(const Constant(0))();
-  RealColumn get birthdayDiscountPercent => real().withDefault(const Constant(0.0))();
+  BoolColumn get exclusiveOffers =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get birthdayBonus =>
+      boolean().withDefault(const Constant(false))();
+  IntColumn get birthdayBonusPoints =>
+      integer().withDefault(const Constant(0))();
+  RealColumn get birthdayDiscountPercent =>
+      real().withDefault(const Constant(0.0))();
   TextColumn get color => text().withDefault(const Constant('#CD7F32'))();
   TextColumn get icon => text().nullable()();
   TextColumn get badgeText => text().nullable()();
@@ -39,7 +44,8 @@ class LoyaltyPointTransactions extends Table {
   TextColumn get referenceType => text().nullable()();
   TextColumn get description => text().nullable()();
   DateTimeColumn get expiresAt => dateTime().nullable()();
-  DateTimeColumn get transactionDate => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get transactionDate =>
+      dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
@@ -88,21 +94,33 @@ class LoyaltySettingsTable extends Table {
   String get tableName => 'loyalty_settings';
 
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get pointsPerCurrencyUnit => integer().withDefault(const Constant(1))();
+  IntColumn get pointsPerCurrencyUnit =>
+      integer().withDefault(const Constant(1))();
   IntColumn get minSpendForPoints => integer().withDefault(const Constant(0))();
   IntColumn get pointsExpiryDays => integer().nullable()();
-  IntColumn get referralBonusPoints => integer().withDefault(const Constant(100))();
-  IntColumn get signupBonusPoints => integer().withDefault(const Constant(50))();
-  IntColumn get reviewBonusPoints => integer().withDefault(const Constant(10))();
+  IntColumn get referralBonusPoints =>
+      integer().withDefault(const Constant(100))();
+  IntColumn get signupBonusPoints =>
+      integer().withDefault(const Constant(50))();
+  IntColumn get reviewBonusPoints =>
+      integer().withDefault(const Constant(10))();
   BoolColumn get isEnabled => boolean().withDefault(const Constant(true))();
+
   /// How much 1 point is worth in cents (e.g., 1 = 1 cent, 10 = 10 cents)
   IntColumn get pointValueCents => integer().withDefault(const Constant(1))();
+
   /// Minimum points required before a customer can redeem at checkout
-  IntColumn get minRedemptionPoints => integer().withDefault(const Constant(100))();
+  IntColumn get minRedemptionPoints =>
+      integer().withDefault(const Constant(100))();
+
   /// Maximum percentage of invoice total that can be paid with points (basis points: 5000 = 50%)
-  IntColumn get maxRedemptionPercentBps => integer().withDefault(const Constant(5000))();
+  IntColumn get maxRedemptionPercentBps =>
+      integer().withDefault(const Constant(5000))();
+
   /// Whether points redemption at checkout is enabled
-  BoolColumn get allowPointsRedemption => boolean().withDefault(const Constant(true))();
+  BoolColumn get allowPointsRedemption =>
+      boolean().withDefault(const Constant(true))();
+
   /// Business birthday date (month and day) for birthday bonus calculation
   /// This is the business/company anniversary, not individual customer birthdays
   DateTimeColumn get businessBirthdayDate => dateTime().nullable()();

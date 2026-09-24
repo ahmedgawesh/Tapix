@@ -36,10 +36,12 @@ void main() {
   late int revenueAccountId;
 
   Future<int> accountIdByCode(String code) async {
-    final row = await db.customSelect(
-      'SELECT id FROM accounts WHERE account_code = ?',
-      variables: [Variable.withString(code)],
-    ).getSingle();
+    final row = await db
+        .customSelect(
+          'SELECT id FROM accounts WHERE account_code = ?',
+          variables: [Variable.withString(code)],
+        )
+        .getSingle();
     return row.read<int>('id');
   }
 
@@ -50,14 +52,14 @@ void main() {
     // Trigger migrations + seed accounts + seed default currencies.
     await db.customSelect('SELECT 1').get();
 
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     usdId = usd.id;
 
-    final eur = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('EUR')))
-        .getSingle();
+    final eur = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('EUR'))).getSingle();
     eurId = eur.id;
 
     cashAccountId = await accountIdByCode('1000');
@@ -135,39 +137,36 @@ void main() {
       expect(lines, isEmpty);
     });
 
-    test(
-      'cross-currency rejection fires even when math is balanced',
-      () async {
-        // Same totals on both sides — but currencies differ. The
-        // mathematics is fine; the economics is not. Phase 11.3a
-        // must reject this BEFORE accepting it.
-        expect(
-          () => repo.createJournalEntry(
-            entryData: JournalEntryData(
-              description: 'Balanced cross-currency JE',
-              entryDate: DateTime.now(),
-              autoPost: false,
-              lines: [
-                JournalEntryLineData(
-                  accountId: cashAccountId,
-                  debitCents: 10000,
-                  creditCents: 0,
-                  currencyId: usdId,
-                ),
-                JournalEntryLineData(
-                  accountId: revenueAccountId,
-                  debitCents: 0,
-                  creditCents: 10000,
-                  currencyId: eurId,
-                ),
-              ],
-            ),
-            userId: null,
+    test('cross-currency rejection fires even when math is balanced', () async {
+      // Same totals on both sides — but currencies differ. The
+      // mathematics is fine; the economics is not. Phase 11.3a
+      // must reject this BEFORE accepting it.
+      expect(
+        () => repo.createJournalEntry(
+          entryData: JournalEntryData(
+            description: 'Balanced cross-currency JE',
+            entryDate: DateTime.now(),
+            autoPost: false,
+            lines: [
+              JournalEntryLineData(
+                accountId: cashAccountId,
+                debitCents: 10000,
+                creditCents: 0,
+                currencyId: usdId,
+              ),
+              JournalEntryLineData(
+                accountId: revenueAccountId,
+                debitCents: 0,
+                creditCents: 10000,
+                currencyId: eurId,
+              ),
+            ],
           ),
-          throwsA(isA<AccountingException>()),
-        );
-      },
-    );
+          userId: null,
+        ),
+        throwsA(isA<AccountingException>()),
+      );
+    });
 
     test('multi-line same-currency JE still succeeds', () async {
       final expenseId = await accountIdByCode('5100');

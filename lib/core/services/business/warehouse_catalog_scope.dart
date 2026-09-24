@@ -22,8 +22,11 @@ class WarehouseCatalogScope {
     LEFT JOIN (
       SELECT v.product_id, COUNT(*) AS variant_count,
         COUNT(ws.variant_id) AS balance_count, COALESCE(SUM(ws.quantity), 0) AS quantity,
-        COALESCE(CAST(ROUND(CAST(SUM(ws.quantity * ws.unit_cost_cents) AS REAL)
-          / NULLIF(SUM(ws.quantity), 0)) AS INTEGER),
+        COALESCE(CAST(ROUND(CAST(SUM(
+          (ws.quantity - ws.supplier_owned_quantity) * ws.unit_cost_cents
+        ) AS REAL) / NULLIF(SUM(
+          ws.quantity - ws.supplier_owned_quantity
+        ), 0)) AS INTEGER),
           CAST(ROUND(AVG(ws.unit_cost_cents)) AS INTEGER), 0) AS cost
       FROM product_variants v LEFT JOIN ${scope?.stocks ?? WarehouseStockScope.primaryStocks} ws ON ws.variant_id = v.id
       WHERE v.is_active = 1 GROUP BY v.product_id

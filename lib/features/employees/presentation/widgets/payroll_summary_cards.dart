@@ -7,10 +7,7 @@ import '../../domain/entities/employee_entity.dart';
 class PayrollSummaryCards extends StatelessWidget {
   final PayrollSummary summary;
 
-  const PayrollSummaryCards({
-    super.key,
-    required this.summary,
-  });
+  const PayrollSummaryCards({super.key, required this.summary});
 
   @override
   Widget build(BuildContext context) {
@@ -188,18 +185,12 @@ class _SummaryCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: color.withValues(alpha: isDark ? 0.15 : 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: color.withValues(alpha: 0.3),
-        ),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            icon,
-            color: color,
-            size: 20,
-          ),
+          Icon(icon, color: color, size: 20),
           const SizedBox(height: 8),
           Text(
             value,

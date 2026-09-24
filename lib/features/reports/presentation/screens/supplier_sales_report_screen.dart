@@ -44,7 +44,7 @@ class _ReportView extends StatelessWidget {
             range: data.range,
             supplierId: changeSupplier ? supplier : data.supplierId,
             categoryId: changeCategory ? category : data.categoryId,
-            productId: changeCategory
+            productId: changeSupplier || changeCategory
                 ? null
                 : changeProduct
                 ? product
@@ -148,6 +148,7 @@ class _ReportView extends StatelessWidget {
                         ),
                         _Filter(
                           label: 'supplier_sales.product'.tr(),
+                          searchHint: 'supplier_sales.search_product'.tr(),
                           selected: data.productId,
                           options: data.products,
                           onChanged: (id) =>
@@ -187,9 +188,10 @@ class _ReportView extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                row.supplierId < 0
-                                    ? 'supplier_sales.unknown'.tr()
-                                    : row.supplierName,
+                                supplierSalesSourceName(
+                                  row.supplierId,
+                                  row.supplierName,
+                                ),
                                 style: Theme.of(context).textTheme.titleMedium
                                     ?.copyWith(
                                       color: Theme.of(
@@ -198,13 +200,55 @@ class _ReportView extends StatelessWidget {
                                     ),
                               ),
                               Text(
+                                'supplier_sales.quality_${row.sourceQuality}'
+                                    .tr(),
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                              Text(
                                 '${row.productName}${row.variantName.isEmpty ? '' : ' • ${row.variantName}'}',
                                 style: Theme.of(context).textTheme.titleSmall,
                               ),
-                              if (row.purchaseNumber.isNotEmpty)
+                              if (row.consignmentReceipts.isNotEmpty) ...[
+                                const SizedBox(height: 6),
                                 Text(
-                                  '${'supplier_sales.purchase'.tr()}: ${row.purchaseNumber}',
+                                  '${'supplier_sales.consignment_receipts'.tr()}:',
+                                  style: Theme.of(context).textTheme.labelLarge,
                                 ),
+                                const SizedBox(height: 4),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: [
+                                    for (final receipt
+                                        in row.consignmentReceipts)
+                                      Chip(
+                                        visualDensity: VisualDensity.compact,
+                                        label: Text(receipt),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                              if (row.purchaseInvoices.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  '${'supplier_sales.purchase_invoices'.tr()}:',
+                                  style: Theme.of(context).textTheme.labelLarge,
+                                ),
+                                const SizedBox(height: 4),
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: [
+                                    for (final invoice in row.purchaseInvoices)
+                                      Chip(
+                                        visualDensity: VisualDensity.compact,
+                                        label: Text(
+                                          '${invoice.purchaseNumber} · ${localizedQuantity(invoice.quantity, row.measurementType)}',
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
                               const SizedBox(height: 10),
                               Wrap(
                                 spacing: 20,
@@ -305,8 +349,10 @@ class _Filter extends StatelessWidget {
     required this.selected,
     required this.options,
     required this.onChanged,
+    this.searchHint,
   });
   final String label;
+  final String? searchHint;
   final int? selected;
   final Map<int, String> options;
   final ValueChanged<int?> onChanged;
@@ -320,7 +366,8 @@ class _Filter extends StatelessWidget {
       final result = await showModalBottomSheet<(int?,)>(
         context: context,
         isScrollControlled: true,
-        builder: (ctx) => _Picker(label: label, options: options),
+        builder: (ctx) =>
+            _Picker(label: label, options: options, searchHint: searchHint),
       );
       if (result != null) onChanged(result.$1);
     },
@@ -328,8 +375,9 @@ class _Filter extends StatelessWidget {
 }
 
 class _Picker extends StatefulWidget {
-  const _Picker({required this.label, required this.options});
+  const _Picker({required this.label, required this.options, this.searchHint});
   final String label;
+  final String? searchHint;
   final Map<int, String> options;
   @override
   State<_Picker> createState() => _PickerState();
@@ -355,7 +403,7 @@ class _PickerState extends State<_Picker> {
               onChanged: (v) => setState(() => query = v.toLowerCase().trim()),
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search),
-                hintText: 'supplier_sales.search'.tr(),
+                hintText: widget.searchHint ?? 'supplier_sales.search'.tr(),
               ),
             ),
             Expanded(
@@ -394,7 +442,7 @@ class _SupplierSearch extends StatelessWidget {
   Widget build(BuildContext context) {
     final options = {
       for (final e in data.suppliers.entries)
-        e.key: e.key < 0 ? 'supplier_sales.unknown'.tr() : e.value,
+        e.key: supplierSalesSourceName(e.key, e.value),
     };
     return LayoutBuilder(
       builder: (context, constraints) => Autocomplete<MapEntry<int, String>>(

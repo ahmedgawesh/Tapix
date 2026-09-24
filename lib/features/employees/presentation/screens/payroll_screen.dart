@@ -21,8 +21,9 @@ class PayrollScreen extends StatelessWidget {
       create: (context) {
         final now = DateTime.now();
         final period = '${now.year}-${now.month.toString().padLeft(2, '0')}';
-        return PayrollBloc(sl<EmployeeRepository>())
-          ..add(PayrollInitialized(period: period, status: PayrollStatus.draft));
+        return PayrollBloc(
+          sl<EmployeeRepository>(),
+        )..add(PayrollInitialized(period: period, status: PayrollStatus.draft));
       },
       child: const _PayrollScreenContent(),
     );
@@ -71,15 +72,16 @@ class _PayrollScreenContentState extends State<_PayrollScreenContent>
   Future<int> _getCurrentCurrencyId() async {
     final db = sl<AppDatabase>();
     final currencyCode = sl<CurrencyService>().currencyCode;
-    final row = await (db.select(db.currencies)
-          ..where((c) => c.code.equals(currencyCode)))
-        .getSingleOrNull();
+    final row = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals(currencyCode))).getSingleOrNull();
     if (row != null) {
       return row.id;
     }
 
-    final usd = await (db.select(db.currencies)..where((c) => c.code.equals('USD')))
-        .getSingleOrNull();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingleOrNull();
     return usd?.id ?? 1;
   }
 
@@ -117,7 +119,9 @@ class _PayrollScreenContentState extends State<_PayrollScreenContent>
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                    color: colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.3,
+                    ),
                   ),
                   child: Row(
                     children: [
@@ -163,8 +167,8 @@ class _PayrollScreenContentState extends State<_PayrollScreenContent>
                   child: state.isLoading
                       ? const Center(child: CircularProgressIndicator())
                       : state.payrolls.isEmpty
-                          ? _EmptyState()
-                          : _PayrollList(payrolls: state.payrolls),
+                      ? _EmptyState()
+                      : _PayrollList(payrolls: state.payrolls),
                 ),
               ],
             );
@@ -188,10 +192,8 @@ class _PayrollScreenContentState extends State<_PayrollScreenContent>
 
     final result = await showDialog<String>(
       context: context,
-      builder: (context) => _PeriodSelectorDialog(
-        initialYear: year,
-        initialMonth: month,
-      ),
+      builder: (context) =>
+          _PeriodSelectorDialog(initialYear: year, initialMonth: month),
     );
 
     if (result != null) {
@@ -201,12 +203,12 @@ class _PayrollScreenContentState extends State<_PayrollScreenContent>
 
   Future<void> _showCreatePayrollDialog(BuildContext context) async {
     final bloc = context.read<PayrollBloc>();
-    final result = await showDialog<({int employeeId, PayrollCalculation calc})>(
-      context: context,
-      builder: (dialogContext) => _CreatePayrollDialog(
-        period: bloc.state.period,
-      ),
-    );
+    final result =
+        await showDialog<({int employeeId, PayrollCalculation calc})>(
+          context: context,
+          builder: (dialogContext) =>
+              _CreatePayrollDialog(period: bloc.state.period),
+        );
 
     if (result != null && context.mounted) {
       final period = bloc.state.period;
@@ -219,22 +221,24 @@ class _PayrollScreenContentState extends State<_PayrollScreenContent>
       final currencyId = await _getCurrentCurrencyId();
       if (!context.mounted) return;
 
-      bloc.add(PayrollCreateRequested(
-        employeeId: result.employeeId,
-        periodStart: periodStart,
-        periodEnd: periodEnd,
-        basicSalaryCents: result.calc.basicSalaryCents,
-        commissionCents: result.calc.commissionCents,
-        bonusCents: result.calc.bonusCents,
-        overtimeCents: result.calc.overtimeCents,
-        deductionCents: result.calc.totalDeductionCents,
-        netPayCents: result.calc.netPayCents,
-        currencyId: currencyId,
-      ));
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('employees.payroll_created'.tr())),
+      bloc.add(
+        PayrollCreateRequested(
+          employeeId: result.employeeId,
+          periodStart: periodStart,
+          periodEnd: periodEnd,
+          basicSalaryCents: result.calc.basicSalaryCents,
+          commissionCents: result.calc.commissionCents,
+          bonusCents: result.calc.bonusCents,
+          overtimeCents: result.calc.overtimeCents,
+          deductionCents: result.calc.totalDeductionCents,
+          netPayCents: result.calc.netPayCents,
+          currencyId: currencyId,
+        ),
       );
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('employees.payroll_created'.tr())));
     }
   }
 }
@@ -308,7 +312,8 @@ class _PayrollCard extends StatelessWidget {
 
     final statusColor = _getStatusColor(payroll.status);
     final statusIcon = _getStatusIcon(payroll.status);
-    final employeeName = bloc.employeeNames[payroll.employeeId] ?? '#${payroll.employeeId}';
+    final employeeName =
+        bloc.employeeNames[payroll.employeeId] ?? '#${payroll.employeeId}';
 
     final basicCents = payroll.basicSalaryCents.toBigInt().toInt();
     final commCents = payroll.commissionCents.toBigInt().toInt();
@@ -339,7 +344,9 @@ class _PayrollCard extends StatelessWidget {
                   radius: 18,
                   backgroundColor: colorScheme.primary.withValues(alpha: 0.12),
                   child: Text(
-                    employeeName.isNotEmpty ? employeeName[0].toUpperCase() : '?',
+                    employeeName.isNotEmpty
+                        ? employeeName[0].toUpperCase()
+                        : '?',
                     style: theme.textTheme.titleSmall?.copyWith(
                       color: colorScheme.primary,
                       fontWeight: FontWeight.bold,
@@ -368,7 +375,10 @@ class _PayrollCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: isDark ? 0.2 : 0.1),
                     borderRadius: BorderRadius.circular(20),
@@ -401,7 +411,9 @@ class _PayrollCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: isDark
                     ? colorScheme.surfaceContainerHighest.withValues(alpha: 0.3)
-                    : colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                    : colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.4,
+                      ),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Column(
@@ -469,26 +481,36 @@ class _PayrollCard extends StatelessWidget {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: isDark
-                      ? [Colors.green.shade900.withValues(alpha: 0.3), Colors.green.shade800.withValues(alpha: 0.15)]
-                      : [Colors.green.shade50, Colors.green.shade100.withValues(alpha: 0.5)],
+                      ? [
+                          Colors.green.shade900.withValues(alpha: 0.3),
+                          Colors.green.shade800.withValues(alpha: 0.15),
+                        ]
+                      : [
+                          Colors.green.shade50,
+                          Colors.green.shade100.withValues(alpha: 0.5),
+                        ],
                 ),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: Colors.green.withValues(alpha: 0.3),
-                ),
+                border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.payments_outlined, size: 20, color: Colors.green.shade600),
+                      Icon(
+                        Icons.payments_outlined,
+                        size: 20,
+                        color: Colors.green.shade600,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         'employees.net_pay'.tr(),
                         style: theme.textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.green.shade300 : Colors.green.shade700,
+                          color: isDark
+                              ? Colors.green.shade300
+                              : Colors.green.shade700,
                         ),
                       ),
                     ],
@@ -497,7 +519,9 @@ class _PayrollCard extends StatelessWidget {
                     cs.format(netCents),
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
-                      color: isDark ? Colors.green.shade300 : Colors.green.shade700,
+                      color: isDark
+                          ? Colors.green.shade300
+                          : Colors.green.shade700,
                     ),
                   ),
                 ],
@@ -515,10 +539,12 @@ class _PayrollCard extends StatelessWidget {
                     label: 'employees.payroll_process'.tr(),
                     color: Colors.purple,
                     onTap: () {
-                      bloc.add(PayrollStatusUpdateRequested(
-                        id: payroll.id,
-                        status: PayrollStatus.processed,
-                      ));
+                      bloc.add(
+                        PayrollStatusUpdateRequested(
+                          id: payroll.id,
+                          status: PayrollStatus.processed,
+                        ),
+                      );
                     },
                   ),
                   const SizedBox(width: 8),
@@ -528,10 +554,12 @@ class _PayrollCard extends StatelessWidget {
                     label: 'employees.payroll_mark_paid'.tr(),
                     color: Colors.green,
                     onTap: () {
-                      bloc.add(PayrollStatusUpdateRequested(
-                        id: payroll.id,
-                        status: PayrollStatus.paid,
-                      ));
+                      bloc.add(
+                        PayrollStatusUpdateRequested(
+                          id: payroll.id,
+                          status: PayrollStatus.paid,
+                        ),
+                      );
                     },
                   ),
                   const SizedBox(width: 8),
@@ -547,7 +575,11 @@ class _PayrollCard extends StatelessWidget {
                 // Delete (only for draft)
                 if (payroll.status == 'draft')
                   IconButton(
-                    icon: Icon(Icons.delete_outline, size: 20, color: colorScheme.error),
+                    icon: Icon(
+                      Icons.delete_outline,
+                      size: 20,
+                      color: colorScheme.error,
+                    ),
                     onPressed: () {
                       _confirmDelete(context, payroll, bloc);
                     },
@@ -567,7 +599,8 @@ class _PayrollCard extends StatelessWidget {
     final employee = await repository.getEmployee(payroll.employeeId);
     if (employee == null || !context.mounted) return;
 
-    final period = '${payroll.periodStart.year}-${payroll.periodStart.month.toString().padLeft(2, '0')}';
+    final period =
+        '${payroll.periodStart.year}-${payroll.periodStart.month.toString().padLeft(2, '0')}';
 
     final counts = await repository.getEmployeeAttendanceCounts(
       payroll.employeeId,
@@ -575,9 +608,9 @@ class _PayrollCard extends StatelessWidget {
       payroll.periodEnd,
     );
 
-    final leaveRequests = await repository.watchEmployeeLeaveRequests(
-      payroll.employeeId,
-    ).first;
+    final leaveRequests = await repository
+        .watchEmployeeLeaveRequests(payroll.employeeId)
+        .first;
 
     final totalCommission = await repository.getTotalCommissionCents(
       payroll.employeeId,
@@ -590,7 +623,8 @@ class _PayrollCard extends StatelessWidget {
       payroll.periodStart,
       payroll.periodEnd,
     );
-    final netSalesCents = (salesStats['salesTotalCents'] ?? 0) -
+    final netSalesCents =
+        (salesStats['salesTotalCents'] ?? 0) -
         (salesStats['returnsTotalCents'] ?? 0);
     final targetBonus = PayrollCalculationService.checkSalesTargetBonus(
       employee: employee,
@@ -826,85 +860,87 @@ class _PeriodSelectorDialogState extends State<_PeriodSelectorDialog> {
       content: SizedBox(
         width: 300,
         child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Year Selector
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.chevron_left),
-                onPressed: () {
-                  setState(() => _selectedYear--);
-                },
-              ),
-              Text(
-                _selectedYear.toString(),
-                style: theme.textTheme.titleLarge,
-              ),
-              IconButton(
-                icon: const Icon(Icons.chevron_right),
-                onPressed: _selectedYear < now.year
-                    ? () {
-                        setState(() => _selectedYear++);
-                      }
-                    : null,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Month Grid
-          GridView.builder(
-            shrinkWrap: true,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 4,
-              childAspectRatio: 1.5,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-            ),
-            itemCount: 12,
-            itemBuilder: (context, index) {
-              final month = index + 1;
-              final isSelected = month == _selectedMonth;
-              final isFuture = _selectedYear == now.year && month > now.month;
-
-              return InkWell(
-                onTap: isFuture
-                    ? null
-                    : () {
-                        setState(() => _selectedMonth = month);
-                      },
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? theme.colorScheme.primaryContainer
-                        : null,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: isSelected
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.outlineVariant,
-                    ),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    DateFormat('MMM').format(DateTime(2024, month)),
-                    style: TextStyle(
-                      color: isFuture
-                          ? theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)
-                          : isSelected
-                              ? theme.colorScheme.onPrimaryContainer
-                              : null,
-                      fontWeight: isSelected ? FontWeight.bold : null,
-                    ),
-                  ),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Year Selector
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: () {
+                    setState(() => _selectedYear--);
+                  },
                 ),
-              );
-            },
-          ),
-        ],
-      ),
+                Text(
+                  _selectedYear.toString(),
+                  style: theme.textTheme.titleLarge,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: _selectedYear < now.year
+                      ? () {
+                          setState(() => _selectedYear++);
+                        }
+                      : null,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Month Grid
+            GridView.builder(
+              shrinkWrap: true,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                childAspectRatio: 1.5,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+              ),
+              itemCount: 12,
+              itemBuilder: (context, index) {
+                final month = index + 1;
+                final isSelected = month == _selectedMonth;
+                final isFuture = _selectedYear == now.year && month > now.month;
+
+                return InkWell(
+                  onTap: isFuture
+                      ? null
+                      : () {
+                          setState(() => _selectedMonth = month);
+                        },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? theme.colorScheme.primaryContainer
+                          : null,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isSelected
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.outlineVariant,
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      DateFormat('MMM').format(DateTime(2024, month)),
+                      style: TextStyle(
+                        color: isFuture
+                            ? theme.colorScheme.onSurfaceVariant.withValues(
+                                alpha: 0.5,
+                              )
+                            : isSelected
+                            ? theme.colorScheme.onPrimaryContainer
+                            : null,
+                        fontWeight: isSelected ? FontWeight.bold : null,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
@@ -1007,7 +1043,8 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
       targetStart,
       targetEnd,
     );
-    final netSalesCents = (salesStats['salesTotalCents'] ?? 0) -
+    final netSalesCents =
+        (salesStats['salesTotalCents'] ?? 0) -
         (salesStats['returnsTotalCents'] ?? 0);
 
     final targetBonusResult = PayrollCalculationService.checkSalesTargetBonus(
@@ -1025,7 +1062,8 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
     _autoOvertimeMinutes = overtimeMinutes;
     int overtimeCents;
     if (_overtimeManuallyEdited) {
-      overtimeCents = ((double.tryParse(_overtimeController.text) ?? 0) * 100).round();
+      overtimeCents = ((double.tryParse(_overtimeController.text) ?? 0) * 100)
+          .round();
     } else {
       // Respect the employee's configured overtime policy
       // (hourly_rate × multiplier / percentage of daily rate / fixed per hour).
@@ -1042,7 +1080,9 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
       );
       // Pre-fill the controller with auto-calculated value
       final overtimeAmount = overtimeCents / 100;
-      _overtimeController.text = overtimeAmount > 0 ? overtimeAmount.toStringAsFixed(2) : '';
+      _overtimeController.text = overtimeAmount > 0
+          ? overtimeAmount.toStringAsFixed(2)
+          : '';
     }
 
     setState(() {
@@ -1073,9 +1113,18 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
     return AlertDialog(
       title: Row(
         children: [
-          Icon(Icons.receipt_long_outlined, color: colorScheme.primary, size: 22),
+          Icon(
+            Icons.receipt_long_outlined,
+            color: colorScheme.primary,
+            size: 22,
+          ),
           const SizedBox(width: 8),
-          Flexible(child: Text('employees.create_payroll'.tr(), overflow: TextOverflow.ellipsis)),
+          Flexible(
+            child: Text(
+              'employees.create_payroll'.tr(),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
       content: _isLoading
@@ -1127,7 +1176,9 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
                       // Bonus
                       TextFormField(
                         controller: _bonusController,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
                         onTap: () => selectAllText(_bonusController),
                         decoration: InputDecoration(
                           labelText: 'employees.bonus'.tr(),
@@ -1144,7 +1195,9 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
                       // Overtime Pay
                       TextFormField(
                         controller: _overtimeController,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
                         onTap: () => selectAllText(_overtimeController),
                         decoration: InputDecoration(
                           labelText: 'employees.overtime_pay'.tr(),
@@ -1164,7 +1217,8 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
                       ),
 
                       // Sales Target Bonus Info
-                      if (_targetBonusResult != null && _targetBonusResult!.salesTargetCents > 0) ...[
+                      if (_targetBonusResult != null &&
+                          _targetBonusResult!.salesTargetCents > 0) ...[
                         const SizedBox(height: 16),
                         Container(
                           padding: const EdgeInsets.all(12),
@@ -1182,32 +1236,50 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(children: [
-                                Icon(
-                                  _targetBonusResult!.achieved ? Icons.emoji_events : Icons.track_changes,
-                                  size: 16,
-                                  color: _targetBonusResult!.achieved ? Colors.green : Colors.orange,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  _targetBonusResult!.achieved
-                                      ? 'employees.target_achieved'.tr()
-                                      : 'employees.target_not_achieved'.tr(),
-                                  style: theme.textTheme.labelMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: _targetBonusResult!.achieved ? Colors.green.shade700 : Colors.orange.shade700,
+                              Row(
+                                children: [
+                                  Icon(
+                                    _targetBonusResult!.achieved
+                                        ? Icons.emoji_events
+                                        : Icons.track_changes,
+                                    size: 16,
+                                    color: _targetBonusResult!.achieved
+                                        ? Colors.green
+                                        : Colors.orange,
                                   ),
-                                ),
-                              ]),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _targetBonusResult!.achieved
+                                        ? 'employees.target_achieved'.tr()
+                                        : 'employees.target_not_achieved'.tr(),
+                                    style: theme.textTheme.labelMedium
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                          color: _targetBonusResult!.achieved
+                                              ? Colors.green.shade700
+                                              : Colors.orange.shade700,
+                                        ),
+                                  ),
+                                ],
+                              ),
                               const SizedBox(height: 6),
-                              _calcRow(context, 'employees.sales_target'.tr(),
-                                  cs.format(_targetBonusResult!.salesTargetCents)),
-                              _calcRow(context, 'employees.actual_sales'.tr(),
-                                  cs.format(_targetBonusResult!.actualSalesCents)),
+                              _calcRow(
+                                context,
+                                'employees.sales_target'.tr(),
+                                cs.format(_targetBonusResult!.salesTargetCents),
+                              ),
+                              _calcRow(
+                                context,
+                                'employees.actual_sales'.tr(),
+                                cs.format(_targetBonusResult!.actualSalesCents),
+                              ),
                               if (_targetBonusResult!.achieved)
-                                _calcRow(context, 'employees.target_bonus'.tr(),
-                                    '+ ${cs.format(_targetBonusResult!.targetBonusCents)}',
-                                    color: Colors.green.shade700),
+                                _calcRow(
+                                  context,
+                                  'employees.target_bonus'.tr(),
+                                  '+ ${cs.format(_targetBonusResult!.targetBonusCents)}',
+                                  color: Colors.green.shade700,
+                                ),
                             ],
                           ),
                         ),
@@ -1223,7 +1295,9 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
                                 .withValues(alpha: 0.4),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+                              color: colorScheme.outlineVariant.withValues(
+                                alpha: 0.5,
+                              ),
                             ),
                           ),
                           child: Column(
@@ -1240,8 +1314,11 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
                               // Attendance row
                               Row(
                                 children: [
-                                  Icon(Icons.assignment_outlined,
-                                      size: 14, color: colorScheme.onSurfaceVariant),
+                                  Icon(
+                                    Icons.assignment_outlined,
+                                    size: 14,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
                                   const SizedBox(width: 4),
                                   Text(
                                     '${_calculation!.presentDays} ${'employees.status_present'.tr()} · '
@@ -1253,14 +1330,26 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
                               ),
                               const Divider(height: 16),
 
-                              _calcRow(context, 'employees.basic_salary'.tr(),
-                                  cs.format(_calculation!.basicSalaryCents)),
-                              _calcRow(context, 'employees.commission'.tr(),
-                                  cs.format(_calculation!.commissionCents)),
-                              _calcRow(context, 'employees.bonus'.tr(),
-                                  cs.format(_calculation!.bonusCents)),
-                              _calcRow(context, 'employees.overtime_pay'.tr(),
-                                  cs.format(_calculation!.overtimeCents)),
+                              _calcRow(
+                                context,
+                                'employees.basic_salary'.tr(),
+                                cs.format(_calculation!.basicSalaryCents),
+                              ),
+                              _calcRow(
+                                context,
+                                'employees.commission'.tr(),
+                                cs.format(_calculation!.commissionCents),
+                              ),
+                              _calcRow(
+                                context,
+                                'employees.bonus'.tr(),
+                                cs.format(_calculation!.bonusCents),
+                              ),
+                              _calcRow(
+                                context,
+                                'employees.overtime_pay'.tr(),
+                                cs.format(_calculation!.overtimeCents),
+                              ),
                               const Divider(height: 12),
                               _calcRow(
                                 context,
@@ -1314,8 +1403,13 @@ class _CreatePayrollDialogState extends State<_CreatePayrollDialog> {
     );
   }
 
-  Widget _calcRow(BuildContext context, String label, String value,
-      {bool isBold = false, Color? color}) {
+  Widget _calcRow(
+    BuildContext context,
+    String label,
+    String value, {
+    bool isBold = false,
+    Color? color,
+  }) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),

@@ -91,8 +91,10 @@ class _CustomPaywallScreenState extends State<CustomPaywallScreen> {
       }
     }
 
-    debugPrint('Paywall: Found ${packageMap.length} packages: '
-        '${packageMap.keys.join(', ')}');
+    debugPrint(
+      'Paywall: Found ${packageMap.length} packages: '
+      '${packageMap.keys.join(', ')}',
+    );
 
     return packageMap.values.toList();
   }
@@ -100,9 +102,15 @@ class _CustomPaywallScreenState extends State<CustomPaywallScreen> {
   String _packageTitle(Package package) {
     final id = package.storeProduct.identifier;
     if (id.contains('lifetime')) return 'paywall.lifetime'.tr();
-    if (id.contains('yearly') || id.contains('year')) return 'paywall.yearly'.tr();
-    if (id.contains('monthly') || id.contains('month')) return 'paywall.monthly'.tr();
-    if (id.contains('weekly') || id.contains('week')) return 'paywall.weekly'.tr();
+    if (id.contains('yearly') || id.contains('year')) {
+      return 'paywall.yearly'.tr();
+    }
+    if (id.contains('monthly') || id.contains('month')) {
+      return 'paywall.monthly'.tr();
+    }
+    if (id.contains('weekly') || id.contains('week')) {
+      return 'paywall.weekly'.tr();
+    }
     // Fallback to store title
     return package.storeProduct.title;
   }
@@ -110,16 +118,26 @@ class _CustomPaywallScreenState extends State<CustomPaywallScreen> {
   String _packagePeriod(Package package) {
     final id = package.storeProduct.identifier;
     if (id.contains('lifetime')) return 'paywall.one_time'.tr();
-    if (id.contains('yearly') || id.contains('year')) return 'paywall.per_year'.tr();
-    if (id.contains('monthly') || id.contains('month')) return 'paywall.per_month'.tr();
-    if (id.contains('weekly') || id.contains('week')) return 'paywall.per_week'.tr();
+    if (id.contains('yearly') || id.contains('year')) {
+      return 'paywall.per_year'.tr();
+    }
+    if (id.contains('monthly') || id.contains('month')) {
+      return 'paywall.per_month'.tr();
+    }
+    if (id.contains('weekly') || id.contains('week')) {
+      return 'paywall.per_week'.tr();
+    }
     return '';
   }
 
   String? _packageBadge(Package package) {
     final id = package.storeProduct.identifier;
-    if (id.contains('yearly') || id.contains('year')) return 'paywall.best_value'.tr();
-    if (id.contains('monthly') || id.contains('month')) return 'paywall.most_popular'.tr();
+    if (id.contains('yearly') || id.contains('year')) {
+      return 'paywall.best_value'.tr();
+    }
+    if (id.contains('monthly') || id.contains('month')) {
+      return 'paywall.most_popular'.tr();
+    }
     return null;
   }
 
@@ -253,7 +271,9 @@ class _CustomPaywallScreenState extends State<CustomPaywallScreen> {
 
   Widget _buildContent(ThemeData theme, ColorScheme colorScheme) {
     final packages = _availablePackages;
-    packages.sort((a, b) => _packageSortOrder(a).compareTo(_packageSortOrder(b)));
+    packages.sort(
+      (a, b) => _packageSortOrder(a).compareTo(_packageSortOrder(b)),
+    );
 
     if (packages.isEmpty) {
       return Center(
@@ -262,7 +282,11 @@ class _CustomPaywallScreenState extends State<CustomPaywallScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.cloud_off, size: 64, color: colorScheme.onSurfaceVariant),
+              Icon(
+                Icons.cloud_off,
+                size: 64,
+                color: colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(height: 16),
               Text(
                 'paywall.no_plans'.tr(),
@@ -291,7 +315,11 @@ class _CustomPaywallScreenState extends State<CustomPaywallScreen> {
               children: [
                 // ── Header ──
                 const SizedBox(height: 8),
-                Icon(Icons.star_rounded, size: 56, color: Colors.amber.shade600),
+                Icon(
+                  Icons.star_rounded,
+                  size: 56,
+                  color: Colors.amber.shade600,
+                ),
                 const SizedBox(height: 12),
                 Text(
                   'paywall.subtitle'.tr(),
@@ -328,12 +356,18 @@ class _CustomPaywallScreenState extends State<CustomPaywallScreen> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.error_outline, color: colorScheme.error, size: 20),
+                        Icon(
+                          Icons.error_outline,
+                          color: colorScheme.error,
+                          size: 20,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             _error!,
-                            style: TextStyle(color: colorScheme.onErrorContainer),
+                            style: TextStyle(
+                              color: colorScheme.onErrorContainer,
+                            ),
                           ),
                         ),
                       ],
@@ -358,7 +392,8 @@ class _CustomPaywallScreenState extends State<CustomPaywallScreen> {
                   width: double.infinity,
                   height: 52,
                   child: FilledButton(
-                    onPressed: (_isPurchasing || _isRestoring || packages.isEmpty)
+                    onPressed:
+                        (_isPurchasing || _isRestoring || packages.isEmpty)
                         ? null
                         : () => _purchase(packages[_selectedIndex]),
                     child: _isPurchasing
@@ -403,7 +438,9 @@ class _CustomPaywallScreenState extends State<CustomPaywallScreen> {
                               const SizedBox(
                                 width: 16,
                                 height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               ),
                               const SizedBox(width: 8),
                               Text('paywall.restoring'.tr()),
@@ -427,7 +464,9 @@ class _CustomPaywallScreenState extends State<CustomPaywallScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     InkWell(
-                      onTap: () => _launchURL('https://tapixsolutions.com/terms-of-service.html'),
+                      onTap: () => _launchURL(
+                        'https://tapixsolutions.com/terms-of-service.html',
+                      ),
                       child: Text(
                         'paywall.terms_of_service'.tr(),
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -444,7 +483,9 @@ class _CustomPaywallScreenState extends State<CustomPaywallScreen> {
                     ),
                     const SizedBox(width: 16),
                     InkWell(
-                      onTap: () => _launchURL('https://tapixsolutions.com/privacy-policy.html'),
+                      onTap: () => _launchURL(
+                        'https://tapixsolutions.com/privacy-policy.html',
+                      ),
                       child: Text(
                         'paywall.privacy_policy'.tr(),
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -493,12 +534,7 @@ class _CustomPaywallScreenState extends State<CustomPaywallScreen> {
             children: [
               Icon(Icons.check_circle, color: Colors.green.shade600, size: 20),
               const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  feature,
-                  style: theme.textTheme.bodyMedium,
-                ),
-              ),
+              Expanded(child: Text(feature, style: theme.textTheme.bodyMedium)),
             ],
           ),
         );
@@ -529,7 +565,9 @@ class _CustomPaywallScreenState extends State<CustomPaywallScreen> {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isSelected ? colorScheme.primary : colorScheme.outlineVariant,
+              color: isSelected
+                  ? colorScheme.primary
+                  : colorScheme.outlineVariant,
               width: isSelected ? 2 : 1,
             ),
             color: isSelected
@@ -545,7 +583,9 @@ class _CustomPaywallScreenState extends State<CustomPaywallScreen> {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: isSelected ? colorScheme.primary : colorScheme.outline,
+                    color: isSelected
+                        ? colorScheme.primary
+                        : colorScheme.outline,
                     width: 2,
                   ),
                   color: isSelected ? colorScheme.primary : Colors.transparent,

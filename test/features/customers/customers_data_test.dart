@@ -18,9 +18,7 @@ void main() {
         isSearching: true,
       );
 
-      final copied = original.copyWith(
-        isSearching: false,
-      );
+      final copied = original.copyWith(isSearching: false);
 
       expect(copied.searchQuery, equals('test'));
       expect(copied.isSearching, isFalse);
@@ -33,9 +31,7 @@ void main() {
         isSearching: true,
       );
 
-      final copied = original.copyWith(
-        searchQuery: 'new',
-      );
+      final copied = original.copyWith(searchQuery: 'new');
 
       expect(copied.searchQuery, equals('new'));
       expect(copied.isSearching, isTrue);

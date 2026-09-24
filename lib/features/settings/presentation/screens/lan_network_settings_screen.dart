@@ -111,12 +111,15 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
       deviceName: _deviceNameController.text,
     );
     if (!mounted) return;
+    final failure = result.message == 'invalid_device_name'
+        ? 'settings.network.invalid_device_name'.tr()
+        : result.message ?? '';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           result.success
               ? 'settings.network.pair_success'.tr()
-              : 'settings.network.pair_failed'.tr(args: [result.message ?? '']),
+              : 'settings.network.pair_failed'.tr(args: [failure]),
         ),
       ),
     );
@@ -504,6 +507,7 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
             ),
           TextField(
             controller: _deviceNameController,
+            maxLength: 80,
             decoration: InputDecoration(
               labelText: 'settings.network.device_name'.tr(),
               hintText: 'settings.network.device_name_hint'.tr(),

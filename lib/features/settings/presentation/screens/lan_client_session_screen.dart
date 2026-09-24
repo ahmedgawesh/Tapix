@@ -10,6 +10,7 @@ import '../../../../core/bloc/realtime_bloc.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/money/money_input_parser.dart';
 import '../../../../core/services/lan/lan_network_service.dart';
+import '../../../../core/services/lan/lan_error_localizer.dart';
 import '../../../auth/domain/entities/user_entity.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
 
@@ -26,6 +27,10 @@ class _LanClientSessionScreenState extends State<LanClientSessionScreen> {
   bool _shiftLoadInFlight = false;
   bool _working = false;
   String? _error;
+  String _currencyCode = 'USD';
+  String _currencySymbol = r'$';
+  int _currencyDecimalDigits = 2;
+  bool _currencySymbolAfter = false;
 
   LanNetworkService get _lan => sl<LanNetworkService>();
 
@@ -59,9 +64,21 @@ class _LanClientSessionScreenState extends State<LanClientSessionScreen> {
       final shift = await _lan.fetchOwnRemoteShift().timeout(
         const Duration(seconds: 12),
       );
+      final catalog = shift == null
+          ? await _lan
+                .fetchRemoteCatalog(limit: 1)
+                .timeout(const Duration(seconds: 12))
+          : null;
       if (!mounted) return;
       setState(() {
         _shift = shift;
+        _currencyCode = shift?.currencyCode ?? catalog?.currencyCode ?? 'USD';
+        _currencySymbol =
+            shift?.currencySymbol ?? catalog?.currencySymbol ?? r'$';
+        _currencyDecimalDigits =
+            shift?.currencyDecimalDigits ?? catalog?.currencyDecimalDigits ?? 2;
+        _currencySymbolAfter =
+            shift?.currencySymbolAfter ?? catalog?.currencySymbolAfter ?? false;
         _loadingShift = false;
         _error = null;
       });
@@ -78,7 +95,7 @@ class _LanClientSessionScreenState extends State<LanClientSessionScreen> {
       }
       setState(() {
         _loadingShift = false;
-        _error = error.message;
+        _error = localizeLanBusinessError(error);
       });
     } on TimeoutException {
       if (!mounted) return;
@@ -102,7 +119,13 @@ class _LanClientSessionScreenState extends State<LanClientSessionScreen> {
   Future<void> _openShift() async {
     final input = await showDialog<_ShiftCashInput>(
       context: context,
-      builder: (_) => const _ShiftCashDialog(opening: true),
+      builder: (_) => _ShiftCashDialog(
+        opening: true,
+        currencyCode: _currencyCode,
+        symbol: _currencySymbol,
+        decimalDigits: _currencyDecimalDigits,
+        symbolAfter: _currencySymbolAfter,
+      ),
     );
     if (input == null) return;
     setState(() => _working = true);
@@ -124,7 +147,7 @@ class _LanClientSessionScreenState extends State<LanClientSessionScreen> {
       if (!mounted) return;
       setState(() {
         _working = false;
-        _error = error.message;
+        _error = localizeLanBusinessError(error);
       });
     } catch (_) {
       if (!mounted) return;
@@ -144,13 +167,17 @@ class _LanClientSessionScreenState extends State<LanClientSessionScreen> {
       builder: (_) => _ShiftCashDialog(
         opening: false,
         expectedCents: shift.expectedCashCents,
+        currencyCode: shift.currencyCode,
         symbol: shift.currencySymbol,
+        decimalDigits: shift.currencyDecimalDigits,
+        symbolAfter: shift.currencySymbolAfter,
       ),
     );
     if (input == null) return false;
     setState(() => _working = true);
     try {
       await _lan.closeOwnRemoteShift(
+        shiftId: shift.id,
         countedCashCents: input.cents,
         notes: input.notes,
       );
@@ -165,7 +192,7 @@ class _LanClientSessionScreenState extends State<LanClientSessionScreen> {
       if (!mounted) return false;
       setState(() {
         _working = false;
-        _error = error.message;
+        _error = localizeLanBusinessError(error);
       });
       return false;
     } catch (_) {
@@ -266,7 +293,7 @@ class _LanClientSessionScreenState extends State<LanClientSessionScreen> {
                                 'settings.network.master_address'.tr(),
                               ),
                               subtitle: Text(
-                                '${lan.masterHost ?? ''}:${lan.port}',
+                                '${lan.masterHost ?? '—'}:${lan.port}',
                               ),
                             ),
                           ],
@@ -402,13 +429,12 @@ class _CashierShiftCard extends StatelessWidget {
               const SizedBox(height: 10),
               Text(shift!.shiftNumber),
               Text(
-                '${'cashier_shifts.sales'.tr()}: ${shift!.salesCount}  "  '
+                '${'cashier_shifts.sales'.tr()}: ${shift!.salesCount} • '
                 '${'cashier_shifts.returns'.tr()}: ${shift!.returnsCount}',
               ),
               Text(
                 '${'cashier_shifts.expected_cash'.tr()}: '
-                '${shift!.currencySymbol}'
-                '${(shift!.expectedCashCents / 100).toStringAsFixed(2)}',
+                '${_formatMinorUnits(shift!.expectedCashCents, shift!.currencySymbol, shift!.currencyDecimalDigits, shift!.currencySymbolAfter)}',
               ),
             ],
             if (error != null) ...[
@@ -451,12 +477,18 @@ class _ShiftCashInput {
 class _ShiftCashDialog extends StatefulWidget {
   final bool opening;
   final int? expectedCents;
-  final String? symbol;
+  final String currencyCode;
+  final String symbol;
+  final int decimalDigits;
+  final bool symbolAfter;
 
   const _ShiftCashDialog({
     required this.opening,
     this.expectedCents,
-    this.symbol,
+    required this.currencyCode,
+    required this.symbol,
+    required this.decimalDigits,
+    required this.symbolAfter,
   });
 
   @override
@@ -476,7 +508,10 @@ class _ShiftCashDialogState extends State<_ShiftCashDialog> {
   }
 
   void _submit() {
-    final parsed = sl<MoneyInputParser>().parse(_amount.text);
+    final parsed = sl<MoneyInputParser>().parse(
+      _amount.text,
+      decimalDigits: widget.decimalDigits,
+    );
     if (!parsed.isValid || parsed.cents < 0) {
       setState(() => _error = 'cashier_shifts.invalid_amount'.tr());
       return;
@@ -505,8 +540,7 @@ class _ShiftCashDialogState extends State<_ShiftCashDialog> {
             if (!widget.opening && widget.expectedCents != null) ...[
               Text(
                 '${'cashier_shifts.expected_cash'.tr()}: '
-                '${widget.symbol ?? ''}'
-                '${(widget.expectedCents! / 100).toStringAsFixed(2)}',
+                '${_formatMinorUnits(widget.expectedCents!, widget.symbol, widget.decimalDigits, widget.symbolAfter)}',
               ),
               const SizedBox(height: 12),
             ],
@@ -522,6 +556,7 @@ class _ShiftCashDialogState extends State<_ShiftCashDialog> {
                     : 'cashier_shifts.counted_cash'.tr(),
                 errorText: _error,
                 prefixIcon: const Icon(LucideIcons.wallet),
+                helperText: widget.currencyCode,
               ),
               onSubmitted: (_) => _submit(),
             ),
@@ -545,4 +580,22 @@ class _ShiftCashDialogState extends State<_ShiftCashDialog> {
       ],
     );
   }
+}
+
+String _formatMinorUnits(
+  int amount,
+  String symbol,
+  int decimalDigits,
+  bool symbolAfter,
+) {
+  final digits = decimalDigits.clamp(0, 6);
+  var factor = 1;
+  for (var index = 0; index < digits; index++) {
+    factor *= 10;
+  }
+  final formatted = NumberFormat.decimalPatternDigits(
+    locale: Intl.getCurrentLocale(),
+    decimalDigits: digits,
+  ).format(amount / factor);
+  return symbolAfter ? '$formatted $symbol' : '$symbol$formatted';
 }

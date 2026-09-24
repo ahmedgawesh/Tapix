@@ -5,6 +5,7 @@ import 'package:drift/drift.dart' hide isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tapix/core/database/app_database.dart';
+import 'package:tapix/core/database/migrations/warehouse_transfers.dart';
 
 void main() {
   late AppDatabase db;
@@ -31,7 +32,7 @@ void main() {
   test(
     'fresh schema stores multi-ingredient medicine strengths exactly',
     () async {
-      expect(db.schemaVersion, 10091);
+      expect(db.schemaVersion, 10115);
       final flag =
           await (db.select(db.appSettings)
                 ..where((row) => row.key.equals('pharmacy_features_enabled')))
@@ -258,6 +259,10 @@ void main() {
         await fileDb.customStatement(
           'DROP INDEX IF EXISTS idx_product_batches_manufacturer_lot',
         );
+        // This fixture starts from today's schema and removes later additions
+        // to reproduce a real 10084 database. A real 10084 database never had
+        // the transfer triggers that reference manufacturer_lot_number.
+        await removeWarehouseTransferGuards(fileDb);
         await fileDb.customStatement(
           'ALTER TABLE purchase_items DROP COLUMN manufacturer_lot_number',
         );
@@ -270,7 +275,7 @@ void main() {
 
         fileDb = AppDatabase.connect(DatabaseConnection(NativeDatabase(file)));
         await fileDb.customSelect('SELECT 1').get();
-        expect(fileDb.schemaVersion, 10091);
+        expect(fileDb.schemaVersion, 10115);
         expect(
           (await (fileDb.select(
             fileDb.products,
@@ -325,7 +330,7 @@ void main() {
 
       fileDb = AppDatabase.connect(DatabaseConnection(NativeDatabase(file)));
       await fileDb.customSelect('SELECT 1').get();
-      expect(fileDb.schemaVersion, 10091);
+      expect(fileDb.schemaVersion, 10115);
       final existing = await (fileDb.select(
         fileDb.products,
       )..where((row) => row.id.equals(productId))).getSingle();

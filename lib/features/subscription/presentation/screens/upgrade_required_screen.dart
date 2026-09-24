@@ -81,14 +81,18 @@ class UpgradeRequiredScreen extends StatelessWidget {
                     color: Colors.amber.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.workspace_premium,
-                      size: 52, color: Colors.amber),
+                  child: const Icon(
+                    Icons.workspace_premium,
+                    size: 52,
+                    color: Colors.amber,
+                  ),
                 ),
                 const SizedBox(height: 24),
                 Text(
                   'subscription.feature_locked_title'.tr(),
-                  style: theme.textTheme.headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.bold),
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
@@ -100,8 +104,9 @@ class UpgradeRequiredScreen extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   'subscription.feature_locked_free_hint'.tr(),
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.hintColor),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.hintColor,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 32),

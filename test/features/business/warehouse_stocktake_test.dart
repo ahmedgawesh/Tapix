@@ -87,6 +87,41 @@ void main() {
         .toList(),
   ];
 
+  test('supplier-owned stock requires a source-aware custody count', () async {
+    await db.customStatement(
+      'UPDATE business_warehouse_stocks SET supplier_owned_quantity=2 '
+      'WHERE warehouse_id=? AND variant_id=?',
+      [scope.warehouseId, variant],
+    );
+    final observed = await service.capture(scope: scope, variantId: variant);
+    expect(
+      () =>
+          service.previewRevaluation(snapshot: observed, newUnitCostCents: 800),
+      throwsStateError,
+    );
+    final before = await snapshot();
+    await expectLater(
+      service.postCounts(
+        counts: [WarehouseCount(snapshot: observed, countedQuantity: 9)],
+        reason: 'Unattributed custody difference',
+      ),
+      throwsStateError,
+    );
+    await expectLater(
+      adjustments.adjust(
+        productId: product,
+        variantId: variant,
+        type: InventoryAdjustmentType.gain,
+        quantityDelta: 1,
+        reason: 'Unattributed custody gain',
+        currencyId: currency,
+        scope: scope,
+      ),
+      throwsA(isA<InventoryAdjustmentException>()),
+    );
+    expect(await snapshot(), before);
+  });
+
   test(
     'FIFO valuation preview uses layer costs and rejects changed layers',
     () async {

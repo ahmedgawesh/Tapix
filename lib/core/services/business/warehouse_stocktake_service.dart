@@ -59,7 +59,7 @@ class WarehouseStocktakeService {
     final row = await _db
         .customSelect(
           '''
-      SELECT s.quantity, s.unit_cost_cents, s.updated_at, v.product_id,
+      SELECT s.quantity, s.supplier_owned_quantity, s.unit_cost_cents, s.updated_at, v.product_id,
         v.is_active AS variant_active, p.is_active AS product_active,
         p.track_inventory, p.currency_id, p.measurement_type,
         p.costing_method, p.inventory_tracking_type
@@ -123,6 +123,12 @@ class WarehouseStocktakeService {
     required WarehouseStocktakeSnapshot snapshot,
     required int newUnitCostCents,
   }) {
+    final supplierOwned = snapshot._state['supplier_owned_quantity']! as int;
+    if (supplierOwned > 0) {
+      throw StateError(
+        'Revaluation requires a source-aware consignment custody workflow.',
+      );
+    }
     if (!identical(snapshot._db, _db) ||
         snapshot.quantity <= 0 ||
         newUnitCostCents < 0) {
@@ -222,6 +228,14 @@ class WarehouseStocktakeService {
     return _db.transaction(() async {
       for (final request in requests) {
         final snapshot = request.snapshot;
+        final supplierOwned =
+            snapshot._state['supplier_owned_quantity']! as int;
+        if (supplierOwned > 0 && request.countedQuantity != snapshot.quantity) {
+          throw StateError(
+            'A custody count with supplier-owned stock must identify the '
+            'affected source before posting.',
+          );
+        }
         final current = await _read(snapshot.scope, snapshot.variantId);
         if (current.length != snapshot._state.length ||
             current.entries.any((e) => snapshot._state[e.key] != e.value)) {

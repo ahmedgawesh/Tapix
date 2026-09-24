@@ -42,10 +42,7 @@ class PermissionGate extends StatelessWidget {
           );
 
           if (disabledTooltip != null) {
-            return Tooltip(
-              message: disabledTooltip!,
-              child: disabledChild,
-            );
+            return Tooltip(message: disabledTooltip!, child: disabledChild);
           }
 
           return disabledChild;
@@ -75,8 +72,10 @@ class RoleGate extends StatelessWidget {
     this.showDisabled = false,
     this.disabledTooltip,
     this.disabledOpacity = 0.5,
-  }) : assert(allowedRoles != null || minRole != null,
-            'Either allowedRoles or minRole must be provided');
+  }) : assert(
+         allowedRoles != null || minRole != null,
+         'Either allowedRoles or minRole must be provided',
+       );
 
   @override
   Widget build(BuildContext context) {
@@ -99,10 +98,7 @@ class RoleGate extends StatelessWidget {
           );
 
           if (disabledTooltip != null) {
-            return Tooltip(
-              message: disabledTooltip!,
-              child: disabledChild,
-            );
+            return Tooltip(message: disabledTooltip!, child: disabledChild);
           }
 
           return disabledChild;
@@ -171,10 +167,7 @@ class MultiPermissionGate extends StatelessWidget {
           );
 
           if (disabledTooltip != null) {
-            return Tooltip(
-              message: disabledTooltip!,
-              child: disabledChild,
-            );
+            return Tooltip(message: disabledTooltip!, child: disabledChild);
           }
 
           return disabledChild;

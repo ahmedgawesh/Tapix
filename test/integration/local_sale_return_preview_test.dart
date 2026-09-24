@@ -137,6 +137,15 @@ void main() {
       (s) => s.items.length == 1,
     );
     await event(
+      const SaleAdjReturnUnverifiedSourceSelected(
+        0,
+        'Acceptance fixture has no documented inventory source.',
+      ),
+      (s) =>
+          s.items.single.sourceResolution ==
+          AdjReturnSourceResolution.unverified,
+    );
+    await event(
       const SaleAdjReturnOverallDiscountChanged(100, false),
       (s) => s.overallDiscountCents == 100,
     );

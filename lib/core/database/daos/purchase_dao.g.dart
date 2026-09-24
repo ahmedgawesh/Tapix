@@ -19,6 +19,8 @@ mixin _$PurchaseDaoMixin on DatabaseAccessor<AppDatabase> {
   $ProductColorsTable get productColors => attachedDatabase.productColors;
   $SizesTable get sizes => attachedDatabase.sizes;
   $ProductVariantsTable get productVariants => attachedDatabase.productVariants;
+  $SupplierProductIdentitiesTable get supplierProductIdentities =>
+      attachedDatabase.supplierProductIdentities;
   $PurchaseItemsTable get purchaseItems => attachedDatabase.purchaseItems;
   $UsersTable get users => attachedDatabase.users;
   $ReturnReasonCodesTable get returnReasonCodes =>
@@ -73,6 +75,11 @@ class PurchaseDaoManager {
       $$ProductVariantsTableTableManager(
         _db.attachedDatabase,
         _db.productVariants,
+      );
+  $$SupplierProductIdentitiesTableTableManager get supplierProductIdentities =>
+      $$SupplierProductIdentitiesTableTableManager(
+        _db.attachedDatabase,
+        _db.supplierProductIdentities,
       );
   $$PurchaseItemsTableTableManager get purchaseItems =>
       $$PurchaseItemsTableTableManager(_db.attachedDatabase, _db.purchaseItems);

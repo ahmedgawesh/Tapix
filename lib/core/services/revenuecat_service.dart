@@ -155,10 +155,7 @@ class PurchaseResult {
   });
 
   factory PurchaseResult.success(CustomerInfo info) {
-    return PurchaseResult(
-      success: true,
-      customerInfo: info,
-    );
+    return PurchaseResult(success: true, customerInfo: info);
   }
 
   factory PurchaseResult.cancelled() {
@@ -248,6 +245,26 @@ class RevenueCatService {
     }
   }
 
+  /// Checks one named RevenueCat entitlement without deriving it from the
+  /// application's general Pro status. Unsupported or unavailable stores fail
+  /// closed, which prevents an add-on from being granted during an outage.
+  Future<bool> hasActiveEntitlement(String entitlementId) async {
+    if (entitlementId.trim().isEmpty ||
+        !RevenueCatConfig.isSupported ||
+        !_isInitialized) {
+      return false;
+    }
+    try {
+      final customerInfo = await Purchases.getCustomerInfo();
+      return customerInfo.entitlements.all[entitlementId]?.isActive ?? false;
+    } catch (error) {
+      debugPrint(
+        'RevenueCat: Failed to check entitlement $entitlementId: $error',
+      );
+      return false;
+    }
+  }
+
   /// Refresh and broadcast subscription status
   Future<SubscriptionStatus> refreshSubscriptionStatus() async {
     final status = await checkSubscription();
@@ -318,7 +335,9 @@ class RevenueCatService {
   /// Returns `true` if a URL was successfully launched.
   Future<bool> openSubscriptionManagement({String? productId}) async {
     if (!RevenueCatConfig.isSupported) {
-      debugPrint('RevenueCat: openSubscriptionManagement skipped — unsupported platform');
+      debugPrint(
+        'RevenueCat: openSubscriptionManagement skipped — unsupported platform',
+      );
       return false;
     }
 
@@ -346,7 +365,9 @@ class RevenueCatService {
         uri,
         mode: LaunchMode.externalApplication,
       );
-      debugPrint('RevenueCat: openSubscriptionManagement → $uri (launched=$launched)');
+      debugPrint(
+        'RevenueCat: openSubscriptionManagement → $uri (launched=$launched)',
+      );
       return launched;
     } catch (e) {
       debugPrint('RevenueCat: openSubscriptionManagement failed: $e');

@@ -356,9 +356,19 @@ class CurrencyService {
     _currencyController.add(Currency.fromCode(code));
   }
 
-  String format(int cents, {bool showSymbol = true}) {
-    final currency = getCurrency();
-    final value = cents / _minorUnitFactor(currency.decimalDigits);
+  String format(int cents, {bool showSymbol = true}) =>
+      formatForCode(cents, getCurrency().code, showSymbol: showSymbol);
+
+  /// Formats persisted minor units using the document currency instead of the
+  /// device preference. Reports that may contain more than one currency must
+  /// use this method and keep their totals partitioned by currency code.
+  String formatForCode(
+    int minorUnits,
+    String currencyCode, {
+    bool showSymbol = true,
+  }) {
+    final currency = Currency.fromCode(currencyCode);
+    final value = minorUnits / _minorUnitFactor(currency.decimalDigits);
 
     // Always use the app's current locale for digit rendering so that
     // selecting EGP (or SAR/AED) does not switch digits to Arabic-Indic
@@ -371,8 +381,6 @@ class CurrencyService {
     final formatted = numberFormatter.format(value);
 
     if (!showSymbol) return formatted;
-
-    // Place symbol according to the currency's defined position
     if (currency.symbolPosition == SymbolPosition.after) {
       return '$formatted ${currency.symbol}';
     }
@@ -384,18 +392,24 @@ class CurrencyService {
       format(cents, showSymbol: showSymbol);
 
   /// Convert cents to a decimal string for form fields (e.g. 1999 → "19.99")
-  String centsToDecimalString(int cents) {
-    final digits = getCurrency().decimalDigits;
+  String centsToDecimalString(int cents) =>
+      minorUnitsToDecimalStringForCode(cents, getCurrency().code);
+
+  String minorUnitsToDecimalStringForCode(int minorUnits, String currencyCode) {
+    final digits = decimalDigitsForCode(currencyCode);
     // Use integer parts so editing an amount does not lose a minor unit to
     // floating-point conversion. The selected currency defines its scale.
     final factor = _minorUnitFactor(digits);
-    final absolute = cents.abs();
-    final sign = cents < 0 ? '-' : '';
+    final absolute = minorUnits.abs();
+    final sign = minorUnits < 0 ? '-' : '';
     final whole = absolute ~/ factor;
     if (digits == 0) return '$sign$whole';
     final fraction = (absolute % factor).toString().padLeft(digits, '0');
     return '$sign$whole.$fraction';
   }
+
+  int decimalDigitsForCode(String currencyCode) =>
+      Currency.fromCode(currencyCode).decimalDigits;
 
   static int _minorUnitFactor(int digits) {
     if (digits < 0 || digits > 6) {

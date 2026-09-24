@@ -32,10 +32,7 @@ import 'package:flutter/widgets.dart';
 void selectAllText(TextEditingController controller) {
   final length = controller.text.length;
   if (length == 0) return;
-  controller.selection = TextSelection(
-    baseOffset: 0,
-    extentOffset: length,
-  );
+  controller.selection = TextSelection(baseOffset: 0, extentOffset: length);
 }
 
 /// A [FocusNode] that automatically selects all text in the supplied

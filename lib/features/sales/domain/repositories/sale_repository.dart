@@ -10,12 +10,20 @@ class SaleItemInput {
   final String lineId;
   final int productId;
   final int? variantId;
+  final int? supplierIdentityId;
+  final String? consignmentLayerId;
   final int quantity;
   final int quantityScale;
   final String measurementType;
   final Decimal unitPriceCents;
   final Decimal subtotalCents;
   final Decimal discountCents;
+
+  /// New postings persist these separately so consignment percentage terms can
+  /// include either discount component without reconstructing history.
+  final Decimal? itemDiscountAtPostCents;
+  final Decimal? invoiceDiscountAtPostCents;
+
   final Decimal taxCents;
   final Decimal totalCents;
   final int? employeeId;
@@ -25,12 +33,16 @@ class SaleItemInput {
     required this.lineId,
     required this.productId,
     this.variantId,
+    this.supplierIdentityId,
+    this.consignmentLayerId,
     required this.quantity,
     this.quantityScale = 1,
     this.measurementType = 'piece',
     required this.unitPriceCents,
     required this.subtotalCents,
     required this.discountCents,
+    this.itemDiscountAtPostCents,
+    this.invoiceDiscountAtPostCents,
     required this.taxCents,
     required this.totalCents,
     this.employeeId,

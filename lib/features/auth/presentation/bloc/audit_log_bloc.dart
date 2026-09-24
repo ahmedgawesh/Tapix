@@ -41,13 +41,13 @@ class AuditLogViewModel extends Equatable {
 
   @override
   List<Object?> get props => [
-        logs,
-        filteredLogs,
-        entityTypeFilter,
-        actionFilter,
-        searchQuery,
-        userNames,
-      ];
+    logs,
+    filteredLogs,
+    entityTypeFilter,
+    actionFilter,
+    searchQuery,
+    userNames,
+  ];
 }
 
 // ==================== EVENTS ====================
@@ -92,19 +92,16 @@ class AuditLogBloc extends RealtimeBloc<AuditLogViewModel, AuditLogEvent> {
   String _searchQuery = '';
   Map<int, String> _userNames = const {};
 
-  AuditLogBloc({
-    required AuditLogService auditService,
-    required AppDatabase db,
-  })  : _auditService = auditService,
-        _db = db,
-        super(const RealtimeLoading()) {
+  AuditLogBloc({required AuditLogService auditService, required AppDatabase db})
+    : _auditService = auditService,
+      _db = db,
+      super(const RealtimeLoading()) {
     _loadUserNames().then(add);
   }
 
   @override
-  Stream<AuditLogViewModel> get dataStream => _auditService
-      .watchAuditLogs()
-      .map((logs) => _buildViewModel(logs: logs));
+  Stream<AuditLogViewModel> get dataStream =>
+      _auditService.watchAuditLogs().map((logs) => _buildViewModel(logs: logs));
 
   @override
   void registerEventHandlers() {
@@ -125,8 +122,14 @@ class AuditLogBloc extends RealtimeBloc<AuditLogViewModel, AuditLogEvent> {
     AuditLogEntityTypeFilterChanged event,
     Emitter<RealtimeState<AuditLogViewModel>> emit,
   ) {
-    _entityTypeFilter = event.entityType == _entityTypeFilter ? null : event.entityType;
-    emit(RealtimeSuccess<AuditLogViewModel>(data: _buildViewModel(logs: _latestLogs)));
+    _entityTypeFilter = event.entityType == _entityTypeFilter
+        ? null
+        : event.entityType;
+    emit(
+      RealtimeSuccess<AuditLogViewModel>(
+        data: _buildViewModel(logs: _latestLogs),
+      ),
+    );
   }
 
   void _onActionFilterChanged(
@@ -134,7 +137,11 @@ class AuditLogBloc extends RealtimeBloc<AuditLogViewModel, AuditLogEvent> {
     Emitter<RealtimeState<AuditLogViewModel>> emit,
   ) {
     _actionFilter = event.action == _actionFilter ? null : event.action;
-    emit(RealtimeSuccess<AuditLogViewModel>(data: _buildViewModel(logs: _latestLogs)));
+    emit(
+      RealtimeSuccess<AuditLogViewModel>(
+        data: _buildViewModel(logs: _latestLogs),
+      ),
+    );
   }
 
   void _onSearchChanged(
@@ -142,7 +149,11 @@ class AuditLogBloc extends RealtimeBloc<AuditLogViewModel, AuditLogEvent> {
     Emitter<RealtimeState<AuditLogViewModel>> emit,
   ) {
     _searchQuery = event.query;
-    emit(RealtimeSuccess<AuditLogViewModel>(data: _buildViewModel(logs: _latestLogs)));
+    emit(
+      RealtimeSuccess<AuditLogViewModel>(
+        data: _buildViewModel(logs: _latestLogs),
+      ),
+    );
   }
 
   void _onFiltersCleared(
@@ -152,7 +163,11 @@ class AuditLogBloc extends RealtimeBloc<AuditLogViewModel, AuditLogEvent> {
     _entityTypeFilter = null;
     _actionFilter = null;
     _searchQuery = '';
-    emit(RealtimeSuccess<AuditLogViewModel>(data: _buildViewModel(logs: _latestLogs)));
+    emit(
+      RealtimeSuccess<AuditLogViewModel>(
+        data: _buildViewModel(logs: _latestLogs),
+      ),
+    );
   }
 
   void _onUserNamesLoaded(
@@ -164,7 +179,11 @@ class AuditLogBloc extends RealtimeBloc<AuditLogViewModel, AuditLogEvent> {
     final currentData = currentDataOrNull;
     if (currentData == null) return;
 
-    emit(RealtimeSuccess<AuditLogViewModel>(data: _buildViewModel(logs: currentData.logs)));
+    emit(
+      RealtimeSuccess<AuditLogViewModel>(
+        data: _buildViewModel(logs: currentData.logs),
+      ),
+    );
   }
 
   AuditLogViewModel _buildViewModel({required List<AuditLog> logs}) {
@@ -204,7 +223,8 @@ class AuditLogBloc extends RealtimeBloc<AuditLogViewModel, AuditLogEvent> {
     if (searchQuery.isNotEmpty) {
       final q = searchQuery.toLowerCase();
       result = result.where((l) {
-        final performedBy = l.changes['performedBy']?.toString().toLowerCase() ?? '';
+        final performedBy =
+            l.changes['performedBy']?.toString().toLowerCase() ?? '';
         return l.targetTable.toLowerCase().contains(q) ||
             l.action.toLowerCase().contains(q) ||
             l.recordId.toString().contains(q) ||

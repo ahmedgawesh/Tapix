@@ -19,7 +19,9 @@ class AttendanceService {
 
   /// Generate attendance for a date range (useful for backfilling a month).
   Future<void> generateAttendanceRange(
-      DateTime startDate, DateTime endDate) async {
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
     var current = DateTime(startDate.year, startDate.month, startDate.day);
     final end = DateTime(endDate.year, endDate.month, endDate.day);
 

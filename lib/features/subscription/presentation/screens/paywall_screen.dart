@@ -53,8 +53,9 @@ class SubscriptionSettingsCard extends StatelessWidget {
       builder: (context, state) {
         final isPro = state is SubscriptionLoaded && state.isPro;
         final isLifetime = state is SubscriptionLoaded && state.isLifetime;
-        final expirationDate =
-            state is SubscriptionLoaded ? state.status.expirationDate : null;
+        final expirationDate = state is SubscriptionLoaded
+            ? state.status.expirationDate
+            : null;
 
         return Card(
           child: Padding(
@@ -74,8 +75,8 @@ class SubscriptionSettingsCard extends StatelessWidget {
                           ? 'subscription.tapix_pro'.tr()
                           : 'subscription.free_plan'.tr(),
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     if (isPro) ...[
                       const Spacer(),
@@ -103,10 +104,12 @@ class SubscriptionSettingsCard extends StatelessWidget {
                 if (isPro && !isLifetime && expirationDate != null) ...[
                   const SizedBox(height: 8),
                   Text(
-                    'subscription.renews_on'.tr(namedArgs: {
-                      'date':
-                          '${expirationDate.day}/${expirationDate.month}/${expirationDate.year}',
-                    }),
+                    'subscription.renews_on'.tr(
+                      namedArgs: {
+                        'date':
+                            '${expirationDate.day}/${expirationDate.month}/${expirationDate.year}',
+                      },
+                    ),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
@@ -114,9 +117,9 @@ class SubscriptionSettingsCard extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     'subscription.lifetime_access'.tr(),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Colors.green,
-                        ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: Colors.green),
                   ),
                 ],
                 const SizedBox(height: 16),
@@ -185,10 +188,7 @@ class _DefaultLockedWidget extends StatelessWidget {
   final String? featureName;
   final VoidCallback onUpgrade;
 
-  const _DefaultLockedWidget({
-    this.featureName,
-    required this.onUpgrade,
-  });
+  const _DefaultLockedWidget({this.featureName, required this.onUpgrade});
 
   @override
   Widget build(BuildContext context) {
@@ -257,10 +257,8 @@ class AppLockScreen extends StatelessWidget {
                     const SizedBox(height: 24),
                     Text(
                       title,
-                      style:
-                          Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.bold),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 12),
@@ -274,8 +272,11 @@ class AppLockScreen extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.wifi_off,
-                              size: 16, color: Colors.orange.shade700),
+                          Icon(
+                            Icons.wifi_off,
+                            size: 16,
+                            color: Colors.orange.shade700,
+                          ),
                           const SizedBox(width: 6),
                           Text(
                             'Internet connection required',
@@ -305,8 +306,9 @@ class AppLockScreen extends StatelessWidget {
                         width: double.infinity,
                         child: OutlinedButton(
                           onPressed: () {
-                            sl<SubscriptionBloc>()
-                                .add(const SubscriptionRestore());
+                            sl<SubscriptionBloc>().add(
+                              const SubscriptionRestore(),
+                            );
                           },
                           child: const Text('Restore Purchases'),
                         ),
@@ -318,8 +320,9 @@ class AppLockScreen extends StatelessWidget {
                         width: double.infinity,
                         child: ElevatedButton.icon(
                           onPressed: () {
-                            sl<SubscriptionBloc>()
-                                .add(const SubscriptionRefresh());
+                            sl<SubscriptionBloc>().add(
+                              const SubscriptionRefresh(),
+                            );
                           },
                           icon: const Icon(Icons.refresh),
                           label: const Text('Retry'),

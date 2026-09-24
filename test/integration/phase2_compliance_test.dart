@@ -47,32 +47,38 @@ void main() {
   late int supplierId;
 
   Future<int> accountIdByCode(String code) async {
-    final row = await db.customSelect(
-      'SELECT id FROM accounts WHERE account_code = ?',
-      variables: [Variable.withString(code)],
-    ).getSingle();
+    final row = await db
+        .customSelect(
+          'SELECT id FROM accounts WHERE account_code = ?',
+          variables: [Variable.withString(code)],
+        )
+        .getSingle();
     return row.read<int>('id');
   }
 
   /// Sum posted debits/credits for a specific (sourceTable, sourceId).
   Future<List<({int accountId, int debitCents, int creditCents})>>
-      journalLinesForSource(String sourceTable, int sourceId) async {
-    final rows = await db.customSelect(
-      'SELECT jel.account_id, jel.debit_cents, jel.credit_cents '
-      'FROM journal_entry_lines jel '
-      'INNER JOIN journal_entries je ON je.id = jel.journal_entry_id '
-      "WHERE je.source_table = ? AND je.source_id = ? AND je.status = 'posted'",
-      variables: [
-        Variable.withString(sourceTable),
-        Variable.withInt(sourceId),
-      ],
-    ).get();
+  journalLinesForSource(String sourceTable, int sourceId) async {
+    final rows = await db
+        .customSelect(
+          'SELECT jel.account_id, jel.debit_cents, jel.credit_cents '
+          'FROM journal_entry_lines jel '
+          'INNER JOIN journal_entries je ON je.id = jel.journal_entry_id '
+          "WHERE je.source_table = ? AND je.source_id = ? AND je.status = 'posted'",
+          variables: [
+            Variable.withString(sourceTable),
+            Variable.withInt(sourceId),
+          ],
+        )
+        .get();
     return rows
-        .map((r) => (
-              accountId: r.read<int>('account_id'),
-              debitCents: r.read<int>('debit_cents'),
-              creditCents: r.read<int>('credit_cents'),
-            ))
+        .map(
+          (r) => (
+            accountId: r.read<int>('account_id'),
+            debitCents: r.read<int>('debit_cents'),
+            creditCents: r.read<int>('credit_cents'),
+          ),
+        )
         .toList();
   }
 
@@ -107,12 +113,14 @@ void main() {
     );
 
     // Seed common test fixtures.
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     currencyId = usd.id;
 
-    productId = await db.into(db.products).insert(
+    productId = await db
+        .into(db.products)
+        .insert(
           ProductsCompanion.insert(
             sku: const Value<String?>('P2-TEST-001'),
             name: 'Phase 2 Test Product',
@@ -123,7 +131,9 @@ void main() {
           ),
         );
 
-    variantId = await db.into(db.productVariants).insert(
+    variantId = await db
+        .into(db.productVariants)
+        .insert(
           ProductVariantsCompanion.insert(
             productId: productId,
             stockQuantity: const Value(100),
@@ -132,7 +142,9 @@ void main() {
           ),
         );
 
-    customerId = await db.into(db.customers).insert(
+    customerId = await db
+        .into(db.customers)
+        .insert(
           CustomersCompanion.insert(
             name: 'P2 Customer',
             currencyId: currencyId,
@@ -140,7 +152,9 @@ void main() {
           ),
         );
 
-    supplierId = await db.into(db.suppliers).insert(
+    supplierId = await db
+        .into(db.suppliers)
+        .insert(
           SuppliersCompanion.insert(
             name: 'P2 Supplier',
             currencyId: currencyId,
@@ -173,6 +187,8 @@ void main() {
           ),
           [
             SaleReturnAdjustmentItemsCompanion.insert(
+              sourceResolution: const Value('unverified'),
+              sourceResolutionReason: const Value('test fixture'),
               returnId: 0,
               productId: productId,
               variantId: Value(variantId),
@@ -202,56 +218,60 @@ void main() {
         );
 
         // Nothing should have been written to the GL.
-        final lines =
-            await journalLinesForSource('sale_return_adjustments', returnId);
-        expect(lines, isEmpty,
-            reason: 'No JE lines should exist for a rejected post');
-      },
-    );
-
-    test(
-      'post into an OPEN period succeeds and posts a balanced JE',
-      () async {
-        final returnDate = DateTime(2025, 6, 10);
-        await fiscalService.ensurePeriod(returnDate); // status=open
-
-        final returnId = await adjDao.createSaleAdjReturn(
-          SaleReturnAdjustmentsCompanion.insert(
-            returnNumber: 'SAR-P2-FP-002',
-            customerId: Value(customerId),
-            currencyId: currencyId,
-            totalCents: Decimal.fromInt(5000),
-            refundMethod: const Value('cash'),
-            returnDate: Value(returnDate),
-          ),
-          [
-            SaleReturnAdjustmentItemsCompanion.insert(
-              returnId: 0,
-              productId: productId,
-              variantId: Value(variantId),
-              quantity: 1,
-              unitPriceCents: Decimal.fromInt(5000),
-              totalCents: Decimal.fromInt(5000),
-            ),
-          ],
-        );
-
-        await adjDao.postSaleAdjReturn(
+        final lines = await journalLinesForSource(
+          'sale_return_adjustments',
           returnId,
-          journalEntryService: journalService,
-          allowOverHistory: true,
         );
-
-        final lines =
-            await journalLinesForSource('sale_return_adjustments', returnId);
-        final totalDr =
-            lines.fold<int>(0, (s, l) => s + l.debitCents);
-        final totalCr =
-            lines.fold<int>(0, (s, l) => s + l.creditCents);
-        expect(totalDr, equals(totalCr), reason: 'JE must be balanced');
-        expect(lines, isNotEmpty);
+        expect(
+          lines,
+          isEmpty,
+          reason: 'No JE lines should exist for a rejected post',
+        );
       },
     );
+
+    test('post into an OPEN period succeeds and posts a balanced JE', () async {
+      final returnDate = DateTime(2025, 6, 10);
+      await fiscalService.ensurePeriod(returnDate); // status=open
+
+      final returnId = await adjDao.createSaleAdjReturn(
+        SaleReturnAdjustmentsCompanion.insert(
+          returnNumber: 'SAR-P2-FP-002',
+          customerId: Value(customerId),
+          currencyId: currencyId,
+          totalCents: Decimal.fromInt(5000),
+          refundMethod: const Value('cash'),
+          returnDate: Value(returnDate),
+        ),
+        [
+          SaleReturnAdjustmentItemsCompanion.insert(
+            sourceResolution: const Value('unverified'),
+            sourceResolutionReason: const Value('test fixture'),
+            returnId: 0,
+            productId: productId,
+            variantId: Value(variantId),
+            quantity: 1,
+            unitPriceCents: Decimal.fromInt(5000),
+            totalCents: Decimal.fromInt(5000),
+          ),
+        ],
+      );
+
+      await adjDao.postSaleAdjReturn(
+        returnId,
+        journalEntryService: journalService,
+        allowOverHistory: true,
+      );
+
+      final lines = await journalLinesForSource(
+        'sale_return_adjustments',
+        returnId,
+      );
+      final totalDr = lines.fold<int>(0, (s, l) => s + l.debitCents);
+      final totalCr = lines.fold<int>(0, (s, l) => s + l.creditCents);
+      expect(totalDr, equals(totalCr), reason: 'JE must be balanced');
+      expect(lines, isNotEmpty);
+    });
 
     test('reopenPeriod lets posts succeed again', () async {
       final d = DateTime(2025, 3, 5);
@@ -289,6 +309,8 @@ void main() {
           ),
           [
             SaleReturnAdjustmentItemsCompanion.insert(
+              sourceResolution: const Value('unverified'),
+              sourceResolutionReason: const Value('test fixture'),
               returnId: 0,
               productId: productId,
               variantId: Value(variantId),
@@ -310,9 +332,13 @@ void main() {
           customerId: customerId,
           currencyId: currencyId,
         );
-        expect(notes, isEmpty,
-            reason: 'Credit adjustment returns now reduce AR directly — '
-                'no store-credit note is auto-issued.');
+        expect(
+          notes,
+          isEmpty,
+          reason:
+              'Credit adjustment returns now reduce AR directly — '
+              'no store-credit note is auto-issued.',
+        );
 
         // ── GL: settlement routes to 1100 AR (NOT 2400) ──
         final lines = await journalLinesForSource(
@@ -322,23 +348,32 @@ void main() {
         final acct1100 = await accountIdByCode('1100');
         final acct2400 = await accountIdByCode('2400');
         final arLines = lines.where((l) => l.accountId == acct1100).toList();
-        expect(arLines.length, equals(1),
-            reason: 'Credit refund must settle to 1100 AR.');
+        expect(
+          arLines.length,
+          equals(1),
+          reason: 'Credit refund must settle to 1100 AR.',
+        );
         expect(arLines.first.creditCents, equals(7500));
-        expect(lines.where((l) => l.accountId == acct2400), isEmpty,
-            reason: 'No 2400 Customer Credit Liability leg on this path.');
+        expect(
+          lines.where((l) => l.accountId == acct2400),
+          isEmpty,
+          reason: 'No 2400 Customer Credit Liability leg on this path.',
+        );
 
         // ── AR sub-ledger: customer balance reduced by the refund ──
-        final customer = await (db.select(db.customers)
-              ..where((c) => c.id.equals(customerId)))
-            .getSingle();
-        expect(customer.balanceCents.toBigInt().toInt(), equals(50000 - 7500),
-            reason: 'Balance reduced (customer owes us less).');
+        final customer = await (db.select(
+          db.customers,
+        )..where((c) => c.id.equals(customerId))).getSingle();
+        expect(
+          customer.balanceCents.toBigInt().toInt(),
+          equals(50000 - 7500),
+          reason: 'Balance reduced (customer owes us less).',
+        );
 
         // ── customer_transactions surfaces the return ──
-        final txns = await (db.select(db.customerTransactions)
-              ..where((t) => t.customerId.equals(customerId)))
-            .get();
+        final txns = await (db.select(
+          db.customerTransactions,
+        )..where((t) => t.customerId.equals(customerId))).get();
         final adjTxn = txns
             .where((t) => t.transactionType == 'adjustment_return')
             .toList();
@@ -393,10 +428,12 @@ void main() {
       expect(bal, equals(0));
 
       // The apply JEs posted Dr 2400 / Cr 1100.
-      final appRows = await db.customSelect(
-        'SELECT je.id, je.source_table FROM journal_entries je '
-        "WHERE je.entry_type = 'credit_note_application'",
-      ).get();
+      final appRows = await db
+          .customSelect(
+            'SELECT je.id, je.source_table FROM journal_entries je '
+            "WHERE je.entry_type = 'credit_note_application'",
+          )
+          .get();
       expect(appRows.length, equals(2));
     });
 
@@ -430,145 +467,149 @@ void main() {
   // TEST 3 — Snapshot columns (Phase 2.1)
   // ──────────────────────────────────────────────────────────────────────
   group('Phase 2.1 — Snapshot columns frozen at post-time', () {
-    test(
-      'postPurchaseAdjReturn populates tax_rate_bps_at_post + '
-      'unit_cost_at_post_cents on every line',
-      () async {
-        final returnId = await adjDao.createPurchaseAdjReturn(
-          PurchaseReturnAdjustmentsCompanion.insert(
-            returnNumber: 'PAR-P2-SNAP-001',
-            supplierId: supplierId,
-            currencyId: currencyId,
+    test('postPurchaseAdjReturn populates tax_rate_bps_at_post + '
+        'unit_cost_at_post_cents on every line', () async {
+      final returnId = await adjDao.createPurchaseAdjReturn(
+        PurchaseReturnAdjustmentsCompanion.insert(
+          returnNumber: 'PAR-P2-SNAP-001',
+          supplierId: supplierId,
+          currencyId: currencyId,
+          totalCents: Decimal.fromInt(11500),
+          refundMethod: const Value('credit'),
+        ),
+        [
+          PurchaseReturnAdjustmentItemsCompanion.insert(
+            returnId: 0,
+            productId: productId,
+            variantId: Value(variantId),
+            quantity: 2,
+            unitPriceCents: Decimal.fromInt(5000),
+            taxCents: Value(Decimal.fromInt(1500)), // 15% of 10000
             totalCents: Decimal.fromInt(11500),
-            refundMethod: const Value('credit'),
           ),
-          [
-            PurchaseReturnAdjustmentItemsCompanion.insert(
-              returnId: 0,
-              productId: productId,
-              variantId: Value(variantId),
-              quantity: 2,
-              unitPriceCents: Decimal.fromInt(5000),
-              taxCents: Value(Decimal.fromInt(1500)), // 15% of 10000
-              totalCents: Decimal.fromInt(11500),
-            ),
-          ],
-        );
+        ],
+      );
 
-        await adjDao.postPurchaseAdjReturn(
-          returnId,
-          journalEntryService: journalService,
-          allowOverHistory: true,
-        );
+      await adjDao.postPurchaseAdjReturn(
+        returnId,
+        journalEntryService: journalService,
+        allowOverHistory: true,
+      );
 
-        final row = await db.customSelect(
-          'SELECT tax_rate_bps_at_post, unit_cost_at_post_cents '
-          'FROM purchase_return_adjustment_items WHERE return_id = ?',
-          variables: [Variable.withInt(returnId)],
-        ).getSingle();
+      final row = await db
+          .customSelect(
+            'SELECT tax_rate_bps_at_post, unit_cost_at_post_cents '
+            'FROM purchase_return_adjustment_items WHERE return_id = ?',
+            variables: [Variable.withInt(returnId)],
+          )
+          .getSingle();
 
-        // 1500 / 10000 = 15% = 1500 bps.
-        expect(row.read<int>('tax_rate_bps_at_post'), equals(1500));
-        // unitCost was auto-frozen from product.cost_cents = 3000.
-        expect(row.read<int>('unit_cost_at_post_cents'), equals(3000));
-      },
-    );
+      // 1500 / 10000 = 15% = 1500 bps.
+      expect(row.read<int>('tax_rate_bps_at_post'), equals(1500));
+      // unitCost was auto-frozen from product.cost_cents = 3000.
+      expect(row.read<int>('unit_cost_at_post_cents'), equals(3000));
+    });
   });
 
   // ──────────────────────────────────────────────────────────────────────
   // TEST 4 — Disposition routing (Phase 2.2)
   // ──────────────────────────────────────────────────────────────────────
   group('Phase 2.2 — Disposition routing', () {
-    test(
-      'purchase adjustment return with disposition_type=send_back '
-      'routes inventory leg to 1290 instead of 1200',
-      () async {
-        final returnId = await adjDao.createPurchaseAdjReturn(
-          PurchaseReturnAdjustmentsCompanion.insert(
-            returnNumber: 'PAR-P2-DISP-001',
-            supplierId: supplierId,
-            currencyId: currencyId,
+    test('purchase adjustment return with disposition_type=send_back '
+        'routes inventory leg to 1290 instead of 1200', () async {
+      final returnId = await adjDao.createPurchaseAdjReturn(
+        PurchaseReturnAdjustmentsCompanion.insert(
+          returnNumber: 'PAR-P2-DISP-001',
+          supplierId: supplierId,
+          currencyId: currencyId,
+          totalCents: Decimal.fromInt(6000),
+          refundMethod: const Value('credit'),
+        ),
+        [
+          PurchaseReturnAdjustmentItemsCompanion.insert(
+            returnId: 0,
+            productId: productId,
+            variantId: Value(variantId),
+            quantity: 2,
+            unitPriceCents: Decimal.fromInt(3000),
             totalCents: Decimal.fromInt(6000),
-            refundMethod: const Value('credit'),
+            dispositionType: const Value('send_back'),
           ),
-          [
-            PurchaseReturnAdjustmentItemsCompanion.insert(
-              returnId: 0,
-              productId: productId,
-              variantId: Value(variantId),
-              quantity: 2,
-              unitPriceCents: Decimal.fromInt(3000),
-              totalCents: Decimal.fromInt(6000),
-              dispositionType: const Value('send_back'),
-            ),
-          ],
-        );
+        ],
+      );
 
-        await adjDao.postPurchaseAdjReturn(
-          returnId,
-          journalEntryService: journalService,
-          allowOverHistory: true,
-        );
+      await adjDao.postPurchaseAdjReturn(
+        returnId,
+        journalEntryService: journalService,
+        allowOverHistory: true,
+      );
 
-        final lines = await journalLinesForSource(
-            'purchase_return_adjustments', returnId);
-        final acct1200 = await accountIdByCode('1200');
-        final acct1290 = await accountIdByCode('1290');
+      final lines = await journalLinesForSource(
+        'purchase_return_adjustments',
+        returnId,
+      );
+      final acct1200 = await accountIdByCode('1200');
+      final acct1290 = await accountIdByCode('1290');
 
-        // Inventory at cost = 2 * 3000 = 6000.
-        // send_back → Dr 1290 6000, Cr 1200 6000 (no touch on 4100 for
-        // the inventory leg).
-        final rit1290 =
-            lines.where((l) => l.accountId == acct1290).toList();
-        expect(rit1290.length, equals(1),
-            reason: 'send_back must debit 1290 Returns-in-Transit');
-        expect(rit1290.first.debitCents, equals(6000));
+      // Inventory at cost = 2 * 3000 = 6000.
+      // send_back → Dr 1290 6000, Cr 1200 6000 (no touch on 4100 for
+      // the inventory leg).
+      final rit1290 = lines.where((l) => l.accountId == acct1290).toList();
+      expect(
+        rit1290.length,
+        equals(1),
+        reason: 'send_back must debit 1290 Returns-in-Transit',
+      );
+      expect(rit1290.first.debitCents, equals(6000));
 
-        final inv1200 =
-            lines.where((l) => l.accountId == acct1200).toList();
-        expect(inv1200.length, equals(1),
-            reason: 'Inventory credited at cost regardless of disposition');
-        expect(inv1200.first.creditCents, equals(6000));
-      },
-    );
+      final inv1200 = lines.where((l) => l.accountId == acct1200).toList();
+      expect(
+        inv1200.length,
+        equals(1),
+        reason: 'Inventory credited at cost regardless of disposition',
+      );
+      expect(inv1200.first.creditCents, equals(6000));
+    });
 
-    test(
-      'purchase adjustment return with default disposition=restock '
-      'routes inventory leg to 1200 (no 1290 touched)',
-      () async {
-        final returnId = await adjDao.createPurchaseAdjReturn(
-          PurchaseReturnAdjustmentsCompanion.insert(
-            returnNumber: 'PAR-P2-DISP-002',
-            supplierId: supplierId,
-            currencyId: currencyId,
+    test('purchase adjustment return with default disposition=restock '
+        'routes inventory leg to 1200 (no 1290 touched)', () async {
+      final returnId = await adjDao.createPurchaseAdjReturn(
+        PurchaseReturnAdjustmentsCompanion.insert(
+          returnNumber: 'PAR-P2-DISP-002',
+          supplierId: supplierId,
+          currencyId: currencyId,
+          totalCents: Decimal.fromInt(6000),
+          refundMethod: const Value('credit'),
+        ),
+        [
+          PurchaseReturnAdjustmentItemsCompanion.insert(
+            returnId: 0,
+            productId: productId,
+            variantId: Value(variantId),
+            quantity: 2,
+            unitPriceCents: Decimal.fromInt(3000),
             totalCents: Decimal.fromInt(6000),
-            refundMethod: const Value('credit'),
+            // dispositionType defaults to 'restock'.
           ),
-          [
-            PurchaseReturnAdjustmentItemsCompanion.insert(
-              returnId: 0,
-              productId: productId,
-              variantId: Value(variantId),
-              quantity: 2,
-              unitPriceCents: Decimal.fromInt(3000),
-              totalCents: Decimal.fromInt(6000),
-              // dispositionType defaults to 'restock'.
-            ),
-          ],
-        );
+        ],
+      );
 
-        await adjDao.postPurchaseAdjReturn(
-          returnId,
-          journalEntryService: journalService,
-          allowOverHistory: true,
-        );
+      await adjDao.postPurchaseAdjReturn(
+        returnId,
+        journalEntryService: journalService,
+        allowOverHistory: true,
+      );
 
-        final lines = await journalLinesForSource(
-            'purchase_return_adjustments', returnId);
-        final acct1290 = await accountIdByCode('1290');
-        expect(lines.where((l) => l.accountId == acct1290), isEmpty,
-            reason: 'restock must NOT touch 1290');
-      },
-    );
+      final lines = await journalLinesForSource(
+        'purchase_return_adjustments',
+        returnId,
+      );
+      final acct1290 = await accountIdByCode('1290');
+      expect(
+        lines.where((l) => l.accountId == acct1290),
+        isEmpty,
+        reason: 'restock must NOT touch 1290',
+      );
+    });
   });
 }

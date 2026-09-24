@@ -269,6 +269,8 @@ void main() {
         ),
         [
           SaleReturnAdjustmentItemsCompanion.insert(
+            sourceResolution: const Value('unverified'),
+            sourceResolutionReason: const Value('test fixture'),
             returnId: 0,
             productId: stock.productId,
             variantId: Value(stock.variantId),

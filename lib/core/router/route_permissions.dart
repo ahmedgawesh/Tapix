@@ -64,6 +64,7 @@ class RoutePermissions {
       UserRole.cashier,
     ],
     '/suppliers': [UserRole.owner, UserRole.manager, UserRole.accountant],
+    '/consignment': [UserRole.owner, UserRole.manager, UserRole.accountant],
     '/purchases': [UserRole.owner, UserRole.manager, UserRole.accountant],
     '/expenses': [UserRole.owner, UserRole.manager, UserRole.accountant],
     '/promotions': [UserRole.owner, UserRole.manager],

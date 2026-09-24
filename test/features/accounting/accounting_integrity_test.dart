@@ -225,41 +225,44 @@ void main() {
       expect(entry.totalDebitCents, equals(entry.totalCreditCents));
     });
 
-    test('purchase with VAT: Dr Inventory + Dr VAT Receivable, Cr Payables', () {
-      const subtotalCents = 40000;
-      const vatCents = 6000;
-      const totalCents = subtotalCents + vatCents;
+    test(
+      'purchase with VAT: Dr Inventory + Dr VAT Receivable, Cr Payables',
+      () {
+        const subtotalCents = 40000;
+        const vatCents = 6000;
+        const totalCents = subtotalCents + vatCents;
 
-      final entry = JournalEntryData(
-        description: 'Purchase with VAT',
-        entryType: 'purchase',
-        autoPost: true,
-        lines: [
-          JournalEntryLineData(
-            accountId: inventoryAccountId,
-            debitCents: subtotalCents,
-            creditCents: 0,
-            currencyId: currencyId,
-          ),
-          JournalEntryLineData(
-            accountId: vatReceivableAccountId,
-            debitCents: vatCents,
-            creditCents: 0,
-            currencyId: currencyId,
-          ),
-          JournalEntryLineData(
-            accountId: payablesAccountId,
-            debitCents: 0,
-            creditCents: totalCents,
-            currencyId: currencyId,
-          ),
-        ],
-      );
+        final entry = JournalEntryData(
+          description: 'Purchase with VAT',
+          entryType: 'purchase',
+          autoPost: true,
+          lines: [
+            JournalEntryLineData(
+              accountId: inventoryAccountId,
+              debitCents: subtotalCents,
+              creditCents: 0,
+              currencyId: currencyId,
+            ),
+            JournalEntryLineData(
+              accountId: vatReceivableAccountId,
+              debitCents: vatCents,
+              creditCents: 0,
+              currencyId: currencyId,
+            ),
+            JournalEntryLineData(
+              accountId: payablesAccountId,
+              debitCents: 0,
+              creditCents: totalCents,
+              currencyId: currencyId,
+            ),
+          ],
+        );
 
-      expect(entry.isValid, isTrue);
-      expect(entry.totalDebitCents, equals(entry.totalCreditCents));
-      expect(entry.totalDebitCents, equals(totalCents));
-    });
+        expect(entry.isValid, isTrue);
+        expect(entry.totalDebitCents, equals(entry.totalCreditCents));
+        expect(entry.totalDebitCents, equals(totalCents));
+      },
+    );
   });
 
   group('Inventory Quantity Integrity', () {
@@ -522,8 +525,10 @@ void main() {
       credit('Cash', 10000);
 
       // Trial balance must sum to zero
-      final trialBalance =
-          accounts.values.fold<int>(0, (sum, val) => sum + val);
+      final trialBalance = accounts.values.fold<int>(
+        0,
+        (sum, val) => sum + val,
+      );
       expect(trialBalance, equals(0));
 
       // Verify profit: Revenue - COGS - Expenses = $800 - $500 - $100 = $200

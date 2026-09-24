@@ -7,8 +7,13 @@ abstract class SupplierLocalDatasource {
   Stream<Supplier?> watchSupplier(int id);
   Future<Supplier?> getSupplier(int id);
   Future<List<Supplier>> searchSuppliers(String query, {bool? isActive});
+  Future<bool> isProductCodeAvailable(String? code, {int? excludingSupplierId});
+  Future<bool> isProductCodeLocked(int supplierId);
   Future<int> createSupplier(SuppliersCompanion supplier);
   Future<bool> updateSupplier(Supplier supplier);
+
+  /// Update the active flag only; retain the code, balance and history.
+  Future<void> setSupplierActive(int supplierId, bool isActive);
   Future<int> deleteSupplier(int id);
   Stream<int> watchSupplierCount({bool? isActive});
   Stream<int> watchTotalBalanceCents();
@@ -57,6 +62,19 @@ class SupplierLocalDatasourceImpl implements SupplierLocalDatasource {
   }
 
   @override
+  Future<bool> isProductCodeAvailable(
+    String? code, {
+    int? excludingSupplierId,
+  }) => _supplierDao.isProductCodeAvailable(
+    code,
+    excludingSupplierId: excludingSupplierId,
+  );
+
+  @override
+  Future<bool> isProductCodeLocked(int supplierId) =>
+      _supplierDao.isProductCodeLocked(supplierId);
+
+  @override
   Future<int> createSupplier(SuppliersCompanion supplier) {
     return _supplierDao.createSupplier(supplier);
   }
@@ -65,6 +83,10 @@ class SupplierLocalDatasourceImpl implements SupplierLocalDatasource {
   Future<bool> updateSupplier(Supplier supplier) {
     return _supplierDao.updateSupplier(supplier);
   }
+
+  @override
+  Future<void> setSupplierActive(int supplierId, bool isActive) =>
+      _supplierDao.setSupplierActive(supplierId, isActive);
 
   @override
   Future<int> deleteSupplier(int id) {

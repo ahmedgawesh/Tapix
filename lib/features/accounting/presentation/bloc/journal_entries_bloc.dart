@@ -30,7 +30,10 @@ class JournalEntriesFilterByTypeRequested extends JournalEntriesEvent {
 class JournalEntriesFilterByDateRangeRequested extends JournalEntriesEvent {
   final DateTime? startDate;
   final DateTime? endDate;
-  const JournalEntriesFilterByDateRangeRequested({this.startDate, this.endDate});
+  const JournalEntriesFilterByDateRangeRequested({
+    this.startDate,
+    this.endDate,
+  });
 }
 
 class JournalEntryPostRequested extends JournalEntriesEvent {
@@ -43,7 +46,11 @@ class JournalEntryVoidRequested extends JournalEntriesEvent {
   final int entryId;
   final String reason;
   final int? createdBy;
-  const JournalEntryVoidRequested(this.entryId, {required this.reason, this.createdBy});
+  const JournalEntryVoidRequested(
+    this.entryId, {
+    required this.reason,
+    this.createdBy,
+  });
 }
 
 /// State data for journal entries list
@@ -64,7 +71,8 @@ class JournalEntriesData {
 }
 
 /// Bloc for managing journal entries list with real-time updates
-class JournalEntriesBloc extends RealtimeBloc<JournalEntriesData, JournalEntriesEvent> {
+class JournalEntriesBloc
+    extends RealtimeBloc<JournalEntriesData, JournalEntriesEvent> {
   final JournalRepository _repository;
   String? _currentSearchQuery;
   String? _currentFilterStatus;
@@ -79,7 +87,10 @@ class JournalEntriesBloc extends RealtimeBloc<JournalEntriesData, JournalEntries
     Stream<List<JournalEntry>> stream;
 
     if (_startDate != null && _endDate != null) {
-      stream = _repository.watchJournalEntriesByDateRange(_startDate!, _endDate!);
+      stream = _repository.watchJournalEntriesByDateRange(
+        _startDate!,
+        _endDate!,
+      );
     } else if (_currentFilterStatus != null) {
       stream = _repository.watchJournalEntriesByStatus(_currentFilterStatus!);
     } else if (_currentFilterType != null) {
@@ -94,7 +105,8 @@ class JournalEntriesBloc extends RealtimeBloc<JournalEntriesData, JournalEntries
         searchQuery: _currentSearchQuery,
         filterStatus: _currentFilterStatus,
         filterType: _currentFilterType,
-        isSearching: _currentSearchQuery != null && _currentSearchQuery!.isNotEmpty,
+        isSearching:
+            _currentSearchQuery != null && _currentSearchQuery!.isNotEmpty,
       ),
     );
   }
@@ -125,17 +137,25 @@ class JournalEntriesBloc extends RealtimeBloc<JournalEntriesData, JournalEntries
 
     try {
       final results = await _repository.searchJournalEntries(event.query);
-      emit(RealtimeSuccess<JournalEntriesData>(
-        data: JournalEntriesData(
-          entries: results,
-          searchQuery: event.query,
-          filterStatus: _currentFilterStatus,
-          filterType: _currentFilterType,
-          isSearching: true,
+      emit(
+        RealtimeSuccess<JournalEntriesData>(
+          data: JournalEntriesData(
+            entries: results,
+            searchQuery: event.query,
+            filterStatus: _currentFilterStatus,
+            filterType: _currentFilterType,
+            isSearching: true,
+          ),
         ),
-      ));
+      );
     } catch (e, st) {
-      emit(RealtimeError<JournalEntriesData>(error: e, stackTrace: st, previousData: previousData));
+      emit(
+        RealtimeError<JournalEntriesData>(
+          error: e,
+          stackTrace: st,
+          previousData: previousData,
+        ),
+      );
     }
   }
 
@@ -181,9 +201,18 @@ class JournalEntriesBloc extends RealtimeBloc<JournalEntriesData, JournalEntries
     Emitter<RealtimeState<JournalEntriesData>> emit,
   ) async {
     try {
-      await _repository.postJournalEntry(event.entryId, postedBy: event.postedBy);
+      await _repository.postJournalEntry(
+        event.entryId,
+        postedBy: event.postedBy,
+      );
     } catch (e, st) {
-      emit(RealtimeError<JournalEntriesData>(error: e, stackTrace: st, previousData: currentData));
+      emit(
+        RealtimeError<JournalEntriesData>(
+          error: e,
+          stackTrace: st,
+          previousData: currentData,
+        ),
+      );
     }
   }
 
@@ -198,7 +227,13 @@ class JournalEntriesBloc extends RealtimeBloc<JournalEntriesData, JournalEntries
         createdBy: event.createdBy,
       );
     } catch (e, st) {
-      emit(RealtimeError<JournalEntriesData>(error: e, stackTrace: st, previousData: currentData));
+      emit(
+        RealtimeError<JournalEntriesData>(
+          error: e,
+          stackTrace: st,
+          previousData: currentData,
+        ),
+      );
     }
   }
 }

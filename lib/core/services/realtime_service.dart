@@ -37,11 +37,8 @@ class StreamError {
   final DateTime timestamp;
   final int retryCount;
 
-  StreamError({
-    required this.error,
-    this.stackTrace,
-    required this.retryCount,
-  }) : timestamp = DateTime.now();
+  StreamError({required this.error, this.stackTrace, required this.retryCount})
+    : timestamp = DateTime.now();
 
   @override
   String toString() => 'StreamError(error: $error, retryCount: $retryCount)';
@@ -65,7 +62,7 @@ class RealtimeService {
   StreamErrorCallback? onError;
 
   RealtimeService(this._database, {StreamConfig? config})
-      : _config = config ?? StreamConfig.adaptive();
+    : _config = config ?? StreamConfig.adaptive();
 
   /// Watch all active products with debouncing
   Stream<List<Product>> watchProducts() {
@@ -94,29 +91,30 @@ class RealtimeService {
   Stream<List<Purchase>> watchPurchases() {
     return _createManagedStream<List<Purchase>>(
       'purchases',
-      () => (_database.select(_database.purchases)
-            ..orderBy([
-              (p) => OrderingTerm(
-                    expression: p.purchaseDate,
-                    mode: OrderingMode.desc,
-                  ),
-            ]))
-          .watch(),
+      () =>
+          (_database.select(_database.purchases)..orderBy([
+                (p) => OrderingTerm(
+                  expression: p.purchaseDate,
+                  mode: OrderingMode.desc,
+                ),
+              ]))
+              .watch(),
     );
   }
 
   Stream<List<Purchase>> watchSupplierPurchases(int supplierId) {
     return _createManagedStream<List<Purchase>>(
       'supplier_purchases_$supplierId',
-      () => (_database.select(_database.purchases)
-            ..where((p) => p.supplierId.equals(supplierId))
-            ..orderBy([
-              (p) => OrderingTerm(
+      () =>
+          (_database.select(_database.purchases)
+                ..where((p) => p.supplierId.equals(supplierId))
+                ..orderBy([
+                  (p) => OrderingTerm(
                     expression: p.purchaseDate,
                     mode: OrderingMode.desc,
                   ),
-            ]))
-          .watch(),
+                ]))
+              .watch(),
     );
   }
 
@@ -139,18 +137,20 @@ class RealtimeService {
   Stream<List<Supplier>> watchSuppliers() {
     return _createManagedStream<List<Supplier>>(
       'suppliers',
-      () => (_database.select(_database.suppliers)
-            ..where((s) => s.isActive.equals(true))
-            ..orderBy([(s) => OrderingTerm(expression: s.name)]))
-          .watch(),
+      () =>
+          (_database.select(_database.suppliers)
+                ..where((s) => s.isActive.equals(true))
+                ..orderBy([(s) => OrderingTerm(expression: s.name)]))
+              .watch(),
     );
   }
 
   Stream<Supplier?> watchSupplier(int id) {
     return _createManagedStream<Supplier?>(
       'supplier_$id',
-      () => (_database.select(_database.suppliers)..where((s) => s.id.equals(id)))
-          .watchSingleOrNull(),
+      () => (_database.select(
+        _database.suppliers,
+      )..where((s) => s.id.equals(id))).watchSingleOrNull(),
     );
   }
 
@@ -230,7 +230,9 @@ class RealtimeService {
       Stream<T> stream = streamFactory();
 
       if (_config.debounceDuration.inMilliseconds > 0) {
-        stream = stream.transform(_DebounceStreamTransformer<T>(_config.debounceDuration));
+        stream = stream.transform(
+          _DebounceStreamTransformer<T>(_config.debounceDuration),
+        );
       }
 
       _subscriptions[key] = stream.listen(
@@ -272,7 +274,9 @@ class RealtimeService {
 
     onError?.call(streamError);
 
-    debugPrint('RealtimeService: Stream error for $key: $error (retry $retryCount)');
+    debugPrint(
+      'RealtimeService: Stream error for $key: $error (retry $retryCount)',
+    );
 
     if (retryCount <= _config.maxRetries) {
       _retryTimers[key]?.cancel();

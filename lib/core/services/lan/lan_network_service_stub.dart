@@ -9,6 +9,23 @@ import 'lan_models.dart';
 /// Web placeholder. Browser LAN access will be enabled in the web phase after
 /// HTTPS and browser local-network permission handling are available.
 class LanNetworkService {
+  static const String consignmentSourceCapability =
+      'consignment-source-allocation-v1';
+  static const String consignmentAdjustmentReturnCapability =
+      'consignment-adjustment-return-v1';
+  static const String consignmentManagementCapability =
+      'consignment-management-master-only-v1';
+  static const String inventoryStockSourcesCapability =
+      'inventory-stock-sources-v1';
+  static const String warehouseTransfersCapability = 'warehouse-transfers-v1';
+  static const Set<String> serverCapabilities = {
+    consignmentSourceCapability,
+    consignmentAdjustmentReturnCapability,
+    consignmentManagementCapability,
+    inventoryStockSourcesCapability,
+    warehouseTransfersCapability,
+  };
+
   LanNetworkService(
     this._settingsDao, {
     LanMasterAuthGateway? authGateway,
@@ -27,6 +44,7 @@ class LanNetworkService {
   LanNetworkSnapshot get snapshot => _snapshot;
   LanRemoteUser? get remoteUser => null;
   bool get hasRemoteUserSession => false;
+  bool supportsCapability(String capability) => false;
   Stream<LanNetworkSnapshot> get changes => _controller.stream;
   Stream<LanMasterActivityEvent> get masterActivityEvents =>
       _masterActivityController.stream;
@@ -87,6 +105,49 @@ class LanNetworkService {
   Future<Uint8List?> fetchRemoteProductImage(int productId) async =>
       _unsupported();
 
+  Future<List<LanWarehouseTransferWarehouse>>
+  fetchRemoteTransferWarehouses() async => _unsupported();
+
+  Future<List<LanWarehouseTransferDocument>> fetchRemoteWarehouseTransfers({
+    required Set<String> statuses,
+    int limit = 100,
+  }) async => _unsupported();
+
+  Future<List<LanWarehouseTransferCatalogItem>>
+  fetchRemoteWarehouseTransferCatalog({
+    required String warehouseId,
+    String query = '',
+    int offset = 0,
+  }) async => _unsupported();
+
+  Future<LanWarehouseTransferDocument> submitRemoteWarehouseTransfer(
+    LanWarehouseTransferCreateRequest transfer,
+  ) async => _unsupported();
+
+  Future<LanWarehouseTransferDocument> cancelRemoteWarehouseTransfer({
+    required String transferId,
+    required LanWarehouseTransferReasonRequest request,
+  }) async => _unsupported();
+
+  Future<LanWarehouseTransferDocument> dispatchRemoteWarehouseTransfer({
+    required String transferId,
+    required String requestKey,
+  }) async => _unsupported();
+
+  Future<List<LanWarehouseTransferPendingAllocation>>
+  fetchRemoteWarehouseTransferPending(String transferId) async =>
+      _unsupported();
+
+  Future<LanWarehouseTransferDocument> receiveRemoteWarehouseTransfer({
+    required String transferId,
+    required LanWarehouseTransferReceiptRequest request,
+  }) async => _unsupported();
+
+  Future<LanWarehouseTransferDocument> recallRemoteWarehouseTransfer({
+    required String transferId,
+    required LanWarehouseTransferReasonRequest request,
+  }) async => _unsupported();
+
   Future<LanSalesPage> fetchRemoteSales({int limit = 500}) async =>
       _unsupported();
 
@@ -138,6 +199,17 @@ class LanNetworkService {
     LanSaleAdjustmentReturnRequest saleReturn,
   ) async => _unsupported();
 
+  Future<List<LanConsignmentReturnSource>>
+  fetchRemoteConsignmentAdjustmentReturnSources({
+    required int productId,
+    int? variantId,
+  }) async => _unsupported();
+
+  Future<LanProductStockSourceSnapshot> fetchRemoteInventoryStockSources({
+    required int productId,
+    int? variantId,
+  }) async => _unsupported();
+
   Future<List<LanSupplierSummary>> fetchRemoteSuppliers({
     String query = '',
     int limit = 100,
@@ -186,6 +258,7 @@ class LanNetworkService {
   }) async => _unsupported();
 
   Future<LanCashierShiftSnapshot> closeOwnRemoteShift({
+    int? shiftId,
     required int countedCashCents,
     String? notes,
   }) async => _unsupported();

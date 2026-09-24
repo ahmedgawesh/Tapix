@@ -218,6 +218,9 @@ class LanMasterDeviceInfo {
   final String? username;
   final String? userRole;
   final String? employeeName;
+  final String? branchName;
+  final String? warehouseName;
+  final bool scopeVerified;
   final DateTime? sessionStartedAt;
   final DateTime? sessionExpiresAt;
 
@@ -233,6 +236,9 @@ class LanMasterDeviceInfo {
     this.username,
     this.userRole,
     this.employeeName,
+    this.branchName,
+    this.warehouseName,
+    this.scopeVerified = false,
     this.sessionStartedAt,
     this.sessionExpiresAt,
   });

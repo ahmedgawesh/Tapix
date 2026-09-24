@@ -117,7 +117,10 @@ void main() {
             db,
             warehouseId: other,
           );
-          final before = await fixtures.legacySnapshot(db);
+          final before = await fixtures.legacySnapshot(
+            db,
+            includeOrigins: false,
+          );
           await StockService.adjustStock(
             db.productDao,
             productId: product,
@@ -132,8 +135,16 @@ void main() {
             scope: scope,
           );
           expect(await quantityAt(other), 466);
+          final origins = await db.select(db.inventoryOriginEvents).get();
+          expect(origins, hasLength(1));
+          expect(origins.single.warehouseId, other);
+          expect(origins.single.delta, -234);
+          expect(origins.single.variantId, variant);
           await expectBalance(1234, 701);
-          expect(await fixtures.legacySnapshot(db), before);
+          expect(
+            await fixtures.legacySnapshot(db, includeOrigins: false),
+            before,
+          );
           final cost = await db
               .customSelect(
                 'SELECT unit_cost_cents FROM business_warehouse_stocks WHERE warehouse_id = ? AND variant_id = ?',

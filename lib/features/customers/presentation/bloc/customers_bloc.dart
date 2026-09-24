@@ -61,13 +61,16 @@ class CustomersBloc extends RealtimeBloc<CustomersData, CustomersEvent> {
 
   @override
   Stream<CustomersData> get dataStream {
-    return _repository.watchAllCustomers(isActive: true).map(
-      (customers) => CustomersData(
-        customers: customers,
-        searchQuery: _currentSearchQuery,
-        isSearching: _currentSearchQuery != null && _currentSearchQuery!.isNotEmpty,
-      ),
-    );
+    return _repository
+        .watchAllCustomers(isActive: true)
+        .map(
+          (customers) => CustomersData(
+            customers: customers,
+            searchQuery: _currentSearchQuery,
+            isSearching:
+                _currentSearchQuery != null && _currentSearchQuery!.isNotEmpty,
+          ),
+        );
   }
 
   @override
@@ -82,7 +85,7 @@ class CustomersBloc extends RealtimeBloc<CustomersData, CustomersEvent> {
     Emitter<RealtimeState<CustomersData>> emit,
   ) async {
     _currentSearchQuery = event.query.isEmpty ? null : event.query;
-    
+
     if (event.query.isEmpty) {
       // Reset to watching all customers
       refresh();
@@ -93,16 +96,27 @@ class CustomersBloc extends RealtimeBloc<CustomersData, CustomersEvent> {
     emit(RealtimeLoading<CustomersData>(previousData: previousData));
 
     try {
-      final results = await _repository.searchCustomers(event.query, isActive: true);
-      emit(RealtimeSuccess<CustomersData>(
-        data: CustomersData(
-          customers: results,
-          searchQuery: event.query,
-          isSearching: true,
+      final results = await _repository.searchCustomers(
+        event.query,
+        isActive: true,
+      );
+      emit(
+        RealtimeSuccess<CustomersData>(
+          data: CustomersData(
+            customers: results,
+            searchQuery: event.query,
+            isSearching: true,
+          ),
         ),
-      ));
+      );
     } catch (e, st) {
-      emit(RealtimeError<CustomersData>(error: e, stackTrace: st, previousData: previousData));
+      emit(
+        RealtimeError<CustomersData>(
+          error: e,
+          stackTrace: st,
+          previousData: previousData,
+        ),
+      );
     }
   }
 
@@ -113,7 +127,13 @@ class CustomersBloc extends RealtimeBloc<CustomersData, CustomersEvent> {
     try {
       await _repository.deleteCustomer(event.customerId);
     } catch (e, st) {
-      emit(RealtimeError<CustomersData>(error: e, stackTrace: st, previousData: currentData));
+      emit(
+        RealtimeError<CustomersData>(
+          error: e,
+          stackTrace: st,
+          previousData: currentData,
+        ),
+      );
     }
   }
 
@@ -128,7 +148,13 @@ class CustomersBloc extends RealtimeBloc<CustomersData, CustomersEvent> {
       );
       await _repository.updateCustomer(updatedCustomer);
     } catch (e, st) {
-      emit(RealtimeError<CustomersData>(error: e, stackTrace: st, previousData: currentData));
+      emit(
+        RealtimeError<CustomersData>(
+          error: e,
+          stackTrace: st,
+          previousData: currentData,
+        ),
+      );
     }
   }
 }
@@ -141,7 +167,9 @@ class CustomerMetricsBloc extends RealtimeBloc<CustomerMetrics, RealtimeEvent> {
 
   @override
   Stream<CustomerMetrics> get dataStream {
-    return _repository.watchCustomerCount(isActive: true).asyncMap((count) async {
+    return _repository.watchCustomerCount(isActive: true).asyncMap((
+      count,
+    ) async {
       // We need to combine multiple streams, so we'll use a simpler approach
       return CustomerMetrics(
         activeCount: count,

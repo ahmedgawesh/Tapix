@@ -60,8 +60,9 @@ class _StockAlertsSectionState extends State<StockAlertsSection> {
   // ─── realtime stream subscriptions ───
 
   void _subscribeOutOfStock() {
-    _outOfStockSub = _db.customSelect(
-      '''
+    _outOfStockSub = _db
+        .customSelect(
+          '''
       SELECT 
         p.id AS product_id,
         p.name AS product_name,
@@ -85,29 +86,50 @@ class _StockAlertsSectionState extends State<StockAlertsSection> {
         AND COALESCE(v.stock_quantity, p.stock_quantity) <= 0
       ORDER BY p.name
       ''',
-      readsFrom: {_db.products, _db.productVariants, _db.productCategories, _db.productColors, _db.sizes},
-    ).watch().map((rows) => rows.map((row) => StockAlertItem(
-          productId: row.read<int>('product_id'),
-          productName: row.read<String>('product_name'),
-          sku: row.readNullable<String>('variant_sku'),
-          barcode: row.readNullable<String>('variant_barcode'),
-          categoryName: row.readNullable<String>('category_name'),
-          colorName: row.readNullable<String>('color_name'),
-          colorHex: row.readNullable<String>('color_hex'),
-          sizeName: row.readNullable<String>('size_name'),
-          currentStock: row.read<int>('current_stock'),
-          reorderLevel: row.read<int>('reorder_level'),
-          costCents: row.read<int>('cost_cents'),
-          priceCents: row.read<int>('price_cents'),
-          isOutOfStock: true,
-        )).toList()).listen((items) {
-      if (mounted) setState(() { _outOfStock = items; _loadedOos = true; });
-    });
+          readsFrom: {
+            _db.products,
+            _db.productVariants,
+            _db.productCategories,
+            _db.productColors,
+            _db.sizes,
+          },
+        )
+        .watch()
+        .map(
+          (rows) => rows
+              .map(
+                (row) => StockAlertItem(
+                  productId: row.read<int>('product_id'),
+                  productName: row.read<String>('product_name'),
+                  sku: row.readNullable<String>('variant_sku'),
+                  barcode: row.readNullable<String>('variant_barcode'),
+                  categoryName: row.readNullable<String>('category_name'),
+                  colorName: row.readNullable<String>('color_name'),
+                  colorHex: row.readNullable<String>('color_hex'),
+                  sizeName: row.readNullable<String>('size_name'),
+                  currentStock: row.read<int>('current_stock'),
+                  reorderLevel: row.read<int>('reorder_level'),
+                  costCents: row.read<int>('cost_cents'),
+                  priceCents: row.read<int>('price_cents'),
+                  isOutOfStock: true,
+                ),
+              )
+              .toList(),
+        )
+        .listen((items) {
+          if (mounted) {
+            setState(() {
+              _outOfStock = items;
+              _loadedOos = true;
+            });
+          }
+        });
   }
 
   void _subscribeLowStock() {
-    _lowStockSub = _db.customSelect(
-      '''
+    _lowStockSub = _db
+        .customSelect(
+          '''
       SELECT 
         p.id AS product_id,
         p.name AS product_name,
@@ -133,24 +155,44 @@ class _StockAlertsSectionState extends State<StockAlertsSection> {
         AND COALESCE(v.stock_quantity, p.stock_quantity) <= p.min_quantity
       ORDER BY (p.min_quantity - COALESCE(v.stock_quantity, p.stock_quantity)) DESC
       ''',
-      readsFrom: {_db.products, _db.productVariants, _db.productCategories, _db.productColors, _db.sizes},
-    ).watch().map((rows) => rows.map((row) => StockAlertItem(
-          productId: row.read<int>('product_id'),
-          productName: row.read<String>('product_name'),
-          sku: row.readNullable<String>('variant_sku'),
-          barcode: row.readNullable<String>('variant_barcode'),
-          categoryName: row.readNullable<String>('category_name'),
-          colorName: row.readNullable<String>('color_name'),
-          colorHex: row.readNullable<String>('color_hex'),
-          sizeName: row.readNullable<String>('size_name'),
-          currentStock: row.read<int>('current_stock'),
-          reorderLevel: row.read<int>('reorder_level'),
-          costCents: row.read<int>('cost_cents'),
-          priceCents: row.read<int>('price_cents'),
-          isOutOfStock: false,
-        )).toList()).listen((items) {
-      if (mounted) setState(() { _lowStock = items; _loadedLow = true; });
-    });
+          readsFrom: {
+            _db.products,
+            _db.productVariants,
+            _db.productCategories,
+            _db.productColors,
+            _db.sizes,
+          },
+        )
+        .watch()
+        .map(
+          (rows) => rows
+              .map(
+                (row) => StockAlertItem(
+                  productId: row.read<int>('product_id'),
+                  productName: row.read<String>('product_name'),
+                  sku: row.readNullable<String>('variant_sku'),
+                  barcode: row.readNullable<String>('variant_barcode'),
+                  categoryName: row.readNullable<String>('category_name'),
+                  colorName: row.readNullable<String>('color_name'),
+                  colorHex: row.readNullable<String>('color_hex'),
+                  sizeName: row.readNullable<String>('size_name'),
+                  currentStock: row.read<int>('current_stock'),
+                  reorderLevel: row.read<int>('reorder_level'),
+                  costCents: row.read<int>('cost_cents'),
+                  priceCents: row.read<int>('price_cents'),
+                  isOutOfStock: false,
+                ),
+              )
+              .toList(),
+        )
+        .listen((items) {
+          if (mounted) {
+            setState(() {
+              _lowStock = items;
+              _loadedLow = true;
+            });
+          }
+        });
   }
 
   // ─── dismissed notifications management ───
@@ -164,7 +206,10 @@ class _StockAlertsSectionState extends State<StockAlertsSection> {
   Future<void> _dismissNotification(String notificationId) async {
     final prefs = sl<SharedPreferences>();
     _dismissedNotifications.add(notificationId);
-    await prefs.setStringList(_kDismissedNotificationsKey, _dismissedNotifications.toList());
+    await prefs.setStringList(
+      _kDismissedNotificationsKey,
+      _dismissedNotifications.toList(),
+    );
     if (mounted) setState(() {});
   }
 
@@ -175,7 +220,10 @@ class _StockAlertsSectionState extends State<StockAlertsSection> {
     return type;
   }
 
-  List<StockAlertItem> _getVisibleItems(List<StockAlertItem> items, String type) {
+  List<StockAlertItem> _getVisibleItems(
+    List<StockAlertItem> items,
+    String type,
+  ) {
     return items.where((item) {
       final id = _getNotificationId(type, item.productId);
       return !_dismissedNotifications.contains(id);
@@ -204,7 +252,7 @@ class _StockAlertsSectionState extends State<StockAlertsSection> {
     return BlocBuilder<AppSettingsBloc, AppSettingsState>(
       builder: (context, settingsState) {
         final settings = settingsState.settings;
-        
+
         // Check if notifications are enabled
         if (!settings.lowStockNotifications) {
           return const SizedBox.shrink();
@@ -217,136 +265,166 @@ class _StockAlertsSectionState extends State<StockAlertsSection> {
         // Filter out dismissed notifications
         final visibleOutOfStock = _getVisibleItems(_outOfStock, 'out_of_stock');
         final visibleLowStock = _getVisibleItems(_lowStock, 'low_stock');
-        final showBackup = _showBackupReminder && !_dismissedNotifications.contains('backup_reminder');
+        final showBackup =
+            _showBackupReminder &&
+            !_dismissedNotifications.contains('backup_reminder');
 
         final totalAlerts = visibleOutOfStock.length + visibleLowStock.length;
         final hasAnyNotification = totalAlerts > 0 || showBackup;
         if (!hasAnyNotification) return const SizedBox.shrink();
 
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-    final badgeCount = totalAlerts + (showBackup ? 1 : 0);
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
+        final isDark = theme.brightness == Brightness.dark;
+        final badgeCount = totalAlerts + (showBackup ? 1 : 0);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Section header
-        Row(
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(LucideIcons.bell, size: 20, color: colorScheme.error),
-            const SizedBox(width: 8),
-            Text(
-              'dashboard.notifications'.tr(),
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+            // Section header
+            Row(
+              children: [
+                Icon(LucideIcons.bell, size: 20, color: colorScheme.error),
+                const SizedBox(width: 8),
+                Text(
+                  'dashboard.notifications'.tr(),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colorScheme.error.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '$badgeCount',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.error,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: colorScheme.error.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                '$badgeCount',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: colorScheme.error,
-                  fontWeight: FontWeight.bold,
+            const SizedBox(height: 12),
+
+            // Backup reminder card
+            if (showBackup)
+              Dismissible(
+                key: const Key('backup_reminder'),
+                direction: DismissDirection.horizontal,
+                onDismissed: (_) => _dismissNotification('backup_reminder'),
+                background: _buildDismissBackground(
+                  context,
+                  Alignment.centerLeft,
+                ),
+                secondaryBackground: _buildDismissBackground(
+                  context,
+                  Alignment.centerRight,
+                ),
+                child: _BackupReminderCard(
+                  onDismiss: () => _dismissNotification('backup_reminder'),
                 ),
               ),
-            ),
+
+            if (showBackup && totalAlerts > 0) const SizedBox(height: 8),
+
+            // Out of stock alert card
+            if (visibleOutOfStock.isNotEmpty)
+              Dismissible(
+                key: const Key('out_of_stock_card'),
+                direction: DismissDirection.horizontal,
+                onDismissed: (_) {
+                  // Dismiss all out of stock items
+                  for (final item in visibleOutOfStock) {
+                    _dismissNotification(
+                      _getNotificationId('out_of_stock', item.productId),
+                    );
+                  }
+                },
+                background: _buildDismissBackground(
+                  context,
+                  Alignment.centerLeft,
+                ),
+                secondaryBackground: _buildDismissBackground(
+                  context,
+                  Alignment.centerRight,
+                ),
+                child: _AlertCard(
+                  icon: LucideIcons.packageX,
+                  title: 'dashboard.out_of_stock'.tr(),
+                  count: visibleOutOfStock.length,
+                  color: colorScheme.error,
+                  bgColor: isDark
+                      ? colorScheme.error.withValues(alpha: 0.12)
+                      : colorScheme.errorContainer.withValues(alpha: 0.5),
+                  items: visibleOutOfStock,
+                  onReportPressed: () => _generateReport(context),
+                  onDismiss: () {
+                    // Dismiss all out of stock items
+                    for (final item in visibleOutOfStock) {
+                      _dismissNotification(
+                        _getNotificationId('out_of_stock', item.productId),
+                      );
+                    }
+                  },
+                ),
+              ),
+
+            if (visibleOutOfStock.isNotEmpty && visibleLowStock.isNotEmpty)
+              const SizedBox(height: 8),
+
+            // Low stock alert card
+            if (visibleLowStock.isNotEmpty)
+              Dismissible(
+                key: const Key('low_stock_card'),
+                direction: DismissDirection.horizontal,
+                onDismissed: (_) {
+                  // Dismiss all low stock items
+                  for (final item in visibleLowStock) {
+                    _dismissNotification(
+                      _getNotificationId('low_stock', item.productId),
+                    );
+                  }
+                },
+                background: _buildDismissBackground(
+                  context,
+                  Alignment.centerLeft,
+                ),
+                secondaryBackground: _buildDismissBackground(
+                  context,
+                  Alignment.centerRight,
+                ),
+                child: _AlertCard(
+                  icon: LucideIcons.alertTriangle,
+                  title: 'dashboard.low_stock'.tr(),
+                  count: visibleLowStock.length,
+                  color: Colors.orange,
+                  bgColor: isDark
+                      ? Colors.orange.withValues(alpha: 0.12)
+                      : Colors.orange.withValues(alpha: 0.08),
+                  items: visibleLowStock,
+                  onReportPressed: () => _generateReport(context),
+                  onDismiss: () {
+                    // Dismiss all low stock items
+                    for (final item in visibleLowStock) {
+                      _dismissNotification(
+                        _getNotificationId('low_stock', item.productId),
+                      );
+                    }
+                  },
+                ),
+              ),
+
+            const SizedBox(height: 16),
           ],
-        ),
-        const SizedBox(height: 12),
-
-        // Backup reminder card
-        if (showBackup)
-          Dismissible(
-            key: const Key('backup_reminder'),
-            direction: DismissDirection.horizontal,
-            onDismissed: (_) => _dismissNotification('backup_reminder'),
-            background: _buildDismissBackground(context, Alignment.centerLeft),
-            secondaryBackground: _buildDismissBackground(context, Alignment.centerRight),
-            child: _BackupReminderCard(
-              onDismiss: () => _dismissNotification('backup_reminder'),
-            ),
-          ),
-
-        if (showBackup && totalAlerts > 0)
-          const SizedBox(height: 8),
-
-        // Out of stock alert card
-        if (visibleOutOfStock.isNotEmpty)
-          Dismissible(
-            key: const Key('out_of_stock_card'),
-            direction: DismissDirection.horizontal,
-            onDismissed: (_) {
-              // Dismiss all out of stock items
-              for (final item in visibleOutOfStock) {
-                _dismissNotification(_getNotificationId('out_of_stock', item.productId));
-              }
-            },
-            background: _buildDismissBackground(context, Alignment.centerLeft),
-            secondaryBackground: _buildDismissBackground(context, Alignment.centerRight),
-            child: _AlertCard(
-              icon: LucideIcons.packageX,
-              title: 'dashboard.out_of_stock'.tr(),
-              count: visibleOutOfStock.length,
-              color: colorScheme.error,
-              bgColor: isDark
-                  ? colorScheme.error.withValues(alpha: 0.12)
-                  : colorScheme.errorContainer.withValues(alpha: 0.5),
-              items: visibleOutOfStock,
-              onReportPressed: () => _generateReport(context),
-              onDismiss: () {
-                // Dismiss all out of stock items
-                for (final item in visibleOutOfStock) {
-                  _dismissNotification(_getNotificationId('out_of_stock', item.productId));
-                }
-              },
-            ),
-          ),
-
-        if (visibleOutOfStock.isNotEmpty && visibleLowStock.isNotEmpty)
-          const SizedBox(height: 8),
-
-        // Low stock alert card
-        if (visibleLowStock.isNotEmpty)
-          Dismissible(
-            key: const Key('low_stock_card'),
-            direction: DismissDirection.horizontal,
-            onDismissed: (_) {
-              // Dismiss all low stock items
-              for (final item in visibleLowStock) {
-                _dismissNotification(_getNotificationId('low_stock', item.productId));
-              }
-            },
-            background: _buildDismissBackground(context, Alignment.centerLeft),
-            secondaryBackground: _buildDismissBackground(context, Alignment.centerRight),
-            child: _AlertCard(
-              icon: LucideIcons.alertTriangle,
-              title: 'dashboard.low_stock'.tr(),
-              count: visibleLowStock.length,
-              color: Colors.orange,
-              bgColor: isDark
-                  ? Colors.orange.withValues(alpha: 0.12)
-                  : Colors.orange.withValues(alpha: 0.08),
-              items: visibleLowStock,
-              onReportPressed: () => _generateReport(context),
-              onDismiss: () {
-                // Dismiss all low stock items
-                for (final item in visibleLowStock) {
-                  _dismissNotification(_getNotificationId('low_stock', item.productId));
-                }
-              },
-            ),
-          ),
-
-        const SizedBox(height: 16),
-      ],
-    );
+        );
       },
     );
   }
@@ -356,10 +434,7 @@ class _StockAlertsSectionState extends State<StockAlertsSection> {
     final isLeft = alignment == Alignment.centerLeft;
     return Container(
       alignment: alignment,
-      padding: EdgeInsets.only(
-        left: isLeft ? 20 : 0,
-        right: isLeft ? 0 : 20,
-      ),
+      padding: EdgeInsets.only(left: isLeft ? 20 : 0, right: isLeft ? 0 : 20),
       decoration: BoxDecoration(
         color: theme.colorScheme.errorContainer,
         borderRadius: BorderRadius.circular(14),
@@ -524,43 +599,45 @@ class _AlertCard extends StatelessWidget {
             const SizedBox(height: 10),
 
             // Preview items
-            ...previewItems.map((item) => Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
-                children: [
-                  if (item.colorHex != null && item.colorHex!.isNotEmpty) ...[
-                    Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: _parseColor(item.colorHex!),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: theme.colorScheme.outlineVariant,
-                          width: 0.5,
+            ...previewItems.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    if (item.colorHex != null && item.colorHex!.isNotEmpty) ...[
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: _parseColor(item.colorHex!),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: theme.colorScheme.outlineVariant,
+                            width: 0.5,
+                          ),
                         ),
                       ),
+                      const SizedBox(width: 6),
+                    ],
+                    Expanded(
+                      child: Text(
+                        _itemLabel(item),
+                        style: theme.textTheme.bodySmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    const SizedBox(width: 6),
+                    Text(
+                      '${item.currentStock}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: color,
+                      ),
+                    ),
                   ],
-                  Expanded(
-                    child: Text(
-                      _itemLabel(item),
-                      style: theme.textTheme.bodySmall,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Text(
-                    '${item.currentStock}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: color,
-                    ),
-                  ),
-                ],
+                ),
               ),
-            )),
+            ),
 
             if (items.length > 3)
               Padding(

@@ -73,7 +73,8 @@ class ExpensesBloc extends RealtimeBloc<ExpensesData, ExpensesEvent> {
         expenses: _applyLocalFilters(expenses),
         searchQuery: _currentSearchQuery,
         filterCategoryId: _currentCategoryFilter,
-        isSearching: _currentSearchQuery != null && _currentSearchQuery!.isNotEmpty,
+        isSearching:
+            _currentSearchQuery != null && _currentSearchQuery!.isNotEmpty,
       ),
     );
   }
@@ -89,7 +90,9 @@ class ExpensesBloc extends RealtimeBloc<ExpensesData, ExpensesEvent> {
   List<Expense> _applyLocalFilters(List<Expense> expenses) {
     var filtered = expenses;
     if (_currentCategoryFilter != null) {
-      filtered = filtered.where((e) => e.categoryId == _currentCategoryFilter).toList();
+      filtered = filtered
+          .where((e) => e.categoryId == _currentCategoryFilter)
+          .toList();
     }
     return filtered;
   }
@@ -110,16 +113,24 @@ class ExpensesBloc extends RealtimeBloc<ExpensesData, ExpensesEvent> {
 
     try {
       final results = await _repository.searchExpenses(event.query);
-      emit(RealtimeSuccess<ExpensesData>(
-        data: ExpensesData(
-          expenses: results,
-          searchQuery: event.query,
-          filterCategoryId: _currentCategoryFilter,
-          isSearching: true,
+      emit(
+        RealtimeSuccess<ExpensesData>(
+          data: ExpensesData(
+            expenses: results,
+            searchQuery: event.query,
+            filterCategoryId: _currentCategoryFilter,
+            isSearching: true,
+          ),
         ),
-      ));
+      );
     } catch (e, st) {
-      emit(RealtimeError<ExpensesData>(error: e, stackTrace: st, previousData: previousData));
+      emit(
+        RealtimeError<ExpensesData>(
+          error: e,
+          stackTrace: st,
+          previousData: previousData,
+        ),
+      );
     }
   }
 
@@ -130,7 +141,13 @@ class ExpensesBloc extends RealtimeBloc<ExpensesData, ExpensesEvent> {
     try {
       await _repository.deleteExpense(event.expenseId);
     } catch (e, st) {
-      emit(RealtimeError<ExpensesData>(error: e, stackTrace: st, previousData: currentData));
+      emit(
+        RealtimeError<ExpensesData>(
+          error: e,
+          stackTrace: st,
+          previousData: currentData,
+        ),
+      );
     }
   }
 
@@ -159,7 +176,13 @@ class ExpensesBloc extends RealtimeBloc<ExpensesData, ExpensesEvent> {
       // For now, just refresh to pick up the latest data
       refresh();
     } catch (e, st) {
-      emit(RealtimeError<ExpensesData>(error: e, stackTrace: st, previousData: previousData));
+      emit(
+        RealtimeError<ExpensesData>(
+          error: e,
+          stackTrace: st,
+          previousData: previousData,
+        ),
+      );
     }
   }
 }

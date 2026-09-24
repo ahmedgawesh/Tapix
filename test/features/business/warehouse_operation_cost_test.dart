@@ -176,7 +176,7 @@ void main() {
     test(
       'inbound WAC and inverse use the captured warehouse and exact value delta',
       () async {
-        final old = await fixtures.legacySnapshot(db);
+        final old = await fixtures.legacySnapshot(db, includeOrigins: false);
         await db.transaction(() async {
           final valuation = (await InventoryValuationDeltaService.capture(
             db.productDao,
@@ -246,7 +246,7 @@ void main() {
             -1000,
           );
         });
-        expect(await fixtures.legacySnapshot(db), old);
+        expect(await fixtures.legacySnapshot(db, includeOrigins: false), old);
       },
     );
 
@@ -452,12 +452,12 @@ void main() {
           await (db.update(db.products)..where((p) => p.id.equals(product)))
               .write(const ProductsCompanion(hasVariants: Value(true)));
         }
-        final old = await fixtures.legacySnapshot(db);
+        final old = await fixtures.legacySnapshot(db, includeOrigins: false);
         await purchase(method, simple);
         final result = await balance();
         expect(result.quantity, 2000);
         expect(result.unitCostCents, method == 'wac' ? 600 : 1000);
-        expect(await fixtures.legacySnapshot(db), old);
+        expect(await fixtures.legacySnapshot(db, includeOrigins: false), old);
         final primary = await WarehouseOperationScope.resolve(db);
         final primaryStock =
             await (db.select(db.businessWarehouseStocks)..where(
@@ -475,7 +475,7 @@ void main() {
   test(
     'inverse WAC removes only the selected warehouse inbound value',
     () async {
-      final old = await fixtures.legacySnapshot(db);
+      final old = await fixtures.legacySnapshot(db, includeOrigins: false);
       await purchase('wac', false);
       final before = await balance();
       await db.transaction(() async {
@@ -501,7 +501,7 @@ void main() {
       });
       expect((await balance()).quantity, 1000);
       expect((await balance()).unitCostCents, 200);
-      expect(await fixtures.legacySnapshot(db), old);
+      expect(await fixtures.legacySnapshot(db, includeOrigins: false), old);
     },
   );
 

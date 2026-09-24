@@ -65,9 +65,7 @@ void main() {
       'flags hasExpired=true when DAO reports expiredQty > 0',
       build: () {
         when(() => repo.watchExpirySummaries()).thenAnswer(
-          (_) => Stream.value({
-            7: (expiredQty: 4, nextExpiry: null),
-          }),
+          (_) => Stream.value({7: (expiredQty: 4, nextExpiry: null)}),
         );
         return ExpirySummariesBloc(repo);
       },
@@ -92,9 +90,7 @@ void main() {
         // diff. The bloc must clamp to 0, not propagate negatives.
         final yesterday = startOfToday().subtract(const Duration(days: 1));
         when(() => repo.watchExpirySummaries()).thenAnswer(
-          (_) => Stream.value({
-            9: (expiredQty: 0, nextExpiry: yesterday),
-          }),
+          (_) => Stream.value({9: (expiredQty: 0, nextExpiry: yesterday)}),
         );
         return ExpirySummariesBloc(repo);
       },
@@ -103,8 +99,11 @@ void main() {
         final data =
             (bloc.state as RealtimeSuccess<Map<int, ExpirySummary>>).data;
         final s = data[9]!;
-        expect(s.daysUntilNearestExpiry, 0,
-            reason: 'negative diff must be clamped to 0');
+        expect(
+          s.daysUntilNearestExpiry,
+          0,
+          reason: 'negative diff must be clamped to 0',
+        );
         expect(s.statusFor(), ExpiryStatus.nearExpiry);
       },
     );
@@ -162,8 +161,9 @@ void main() {
 
   group('ExpirySummariesBloc — RealtimeBloc contract', () {
     test('initial state is RealtimeLoading', () {
-      when(() => repo.watchExpirySummaries())
-          .thenAnswer((_) => const Stream.empty());
+      when(
+        () => repo.watchExpirySummaries(),
+      ).thenAnswer((_) => const Stream.empty());
       final bloc = ExpirySummariesBloc(repo);
       expect(bloc.state, isA<RealtimeLoading<Map<int, ExpirySummary>>>());
       bloc.close();
@@ -172,10 +172,11 @@ void main() {
     blocTest<ExpirySummariesBloc, RealtimeState<Map<int, ExpirySummary>>>(
       're-emits when the underlying stream emits again',
       build: () {
-        final ctrl = StreamController<
-            Map<int, ({int expiredQty, DateTime? nextExpiry})>>();
-        when(() => repo.watchExpirySummaries())
-            .thenAnswer((_) => ctrl.stream);
+        final ctrl =
+            StreamController<
+              Map<int, ({int expiredQty, DateTime? nextExpiry})>
+            >();
+        when(() => repo.watchExpirySummaries()).thenAnswer((_) => ctrl.stream);
         // Stash the controller on the bloc by wrapping it through closure.
         final bloc = ExpirySummariesBloc(repo);
         // Drive two emissions back-to-back.

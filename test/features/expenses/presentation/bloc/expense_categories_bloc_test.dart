@@ -38,8 +38,9 @@ void main() {
   setUp(() {
     mockRepository = MockExpenseRepository();
 
-    when(() => mockRepository.watchAllCategories(isActive: any(named: 'isActive')))
-        .thenAnswer((_) => const Stream.empty());
+    when(
+      () => mockRepository.watchAllCategories(isActive: any(named: 'isActive')),
+    ).thenAnswer((_) => const Stream.empty());
   });
 
   group('ExpenseCategoriesBloc', () {
@@ -53,46 +54,59 @@ void main() {
     blocTest<ExpenseCategoriesBloc, RealtimeState<List<ExpenseCategory>>>(
       'emits categories when stream emits data',
       build: () {
-        when(() => mockRepository.watchAllCategories(isActive: true))
-            .thenAnswer((_) => Stream.value(tCategories));
+        when(
+          () => mockRepository.watchAllCategories(isActive: true),
+        ).thenAnswer((_) => Stream.value(tCategories));
         return ExpenseCategoriesBloc(mockRepository);
       },
       expect: () => [
-        isA<RealtimeSuccess<List<ExpenseCategory>>>()
-            .having((s) => s.data.length, 'count', 2),
+        isA<RealtimeSuccess<List<ExpenseCategory>>>().having(
+          (s) => s.data.length,
+          'count',
+          2,
+        ),
       ],
     );
 
     blocTest<ExpenseCategoriesBloc, RealtimeState<List<ExpenseCategory>>>(
       'creates category when ExpenseCategoryCreateRequested is added',
       build: () {
-        when(() => mockRepository.watchAllCategories(isActive: true))
-            .thenAnswer((_) => Stream.value(tCategories));
-        when(() => mockRepository.createCategory(
-              name: any(named: 'name'),
-              description: any(named: 'description'),
-            )).thenAnswer((_) async => 3);
+        when(
+          () => mockRepository.watchAllCategories(isActive: true),
+        ).thenAnswer((_) => Stream.value(tCategories));
+        when(
+          () => mockRepository.createCategory(
+            name: any(named: 'name'),
+            description: any(named: 'description'),
+          ),
+        ).thenAnswer((_) async => 3);
         return ExpenseCategoriesBloc(mockRepository);
       },
-      act: (bloc) => bloc.add(const ExpenseCategoryCreateRequested(
-        name: 'Travel',
-        description: 'Travel expenses',
-      )),
+      act: (bloc) => bloc.add(
+        const ExpenseCategoryCreateRequested(
+          name: 'Travel',
+          description: 'Travel expenses',
+        ),
+      ),
       verify: (_) {
-        verify(() => mockRepository.createCategory(
-              name: 'Travel',
-              description: 'Travel expenses',
-            )).called(1);
+        verify(
+          () => mockRepository.createCategory(
+            name: 'Travel',
+            description: 'Travel expenses',
+          ),
+        ).called(1);
       },
     );
 
     blocTest<ExpenseCategoriesBloc, RealtimeState<List<ExpenseCategory>>>(
       'updates category when ExpenseCategoryUpdateRequested is added',
       build: () {
-        when(() => mockRepository.watchAllCategories(isActive: true))
-            .thenAnswer((_) => Stream.value(tCategories));
-        when(() => mockRepository.updateCategory(any()))
-            .thenAnswer((_) async => true);
+        when(
+          () => mockRepository.watchAllCategories(isActive: true),
+        ).thenAnswer((_) => Stream.value(tCategories));
+        when(
+          () => mockRepository.updateCategory(any()),
+        ).thenAnswer((_) async => true);
         return ExpenseCategoriesBloc(mockRepository);
       },
       act: (bloc) => bloc.add(ExpenseCategoryUpdateRequested(tCategory1)),
@@ -104,10 +118,12 @@ void main() {
     blocTest<ExpenseCategoriesBloc, RealtimeState<List<ExpenseCategory>>>(
       'deletes category when ExpenseCategoryDeleteRequested is added',
       build: () {
-        when(() => mockRepository.watchAllCategories(isActive: true))
-            .thenAnswer((_) => Stream.value(tCategories));
-        when(() => mockRepository.deleteCategory(any()))
-            .thenAnswer((_) async => 1);
+        when(
+          () => mockRepository.watchAllCategories(isActive: true),
+        ).thenAnswer((_) => Stream.value(tCategories));
+        when(
+          () => mockRepository.deleteCategory(any()),
+        ).thenAnswer((_) async => 1);
         return ExpenseCategoriesBloc(mockRepository);
       },
       act: (bloc) => bloc.add(const ExpenseCategoryDeleteRequested(1)),
@@ -119,21 +135,27 @@ void main() {
     blocTest<ExpenseCategoriesBloc, RealtimeState<List<ExpenseCategory>>>(
       'toggles active status when ExpenseCategoryToggleActiveRequested is added',
       build: () {
-        when(() => mockRepository.watchAllCategories(isActive: true))
-            .thenAnswer((_) => Stream.value(tCategories));
-        when(() => mockRepository.updateCategory(any()))
-            .thenAnswer((_) async => true);
+        when(
+          () => mockRepository.watchAllCategories(isActive: true),
+        ).thenAnswer((_) => Stream.value(tCategories));
+        when(
+          () => mockRepository.updateCategory(any()),
+        ).thenAnswer((_) async => true);
         return ExpenseCategoriesBloc(mockRepository);
       },
       act: (bloc) => bloc.add(ExpenseCategoryToggleActiveRequested(tCategory1)),
       verify: (_) {
-        verify(() => mockRepository.updateCategory(
-              any(that: isA<ExpenseCategory>().having(
-                    (c) => c.isActive,
-                    'isActive',
-                    false,
-                  )),
-            )).called(1);
+        verify(
+          () => mockRepository.updateCategory(
+            any(
+              that: isA<ExpenseCategory>().having(
+                (c) => c.isActive,
+                'isActive',
+                false,
+              ),
+            ),
+          ),
+        ).called(1);
       },
     );
   });

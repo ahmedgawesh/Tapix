@@ -176,9 +176,7 @@ void main() {
         dateRange: ReportDateRange.thisMonth(),
       );
 
-      final updated = original.copyWith(
-        dateRange: ReportDateRange.thisYear(),
-      );
+      final updated = original.copyWith(dateRange: ReportDateRange.thisYear());
 
       expect(updated.customerId, 1);
       expect(updated.customerName, 'Test');
@@ -349,8 +347,11 @@ void main() {
       int balance = openingBalance;
       for (final txn in transactions) {
         balance += txn.amountCents;
-        expect(txn.runningBalanceCents, balance,
-            reason: 'Running balance should be correct after ${txn.type}');
+        expect(
+          txn.runningBalanceCents,
+          balance,
+          reason: 'Running balance should be correct after ${txn.type}',
+        );
       }
 
       // Final balance should be closing balance
@@ -447,15 +448,21 @@ void main() {
       );
 
       // Verify closing = opening + debits - credits
-      expect(data.closingBalanceCents,
-          data.openingBalanceCents + data.totalDebitsCents - data.totalCreditsCents);
+      expect(
+        data.closingBalanceCents,
+        data.openingBalanceCents +
+            data.totalDebitsCents -
+            data.totalCreditsCents,
+      );
 
       // Verify transaction count
       expect(data.transactionCount, 3);
 
       // Verify last running balance equals closing balance
-      expect(data.transactions.last.runningBalanceCents,
-          data.closingBalanceCents);
+      expect(
+        data.transactions.last.runningBalanceCents,
+        data.closingBalanceCents,
+      );
 
       // Verify customer info
       expect(data.customerName, 'Test Customer');
@@ -526,7 +533,17 @@ void main() {
       ];
 
       final types = transactions.map((t) => t.type).toSet();
-      expect(types, containsAll(['sale', 'payment', 'return', 'adjustment', 'credit_note', 'refund']));
+      expect(
+        types,
+        containsAll([
+          'sale',
+          'payment',
+          'return',
+          'adjustment',
+          'credit_note',
+          'refund',
+        ]),
+      );
       expect(transactions.length, 6);
 
       // Verify running balance chain from 0
@@ -621,13 +638,15 @@ void main() {
       for (int i = 0; i < 100; i++) {
         final amount = (i % 2 == 0) ? 10000 : -5000;
         balance += amount;
-        transactions.add(StatementTransaction(
-          id: i + 1,
-          date: DateTime(2026, 1, 1).add(Duration(days: i)),
-          type: i % 2 == 0 ? 'sale' : 'payment',
-          amountCents: amount,
-          runningBalanceCents: balance,
-        ));
+        transactions.add(
+          StatementTransaction(
+            id: i + 1,
+            date: DateTime(2026, 1, 1).add(Duration(days: i)),
+            type: i % 2 == 0 ? 'sale' : 'payment',
+            amountCents: amount,
+            runningBalanceCents: balance,
+          ),
+        );
       }
 
       expect(transactions.length, 100);

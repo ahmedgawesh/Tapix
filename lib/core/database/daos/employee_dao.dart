@@ -40,19 +40,21 @@ class EmployeeLineDetail {
   }
 }
 
-@DriftAccessor(tables: [
-  Employees,
-  Roles,
-  Attendances,
-  LeaveRequests,
-  Payrolls,
-  PayrollDeductions,
-  Commissions,
-  PerformanceMetrics,
-  ShiftSchedules,
-  EmployeeDocuments,
-  OvertimeRules,
-])
+@DriftAccessor(
+  tables: [
+    Employees,
+    Roles,
+    Attendances,
+    LeaveRequests,
+    Payrolls,
+    PayrollDeductions,
+    Commissions,
+    PerformanceMetrics,
+    ShiftSchedules,
+    EmployeeDocuments,
+    OvertimeRules,
+  ],
+)
 class EmployeeDao extends DatabaseAccessor<AppDatabase>
     with _$EmployeeDaoMixin {
   EmployeeDao(super.db);
@@ -82,8 +84,9 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
 
   /// Watch a single employee by ID
   Stream<Employee?> watchEmployee(int id) {
-    return (select(employees)..where((e) => e.id.equals(id)))
-        .watchSingleOrNull();
+    return (select(
+      employees,
+    )..where((e) => e.id.equals(id))).watchSingleOrNull();
   }
 
   /// Get a single employee by ID
@@ -95,11 +98,13 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
   Future<List<Employee>> searchEmployees(String query, {bool? isActive}) {
     final searchQuery = '%$query%';
     var selectQuery = select(employees)
-      ..where((e) =>
-          e.name.like(searchQuery) |
-          e.email.like(searchQuery) |
-          e.phone.like(searchQuery) |
-          e.employeeCode.like(searchQuery));
+      ..where(
+        (e) =>
+            e.name.like(searchQuery) |
+            e.email.like(searchQuery) |
+            e.phone.like(searchQuery) |
+            e.employeeCode.like(searchQuery),
+      );
 
     if (isActive != null) {
       selectQuery = selectQuery..where((e) => e.isActive.equals(isActive));
@@ -221,9 +226,11 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
     final endOfDay = startOfDay.add(const Duration(days: 1));
 
     return (select(attendances)
-          ..where((a) =>
-              a.attendanceDate.isBiggerOrEqualValue(startOfDay) &
-              a.attendanceDate.isSmallerThanValue(endOfDay))
+          ..where(
+            (a) =>
+                a.attendanceDate.isBiggerOrEqualValue(startOfDay) &
+                a.attendanceDate.isSmallerThanValue(endOfDay),
+          )
           ..orderBy([(a) => OrderingTerm.asc(a.employeeId)]))
         .watch();
   }
@@ -234,16 +241,20 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
     DateTime? startDate,
     DateTime? endDate,
   }) {
-    var query = select(attendances)..where((a) => a.employeeId.equals(employeeId));
+    var query = select(attendances)
+      ..where((a) => a.employeeId.equals(employeeId));
 
     if (startDate != null) {
-      query = query..where((a) => a.attendanceDate.isBiggerOrEqualValue(startDate));
+      query = query
+        ..where((a) => a.attendanceDate.isBiggerOrEqualValue(startDate));
     }
     if (endDate != null) {
-      query = query..where((a) => a.attendanceDate.isSmallerOrEqualValue(endDate));
+      query = query
+        ..where((a) => a.attendanceDate.isSmallerOrEqualValue(endDate));
     }
 
-    return (query..orderBy([(a) => OrderingTerm.desc(a.attendanceDate)])).watch();
+    return (query..orderBy([(a) => OrderingTerm.desc(a.attendanceDate)]))
+        .watch();
   }
 
   /// Get attendance for a specific employee and date
@@ -251,11 +262,12 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
     final startOfDay = DateTime(date.year, date.month, date.day);
     final endOfDay = startOfDay.add(const Duration(days: 1));
 
-    return (select(attendances)
-          ..where((a) =>
+    return (select(attendances)..where(
+          (a) =>
               a.employeeId.equals(employeeId) &
               a.attendanceDate.isBiggerOrEqualValue(startOfDay) &
-              a.attendanceDate.isSmallerThanValue(endOfDay)))
+              a.attendanceDate.isSmallerThanValue(endOfDay),
+        ))
         .getSingleOrNull();
   }
 
@@ -274,24 +286,25 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
     final startOfDay = DateTime(date.year, date.month, date.day);
     final endOfDay = startOfDay.add(const Duration(days: 1));
 
-    return (select(attendances)
-          ..where((a) =>
+    return (select(attendances)..where(
+          (a) =>
               a.attendanceDate.isBiggerOrEqualValue(startOfDay) &
-              a.attendanceDate.isSmallerThanValue(endOfDay)))
+              a.attendanceDate.isSmallerThanValue(endOfDay),
+        ))
         .watch()
         .map((list) {
-      final counts = <String, int>{
-        'present': 0,
-        'late': 0,
-        'absent': 0,
-        'leave': 0,
-      };
-      for (final attendance in list) {
-        final status = attendance.status;
-        counts[status] = (counts[status] ?? 0) + 1;
-      }
-      return counts;
-    });
+          final counts = <String, int>{
+            'present': 0,
+            'late': 0,
+            'absent': 0,
+            'leave': 0,
+          };
+          for (final attendance in list) {
+            final status = attendance.status;
+            counts[status] = (counts[status] ?? 0) + 1;
+          }
+          return counts;
+        });
   }
 
   /// Get employee attendance counts for a period
@@ -301,12 +314,14 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
     DateTime startDate,
     DateTime endDate,
   ) async {
-    final result = await (select(attendances)
-          ..where((a) =>
-              a.employeeId.equals(employeeId) &
-              a.attendanceDate.isBiggerOrEqualValue(startDate) &
-              a.attendanceDate.isSmallerOrEqualValue(endDate)))
-        .get();
+    final result =
+        await (select(attendances)..where(
+              (a) =>
+                  a.employeeId.equals(employeeId) &
+                  a.attendanceDate.isBiggerOrEqualValue(startDate) &
+                  a.attendanceDate.isSmallerOrEqualValue(endDate),
+            ))
+            .get();
 
     final counts = <String, int>{
       'present': 0,
@@ -317,7 +332,8 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
     };
     for (final a in result) {
       counts[a.status] = (counts[a.status] ?? 0) + 1;
-      counts['overtimeMinutes'] = (counts['overtimeMinutes'] ?? 0) + a.overtimeMinutes;
+      counts['overtimeMinutes'] =
+          (counts['overtimeMinutes'] ?? 0) + a.overtimeMinutes;
     }
     return counts;
   }
@@ -331,11 +347,15 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// Get attendance records for a date range
-  Future<List<Attendance>> getAttendanceByDateRange(DateTime startDate, DateTime endDate) {
-    return (select(attendances)
-          ..where((a) =>
+  Future<List<Attendance>> getAttendanceByDateRange(
+    DateTime startDate,
+    DateTime endDate,
+  ) {
+    return (select(attendances)..where(
+          (a) =>
               a.attendanceDate.isBiggerOrEqualValue(startDate) &
-              a.attendanceDate.isSmallerOrEqualValue(endDate)))
+              a.attendanceDate.isSmallerOrEqualValue(endDate),
+        ))
         .get();
   }
 
@@ -369,8 +389,9 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
 
   /// Get a leave request by ID
   Future<LeaveRequest?> getLeaveRequest(int id) {
-    return (select(leaveRequests)..where((l) => l.id.equals(id)))
-        .getSingleOrNull();
+    return (select(
+      leaveRequests,
+    )..where((l) => l.id.equals(id))).getSingleOrNull();
   }
 
   /// Create a new leave request
@@ -392,9 +413,11 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
     String? status,
   }) {
     var query = select(payrolls)
-      ..where((p) =>
-          p.periodStart.isBiggerOrEqualValue(periodStart) &
-          p.periodEnd.isSmallerOrEqualValue(periodEnd));
+      ..where(
+        (p) =>
+            p.periodStart.isBiggerOrEqualValue(periodStart) &
+            p.periodEnd.isSmallerOrEqualValue(periodEnd),
+      );
 
     if (status != null) {
       query = query..where((p) => p.status.equals(status));
@@ -436,32 +459,34 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
     DateTime periodStart,
     DateTime periodEnd,
   ) {
-    return (select(payrolls)
-          ..where((p) =>
+    return (select(payrolls)..where(
+          (p) =>
               p.periodStart.isBiggerOrEqualValue(periodStart) &
-              p.periodEnd.isSmallerOrEqualValue(periodEnd)))
+              p.periodEnd.isSmallerOrEqualValue(periodEnd),
+        ))
         .watch()
         .map((list) {
-      var totalGross = Decimal.zero;
-      var totalDeductions = Decimal.zero;
-      var totalNet = Decimal.zero;
+          var totalGross = Decimal.zero;
+          var totalDeductions = Decimal.zero;
+          var totalNet = Decimal.zero;
 
-      for (final payroll in list) {
-        totalGross += payroll.basicSalaryCents +
-            payroll.commissionCents +
-            payroll.bonusCents +
-            payroll.overtimeCents;
-        totalDeductions += payroll.deductionCents;
-        totalNet += payroll.netPayCents;
-      }
+          for (final payroll in list) {
+            totalGross +=
+                payroll.basicSalaryCents +
+                payroll.commissionCents +
+                payroll.bonusCents +
+                payroll.overtimeCents;
+            totalDeductions += payroll.deductionCents;
+            totalNet += payroll.netPayCents;
+          }
 
-      return {
-        'totalGross': totalGross.toBigInt().toInt(),
-        'totalDeductions': totalDeductions.toBigInt().toInt(),
-        'totalNet': totalNet.toBigInt().toInt(),
-        'count': list.length,
-      };
-    });
+          return {
+            'totalGross': totalGross.toBigInt().toInt(),
+            'totalDeductions': totalDeductions.toBigInt().toInt(),
+            'totalNet': totalNet.toBigInt().toInt(),
+            'count': list.length,
+          };
+        });
   }
 
   /// Get distinct payroll periods
@@ -481,7 +506,9 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
 
   /// Get a single commission by ID
   Future<Commission?> getCommissionById(int id) {
-    return (select(commissions)..where((c) => c.id.equals(id))).getSingleOrNull();
+    return (select(
+      commissions,
+    )..where((c) => c.id.equals(id))).getSingleOrNull();
   }
 
   /// Watch commissions for an employee
@@ -819,9 +846,9 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
   /// Delete all commissions created for a specific adjustment sale return.
   /// Used by `voidSaleAdjReturn` to reverse the deduction exactly.
   Future<int> deleteCommissionsByAdjustmentReturnId(int adjustmentReturnId) {
-    return (delete(commissions)
-          ..where((c) => c.saleReturnAdjustmentId.equals(adjustmentReturnId)))
-        .go();
+    return (delete(
+      commissions,
+    )..where((c) => c.saleReturnAdjustmentId.equals(adjustmentReturnId))).go();
   }
 
   /// Get total commission for an employee in a period
@@ -874,7 +901,10 @@ class EmployeeDao extends DatabaseAccessor<AppDatabase>
       variables.add(Variable.withString(period));
     }
 
-    final result = await customSelect(sql, variables: variables).getSingleOrNull();
+    final result = await customSelect(
+      sql,
+      variables: variables,
+    ).getSingleOrNull();
     return result?.read<double?>('avg_score');
   }
 }

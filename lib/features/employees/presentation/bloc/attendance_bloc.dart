@@ -81,10 +81,7 @@ class AttendanceMarkAbsentRequested extends AttendanceEvent {
   final int employeeId;
   final String? notes;
 
-  const AttendanceMarkAbsentRequested({
-    required this.employeeId,
-    this.notes,
-  });
+  const AttendanceMarkAbsentRequested({required this.employeeId, this.notes});
 }
 
 /// Correct an existing attendance record (owner/manager only).
@@ -158,7 +155,8 @@ class AttendanceState {
 
 // Extend AttendanceSummary to allow null date for initial state
 extension AttendanceSummaryExtension on AttendanceSummary {
-  static AttendanceSummary empty(DateTime date) => AttendanceSummary(date: date);
+  static AttendanceSummary empty(DateTime date) =>
+      AttendanceSummary(date: date);
 }
 
 // ==================== BLOC ====================
@@ -169,7 +167,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
   StreamSubscription<List<Attendance>>? _attendanceSub;
 
   AttendanceBloc(this._repository, this._attendanceService)
-      : super(AttendanceState(selectedDate: DateTime.now())) {
+    : super(AttendanceState(selectedDate: DateTime.now())) {
     on<AttendanceInitialized>(_onInitialized);
     on<AttendanceDateChanged>(_onDateChanged);
     on<_AttendanceDataReceived>(_onDataReceived);
@@ -187,7 +185,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
     Emitter<AttendanceState> emit,
   ) async {
     emit(state.copyWith(selectedDate: event.date, isLoading: true));
-    
+
     // Generate attendance records for all active employees if they don't exist
     try {
       await _attendanceService.generateDailyAttendance(event.date);
@@ -195,7 +193,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
       // Don't emit error state, just log it
       // The attendance will still load even if generation fails
     }
-    
+
     _subscribeToDate(event.date);
   }
 
@@ -204,23 +202,25 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
     Emitter<AttendanceState> emit,
   ) async {
     emit(state.copyWith(selectedDate: event.date, isLoading: true));
-    
+
     // Generate attendance records for the selected date if they don't exist
     try {
       await _attendanceService.generateDailyAttendance(event.date);
     } catch (e) {
       // Don't emit error state, just log it
     }
-    
+
     _subscribeToDate(event.date);
   }
 
   void _subscribeToDate(DateTime date) {
     _attendanceSub?.cancel();
-    _attendanceSub = _repository.watchAttendanceByDate(date).listen(
-      (attendances) => add(_AttendanceDataReceived(attendances)),
-      onError: (Object error) => add(_AttendanceStreamError(error)),
-    );
+    _attendanceSub = _repository
+        .watchAttendanceByDate(date)
+        .listen(
+          (attendances) => add(_AttendanceDataReceived(attendances)),
+          onError: (Object error) => add(_AttendanceStreamError(error)),
+        );
   }
 
   Future<void> _onDataReceived(
@@ -261,29 +261,28 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
       }
     }
 
-    emit(state.copyWith(
-      attendances: attendances,
-      employeeNames: names,
-      summary: AttendanceSummary(
-        date: state.selectedDate,
-        presentCount: presentCount,
-        lateCount: lateCount,
-        absentCount: absentCount,
-        onLeaveCount: onLeaveCount,
+    emit(
+      state.copyWith(
+        attendances: attendances,
+        employeeNames: names,
+        summary: AttendanceSummary(
+          date: state.selectedDate,
+          presentCount: presentCount,
+          lateCount: lateCount,
+          absentCount: absentCount,
+          onLeaveCount: onLeaveCount,
+        ),
+        isLoading: false,
+        error: null,
       ),
-      isLoading: false,
-      error: null,
-    ));
+    );
   }
 
   void _onStreamError(
     _AttendanceStreamError event,
     Emitter<AttendanceState> emit,
   ) {
-    emit(state.copyWith(
-      isLoading: false,
-      error: event.error.toString(),
-    ));
+    emit(state.copyWith(isLoading: false, error: event.error.toString()));
   }
 
   Future<void> _onCheckInRequested(
@@ -336,7 +335,8 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
               employeeId: event.employeeId,
               date: state.selectedDate,
               status: AttendanceStatus.early_departure,
-              notes: 'Left ${earlyBy.inHours}h ${earlyBy.inMinutes % 60}m early',
+              notes:
+                  'Left ${earlyBy.inHours}h ${earlyBy.inMinutes % 60}m early',
             );
           }
         }

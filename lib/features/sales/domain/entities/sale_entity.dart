@@ -89,6 +89,8 @@ class SaleItemEntity extends Equatable {
   final int productId;
   final String? productName;
   final int? variantId;
+  final int? supplierIdentityId;
+  final String? consignmentLayerId;
   final String? variantSku;
   final String? productSku;
   final String? colorName;
@@ -112,6 +114,8 @@ class SaleItemEntity extends Equatable {
     required this.productId,
     this.productName,
     this.variantId,
+    this.supplierIdentityId,
+    this.consignmentLayerId,
     this.variantSku,
     this.productSku,
     this.colorName,
@@ -169,6 +173,8 @@ class SaleItemEntity extends Equatable {
     productId,
     productName,
     variantId,
+    supplierIdentityId,
+    consignmentLayerId,
     variantSku,
     productSku,
     colorName,

@@ -10,7 +10,9 @@ import 'package:tapix/features/products/domain/repositories/product_repository.d
 import 'package:decimal/decimal.dart';
 
 class MockProductRepository extends Mock implements ProductRepository {}
-class MockBarcodeValidationService extends Mock implements BarcodeValidationService {}
+
+class MockBarcodeValidationService extends Mock
+    implements BarcodeValidationService {}
 
 void main() {
   late MockProductRepository mockRepository;
@@ -53,13 +55,13 @@ void main() {
         productRepository: mockRepository,
         validationService: mockValidationService,
       );
-      
+
       expect(bloc.state, isA<RealtimeSuccess<ScannerState>>());
       final state = (bloc.state as RealtimeSuccess<ScannerState>).data;
       expect(state.isScanning, false);
       expect(state.lastResult, isNull);
       expect(state.foundProduct, isNull);
-      
+
       bloc.close();
     });
 
@@ -92,9 +94,7 @@ void main() {
         productRepository: mockRepository,
         validationService: mockValidationService,
       ),
-      seed: () => RealtimeSuccess(
-        data: const ScannerState(isScanning: true),
-      ),
+      seed: () => RealtimeSuccess(data: const ScannerState(isScanning: true)),
       act: (bloc) => bloc.add(const StopScanning()),
       expect: () => [
         // First: event handler emission with scanning=false
@@ -115,21 +115,26 @@ void main() {
     blocTest<BarcodeScannerBloc, RealtimeState<ScannerState>>(
       'emits error when barcode validation fails',
       build: () {
-        when(() => mockValidationService.validateBarcode(any(), any()))
-            .thenReturn(const ValidationResult(
-              isValid: false,
-              errorMessage: 'Invalid checksum',
-            ));
-        
+        when(
+          () => mockValidationService.validateBarcode(any(), any()),
+        ).thenReturn(
+          const ValidationResult(
+            isValid: false,
+            errorMessage: 'Invalid checksum',
+          ),
+        );
+
         return BarcodeScannerBloc(
           productRepository: mockRepository,
           validationService: mockValidationService,
         );
       },
-      act: (bloc) => bloc.add(const BarcodeDetected(
-        barcode: '5901234123450',
-        format: BarcodeFormat.ean13,
-      )),
+      act: (bloc) => bloc.add(
+        const BarcodeDetected(
+          barcode: '5901234123450',
+          format: BarcodeFormat.ean13,
+        ),
+      ),
       expect: () => [
         // First: event handler emission with error
         isA<RealtimeSuccess<ScannerState>>().having(
@@ -172,59 +177,70 @@ void main() {
     );
 
     test('finds product when valid barcode is scanned', () async {
-      when(() => mockValidationService.validateBarcode(any(), any()))
-          .thenReturn(const ValidationResult(isValid: true));
-      when(() => mockRepository.findByBarcode('5901234123457'))
-          .thenAnswer((_) async => createTestProduct());
-      
+      when(
+        () => mockValidationService.validateBarcode(any(), any()),
+      ).thenReturn(const ValidationResult(isValid: true));
+      when(
+        () => mockRepository.findByBarcode('5901234123457'),
+      ).thenAnswer((_) async => createTestProduct());
+
       final bloc = BarcodeScannerBloc(
         productRepository: mockRepository,
         validationService: mockValidationService,
       );
-      
-      bloc.add(const BarcodeDetected(
-        barcode: '5901234123457',
-        format: BarcodeFormat.ean13,
-      ));
-      
+
+      bloc.add(
+        const BarcodeDetected(
+          barcode: '5901234123457',
+          format: BarcodeFormat.ean13,
+        ),
+      );
+
       // Wait for async operations to complete
       await expectLater(
         bloc.stream,
-        emitsThrough(isA<RealtimeSuccess<ScannerState>>().having(
-          (s) => s.data.foundProduct?.name,
-          'product name',
-          'Test Product',
-        )),
+        emitsThrough(
+          isA<RealtimeSuccess<ScannerState>>().having(
+            (s) => s.data.foundProduct?.name,
+            'product name',
+            'Test Product',
+          ),
+        ),
       );
-      
+
       await bloc.close();
     });
 
     test('handles manual barcode entry', () async {
-      when(() => mockValidationService.detectFormat(any()))
-          .thenReturn(BarcodeFormat.ean13);
-      when(() => mockValidationService.validateBarcode(any(), any()))
-          .thenReturn(const ValidationResult(isValid: true));
-      when(() => mockRepository.findByBarcode(any()))
-          .thenAnswer((_) async => createTestProduct());
-      
+      when(
+        () => mockValidationService.detectFormat(any()),
+      ).thenReturn(BarcodeFormat.ean13);
+      when(
+        () => mockValidationService.validateBarcode(any(), any()),
+      ).thenReturn(const ValidationResult(isValid: true));
+      when(
+        () => mockRepository.findByBarcode(any()),
+      ).thenAnswer((_) async => createTestProduct());
+
       final bloc = BarcodeScannerBloc(
         productRepository: mockRepository,
         validationService: mockValidationService,
       );
-      
+
       bloc.add(const ManualBarcodeEntered('5901234123457'));
-      
+
       // Wait for async operations to complete
       await expectLater(
         bloc.stream,
-        emitsThrough(isA<RealtimeSuccess<ScannerState>>().having(
-          (s) => s.data.foundProduct,
-          'product',
-          isNotNull,
-        )),
+        emitsThrough(
+          isA<RealtimeSuccess<ScannerState>>().having(
+            (s) => s.data.foundProduct,
+            'product',
+            isNotNull,
+          ),
+        ),
       );
-      
+
       await bloc.close();
     });
   });

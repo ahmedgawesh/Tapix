@@ -52,8 +52,7 @@ class ZatcaPhase2Provider implements EInvoiceProvider {
   });
 
   @override
-  EInvoiceJurisdiction get jurisdiction =>
-      EInvoiceJurisdiction.ksaZatcaPhase2;
+  EInvoiceJurisdiction get jurisdiction => EInvoiceJurisdiction.ksaZatcaPhase2;
 
   @override
   Future<PreparedArtifact> prepare(
@@ -76,9 +75,7 @@ class ZatcaPhase2Provider implements EInvoiceProvider {
 
     // 3. SHA-256 hash → base64. This becomes the PIH for the NEXT
     //    invoice. ZATCA Phase 2 uses the canonical-XML hash.
-    final hash = base64Encode(
-      sha256.convert(utf8.encode(canonical)).bytes,
-    );
+    final hash = base64Encode(sha256.convert(utf8.encode(canonical)).bytes);
 
     // 4. QR payload — ZATCA's 5-field simplified QR (TLV tags 1..5).
     //    The real tag-length-value binary encoding is delegated to
@@ -153,8 +150,8 @@ class ZatcaPhase2Provider implements EInvoiceProvider {
   /// per-invoice uniqueness requirement (they do not audit entropy
   /// strength; collision safety is all that matters).
   String _uuidV4() {
-    final seed = DateTime.now().microsecondsSinceEpoch ^
-        identityHashCode(Object());
+    final seed =
+        DateTime.now().microsecondsSinceEpoch ^ identityHashCode(Object());
     int rand(int n) {
       // LCG — deterministic given seed, good enough for UUID filler.
       final m = (seed * 0x5DEECE66D + 0xB + n) & 0xFFFFFFFFFFFF;
@@ -197,9 +194,11 @@ class ZatcaPhase2Provider implements EInvoiceProvider {
       ..write('<IssueDate>${subject.issueDate.toIso8601String()}</IssueDate>')
       ..write('<DocumentType>${subject.documentType}</DocumentType>')
       ..write(
-          '<SellerVAT>${subject.sellerTaxNumber ?? sellerTaxNumber}</SellerVAT>')
+        '<SellerVAT>${subject.sellerTaxNumber ?? sellerTaxNumber}</SellerVAT>',
+      )
       ..write(
-          '<SellerName>${subject.sellerLegalName ?? sellerLegalName}</SellerName>');
+        '<SellerName>${subject.sellerLegalName ?? sellerLegalName}</SellerName>',
+      );
     if (subject.buyerTaxNumber != null) {
       b.write('<BuyerVAT>${subject.buyerTaxNumber}</BuyerVAT>');
     }

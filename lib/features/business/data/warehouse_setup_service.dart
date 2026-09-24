@@ -10,10 +10,12 @@ import '../../../core/services/business/warehouse_operation_scope.dart';
 import '../../../core/services/business/warehouse_stocktake_service.dart';
 import '../../../core/services/business/warehouse_stock_initialization_service.dart';
 import '../../../core/services/currency_service.dart' as money;
+import '../../../core/services/desktop_license_service.dart';
+import '../../../core/services/revenuecat_service.dart';
+import '../../../core/utils/platform_utils.dart';
 import '../../auth/data/services/session_service.dart';
 
-/// Implemented by the future verified, independent business-add-on license.
-/// Never infer this entitlement from Pro or a device preference.
+/// Commercial boundary for local multi-warehouse management, included in Pro.
 abstract interface class WarehouseSetupEntitlement {
   Future<bool> permits(WarehouseOperationScope scope);
 }
@@ -22,6 +24,31 @@ class UnreleasedWarehouseSetupEntitlement implements WarehouseSetupEntitlement {
   const UnreleasedWarehouseSetupEntitlement();
   @override
   Future<bool> permits(WarehouseOperationScope scope) async => false;
+}
+
+/// Uses the existing Pro entitlement. Online branch synchronization has a
+/// different, separately priced entitlement and must never be inferred here.
+class PlatformProWarehouseSetupEntitlement
+    implements WarehouseSetupEntitlement {
+  const PlatformProWarehouseSetupEntitlement({
+    required RevenueCatService revenueCat,
+    required DesktopLicenseService desktopLicense,
+  }) : _revenueCat = revenueCat,
+       _desktopLicense = desktopLicense;
+
+  final RevenueCatService _revenueCat;
+  final DesktopLicenseService _desktopLicense;
+
+  @override
+  Future<bool> permits(WarehouseOperationScope scope) async {
+    if (PlatformUtils.isAndroid || PlatformUtils.isIOS) {
+      return _revenueCat.hasActiveEntitlement(RevenueCatConfig.entitlementId);
+    }
+    if (PlatformUtils.isWindows || PlatformUtils.isLinux) {
+      return await _desktopLicense.initialize() == DesktopLicenseStatus.valid;
+    }
+    return false;
+  }
 }
 
 class WarehouseSetupDenied implements Exception {
@@ -126,8 +153,8 @@ class WarehouseValuationItem {
   }
 }
 
-/// Owner-only initial release boundary. Rechecks the current DB user and
-/// entitlement for every read and write. LAN clients cannot write their replica.
+/// Owner-only initial release boundary. Rechecks the current DB user and Pro
+/// entitlement for every read and write. A LAN replica cannot write directly.
 class WarehouseSetupService {
   WarehouseSetupService(
     this._db,

@@ -22,22 +22,25 @@ class SecurityConfig {
   });
 
   Map<String, dynamic> toJson() => {
-        'minimumSupportedVersion': minimumSupportedVersion,
-        'blockedDeviceIds': blockedDeviceIds,
-        'forceUpdate': forceUpdate,
-        'killedVersions': killedVersions,
-        'fetchedAt': fetchedAt.toIso8601String(),
-      };
+    'minimumSupportedVersion': minimumSupportedVersion,
+    'blockedDeviceIds': blockedDeviceIds,
+    'forceUpdate': forceUpdate,
+    'killedVersions': killedVersions,
+    'fetchedAt': fetchedAt.toIso8601String(),
+  };
 
   factory SecurityConfig.fromJson(Map<String, dynamic> json) {
     return SecurityConfig(
-      minimumSupportedVersion: json['minimumSupportedVersion'] as String? ?? '1.0.0',
-      blockedDeviceIds: (json['blockedDeviceIds'] as List<dynamic>?)
+      minimumSupportedVersion:
+          json['minimumSupportedVersion'] as String? ?? '1.0.0',
+      blockedDeviceIds:
+          (json['blockedDeviceIds'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
           [],
       forceUpdate: json['forceUpdate'] as bool? ?? false,
-      killedVersions: (json['killedVersions'] as List<dynamic>?)
+      killedVersions:
+          (json['killedVersions'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
           [],
@@ -59,8 +62,7 @@ class SecurityConfig {
   }
 
   /// Whether the cached config is still fresh (within 24 hours).
-  bool get isFresh =>
-      DateTime.now().difference(fetchedAt).inHours < 24;
+  bool get isFresh => DateTime.now().difference(fetchedAt).inHours < 24;
 }
 
 /// Result of a security check.
@@ -84,11 +86,10 @@ class RemoteSecurityService {
 
   SecurityConfig? _cachedConfig;
 
-  RemoteSecurityService({
-    FlutterSecureStorage? secureStorage,
-    Dio? dio,
-  })  : _secureStorage = secureStorage ?? const FlutterSecureStorage(),
-        _dio = dio ?? Dio(BaseOptions(connectTimeout: const Duration(seconds: 10)));
+  RemoteSecurityService({FlutterSecureStorage? secureStorage, Dio? dio})
+    : _secureStorage = secureStorage ?? const FlutterSecureStorage(),
+      _dio =
+          dio ?? Dio(BaseOptions(connectTimeout: const Duration(seconds: 10)));
 
   /// Fetch config from remote, falling back to cache, then defaults.
   Future<SecurityConfig> fetchConfig() async {
@@ -123,7 +124,9 @@ class RemoteSecurityService {
         final json = jsonDecode(encoded) as Map<String, dynamic>;
         final config = SecurityConfig.fromJson(json);
         _cachedConfig = config;
-        debugPrint('RemoteSecurity: Loaded cached config (fresh: ${config.isFresh})');
+        debugPrint(
+          'RemoteSecurity: Loaded cached config (fresh: ${config.isFresh})',
+        );
         return config;
       }
     } catch (e) {
@@ -157,14 +160,18 @@ class RemoteSecurityService {
     if (config.forceUpdate) {
       final minVersion = config.minimumSupportedVersion;
       if (_isVersionLessThan(currentVersion, minVersion)) {
-        debugPrint('RemoteSecurity: Force update required ($currentVersion < $minVersion)');
+        debugPrint(
+          'RemoteSecurity: Force update required ($currentVersion < $minVersion)',
+        );
         return SecurityCheckResult.forceUpdateRequired;
       }
     }
 
     // Check minimum supported version
     if (_isVersionLessThan(currentVersion, config.minimumSupportedVersion)) {
-      debugPrint('RemoteSecurity: Version unsupported ($currentVersion < ${config.minimumSupportedVersion})');
+      debugPrint(
+        'RemoteSecurity: Version unsupported ($currentVersion < ${config.minimumSupportedVersion})',
+      );
       return SecurityCheckResult.versionUnsupported;
     }
 

@@ -1,3 +1,5 @@
+import 'inventory/inventory_origin_service.dart';
+export 'inventory/inventory_origin_service.dart' show InventoryOriginIntent;
 import 'package:drift/drift.dart';
 import '../database/app_database.dart';
 import 'logging_service.dart';
@@ -44,6 +46,7 @@ class StockService {
     required int quantity,
     required StockDirection direction,
     WarehouseOperationScope? scope,
+    InventoryOriginIntent? origin,
   }) async {
     if (quantity < 0 ||
         productId <= 0 ||
@@ -69,6 +72,11 @@ class StockService {
           scope ?? await WarehouseOperationScope.resolve(dao.attachedDatabase);
       await operationScope.validate(dao.attachedDatabase);
       Future<void> updateWarehouse(int resolvedVariantId) async {
+        final originLayers = await InventoryOriginService.capture(
+          dao.attachedDatabase,
+          operationScope.warehouseId,
+          resolvedVariantId,
+        );
         final changed = await dao.customUpdate(
           'UPDATE business_warehouse_stocks SET quantity = quantity $sign ?, '
           'updated_at = ? WHERE variant_id = ? '
@@ -90,6 +98,17 @@ class StockService {
         if (changed != 1) {
           throw StateError(
             'Missing warehouse balance or variant/product mismatch.',
+          );
+        }
+        if (originLayers != null) {
+          await InventoryOriginService.record(
+            dao.attachedDatabase,
+            warehouse: operationScope.warehouseId,
+            variant: resolvedVariantId,
+            product: productId,
+            delta: direction == StockDirection.increase ? quantity : -quantity,
+            layers: originLayers,
+            intent: origin,
           );
         }
       }

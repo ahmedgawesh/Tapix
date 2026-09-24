@@ -1,15 +1,6 @@
 import 'package:equatable/equatable.dart';
 
-enum BarcodeFormat {
-  ean13,
-  ean8,
-  upcA,
-  upcE,
-  code128,
-  code39,
-  qrCode,
-  unknown,
-}
+enum BarcodeFormat { ean13, ean8, upcA, upcE, code128, code39, qrCode, unknown }
 
 class ScannerResult extends Equatable {
   final String barcode;

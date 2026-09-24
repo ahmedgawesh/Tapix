@@ -32,6 +32,22 @@ class LanNetworkService {
        _localizationService = localizationService;
 
   static const int protocolVersion = 2;
+  static const String consignmentSourceCapability =
+      'consignment-source-allocation-v1';
+  static const String consignmentAdjustmentReturnCapability =
+      'consignment-adjustment-return-v1';
+  static const String consignmentManagementCapability =
+      'consignment-management-master-only-v1';
+  static const String inventoryStockSourcesCapability =
+      'inventory-stock-sources-v1';
+  static const String warehouseTransfersCapability = 'warehouse-transfers-v1';
+  static const Set<String> serverCapabilities = {
+    consignmentSourceCapability,
+    consignmentAdjustmentReturnCapability,
+    consignmentManagementCapability,
+    inventoryStockSourcesCapability,
+    warehouseTransfersCapability,
+  };
   static const int defaultPort = 45820;
   static const int discoveryPort = 45821;
   static const _discoveryProbe = 'TAPIX_DISCOVER_V2';
@@ -47,6 +63,8 @@ class LanNetworkService {
   static const _authorizedDevicesKey = 'lan.authorized_devices.v2';
   static const _scopeBindingMigrationKey = 'lan.scope_binding.v1';
   LocalBranchScope? _masterScope;
+  String? _masterBranchName;
+  String? _masterWarehouseName;
 
   static const _userSessionHeader = 'X-Tapix-User-Session';
   static const _platformHeader = 'X-Tapix-Platform';
@@ -84,6 +102,7 @@ class LanNetworkService {
   String? _deviceId;
   String? _clientDeviceName;
   Map<String, Map<String, dynamic>> _authorizedDevices = {};
+  Set<String> _remoteCapabilities = const {};
   final Map<String, _LoginChallenge> _loginChallenges = {};
   final Map<String, _MasterUserSession> _userSessions = {};
   final Map<String, List<DateTime>> _failedLoginAttempts = {};
@@ -94,6 +113,9 @@ class LanNetworkService {
   LanRemoteUser? get remoteUser => _remoteUser;
   bool get hasRemoteUserSession =>
       _remoteUser != null && _remoteSessionToken != null;
+  bool supportsCapability(String capability) => _snapshot.mode == LanMode.master
+      ? serverCapabilities.contains(capability)
+      : _remoteCapabilities.contains(capability);
   Stream<LanNetworkSnapshot> get changes => _controller.stream;
   Stream<LanMasterActivityEvent> get masterActivityEvents =>
       _masterActivityController.stream;
@@ -151,6 +173,7 @@ class LanNetworkService {
     await stop();
     await _settingsDao.saveSetting(_modeKey, LanMode.standalone.name);
     await _settingsDao.saveSetting(_clientTokenKey, '');
+    _remoteCapabilities = const {};
     _emit(const LanNetworkSnapshot());
   }
 
@@ -176,6 +199,7 @@ class LanNetworkService {
         _loginChallenges.clear();
       }
       _masterScope = scope;
+      await _loadMasterLocationNames(scope);
       await _bindLegacyDevicesToScope(scope);
       _tlsIdentity ??= await LanTlsIdentity.loadOrCreate(_deviceId!);
       _server = await HttpServer.bindSecure(
@@ -245,9 +269,15 @@ class LanNetworkService {
   }) async {
     final cleanHost = _normalizeHost(host);
     final cleanCode = pairingCode.trim().toLowerCase();
+    final cleanDeviceName = deviceName.trim().isEmpty
+        ? 'Tapix device'
+        : deviceName.trim();
     if (cleanHost.isEmpty ||
         !RegExp(r'^[0-9]{6}:[a-f0-9]{64}$').hasMatch(cleanCode)) {
       return const LanPairResult.failure('Invalid address or pairing code.');
+    }
+    if (!_isSafeDeviceLabel(cleanDeviceName, maxLength: 80)) {
+      return const LanPairResult.failure('invalid_device_name');
     }
 
     final pairingFingerprint = cleanCode.split(':').last;
@@ -276,6 +306,7 @@ class LanNetworkService {
           health.body['protocolVersion'] != protocolVersion) {
         throw const FormatException('Incompatible Tapix master.');
       }
+      _remoteCapabilities = _parseCapabilities(health.body);
       final masterLocaleCode = _validLocaleCode(
         health.body['localeCode']?.toString(),
       );
@@ -289,9 +320,7 @@ class LanNetworkService {
         body: {
           'pairingCode': cleanCode,
           'deviceId': _deviceId,
-          'deviceName': deviceName.trim().isEmpty
-              ? 'Tapix device'
-              : deviceName.trim(),
+          'deviceName': cleanDeviceName,
           'platform': Platform.operatingSystem,
         },
       );
@@ -316,9 +345,7 @@ class LanNetworkService {
       await _settingsDao.saveSetting(_portKey, port.toString());
       await _settingsDao.saveSetting(_masterIdKey, masterId);
       await _settingsDao.saveSetting(_clientTokenKey, token);
-      _clientDeviceName = deviceName.trim().isEmpty
-          ? 'Tapix device'
-          : deviceName.trim();
+      _clientDeviceName = cleanDeviceName;
       await _settingsDao.saveSetting(_clientDeviceNameKey, _clientDeviceName!);
 
       _emit(
@@ -602,6 +629,157 @@ class LanNetworkService {
     }
   }
 
+  void _requireWarehouseTransfersCapability() {
+    if (!supportsCapability(warehouseTransfersCapability)) {
+      throw const LanBusinessException(
+        'lan_capability_required',
+        'The master must be updated before using warehouse transfers.',
+        statusCode: 426,
+      );
+    }
+  }
+
+  Future<List<LanWarehouseTransferWarehouse>>
+  fetchRemoteTransferWarehouses() async {
+    _requireWarehouseTransfersCapability();
+    final response = await _authenticatedClientRequest(
+      method: 'GET',
+      path: '/v1/warehouse-transfers/warehouses',
+    );
+    return (response.body['warehouses'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(LanWarehouseTransferWarehouse.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<List<LanWarehouseTransferDocument>> fetchRemoteWarehouseTransfers({
+    required Set<String> statuses,
+    int limit = 100,
+  }) async {
+    _requireWarehouseTransfersCapability();
+    final response = await _authenticatedClientRequest(
+      method: 'GET',
+      path: '/v1/warehouse-transfers',
+      queryParameters: {
+        'statuses': (statuses.toList()..sort()).join(','),
+        'limit': limit.toString(),
+      },
+    );
+    return (response.body['transfers'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(LanWarehouseTransferDocument.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<List<LanWarehouseTransferCatalogItem>>
+  fetchRemoteWarehouseTransferCatalog({
+    required String warehouseId,
+    String query = '',
+    int offset = 0,
+  }) async {
+    _requireWarehouseTransfersCapability();
+    final response = await _authenticatedClientRequest(
+      method: 'GET',
+      path: '/v1/warehouse-transfers/catalog',
+      queryParameters: {
+        'transferWarehouseId': warehouseId,
+        'q': query,
+        'offset': offset.toString(),
+      },
+    );
+    return (response.body['items'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(LanWarehouseTransferCatalogItem.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<LanWarehouseTransferDocument> submitRemoteWarehouseTransfer(
+    LanWarehouseTransferCreateRequest transfer,
+  ) async {
+    _requireWarehouseTransfersCapability();
+    final response = await _authenticatedClientRequest(
+      method: 'POST',
+      path: '/v1/warehouse-transfers',
+      body: transfer.toJson(),
+    );
+    return LanWarehouseTransferDocument.fromJson(
+      Map<String, dynamic>.from(response.body['transfer'] as Map),
+    );
+  }
+
+  Future<LanWarehouseTransferDocument> cancelRemoteWarehouseTransfer({
+    required String transferId,
+    required LanWarehouseTransferReasonRequest request,
+  }) async {
+    _requireWarehouseTransfersCapability();
+    final response = await _authenticatedClientRequest(
+      method: 'POST',
+      path: '/v1/warehouse-transfers/$transferId/cancel',
+      body: request.toJson(),
+    );
+    return LanWarehouseTransferDocument.fromJson(
+      Map<String, dynamic>.from(response.body['transfer'] as Map),
+    );
+  }
+
+  Future<LanWarehouseTransferDocument> dispatchRemoteWarehouseTransfer({
+    required String transferId,
+    required String requestKey,
+  }) async {
+    _requireWarehouseTransfersCapability();
+    final response = await _authenticatedClientRequest(
+      method: 'POST',
+      path: '/v1/warehouse-transfers/$transferId/dispatch',
+      body: {'requestKey': requestKey},
+    );
+    return LanWarehouseTransferDocument.fromJson(
+      Map<String, dynamic>.from(response.body['transfer'] as Map),
+    );
+  }
+
+  Future<List<LanWarehouseTransferPendingAllocation>>
+  fetchRemoteWarehouseTransferPending(String transferId) async {
+    _requireWarehouseTransfersCapability();
+    final response = await _authenticatedClientRequest(
+      method: 'GET',
+      path: '/v1/warehouse-transfers/$transferId/pending',
+    );
+    return (response.body['items'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(LanWarehouseTransferPendingAllocation.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<LanWarehouseTransferDocument> receiveRemoteWarehouseTransfer({
+    required String transferId,
+    required LanWarehouseTransferReceiptRequest request,
+  }) async {
+    _requireWarehouseTransfersCapability();
+    final response = await _authenticatedClientRequest(
+      method: 'POST',
+      path: '/v1/warehouse-transfers/$transferId/receipts',
+      body: request.toJson(),
+    );
+    return LanWarehouseTransferDocument.fromJson(
+      Map<String, dynamic>.from(response.body['transfer'] as Map),
+    );
+  }
+
+  Future<LanWarehouseTransferDocument> recallRemoteWarehouseTransfer({
+    required String transferId,
+    required LanWarehouseTransferReasonRequest request,
+  }) async {
+    _requireWarehouseTransfersCapability();
+    final response = await _authenticatedClientRequest(
+      method: 'POST',
+      path: '/v1/warehouse-transfers/$transferId/recall',
+      body: request.toJson(),
+    );
+    return LanWarehouseTransferDocument.fromJson(
+      Map<String, dynamic>.from(response.body['transfer'] as Map),
+    );
+  }
+
   Future<LanSalesPage> fetchRemoteSales({int limit = 500}) async {
     final response = await _authenticatedClientRequest(
       method: 'GET',
@@ -756,6 +934,54 @@ class LanNetworkService {
     return LanSaleReturnResult.fromJson(response.body);
   }
 
+  Future<List<LanConsignmentReturnSource>>
+  fetchRemoteConsignmentAdjustmentReturnSources({
+    required int productId,
+    int? variantId,
+  }) async {
+    if (!supportsCapability(consignmentAdjustmentReturnCapability)) {
+      throw const LanBusinessException(
+        'lan_capability_required',
+        'The master must be updated before using consignment return sources.',
+        statusCode: 426,
+      );
+    }
+    final response = await _authenticatedClientRequest(
+      method: 'GET',
+      path: '/v1/consignment/adjustment-return-sources',
+      queryParameters: {
+        'productId': productId.toString(),
+        if (variantId != null) 'variantId': variantId.toString(),
+      },
+    );
+    return (response.body['sources'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(LanConsignmentReturnSource.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<LanProductStockSourceSnapshot> fetchRemoteInventoryStockSources({
+    required int productId,
+    int? variantId,
+  }) async {
+    if (!supportsCapability(inventoryStockSourcesCapability)) {
+      throw const LanBusinessException(
+        'lan_capability_required',
+        'The master must be updated before selecting a stock source.',
+        statusCode: 426,
+      );
+    }
+    final response = await _authenticatedClientRequest(
+      method: 'GET',
+      path: '/v1/inventory/stock-sources',
+      queryParameters: {
+        'productId': productId.toString(),
+        if (variantId != null) 'variantId': variantId.toString(),
+      },
+    );
+    return LanProductStockSourceSnapshot.fromJson(response.body);
+  }
+
   Future<List<LanSupplierSummary>> fetchRemoteSuppliers({
     String query = '',
     int limit = 100,
@@ -886,13 +1112,18 @@ class LanNetworkService {
   }
 
   Future<LanCashierShiftSnapshot> closeOwnRemoteShift({
+    int? shiftId,
     required int countedCashCents,
     String? notes,
   }) async {
     final response = await _authenticatedClientRequest(
       method: 'POST',
       path: '/v1/shifts/close',
-      body: {'countedCashCents': countedCashCents, 'notes': notes},
+      body: {
+        'shiftId': ?shiftId,
+        'countedCashCents': countedCashCents,
+        'notes': notes,
+      },
     );
     return LanCashierShiftSnapshot.fromJson(
       response.body['shift'] as Map<String, dynamic>,
@@ -917,6 +1148,12 @@ class LanNetworkService {
     );
     return LanSaleResult.fromJson(response.body);
   }
+
+  Set<String> _parseCapabilities(Map<String, dynamic> body) =>
+      (body['capabilities'] as List<dynamic>? ?? const [])
+          .map((value) => value.toString())
+          .where((value) => value.isNotEmpty)
+          .toSet();
 
   Future<_JsonResponse> _authenticatedClientRequest({
     required String method,
@@ -1028,6 +1265,7 @@ class LanNetworkService {
     }
 
     if (response != null) {
+      _remoteCapabilities = _parseCapabilities(response.body);
       await _settingsDao.saveSetting(_masterHostKey, targetHost);
       await _settingsDao.saveSetting(_portKey, targetPort.toString());
       final responseMasterId = response.body['masterId']?.toString();
@@ -1143,6 +1381,7 @@ class LanNetworkService {
               jsonEncode({
                 'app': 'Tapix',
                 'protocolVersion': protocolVersion,
+                'capabilities': serverCapabilities.toList(growable: false),
                 'masterId': _deviceId,
                 'port': _server?.port ?? _snapshot.port,
                 'localeCode': _masterLocaleCode,
@@ -1335,6 +1574,8 @@ class LanNetworkService {
           final lastSeenAt = DateTime.tryParse(
             data['lastSeenAt']?.toString() ?? '',
           );
+          final scopeVerified =
+              _masterScope?.matchesBinding(data['businessScope']) == true;
           return LanMasterDeviceInfo(
             id: entry.key,
             name: data['name']?.toString() ?? 'Tapix device',
@@ -1351,6 +1592,9 @@ class LanNetworkService {
             username: activeSession?.user.username,
             userRole: activeSession?.user.role,
             employeeName: activeSession?.user.employeeName,
+            branchName: scopeVerified ? _masterBranchName : null,
+            warehouseName: scopeVerified ? _masterWarehouseName : null,
+            scopeVerified: scopeVerified,
             sessionStartedAt: activeSession?.signedInAt,
             sessionExpiresAt: activeSession?.expiresAt,
           );
@@ -1414,8 +1658,7 @@ class LanNetworkService {
     final cleanName = name.trim();
     if (_snapshot.mode != LanMode.master ||
         device == null ||
-        cleanName.isEmpty ||
-        cleanName.length > 80) {
+        !_isSafeDeviceLabel(cleanName, maxLength: 80)) {
       return false;
     }
     final oldName = device['name']?.toString() ?? 'Tapix device';
@@ -1623,6 +1866,7 @@ class LanNetworkService {
           'app': 'Tapix',
           'role': 'master',
           'protocolVersion': protocolVersion,
+          'capabilities': serverCapabilities.toList(growable: false),
           'masterId': _deviceId,
           'pairingAvailable': _snapshot.pairingCode != null,
           'localeCode': _masterLocaleCode,
@@ -1659,15 +1903,26 @@ class LanNetworkService {
           });
           return;
         }
+        final deviceName = body['deviceName']?.toString().trim() ?? '';
+        final platform = body['platform']?.toString().trim() ?? '';
+        if (!_isSafeDeviceLabel(deviceName, maxLength: 80) ||
+            (platform.isNotEmpty &&
+                !_isSafeDeviceLabel(platform, maxLength: 40))) {
+          await _respond(request, HttpStatus.badRequest, {
+            'message': 'Invalid device information.',
+          });
+          return;
+        }
 
-        // Consume synchronously before any database/audit await.
+        // Consume synchronously before any database/audit await. Invalid
+        // metadata above does not burn the one-time pairing code.
         _pairingExpiresAt = null;
         _pairingTimer?.cancel();
         final token = _newToken();
         _authorizedDevices[deviceId] = {
           'businessScope': scope.toJson(),
-          'name': body['deviceName']?.toString() ?? 'Tapix device',
-          'platform': body['platform']?.toString() ?? 'unknown',
+          'name': deviceName,
+          'platform': platform.isEmpty ? 'unknown' : platform,
           'tokenHash': sha256.convert(utf8.encode(token)).toString(),
           'pairedAt': DateTime.now().toUtc().toIso8601String(),
           'lastSeenAt': DateTime.now().toUtc().toIso8601String(),
@@ -1678,7 +1933,7 @@ class LanNetworkService {
           LanAuthAuditEvent(
             action: 'device_paired',
             deviceId: deviceId,
-            deviceName: body['deviceName']?.toString() ?? 'Tapix device',
+            deviceName: deviceName,
             remoteAddress: _remoteAddress(request),
           ),
         );
@@ -1695,6 +1950,7 @@ class LanNetworkService {
           'token': token,
           'masterId': _deviceId,
           'protocolVersion': protocolVersion,
+          'capabilities': serverCapabilities.toList(growable: false),
           'localeCode': _masterLocaleCode,
         });
         return;
@@ -1927,6 +2183,221 @@ class LanNetworkService {
         return;
       }
 
+      if (path == '/v1/warehouse-transfers' ||
+          path.startsWith('/v1/warehouse-transfers/')) {
+        final device = _authorizeDevice(request);
+        if (device == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'device_unauthorized',
+            'message': 'Device is not authorized.',
+          });
+          return;
+        }
+        final session = await _authorizeUserSession(request, device);
+        if (session == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'authentication_required',
+            'message': 'User session is invalid or expired.',
+          });
+          return;
+        }
+        // Warehouse transfers change stock custody across business locations.
+        // Keep the LAN policy identical to the local application policy: only
+        // the active owner may authorize them.
+        if (session.user.role.trim().toLowerCase() != 'owner') {
+          await _respond(request, HttpStatus.forbidden, {
+            'code': 'permission_denied',
+            'message':
+                'Only the business owner can manage warehouse transfers.',
+          });
+          return;
+        }
+        final gateway = _businessGateway;
+        if (gateway is! LanWarehouseTransferGateway) {
+          await _respond(request, HttpStatus.serviceUnavailable, {
+            'code': 'business_api_unavailable',
+            'message': 'Warehouse transfer services are unavailable.',
+          });
+          return;
+        }
+        final transferGateway = gateway as LanWarehouseTransferGateway;
+        try {
+          late Map<String, dynamic> responseBody;
+          String? auditAction;
+          String? auditReason;
+          if (request.method == 'GET' &&
+              path == '/v1/warehouse-transfers/warehouses') {
+            final rows = await transferGateway.fetchTransferWarehouses(
+              actor: session.user,
+            );
+            responseBody = {
+              'warehouses': rows
+                  .map((row) => row.toJson())
+                  .toList(growable: false),
+            };
+          } else if (request.method == 'GET' &&
+              path == '/v1/warehouse-transfers/catalog') {
+            final offset = int.tryParse(
+              request.uri.queryParameters['offset'] ?? '',
+            );
+            final rows = await transferGateway.fetchWarehouseTransferCatalog(
+              actor: session.user,
+              warehouseId:
+                  request.uri.queryParameters['transferWarehouseId']?.trim() ??
+                  '',
+              query: request.uri.queryParameters['q'] ?? '',
+              offset: offset ?? 0,
+            );
+            responseBody = {
+              'items': rows.map((row) => row.toJson()).toList(growable: false),
+            };
+          } else if (request.method == 'GET' &&
+              path == '/v1/warehouse-transfers') {
+            final rawStatuses =
+                request.uri.queryParameters['statuses'] ??
+                'draft,in_transit,partially_received';
+            final statuses = rawStatuses
+                .split(',')
+                .map((value) => value.trim())
+                .where((value) => value.isNotEmpty)
+                .toSet();
+            final limit =
+                int.tryParse(request.uri.queryParameters['limit'] ?? '') ?? 100;
+            final rows = await transferGateway.fetchWarehouseTransfers(
+              actor: session.user,
+              statuses: statuses,
+              limit: limit,
+            );
+            responseBody = {
+              'transfers': rows
+                  .map((row) => row.toJson())
+                  .toList(growable: false),
+            };
+          } else if (request.method == 'POST' &&
+              path == '/v1/warehouse-transfers') {
+            final result = await transferGateway.createWarehouseTransfer(
+              actor: session.user,
+              request: LanWarehouseTransferCreateRequest.fromJson(
+                await _readJson(request),
+              ),
+            );
+            responseBody = {'transfer': result.toJson()};
+            auditAction = 'remote_warehouse_transfer_created';
+            auditReason = result.id;
+          } else {
+            final match = RegExp(
+              r'^/v1/warehouse-transfers/([^/]+)/(cancel|dispatch|pending|receipts|recall)$',
+            ).firstMatch(path);
+            if (match == null) {
+              await _respond(request, HttpStatus.notFound, {
+                'code': 'not_found',
+                'message': 'Warehouse transfer endpoint not found.',
+              });
+              return;
+            }
+            final transferId = match.group(1)!;
+            final action = match.group(2)!;
+            if (request.method == 'GET' && action == 'pending') {
+              final rows = await transferGateway.fetchWarehouseTransferPending(
+                actor: session.user,
+                transferId: transferId,
+              );
+              responseBody = {
+                'items': rows
+                    .map((row) => row.toJson())
+                    .toList(growable: false),
+              };
+            } else if (request.method == 'POST' && action == 'dispatch') {
+              final body = await _readJson(request);
+              final result = await transferGateway.dispatchWarehouseTransfer(
+                actor: session.user,
+                transferId: transferId,
+                requestKey: body['requestKey']?.toString() ?? '',
+              );
+              responseBody = {'transfer': result.toJson()};
+              auditAction = 'remote_warehouse_transfer_dispatched';
+              auditReason = result.id;
+            } else if (request.method == 'POST' && action == 'cancel') {
+              final result = await transferGateway.cancelWarehouseTransfer(
+                actor: session.user,
+                transferId: transferId,
+                request: LanWarehouseTransferReasonRequest.fromJson(
+                  await _readJson(request),
+                ),
+              );
+              responseBody = {'transfer': result.toJson()};
+              auditAction = 'remote_warehouse_transfer_cancelled';
+              auditReason = result.id;
+            } else if (request.method == 'POST' && action == 'receipts') {
+              final result = await transferGateway.receiveWarehouseTransfer(
+                actor: session.user,
+                transferId: transferId,
+                request: LanWarehouseTransferReceiptRequest.fromJson(
+                  await _readJson(request),
+                ),
+              );
+              responseBody = {'transfer': result.toJson()};
+              auditAction = 'remote_warehouse_transfer_received';
+              auditReason = result.id;
+            } else if (request.method == 'POST' && action == 'recall') {
+              final result = await transferGateway.recallWarehouseTransfer(
+                actor: session.user,
+                transferId: transferId,
+                request: LanWarehouseTransferReasonRequest.fromJson(
+                  await _readJson(request),
+                ),
+              );
+              responseBody = {'transfer': result.toJson()};
+              auditAction = 'remote_warehouse_transfer_recalled';
+              auditReason = result.id;
+            } else {
+              await _respond(request, HttpStatus.methodNotAllowed, {
+                'code': 'method_not_allowed',
+                'message': 'This warehouse transfer operation is not allowed.',
+              });
+              return;
+            }
+          }
+          if (auditAction != null) {
+            await _recordSecurityEventSafe(
+              LanAuthAuditEvent(
+                action: auditAction,
+                targetUserId: session.user.id,
+                username: session.user.username,
+                role: session.user.role,
+                deviceId: device.id,
+                deviceName: device.name,
+                remoteAddress: _remoteAddress(request),
+                authenticatedActor: true,
+                reason: auditReason,
+              ),
+            );
+          }
+          await _respond(request, HttpStatus.ok, responseBody);
+        } on LanBusinessException catch (error) {
+          await _respond(request, error.statusCode, {
+            'code': error.code,
+            'message': error.message,
+          });
+        } on FormatException catch (error) {
+          await _respond(request, HttpStatus.badRequest, {
+            'code': 'invalid_request',
+            'message': error.message,
+          });
+        } on ArgumentError catch (error) {
+          await _respond(request, HttpStatus.badRequest, {
+            'code': 'invalid_request',
+            'message': error.message?.toString() ?? 'Invalid request.',
+          });
+        } on StateError catch (error) {
+          await _respond(request, HttpStatus.conflict, {
+            'code': 'transfer_conflict',
+            'message': error.message,
+          });
+        }
+        return;
+      }
+
       if (request.method == 'GET' && path.startsWith('/v1/catalog/images/')) {
         final device = _authorizeDevice(request);
         if (device == null) {
@@ -2149,15 +2620,18 @@ class LanNetworkService {
           });
           return;
         }
+        // A directory permission is not enough to disclose a live financial
+        // balance. Checkout data is limited to users who can actually create
+        // or manage a sale; the master still reloads these permissions for
+        // every request.
         if (!_hasAnyPermission(session.user, const [
-          'view_customers',
           'create_sales',
           'process_sales',
           'manage_sales',
         ])) {
           await _respond(request, HttpStatus.forbidden, {
             'code': 'permission_denied',
-            'message': 'This user cannot view customers.',
+            'message': 'This user cannot view customer checkout balances.',
           });
           return;
         }
@@ -2224,7 +2698,9 @@ class LanNetworkService {
           limit: limit ?? 100,
         );
         await _respond(request, HttpStatus.ok, {
-          'customers': customers.map((value) => value.toJson()).toList(),
+          'customers': customers
+              .map((value) => value.toJson(includeBalance: false))
+              .toList(),
         });
         return;
       }
@@ -2326,6 +2802,7 @@ class LanNetworkService {
           final body = await _readJson(request);
           final opening = (body['openingCashCents'] as num?)?.toInt();
           final counted = (body['countedCashCents'] as num?)?.toInt();
+          final shiftId = (body['shiftId'] as num?)?.toInt();
           final isOpen = path.endsWith('/open');
           if (!isOpen && counted == null) {
             throw const LanBusinessException(
@@ -2334,10 +2811,11 @@ class LanNetworkService {
             );
           }
           if ((opening != null && opening < 0) ||
-              (counted != null && counted < 0)) {
+              (counted != null && counted < 0) ||
+              (!isOpen && shiftId != null && shiftId <= 0)) {
             throw const LanBusinessException(
               'invalid_shift_amount',
-              'Shift cash amount cannot be negative.',
+              'Shift values are invalid.',
             );
           }
           final shift = isOpen
@@ -2348,6 +2826,7 @@ class LanNetworkService {
                 )
               : await _businessGateway.closeOwnShift(
                   actor: session.user,
+                  shiftId: shiftId,
                   countedCashCents: counted!,
                   notes: body['notes']?.toString(),
                 );
@@ -2468,7 +2947,9 @@ class LanNetworkService {
           );
           await _recordSecurityEventSafe(
             LanAuthAuditEvent(
-              action: 'remote_sale_voided',
+              action: result.duplicate
+                  ? 'remote_sale_void_replayed'
+                  : 'remote_sale_voided',
               targetUserId: session.user.id,
               username: session.user.username,
               role: session.user.role,
@@ -2810,6 +3291,135 @@ class LanNetworkService {
         } on FormatException catch (error) {
           await _respond(request, HttpStatus.badRequest, {
             'code': 'invalid_request',
+            'message': error.message,
+          });
+        }
+        return;
+      }
+
+      if (request.method == 'GET' && path == '/v1/inventory/stock-sources') {
+        final device = _authorizeDevice(request);
+        if (device == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'device_unauthorized',
+            'message': 'Device is not authorized.',
+          });
+          return;
+        }
+        final session = await _authorizeUserSession(request, device);
+        if (session == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'authentication_required',
+            'message': 'User session is invalid or expired.',
+          });
+          return;
+        }
+        if (!_hasAnyPermission(session.user, const [
+          'process_sales',
+          'manage_sales',
+          'handle_returns',
+          'view_products',
+          'manage_products',
+        ])) {
+          await _respond(request, HttpStatus.forbidden, {
+            'code': 'permission_denied',
+            'message': 'This user cannot view stock sources.',
+          });
+          return;
+        }
+        if (_businessGateway == null) {
+          await _respond(request, HttpStatus.serviceUnavailable, {
+            'code': 'business_api_unavailable',
+            'message': 'Master business services are unavailable.',
+          });
+          return;
+        }
+        final productId = int.tryParse(
+          request.uri.queryParameters['productId'] ?? '',
+        );
+        final rawVariant = request.uri.queryParameters['variantId'];
+        final variantId = rawVariant == null ? null : int.tryParse(rawVariant);
+        if (productId == null || (rawVariant != null && variantId == null)) {
+          await _respond(request, HttpStatus.badRequest, {
+            'code': 'invalid_product',
+            'message': 'A valid product and variant are required.',
+          });
+          return;
+        }
+        try {
+          final snapshot = await _businessGateway.fetchInventoryStockSources(
+            productId: productId,
+            variantId: variantId,
+          );
+          await _respond(request, HttpStatus.ok, snapshot.toJson());
+        } on LanBusinessException catch (error) {
+          await _respond(request, error.statusCode, {
+            'code': error.code,
+            'message': error.message,
+          });
+        }
+        return;
+      }
+
+      if (request.method == 'GET' &&
+          path == '/v1/consignment/adjustment-return-sources') {
+        final device = _authorizeDevice(request);
+        if (device == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'device_unauthorized',
+            'message': 'Device is not authorized.',
+          });
+          return;
+        }
+        final session = await _authorizeUserSession(request, device);
+        if (session == null) {
+          await _respond(request, HttpStatus.unauthorized, {
+            'code': 'authentication_required',
+            'message': 'User session is invalid or expired.',
+          });
+          return;
+        }
+        if (!_hasAnyPermission(session.user, const [
+          'handle_returns',
+          'manage_sales',
+        ])) {
+          await _respond(request, HttpStatus.forbidden, {
+            'code': 'permission_denied',
+            'message': 'This user cannot view return sources.',
+          });
+          return;
+        }
+        if (_businessGateway == null) {
+          await _respond(request, HttpStatus.serviceUnavailable, {
+            'code': 'business_api_unavailable',
+            'message': 'Master business services are unavailable.',
+          });
+          return;
+        }
+        final productId = int.tryParse(
+          request.uri.queryParameters['productId'] ?? '',
+        );
+        final rawVariant = request.uri.queryParameters['variantId'];
+        final variantId = rawVariant == null ? null : int.tryParse(rawVariant);
+        if (productId == null || (rawVariant != null && variantId == null)) {
+          await _respond(request, HttpStatus.badRequest, {
+            'code': 'invalid_product',
+            'message': 'A valid product and variant are required.',
+          });
+          return;
+        }
+        try {
+          final sources = await _businessGateway
+              .fetchConsignmentAdjustmentReturnSources(
+                productId: productId,
+                variantId: variantId,
+              );
+          await _respond(request, HttpStatus.ok, {
+            'sources': sources.map((source) => source.toJson()).toList(),
+          });
+        } on LanBusinessException catch (error) {
+          await _respond(request, error.statusCode, {
+            'code': error.code,
             'message': error.message,
           });
         }
@@ -3209,6 +3819,7 @@ class LanNetworkService {
         await _respond(request, HttpStatus.ok, {
           'masterId': _deviceId,
           'protocolVersion': protocolVersion,
+          'capabilities': serverCapabilities.toList(growable: false),
           'serverTime': DateTime.now().toUtc().toIso8601String(),
           'localeCode': _masterLocaleCode,
         });
@@ -3256,7 +3867,9 @@ class LanNetworkService {
         entry.value['lastSeenAt'] = DateTime.now().toUtc().toIso8601String();
         entry.value['lastAddress'] = _remoteAddress(request);
         final platform = request.headers.value(_platformHeader)?.trim();
-        if (platform != null && platform.isNotEmpty) {
+        if (platform != null &&
+            platform.isNotEmpty &&
+            _isSafeDeviceLabel(platform, maxLength: 40)) {
           entry.value['platform'] = platform;
         }
         final connectedDevices = _connectedDeviceCount();
@@ -3439,6 +4052,12 @@ class LanNetworkService {
     return permissions.any(user.permissions.contains);
   }
 
+  bool _isSafeDeviceLabel(String value, {required int maxLength}) {
+    return value.isNotEmpty &&
+        value.length <= maxLength &&
+        !RegExp(r'[\x00-\x1F\x7F]').hasMatch(value);
+  }
+
   bool _constantTimeEquals(String a, String b) {
     if (a.length != b.length) return false;
     var mismatch = 0;
@@ -3535,6 +4154,27 @@ class LanNetworkService {
     final created = const Uuid().v4();
     await _settingsDao.saveSetting(_deviceIdKey, created);
     return created;
+  }
+
+  Future<void> _loadMasterLocationNames(LocalBranchScope scope) async {
+    final database = _settingsDao.attachedDatabase;
+    final branch =
+        await (database.select(database.businessBranches)
+              ..where((row) => row.id.equals(scope.branchId))
+              ..limit(1))
+            .getSingleOrNull();
+    final warehouse =
+        await (database.select(database.businessWarehouses)
+              ..where((row) => row.id.equals(scope.warehouseId))
+              ..limit(1))
+            .getSingleOrNull();
+    if (branch == null || warehouse == null) {
+      throw StateError('Business location labels are unavailable.');
+    }
+    _masterBranchName = branch.name.trim().isEmpty ? branch.code : branch.name;
+    _masterWarehouseName = warehouse.name.trim().isEmpty
+        ? warehouse.code
+        : warehouse.name;
   }
 
   Future<void> _loadAuthorizedDevices() async {

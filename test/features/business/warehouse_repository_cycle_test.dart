@@ -404,7 +404,11 @@ void main() {
                 expect(result.netByCurrency['USD'] ?? 0, net);
                 if (sold > 0) {
                   final row = result.rows.single;
-                  expect(row.supplierId, method == 'fifo' ? supplier : -1);
+                  expect(row.supplierId, supplier);
+                  expect(
+                    row.sourceQuality,
+                    method == 'fifo' ? 'verified' : 'allocated',
+                  );
                   expect(row.soldQuantity, sold);
                   expect(row.returnedQuantity, returned);
                 } else {

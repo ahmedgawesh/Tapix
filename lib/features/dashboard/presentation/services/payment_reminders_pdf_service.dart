@@ -20,8 +20,12 @@ class _PdfFonts {
 class PaymentRemindersPdfService {
   static Future<_PdfFonts> _loadFonts() async {
     try {
-      final regularData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Regular.ttf');
-      final boldData = await rootBundle.load('assets/fonts/IBMPlexSansArabic-Bold.ttf');
+      final regularData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Regular.ttf',
+      );
+      final boldData = await rootBundle.load(
+        'assets/fonts/IBMPlexSansArabic-Bold.ttf',
+      );
       return _PdfFonts(
         regular: pw.Font.ttf(regularData),
         bold: pw.Font.ttf(boldData),
@@ -34,20 +38,23 @@ class PaymentRemindersPdfService {
     }
   }
 
-  static Future<void> printPaymentReminders({required BuildContext context}) async {
+  static Future<void> printPaymentReminders({
+    required BuildContext context,
+  }) async {
     // Capture RTL before async gap
     final textDir = Directionality.of(context);
     final isRtl = textDir == ui.TextDirection.rtl;
     final dir = isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr;
-    
+
     final db = sl<AppDatabase>();
     final cs = sl<CurrencyService>();
     final company = await sl<CompanyProfileService>().getProfile();
     final fonts = await _loadFonts();
 
     // Fetch customers with outstanding balances
-    final customersData = await db.customSelect(
-      '''
+    final customersData = await db
+        .customSelect(
+          '''
       SELECT 
         id,
         name,
@@ -58,12 +65,14 @@ class PaymentRemindersPdfService {
       WHERE balance_cents > 0
       ORDER BY balance_cents DESC
       ''',
-      readsFrom: {db.customers},
-    ).get();
+          readsFrom: {db.customers},
+        )
+        .get();
 
     // Fetch suppliers with outstanding balances (we owe them)
-    final suppliersData = await db.customSelect(
-      '''
+    final suppliersData = await db
+        .customSelect(
+          '''
       SELECT 
         id,
         name,
@@ -74,8 +83,9 @@ class PaymentRemindersPdfService {
       WHERE balance_cents < 0
       ORDER BY balance_cents ASC
       ''',
-      readsFrom: {db.suppliers},
-    ).get();
+          readsFrom: {db.suppliers},
+        )
+        .get();
 
     final pdf = pw.Document();
 
@@ -114,16 +124,28 @@ class PaymentRemindersPdfService {
                     children: [
                       pw.Text(
                         company.name,
-                        style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, font: fonts.bold),
+                        style: pw.TextStyle(
+                          fontSize: 18,
+                          fontWeight: pw.FontWeight.bold,
+                          font: fonts.bold,
+                        ),
                       ),
                       pw.SizedBox(height: 4),
                       pw.Text(
                         'dashboard.payment_reminders'.tr(),
-                        style: pw.TextStyle(fontSize: 14, color: PdfColors.amber800, font: fonts.regular),
+                        style: pw.TextStyle(
+                          fontSize: 14,
+                          color: PdfColors.amber800,
+                          font: fonts.regular,
+                        ),
                       ),
                       pw.Text(
                         DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now()),
-                        style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700, font: fonts.regular),
+                        style: pw.TextStyle(
+                          fontSize: 12,
+                          color: PdfColors.grey700,
+                          font: fonts.regular,
+                        ),
                       ),
                     ],
                   ),
@@ -164,7 +186,12 @@ class PaymentRemindersPdfService {
                 if (customersData.isNotEmpty) ...[
                   pw.Text(
                     'dashboard.customers_owe'.tr(),
-                    style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.green, font: fonts.bold),
+                    style: pw.TextStyle(
+                      fontSize: 14,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.green,
+                      font: fonts.bold,
+                    ),
                   ),
                   pw.SizedBox(height: 8),
                   pw.Table(
@@ -172,12 +199,30 @@ class PaymentRemindersPdfService {
                     children: [
                       // Header
                       pw.TableRow(
-                        decoration: pw.BoxDecoration(color: PdfColors.green.shade(0.1)),
+                        decoration: pw.BoxDecoration(
+                          color: PdfColors.green.shade(0.1),
+                        ),
                         children: [
-                          _buildTableCell('customers.name'.tr(), fonts, isHeader: true),
-                          _buildTableCell('customers.phone'.tr(), fonts, isHeader: true),
-                          _buildTableCell('customers.email'.tr(), fonts, isHeader: true),
-                          _buildTableCell('customers.balance'.tr(), fonts, isHeader: true),
+                          _buildTableCell(
+                            'customers.name'.tr(),
+                            fonts,
+                            isHeader: true,
+                          ),
+                          _buildTableCell(
+                            'customers.phone'.tr(),
+                            fonts,
+                            isHeader: true,
+                          ),
+                          _buildTableCell(
+                            'customers.email'.tr(),
+                            fonts,
+                            isHeader: true,
+                          ),
+                          _buildTableCell(
+                            'customers.balance'.tr(),
+                            fonts,
+                            isHeader: true,
+                          ),
                         ],
                       ),
                       // Data rows
@@ -192,7 +237,11 @@ class PaymentRemindersPdfService {
                             _buildTableCell(name, fonts),
                             _buildTableCell(phone, fonts),
                             _buildTableCell(email, fonts),
-                            _buildTableCell(cs.format(balance), fonts, align: pw.TextAlign.right),
+                            _buildTableCell(
+                              cs.format(balance),
+                              fonts,
+                              align: pw.TextAlign.right,
+                            ),
                           ],
                         );
                       }),
@@ -205,7 +254,12 @@ class PaymentRemindersPdfService {
                 if (suppliersData.isNotEmpty) ...[
                   pw.Text(
                     'dashboard.suppliers_owed'.tr(),
-                    style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.red, font: fonts.bold),
+                    style: pw.TextStyle(
+                      fontSize: 14,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.red,
+                      font: fonts.bold,
+                    ),
                   ),
                   pw.SizedBox(height: 8),
                   pw.Table(
@@ -213,12 +267,30 @@ class PaymentRemindersPdfService {
                     children: [
                       // Header
                       pw.TableRow(
-                        decoration: pw.BoxDecoration(color: PdfColors.red.shade(0.1)),
+                        decoration: pw.BoxDecoration(
+                          color: PdfColors.red.shade(0.1),
+                        ),
                         children: [
-                          _buildTableCell('suppliers.name'.tr(), fonts, isHeader: true),
-                          _buildTableCell('suppliers.phone'.tr(), fonts, isHeader: true),
-                          _buildTableCell('suppliers.email'.tr(), fonts, isHeader: true),
-                          _buildTableCell('suppliers.balance'.tr(), fonts, isHeader: true),
+                          _buildTableCell(
+                            'suppliers.name'.tr(),
+                            fonts,
+                            isHeader: true,
+                          ),
+                          _buildTableCell(
+                            'suppliers.phone'.tr(),
+                            fonts,
+                            isHeader: true,
+                          ),
+                          _buildTableCell(
+                            'suppliers.email'.tr(),
+                            fonts,
+                            isHeader: true,
+                          ),
+                          _buildTableCell(
+                            'suppliers.balance'.tr(),
+                            fonts,
+                            isHeader: true,
+                          ),
                         ],
                       ),
                       // Data rows
@@ -233,7 +305,11 @@ class PaymentRemindersPdfService {
                             _buildTableCell(name, fonts),
                             _buildTableCell(phone, fonts),
                             _buildTableCell(email, fonts),
-                            _buildTableCell(cs.format(balance), fonts, align: pw.TextAlign.right),
+                            _buildTableCell(
+                              cs.format(balance),
+                              fonts,
+                              align: pw.TextAlign.right,
+                            ),
                           ],
                         );
                       }),
@@ -248,7 +324,11 @@ class PaymentRemindersPdfService {
                   alignment: pw.Alignment.center,
                   child: pw.Text(
                     '${'dashboard.generated_on'.tr()}: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}',
-                    style: pw.TextStyle(fontSize: 8, color: PdfColors.grey500, font: fonts.regular),
+                    style: pw.TextStyle(
+                      fontSize: 8,
+                      color: PdfColors.grey500,
+                      font: fonts.regular,
+                    ),
                   ),
                 ),
               ],
@@ -258,7 +338,9 @@ class PaymentRemindersPdfService {
       ),
     );
 
-    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+    );
   }
 
   static pw.Widget _buildSummaryRow(
@@ -276,17 +358,30 @@ class PaymentRemindersPdfService {
           pw.Expanded(
             child: pw.Text(
               label,
-              style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, font: fonts.bold),
+              style: pw.TextStyle(
+                fontSize: 11,
+                fontWeight: pw.FontWeight.bold,
+                font: fonts.bold,
+              ),
             ),
           ),
           pw.Text(
             count,
-            style: pw.TextStyle(fontSize: 10, color: PdfColors.grey700, font: fonts.regular),
+            style: pw.TextStyle(
+              fontSize: 10,
+              color: PdfColors.grey700,
+              font: fonts.regular,
+            ),
           ),
           pw.SizedBox(width: 20),
           pw.Text(
             amount,
-            style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: color, font: fonts.bold),
+            style: pw.TextStyle(
+              fontSize: 11,
+              fontWeight: pw.FontWeight.bold,
+              color: color,
+              font: fonts.bold,
+            ),
           ),
         ],
       ),

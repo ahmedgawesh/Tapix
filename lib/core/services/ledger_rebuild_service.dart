@@ -52,44 +52,59 @@ class LedgerRebuildService {
 
     developer.log('=== LEDGER REBUILD STARTED ===', name: 'LedgerRebuild');
 
-    // Phase 0: Temporarily reopen all closed periods so replayed entries
-    //          are not blocked by the closed-period lock in
-    //          AccountingRepository.createJournalEntry().
-    final reopenedPeriodIds = await _reopenAllClosedPeriods(report);
+    try {
+      await _db.transaction(() async {
+        // Phase 0: Temporarily reopen all closed periods so replayed entries
+        // are not blocked by the closed-period lock.
+        final reopenedPeriodIds = await _reopenAllClosedPeriods(report);
 
-    // Capture manual/adjustment entries before deleting the ledger.
-    final preservedEntries = await _capturePreservedEntries(report);
+        // Capture manual/adjustment entries before deleting the ledger.
+        final preservedEntries = await _capturePreservedEntries(report);
 
-    // Phase 1: Reset all account balances to zero
-    await _resetAccountBalances(report);
+        // Phase 1: Reset all account balances to zero.
+        await _resetAccountBalances(report);
 
-    // Phase 2: Delete all existing journal entries
-    await _deleteAllJournalEntries(report);
+        // Phase 2: Delete reconstructable journal entries.
+        await _deleteAllJournalEntries(report);
 
-    // Phase 3: Replay all historical transactions
-    await _replaySales(report);
-    await _replayPurchases(report);
-    await _replayExpenses(report);
-    await _replaySaleReturns(report);
-    await _replayPurchaseReturns(report);
-    await _replayPurchaseAdjustmentReturns(report);
-    await _replaySaleAdjustmentReturns(report);
-    await _replaySalePayments(report);
-    await _replayPurchasePayments(report);
-    await _replayDirectCustomerTransactions(report);
-    await _replayDirectSupplierTransactions(report);
-    await _replayCustomerOpeningBalances(report);
-    await _replaySupplierOpeningBalances(report);
-    await _replayPayrolls(report);
-    await _replayLoyaltyEarns(report);
-    await _replayLoyaltyRedemptions(report);
-    await _replayPreservedEntries(preservedEntries, report);
+        // Phase 3: Replay all historical transactions.
+        await _replaySales(report);
+        await _replayPurchases(report);
+        await _replayExpenses(report);
+        await _replaySaleReturns(report);
+        await _replayPurchaseReturns(report);
+        await _replayPurchaseAdjustmentReturns(report);
+        await _replaySaleAdjustmentReturns(report);
+        await _replaySalePayments(report);
+        await _replayPurchasePayments(report);
+        await _replayDirectCustomerTransactions(report);
+        await _replayDirectSupplierTransactions(report);
+        await _replayCustomerOpeningBalances(report);
+        await _replaySupplierOpeningBalances(report);
+        await _replayPayrolls(report);
+        await _replayLoyaltyEarns(report);
+        await _replayLoyaltyRedemptions(report);
+        await _replayPreservedEntries(preservedEntries, report);
 
-    // Phase 4: Restore closed periods that were temporarily reopened
-    await _restoreClosedPeriods(reopenedPeriodIds, report);
+        // Consignment sub-ledger journals are immutable audit records and stay
+        // in place. Recalculate the cache from the complete posted ledger so
+        // their retained lines are included exactly once.
+        await _accountingRepo.rebuildCachedAccountBalancesFromPostedLedger();
 
-    // Phase 5: Verify
-    await _verify(report);
+        // Phase 4: Restore periods, then verify before committing anything.
+        await _restoreClosedPeriods(reopenedPeriodIds, report);
+        await _verify(report);
+        if (report.errors.isNotEmpty || !report.trialBalanceBalanced) {
+          throw const _LedgerRebuildRollback();
+        }
+      });
+    } on _LedgerRebuildRollback {
+      report.rolledBack = true;
+      developer.log(
+        'Ledger rebuild failed verification; every database change was rolled back.',
+        name: 'LedgerRebuild',
+      );
+    }
 
     stopwatch.stop();
     report.durationMs = stopwatch.elapsedMilliseconds;
@@ -280,16 +295,69 @@ class LedgerRebuildService {
     );
   }
 
-  /// Phase 2: Delete all existing journal entries and lines
+  /// Phase 2: Delete reconstructable journal entries and lines.
+  ///
+  /// Journals referenced by the immutable consignment sub-ledger must retain
+  /// their original IDs. Deleting and recreating them would either violate
+  /// the RESTRICT foreign keys or break the frozen audit trail.
   Future<void> _deleteAllJournalEntries(LedgerRebuildReport report) async {
-    // Delete lines first (FK constraint)
-    final linesDeleted = await _db.delete(_db.journalEntryLines).go();
-    final entriesDeleted = await _db.delete(_db.journalEntries).go();
+    const protectedJournal = '''
+      EXISTS(
+        SELECT 1 FROM consignment_obligation_events e
+        WHERE e.journal_entry_id=journal_entries.id
+      )
+      OR EXISTS(
+        SELECT 1 FROM consignment_adjustment_return_events e
+        WHERE e.journal_entry_id=journal_entries.id
+      )
+      OR EXISTS(
+        SELECT 1 FROM consignment_settlement_statements s
+        WHERE s.journal_entry_id=journal_entries.id
+           OR s.void_journal_entry_id=journal_entries.id
+      )
+      OR EXISTS(
+        SELECT 1 FROM consignment_settlement_payments p
+        WHERE p.journal_entry_id=journal_entries.id
+           OR p.reversal_journal_entry_id=journal_entries.id
+      )
+    ''';
+
+    final protectedCounts = await _db.customSelect('''
+      SELECT COUNT(DISTINCT journal_entries.id) AS entry_count,
+             COUNT(journal_entry_lines.id) AS line_count
+      FROM journal_entries
+      LEFT JOIN journal_entry_lines
+        ON journal_entry_lines.journal_entry_id=journal_entries.id
+      WHERE $protectedJournal
+    ''').getSingle();
+    report.consignmentJournalEntriesRetained = protectedCounts.read<int>(
+      'entry_count',
+    );
+    report.consignmentJournalLinesRetained = protectedCounts.read<int>(
+      'line_count',
+    );
+
+    // Delete child rows first, excluding every journal referenced by the
+    // consignment sub-ledger. The correlated alias keeps the protection rule
+    // independent of the number of historical entries (no SQLite bind limit).
+    final linesDeleted = await _db.customUpdate('''
+      DELETE FROM journal_entry_lines
+      WHERE journal_entry_id IN (
+        SELECT journal_entries.id FROM journal_entries
+        WHERE NOT ($protectedJournal)
+      )
+    ''');
+    final entriesDeleted = await _db.customUpdate('''
+      DELETE FROM journal_entries
+      WHERE NOT ($protectedJournal)
+    ''');
 
     report.journalEntriesDeleted = entriesDeleted;
     report.journalLinesDeleted = linesDeleted;
     developer.log(
-      'Deleted $entriesDeleted journal entries and $linesDeleted lines',
+      'Deleted $entriesDeleted reconstructable journal entries and '
+      '$linesDeleted lines; retained '
+      '${report.consignmentJournalEntriesRetained} consignment entries',
       name: 'LedgerRebuild',
     );
   }
@@ -1223,6 +1291,8 @@ class LedgerRebuildReport {
   int accountsReset = 0;
   int journalEntriesDeleted = 0;
   int journalLinesDeleted = 0;
+  int consignmentJournalEntriesRetained = 0;
+  int consignmentJournalLinesRetained = 0;
   int manualEntriesPreserved = 0;
   int manualEntriesReplayed = 0;
   int salesReplayed = 0;
@@ -1240,12 +1310,13 @@ class LedgerRebuildReport {
   int loyaltyEarnsReplayed = 0;
   int loyaltyRedemptionsReplayed = 0;
   bool trialBalanceBalanced = false;
+  bool rolledBack = false;
   int totalDebits = 0;
   int totalCredits = 0;
   int durationMs = 0;
   List<String> errors = [];
 
-  bool get isSuccess => trialBalanceBalanced && errors.isEmpty;
+  bool get isSuccess => !rolledBack && trialBalanceBalanced && errors.isEmpty;
 
   String get summary =>
       '''
@@ -1256,6 +1327,8 @@ Closed periods temporarily reopened: $periodsReopened
 Accounts reset: $accountsReset
 Journal entries deleted: $journalEntriesDeleted
 Journal lines deleted: $journalLinesDeleted
+Consignment journal entries retained: $consignmentJournalEntriesRetained
+Consignment journal lines retained: $consignmentJournalLinesRetained
 Manual entries preserved: $manualEntriesPreserved
 
 Transactions replayed:
@@ -1277,6 +1350,7 @@ Transactions replayed:
 
 Verification:
   Trial Balance Balanced: $trialBalanceBalanced
+  Rolled back: $rolledBack
   Total Debits: $totalDebits
   Total Credits: $totalCredits
 
@@ -1284,6 +1358,10 @@ Errors: ${errors.isEmpty ? 'NONE' : '\n  ${errors.join('\n  ')}'}
 
 Result: ${isSuccess ? 'SUCCESS ✓' : 'FAILED ✗'}
 ''';
+}
+
+class _LedgerRebuildRollback implements Exception {
+  const _LedgerRebuildRollback();
 }
 
 class _PreservedJournalEntry {

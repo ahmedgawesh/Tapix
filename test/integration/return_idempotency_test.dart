@@ -33,25 +33,31 @@ void main() {
   tearDown(() async => db.close());
 
   Future<({int currencyId, int customerId, int supplierId, int productId})>
-      seed() async {
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
-    final cid = await db.into(db.customers).insert(
+  seed() async {
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
+    final cid = await db
+        .into(db.customers)
+        .insert(
           CustomersCompanion.insert(
             name: 'Idem Customer',
             currencyId: usd.id,
             balanceCents: Value(Decimal.zero),
           ),
         );
-    final sid = await db.into(db.suppliers).insert(
+    final sid = await db
+        .into(db.suppliers)
+        .insert(
           SuppliersCompanion.insert(
             name: 'Idem Supplier',
             currencyId: usd.id,
             balanceCents: Value(Decimal.zero),
           ),
         );
-    final pid = await db.into(db.products).insert(
+    final pid = await db
+        .into(db.products)
+        .insert(
           ProductsCompanion.insert(
             sku: const Value<String?>('IDEM-1'),
             name: 'Idem Product',
@@ -61,7 +67,9 @@ void main() {
             stockQuantity: const Value(100),
           ),
         );
-    await db.into(db.productVariants).insert(
+    await db
+        .into(db.productVariants)
+        .insert(
           ProductVariantsCompanion.insert(
             productId: pid,
             stockQuantity: const Value(100),
@@ -77,102 +85,112 @@ void main() {
     );
   }
 
-  test('purchase adjustment return UNIQUE idempotency key blocks duplicate',
-      () async {
-    final s = await seed();
-    const key = 'idem-par-001';
+  test(
+    'purchase adjustment return UNIQUE idempotency key blocks duplicate',
+    () async {
+      final s = await seed();
+      const key = 'idem-par-001';
 
-    final headerOk = PurchaseReturnAdjustmentsCompanion.insert(
-      returnNumber: 'PAR-IDEM-1',
-      supplierId: s.supplierId,
-      currencyId: s.currencyId,
-      totalCents: Decimal.fromInt(1000),
-      idempotencyKey: const Value(key),
-    );
-    final items = [
-      PurchaseReturnAdjustmentItemsCompanion.insert(
-        returnId: 0,
-        productId: s.productId,
-        quantity: 1,
-        unitPriceCents: Decimal.fromInt(1000),
+      final headerOk = PurchaseReturnAdjustmentsCompanion.insert(
+        returnNumber: 'PAR-IDEM-1',
+        supplierId: s.supplierId,
+        currencyId: s.currencyId,
         totalCents: Decimal.fromInt(1000),
-      ),
-    ];
-
-    final firstId = await adjDao.createPurchaseAdjReturn(headerOk, items);
-    expect(firstId, greaterThan(0));
-
-    // Second submission with same key must throw a UNIQUE-constraint error.
-    expect(
-      () async => adjDao.createPurchaseAdjReturn(
-        PurchaseReturnAdjustmentsCompanion.insert(
-          returnNumber: 'PAR-IDEM-1-DUP',
-          supplierId: s.supplierId,
-          currencyId: s.currencyId,
+        idempotencyKey: const Value(key),
+      );
+      final items = [
+        PurchaseReturnAdjustmentItemsCompanion.insert(
+          returnId: 0,
+          productId: s.productId,
+          quantity: 1,
+          unitPriceCents: Decimal.fromInt(1000),
           totalCents: Decimal.fromInt(1000),
-          idempotencyKey: const Value(key),
         ),
-        items,
-      ),
-      throwsA(isA<Exception>()),
-    );
+      ];
 
-    // Verify exactly ONE row exists.
-    final rows = await db.customSelect(
-      'SELECT COUNT(*) AS c FROM purchase_return_adjustments '
-      'WHERE idempotency_key = ?',
-      variables: [Variable.withString(key)],
-    ).getSingle();
-    expect(rows.read<int>('c'), equals(1));
-  });
+      final firstId = await adjDao.createPurchaseAdjReturn(headerOk, items);
+      expect(firstId, greaterThan(0));
 
-  test('sale adjustment return UNIQUE idempotency key blocks duplicate',
-      () async {
-    final s = await seed();
-    const key = 'idem-sar-001';
+      // Second submission with same key must throw a UNIQUE-constraint error.
+      expect(
+        () async => adjDao.createPurchaseAdjReturn(
+          PurchaseReturnAdjustmentsCompanion.insert(
+            returnNumber: 'PAR-IDEM-1-DUP',
+            supplierId: s.supplierId,
+            currencyId: s.currencyId,
+            totalCents: Decimal.fromInt(1000),
+            idempotencyKey: const Value(key),
+          ),
+          items,
+        ),
+        throwsA(isA<Exception>()),
+      );
 
-    final header = SaleReturnAdjustmentsCompanion.insert(
-      returnNumber: 'SAR-IDEM-1',
-      customerId: Value(s.customerId),
-      currencyId: s.currencyId,
-      totalCents: Decimal.fromInt(2000),
-      refundMethod: const Value('cash'),
-      idempotencyKey: const Value(key),
-    );
-    final items = [
-      SaleReturnAdjustmentItemsCompanion.insert(
-        returnId: 0,
-        productId: s.productId,
-        quantity: 1,
-        unitPriceCents: Decimal.fromInt(2000),
+      // Verify exactly ONE row exists.
+      final rows = await db
+          .customSelect(
+            'SELECT COUNT(*) AS c FROM purchase_return_adjustments '
+            'WHERE idempotency_key = ?',
+            variables: [Variable.withString(key)],
+          )
+          .getSingle();
+      expect(rows.read<int>('c'), equals(1));
+    },
+  );
+
+  test(
+    'sale adjustment return UNIQUE idempotency key blocks duplicate',
+    () async {
+      final s = await seed();
+      const key = 'idem-sar-001';
+
+      final header = SaleReturnAdjustmentsCompanion.insert(
+        returnNumber: 'SAR-IDEM-1',
+        customerId: Value(s.customerId),
+        currencyId: s.currencyId,
         totalCents: Decimal.fromInt(2000),
-      ),
-    ];
-
-    await adjDao.createSaleAdjReturn(header, items);
-
-    expect(
-      () async => adjDao.createSaleAdjReturn(
-        SaleReturnAdjustmentsCompanion.insert(
-          returnNumber: 'SAR-IDEM-1-DUP',
-          customerId: Value(s.customerId),
-          currencyId: s.currencyId,
+        refundMethod: const Value('cash'),
+        idempotencyKey: const Value(key),
+      );
+      final items = [
+        SaleReturnAdjustmentItemsCompanion.insert(
+          sourceResolution: const Value('unverified'),
+          sourceResolutionReason: const Value('test fixture'),
+          returnId: 0,
+          productId: s.productId,
+          quantity: 1,
+          unitPriceCents: Decimal.fromInt(2000),
           totalCents: Decimal.fromInt(2000),
-          refundMethod: const Value('cash'),
-          idempotencyKey: const Value(key),
         ),
-        items,
-      ),
-      throwsA(isA<Exception>()),
-    );
+      ];
 
-    final rows = await db.customSelect(
-      'SELECT COUNT(*) AS c FROM sale_return_adjustments '
-      'WHERE idempotency_key = ?',
-      variables: [Variable.withString(key)],
-    ).getSingle();
-    expect(rows.read<int>('c'), equals(1));
-  });
+      await adjDao.createSaleAdjReturn(header, items);
+
+      expect(
+        () async => adjDao.createSaleAdjReturn(
+          SaleReturnAdjustmentsCompanion.insert(
+            returnNumber: 'SAR-IDEM-1-DUP',
+            customerId: Value(s.customerId),
+            currencyId: s.currencyId,
+            totalCents: Decimal.fromInt(2000),
+            refundMethod: const Value('cash'),
+            idempotencyKey: const Value(key),
+          ),
+          items,
+        ),
+        throwsA(isA<Exception>()),
+      );
+
+      final rows = await db
+          .customSelect(
+            'SELECT COUNT(*) AS c FROM sale_return_adjustments '
+            'WHERE idempotency_key = ?',
+            variables: [Variable.withString(key)],
+          )
+          .getSingle();
+      expect(rows.read<int>('c'), equals(1));
+    },
+  );
 
   test('null idempotency key allows multiple inserts (back-compat)', () async {
     final s = await seed();

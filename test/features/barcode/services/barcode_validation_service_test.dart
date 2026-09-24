@@ -13,42 +13,63 @@ void main() {
     group('validateBarcode', () {
       test('should validate correct EAN-13 barcode', () {
         // Valid EAN-13: 5901234123457
-        final result = service.validateBarcode('5901234123457', BarcodeFormat.ean13);
+        final result = service.validateBarcode(
+          '5901234123457',
+          BarcodeFormat.ean13,
+        );
         expect(result.isValid, true);
         expect(result.errorMessage, isNull);
       });
 
       test('should reject invalid EAN-13 checksum', () {
         // Invalid checksum (last digit should be 7, not 0)
-        final result = service.validateBarcode('5901234123450', BarcodeFormat.ean13);
+        final result = service.validateBarcode(
+          '5901234123450',
+          BarcodeFormat.ean13,
+        );
         expect(result.isValid, false);
         expect(result.errorMessage, isNotNull);
       });
 
       test('should reject EAN-13 with wrong length', () {
-        final result = service.validateBarcode('123456789', BarcodeFormat.ean13);
+        final result = service.validateBarcode(
+          '123456789',
+          BarcodeFormat.ean13,
+        );
         expect(result.isValid, false);
         expect(result.errorMessage, contains('13 digits'));
       });
 
       test('should validate correct UPC-A barcode', () {
         // Valid UPC-A: 012345678905
-        final result = service.validateBarcode('012345678905', BarcodeFormat.upcA);
+        final result = service.validateBarcode(
+          '012345678905',
+          BarcodeFormat.upcA,
+        );
         expect(result.isValid, true);
       });
 
       test('should reject invalid UPC-A checksum', () {
-        final result = service.validateBarcode('012345678900', BarcodeFormat.upcA);
+        final result = service.validateBarcode(
+          '012345678900',
+          BarcodeFormat.upcA,
+        );
         expect(result.isValid, false);
       });
 
       test('should validate Code128 with valid characters', () {
-        final result = service.validateBarcode('ABC-123', BarcodeFormat.code128);
+        final result = service.validateBarcode(
+          'ABC-123',
+          BarcodeFormat.code128,
+        );
         expect(result.isValid, true);
       });
 
       test('should accept any format for unknown type', () {
-        final result = service.validateBarcode('anybarcode123', BarcodeFormat.unknown);
+        final result = service.validateBarcode(
+          'anybarcode123',
+          BarcodeFormat.unknown,
+        );
         expect(result.isValid, true);
       });
     });

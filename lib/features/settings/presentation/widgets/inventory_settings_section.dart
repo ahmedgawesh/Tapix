@@ -4,6 +4,10 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../domain/entities/app_settings.dart';
+import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/inventory/supplier_purchase_source_policy.dart';
+import '../../../business/presentation/screens/warehouse_setup_screen.dart';
+import '../../../business/presentation/screens/warehouse_transfer_screen.dart';
 import '../bloc/app_settings_bloc.dart';
 import 'settings_widgets.dart';
 
@@ -19,6 +23,40 @@ class InventorySettingsSection extends StatelessWidget {
           title: 'app_settings.inventory.title'.tr(),
           icon: LucideIcons.warehouse,
           children: [
+            ListTile(
+              leading: const Icon(Icons.account_tree_outlined),
+              title: Text('warehouse_transfer.title'.tr()),
+              subtitle: Text('warehouse_transfer.hero_body'.tr()),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => WarehouseTransferScreen(service: sl()),
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.warehouse_outlined),
+              title: Text('warehouse_setup.title'.tr()),
+              subtitle: Text('warehouse_setup.intro'.tr()),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => WarehouseSetupScreen(service: sl()),
+                ),
+              ),
+            ),
+            const Divider(),
+            if (SupplierPurchaseSourcePolicy.buildAllowsWrites)
+              SwitchListTile(
+                key: const ValueKey('supplier-source-purchase-setting'),
+                title: Text('supplier_purchase.setting_title'.tr()),
+                subtitle: Text('supplier_purchase.setting_description'.tr()),
+                value: s.enableSupplierProductCodes,
+                onChanged: (v) => _patch(
+                  context,
+                  (c) => c.copyWith(enableSupplierProductCodes: v),
+                ),
+              ),
             SettingsSliderTile(
               title: 'app_settings.inventory.low_stock_threshold'.tr(),
               value: s.lowStockThreshold.toDouble(),

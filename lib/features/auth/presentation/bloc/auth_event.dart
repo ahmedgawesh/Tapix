@@ -44,7 +44,12 @@ class AuthFirstOwnerCreated extends AuthEvent {
   });
 
   @override
-  List<Object?> get props => [username, password, securityQuestion, securityAnswer];
+  List<Object?> get props => [
+    username,
+    password,
+    securityQuestion,
+    securityAnswer,
+  ];
 }
 
 class AuthSecurityQuestionRequested extends AuthEvent {

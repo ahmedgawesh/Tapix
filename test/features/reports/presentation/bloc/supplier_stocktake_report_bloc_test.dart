@@ -130,20 +130,26 @@ void main() {
       expect(item.variantLabel, isEmpty);
     });
 
-    test('remaining value equals remaining quantity times cost (integer cents)', () {
-      const item = SupplierStocktakeProductItem(
-        productId: 1,
-        productName: 'Test',
-        variantId: 10,
-        purchasedQuantity: 50,
-        soldQuantity: 25,
-        remainingQuantity: 25,
-        costCents: 2000,
-        remainingValueCents: 50000,
-      );
+    test(
+      'remaining value equals remaining quantity times cost (integer cents)',
+      () {
+        const item = SupplierStocktakeProductItem(
+          productId: 1,
+          productName: 'Test',
+          variantId: 10,
+          purchasedQuantity: 50,
+          soldQuantity: 25,
+          remainingQuantity: 25,
+          costCents: 2000,
+          remainingValueCents: 50000,
+        );
 
-      expect(item.remainingValueCents, item.remainingQuantity * item.costCents);
-    });
+        expect(
+          item.remainingValueCents,
+          item.remainingQuantity * item.costCents,
+        );
+      },
+    );
 
     test('integer cents prevents floating point errors', () {
       const item = SupplierStocktakeProductItem(
@@ -225,9 +231,7 @@ void main() {
         dateRange: ReportDateRange.thisMonth(),
       );
 
-      final updated = original.copyWith(
-        dateRange: ReportDateRange.thisYear(),
-      );
+      final updated = original.copyWith(dateRange: ReportDateRange.thisYear());
 
       expect(updated.supplierId, 1);
       expect(updated.supplierName, 'Test');
@@ -276,10 +280,7 @@ void main() {
         remainingValueCents: 120000,
       );
 
-      final updated = original.copyWith(
-        products: [product],
-        totalProducts: 1,
-      );
+      final updated = original.copyWith(products: [product], totalProducts: 1);
 
       expect(updated.products.length, 1);
       expect(updated.products.first.productName, 'New Product');
@@ -340,7 +341,8 @@ void main() {
 
     test('SupplierStocktakeReportSortChanged stores sort type', () {
       const event = SupplierStocktakeReportSortChanged(
-          SupplierStocktakeSortType.stockDesc);
+        SupplierStocktakeSortType.stockDesc,
+      );
       expect(event.sort, SupplierStocktakeSortType.stockDesc);
     });
 
@@ -367,24 +369,42 @@ void main() {
   group('SupplierStocktakeSortType enum', () {
     test('has all expected values', () {
       expect(SupplierStocktakeSortType.values.length, 9);
-      expect(SupplierStocktakeSortType.values,
-          contains(SupplierStocktakeSortType.valueDesc));
-      expect(SupplierStocktakeSortType.values,
-          contains(SupplierStocktakeSortType.valueAsc));
-      expect(SupplierStocktakeSortType.values,
-          contains(SupplierStocktakeSortType.nameAsc));
-      expect(SupplierStocktakeSortType.values,
-          contains(SupplierStocktakeSortType.nameDesc));
-      expect(SupplierStocktakeSortType.values,
-          contains(SupplierStocktakeSortType.stockDesc));
-      expect(SupplierStocktakeSortType.values,
-          contains(SupplierStocktakeSortType.stockAsc));
-      expect(SupplierStocktakeSortType.values,
-          contains(SupplierStocktakeSortType.soldDesc));
-      expect(SupplierStocktakeSortType.values,
-          contains(SupplierStocktakeSortType.purchasedDesc));
-      expect(SupplierStocktakeSortType.values,
-          contains(SupplierStocktakeSortType.profitDesc));
+      expect(
+        SupplierStocktakeSortType.values,
+        contains(SupplierStocktakeSortType.valueDesc),
+      );
+      expect(
+        SupplierStocktakeSortType.values,
+        contains(SupplierStocktakeSortType.valueAsc),
+      );
+      expect(
+        SupplierStocktakeSortType.values,
+        contains(SupplierStocktakeSortType.nameAsc),
+      );
+      expect(
+        SupplierStocktakeSortType.values,
+        contains(SupplierStocktakeSortType.nameDesc),
+      );
+      expect(
+        SupplierStocktakeSortType.values,
+        contains(SupplierStocktakeSortType.stockDesc),
+      );
+      expect(
+        SupplierStocktakeSortType.values,
+        contains(SupplierStocktakeSortType.stockAsc),
+      );
+      expect(
+        SupplierStocktakeSortType.values,
+        contains(SupplierStocktakeSortType.soldDesc),
+      );
+      expect(
+        SupplierStocktakeSortType.values,
+        contains(SupplierStocktakeSortType.purchasedDesc),
+      );
+      expect(
+        SupplierStocktakeSortType.values,
+        contains(SupplierStocktakeSortType.profitDesc),
+      );
     });
   });
 
@@ -424,8 +444,9 @@ void main() {
 
     test('sort by remaining value descending', () {
       final list = List<SupplierStocktakeProductItem>.from(products);
-      list.sort((a, b) =>
-          b.remainingValueCents.compareTo(a.remainingValueCents));
+      list.sort(
+        (a, b) => b.remainingValueCents.compareTo(a.remainingValueCents),
+      );
 
       expect(list[0].productName, 'Apple Watch');
       expect(list[1].productName, 'Mango Bag');
@@ -434,8 +455,9 @@ void main() {
 
     test('sort by remaining value ascending', () {
       final list = List<SupplierStocktakeProductItem>.from(products);
-      list.sort((a, b) =>
-          a.remainingValueCents.compareTo(b.remainingValueCents));
+      list.sort(
+        (a, b) => a.remainingValueCents.compareTo(b.remainingValueCents),
+      );
 
       expect(list[0].productName, 'Zebra Shirt');
       expect(list[2].productName, 'Apple Watch');
@@ -460,8 +482,7 @@ void main() {
 
     test('sort by remaining quantity descending', () {
       final list = List<SupplierStocktakeProductItem>.from(products);
-      list.sort((a, b) =>
-          b.remainingQuantity.compareTo(a.remainingQuantity));
+      list.sort((a, b) => b.remainingQuantity.compareTo(a.remainingQuantity));
 
       expect(list[0].productName, 'Mango Bag');
       expect(list[0].remainingQuantity, 90);
@@ -481,8 +502,7 @@ void main() {
 
     test('sort by purchased quantity descending', () {
       final list = List<SupplierStocktakeProductItem>.from(products);
-      list.sort((a, b) =>
-          b.purchasedQuantity.compareTo(a.purchasedQuantity));
+      list.sort((a, b) => b.purchasedQuantity.compareTo(a.purchasedQuantity));
 
       expect(list[0].productName, 'Apple Watch');
       expect(list[0].purchasedQuantity, 200);
@@ -584,8 +604,11 @@ void main() {
       ];
 
       for (final p in products) {
-        expect(p.remainingValueCents, p.remainingQuantity * p.costCents,
-            reason: '${p.productName}: value should equal remaining * cost');
+        expect(
+          p.remainingValueCents,
+          p.remainingQuantity * p.costCents,
+          reason: '${p.productName}: value should equal remaining * cost',
+        );
       }
     });
 
@@ -661,9 +684,7 @@ void main() {
 
     test('copyWith preserves unchanged fields', () {
       final range = ReportDateRange.thisMonth();
-      final updated = range.copyWith(
-        preset: ReportPeriodPreset.custom,
-      );
+      final updated = range.copyWith(preset: ReportPeriodPreset.custom);
       expect(updated.startDate, range.startDate);
       expect(updated.endDate, range.endDate);
       expect(updated.preset, ReportPeriodPreset.custom);
@@ -729,8 +750,11 @@ void main() {
 
       for (final p in products) {
         // remaining value = remaining * cost
-        expect(p.remainingValueCents, p.remainingQuantity * p.costCents,
-            reason: '${p.productName}: remaining value should be correct');
+        expect(
+          p.remainingValueCents,
+          p.remainingQuantity * p.costCents,
+          reason: '${p.productName}: remaining value should be correct',
+        );
       }
     });
 

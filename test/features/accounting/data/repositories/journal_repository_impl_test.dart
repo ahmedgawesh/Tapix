@@ -513,39 +513,46 @@ void main() {
       expect(fakeDatasource.createAccountCallCount, 0);
     });
 
-    test('should seed 34 default accounts when none exist', () async {
-      fakeDatasource.setFindByCodeResult(null);
-      fakeDatasource.setAccountLookup(
-        (id) => Account(
-          id: id,
-          accountCode: '10100',
-          accountName: 'Cash',
-          accountType: 'asset',
-          balanceCents: Decimal.zero,
-          currencyId: 1,
-          isActive: true,
-          isSystemAccount: true,
-          displayOrder: 1,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        ),
-      );
+    test(
+      'should seed all canonical default accounts when none exist',
+      () async {
+        fakeDatasource.setFindByCodeResult(null);
+        fakeDatasource.setAccountLookup(
+          (id) => Account(
+            id: id,
+            accountCode: '10100',
+            accountName: 'Cash',
+            accountType: 'asset',
+            balanceCents: Decimal.zero,
+            currencyId: 1,
+            isActive: true,
+            isSystemAccount: true,
+            displayOrder: 1,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          ),
+        );
 
-      await repository.seedDefaultAccounts(1);
+        await repository.seedDefaultAccounts(1);
 
-      // Phase 1.4 added 2400 Customer Credit Liability (21 → 22).
-      // Phase 2.2 added 1290 Returns in Transit, the asset clearing account
-      // for the `send_back` disposition on purchase returns (22 → 23).
-      // Phase 13 added 4900 Purchase Discounts Earned, the revenue/other-
-      // income account for unallocated supplier rebates that previously
-      // (and incorrectly) credited Inventory and drove a GL drift below
-      // Σ(stock × cost). See supplier_discount_inventory_drift_test.dart.
-      // (23 → 24).
-      // Phase 10061 added seven owner-finance/fixed-asset accounts:
-      // 1500, 1510, 1520, 1590, 2200, 3200, and 6100 (24 → 31).
-      // Cheque accounting adds 1020 Cheques in Hand, 1030 Dishonoured
-      // Cheques Receivable, and 2020 Cheques Issued (31 → 34).
-      expect(fakeDatasource.createAccountCallCount, 34);
-    });
+        // Phase 1.4 added 2400 Customer Credit Liability (21 → 22).
+        // Phase 2.2 added 1290 Returns in Transit, the asset clearing account
+        // for the `send_back` disposition on purchase returns (22 → 23).
+        // Phase 13 added 4900 Purchase Discounts Earned, the revenue/other-
+        // income account for unallocated supplier rebates that previously
+        // (and incorrectly) credited Inventory and drove a GL drift below
+        // Σ(stock × cost). See supplier_discount_inventory_drift_test.dart.
+        // (23 → 24).
+        // Phase 10061 added seven owner-finance/fixed-asset accounts:
+        // 1500, 1510, 1520, 1590, 2200, 3200, and 6100 (24 → 31).
+        // Cheque accounting adds 1020 Cheques in Hand, 1030 Dishonoured
+        // Cheques Receivable, and 2020 Cheques Issued (31 → 34).
+        // Consignment accounting adds 2050 Accrued Consignment Payable
+        // without changing the ordinary supplier AP ledger (34 → 35).
+        // Bad-debt accounting adds 6200 Bad Debt Expense (35 → 36).
+        // Warehouse transfers add 1210 Inventory in Transit (36 → 37).
+        expect(fakeDatasource.createAccountCallCount, 37);
+      },
+    );
   });
 }

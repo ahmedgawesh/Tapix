@@ -17,10 +17,7 @@ Product 1,SKU001,19.99,100
 Product 2,SKU002,29.99,50''';
       final bytes = utf8.encode(csvContent);
 
-      final result = await service(
-        bytes: bytes,
-        fileName: 'products.csv',
-      );
+      final result = await service(bytes: bytes, fileName: 'products.csv');
 
       expect(result.fileName, 'products.csv');
       expect(result.fileType, ImportFileType.csv);
@@ -46,10 +43,7 @@ Product 2,SKU002,29.99,50''';
 "Product, with comma","Description with ""quotes""",19.99''';
       final bytes = utf8.encode(csvContent);
 
-      final result = await service(
-        bytes: bytes,
-        fileName: 'special.csv',
-      );
+      final result = await service(bytes: bytes, fileName: 'special.csv');
 
       expect(result.totalRows, 1);
       expect(result.rows[0][0], 'Product, with comma');

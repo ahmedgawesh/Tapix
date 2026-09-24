@@ -30,24 +30,20 @@ class ProductSelectionWidget extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              LucideIcons.packageOpen,
-              size: 48,
-              color: colorScheme.outline,
-            ),
+            Icon(LucideIcons.packageOpen, size: 48, color: colorScheme.outline),
             const SizedBox(height: 16),
             Text(
               'barcode.no_products_selected'.tr(),
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: colorScheme.outline,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(color: colorScheme.outline),
             ),
             const SizedBox(height: 8),
             Text(
               'barcode.add_products_hint'.tr(),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colorScheme.outline,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: colorScheme.outline),
               textAlign: TextAlign.center,
             ),
           ],
@@ -63,7 +59,9 @@ class ProductSelectionWidget extends StatelessWidget {
           child: Row(
             children: [
               Text(
-                'barcode.products_count'.tr(args: [selectedProducts.length.toString()]),
+                'barcode.products_count'.tr(
+                  args: [selectedProducts.length.toString()],
+                ),
                 style: Theme.of(context).textTheme.titleSmall,
               ),
               const Spacer(),
@@ -71,9 +69,7 @@ class ProductSelectionWidget extends StatelessWidget {
                 onPressed: onClear,
                 icon: const Icon(LucideIcons.trash2, size: 16),
                 label: Text('common.clear_all'.tr()),
-                style: TextButton.styleFrom(
-                  foregroundColor: colorScheme.error,
-                ),
+                style: TextButton.styleFrom(foregroundColor: colorScheme.error),
               ),
             ],
           ),
@@ -130,27 +126,23 @@ class _ProductListItem extends StatelessWidget {
           ),
         ),
       ),
-      title: Text(
-        product.name,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+      title: Text(product.name, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (product.barcode != null && product.barcode!.isNotEmpty)
             Text(
               product.barcode!,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontFamily: 'monospace',
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
             ),
           Text(
             currencyService.format(product.priceCents.toBigInt().toInt()),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.primary,
-                ),
+              fontWeight: FontWeight.bold,
+              color: colorScheme.primary,
+            ),
           ),
           const SizedBox(height: 4),
           StreamBuilder<List<ProductVariant>>(
@@ -161,22 +153,30 @@ class _ProductListItem extends StatelessWidget {
                 return const SizedBox.shrink();
               }
 
-              final totalStock = variants.fold<int>(0, (sum, v) => sum + v.stockQuantity);
-              final lines = variants.take(3).map((v) {
-                final parts = <String>[];
-                if (v.sizeId != null) parts.add('S#${v.sizeId}');
-                if (v.colorId != null) parts.add('C#${v.colorId}');
-                final name = parts.isEmpty ? 'Variant #${v.id}' : parts.join(' ');
-                return '$name: ${v.stockQuantity}';
-              }).join(' | ');
+              final totalStock = variants.fold<int>(
+                0,
+                (sum, v) => sum + v.stockQuantity,
+              );
+              final lines = variants
+                  .take(3)
+                  .map((v) {
+                    final parts = <String>[];
+                    if (v.sizeId != null) parts.add('S#${v.sizeId}');
+                    if (v.colorId != null) parts.add('C#${v.colorId}');
+                    final name = parts.isEmpty
+                        ? 'Variant #${v.id}'
+                        : parts.join(' ');
+                    return '$name: ${v.stockQuantity}';
+                  })
+                  .join(' | ');
 
               return Text(
                 '${'variants.new_stock'.tr()}: $totalStock  •  $lines',
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colorScheme.outline,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: colorScheme.outline),
               );
             },
           ),

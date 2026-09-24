@@ -15,7 +15,10 @@ abstract class CustomerLocalDatasource {
   Stream<List<Customer>> watchCustomersWithPositiveBalance();
   Stream<List<Customer>> watchTopCustomersByBalance({int limit = 5});
   Future<void> updateCustomerBalance(int customerId, int newBalanceCents);
-  Future<void> updateCustomerLoyaltyEnabled(int customerId, bool loyaltyEnabled);
+  Future<void> updateCustomerLoyaltyEnabled(
+    int customerId,
+    bool loyaltyEnabled,
+  );
   Future<int> createTransaction(CustomerTransactionsCompanion transaction);
   Future<CustomerTransaction?> getTransaction(int transactionId);
   Future<CustomerTransaction> updateTransactionAmount(
@@ -98,8 +101,14 @@ class CustomerLocalDatasourceImpl implements CustomerLocalDatasource {
   }
 
   @override
-  Future<void> updateCustomerLoyaltyEnabled(int customerId, bool loyaltyEnabled) {
-    return _customerDao.updateCustomerLoyaltyEnabled(customerId, loyaltyEnabled);
+  Future<void> updateCustomerLoyaltyEnabled(
+    int customerId,
+    bool loyaltyEnabled,
+  ) {
+    return _customerDao.updateCustomerLoyaltyEnabled(
+      customerId,
+      loyaltyEnabled,
+    );
   }
 
   @override

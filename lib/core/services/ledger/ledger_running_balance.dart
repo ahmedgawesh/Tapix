@@ -31,7 +31,8 @@
 class LedgerRunningBalance {
   int _balance;
 
-  LedgerRunningBalance(int openingBalanceCents) : _balance = openingBalanceCents;
+  LedgerRunningBalance(int openingBalanceCents)
+    : _balance = openingBalanceCents;
 
   /// Apply a signed delta (positive = debit-side / charge, negative =
   /// credit-side / payment, depending on caller's sign convention) and

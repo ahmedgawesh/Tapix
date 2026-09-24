@@ -17,13 +17,15 @@ class BarcodeLabelDesignerScreen extends StatefulWidget {
   const BarcodeLabelDesignerScreen({super.key, required this.product});
 
   @override
-  State<BarcodeLabelDesignerScreen> createState() => _BarcodeLabelDesignerScreenState();
+  State<BarcodeLabelDesignerScreen> createState() =>
+      _BarcodeLabelDesignerScreenState();
 }
 
-class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen> {
+class _BarcodeLabelDesignerScreenState
+    extends State<BarcodeLabelDesignerScreen> {
   final _printerService = sl<BarcodePrinterService>();
   final _currencyService = sl<CurrencyService>();
-  
+
   bool _isLoading = true;
   double _labelWidth = 58;
   double _labelHeight = 40;
@@ -32,7 +34,14 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
   int _copies = 1;
   String _selectedBarcodeType = 'Auto'; // Auto, Code128, EAN13, EAN8, UPCA, QR
 
-  final List<String> _barcodeTypes = ['Auto', 'Code 128', 'EAN-13', 'EAN-8', 'UPC-A', 'QR Code'];
+  final List<String> _barcodeTypes = [
+    'Auto',
+    'Code 128',
+    'EAN-13',
+    'EAN-8',
+    'UPC-A',
+    'QR Code',
+  ];
 
   @override
   void initState() {
@@ -94,13 +103,11 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
         return Barcode.code128();
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     final barcodeData = widget.product.barcode ?? '';
@@ -143,7 +150,9 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
                     ),
                     const SizedBox(height: 16),
                     Container(
-                      width: _labelWidth * 3.78, // Approx px conversion (1mm ~= 3.78px)
+                      width:
+                          _labelWidth *
+                          3.78, // Approx px conversion (1mm ~= 3.78px)
                       height: _labelHeight * 3.78,
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey.shade300),
@@ -160,14 +169,20 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
                       padding: const EdgeInsets.all(8),
                       child: LayoutBuilder(
                         builder: (context, constraints) {
-                          final contentHeight = constraints.maxHeight.clamp(1.0, double.infinity);
+                          final contentHeight = constraints.maxHeight.clamp(
+                            1.0,
+                            double.infinity,
+                          );
 
                           final nameLine = _includeName ? 16.0 : 0.0;
                           final priceLine = _includePrice ? 18.0 : 0.0;
-                          final gaps = (_includeName ? 4.0 : 0.0) + (_includePrice ? 4.0 : 0.0);
+                          final gaps =
+                              (_includeName ? 4.0 : 0.0) +
+                              (_includePrice ? 4.0 : 0.0);
 
-                          final barcodeHeight = (contentHeight - nameLine - priceLine - gaps)
-                              .clamp(8.0, contentHeight);
+                          final barcodeHeight =
+                              (contentHeight - nameLine - priceLine - gaps)
+                                  .clamp(8.0, contentHeight);
 
                           return FittedBox(
                             fit: BoxFit.scaleDown,
@@ -200,20 +215,26 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
                                           fontSize: 10,
                                           color: Colors.black,
                                         ),
-                                        errorBuilder: (context, error) => Center(
-                                          child: Text(
-                                            error,
-                                            style: const TextStyle(color: Colors.red, fontSize: 10),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                        ),
+                                        errorBuilder: (context, error) =>
+                                            Center(
+                                              child: Text(
+                                                error,
+                                                style: const TextStyle(
+                                                  color: Colors.red,
+                                                  fontSize: 10,
+                                                ),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
                                       ),
                                     ),
                                   if (_includePrice) const SizedBox(height: 4),
                                   if (_includePrice)
                                     Text(
                                       _currencyService.format(
-                                        widget.product.priceCents.toBigInt().toInt(),
+                                        widget.product.priceCents
+                                            .toBigInt()
+                                            .toInt(),
                                       ),
                                       style: const TextStyle(
                                         fontSize: 14,
@@ -232,9 +253,9 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
                 ),
               ),
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Settings
             Card(
               child: Padding(
@@ -250,9 +271,7 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
                     // Copies
                     Row(
                       children: [
-                        Expanded(
-                          child: Text('barcode.copies'.tr()),
-                        ),
+                        Expanded(child: Text('barcode.copies'.tr())),
                         IconButton(
                           icon: const Icon(LucideIcons.minus),
                           onPressed: () {
@@ -261,7 +280,10 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
                         ),
                         Text(
                           '$_copies',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
                         ),
                         IconButton(
                           icon: const Icon(LucideIcons.plus),
@@ -279,13 +301,12 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
                         border: const OutlineInputBorder(),
                       ),
                       items: _barcodeTypes.map((type) {
-                        return DropdownMenuItem(
-                          value: type,
-                          child: Text(type),
-                        );
+                        return DropdownMenuItem(value: type, child: Text(type));
                       }).toList(),
                       onChanged: (value) {
-                        if (value != null) setState(() => _selectedBarcodeType = value);
+                        if (value != null) {
+                          setState(() => _selectedBarcodeType = value);
+                        }
                       },
                     ),
                     const SizedBox(height: 16),
@@ -299,7 +320,9 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
                               border: const OutlineInputBorder(),
                             ),
                             keyboardType: TextInputType.number,
-                            onChanged: (v) => setState(() => _labelWidth = double.tryParse(v) ?? 58),
+                            onChanged: (v) => setState(
+                              () => _labelWidth = double.tryParse(v) ?? 58,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -311,7 +334,9 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
                               border: const OutlineInputBorder(),
                             ),
                             keyboardType: TextInputType.number,
-                            onChanged: (v) => setState(() => _labelHeight = double.tryParse(v) ?? 40),
+                            onChanged: (v) => setState(
+                              () => _labelHeight = double.tryParse(v) ?? 40,
+                            ),
                           ),
                         ),
                       ],
@@ -340,9 +365,9 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
   Future<void> _printLabel(Barcode barcodeType) async {
     final barcodeData = widget.product.barcode;
     if (barcodeData == null || barcodeData.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('barcode.error_no_barcode'.tr())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('barcode.error_no_barcode'.tr())));
       return;
     }
 
@@ -352,7 +377,9 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'barcode.error_invalid_format'.tr(args: [barcodeType.name, barcodeData]),
+              'barcode.error_invalid_format'.tr(
+                args: [barcodeType.name, barcodeData],
+              ),
             ),
             backgroundColor: Colors.red,
           ),
@@ -379,7 +406,9 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('barcode.print_error'.tr(args: [e.toString()]))),
+          SnackBar(
+            content: Text('barcode.print_error'.tr(args: [e.toString()])),
+          ),
         );
       }
     }
@@ -388,9 +417,9 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
   Future<void> _shareLabel(Barcode barcodeType) async {
     final barcodeData = widget.product.barcode;
     if (barcodeData == null || barcodeData.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('barcode.error_no_barcode'.tr())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('barcode.error_no_barcode'.tr())));
       return;
     }
 
@@ -400,7 +429,9 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'barcode.error_invalid_format'.tr(args: [barcodeType.name, barcodeData]),
+              'barcode.error_invalid_format'.tr(
+                args: [barcodeType.name, barcodeData],
+              ),
             ),
             backgroundColor: Colors.red,
           ),
@@ -420,7 +451,9 @@ class _BarcodeLabelDesignerScreenState extends State<BarcodeLabelDesignerScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('barcode.share_error'.tr(args: [e.toString()]))),
+          SnackBar(
+            content: Text('barcode.share_error'.tr(args: [e.toString()])),
+          ),
         );
       }
     }

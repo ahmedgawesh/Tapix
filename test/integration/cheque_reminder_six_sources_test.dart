@@ -33,18 +33,20 @@ void main() {
   setUp(() async {
     db = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
     currencyId = (await db.select(db.currencies).get()).first.id;
-    customerId = await db.into(db.customers).insert(
-          CustomersCompanion.insert(name: 'C1', currencyId: currencyId),
-        );
-    supplierId = await db.into(db.suppliers).insert(
-          SuppliersCompanion.insert(name: 'S1', currencyId: currencyId),
-        );
+    customerId = await db
+        .into(db.customers)
+        .insert(CustomersCompanion.insert(name: 'C1', currencyId: currencyId));
+    supplierId = await db
+        .into(db.suppliers)
+        .insert(SuppliersCompanion.insert(name: 'S1', currencyId: currencyId));
   });
 
   tearDown(() async => db.close());
 
   Future<int> insertSale({required DateTime due, String status = 'completed'}) {
-    return db.into(db.sales).insert(
+    return db
+        .into(db.sales)
+        .insert(
           SalesCompanion.insert(
             invoiceNumber: 'INV-${DateTime.now().microsecondsSinceEpoch}',
             customerId: Value(customerId),
@@ -60,7 +62,9 @@ void main() {
   }
 
   Future<int> insertPurchase({required DateTime due}) {
-    return db.into(db.purchases).insert(
+    return db
+        .into(db.purchases)
+        .insert(
           PurchasesCompanion.insert(
             purchaseNumber: 'PO-${DateTime.now().microsecondsSinceEpoch}',
             supplierId: supplierId,
@@ -76,7 +80,9 @@ void main() {
   }
 
   Future<int> insertSaleReturn(int saleId, {required DateTime due}) {
-    return db.into(db.saleReturns).insert(
+    return db
+        .into(db.saleReturns)
+        .insert(
           SaleReturnsCompanion.insert(
             returnNumber: 'SR-${DateTime.now().microsecondsSinceEpoch}',
             saleId: saleId,
@@ -92,7 +98,9 @@ void main() {
   }
 
   Future<int> insertPurchaseReturn(int purchaseId, {required DateTime due}) {
-    return db.into(db.purchaseReturns).insert(
+    return db
+        .into(db.purchaseReturns)
+        .insert(
           PurchaseReturnsCompanion.insert(
             returnNumber: 'PR-${DateTime.now().microsecondsSinceEpoch}',
             purchaseId: purchaseId,
@@ -108,7 +116,9 @@ void main() {
   }
 
   Future<int> insertSaleReturnAdj({required DateTime due}) {
-    return db.into(db.saleReturnAdjustments).insert(
+    return db
+        .into(db.saleReturnAdjustments)
+        .insert(
           SaleReturnAdjustmentsCompanion.insert(
             returnNumber: 'SAR-${DateTime.now().microsecondsSinceEpoch}',
             customerId: Value(customerId),
@@ -124,7 +134,9 @@ void main() {
   }
 
   Future<int> insertPurchaseReturnAdj({required DateTime due}) {
-    return db.into(db.purchaseReturnAdjustments).insert(
+    return db
+        .into(db.purchaseReturnAdjustments)
+        .insert(
           PurchaseReturnAdjustmentsCompanion.insert(
             returnNumber: 'PAR-${DateTime.now().microsecondsSinceEpoch}',
             supplierId: supplierId,
@@ -146,29 +158,30 @@ void main() {
     final purchaseId = await insertPurchase(due: due);
     final prId = await insertPurchaseReturn(purchaseId, due: due);
 
-    final sr = await (db.select(db.saleReturns)
-          ..where((t) => t.id.equals(srId)))
-        .getSingle();
-    final pr = await (db.select(db.purchaseReturns)
-          ..where((t) => t.id.equals(prId)))
-        .getSingle();
+    final sr = await (db.select(
+      db.saleReturns,
+    )..where((t) => t.id.equals(srId))).getSingle();
+    final pr = await (db.select(
+      db.purchaseReturns,
+    )..where((t) => t.id.equals(prId))).getSingle();
 
     expect(sr.dueDate, due);
     expect(pr.dueDate, due);
   });
 
-  test('dashboard UNION surfaces one cheque from each of the six sources',
-      () async {
-    final due = DateTime(2026, 6, 20);
+  test(
+    'dashboard UNION surfaces one cheque from each of the six sources',
+    () async {
+      final due = DateTime(2026, 6, 20);
 
-    final saleId = await insertSale(due: due);
-    final purchaseId = await insertPurchase(due: due);
-    await insertSaleReturn(saleId, due: due);
-    await insertPurchaseReturn(purchaseId, due: due);
-    await insertSaleReturnAdj(due: due);
-    await insertPurchaseReturnAdj(due: due);
+      final saleId = await insertSale(due: due);
+      final purchaseId = await insertPurchase(due: due);
+      await insertSaleReturn(saleId, due: due);
+      await insertPurchaseReturn(purchaseId, due: due);
+      await insertSaleReturnAdj(due: due);
+      await insertPurchaseReturnAdj(due: due);
 
-    final rows = await db.customSelect('''
+      final rows = await db.customSelect('''
       SELECT 'sale' AS source_table, id AS source_id FROM sales
       WHERE payment_method IN ('cheque', 'check') AND due_date IS NOT NULL
         AND status NOT IN ('voided', 'draft')
@@ -194,57 +207,67 @@ void main() {
         AND status NOT IN ('voided', 'draft')
     ''').get();
 
-    final tables = rows.map((r) => r.read<String>('source_table')).toSet();
-    expect(
-      tables,
-      equals({
-        'sale',
-        'purchase',
-        'sale_return',
-        'purchase_return',
-        'sale_return_adjustment',
-        'purchase_return_adjustment',
-      }),
-      reason: 'All six cheque-bearing source tables must surface to the '
-          'dashboard reminder. Phase 14.0 closes the gap where linked '
-          'returns (sale_returns / purchase_returns) were silently dropped.',
-    );
-    expect(rows.length, 6, reason: 'Exactly one cheque per source table.');
-  });
+      final tables = rows.map((r) => r.read<String>('source_table')).toSet();
+      expect(
+        tables,
+        equals({
+          'sale',
+          'purchase',
+          'sale_return',
+          'purchase_return',
+          'sale_return_adjustment',
+          'purchase_return_adjustment',
+        }),
+        reason:
+            'All six cheque-bearing source tables must surface to the '
+            'dashboard reminder. Phase 14.0 closes the gap where linked '
+            'returns (sale_returns / purchase_returns) were silently dropped.',
+      );
+      expect(rows.length, 6, reason: 'Exactly one cheque per source table.');
+    },
+  );
 
-  test('voided / draft documents are EXCLUDED from the reminder feed',
-      () async {
-    final due = DateTime(2026, 6, 22);
-    await insertSale(due: due, status: 'voided');
-    await insertSale(due: due, status: 'draft');
+  test(
+    'voided / draft documents are EXCLUDED from the reminder feed',
+    () async {
+      final due = DateTime(2026, 6, 22);
+      await insertSale(due: due, status: 'voided');
+      await insertSale(due: due, status: 'draft');
 
-    final rows = await db.customSelect('''
+      final rows = await db.customSelect('''
       SELECT id FROM sales WHERE payment_method='cheque'
         AND due_date IS NOT NULL
         AND status NOT IN ('voided', 'draft')
     ''').get();
-    expect(rows, isEmpty,
-        reason: 'Voided and draft sales must not surface as cheque reminders.');
-  });
+      expect(
+        rows,
+        isEmpty,
+        reason: 'Voided and draft sales must not surface as cheque reminders.',
+      );
+    },
+  );
 
-  test('cheque_confirmations natural key matches dashboard lookup format',
-      () async {
-    final dao = ChequeConfirmationDao(db);
-    final saleId = await insertSale(due: DateTime(2026, 7, 1));
+  test(
+    'cheque_confirmations natural key matches dashboard lookup format',
+    () async {
+      final dao = ChequeConfirmationDao(db);
+      final saleId = await insertSale(due: DateTime(2026, 7, 1));
 
-    await dao.confirm(
-      sourceTable: ChequeSourceTables.sale,
-      sourceId: saleId,
-      status: ChequeConfirmationStatus.cleared,
-    );
+      await dao.confirm(
+        sourceTable: ChequeSourceTables.sale,
+        sourceId: saleId,
+        status: ChequeConfirmationStatus.cleared,
+      );
 
-    final map = await dao.watchAllAsMap().first;
-    expect(map.containsKey('sale|$saleId'), isTrue);
-    expect(
-      ChequeConfirmationStatus.resolved.contains(map['sale|$saleId']!.status),
-      isTrue,
-      reason: 'A cleared cheque is in the resolved set the widget uses to '
-          'hide the reminder card.',
-    );
-  });
+      final map = await dao.watchAllAsMap().first;
+      expect(map.containsKey('sale|$saleId'), isTrue);
+      expect(
+        ChequeConfirmationStatus.resolved.contains(map['sale|$saleId']!.status),
+        isTrue,
+        reason:
+            'A cleared cheque is in the resolved set the widget uses to '
+            'hide the reminder card.',
+      );
+    },
+  );
 }

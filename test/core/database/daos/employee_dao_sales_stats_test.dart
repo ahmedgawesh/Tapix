@@ -58,11 +58,15 @@ void main() {
 
     currencyId = (await db.select(db.currencies).get()).first.id;
 
-    customerId = await db.into(db.customers).insert(
+    customerId = await db
+        .into(db.customers)
+        .insert(
           CustomersCompanion.insert(name: 'Acme Co', currencyId: currencyId),
         );
 
-    productId = await db.into(db.products).insert(
+    productId = await db
+        .into(db.products)
+        .insert(
           ProductsCompanion.insert(
             name: 'Widget',
             costCents: Decimal.fromInt(500),
@@ -70,7 +74,9 @@ void main() {
             currencyId: Value(currencyId),
           ),
         );
-    variantId = await db.into(db.productVariants).insert(
+    variantId = await db
+        .into(db.productVariants)
+        .insert(
           ProductVariantsCompanion.insert(
             productId: productId,
             costCents: Decimal.fromInt(500),
@@ -78,10 +84,14 @@ void main() {
           ),
         );
 
-    empAId = await db.into(db.employees).insert(
+    empAId = await db
+        .into(db.employees)
+        .insert(
           EmployeesCompanion.insert(name: 'bero', currencyId: currencyId),
         );
-    empBId = await db.into(db.employees).insert(
+    empBId = await db
+        .into(db.employees)
+        .insert(
           EmployeesCompanion.insert(name: 'other', currencyId: currencyId),
         );
   });
@@ -101,9 +111,10 @@ void main() {
     required List<({int? itemEmployeeId, int totalCents})> items,
     String status = 'completed',
   }) async {
-    final totalCents =
-        items.fold<int>(0, (sum, i) => sum + i.totalCents);
-    final saleId = await db.into(db.sales).insert(
+    final totalCents = items.fold<int>(0, (sum, i) => sum + i.totalCents);
+    final saleId = await db
+        .into(db.sales)
+        .insert(
           SalesCompanion.insert(
             invoiceNumber: invoice,
             customerId: Value(customerId),
@@ -118,7 +129,9 @@ void main() {
           ),
         );
     for (final item in items) {
-      await db.into(db.saleItems).insert(
+      await db
+          .into(db.saleItems)
+          .insert(
             SaleItemsCompanion.insert(
               saleId: saleId,
               productId: productId,
@@ -144,7 +157,9 @@ void main() {
     String status = 'posted',
   }) async {
     final total = lines.fold<int>(0, (s, l) => s + l.refundCents);
-    final returnId = await db.into(db.saleReturns).insert(
+    final returnId = await db
+        .into(db.saleReturns)
+        .insert(
           SaleReturnsCompanion.insert(
             returnNumber: returnNumber,
             saleId: saleId,
@@ -157,7 +172,9 @@ void main() {
           ),
         );
     for (final line in lines) {
-      await db.into(db.saleReturnItems).insert(
+      await db
+          .into(db.saleReturnItems)
+          .insert(
             SaleReturnItemsCompanion.insert(
               returnId: returnId,
               saleItemId: line.saleItemId,
@@ -178,7 +195,9 @@ void main() {
     required int totalCents,
     String status = 'posted',
   }) async {
-    final returnId = await db.into(db.saleReturnAdjustments).insert(
+    final returnId = await db
+        .into(db.saleReturnAdjustments)
+        .insert(
           SaleReturnAdjustmentsCompanion.insert(
             returnNumber: returnNumber,
             customerId: Value(customerId),
@@ -191,8 +210,12 @@ void main() {
             returnDate: Value(date),
           ),
         );
-    await db.into(db.saleReturnAdjustmentItems).insert(
+    await db
+        .into(db.saleReturnAdjustmentItems)
+        .insert(
           SaleReturnAdjustmentItemsCompanion.insert(
+            sourceResolution: const Value('unverified'),
+            sourceResolutionReason: const Value('test fixture'),
             returnId: returnId,
             productId: productId,
             variantId: Value(variantId),
@@ -207,27 +230,31 @@ void main() {
   // ─── sales attribution ────────────────────────────────────────────────
 
   group('sales attribution', () {
-    test('per-invoice mode: full sale total is credited to header employee',
-        () async {
-      await insertSale(
-        invoice: 'INV-1',
-        date: inRange,
-        headerEmployeeId: empAId,
-        items: [
-          (itemEmployeeId: null, totalCents: 1500),
-          (itemEmployeeId: null, totalCents: 2500),
-        ],
-      );
-      final stats = await db.employeeDao
-          .getEmployeeSalesStats(empAId, periodStart, periodEnd);
-      expect(stats['salesCount'], 1);
-      expect(stats['salesTotalCents'], 4000);
-      expect(stats['returnsCount'], 0);
-      expect(stats['returnsTotalCents'], 0);
-    });
-
     test(
-        'per-item mode: header NULL + per-item employees → sum only this '
+      'per-invoice mode: full sale total is credited to header employee',
+      () async {
+        await insertSale(
+          invoice: 'INV-1',
+          date: inRange,
+          headerEmployeeId: empAId,
+          items: [
+            (itemEmployeeId: null, totalCents: 1500),
+            (itemEmployeeId: null, totalCents: 2500),
+          ],
+        );
+        final stats = await db.employeeDao.getEmployeeSalesStats(
+          empAId,
+          periodStart,
+          periodEnd,
+        );
+        expect(stats['salesCount'], 1);
+        expect(stats['salesTotalCents'], 4000);
+        expect(stats['returnsCount'], 0);
+        expect(stats['returnsTotalCents'], 0);
+      },
+    );
+
+    test('per-item mode: header NULL + per-item employees → sum only this '
         "employee's line items (the screenshot bug)", () async {
       await insertSale(
         invoice: 'INV-2',
@@ -239,36 +266,41 @@ void main() {
           (itemEmployeeId: empBId, totalCents: 999), // not ours
         ],
       );
-      final statsA = await db.employeeDao
-          .getEmployeeSalesStats(empAId, periodStart, periodEnd);
+      final statsA = await db.employeeDao.getEmployeeSalesStats(
+        empAId,
+        periodStart,
+        periodEnd,
+      );
       expect(statsA['salesCount'], 1);
       expect(statsA['salesTotalCents'], 3000);
 
-      final statsB = await db.employeeDao
-          .getEmployeeSalesStats(empBId, periodStart, periodEnd);
+      final statsB = await db.employeeDao.getEmployeeSalesStats(
+        empBId,
+        periodStart,
+        periodEnd,
+      );
       expect(statsB['salesCount'], 1);
       expect(statsB['salesTotalCents'], 999);
     });
 
-    test(
-        'per-item mode without a single matching item returns zero — no '
+    test('per-item mode without a single matching item returns zero — no '
         'cross-employee leak', () async {
       await insertSale(
         invoice: 'INV-3',
         date: inRange,
         headerEmployeeId: null,
-        items: [
-          (itemEmployeeId: empBId, totalCents: 5000),
-        ],
+        items: [(itemEmployeeId: empBId, totalCents: 5000)],
       );
-      final stats = await db.employeeDao
-          .getEmployeeSalesStats(empAId, periodStart, periodEnd);
+      final stats = await db.employeeDao.getEmployeeSalesStats(
+        empAId,
+        periodStart,
+        periodEnd,
+      );
       expect(stats['salesCount'], 0);
       expect(stats['salesTotalCents'], 0);
     });
 
-    test(
-        'per-invoice mode never double-counts when items also carry an '
+    test('per-invoice mode never double-counts when items also carry an '
         'employee_id (defence-in-depth)', () async {
       // Production code branches IF/ELSE on `sales.employee_id`, so items
       // assigned in addition to a header must NOT cause double-credit.
@@ -281,8 +313,11 @@ void main() {
           (itemEmployeeId: empAId, totalCents: 2000),
         ],
       );
-      final stats = await db.employeeDao
-          .getEmployeeSalesStats(empAId, periodStart, periodEnd);
+      final stats = await db.employeeDao.getEmployeeSalesStats(
+        empAId,
+        periodStart,
+        periodEnd,
+      );
       expect(stats['salesCount'], 1);
       expect(stats['salesTotalCents'], 3000); // header total, not 6000
     });
@@ -302,8 +337,11 @@ void main() {
         items: [(itemEmployeeId: empAId, totalCents: 2000)],
         status: 'voided',
       );
-      final stats = await db.employeeDao
-          .getEmployeeSalesStats(empAId, periodStart, periodEnd);
+      final stats = await db.employeeDao.getEmployeeSalesStats(
+        empAId,
+        periodStart,
+        periodEnd,
+      );
       expect(stats['salesCount'], 0);
       expect(stats['salesTotalCents'], 0);
     });
@@ -321,8 +359,11 @@ void main() {
         headerEmployeeId: null,
         items: [(itemEmployeeId: empAId, totalCents: 9999)],
       );
-      final stats = await db.employeeDao
-          .getEmployeeSalesStats(empAId, periodStart, periodEnd);
+      final stats = await db.employeeDao.getEmployeeSalesStats(
+        empAId,
+        periodStart,
+        periodEnd,
+      );
       expect(stats['salesCount'], 0);
       expect(stats['salesTotalCents'], 0);
     });
@@ -331,32 +372,36 @@ void main() {
   // ─── returns attribution ──────────────────────────────────────────────
 
   group('returns attribution', () {
-    test('linked return on per-invoice mode sale → full return total',
-        () async {
-      final saleId = await insertSale(
-        invoice: 'INV-L1',
-        date: inRange,
-        headerEmployeeId: empAId,
-        items: [(itemEmployeeId: null, totalCents: 5000)],
-      );
-      final saleItem = await (db.select(db.saleItems)
-            ..where((i) => i.saleId.equals(saleId)))
-          .getSingle();
-      await insertLinkedReturn(
-        returnNumber: 'SR-L1',
-        saleId: saleId,
-        date: inRange,
-        lines: [(saleItemId: saleItem.id, refundCents: 1500)],
-      );
-      final stats = await db.employeeDao
-          .getEmployeeSalesStats(empAId, periodStart, periodEnd);
-      expect(stats['returnsCount'], 1);
-      // Per-invoice-mode rule: whole sr.total_cents is the employee's slice.
-      expect(stats['returnsTotalCents'], 1500);
-    });
-
     test(
-        "linked return on per-item mode sale → only this employee's return "
+      'linked return on per-invoice mode sale → full return total',
+      () async {
+        final saleId = await insertSale(
+          invoice: 'INV-L1',
+          date: inRange,
+          headerEmployeeId: empAId,
+          items: [(itemEmployeeId: null, totalCents: 5000)],
+        );
+        final saleItem = await (db.select(
+          db.saleItems,
+        )..where((i) => i.saleId.equals(saleId))).getSingle();
+        await insertLinkedReturn(
+          returnNumber: 'SR-L1',
+          saleId: saleId,
+          date: inRange,
+          lines: [(saleItemId: saleItem.id, refundCents: 1500)],
+        );
+        final stats = await db.employeeDao.getEmployeeSalesStats(
+          empAId,
+          periodStart,
+          periodEnd,
+        );
+        expect(stats['returnsCount'], 1);
+        // Per-invoice-mode rule: whole sr.total_cents is the employee's slice.
+        expect(stats['returnsTotalCents'], 1500);
+      },
+    );
+
+    test("linked return on per-item mode sale → only this employee's return "
         'lines are summed', () async {
       final saleId = await insertSale(
         invoice: 'INV-L2',
@@ -367,9 +412,9 @@ void main() {
           (itemEmployeeId: empBId, totalCents: 2000),
         ],
       );
-      final items = await (db.select(db.saleItems)
-            ..where((i) => i.saleId.equals(saleId)))
-          .get();
+      final items = await (db.select(
+        db.saleItems,
+      )..where((i) => i.saleId.equals(saleId))).get();
       final aItem = items.firstWhere((i) => i.employeeId == empAId);
       final bItem = items.firstWhere((i) => i.employeeId == empBId);
 
@@ -384,30 +429,41 @@ void main() {
         ],
       );
 
-      final statsA = await db.employeeDao
-          .getEmployeeSalesStats(empAId, periodStart, periodEnd);
+      final statsA = await db.employeeDao.getEmployeeSalesStats(
+        empAId,
+        periodStart,
+        periodEnd,
+      );
       expect(statsA['returnsCount'], 1);
       expect(statsA['returnsTotalCents'], 3000); // only A's line
 
-      final statsB = await db.employeeDao
-          .getEmployeeSalesStats(empBId, periodStart, periodEnd);
+      final statsB = await db.employeeDao.getEmployeeSalesStats(
+        empBId,
+        periodStart,
+        periodEnd,
+      );
       expect(statsB['returnsCount'], 1);
       expect(statsB['returnsTotalCents'], 2000); // only B's line
     });
 
-    test('adjustment (unlinked) return on header employee_id → full total',
-        () async {
-      await insertAdjReturn(
-        returnNumber: 'SAR-1',
-        employeeId: empAId,
-        date: inRange,
-        totalCents: 4200,
-      );
-      final stats = await db.employeeDao
-          .getEmployeeSalesStats(empAId, periodStart, periodEnd);
-      expect(stats['returnsCount'], 1);
-      expect(stats['returnsTotalCents'], 4200);
-    });
+    test(
+      'adjustment (unlinked) return on header employee_id → full total',
+      () async {
+        await insertAdjReturn(
+          returnNumber: 'SAR-1',
+          employeeId: empAId,
+          date: inRange,
+          totalCents: 4200,
+        );
+        final stats = await db.employeeDao.getEmployeeSalesStats(
+          empAId,
+          periodStart,
+          periodEnd,
+        );
+        expect(stats['returnsCount'], 1);
+        expect(stats['returnsTotalCents'], 4200);
+      },
+    );
 
     test('voided returns are excluded across all three paths', () async {
       // A) linked, per-invoice
@@ -417,9 +473,9 @@ void main() {
         headerEmployeeId: empAId,
         items: [(itemEmployeeId: null, totalCents: 1000)],
       );
-      final aItem = await (db.select(db.saleItems)
-            ..where((i) => i.saleId.equals(saleA)))
-          .getSingle();
+      final aItem = await (db.select(
+        db.saleItems,
+      )..where((i) => i.saleId.equals(saleA))).getSingle();
       await insertLinkedReturn(
         returnNumber: 'SR-V-A',
         saleId: saleA,
@@ -435,9 +491,9 @@ void main() {
         headerEmployeeId: null,
         items: [(itemEmployeeId: empAId, totalCents: 2000)],
       );
-      final bItem = await (db.select(db.saleItems)
-            ..where((i) => i.saleId.equals(saleB)))
-          .getSingle();
+      final bItem = await (db.select(
+        db.saleItems,
+      )..where((i) => i.saleId.equals(saleB))).getSingle();
       await insertLinkedReturn(
         returnNumber: 'SR-V-B',
         saleId: saleB,
@@ -455,8 +511,11 @@ void main() {
         status: 'voided',
       );
 
-      final stats = await db.employeeDao
-          .getEmployeeSalesStats(empAId, periodStart, periodEnd);
+      final stats = await db.employeeDao.getEmployeeSalesStats(
+        empAId,
+        periodStart,
+        periodEnd,
+      );
       // The two underlying sales themselves still count (status=completed).
       expect(stats['salesCount'], 2);
       expect(stats['salesTotalCents'], 3000);
@@ -472,8 +531,11 @@ void main() {
         date: outOfRange,
         totalCents: 9999,
       );
-      final stats = await db.employeeDao
-          .getEmployeeSalesStats(empAId, periodStart, periodEnd);
+      final stats = await db.employeeDao.getEmployeeSalesStats(
+        empAId,
+        periodStart,
+        periodEnd,
+      );
       expect(stats['returnsCount'], 0);
       expect(stats['returnsTotalCents'], 0);
     });
@@ -482,8 +544,7 @@ void main() {
   // ─── end-to-end mixed scenario ────────────────────────────────────────
 
   group('end-to-end mixed scenario', () {
-    test(
-        '5 contribution paths sum correctly in one query — reproduction of '
+    test('5 contribution paths sum correctly in one query — reproduction of '
         'the field bug and its fix', () async {
       // 1. Per-invoice mode sale credited to empA: 5000
       await insertSale(
@@ -506,12 +567,12 @@ void main() {
       );
 
       // 3. Linked return on the per-invoice sale: empA loses 1000
-      final invoiceSale = await (db.select(db.sales)
-            ..where((s) => s.invoiceNumber.equals('MIX-1')))
-          .getSingle();
-      final invoiceSaleItem = await (db.select(db.saleItems)
-            ..where((i) => i.saleId.equals(invoiceSale.id)))
-          .getSingle();
+      final invoiceSale = await (db.select(
+        db.sales,
+      )..where((s) => s.invoiceNumber.equals('MIX-1'))).getSingle();
+      final invoiceSaleItem = await (db.select(
+        db.saleItems,
+      )..where((i) => i.saleId.equals(invoiceSale.id))).getSingle();
       await insertLinkedReturn(
         returnNumber: 'SR-MIX-A',
         saleId: invoiceSale.id,
@@ -520,11 +581,12 @@ void main() {
       );
 
       // 4. Linked return on the per-item sale: empA loses one item (1000)
-      final perItemItems = await (db.select(db.saleItems)
-            ..where((i) => i.saleId.equals(perItemSaleId)))
-          .get();
-      final aItemToReturn =
-          perItemItems.firstWhere((i) => i.employeeId == empAId);
+      final perItemItems = await (db.select(
+        db.saleItems,
+      )..where((i) => i.saleId.equals(perItemSaleId))).get();
+      final aItemToReturn = perItemItems.firstWhere(
+        (i) => i.employeeId == empAId,
+      );
       await insertLinkedReturn(
         returnNumber: 'SR-MIX-B',
         saleId: perItemSaleId,
@@ -540,8 +602,11 @@ void main() {
         totalCents: 500,
       );
 
-      final stats = await db.employeeDao
-          .getEmployeeSalesStats(empAId, periodStart, periodEnd);
+      final stats = await db.employeeDao.getEmployeeSalesStats(
+        empAId,
+        periodStart,
+        periodEnd,
+      );
 
       // Sales: 1 per-invoice + 1 per-item, totals 5000 + 3000.
       expect(stats['salesCount'], 2);

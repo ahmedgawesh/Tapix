@@ -1,5 +1,6 @@
 import '../../../reports/presentation/screens/supplier_sales_report_screen.dart';
 import 'package:easy_localization/easy_localization.dart';
+import 'warehouse_transfer_report_screen.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/database/app_database.dart' show BusinessWarehouse;
 import '../../../../core/services/business/warehouse_read_scope.dart';
@@ -168,6 +169,7 @@ class _WarehouseReportList extends StatefulWidget {
 class _WarehouseReportListState extends State<_WarehouseReportList> {
   String _search = '';
   static const _entries = <(String, Widget)>[
+    ('reports.warehouse_transfers', WarehouseTransferReportScreen()),
     ('reports.sales_by_supplier', SupplierSalesReportScreen()),
     ('reports.customer_analysis', CustomerAnalysisReportScreen()),
     ('reports.customer_invoices_report', CustomerInvoicesReportScreen()),

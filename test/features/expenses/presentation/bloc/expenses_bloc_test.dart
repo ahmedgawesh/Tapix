@@ -39,8 +39,9 @@ void main() {
   setUp(() {
     mockRepository = MockExpenseRepository();
 
-    when(() => mockRepository.watchAllExpenses())
-        .thenAnswer((_) => const Stream.empty());
+    when(
+      () => mockRepository.watchAllExpenses(),
+    ).thenAnswer((_) => const Stream.empty());
   });
 
   group('ExpensesBloc', () {
@@ -54,23 +55,29 @@ void main() {
     blocTest<ExpensesBloc, RealtimeState<ExpensesData>>(
       'emits expenses when stream emits data',
       build: () {
-        when(() => mockRepository.watchAllExpenses())
-            .thenAnswer((_) => Stream.value(tExpenses));
+        when(
+          () => mockRepository.watchAllExpenses(),
+        ).thenAnswer((_) => Stream.value(tExpenses));
         return ExpensesBloc(mockRepository);
       },
       expect: () => [
-        isA<RealtimeSuccess<ExpensesData>>()
-            .having((s) => s.data.expenses.length, 'expenses count', 2),
+        isA<RealtimeSuccess<ExpensesData>>().having(
+          (s) => s.data.expenses.length,
+          'expenses count',
+          2,
+        ),
       ],
     );
 
     blocTest<ExpensesBloc, RealtimeState<ExpensesData>>(
       'searches expenses when ExpensesSearchRequested is added',
       build: () {
-        when(() => mockRepository.watchAllExpenses())
-            .thenAnswer((_) => const Stream.empty());
-        when(() => mockRepository.searchExpenses(any()))
-            .thenAnswer((_) async => [tExpense1]);
+        when(
+          () => mockRepository.watchAllExpenses(),
+        ).thenAnswer((_) => const Stream.empty());
+        when(
+          () => mockRepository.searchExpenses(any()),
+        ).thenAnswer((_) async => [tExpense1]);
         return ExpensesBloc(mockRepository);
       },
       act: (bloc) => bloc.add(const ExpensesSearchRequested('Office')),
@@ -88,10 +95,12 @@ void main() {
     blocTest<ExpensesBloc, RealtimeState<ExpensesData>>(
       'deletes expense when ExpenseDeleteRequested is added',
       build: () {
-        when(() => mockRepository.watchAllExpenses())
-            .thenAnswer((_) => Stream.value(tExpenses));
-        when(() => mockRepository.deleteExpense(any()))
-            .thenAnswer((_) async => 1);
+        when(
+          () => mockRepository.watchAllExpenses(),
+        ).thenAnswer((_) => Stream.value(tExpenses));
+        when(
+          () => mockRepository.deleteExpense(any()),
+        ).thenAnswer((_) async => 1);
         return ExpensesBloc(mockRepository);
       },
       act: (bloc) => bloc.add(const ExpenseDeleteRequested(1)),
@@ -103,8 +112,9 @@ void main() {
     blocTest<ExpensesBloc, RealtimeState<ExpensesData>>(
       'filters by category when ExpensesFilterByCategoryRequested is added',
       build: () {
-        when(() => mockRepository.watchAllExpenses())
-            .thenAnswer((_) => Stream.value(tExpenses));
+        when(
+          () => mockRepository.watchAllExpenses(),
+        ).thenAnswer((_) => Stream.value(tExpenses));
         return ExpensesBloc(mockRepository);
       },
       act: (bloc) => bloc.add(const ExpensesFilterByCategoryRequested(1)),
@@ -113,16 +123,20 @@ void main() {
         isA<RealtimeSuccess<ExpensesData>>(),
         // After filter + refresh
         isA<RealtimeLoading<ExpensesData>>(),
-        isA<RealtimeSuccess<ExpensesData>>()
-            .having((s) => s.data.filterCategoryId, 'filterCategoryId', 1),
+        isA<RealtimeSuccess<ExpensesData>>().having(
+          (s) => s.data.filterCategoryId,
+          'filterCategoryId',
+          1,
+        ),
       ],
     );
 
     blocTest<ExpensesBloc, RealtimeState<ExpensesData>>(
       'clears search when empty query is provided',
       build: () {
-        when(() => mockRepository.watchAllExpenses())
-            .thenAnswer((_) => Stream.value(tExpenses));
+        when(
+          () => mockRepository.watchAllExpenses(),
+        ).thenAnswer((_) => Stream.value(tExpenses));
         return ExpensesBloc(mockRepository);
       },
       act: (bloc) => bloc.add(const ExpensesSearchRequested('')),
@@ -131,8 +145,11 @@ void main() {
         isA<RealtimeSuccess<ExpensesData>>(),
         // After refresh from empty search
         isA<RealtimeLoading<ExpensesData>>(),
-        isA<RealtimeSuccess<ExpensesData>>()
-            .having((s) => s.data.isSearching, 'isSearching', false),
+        isA<RealtimeSuccess<ExpensesData>>().having(
+          (s) => s.data.isSearching,
+          'isSearching',
+          false,
+        ),
       ],
     );
   });

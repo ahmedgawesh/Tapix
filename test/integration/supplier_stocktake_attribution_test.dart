@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart' hide isNotNull;
 import 'package:drift/native.dart';
@@ -127,7 +129,7 @@ void main() {
   tearDown(() => db.close());
 
   test(
-    'supplier balances never duplicate stock: FIFO exact and WAC allocated',
+    'supplier balances never duplicate stock: FIFO exact and WAC saved source',
     () async {
       final fifo = await product(
         name: 'FIFO-SUPPLIER',
@@ -295,7 +297,7 @@ void main() {
         cost: 500,
         number: 'PO-WAC-A',
       );
-      await postedPurchase(
+      final wacPurchaseB = await postedPurchase(
         supplierId: supplierB,
         productId: wac.productId,
         variantId: wac.variantId,
@@ -304,8 +306,8 @@ void main() {
         number: 'PO-WAC-B',
       );
 
-      // Both purchase-return paths must reduce Supplier A's source weight and
-      // appear in its period return quantity.
+      // Both purchase-return paths remain direct supplier facts in the period;
+      // they do not manufacture or redistribute the saved current WAC source.
       final linkedReturnId = await db
           .into(db.purchaseReturns)
           .insert(
@@ -353,6 +355,31 @@ void main() {
             ),
           );
 
+      // This fixture writes documents directly, so seed the exact saved WAC
+      // projection explicitly: one remaining unit from each purchase source.
+      final originWarehouseId =
+          (await db
+                  .customSelect(
+                    'SELECT warehouse_id FROM business_warehouse_stocks WHERE variant_id = ?',
+                    variables: [Variable.withInt(wac.variantId)],
+                  )
+                  .getSingle())
+              .read<String>('warehouse_id');
+      await db
+          .into(db.inventoryOriginStates)
+          .insert(
+            InventoryOriginStatesCompanion.insert(
+              warehouseId: originWarehouseId,
+              variantId: wac.variantId,
+              quantity: 2,
+              measurementType: 'piece',
+              layers: jsonEncode([
+                {'q': 1, 'p': wacPurchaseA.itemId, 'k': 'purchase'},
+                {'q': 1, 'p': wacPurchaseB.itemId, 'k': 'purchase'},
+              ]),
+            ),
+          );
+
       final reportA = await reportFor(supplierA);
       final reportB = await reportFor(supplierB);
       final fifoA = reportA.products.singleWhere(
@@ -376,8 +403,8 @@ void main() {
       expect(fifoB.profitCents, 300);
       expect(wacA.purchaseReturnedQuantity, 2);
       expect(wacB.purchaseReturnedQuantity, 0);
-      expect(wacA.remainingQuantity + wacB.remainingQuantity, 2);
-      expect(wacA.remainingValueCents + wacB.remainingValueCents, 1000);
+      expect((wacA.remainingQuantity, wacA.remainingValueCents), (1, 500));
+      expect((wacB.remainingQuantity, wacB.remainingValueCents), (1, 500));
 
       expect(
         reportA.totalRemainingQuantity + reportB.totalRemainingQuantity,

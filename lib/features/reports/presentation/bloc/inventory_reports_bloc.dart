@@ -547,12 +547,16 @@ class InventoryReportsBloc
             ), 0)
             FROM ${warehouseScope?.batches ?? WarehouseBatchScope.primaryBatches} b
             WHERE b.product_id = p.id AND b.is_active = 1
+              AND NOT EXISTS (
+                SELECT 1 FROM consignment_inventory_layers cl
+                WHERE cl.batch_id = b.id AND cl.status != 'voided'
+              )
               AND ((v.id IS NOT NULL AND b.variant_id = v.id)
                 OR (v.id IS NULL AND b.variant_id IS NULL))
           )
           ELSE CAST(ROUND(
             1.0 * (CASE WHEN v.id IS NULL THEN p.stock_quantity * p.cost_cents
-                  ELSE ws.quantity * ws.unit_cost_cents END) /
+                  ELSE (ws.quantity - ws.supplier_owned_quantity) * ws.unit_cost_cents END) /
             CASE WHEN p.measurement_type = 'piece' THEN 1 ELSE 1000 END
           ) AS INTEGER)
         END AS valuation_cents
@@ -575,6 +579,7 @@ class InventoryReportsBloc
             _db.sizes,
             ...WarehouseStockScope.dependencies(_db),
             _db.productBatches,
+            _db.consignmentInventoryLayers,
             ...WarehouseBatchScope.dependencies(_db),
             ...WarehouseDocumentScope.dependencies(_db),
           },

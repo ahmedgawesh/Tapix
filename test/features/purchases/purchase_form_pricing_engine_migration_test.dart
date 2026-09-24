@@ -34,21 +34,20 @@ Product _product({
   required String name,
   required bool isTaxable,
   required int purchaseTaxRateBps,
-}) =>
-    Product(
-      id: id,
-      name: name,
-      costCents: Decimal.zero,
-      priceCents: Decimal.zero,
-      stockQuantity: 0,
-      minQuantity: 0,
-      hasVariants: false,
-      isTaxable: isTaxable,
-      purchaseTaxRateBps: purchaseTaxRateBps,
-      salesTaxRateBps: 0,
-      isActive: true,
-      trackInventory: true,
-    );
+}) => Product(
+  id: id,
+  name: name,
+  costCents: Decimal.zero,
+  priceCents: Decimal.zero,
+  stockQuantity: 0,
+  minQuantity: 0,
+  hasVariants: false,
+  isTaxable: isTaxable,
+  purchaseTaxRateBps: purchaseTaxRateBps,
+  salesTaxRateBps: 0,
+  isActive: true,
+  trackInventory: true,
+);
 
 PurchaseLineItem _line({
   required String tempId,
@@ -56,16 +55,15 @@ PurchaseLineItem _line({
   required int qty,
   required int unitCostCents,
   int discountCents = 0,
-}) =>
-    PurchaseLineItem(
-      tempId: tempId,
-      product: product,
-      quantity: qty,
-      unitCostCents: Decimal.fromInt(unitCostCents),
-      discountCents: Decimal.fromInt(discountCents),
-      originalCostCents: unitCostCents,
-      originalPriceCents: unitCostCents * 2,
-    );
+}) => PurchaseLineItem(
+  tempId: tempId,
+  product: product,
+  quantity: qty,
+  unitCostCents: Decimal.fromInt(unitCostCents),
+  discountCents: Decimal.fromInt(discountCents),
+  originalCostCents: unitCostCents,
+  originalPriceCents: unitCostCents * 2,
+);
 
 PurchaseFormState _state({
   required List<PurchaseLineItem> items,
@@ -74,52 +72,65 @@ PurchaseFormState _state({
   bool enableTaxCalculations = true,
   int defaultPurchaseTaxRateBps = 0,
   bool taxInclusivePricing = false,
-}) =>
-    PurchaseFormState(
-      currencyId: 1,
-      purchaseDate: DateTime(2026, 1, 15),
-      items: items,
-      discountMode: discountMode,
-      invoiceDiscountCents: Decimal.fromInt(invoiceDiscountCents),
-      enableTaxCalculations: enableTaxCalculations,
-      defaultPurchaseTaxRateBps: defaultPurchaseTaxRateBps,
-      taxInclusivePricing: taxInclusivePricing,
-    );
+}) => PurchaseFormState(
+  currencyId: 1,
+  purchaseDate: DateTime(2026, 1, 15),
+  items: items,
+  discountMode: discountMode,
+  invoiceDiscountCents: Decimal.fromInt(invoiceDiscountCents),
+  enableTaxCalculations: enableTaxCalculations,
+  defaultPurchaseTaxRateBps: defaultPurchaseTaxRateBps,
+  taxInclusivePricing: taxInclusivePricing,
+);
 
 void main() {
   final taxable10 = _product(
-      id: 1, name: 'Taxable 10%', isTaxable: true, purchaseTaxRateBps: 1000);
+    id: 1,
+    name: 'Taxable 10%',
+    isTaxable: true,
+    purchaseTaxRateBps: 1000,
+  );
   final taxable15 = _product(
-      id: 2, name: 'Taxable 15%', isTaxable: true, purchaseTaxRateBps: 1500);
+    id: 2,
+    name: 'Taxable 15%',
+    isTaxable: true,
+    purchaseTaxRateBps: 1500,
+  );
   final nonTaxable = _product(
-      id: 3, name: 'Non-taxable', isTaxable: false, purchaseTaxRateBps: 0);
+    id: 3,
+    name: 'Non-taxable',
+    isTaxable: false,
+    purchaseTaxRateBps: 0,
+  );
 
   group('Phase 3 — engine SoT migration', () {
     // ── Q3 — discount-mode exclusivity ────────────────────────────────────
-    test(
-        'Q3a — perItem mode: engine reports itemDiscount = Σ line.discount, '
+    test('Q3a — perItem mode: engine reports itemDiscount = Σ line.discount, '
         'overall = 0', () {
-      final s = _state(items: [
-        _line(
+      final s = _state(
+        items: [
+          _line(
             tempId: '1',
             product: taxable10,
             qty: 1,
             unitCostCents: 10000,
-            discountCents: 1000),
-        _line(
+            discountCents: 1000,
+          ),
+          _line(
             tempId: '2',
             product: taxable10,
             qty: 1,
             unitCostCents: 5000,
-            discountCents: 500),
-      ]);
+            discountCents: 500,
+          ),
+        ],
+      );
       expect(s.pricing.itemDiscountTotal.cents, 1500);
       expect(s.pricing.overallDiscount.cents, 0);
       expect(s.pricing.totalDiscount.cents, 1500);
     });
 
-    test(
-        'Q3b — invoice mode: per-line discounts are suppressed at the engine, '
+    test('Q3b — invoice mode: per-line discounts are suppressed at the engine, '
         'overall = invoice value', () {
       // The user has previously entered per-line discounts but then switched
       // to `invoice` discount mode. The engine must treat the per-line ones
@@ -128,18 +139,20 @@ void main() {
       final s = _state(
         items: [
           _line(
-              tempId: '1',
-              product: taxable10,
-              qty: 1,
-              unitCostCents: 10000,
-              // stale per-line discount — must be ignored by engine.
-              discountCents: 1000),
+            tempId: '1',
+            product: taxable10,
+            qty: 1,
+            unitCostCents: 10000,
+            // stale per-line discount — must be ignored by engine.
+            discountCents: 1000,
+          ),
           _line(
-              tempId: '2',
-              product: taxable10,
-              qty: 1,
-              unitCostCents: 5000,
-              discountCents: 500),
+            tempId: '2',
+            product: taxable10,
+            qty: 1,
+            unitCostCents: 5000,
+            discountCents: 500,
+          ),
         ],
         discountMode: DiscountMode.invoice,
         invoiceDiscountCents: 750,
@@ -155,14 +168,12 @@ void main() {
       expect(s.totalDiscountCents, Decimal.fromInt(750));
     });
 
-    test(
-        'Q3c — invoice-mode percent: engine clamps to ≤ subtotal '
+    test('Q3c — invoice-mode percent: engine clamps to ≤ subtotal '
         '(legacy fixed-path quirk eliminated)', () {
       // 200% on a 10000 subtotal must clamp to 10000 — not 20000.
       final s = _state(
         items: [
-          _line(
-              tempId: '1', product: nonTaxable, qty: 1, unitCostCents: 10000),
+          _line(tempId: '1', product: nonTaxable, qty: 1, unitCostCents: 10000),
         ],
         discountMode: DiscountMode.invoice,
         // 200 currency units (20000¢) against a 10000¢ subtotal — the
@@ -176,66 +187,90 @@ void main() {
     });
 
     // ── Q5 — engine vs legacy invariant ────────────────────────────────────
-    test('Q5 — engine total satisfies subtotal − totalDiscount + tax (clamp 0)',
-        () {
-      final scenarios = <PurchaseFormState>[
-        _state(items: const []),
-        _state(items: [
-          _line(
-              tempId: '1', product: taxable10, qty: 1, unitCostCents: 10000),
-        ]),
-        _state(items: [
-          _line(
-              tempId: '1',
-              product: taxable15,
-              qty: 3,
-              unitCostCents: 2000,
-              discountCents: 600),
-          _line(
-              tempId: '2', product: taxable10, qty: 1, unitCostCents: 4000),
-          _line(
-              tempId: '3',
-              product: nonTaxable,
-              qty: 2,
-              unitCostCents: 1500,
-              discountCents: 300),
-        ]),
-        _state(
-          items: [
-            _line(
+    test(
+      'Q5 — engine total satisfies subtotal − totalDiscount + tax (clamp 0)',
+      () {
+        final scenarios = <PurchaseFormState>[
+          _state(items: const []),
+          _state(
+            items: [
+              _line(
                 tempId: '1',
                 product: taxable10,
                 qty: 1,
-                unitCostCents: 10000),
-            _line(
+                unitCostCents: 10000,
+              ),
+            ],
+          ),
+          _state(
+            items: [
+              _line(
+                tempId: '1',
+                product: taxable15,
+                qty: 3,
+                unitCostCents: 2000,
+                discountCents: 600,
+              ),
+              _line(
+                tempId: '2',
+                product: taxable10,
+                qty: 1,
+                unitCostCents: 4000,
+              ),
+              _line(
+                tempId: '3',
+                product: nonTaxable,
+                qty: 2,
+                unitCostCents: 1500,
+                discountCents: 300,
+              ),
+            ],
+          ),
+          _state(
+            items: [
+              _line(
+                tempId: '1',
+                product: taxable10,
+                qty: 1,
+                unitCostCents: 10000,
+              ),
+              _line(
                 tempId: '2',
                 product: nonTaxable,
                 qty: 1,
-                unitCostCents: 6000),
-          ],
-          discountMode: DiscountMode.invoice,
-          invoiceDiscountCents: 1600,
-        ),
-        _state(
-          items: [
-            _line(
+                unitCostCents: 6000,
+              ),
+            ],
+            discountMode: DiscountMode.invoice,
+            invoiceDiscountCents: 1600,
+          ),
+          _state(
+            items: [
+              _line(
                 tempId: '1',
                 product: taxable15,
                 qty: 1,
-                unitCostCents: 79984),
-          ],
-          discountMode: DiscountMode.invoice,
-          invoiceDiscountCents: 800, // ≈ 1% of 79984¢ net
-        ),
-      ];
-      for (final s in scenarios) {
-        final reconstructed = s.subtotalCents - s.totalDiscountCents + s.taxCents;
-        final expected =
-            reconstructed < Decimal.zero ? Decimal.zero : reconstructed;
-        expect(s.totalCents, expected,
-            reason: 'total invariant violated for scenario: $s');
-      }
-    });
+                unitCostCents: 79984,
+              ),
+            ],
+            discountMode: DiscountMode.invoice,
+            invoiceDiscountCents: 800, // ≈ 1% of 79984¢ net
+          ),
+        ];
+        for (final s in scenarios) {
+          final reconstructed =
+              s.subtotalCents - s.totalDiscountCents + s.taxCents;
+          final expected = reconstructed < Decimal.zero
+              ? Decimal.zero
+              : reconstructed;
+          expect(
+            s.totalCents,
+            expected,
+            reason: 'total invariant violated for scenario: $s',
+          );
+        }
+      },
+    );
 
     test('Q5 — Σ engine.line.total == invoice.total exactly', () {
       // The "lost cent" bug the largest-remainder allocator was built to
@@ -250,29 +285,37 @@ void main() {
         discountMode: DiscountMode.invoice,
         invoiceDiscountCents: 1444, // ≈ 7% of the 20635¢ subtotal
       );
-      final summed = s.pricing.lines
-          .fold<int>(0, (acc, l) => acc + l.total.cents);
+      final summed = s.pricing.lines.fold<int>(
+        0,
+        (acc, l) => acc + l.total.cents,
+      );
       expect(summed, s.pricing.total.cents);
     });
 
     // ── Engine consumer contract ─────────────────────────────────────────
     test('state exposes the same engine instance to bloc & UI (memoized)', () {
-      final s = _state(items: [
-        _line(tempId: '1', product: taxable10, qty: 1, unitCostCents: 10000),
-      ]);
+      final s = _state(
+        items: [
+          _line(tempId: '1', product: taxable10, qty: 1, unitCostCents: 10000),
+        ],
+      );
       final a = s.pricing;
       final b = s.pricing;
-      expect(identical(a, b), isTrue,
-          reason: 'pricing must be memoized — computing it twice is a perf bug');
+      expect(
+        identical(a, b),
+        isTrue,
+        reason: 'pricing must be memoized — computing it twice is a perf bug',
+      );
     });
 
     test('PurchaseLineItem.toPricingInput round-trips through the engine', () {
       final item = _line(
-          tempId: '1',
-          product: taxable15,
-          qty: 4,
-          unitCostCents: 2500,
-          discountCents: 500);
+        tempId: '1',
+        product: taxable15,
+        qty: 4,
+        unitCostCents: 2500,
+        discountCents: 500,
+      );
       // qty 4 × 2500 = 10000; disc 500 → net 9500; tax 15% = 1425;
       // total = 10925.
       expect(item.subtotalCents, Decimal.fromInt(10000));
@@ -281,19 +324,20 @@ void main() {
       expect(item.totalCents, Decimal.fromInt(10925));
     });
 
-    test(
-        'PurchaseLineItem.taxCentsWithSettings honors global toggle + '
+    test('PurchaseLineItem.taxCentsWithSettings honors global toggle + '
         'default fallback', () {
       final untaxedProduct = _product(
-          id: 99,
-          name: 'No rate',
-          isTaxable: true,
-          purchaseTaxRateBps: 0); // taxable flag set, but no own rate
+        id: 99,
+        name: 'No rate',
+        isTaxable: true,
+        purchaseTaxRateBps: 0,
+      ); // taxable flag set, but no own rate
       final item = _line(
-          tempId: '1',
-          product: untaxedProduct,
-          qty: 1,
-          unitCostCents: 10000);
+        tempId: '1',
+        product: untaxedProduct,
+        qty: 1,
+        unitCostCents: 10000,
+      );
       // Disabled: 0.
       expect(
         item.taxCentsWithSettings(
@@ -313,12 +357,21 @@ void main() {
     });
 
     // ── Type-system check — engine result is reachable from state ────────
-    test('pricing is an InvoicePricingResult (engine SoT, not a duplicate)',
-        () {
-      final s = _state(items: [
-        _line(tempId: '1', product: taxable10, qty: 1, unitCostCents: 10000),
-      ]);
-      expect(s.pricing, isA<InvoicePricingResult>());
-    });
+    test(
+      'pricing is an InvoicePricingResult (engine SoT, not a duplicate)',
+      () {
+        final s = _state(
+          items: [
+            _line(
+              tempId: '1',
+              product: taxable10,
+              qty: 1,
+              unitCostCents: 10000,
+            ),
+          ],
+        );
+        expect(s.pricing, isA<InvoicePricingResult>());
+      },
+    );
   });
 }

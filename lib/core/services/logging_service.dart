@@ -5,24 +5,36 @@ import 'package:flutter/foundation.dart';
 /// Provides different log levels and ensures all errors are visible in console
 class LoggingService {
   static const String _defaultTag = 'TAPIX';
-  
+
   /// Log debug information
-  static void debug(String message, {Map<String, dynamic>? params, String? tag}) {
+  static void debug(
+    String message, {
+    Map<String, dynamic>? params,
+    String? tag,
+  }) {
     if (kDebugMode) {
       _log('DEBUG', message, params: params, tag: tag);
     }
   }
-  
+
   /// Log informational messages
-  static void info(String message, {Map<String, dynamic>? params, String? tag}) {
+  static void info(
+    String message, {
+    Map<String, dynamic>? params,
+    String? tag,
+  }) {
     _log('INFO', message, params: params, tag: tag);
   }
-  
+
   /// Log warnings
-  static void warning(String message, {Map<String, dynamic>? params, String? tag}) {
+  static void warning(
+    String message, {
+    Map<String, dynamic>? params,
+    String? tag,
+  }) {
     _log('WARNING', message, params: params, tag: tag);
   }
-  
+
   /// Log errors with stack trace
   static void error(
     String message, {
@@ -32,7 +44,7 @@ class LoggingService {
     String? tag,
   }) {
     _log('ERROR', message, params: params, tag: tag);
-    
+
     if (error != null) {
       developer.log(
         'Error details: $error',
@@ -41,12 +53,12 @@ class LoggingService {
         stackTrace: stackTrace,
       );
     }
-    
+
     if (stackTrace != null && kDebugMode) {
       debug('Stack trace:\n$stackTrace', tag: tag);
     }
   }
-  
+
   /// Log exceptions with full details
   static void exception(
     String message,
@@ -56,7 +68,7 @@ class LoggingService {
   }) {
     error(message, error: exception, stackTrace: stackTrace, tag: tag);
   }
-  
+
   /// Internal logging method
   static void _log(
     String level,
@@ -67,11 +79,12 @@ class LoggingService {
     final timestamp = DateTime.now().toIso8601String();
     final logTag = tag ?? _defaultTag;
     final paramsStr = _formatParams(params);
-    final logMessage = '[$timestamp] $level: $logTag - $message${paramsStr.isNotEmpty ? ' | $paramsStr' : ''}';
-    
+    final logMessage =
+        '[$timestamp] $level: $logTag - $message${paramsStr.isNotEmpty ? ' | $paramsStr' : ''}';
+
     // Always print to console for visibility
     debugPrint(logMessage);
-    
+
     // Also use developer.log for better filtering in IDE
     developer.log(message, name: '$logTag [$level]', time: DateTime.now());
   }
@@ -80,36 +93,59 @@ class LoggingService {
     if (params == null || params.isEmpty) return '';
     return params.entries.map((e) => '${e.key}=${e.value}').join(', ');
   }
-  
+
   /// Log method entry for debugging
-  static void methodEntry(String methodName, {Map<String, dynamic>? params, String? tag}) {
+  static void methodEntry(
+    String methodName, {
+    Map<String, dynamic>? params,
+    String? tag,
+  }) {
     if (kDebugMode) {
       final paramStr = _formatParams(params);
-      debug('→ $methodName${paramStr.isNotEmpty ? '($paramStr)' : ''}', tag: tag);
+      debug(
+        '→ $methodName${paramStr.isNotEmpty ? '($paramStr)' : ''}',
+        tag: tag,
+      );
     }
   }
-  
+
   /// Log method exit for debugging
   static void methodExit(String methodName, {dynamic result, String? tag}) {
     if (kDebugMode) {
       debug('← $methodName${result != null ? ' -> $result' : ''}', tag: tag);
     }
   }
-  
+
   /// Log bloc events for debugging
   static void blocEvent(String blocName, String eventName, {String? tag}) {
     debug('BLOC Event: $blocName -> $eventName', tag: tag ?? 'BLOC');
   }
-  
+
   /// Log repository operations
-  static void repositoryOperation(String repoName, String operation, {Map<String, dynamic>? params, String? tag}) {
+  static void repositoryOperation(
+    String repoName,
+    String operation, {
+    Map<String, dynamic>? params,
+    String? tag,
+  }) {
     final paramStr = _formatParams(params);
-    info('REPO: $repoName.$operation${paramStr.isNotEmpty ? '($paramStr)' : ''}', tag: tag ?? 'REPO');
+    info(
+      'REPO: $repoName.$operation${paramStr.isNotEmpty ? '($paramStr)' : ''}',
+      tag: tag ?? 'REPO',
+    );
   }
-  
+
   /// Log service operations
-  static void serviceOperation(String serviceName, String operation, {dynamic data, String? tag}) {
-    info('SERVICE: $serviceName.$operation${data != null ? ' -> $data' : ''}', tag: tag ?? 'SERVICE');
+  static void serviceOperation(
+    String serviceName,
+    String operation, {
+    dynamic data,
+    String? tag,
+  }) {
+    info(
+      'SERVICE: $serviceName.$operation${data != null ? ' -> $data' : ''}',
+      tag: tag ?? 'SERVICE',
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -117,7 +153,11 @@ class LoggingService {
   // ---------------------------------------------------------------------------
 
   /// Log a database operation (migration, backup, integrity check)
-  static void database(String operation, {Map<String, dynamic>? params, bool isError = false}) {
+  static void database(
+    String operation, {
+    Map<String, dynamic>? params,
+    bool isError = false,
+  }) {
     if (isError) {
       error('DB: $operation', params: params, tag: 'DB');
     } else {
@@ -159,15 +199,14 @@ class LoggingService {
   }
 
   /// Log a data integrity event (invariant check result)
-  static void integrity(
-    String check, {
-    bool passed = true,
-    String? details,
-  }) {
+  static void integrity(String check, {bool passed = true, String? details}) {
     if (passed) {
       info('INTEGRITY: $check PASSED', tag: 'INTEGRITY');
     } else {
-      error('INTEGRITY: $check FAILED${details != null ? ' — $details' : ''}', tag: 'INTEGRITY');
+      error(
+        'INTEGRITY: $check FAILED${details != null ? ' — $details' : ''}',
+        tag: 'INTEGRITY',
+      );
     }
   }
 }

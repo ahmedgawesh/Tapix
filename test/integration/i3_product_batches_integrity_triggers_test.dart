@@ -44,7 +44,9 @@ void main() {
         .getSingle();
     final currencyId = currencyRow.data['id'] as int;
 
-    productId = await db.into(db.products).insert(
+    productId = await db
+        .into(db.products)
+        .insert(
           ProductsCompanion.insert(
             sku: const Value('SKU-I3'),
             name: 'I3 Test Product',
@@ -94,10 +96,12 @@ void main() {
       received: received,
       remaining: remaining ?? received,
     );
-    final row = await db.customSelect(
-      'SELECT id FROM product_batches WHERE batch_number = ?',
-      variables: [Variable.withString(batchNumber)],
-    ).getSingle();
+    final row = await db
+        .customSelect(
+          'SELECT id FROM product_batches WHERE batch_number = ?',
+          variables: [Variable.withString(batchNumber)],
+        )
+        .getSingle();
     return row.data['id'] as int;
   }
 
@@ -114,48 +118,53 @@ void main() {
           received: 10,
           remaining: -1,
         ),
-        throwsA(predicate(
-          (e) => e.toString().contains('remaining_quantity must be >= 0'),
-          'message contains "remaining_quantity must be >= 0"',
-        )),
+        throwsA(
+          predicate(
+            (e) => e.toString().contains('remaining_quantity must be >= 0'),
+            'message contains "remaining_quantity must be >= 0"',
+          ),
+        ),
       );
 
       // Verify the row was NOT inserted (BEFORE INSERT trigger short-circuits).
-      final count = await db.customSelect(
-        'SELECT COUNT(*) AS c FROM product_batches WHERE batch_number = ?',
-        variables: [Variable.withString('B-NEG-INSERT')],
-      ).getSingle();
+      final count = await db
+          .customSelect(
+            'SELECT COUNT(*) AS c FROM product_batches WHERE batch_number = ?',
+            variables: [Variable.withString('B-NEG-INSERT')],
+          )
+          .getSingle();
       expect(count.data['c'], equals(0));
     },
   );
 
-  test(
-    'I-DB-1 UPDATE: rejects remaining_quantity going below zero',
-    () async {
-      final batchId = await insertValidBatch(
-        batchNumber: 'B-NEG-UPDATE',
-        received: 10,
-        remaining: 5,
-      );
+  test('I-DB-1 UPDATE: rejects remaining_quantity going below zero', () async {
+    final batchId = await insertValidBatch(
+      batchNumber: 'B-NEG-UPDATE',
+      received: 10,
+      remaining: 5,
+    );
 
-      await expectLater(
-        () => db.customStatement(
-          'UPDATE product_batches SET remaining_quantity = -3 WHERE id = ?',
-          [batchId],
-        ),
-        throwsA(predicate(
+    await expectLater(
+      () => db.customStatement(
+        'UPDATE product_batches SET remaining_quantity = -3 WHERE id = ?',
+        [batchId],
+      ),
+      throwsA(
+        predicate(
           (e) => e.toString().contains('remaining_quantity must be >= 0'),
-        )),
-      );
+        ),
+      ),
+    );
 
-      // Original value is preserved.
-      final row = await db.customSelect(
-        'SELECT remaining_quantity AS r FROM product_batches WHERE id = ?',
-        variables: [Variable.withInt(batchId)],
-      ).getSingle();
-      expect(row.data['r'], equals(5));
-    },
-  );
+    // Original value is preserved.
+    final row = await db
+        .customSelect(
+          'SELECT remaining_quantity AS r FROM product_batches WHERE id = ?',
+          variables: [Variable.withInt(batchId)],
+        )
+        .getSingle();
+    expect(row.data['r'], equals(5));
+  });
 
   // ──────────────────────────────────────────────────────────────────────────
   // I-DB-2: remaining_quantity <= received_quantity
@@ -170,12 +179,14 @@ void main() {
           received: 10,
           remaining: 11,
         ),
-        throwsA(predicate(
-          (e) => e
-              .toString()
-              .contains('remaining_quantity must be <= received_quantity'),
-          'message contains "remaining_quantity must be <= received_quantity"',
-        )),
+        throwsA(
+          predicate(
+            (e) => e.toString().contains(
+              'remaining_quantity must be <= received_quantity',
+            ),
+            'message contains "remaining_quantity must be <= received_quantity"',
+          ),
+        ),
       );
     },
   );
@@ -196,17 +207,21 @@ void main() {
           'UPDATE product_batches SET remaining_quantity = 12 WHERE id = ?',
           [batchId],
         ),
-        throwsA(predicate(
-          (e) => e
-              .toString()
-              .contains('remaining_quantity must be <= received_quantity'),
-        )),
+        throwsA(
+          predicate(
+            (e) => e.toString().contains(
+              'remaining_quantity must be <= received_quantity',
+            ),
+          ),
+        ),
       );
 
-      final row = await db.customSelect(
-        'SELECT remaining_quantity AS r FROM product_batches WHERE id = ?',
-        variables: [Variable.withInt(batchId)],
-      ).getSingle();
+      final row = await db
+          .customSelect(
+            'SELECT remaining_quantity AS r FROM product_batches WHERE id = ?',
+            variables: [Variable.withInt(batchId)],
+          )
+          .getSingle();
       expect(row.data['r'], equals(5));
     },
   );
@@ -215,31 +230,30 @@ void main() {
   // Positive cases — valid mutations must still pass through unchanged.
   // ──────────────────────────────────────────────────────────────────────────
 
-  test(
-    'valid INSERT (0 <= remaining <= received) succeeds',
-    () async {
-      await insertBatchRaw(
-        batchNumber: 'B-VALID-FULL',
-        received: 10,
-        remaining: 10,
-      );
-      await insertBatchRaw(
-        batchNumber: 'B-VALID-PARTIAL',
-        received: 10,
-        remaining: 3,
-      );
-      await insertBatchRaw(
-        batchNumber: 'B-VALID-EMPTY',
-        received: 10,
-        remaining: 0,
-      );
+  test('valid INSERT (0 <= remaining <= received) succeeds', () async {
+    await insertBatchRaw(
+      batchNumber: 'B-VALID-FULL',
+      received: 10,
+      remaining: 10,
+    );
+    await insertBatchRaw(
+      batchNumber: 'B-VALID-PARTIAL',
+      received: 10,
+      remaining: 3,
+    );
+    await insertBatchRaw(
+      batchNumber: 'B-VALID-EMPTY',
+      received: 10,
+      remaining: 0,
+    );
 
-      final count = await db.customSelect(
-        "SELECT COUNT(*) AS c FROM product_batches WHERE batch_number LIKE 'B-VALID-%'",
-      ).getSingle();
-      expect(count.data['c'], equals(3));
-    },
-  );
+    final count = await db
+        .customSelect(
+          "SELECT COUNT(*) AS c FROM product_batches WHERE batch_number LIKE 'B-VALID-%'",
+        )
+        .getSingle();
+    expect(count.data['c'], equals(3));
+  });
 
   test(
     'valid UPDATE (consume down to zero, restore back up) succeeds',
@@ -262,10 +276,12 @@ void main() {
         [batchId],
       );
 
-      final row = await db.customSelect(
-        'SELECT remaining_quantity AS r FROM product_batches WHERE id = ?',
-        variables: [Variable.withInt(batchId)],
-      ).getSingle();
+      final row = await db
+          .customSelect(
+            'SELECT remaining_quantity AS r FROM product_batches WHERE id = ?',
+            variables: [Variable.withInt(batchId)],
+          )
+          .getSingle();
       expect(row.data['r'], equals(10));
     },
   );
@@ -274,44 +290,42 @@ void main() {
   // Trigger introspection — proves all four triggers were actually installed.
   // ──────────────────────────────────────────────────────────────────────────
 
-  test(
-    'all four integrity triggers are present in sqlite_master',
-    () async {
-      final rows = await db.customSelect(
-        "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'trg_product_batches_%' ORDER BY name",
-      ).get();
-      final names = rows.map((r) => r.data['name'] as String).toList();
-      expect(
-        names,
-        containsAll(<String>[
-          'trg_product_batches_remaining_le_received_insert',
-          'trg_product_batches_remaining_le_received_update',
-          'trg_product_batches_remaining_nonneg_insert',
-          'trg_product_batches_remaining_nonneg_update',
-        ]),
-      );
-    },
-  );
+  test('all four integrity triggers are present in sqlite_master', () async {
+    final rows = await db
+        .customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'trg_product_batches_%' ORDER BY name",
+        )
+        .get();
+    final names = rows.map((r) => r.data['name'] as String).toList();
+    expect(
+      names,
+      containsAll(<String>[
+        'trg_product_batches_remaining_le_received_insert',
+        'trg_product_batches_remaining_le_received_update',
+        'trg_product_batches_remaining_nonneg_insert',
+        'trg_product_batches_remaining_nonneg_update',
+      ]),
+    );
+  });
 
-  test(
-    'installProductBatchesIntegrityTriggersForTest is idempotent '
-    '(safe to call repeatedly)',
-    () async {
-      // Already installed via onCreate. Calling again must not throw.
-      await db.installProductBatchesIntegrityTriggersForTest();
-      await db.installProductBatchesIntegrityTriggersForTest();
+  test('installProductBatchesIntegrityTriggersForTest is idempotent '
+      '(safe to call repeatedly)', () async {
+    // Already installed via onCreate. Calling again must not throw.
+    await db.installProductBatchesIntegrityTriggersForTest();
+    await db.installProductBatchesIntegrityTriggersForTest();
 
-      // Behavior must remain identical: invariant still enforced.
-      await expectLater(
-        () => insertBatchRaw(
-          batchNumber: 'B-IDEMPOTENT',
-          received: 5,
-          remaining: -1,
-        ),
-        throwsA(predicate(
+    // Behavior must remain identical: invariant still enforced.
+    await expectLater(
+      () => insertBatchRaw(
+        batchNumber: 'B-IDEMPOTENT',
+        received: 5,
+        remaining: -1,
+      ),
+      throwsA(
+        predicate(
           (e) => e.toString().contains('remaining_quantity must be >= 0'),
-        )),
-      );
-    },
-  );
+        ),
+      ),
+    );
+  });
 }

@@ -24,31 +24,36 @@ void main() {
 
   /// Helper: fetch all posted journal entry lines for a source.
   Future<List<({int accountId, int debitCents, int creditCents})>>
-      journalLinesForSource(String sourceTable, int sourceId) async {
-    final rows = await db.customSelect(
-      'SELECT jel.account_id, jel.debit_cents, jel.credit_cents '
-      'FROM journal_entry_lines jel '
-      'INNER JOIN journal_entries je ON je.id = jel.journal_entry_id '
-      'WHERE je.source_table = ? AND je.source_id = ? AND je.status = ?',
-      variables: [
-        Variable.withString(sourceTable),
-        Variable.withInt(sourceId),
-        Variable.withString('posted'),
-      ],
-    ).get();
+  journalLinesForSource(String sourceTable, int sourceId) async {
+    final rows = await db
+        .customSelect(
+          'SELECT jel.account_id, jel.debit_cents, jel.credit_cents '
+          'FROM journal_entry_lines jel '
+          'INNER JOIN journal_entries je ON je.id = jel.journal_entry_id '
+          'WHERE je.source_table = ? AND je.source_id = ? AND je.status = ?',
+          variables: [
+            Variable.withString(sourceTable),
+            Variable.withInt(sourceId),
+            Variable.withString('posted'),
+          ],
+        )
+        .get();
 
     return rows
-        .map((r) => (
-              accountId: r.read<int>('account_id'),
-              debitCents: r.read<int>('debit_cents'),
-              creditCents: r.read<int>('credit_cents'),
-            ))
+        .map(
+          (r) => (
+            accountId: r.read<int>('account_id'),
+            debitCents: r.read<int>('debit_cents'),
+            creditCents: r.read<int>('credit_cents'),
+          ),
+        )
         .toList();
   }
 
   /// Helper: sum debits and credits.
   ({int totalDebit, int totalCredit}) sumLines(
-      List<({int accountId, int debitCents, int creditCents})> lines) {
+    List<({int accountId, int debitCents, int creditCents})> lines,
+  ) {
     int d = 0, c = 0;
     for (final l in lines) {
       d += l.debitCents;
@@ -59,23 +64,27 @@ void main() {
 
   /// Helper: look up account id by code.
   Future<int> accountIdByCode(String code) async {
-    final row = await db.customSelect(
-      'SELECT id FROM accounts WHERE account_code = ?',
-      variables: [Variable.withString(code)],
-    ).getSingle();
+    final row = await db
+        .customSelect(
+          'SELECT id FROM accounts WHERE account_code = ?',
+          variables: [Variable.withString(code)],
+        )
+        .getSingle();
     return row.read<int>('id');
   }
 
   /// Helper: check if reversed journal entries exist for a source.
   Future<int> reversedJournalCount(String sourceTable, int sourceId) async {
-    final row = await db.customSelect(
-      'SELECT COUNT(*) AS cnt FROM journal_entries '
-      'WHERE source_table = ? AND source_id = ? AND is_reversed = 1',
-      variables: [
-        Variable.withString(sourceTable),
-        Variable.withInt(sourceId),
-      ],
-    ).getSingle();
+    final row = await db
+        .customSelect(
+          'SELECT COUNT(*) AS cnt FROM journal_entries '
+          'WHERE source_table = ? AND source_id = ? AND is_reversed = 1',
+          variables: [
+            Variable.withString(sourceTable),
+            Variable.withInt(sourceId),
+          ],
+        )
+        .getSingle();
     return row.read<int>('cnt');
   }
 
@@ -110,46 +119,54 @@ void main() {
   late int supplierId;
 
   Future<void> seedData() async {
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     currencyId = usd.id;
 
-    productId = await db.into(db.products).insert(
-      ProductsCompanion.insert(
-        sku: const Value<String?>('ADJ-PROD-001'),
-        name: 'Adj Return Test Product',
-        costCents: Decimal.fromInt(3000), // $30.00
-        priceCents: Decimal.fromInt(5000), // $50.00
-        currencyId: Value(currencyId),
-        stockQuantity: const Value(100),
-      ),
-    );
+    productId = await db
+        .into(db.products)
+        .insert(
+          ProductsCompanion.insert(
+            sku: const Value<String?>('ADJ-PROD-001'),
+            name: 'Adj Return Test Product',
+            costCents: Decimal.fromInt(3000), // $30.00
+            priceCents: Decimal.fromInt(5000), // $50.00
+            currencyId: Value(currencyId),
+            stockQuantity: const Value(100),
+          ),
+        );
 
-    variantId = await db.into(db.productVariants).insert(
-      ProductVariantsCompanion.insert(
-        productId: productId,
-        stockQuantity: const Value(100),
-        costCents: Decimal.fromInt(3000),
-        priceCents: Decimal.fromInt(5000),
-      ),
-    );
+    variantId = await db
+        .into(db.productVariants)
+        .insert(
+          ProductVariantsCompanion.insert(
+            productId: productId,
+            stockQuantity: const Value(100),
+            costCents: Decimal.fromInt(3000),
+            priceCents: Decimal.fromInt(5000),
+          ),
+        );
 
-    customerId = await db.into(db.customers).insert(
-      CustomersCompanion.insert(
-        name: 'Adj Test Customer',
-        currencyId: currencyId,
-        balanceCents: Value(Decimal.fromInt(50000)), // owes $500
-      ),
-    );
+    customerId = await db
+        .into(db.customers)
+        .insert(
+          CustomersCompanion.insert(
+            name: 'Adj Test Customer',
+            currencyId: currencyId,
+            balanceCents: Value(Decimal.fromInt(50000)), // owes $500
+          ),
+        );
 
-    supplierId = await db.into(db.suppliers).insert(
-      SuppliersCompanion.insert(
-        name: 'Adj Test Supplier',
-        currencyId: currencyId,
-        balanceCents: Value(Decimal.fromInt(80000)), // we owe $800
-      ),
-    );
+    supplierId = await db
+        .into(db.suppliers)
+        .insert(
+          SuppliersCompanion.insert(
+            name: 'Adj Test Supplier',
+            currencyId: currencyId,
+            balanceCents: Value(Decimal.fromInt(80000)), // we owe $800
+          ),
+        );
   }
 
   // =========================================================================
@@ -171,6 +188,8 @@ void main() {
         ),
         [
           SaleReturnAdjustmentItemsCompanion.insert(
+            sourceResolution: const Value('unverified'),
+            sourceResolutionReason: const Value('test fixture'),
             returnId: 0,
             productId: productId,
             variantId: Value(variantId),
@@ -193,34 +212,52 @@ void main() {
       );
 
       // Fetch journal lines
-      final lines =
-          await journalLinesForSource('sale_return_adjustments', returnId);
+      final lines = await journalLinesForSource(
+        'sale_return_adjustments',
+        returnId,
+      );
       final totals = sumLines(lines);
 
       // VERIFY: Balanced
-      expect(totals.totalDebit, equals(totals.totalCredit),
-          reason: 'JE must be balanced');
+      expect(
+        totals.totalDebit,
+        equals(totals.totalCredit),
+        reason: 'JE must be balanced',
+      );
 
       // VERIFY: 4 lines
-      expect(lines.length, equals(4),
-          reason: 'Should have 4 lines (financial + inventory)');
+      expect(
+        lines.length,
+        equals(4),
+        reason: 'Should have 4 lines (financial + inventory)',
+      );
 
       // VERIFY: Financial side
       final acct5700 = await accountIdByCode('5700');
       final acct1100 = await accountIdByCode('1100');
-      final financial5700 =
-          lines.where((l) => l.accountId == acct5700).toList();
-      final financial1100 =
-          lines.where((l) => l.accountId == acct1100).toList();
+      final financial5700 = lines
+          .where((l) => l.accountId == acct5700)
+          .toList();
+      final financial1100 = lines
+          .where((l) => l.accountId == acct1100)
+          .toList();
 
-      expect(financial5700.length, equals(1),
-          reason: 'One line for Sales Return Adj (5700)');
-      expect(financial5700.first.debitCents, equals(10000),
-          reason: 'Dr Sales Return Adj = total');
-      expect(financial1100.length, equals(1),
-          reason: 'One line for AR (1100)');
-      expect(financial1100.first.creditCents, equals(10000),
-          reason: 'Cr AR = total');
+      expect(
+        financial5700.length,
+        equals(1),
+        reason: 'One line for Sales Return Adj (5700)',
+      );
+      expect(
+        financial5700.first.debitCents,
+        equals(10000),
+        reason: 'Dr Sales Return Adj = total',
+      );
+      expect(financial1100.length, equals(1), reason: 'One line for AR (1100)');
+      expect(
+        financial1100.first.creditCents,
+        equals(10000),
+        reason: 'Cr AR = total',
+      );
 
       // VERIFY: Inventory side
       final acct1200 = await accountIdByCode('1200');
@@ -228,28 +265,41 @@ void main() {
       final inv1200 = lines.where((l) => l.accountId == acct1200).toList();
       final inv5300 = lines.where((l) => l.accountId == acct5300).toList();
 
-      expect(inv1200.length, equals(1),
-          reason: 'One line for Inventory (1200)');
-      expect(inv1200.first.debitCents, greaterThan(0),
-          reason: 'Dr Inventory > 0 (cost-based)');
-      expect(inv5300.length, equals(1),
-          reason: 'One line for COGS (5300)');
-      expect(inv5300.first.creditCents, greaterThan(0),
-          reason: 'Cr COGS > 0');
+      expect(
+        inv1200.length,
+        equals(1),
+        reason: 'One line for Inventory (1200)',
+      );
+      expect(
+        inv1200.first.debitCents,
+        greaterThan(0),
+        reason: 'Dr Inventory > 0 (cost-based)',
+      );
+      expect(inv5300.length, equals(1), reason: 'One line for COGS (5300)');
+      expect(inv5300.first.creditCents, greaterThan(0), reason: 'Cr COGS > 0');
 
       // VERIFY: Inventory cost = qty * unitCostCents
       // unitCostCents was auto-fetched as 3000 (product cost)
-      expect(inv1200.first.debitCents, equals(6000),
-          reason: 'Inventory Dr = 2 * 3000');
-      expect(inv5300.first.creditCents, equals(6000),
-          reason: 'COGS Cr = 2 * 3000');
+      expect(
+        inv1200.first.debitCents,
+        equals(6000),
+        reason: 'Inventory Dr = 2 * 3000',
+      );
+      expect(
+        inv5300.first.creditCents,
+        equals(6000),
+        reason: 'COGS Cr = 2 * 3000',
+      );
 
       // VERIFY: Stock increased (sale return adds stock back)
-      final variant = await (db.select(db.productVariants)
-            ..where((v) => v.id.equals(variantId)))
-          .getSingle();
-      expect(variant.stockQuantity, equals(102),
-          reason: 'Stock should be 100 + 2 = 102');
+      final variant = await (db.select(
+        db.productVariants,
+      )..where((v) => v.id.equals(variantId))).getSingle();
+      expect(
+        variant.stockQuantity,
+        equals(102),
+        reason: 'Stock should be 100 + 2 = 102',
+      );
 
       // VERIFY: Customer balance REDUCED by the refund.
       // A CREDIT adjustment sale return now reduces `customers.balance_cents`
@@ -257,109 +307,136 @@ void main() {
       // less. This keeps the AR sub-ledger reconciled 1:1 with the GL 1100
       // credit posted above (Cr AR = 10000). Seed was 50000; after a $100
       // credit return the customer owes 40000.
-      final customer = await (db.select(db.customers)
-            ..where((c) => c.id.equals(customerId)))
-          .getSingle();
-      expect(customer.balanceCents.toBigInt().toInt(), equals(40000),
-          reason: 'Credit adjustment sale return must reduce customer '
-              'balance by the refund (50000 - 10000 = 40000).');
+      final customer = await (db.select(
+        db.customers,
+      )..where((c) => c.id.equals(customerId))).getSingle();
+      expect(
+        customer.balanceCents.toBigInt().toInt(),
+        equals(40000),
+        reason:
+            'Credit adjustment sale return must reduce customer '
+            'balance by the refund (50000 - 10000 = 40000).',
+      );
 
       // VERIFY: A customer_transactions row surfaces the credit return.
-      final txns = await (db.select(db.customerTransactions)
-            ..where((t) => t.customerId.equals(customerId)))
-          .get();
+      final txns = await (db.select(
+        db.customerTransactions,
+      )..where((t) => t.customerId.equals(customerId))).get();
       final adjTxn = txns
           .where((t) => t.transactionType == 'adjustment_return')
           .toList();
-      expect(adjTxn.length, equals(1),
-          reason: 'One adjustment_return customer transaction expected.');
-      expect(adjTxn.first.amountCents.toBigInt().toInt(), equals(-10000),
-          reason: 'Transaction amount = -refund (reduces receivable).');
+      expect(
+        adjTxn.length,
+        equals(1),
+        reason: 'One adjustment_return customer transaction expected.',
+      );
+      expect(
+        adjTxn.first.amountCents.toBigInt().toInt(),
+        equals(-10000),
+        reason: 'Transaction amount = -refund (reduces receivable).',
+      );
     });
 
-    test('voidSaleAdjReturn creates reversal and restores stock/balance',
-        () async {
-      await seedData();
+    test(
+      'voidSaleAdjReturn creates reversal and restores stock/balance',
+      () async {
+        await seedData();
 
-      final returnId = await adjDao.createSaleAdjReturn(
-        SaleReturnAdjustmentsCompanion.insert(
-          returnNumber: 'SAR-TEST-0002',
-          customerId: Value(customerId),
-          currencyId: currencyId,
-          totalCents: Decimal.fromInt(5000),
-          refundMethod: const Value('credit'),
-        ),
-        [
-          SaleReturnAdjustmentItemsCompanion.insert(
-            returnId: 0,
-            productId: productId,
-            variantId: Value(variantId),
-            quantity: 1,
-            unitPriceCents: Decimal.fromInt(5000),
+        final returnId = await adjDao.createSaleAdjReturn(
+          SaleReturnAdjustmentsCompanion.insert(
+            returnNumber: 'SAR-TEST-0002',
+            customerId: Value(customerId),
+            currencyId: currencyId,
             totalCents: Decimal.fromInt(5000),
+            refundMethod: const Value('credit'),
           ),
-        ],
-      );
+          [
+            SaleReturnAdjustmentItemsCompanion.insert(
+              sourceResolution: const Value('unverified'),
+              sourceResolutionReason: const Value('test fixture'),
+              returnId: 0,
+              productId: productId,
+              variantId: Value(variantId),
+              quantity: 1,
+              unitPriceCents: Decimal.fromInt(5000),
+              totalCents: Decimal.fromInt(5000),
+            ),
+          ],
+        );
 
-      // Post
-      await adjDao.postSaleAdjReturn(
-        returnId,
-        journalEntryService: journalService,
-        allowOverHistory: true,
-      );
+        // Post
+        await adjDao.postSaleAdjReturn(
+          returnId,
+          journalEntryService: journalService,
+          allowOverHistory: true,
+        );
 
-      // Verify stock after post
-      var variant = await (db.select(db.productVariants)
-            ..where((v) => v.id.equals(variantId)))
-          .getSingle();
-      expect(variant.stockQuantity, equals(101));
+        // Verify stock after post
+        var variant = await (db.select(
+          db.productVariants,
+        )..where((v) => v.id.equals(variantId))).getSingle();
+        expect(variant.stockQuantity, equals(101));
 
-      // Void
-      await adjDao.voidSaleAdjReturn(
-        returnId,
-        journalEntryService: journalService,
-      );
+        // Void
+        await adjDao.voidSaleAdjReturn(
+          returnId,
+          journalEntryService: journalService,
+        );
 
-      // VERIFY: Original JE is reversed
-      final reversedCount =
-          await reversedJournalCount('sale_return_adjustments', returnId);
-      expect(reversedCount, greaterThan(0),
-          reason: 'Original JE should be reversed');
+        // VERIFY: Original JE is reversed
+        final reversedCount = await reversedJournalCount(
+          'sale_return_adjustments',
+          returnId,
+        );
+        expect(
+          reversedCount,
+          greaterThan(0),
+          reason: 'Original JE should be reversed',
+        );
 
-      // VERIFY: Stock restored
-      variant = await (db.select(db.productVariants)
-            ..where((v) => v.id.equals(variantId)))
-          .getSingle();
-      expect(variant.stockQuantity, equals(100),
-          reason: 'Stock should return to original 100');
+        // VERIFY: Stock restored
+        variant = await (db.select(
+          db.productVariants,
+        )..where((v) => v.id.equals(variantId))).getSingle();
+        expect(
+          variant.stockQuantity,
+          equals(100),
+          reason: 'Stock should return to original 100',
+        );
 
-      // VERIFY: Customer balance RESTORED to seed through post + void.
-      // The credit post reduced the balance by 5000 (50000 -> 45000); the
-      // void writes the exact reversal (+5000), restoring 50000. This pins
-      // the post/void symmetry on the AR sub-ledger.
-      final customer = await (db.select(db.customers)
-            ..where((c) => c.id.equals(customerId)))
-          .getSingle();
-      expect(customer.balanceCents.toBigInt().toInt(), equals(50000),
-          reason: 'Customer balance must return to the seed value after '
-              'post (-5000) then void (+5000) of a credit adjustment return.');
+        // VERIFY: Customer balance RESTORED to seed through post + void.
+        // The credit post reduced the balance by 5000 (50000 -> 45000); the
+        // void writes the exact reversal (+5000), restoring 50000. This pins
+        // the post/void symmetry on the AR sub-ledger.
+        final customer = await (db.select(
+          db.customers,
+        )..where((c) => c.id.equals(customerId))).getSingle();
+        expect(
+          customer.balanceCents.toBigInt().toInt(),
+          equals(50000),
+          reason:
+              'Customer balance must return to the seed value after '
+              'post (-5000) then void (+5000) of a credit adjustment return.',
+        );
 
-      // VERIFY: reversal customer transaction present.
-      final txns = await (db.select(db.customerTransactions)
-            ..where((t) => t.customerId.equals(customerId)))
-          .get();
-      expect(
+        // VERIFY: reversal customer transaction present.
+        final txns = await (db.select(
+          db.customerTransactions,
+        )..where((t) => t.customerId.equals(customerId))).get();
+        expect(
           txns.where((t) => t.transactionType == 'adjustment_return').length,
           equals(1),
-          reason: 'Original adjustment_return row remains.');
-      expect(
+          reason: 'Original adjustment_return row remains.',
+        );
+        expect(
           txns
-              .where((t) =>
-                  t.transactionType == 'adjustment_return_reversal')
+              .where((t) => t.transactionType == 'adjustment_return_reversal')
               .length,
           equals(1),
-          reason: 'Void writes one adjustment_return_reversal row.');
-    });
+          reason: 'Void writes one adjustment_return_reversal row.',
+        );
+      },
+    );
   });
 
   // =========================================================================
@@ -398,16 +475,24 @@ void main() {
 
       // Fetch journal lines
       final lines = await journalLinesForSource(
-          'purchase_return_adjustments', returnId);
+        'purchase_return_adjustments',
+        returnId,
+      );
       final totals = sumLines(lines);
 
       // VERIFY: Balanced
-      expect(totals.totalDebit, equals(totals.totalCredit),
-          reason: 'JE must be balanced');
+      expect(
+        totals.totalDebit,
+        equals(totals.totalCredit),
+        reason: 'JE must be balanced',
+      );
 
       // VERIFY: 4 lines
-      expect(lines.length, equals(4),
-          reason: 'Should have 4 lines (financial + inventory)');
+      expect(
+        lines.length,
+        equals(4),
+        reason: 'Should have 4 lines (financial + inventory)',
+      );
 
       // VERIFY: Financial side — Dr AP (2000), Cr PurchaseRetAdj (4100)
       final acct2000 = await accountIdByCode('2000');
@@ -416,11 +501,13 @@ void main() {
       final fin4100 = lines.where((l) => l.accountId == acct4100).toList();
 
       expect(fin2000.length, equals(1));
-      expect(fin2000.first.debitCents, equals(15000),
-          reason: 'Dr AP = total');
+      expect(fin2000.first.debitCents, equals(15000), reason: 'Dr AP = total');
       expect(fin4100.length, equals(1));
-      expect(fin4100.first.creditCents, equals(15000),
-          reason: 'Cr Purchase Ret Adj = total');
+      expect(
+        fin4100.first.creditCents,
+        equals(15000),
+        reason: 'Cr Purchase Ret Adj = total',
+      );
 
       // VERIFY: Inventory side — Dr COGS (5300), Cr Inventory (1200)
       final acct5300 = await accountIdByCode('5300');
@@ -429,87 +516,109 @@ void main() {
       final inv1200 = lines.where((l) => l.accountId == acct1200).toList();
 
       expect(inv5300.length, equals(1));
-      expect(inv5300.first.debitCents, equals(9000),
-          reason: 'Dr COGS = 3 * 3000');
+      expect(
+        inv5300.first.debitCents,
+        equals(9000),
+        reason: 'Dr COGS = 3 * 3000',
+      );
       expect(inv1200.length, equals(1));
-      expect(inv1200.first.creditCents, equals(9000),
-          reason: 'Cr Inventory = 3 * 3000');
+      expect(
+        inv1200.first.creditCents,
+        equals(9000),
+        reason: 'Cr Inventory = 3 * 3000',
+      );
 
       // VERIFY: Stock decreased (purchase return sends stock back)
-      final variant = await (db.select(db.productVariants)
-            ..where((v) => v.id.equals(variantId)))
-          .getSingle();
-      expect(variant.stockQuantity, equals(97),
-          reason: 'Stock should be 100 - 3 = 97');
+      final variant = await (db.select(
+        db.productVariants,
+      )..where((v) => v.id.equals(variantId))).getSingle();
+      expect(
+        variant.stockQuantity,
+        equals(97),
+        reason: 'Stock should be 100 - 3 = 97',
+      );
 
       // VERIFY: Supplier balance decreased
-      final supplier = await (db.select(db.suppliers)
-            ..where((s) => s.id.equals(supplierId)))
-          .getSingle();
-      expect(supplier.balanceCents.toBigInt().toInt(), equals(65000),
-          reason: 'Supplier balance: 80000 - 15000 = 65000');
+      final supplier = await (db.select(
+        db.suppliers,
+      )..where((s) => s.id.equals(supplierId))).getSingle();
+      expect(
+        supplier.balanceCents.toBigInt().toInt(),
+        equals(65000),
+        reason: 'Supplier balance: 80000 - 15000 = 65000',
+      );
     });
 
-    test('voidPurchaseAdjReturn creates reversal and restores stock/balance',
-        () async {
-      await seedData();
+    test(
+      'voidPurchaseAdjReturn creates reversal and restores stock/balance',
+      () async {
+        await seedData();
 
-      final returnId = await adjDao.createPurchaseAdjReturn(
-        PurchaseReturnAdjustmentsCompanion.insert(
-          returnNumber: 'PAR-TEST-0002',
-          supplierId: supplierId,
-          currencyId: currencyId,
-          totalCents: Decimal.fromInt(5000),
-        ),
-        [
-          PurchaseReturnAdjustmentItemsCompanion.insert(
-            returnId: 0,
-            productId: productId,
-            variantId: Value(variantId),
-            quantity: 1,
-            unitPriceCents: Decimal.fromInt(5000),
+        final returnId = await adjDao.createPurchaseAdjReturn(
+          PurchaseReturnAdjustmentsCompanion.insert(
+            returnNumber: 'PAR-TEST-0002',
+            supplierId: supplierId,
+            currencyId: currencyId,
             totalCents: Decimal.fromInt(5000),
           ),
-        ],
-      );
+          [
+            PurchaseReturnAdjustmentItemsCompanion.insert(
+              returnId: 0,
+              productId: productId,
+              variantId: Value(variantId),
+              quantity: 1,
+              unitPriceCents: Decimal.fromInt(5000),
+              totalCents: Decimal.fromInt(5000),
+            ),
+          ],
+        );
 
-      await adjDao.postPurchaseAdjReturn(
-        returnId,
-        journalEntryService: journalService,
-        allowOverHistory: true,
-      );
+        await adjDao.postPurchaseAdjReturn(
+          returnId,
+          journalEntryService: journalService,
+          allowOverHistory: true,
+        );
 
-      // Verify stock after post
-      var variant = await (db.select(db.productVariants)
-            ..where((v) => v.id.equals(variantId)))
-          .getSingle();
-      expect(variant.stockQuantity, equals(99));
+        // Verify stock after post
+        var variant = await (db.select(
+          db.productVariants,
+        )..where((v) => v.id.equals(variantId))).getSingle();
+        expect(variant.stockQuantity, equals(99));
 
-      // Void
-      await adjDao.voidPurchaseAdjReturn(
-        returnId,
-        journalEntryService: journalService,
-      );
+        // Void
+        await adjDao.voidPurchaseAdjReturn(
+          returnId,
+          journalEntryService: journalService,
+        );
 
-      // VERIFY: Original JE reversed
-      final reversedCount =
-          await reversedJournalCount('purchase_return_adjustments', returnId);
-      expect(reversedCount, greaterThan(0));
+        // VERIFY: Original JE reversed
+        final reversedCount = await reversedJournalCount(
+          'purchase_return_adjustments',
+          returnId,
+        );
+        expect(reversedCount, greaterThan(0));
 
-      // VERIFY: Stock restored
-      variant = await (db.select(db.productVariants)
-            ..where((v) => v.id.equals(variantId)))
-          .getSingle();
-      expect(variant.stockQuantity, equals(100),
-          reason: 'Stock should return to 100');
+        // VERIFY: Stock restored
+        variant = await (db.select(
+          db.productVariants,
+        )..where((v) => v.id.equals(variantId))).getSingle();
+        expect(
+          variant.stockQuantity,
+          equals(100),
+          reason: 'Stock should return to 100',
+        );
 
-      // VERIFY: Supplier balance restored
-      final supplier = await (db.select(db.suppliers)
-            ..where((s) => s.id.equals(supplierId)))
-          .getSingle();
-      expect(supplier.balanceCents.toBigInt().toInt(), equals(80000),
-          reason: 'Supplier balance should be restored to 80000');
-    });
+        // VERIFY: Supplier balance restored
+        final supplier = await (db.select(
+          db.suppliers,
+        )..where((s) => s.id.equals(supplierId))).getSingle();
+        expect(
+          supplier.balanceCents.toBigInt().toInt(),
+          equals(80000),
+          reason: 'Supplier balance should be restored to 80000',
+        );
+      },
+    );
   });
 
   // =========================================================================
@@ -536,9 +645,9 @@ void main() {
       await seedData();
 
       // Customer enters with $500 owing — same shape as the field DB.
-      final initialBalance = await (db.select(db.customers)
-            ..where((c) => c.id.equals(customerId)))
-          .getSingle();
+      final initialBalance = await (db.select(
+        db.customers,
+      )..where((c) => c.id.equals(customerId))).getSingle();
       expect(initialBalance.balanceCents.toBigInt().toInt(), equals(50000));
 
       // 1 unit @ 15150 cents (matches the field SAR-202605-0001 total).
@@ -552,6 +661,8 @@ void main() {
         ),
         [
           SaleReturnAdjustmentItemsCompanion.insert(
+            sourceResolution: const Value('unverified'),
+            sourceResolutionReason: const Value('test fixture'),
             returnId: 0,
             productId: productId,
             variantId: Value(variantId),
@@ -570,42 +681,59 @@ void main() {
       );
 
       // GL side: settlement leg credits 1000 Cash (NOT 1100 AR).
-      final lines =
-          await journalLinesForSource('sale_return_adjustments', returnId);
+      final lines = await journalLinesForSource(
+        'sale_return_adjustments',
+        returnId,
+      );
       final acct1000 = await accountIdByCode('1000');
       final acct1100 = await accountIdByCode('1100');
       final cashLines = lines.where((l) => l.accountId == acct1000).toList();
       final arLines = lines.where((l) => l.accountId == acct1100).toList();
-      expect(cashLines.length, equals(1),
-          reason: 'Cash refund must Cr 1000 Cash');
-      expect(cashLines.first.creditCents, equals(15150),
-          reason: 'Cr 1000 Cash = full refund (subtotal+tax)');
-      expect(arLines, isEmpty,
-          reason: 'Cash refund must NEVER touch 1100 AR');
+      expect(
+        cashLines.length,
+        equals(1),
+        reason: 'Cash refund must Cr 1000 Cash',
+      );
+      expect(
+        cashLines.first.creditCents,
+        equals(15150),
+        reason: 'Cr 1000 Cash = full refund (subtotal+tax)',
+      );
+      expect(arLines, isEmpty, reason: 'Cash refund must NEVER touch 1100 AR');
 
       // Sub-ledger side: customers.balance MUST be unchanged.
-      final after = await (db.select(db.customers)
-            ..where((c) => c.id.equals(customerId)))
-          .getSingle();
-      expect(after.balanceCents.toBigInt().toInt(), equals(50000),
-          reason: 'Field bug: customer balance dropped by 15150 here. '
-              'Fix gates the side-effect on the JE actually touching 1100 '
-              '(it never does for adjustment returns), so balance stays put.');
+      final after = await (db.select(
+        db.customers,
+      )..where((c) => c.id.equals(customerId))).getSingle();
+      expect(
+        after.balanceCents.toBigInt().toInt(),
+        equals(50000),
+        reason:
+            'Field bug: customer balance dropped by 15150 here. '
+            'Fix gates the side-effect on the JE actually touching 1100 '
+            '(it never does for adjustment returns), so balance stays put.',
+      );
 
       // No `customer_transactions` row should be inserted either, because
       // recalculateBalance rebuilds balance from SUM(amount_cents) and
       // would silently re-introduce the bug if the row were present.
-      final txCount = await db.customSelect(
-        'SELECT COUNT(*) AS cnt FROM customer_transactions '
-        'WHERE customer_id = ? AND reference_type = ?',
-        variables: [
-          Variable.withInt(customerId),
-          Variable.withString('sale_return_adjustment'),
-        ],
-      ).getSingle();
-      expect(txCount.read<int>('cnt'), equals(0),
-          reason: 'No customer_transactions row may be written for '
-              'adjustment sale returns — would drift on recalc.');
+      final txCount = await db
+          .customSelect(
+            'SELECT COUNT(*) AS cnt FROM customer_transactions '
+            'WHERE customer_id = ? AND reference_type = ?',
+            variables: [
+              Variable.withInt(customerId),
+              Variable.withString('sale_return_adjustment'),
+            ],
+          )
+          .getSingle();
+      expect(
+        txCount.read<int>('cnt'),
+        equals(0),
+        reason:
+            'No customer_transactions row may be written for '
+            'adjustment sale returns — would drift on recalc.',
+      );
     });
 
     test('cash refund on adjustment purchase return leaves '
@@ -640,33 +768,46 @@ void main() {
 
       // GL: settlement leg debits 1000 Cash (NOT 2000 AP).
       final lines = await journalLinesForSource(
-          'purchase_return_adjustments', returnId);
+        'purchase_return_adjustments',
+        returnId,
+      );
       final acct1000 = await accountIdByCode('1000');
       final acct2000 = await accountIdByCode('2000');
       final cashLines = lines.where((l) => l.accountId == acct1000).toList();
       final apLines = lines.where((l) => l.accountId == acct2000).toList();
-      expect(cashLines.length, equals(1),
-          reason: 'Cash refund must Dr 1000 Cash');
-      expect(apLines, isEmpty,
-          reason: 'Cash refund must NEVER touch 2000 AP');
+      expect(
+        cashLines.length,
+        equals(1),
+        reason: 'Cash refund must Dr 1000 Cash',
+      );
+      expect(apLines, isEmpty, reason: 'Cash refund must NEVER touch 2000 AP');
 
       // Sub-ledger: suppliers.balance unchanged + no supplier_transactions row.
-      final after = await (db.select(db.suppliers)
-            ..where((s) => s.id.equals(supplierId)))
+      final after = await (db.select(
+        db.suppliers,
+      )..where((s) => s.id.equals(supplierId))).getSingle();
+      expect(
+        after.balanceCents.toBigInt().toInt(),
+        equals(80000),
+        reason: 'Cash refund must not move supplier balance.',
+      );
+      final txCount = await db
+          .customSelect(
+            'SELECT COUNT(*) AS cnt FROM supplier_transactions '
+            'WHERE supplier_id = ? AND reference_type = ?',
+            variables: [
+              Variable.withInt(supplierId),
+              Variable.withString('purchase_return_adjustment'),
+            ],
+          )
           .getSingle();
-      expect(after.balanceCents.toBigInt().toInt(), equals(80000),
-          reason: 'Cash refund must not move supplier balance.');
-      final txCount = await db.customSelect(
-        'SELECT COUNT(*) AS cnt FROM supplier_transactions '
-        'WHERE supplier_id = ? AND reference_type = ?',
-        variables: [
-          Variable.withInt(supplierId),
-          Variable.withString('purchase_return_adjustment'),
-        ],
-      ).getSingle();
-      expect(txCount.read<int>('cnt'), equals(0),
-          reason: 'No supplier_transactions row may be written for cash '
-              'adjustment purchase returns — would drift on recalc.');
+      expect(
+        txCount.read<int>('cnt'),
+        equals(0),
+        reason:
+            'No supplier_transactions row may be written for cash '
+            'adjustment purchase returns — would drift on recalc.',
+      );
     });
   });
 
@@ -679,9 +820,9 @@ void main() {
     late int employeeId;
 
     Future<List<Commission>> commissionsByAdj(int adjId) {
-      return (db.select(db.commissions)
-            ..where((c) => c.saleReturnAdjustmentId.equals(adjId)))
-          .get();
+      return (db.select(
+        db.commissions,
+      )..where((c) => c.saleReturnAdjustmentId.equals(adjId))).get();
     }
 
     Future<void> seedEmployee({int rateBps = 100}) async {
@@ -696,62 +837,76 @@ void main() {
       );
     }
 
-    test('post deducts commission = (subtotal − discount) × rate; void removes it',
-        () async {
-      await seedData();
-      await seedEmployee(rateBps: 100); // 1%
+    test(
+      'post deducts commission = (subtotal − discount) × rate; void removes it',
+      () async {
+        await seedData();
+        await seedEmployee(rateBps: 100); // 1%
 
-      // Field shape: subtotal 20000, discount 100 → net 19900 × 1% = 199.
-      final returnId = await adjDao.createSaleAdjReturn(
-        SaleReturnAdjustmentsCompanion.insert(
-          returnNumber: 'SAR-COMM-0001',
-          customerId: Value(customerId),
-          employeeId: Value(employeeId),
-          currencyId: currencyId,
-          subtotalCents: Value(Decimal.fromInt(20000)),
-          discountCents: Value(Decimal.fromInt(100)),
-          taxCents: Value(Decimal.fromInt(199)),
-          totalCents: Decimal.fromInt(20099),
-          refundMethod: const Value('cash'),
-          returnDate: Value(DateTime(2026, 6, 30)),
-        ),
-        [
-          SaleReturnAdjustmentItemsCompanion.insert(
-            returnId: 0,
-            productId: productId,
-            variantId: Value(variantId),
-            quantity: 1,
-            unitPriceCents: Decimal.fromInt(20000),
+        // Field shape: subtotal 20000, discount 100 → net 19900 × 1% = 199.
+        final returnId = await adjDao.createSaleAdjReturn(
+          SaleReturnAdjustmentsCompanion.insert(
+            returnNumber: 'SAR-COMM-0001',
+            customerId: Value(customerId),
+            employeeId: Value(employeeId),
+            currencyId: currencyId,
+            subtotalCents: Value(Decimal.fromInt(20000)),
+            discountCents: Value(Decimal.fromInt(100)),
+            taxCents: Value(Decimal.fromInt(199)),
             totalCents: Decimal.fromInt(20099),
+            refundMethod: const Value('cash'),
+            returnDate: Value(DateTime(2026, 6, 30)),
           ),
-        ],
-      );
+          [
+            SaleReturnAdjustmentItemsCompanion.insert(
+              sourceResolution: const Value('unverified'),
+              sourceResolutionReason: const Value('test fixture'),
+              returnId: 0,
+              productId: productId,
+              variantId: Value(variantId),
+              quantity: 1,
+              unitPriceCents: Decimal.fromInt(20000),
+              totalCents: Decimal.fromInt(20099),
+            ),
+          ],
+        );
 
-      await adjDao.postSaleAdjReturn(
-        returnId,
-        journalEntryService: journalService,
-        allowOverHistory: true,
-        commissionService: commissionService,
-      );
+        await adjDao.postSaleAdjReturn(
+          returnId,
+          journalEntryService: journalService,
+          allowOverHistory: true,
+          commissionService: commissionService,
+        );
 
-      final rows = await commissionsByAdj(returnId);
-      expect(rows.length, equals(1),
-          reason: 'A negative commission row must be created for the '
-              'salesperson attributed to the adjustment return.');
-      expect(rows.single.commissionAmountCents.toBigInt().toInt(), equals(-199),
-          reason: 'Deduction = (20000 − 100) × 1% = 199, stored negative.');
-      expect(rows.single.saleId, equals(null));
-      expect(rows.single.period, equals('2026-06'));
+        final rows = await commissionsByAdj(returnId);
+        expect(
+          rows.length,
+          equals(1),
+          reason:
+              'A negative commission row must be created for the '
+              'salesperson attributed to the adjustment return.',
+        );
+        expect(
+          rows.single.commissionAmountCents.toBigInt().toInt(),
+          equals(-199),
+          reason: 'Deduction = (20000 − 100) × 1% = 199, stored negative.',
+        );
+        expect(rows.single.saleId, equals(null));
+        expect(rows.single.period, equals('2026-06'));
 
-      // Void must delete the reversal exactly.
-      await adjDao.voidSaleAdjReturn(
-        returnId,
-        journalEntryService: journalService,
-        commissionService: commissionService,
-      );
-      expect(await commissionsByAdj(returnId), isEmpty,
-          reason: 'Voiding the adjustment return must remove the deduction.');
-    });
+        // Void must delete the reversal exactly.
+        await adjDao.voidSaleAdjReturn(
+          returnId,
+          journalEntryService: journalService,
+          commissionService: commissionService,
+        );
+        expect(
+          await commissionsByAdj(returnId),
+          isEmpty,
+          reason: 'Voiding the adjustment return must remove the deduction.',
+        );
+      },
+    );
 
     test('no commission row when return has no attributed employee', () async {
       await seedData();
@@ -767,6 +922,8 @@ void main() {
         ),
         [
           SaleReturnAdjustmentItemsCompanion.insert(
+            sourceResolution: const Value('unverified'),
+            sourceResolutionReason: const Value('test fixture'),
             returnId: 0,
             productId: productId,
             variantId: Value(variantId),
@@ -803,76 +960,94 @@ void main() {
     late int fifoVariantId;
 
     Future<void> seedFifoProduct() async {
-      fifoProductId = await db.into(db.products).insert(
-        ProductsCompanion.insert(
-          sku: const Value<String?>('ADJ-FIFO-001'),
-          name: 'Batch-tracked Adj Return Product',
-          costCents: Decimal.fromInt(3000),
-          priceCents: Decimal.fromInt(5000),
-          currencyId: Value(currencyId),
-          // Batch-tracked so postSaleAdjReturn materialises a batch.
-          costingMethod: const Value('fifo'),
-          inventoryTrackingType: const Value('batch'),
-          // Start at 0 so the FIFO invariant Σ(batch.remaining)==stock holds
-          // (the return itself is the only batch/stock movement).
-          stockQuantity: const Value(0),
-        ),
-      );
-      fifoVariantId = await db.into(db.productVariants).insert(
-        ProductVariantsCompanion.insert(
-          productId: fifoProductId,
-          stockQuantity: const Value(0),
-          costCents: Decimal.fromInt(3000),
-          priceCents: Decimal.fromInt(5000),
-        ),
-      );
+      fifoProductId = await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              sku: const Value<String?>('ADJ-FIFO-001'),
+              name: 'Batch-tracked Adj Return Product',
+              costCents: Decimal.fromInt(3000),
+              priceCents: Decimal.fromInt(5000),
+              currencyId: Value(currencyId),
+              // Batch-tracked so postSaleAdjReturn materialises a batch.
+              costingMethod: const Value('fifo'),
+              inventoryTrackingType: const Value('batch'),
+              // Start at 0 so the FIFO invariant Σ(batch.remaining)==stock holds
+              // (the return itself is the only batch/stock movement).
+              stockQuantity: const Value(0),
+            ),
+          );
+      fifoVariantId = await db
+          .into(db.productVariants)
+          .insert(
+            ProductVariantsCompanion.insert(
+              productId: fifoProductId,
+              stockQuantity: const Value(0),
+              costCents: Decimal.fromInt(3000),
+              priceCents: Decimal.fromInt(5000),
+            ),
+          );
     }
 
-    test('batch_number is derived from the SAR return number, never SR-',
-        () async {
-      await seedData();
-      await seedFifoProduct();
+    test(
+      'batch_number is derived from the SAR return number, never SR-',
+      () async {
+        await seedData();
+        await seedFifoProduct();
 
-      const returnNumber = 'SAR-202607-0001';
-      final returnId = await adjDao.createSaleAdjReturn(
-        SaleReturnAdjustmentsCompanion.insert(
-          returnNumber: returnNumber,
-          customerId: Value(customerId),
-          currencyId: currencyId,
-          totalCents: Decimal.fromInt(5000),
-          refundMethod: const Value('cash'),
-        ),
-        [
-          SaleReturnAdjustmentItemsCompanion.insert(
-            returnId: 0,
-            productId: fifoProductId,
-            variantId: Value(fifoVariantId),
-            quantity: 1,
-            unitPriceCents: Decimal.fromInt(5000),
+        const returnNumber = 'SAR-202607-0001';
+        final returnId = await adjDao.createSaleAdjReturn(
+          SaleReturnAdjustmentsCompanion.insert(
+            returnNumber: returnNumber,
+            customerId: Value(customerId),
+            currencyId: currencyId,
             totalCents: Decimal.fromInt(5000),
+            refundMethod: const Value('cash'),
           ),
-        ],
-      );
+          [
+            SaleReturnAdjustmentItemsCompanion.insert(
+              sourceResolution: const Value('unverified'),
+              sourceResolutionReason: const Value('test fixture'),
+              returnId: 0,
+              productId: fifoProductId,
+              variantId: Value(fifoVariantId),
+              quantity: 1,
+              unitPriceCents: Decimal.fromInt(5000),
+              totalCents: Decimal.fromInt(5000),
+            ),
+          ],
+        );
 
-      await adjDao.postSaleAdjReturn(
-        returnId,
-        journalEntryService: journalService,
-        allowOverHistory: true,
-      );
+        await adjDao.postSaleAdjReturn(
+          returnId,
+          journalEntryService: journalService,
+          allowOverHistory: true,
+        );
 
-      final batches = await (db.select(db.productBatches)
-            ..where((b) => b.productId.equals(fifoProductId)))
-          .get();
-      expect(batches.length, equals(1),
-          reason: 'One batch must be materialised for the unlinked return.');
-      final batch = batches.single;
-      expect(batch.source, equals('sale_return'));
-      expect(batch.batchNumber.startsWith('$returnNumber-'), isTrue,
-          reason: 'Batch must be named after its SAR document so it is '
+        final batches = await (db.select(
+          db.productBatches,
+        )..where((b) => b.productId.equals(fifoProductId))).get();
+        expect(
+          batches.length,
+          equals(1),
+          reason: 'One batch must be materialised for the unlinked return.',
+        );
+        final batch = batches.single;
+        expect(batch.source, equals('sale_return'));
+        expect(
+          batch.batchNumber.startsWith('$returnNumber-'),
+          isTrue,
+          reason:
+              'Batch must be named after its SAR document so it is '
               'traceable in the Batch Management report. Got '
-              '"${batch.batchNumber}".');
-      expect(batch.batchNumber.startsWith('SR-'), isFalse,
-          reason: 'Must NOT collide with linked SR- return document numbers.');
-    });
+              '"${batch.batchNumber}".',
+        );
+        expect(
+          batch.batchNumber.startsWith('SR-'),
+          isFalse,
+          reason: 'Must NOT collide with linked SR- return document numbers.',
+        );
+      },
+    );
   });
 }

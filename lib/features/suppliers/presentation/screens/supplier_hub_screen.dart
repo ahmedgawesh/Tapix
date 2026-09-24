@@ -8,8 +8,10 @@ import '../../../../core/database/app_database.dart';
 import '../../../../core/services/currency_service.dart';
 import '../../../../core/services/parties/party_balance_classifier.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../consignment/data/consignment_module_service.dart';
 import '../../domain/repositories/supplier_repository.dart';
 import '../bloc/suppliers_bloc.dart';
+import '../widgets/supplier_status_filter_bar.dart';
 
 /// Main supplier hub screen with quick stats, search, and supplier list
 class SupplierHubScreen extends StatelessWidget {
@@ -34,13 +36,11 @@ class _SupplierHubContent extends StatefulWidget {
 class _SupplierHubContentState extends State<_SupplierHubContent> {
   final _searchController = TextEditingController();
 
-  void _showSupplierPickerBottomSheet({
-    required List<Supplier> suppliers,
-  }) {
+  void _showSupplierPickerBottomSheet({required List<Supplier> suppliers}) {
     if (suppliers.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('suppliers.empty'.tr())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('suppliers.empty'.tr())));
       return;
     }
 
@@ -89,6 +89,17 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
         ),
         title: Text('suppliers.title'.tr()),
         actions: [
+          if (sl.isRegistered<ConsignmentModuleService>())
+            FutureBuilder<bool>(
+              future: sl<ConsignmentModuleService>().canOpenCenter(),
+              builder: (context, snapshot) => snapshot.data == true
+                  ? IconButton(
+                      icon: const Icon(LucideIcons.packageCheck),
+                      onPressed: () => context.push('/consignment'),
+                      tooltip: 'consignment.open_center'.tr(),
+                    )
+                  : const SizedBox.shrink(),
+            ),
           IconButton(
             icon: const Icon(LucideIcons.settings),
             onPressed: () => context.push('/settings'),
@@ -123,7 +134,10 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
     );
   }
 
-  Widget _buildErrorState(BuildContext context, RealtimeError<SuppliersData> state) {
+  Widget _buildErrorState(
+    BuildContext context,
+    RealtimeError<SuppliersData> state,
+  ) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -158,7 +172,7 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
     // Calculate metrics — sign convention and bucket math live in
     // `PartyBalanceClassifier` (Phase 3.5.2) so this widget cannot drift
     // from the customer hub or profile screens.
-    final activeCount = data.suppliers.length;
+    final visibleCount = data.suppliers.length;
     final breakdown = sl<PartyBalanceClassifier>().classifyDecimal(
       data.suppliers.map((s) => s.balanceCents),
       PartyKind.supplier,
@@ -173,6 +187,21 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
       },
       child: CustomScrollView(
         slivers: [
+          // Available even when the selected list is empty.
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: SupplierStatusFilterBar(
+                selected: data.statusFilter,
+                activeCount: data.activeCount,
+                inactiveCount: data.inactiveCount,
+                totalCount: data.totalCount,
+                onChanged: (filter) => context.read<SuppliersBloc>().add(
+                  SuppliersStatusFilterChanged(filter),
+                ),
+              ),
+            ),
+          ),
           // Quick Stats Section
           SliverToBoxAdapter(
             child: Padding(
@@ -181,7 +210,7 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'suppliers.quick_stats'.tr(),
+                    'suppliers.visible_stats'.tr(),
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -194,9 +223,10 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
                       final activeCard = _StatCard(
                         icon: LucideIcons.truck,
                         iconColor: colorScheme.primary,
-                        backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.5),
-                        label: 'suppliers.active_suppliers'.tr(),
-                        value: activeCount.toString(),
+                        backgroundColor: colorScheme.primaryContainer
+                            .withValues(alpha: 0.5),
+                        label: 'suppliers.visible_suppliers'.tr(),
+                        value: visibleCount.toString(),
                       );
 
                       final weOweCard = _StatCard(
@@ -218,7 +248,8 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
                       final withBalanceCard = _StatCard(
                         icon: LucideIcons.fileText,
                         iconColor: colorScheme.tertiary,
-                        backgroundColor: colorScheme.tertiaryContainer.withValues(alpha: 0.5),
+                        backgroundColor: colorScheme.tertiaryContainer
+                            .withValues(alpha: 0.5),
                         label: 'suppliers.with_balance'.tr(),
                         value: withBalanceCount.toString(),
                       );
@@ -312,11 +343,17 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: isDark ? const Color(0xFF90CAF9) : null,
                       side: BorderSide(
-                        color: (isDark ? const Color(0xFF1E3A5F) : colorScheme.outlineVariant)
-                            .withValues(alpha: isDark ? 0.9 : 0.8),
+                        color:
+                            (isDark
+                                    ? const Color(0xFF1E3A5F)
+                                    : colorScheme.outlineVariant)
+                                .withValues(alpha: isDark ? 0.9 : 0.8),
                       ),
                       backgroundColor: isDark ? const Color(0xFF0B0F14) : null,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                     ),
                   ),
                   OutlinedButton.icon(
@@ -328,11 +365,17 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: isDark ? const Color(0xFFFFB74D) : null,
                       side: BorderSide(
-                        color: (isDark ? const Color(0xFF3D2E10) : colorScheme.outlineVariant)
-                            .withValues(alpha: isDark ? 0.9 : 0.8),
+                        color:
+                            (isDark
+                                    ? const Color(0xFF3D2E10)
+                                    : colorScheme.outlineVariant)
+                                .withValues(alpha: isDark ? 0.9 : 0.8),
                       ),
                       backgroundColor: isDark ? const Color(0xFF0B0F14) : null,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                     ),
                   ),
                   OutlinedButton.icon(
@@ -342,11 +385,17 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: isDark ? const Color(0xFFB0BEC5) : null,
                       side: BorderSide(
-                        color: (isDark ? const Color(0xFF253242) : colorScheme.outlineVariant)
-                            .withValues(alpha: isDark ? 0.9 : 0.8),
+                        color:
+                            (isDark
+                                    ? const Color(0xFF253242)
+                                    : colorScheme.outlineVariant)
+                                .withValues(alpha: isDark ? 0.9 : 0.8),
                       ),
                       backgroundColor: isDark ? const Color(0xFF0B0F14) : null,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                     ),
                   ),
                 ],
@@ -359,7 +408,7 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                'suppliers.all_suppliers'.tr(),
+                'suppliers.filter_${data.statusFilter.name}'.tr(),
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -371,33 +420,26 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
 
           // Supplier List
           if (data.suppliers.isEmpty)
-            SliverFillRemaining(
-              child: _buildEmptyState(context),
-            )
+            SliverFillRemaining(child: _buildEmptyState(context, data))
           else
             SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final supplier = data.suppliers[index];
-                  return _SupplierListTile(
-                    supplier: supplier,
-                    onTap: () => context.push('/suppliers/${supplier.id}'),
-                  );
-                },
-                childCount: data.suppliers.length,
-              ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final supplier = data.suppliers[index];
+                return _SupplierListTile(
+                  supplier: supplier,
+                  onTap: () => context.push('/suppliers/${supplier.id}'),
+                );
+              }, childCount: data.suppliers.length),
             ),
 
           // Bottom padding for FAB
-          const SliverToBoxAdapter(
-            child: SizedBox(height: 80),
-          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 80)),
         ],
       ),
     );
   }
 
-  Widget _buildEmptyState(BuildContext context) {
+  Widget _buildEmptyState(BuildContext context, SuppliersData data) {
     final theme = Theme.of(context);
 
     return Center(
@@ -406,20 +448,22 @@ class _SupplierHubContentState extends State<_SupplierHubContent> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              LucideIcons.truck,
-              size: 80,
-              color: theme.colorScheme.outline,
-            ),
+            Icon(LucideIcons.truck, size: 80, color: theme.colorScheme.outline),
             const SizedBox(height: 16),
             Text(
-              'suppliers.empty'.tr(),
+              (data.totalCount == 0
+                      ? 'suppliers.empty'
+                      : 'suppliers.no_results')
+                  .tr(),
               style: theme.textTheme.titleLarge,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              'suppliers.empty_hint'.tr(),
+              (data.totalCount == 0
+                      ? 'suppliers.empty_hint'
+                      : 'suppliers.filter_empty_hint')
+                  .tr(),
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.outline,
               ),
@@ -498,10 +542,7 @@ class _SupplierListTile extends StatelessWidget {
   final Supplier supplier;
   final VoidCallback onTap;
 
-  const _SupplierListTile({
-    required this.supplier,
-    required this.onTap,
-  });
+  const _SupplierListTile({required this.supplier, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -530,7 +571,9 @@ class _SupplierListTile extends StatelessWidget {
                 radius: 24,
                 backgroundColor: theme.colorScheme.primaryContainer,
                 child: Text(
-                  supplier.name.isNotEmpty ? supplier.name[0].toUpperCase() : '?',
+                  supplier.name.isNotEmpty
+                      ? supplier.name[0].toUpperCase()
+                      : '?',
                   style: TextStyle(
                     color: theme.colorScheme.onPrimaryContainer,
                     fontWeight: FontWeight.bold,
@@ -551,13 +594,28 @@ class _SupplierListTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
                     ),
+                    if (supplier.productCode != null)
+                      Text(
+                        supplier.productCode!,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    if (!supplier.isActive)
+                      Text(
+                        'suppliers.inactive_badge'.tr(),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     if (supplier.phone != null || supplier.email != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Row(
                           children: [
                             Icon(
-                              supplier.phone != null ? LucideIcons.phone : LucideIcons.mail,
+                              supplier.phone != null
+                                  ? LucideIcons.phone
+                                  : LucideIcons.mail,
                               size: 14,
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -582,7 +640,11 @@ class _SupplierListTile extends StatelessWidget {
               Text(
                 currencyService.format(balanceCents.abs()),
                 style: theme.textTheme.titleMedium?.copyWith(
-                  color: balanceCents > 0 ? Colors.red : balanceCents < 0 ? Colors.green : Colors.blue,
+                  color: balanceCents > 0
+                      ? Colors.red
+                      : balanceCents < 0
+                      ? Colors.green
+                      : Colors.blue,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -631,7 +693,9 @@ class _SupplierPickerSheetState extends State<_SupplierPickerSheet> {
         final query = _searchController.text.toLowerCase();
         final filtered = query.isEmpty
             ? widget.suppliers
-            : widget.suppliers.where((s) => s.name.toLowerCase().contains(query)).toList();
+            : widget.suppliers
+                  .where((s) => s.name.toLowerCase().contains(query))
+                  .toList();
 
         return Column(
           children: [
@@ -686,11 +750,14 @@ class _SupplierPickerSheetState extends State<_SupplierPickerSheet> {
                       itemCount: filtered.length,
                       itemBuilder: (context, index) {
                         final supplier = filtered[index];
-                        final balanceCents = supplier.balanceCents.toBigInt().toInt();
+                        final balanceCents = supplier.balanceCents
+                            .toBigInt()
+                            .toInt();
 
                         return ListTile(
                           leading: CircleAvatar(
-                            backgroundColor: widget.colorScheme.primaryContainer,
+                            backgroundColor:
+                                widget.colorScheme.primaryContainer,
                             child: Text(
                               supplier.name.isNotEmpty
                                   ? supplier.name[0].toUpperCase()
@@ -708,7 +775,11 @@ class _SupplierPickerSheetState extends State<_SupplierPickerSheet> {
                           subtitle: Text(
                             widget.currencyService.format(balanceCents.abs()),
                             style: TextStyle(
-                              color: balanceCents > 0 ? Colors.red : balanceCents < 0 ? Colors.green : Colors.blue,
+                              color: balanceCents > 0
+                                  ? Colors.red
+                                  : balanceCents < 0
+                                  ? Colors.green
+                                  : Colors.blue,
                             ),
                           ),
                           onTap: () => Navigator.pop(context, supplier),

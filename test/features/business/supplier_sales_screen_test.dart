@@ -47,6 +47,19 @@ void main() {
           'INSERT INTO suppliers(name,currency_id) VALUES(?,?)',
           ['Other Supplier', currency],
         );
+        final supplier = (await db.select(db.suppliers).get()).first.id;
+        final product = await db.customInsert(
+          "INSERT INTO products(name,currency_id,cost_cents,price_cents) VALUES('Returned item',$currency,100,200)",
+        );
+        final variant = await db.customInsert(
+          'INSERT INTO product_variants(product_id,cost_cents,price_cents) VALUES($product,100,200)',
+        );
+        final purchase = await db.customInsert(
+          "INSERT INTO purchases(purchase_number,supplier_id,currency_id,status,subtotal_cents,tax_cents,total_cents) VALUES('P-UI',$supplier,$currency,'posted',100,0,100)",
+        );
+        await db.customStatement(
+          'INSERT INTO purchase_items(purchase_id,product_id,variant_id,quantity,unit_cost_cents,subtotal_cents,total_cents) VALUES($purchase,$product,$variant,1,100,100,100)',
+        );
         sl.registerFactoryParam<
           SupplierSalesReportBloc,
           WarehouseReadScope?,

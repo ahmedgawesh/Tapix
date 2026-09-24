@@ -12,8 +12,8 @@ class UserRepository implements UserRepositoryInterface {
   UserRepository({
     required AppDatabase database,
     required PasswordService passwordService,
-  })  : _database = database,
-        _passwordService = passwordService;
+  }) : _database = database,
+       _passwordService = passwordService;
 
   @override
   Stream<List<UserEntity>> watchAllUsers() {
@@ -21,9 +21,7 @@ class UserRepository implements UserRepositoryInterface {
       ..orderBy([
         (u) => OrderingTerm(expression: u.createdAt, mode: OrderingMode.desc),
       ]);
-    return query.watch().map(
-          (rows) => rows.map(_mapToEntity).toList(),
-        );
+    return query.watch().map((rows) => rows.map(_mapToEntity).toList());
   }
 
   @override
@@ -50,7 +48,9 @@ class UserRepository implements UserRepositoryInterface {
         ? _passwordService.hashPassword(securityAnswer.trim().toLowerCase())
         : null;
 
-    final id = await _database.into(_database.users).insert(
+    final id = await _database
+        .into(_database.users)
+        .insert(
           UsersCompanion.insert(
             username: username,
             passwordHash: hashedPassword,
@@ -63,9 +63,9 @@ class UserRepository implements UserRepositoryInterface {
           ),
         );
 
-    final user = await (_database.select(_database.users)
-          ..where((u) => u.id.equals(id)))
-        .getSingle();
+    final user = await (_database.select(
+      _database.users,
+    )..where((u) => u.id.equals(id))).getSingle();
 
     return _mapToEntity(user);
   }
@@ -104,18 +104,19 @@ class UserRepository implements UserRepositoryInterface {
       updatedAt: Value(now),
     );
 
-    await (_database.update(_database.users)..where((u) => u.id.equals(id)))
-        .write(companion);
+    await (_database.update(
+      _database.users,
+    )..where((u) => u.id.equals(id))).write(companion);
   }
 
   @override
   Future<void> toggleUserActive(int id, bool isActive) async {
     final now = DateTime.now();
-    await (_database.update(_database.users)..where((u) => u.id.equals(id)))
-        .write(UsersCompanion(
-      isActive: Value(isActive ? 1 : 0),
-      updatedAt: Value(now),
-    ));
+    await (_database.update(
+      _database.users,
+    )..where((u) => u.id.equals(id))).write(
+      UsersCompanion(isActive: Value(isActive ? 1 : 0), updatedAt: Value(now)),
+    );
   }
 
   @override

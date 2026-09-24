@@ -106,11 +106,7 @@ class UserCard extends StatelessWidget {
               CircleAvatar(
                 radius: 24,
                 backgroundColor: roleColor.withValues(alpha: 0.15),
-                child: Icon(
-                  _roleIcon(user.role),
-                  color: roleColor,
-                  size: 24,
-                ),
+                child: Icon(_roleIcon(user.role), color: roleColor, size: 24),
               ),
               const SizedBox(width: 12),
               // User info
@@ -207,8 +203,11 @@ class UserCard extends StatelessWidget {
                     value: 'edit',
                     child: Row(
                       children: [
-                        Icon(Icons.edit_outlined,
-                            size: 20, color: colorScheme.onSurface),
+                        Icon(
+                          Icons.edit_outlined,
+                          size: 20,
+                          color: colorScheme.onSurface,
+                        ),
                         const SizedBox(width: 12),
                         Text('users.edit'.tr()),
                       ],

@@ -12,7 +12,7 @@ class ConnectivityService {
   bool _lastKnown = false;
 
   ConnectivityService({Connectivity? connectivity})
-      : _connectivity = connectivity ?? Connectivity();
+    : _connectivity = connectivity ?? Connectivity();
 
   /// Whether the device currently has internet (best effort).
   bool get isOnline => _lastKnown;
@@ -38,11 +38,13 @@ class ConnectivityService {
   }
 
   bool _hasInternet(List<ConnectivityResult> results) {
-    return results.any((r) =>
-        r == ConnectivityResult.wifi ||
-        r == ConnectivityResult.mobile ||
-        r == ConnectivityResult.ethernet ||
-        r == ConnectivityResult.vpn);
+    return results.any(
+      (r) =>
+          r == ConnectivityResult.wifi ||
+          r == ConnectivityResult.mobile ||
+          r == ConnectivityResult.ethernet ||
+          r == ConnectivityResult.vpn,
+    );
   }
 
   /// Manually check connectivity right now.

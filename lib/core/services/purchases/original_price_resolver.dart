@@ -56,13 +56,13 @@ class OriginalPriceSnapshot extends Equatable {
 
   @override
   List<Object?> get props => [
-        costCents,
-        priceCents,
-        wholesalePriceCents,
-        persistCostCents,
-        persistPriceCents,
-        persistWholesalePriceCents,
-      ];
+    costCents,
+    priceCents,
+    wholesalePriceCents,
+    persistCostCents,
+    persistPriceCents,
+    persistWholesalePriceCents,
+  ];
 }
 
 /// **Single source of truth** for resolving the "original" (pre-purchase)
@@ -170,12 +170,14 @@ class OriginalPriceResolver {
     if (variant != null) {
       final variantCurrentCost = variant.costCents.toBigInt().toInt();
       final variantCurrentPrice = variant.priceCents.toBigInt().toInt();
-      liveCost = _firstPositive([
+      liveCost =
+          _firstPositive([
             variantCurrentCost,
             variant.previousCostCents?.toBigInt().toInt(),
           ]) ??
           variantCurrentCost;
-      livePrice = _firstPositive([
+      livePrice =
+          _firstPositive([
             variantCurrentPrice,
             variant.previousPriceCents?.toBigInt().toInt(),
           ]) ??
@@ -187,12 +189,14 @@ class OriginalPriceResolver {
     } else {
       final productCurrentCost = product.costCents.toBigInt().toInt();
       final productCurrentPrice = product.priceCents.toBigInt().toInt();
-      liveCost = _firstPositive([
+      liveCost =
+          _firstPositive([
             productCurrentCost,
             product.previousCostCents?.toBigInt().toInt(),
           ]) ??
           productCurrentCost;
-      livePrice = _firstPositive([
+      livePrice =
+          _firstPositive([
             productCurrentPrice,
             product.previousPriceCents?.toBigInt().toInt(),
           ]) ??
@@ -213,7 +217,8 @@ class OriginalPriceResolver {
     //    through the same chain rather than freezing a meaningless 0.
     final persistCost = realSavedCost ?? (liveCost > 0 ? liveCost : null);
     final persistPrice = realSavedPrice ?? (livePrice > 0 ? livePrice : null);
-    final persistWholesale = realSavedWholesale ??
+    final persistWholesale =
+        realSavedWholesale ??
         ((liveWholesale != null && liveWholesale > 0) ? liveWholesale : null);
 
     return OriginalPriceSnapshot(

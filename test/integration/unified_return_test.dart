@@ -71,6 +71,20 @@ void main() {
   // HELPERS
   // ─────────────────────────────────────────────────────────────────────────
 
+  List<UnifiedReturnLineItem> documentSaleSources(
+    Iterable<UnifiedReturnLineItem> items,
+  ) => [
+    for (final item in items)
+      if (item.mode == ReturnMode.adjustment)
+        item.copyWith(
+          sourceResolution: 'unverified',
+          sourceResolutionReason:
+              'Acceptance fixture has no documented inventory source.',
+        )
+      else
+        item,
+  ];
+
   Future<int> getCurrencyId() async {
     final usd = await (db.select(
       db.currencies,
@@ -562,7 +576,7 @@ void main() {
         final batchId = await service.submitSaleReturn(
           customerId: customerId,
           currencyId: cid,
-          items: resolved,
+          items: documentSaleSources(resolved),
           refundMethod: 'cash',
           notes: 'Test return',
         );
@@ -593,7 +607,7 @@ void main() {
       final batchId = await service.submitSaleReturn(
         customerId: customerId,
         currencyId: cid,
-        items: resolved,
+        items: documentSaleSources(resolved),
         refundMethod: 'credit',
         // No sale history in this test fixture — bypass Phase-0 cap.
         allowOverHistory: true,
@@ -610,7 +624,7 @@ void main() {
         () => service.submitSaleReturn(
           customerId: customerId,
           currencyId: cid,
-          items: [],
+          items: documentSaleSources([]),
           refundMethod: 'cash',
         ),
         throwsException,
@@ -772,7 +786,7 @@ void main() {
         await service.submitSaleReturn(
           customerId: customerId,
           currencyId: cid,
-          items: resolved,
+          items: documentSaleSources(resolved),
           refundMethod: 'cash',
         );
       }
@@ -886,7 +900,7 @@ void main() {
         await service.submitSaleReturn(
           customerId: customerId,
           currencyId: cid,
-          items: saleResolved,
+          items: documentSaleSources(saleResolved),
           refundMethod: 'cash',
         );
         final saleReturn = await (db.select(
@@ -970,7 +984,7 @@ void main() {
       await service.submitSaleReturn(
         customerId: customerId,
         currencyId: cid,
-        items: adjustment,
+        items: documentSaleSources(adjustment),
         refundMethod: 'cash',
       );
 
@@ -987,7 +1001,7 @@ void main() {
       await service.submitSaleReturn(
         customerId: customerId,
         currencyId: cid,
-        items: linked,
+        items: documentSaleSources(linked),
         refundMethod: 'cash',
       );
 
@@ -1165,7 +1179,7 @@ void main() {
               ? service.submitSaleReturn(
                   customerId: party,
                   currencyId: cid,
-                  items: items,
+                  items: documentSaleSources(items),
                   refundMethod: 'credit',
                   allowOverHistory: true,
                   expectedAdjustmentQuote: quote,
@@ -1247,7 +1261,7 @@ void main() {
                 ? await service.submitSaleReturn(
                     customerId: party,
                     currencyId: cid,
-                    items: items,
+                    items: documentSaleSources(items),
                     refundMethod: 'credit',
                     allowOverHistory: true,
                     expectedAdjustmentQuote: quote,
@@ -1408,7 +1422,7 @@ void main() {
             ? service.submitSaleReturn(
                 customerId: party,
                 currencyId: cid,
-                items: items,
+                items: documentSaleSources(items),
                 refundMethod: 'credit',
                 allowOverHistory: true,
               )

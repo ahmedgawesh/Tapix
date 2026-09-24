@@ -44,28 +44,32 @@ void main() {
     String table = 'sales',
     int total = 11500,
     int tax = 1500,
-  }) =>
-      EInvoiceSubject(
-        sourceTable: table,
-        sourceId: id,
-        documentNumber: 'INV-$id',
-        documentType: 'invoice',
-        subtotalCents: total - tax,
-        taxCents: tax,
-        totalCents: total,
-        currencyId: 1,
-        issueDate: DateTime.utc(2026, 5, 11, 10),
-        sellerTaxNumber: '300000000000003',
-        sellerLegalName: 'Tapix Test Co.',
-        lines: const [],
-      );
+  }) => EInvoiceSubject(
+    sourceTable: table,
+    sourceId: id,
+    documentNumber: 'INV-$id',
+    documentType: 'invoice',
+    subtotalCents: total - tax,
+    taxCents: tax,
+    totalCents: total,
+    currencyId: 1,
+    issueDate: DateTime.utc(2026, 5, 11, 10),
+    sellerTaxNumber: '300000000000003',
+    sellerLegalName: 'Tapix Test Co.',
+    lines: const [],
+  );
 
   group('Registry resolution', () {
     test('returns NullEInvoiceProvider for unconfigured jurisdictions', () {
       final reg = EInvoiceProviderRegistry();
-      expect(reg.resolve(EInvoiceJurisdiction.none), isA<NullEInvoiceProvider>());
-      expect(reg.resolve(EInvoiceJurisdiction.ksaZatcaPhase2),
-          isA<NullEInvoiceProvider>());
+      expect(
+        reg.resolve(EInvoiceJurisdiction.none),
+        isA<NullEInvoiceProvider>(),
+      );
+      expect(
+        reg.resolve(EInvoiceJurisdiction.ksaZatcaPhase2),
+        isA<NullEInvoiceProvider>(),
+      );
       expect(reg.hasProvider(EInvoiceJurisdiction.ksaZatcaPhase2), isFalse);
     });
 
@@ -113,7 +117,9 @@ void main() {
     setUp(() async {
       await settingsDao.saveSetting('einvoice_enabled', 'true');
       await settingsDao.saveSetting(
-          'einvoice_jurisdiction', 'KSA_ZATCA_PHASE2');
+        'einvoice_jurisdiction',
+        'KSA_ZATCA_PHASE2',
+      );
       const zatca = ZatcaPhase2Provider(
         sellerTaxNumber: '300000000000003',
         sellerLegalName: 'Tapix Test Co.',
@@ -125,90 +131,111 @@ void main() {
       );
     });
 
-    test('first dispatch produces ICV=1, no previousHash, terminal status',
-        () async {
-      final status = await svc.dispatch(subject(id: 10));
-      expect(status, anyOf(EInvoiceStatus.reported, EInvoiceStatus.cleared));
+    test(
+      'first dispatch produces ICV=1, no previousHash, terminal status',
+      () async {
+        final status = await svc.dispatch(subject(id: 10));
+        expect(status, anyOf(EInvoiceStatus.reported, EInvoiceStatus.cleared));
 
-      final row = await repo.findBySource(sourceTable: 'sales', sourceId: 10);
-      expect(row, isNotNull);
-      expect(row!.icv, 1);
-      expect(row.previousHash, isNull);
-      expect(row.documentUuid, isNotNull);
-      expect(row.documentHash, isNotNull);
-      expect(row.status.isTerminal, isTrue);
-      expect(row.attemptCount, greaterThanOrEqualTo(1));
-    });
+        final row = await repo.findBySource(sourceTable: 'sales', sourceId: 10);
+        expect(row, isNotNull);
+        expect(row!.icv, 1);
+        expect(row.previousHash, isNull);
+        expect(row.documentUuid, isNotNull);
+        expect(row.documentHash, isNotNull);
+        expect(row.status.isTerminal, isTrue);
+        expect(row.attemptCount, greaterThanOrEqualTo(1));
+      },
+    );
 
-    test('second dispatch chains ICV=2 and previousHash matches first hash',
-        () async {
-      await svc.dispatch(subject(id: 20));
-      final first =
-          await repo.findBySource(sourceTable: 'sales', sourceId: 20);
-      expect(first!.icv, 1);
+    test(
+      'second dispatch chains ICV=2 and previousHash matches first hash',
+      () async {
+        await svc.dispatch(subject(id: 20));
+        final first = await repo.findBySource(
+          sourceTable: 'sales',
+          sourceId: 20,
+        );
+        expect(first!.icv, 1);
 
-      await svc.dispatch(subject(id: 21));
-      final second =
-          await repo.findBySource(sourceTable: 'sales', sourceId: 21);
-      expect(second!.icv, 2);
-      expect(second.previousHash, first.documentHash);
-      expect(second.documentHash, isNot(first.documentHash));
-    });
+        await svc.dispatch(subject(id: 21));
+        final second = await repo.findBySource(
+          sourceTable: 'sales',
+          sourceId: 21,
+        );
+        expect(second!.icv, 2);
+        expect(second.previousHash, first.documentHash);
+        expect(second.documentHash, isNot(first.documentHash));
+      },
+    );
 
-    test('idempotency: re-dispatching a terminal artifact is a no-op',
-        () async {
-      await svc.dispatch(subject(id: 30));
-      final first =
-          await repo.findBySource(sourceTable: 'sales', sourceId: 30);
-      expect(first!.status.isTerminal, isTrue);
-      final attemptsBefore = first.attemptCount;
+    test(
+      'idempotency: re-dispatching a terminal artifact is a no-op',
+      () async {
+        await svc.dispatch(subject(id: 30));
+        final first = await repo.findBySource(
+          sourceTable: 'sales',
+          sourceId: 30,
+        );
+        expect(first!.status.isTerminal, isTrue);
+        final attemptsBefore = first.attemptCount;
 
-      // Second call must NOT advance the chain, NOT bump attempts.
-      final s = await svc.dispatch(subject(id: 30));
-      expect(s, first.status);
+        // Second call must NOT advance the chain, NOT bump attempts.
+        final s = await svc.dispatch(subject(id: 30));
+        expect(s, first.status);
 
-      final again =
-          await repo.findBySource(sourceTable: 'sales', sourceId: 30);
-      expect(again!.icv, first.icv);
-      expect(again.documentHash, first.documentHash);
-      expect(again.attemptCount, attemptsBefore);
+        final again = await repo.findBySource(
+          sourceTable: 'sales',
+          sourceId: 30,
+        );
+        expect(again!.icv, first.icv);
+        expect(again.documentHash, first.documentHash);
+        expect(again.attemptCount, attemptsBefore);
 
-      // And the chain head must not have advanced.
-      final head =
-          await repo.findChainHead(EInvoiceJurisdiction.ksaZatcaPhase2);
-      expect(head!.icv, first.icv);
-    });
+        // And the chain head must not have advanced.
+        final head = await repo.findChainHead(
+          EInvoiceJurisdiction.ksaZatcaPhase2,
+        );
+        expect(head!.icv, first.icv);
+      },
+    );
 
-    test('credit notes for sale_returns are persisted with their own row',
-        () async {
-      await svc.dispatch(subject(id: 40, table: 'sales'));
-      final cn = EInvoiceSubject(
-        sourceTable: 'sale_returns',
-        sourceId: 40,
-        documentNumber: 'CN-40',
-        documentType: 'credit_note',
-        subtotalCents: 1000,
-        taxCents: 150,
-        totalCents: 1150,
-        currencyId: 1,
-        issueDate: DateTime.utc(2026, 5, 12),
-        sellerTaxNumber: '300000000000003',
-        sellerLegalName: 'Tapix Test Co.',
-        lines: const [],
-        originalInvoiceNumber: 'INV-40',
-      );
-      await svc.dispatch(cn);
+    test(
+      'credit notes for sale_returns are persisted with their own row',
+      () async {
+        await svc.dispatch(subject(id: 40, table: 'sales'));
+        final cn = EInvoiceSubject(
+          sourceTable: 'sale_returns',
+          sourceId: 40,
+          documentNumber: 'CN-40',
+          documentType: 'credit_note',
+          subtotalCents: 1000,
+          taxCents: 150,
+          totalCents: 1150,
+          currencyId: 1,
+          issueDate: DateTime.utc(2026, 5, 12),
+          sellerTaxNumber: '300000000000003',
+          sellerLegalName: 'Tapix Test Co.',
+          lines: const [],
+          originalInvoiceNumber: 'INV-40',
+        );
+        await svc.dispatch(cn);
 
-      final invoiceRow =
-          await repo.findBySource(sourceTable: 'sales', sourceId: 40);
-      final creditRow =
-          await repo.findBySource(sourceTable: 'sale_returns', sourceId: 40);
-      expect(invoiceRow, isNotNull);
-      expect(creditRow, isNotNull);
-      // Same source_id but different source_table → both rows coexist
-      // (unique key is the composite, not source_id alone).
-      expect(creditRow!.icv, invoiceRow!.icv! + 1);
-      expect(creditRow.previousHash, invoiceRow.documentHash);
-    });
+        final invoiceRow = await repo.findBySource(
+          sourceTable: 'sales',
+          sourceId: 40,
+        );
+        final creditRow = await repo.findBySource(
+          sourceTable: 'sale_returns',
+          sourceId: 40,
+        );
+        expect(invoiceRow, isNotNull);
+        expect(creditRow, isNotNull);
+        // Same source_id but different source_table → both rows coexist
+        // (unique key is the composite, not source_id alone).
+        expect(creditRow!.icv, invoiceRow!.icv! + 1);
+        expect(creditRow.previousHash, invoiceRow.documentHash);
+      },
+    );
   });
 }

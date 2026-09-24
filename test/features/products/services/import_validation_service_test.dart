@@ -27,10 +27,7 @@ void main() {
         totalRows: 1,
       );
 
-      const columnMapping = ColumnMapping({
-        'name': 0,
-        'price': 1,
-      });
+      const columnMapping = ColumnMapping({'name': 0, 'price': 1});
 
       final errors = await service(
         fileData: fileData,
@@ -55,10 +52,7 @@ void main() {
         totalRows: 1,
       );
 
-      const columnMapping = ColumnMapping({
-        'name': 0,
-        'price': 1,
-      });
+      const columnMapping = ColumnMapping({'name': 0, 'price': 1});
 
       final errors = await service(
         fileData: fileData,
@@ -83,19 +77,13 @@ void main() {
         totalRows: 1,
       );
 
-      const columnMapping = ColumnMapping({
-        'name': 0,
-        'sku': 1,
-        'price': 2,
-      });
+      const columnMapping = ColumnMapping({'name': 0, 'sku': 1, 'price': 2});
 
-      when(() => mockRepository.findBySku('SKU001'))
-          .thenAnswer((_) async => null);
+      when(
+        () => mockRepository.findBySku('SKU001'),
+      ).thenAnswer((_) async => null);
 
-      await service(
-        fileData: fileData,
-        columnMapping: columnMapping,
-      );
+      await service(fileData: fileData, columnMapping: columnMapping);
 
       verify(() => mockRepository.findBySku('SKU001')).called(1);
     });

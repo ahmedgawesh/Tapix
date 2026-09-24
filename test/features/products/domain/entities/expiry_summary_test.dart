@@ -61,19 +61,22 @@ void main() {
       expect(s.statusFor(thresholdDays: 30), ExpiryStatus.healthy);
     });
 
-    test('healthy when daysUntilNearestExpiry is null (no upcoming expiry)', () {
-      // A product whose only remaining batches are already expired would set
-      // `hasExpired=true`. A product with NO batches at all simply isn't in
-      // the map, so this branch represents an edge case where a `null`
-      // distance must NOT be treated as "near".
-      const s = ExpirySummary(
-        hasExpired: false,
-        expiredQuantity: 0,
-        nearestExpiry: null,
-        daysUntilNearestExpiry: null,
-      );
-      expect(s.statusFor(), ExpiryStatus.healthy);
-    });
+    test(
+      'healthy when daysUntilNearestExpiry is null (no upcoming expiry)',
+      () {
+        // A product whose only remaining batches are already expired would set
+        // `hasExpired=true`. A product with NO batches at all simply isn't in
+        // the map, so this branch represents an edge case where a `null`
+        // distance must NOT be treated as "near".
+        const s = ExpirySummary(
+          hasExpired: false,
+          expiredQuantity: 0,
+          nearestExpiry: null,
+          daysUntilNearestExpiry: null,
+        );
+        expect(s.statusFor(), ExpiryStatus.healthy);
+      },
+    );
 
     test('custom threshold is respected (60-day amber window)', () {
       const s = ExpirySummary(

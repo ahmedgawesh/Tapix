@@ -59,9 +59,9 @@ class InventoryValuationService {
         .watchSetting(InventoryValuationMethod.settingKey)
         .map(InventoryValuationMethod.fromKey)
         .map((m) {
-      _cached = m;
-      return m;
-    });
+          _cached = m;
+          return m;
+        });
   }
 
   /// Persist a new method. Returns the previous value so callers (e.g. an
@@ -75,10 +75,7 @@ class InventoryValuationService {
   }) async {
     final previous = await getMethod();
     if (previous == method) {
-      LoggingService.debug(
-        'setMethod: no-op (already $method)',
-        tag: _tag,
-      );
+      LoggingService.debug('setMethod: no-op (already $method)', tag: _tag);
       return previous;
     }
 
@@ -107,14 +104,11 @@ class InventoryValuationService {
   /// layer to gate it behind a confirmation dialog with a reason field.
   Future<bool> hasPostedTransactions() async {
     final db = _settingsDao.attachedDatabase;
-    final row = await db.customSelect(
-      '''
+    final row = await db.customSelect('''
       SELECT
         (SELECT COUNT(*) FROM sales) +
         (SELECT COUNT(*) FROM purchases) AS total
-      ''',
-      variables: const <Variable>[],
-    ).getSingle();
+      ''', variables: const <Variable>[]).getSingle();
     return row.read<int>('total') > 0;
   }
 

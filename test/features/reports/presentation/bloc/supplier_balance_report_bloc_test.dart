@@ -165,9 +165,7 @@ void main() {
         dateRange: ReportDateRange.thisMonth(),
       );
 
-      final updated = original.copyWith(
-        dateRange: ReportDateRange.thisYear(),
-      );
+      final updated = original.copyWith(dateRange: ReportDateRange.thisYear());
 
       expect(updated.summary.totalPayablesCents, 500000);
       expect(updated.summary.totalReceivablesCents, 200000);
@@ -231,7 +229,8 @@ void main() {
 
     test('SupplierBalanceReportSortChanged stores sort type', () {
       const event = SupplierBalanceReportSortChanged(
-          SupplierBalanceSortType.nameAsc);
+        SupplierBalanceSortType.nameAsc,
+      );
       expect(event.sort, SupplierBalanceSortType.nameAsc);
     });
   });
@@ -239,18 +238,30 @@ void main() {
   group('SupplierBalanceSortType enum', () {
     test('has all expected values', () {
       expect(SupplierBalanceSortType.values.length, 6);
-      expect(SupplierBalanceSortType.values,
-          contains(SupplierBalanceSortType.balanceDesc));
-      expect(SupplierBalanceSortType.values,
-          contains(SupplierBalanceSortType.balanceAsc));
-      expect(SupplierBalanceSortType.values,
-          contains(SupplierBalanceSortType.nameAsc));
-      expect(SupplierBalanceSortType.values,
-          contains(SupplierBalanceSortType.nameDesc));
-      expect(SupplierBalanceSortType.values,
-          contains(SupplierBalanceSortType.debitDesc));
-      expect(SupplierBalanceSortType.values,
-          contains(SupplierBalanceSortType.creditDesc));
+      expect(
+        SupplierBalanceSortType.values,
+        contains(SupplierBalanceSortType.balanceDesc),
+      );
+      expect(
+        SupplierBalanceSortType.values,
+        contains(SupplierBalanceSortType.balanceAsc),
+      );
+      expect(
+        SupplierBalanceSortType.values,
+        contains(SupplierBalanceSortType.nameAsc),
+      );
+      expect(
+        SupplierBalanceSortType.values,
+        contains(SupplierBalanceSortType.nameDesc),
+      );
+      expect(
+        SupplierBalanceSortType.values,
+        contains(SupplierBalanceSortType.debitDesc),
+      );
+      expect(
+        SupplierBalanceSortType.values,
+        contains(SupplierBalanceSortType.creditDesc),
+      );
     });
   });
 
@@ -294,7 +305,8 @@ void main() {
     test('sort by balance descending (absolute value)', () {
       final list = List<SupplierBalanceItem>.from(suppliers);
       list.sort(
-          (a, b) => b.netBalanceCents.abs().compareTo(a.netBalanceCents.abs()));
+        (a, b) => b.netBalanceCents.abs().compareTo(a.netBalanceCents.abs()),
+      );
 
       expect(list[0].supplierName, 'Apple Wholesale');
       expect(list[0].netBalanceCents.abs(), 150000);
@@ -307,7 +319,8 @@ void main() {
     test('sort by balance ascending (absolute value)', () {
       final list = List<SupplierBalanceItem>.from(suppliers);
       list.sort(
-          (a, b) => a.netBalanceCents.abs().compareTo(b.netBalanceCents.abs()));
+        (a, b) => a.netBalanceCents.abs().compareTo(b.netBalanceCents.abs()),
+      );
 
       expect(list[0].supplierName, 'Mango Trading');
       expect(list[2].supplierName, 'Apple Wholesale');
@@ -506,9 +519,7 @@ void main() {
 
     test('copyWith preserves unchanged fields', () {
       final range = ReportDateRange.thisMonth();
-      final updated = range.copyWith(
-        preset: ReportPeriodPreset.custom,
-      );
+      final updated = range.copyWith(preset: ReportPeriodPreset.custom);
       expect(updated.startDate, range.startDate);
       expect(updated.endDate, range.endDate);
       expect(updated.preset, ReportPeriodPreset.custom);

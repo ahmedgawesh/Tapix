@@ -94,7 +94,8 @@ class _DesktopLicenseGateState extends State<DesktopLicenseGate> {
     }
 
     final copy = _DesktopLicenseCopy.forLanguage(context.locale.languageCode);
-    final canRefresh = status == DesktopLicenseStatus.offlineLeaseExpired ||
+    final canRefresh =
+        status == DesktopLicenseStatus.offlineLeaseExpired ||
         status == DesktopLicenseStatus.revoked;
 
     return Material(
@@ -127,10 +128,7 @@ class _DesktopLicenseGateState extends State<DesktopLicenseGate> {
                             ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 10),
-                      Text(
-                        copy.subtitle,
-                        textAlign: TextAlign.center,
-                      ),
+                      Text(copy.subtitle, textAlign: TextAlign.center),
                       const SizedBox(height: 20),
                       if (_statusText(status, copy) case final text?)
                         Container(
@@ -171,7 +169,9 @@ class _DesktopLicenseGateState extends State<DesktopLicenseGate> {
                         icon: _submitting
                             ? const SizedBox.square(
                                 dimension: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.lock_open_outlined),
                         label: Text(copy.activate),
@@ -196,9 +196,8 @@ class _DesktopLicenseGateState extends State<DesktopLicenseGate> {
                         spacing: 10,
                         children: [
                           TextButton.icon(
-                            onPressed: () => _open(
-                              DesktopLicenseService.manageLicenseUrl,
-                            ),
+                            onPressed: () =>
+                                _open(DesktopLicenseService.manageLicenseUrl),
                             icon: const Icon(Icons.devices_outlined),
                             label: Text(copy.manageDevices),
                           ),
@@ -221,10 +220,7 @@ class _DesktopLicenseGateState extends State<DesktopLicenseGate> {
     );
   }
 
-  String? _statusText(
-    DesktopLicenseStatus status,
-    _DesktopLicenseCopy copy,
-  ) {
+  String? _statusText(DesktopLicenseStatus status, _DesktopLicenseCopy copy) {
     switch (status) {
       case DesktopLicenseStatus.missing:
         return null;
@@ -347,7 +343,8 @@ class _DesktopLicenseCopy {
     }
     return const _DesktopLicenseCopy(
       title: 'Activate TapBix Desktop',
-      subtitle: 'Enter your license key to activate this Windows or Linux device.',
+      subtitle:
+          'Enter your license key to activate this Windows or Linux device.',
       licenseKey: 'License key',
       activate: 'Activate TapBix',
       recheck: 'Check online',

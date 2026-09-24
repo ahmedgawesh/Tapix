@@ -187,8 +187,7 @@ void main() {
     test('avg order value with zero sales returns zero', () {
       const totalSalesCents = 0;
       const salesCount = 0;
-      final avgOrderValue =
-          salesCount > 0 ? totalSalesCents ~/ salesCount : 0;
+      final avgOrderValue = salesCount > 0 ? totalSalesCents ~/ salesCount : 0;
 
       expect(avgOrderValue, 0);
     });
@@ -270,9 +269,7 @@ void main() {
         dateRange: ReportDateRange.thisMonth(),
       );
 
-      final updated = original.copyWith(
-        dateRange: ReportDateRange.thisYear(),
-      );
+      final updated = original.copyWith(dateRange: ReportDateRange.thisYear());
 
       expect(updated.grandTotalSalesCents, 10000000);
       expect(updated.grandTotalCommissionCents, 500000);
@@ -342,7 +339,8 @@ void main() {
 
     test('SortChanged stores sort type', () {
       const event = SalespeopleCommissionReportSortChanged(
-          SalespeopleCommissionSortType.nameAsc);
+        SalespeopleCommissionSortType.nameAsc,
+      );
       expect(event.sort, SalespeopleCommissionSortType.nameAsc);
     });
 
@@ -361,20 +359,34 @@ void main() {
   group('SalespeopleCommissionSortType enum', () {
     test('has all expected values', () {
       expect(SalespeopleCommissionSortType.values.length, 7);
-      expect(SalespeopleCommissionSortType.values,
-          contains(SalespeopleCommissionSortType.revenueDesc));
-      expect(SalespeopleCommissionSortType.values,
-          contains(SalespeopleCommissionSortType.revenueAsc));
-      expect(SalespeopleCommissionSortType.values,
-          contains(SalespeopleCommissionSortType.nameAsc));
-      expect(SalespeopleCommissionSortType.values,
-          contains(SalespeopleCommissionSortType.nameDesc));
-      expect(SalespeopleCommissionSortType.values,
-          contains(SalespeopleCommissionSortType.commissionDesc));
-      expect(SalespeopleCommissionSortType.values,
-          contains(SalespeopleCommissionSortType.salesCountDesc));
-      expect(SalespeopleCommissionSortType.values,
-          contains(SalespeopleCommissionSortType.targetAchievementDesc));
+      expect(
+        SalespeopleCommissionSortType.values,
+        contains(SalespeopleCommissionSortType.revenueDesc),
+      );
+      expect(
+        SalespeopleCommissionSortType.values,
+        contains(SalespeopleCommissionSortType.revenueAsc),
+      );
+      expect(
+        SalespeopleCommissionSortType.values,
+        contains(SalespeopleCommissionSortType.nameAsc),
+      );
+      expect(
+        SalespeopleCommissionSortType.values,
+        contains(SalespeopleCommissionSortType.nameDesc),
+      );
+      expect(
+        SalespeopleCommissionSortType.values,
+        contains(SalespeopleCommissionSortType.commissionDesc),
+      );
+      expect(
+        SalespeopleCommissionSortType.values,
+        contains(SalespeopleCommissionSortType.salesCountDesc),
+      );
+      expect(
+        SalespeopleCommissionSortType.values,
+        contains(SalespeopleCommissionSortType.targetAchievementDesc),
+      );
     });
   });
 
@@ -423,8 +435,7 @@ void main() {
 
     test('sort by revenue descending', () {
       final list = List<SalespersonCommissionItem>.from(salespeople);
-      list.sort(
-          (a, b) => b.totalSalesCents.compareTo(a.totalSalesCents));
+      list.sort((a, b) => b.totalSalesCents.compareTo(a.totalSalesCents));
 
       expect(list[0].employeeName, 'Zara Top');
       expect(list[0].totalSalesCents, 8000000);
@@ -436,8 +447,7 @@ void main() {
 
     test('sort by revenue ascending', () {
       final list = List<SalespersonCommissionItem>.from(salespeople);
-      list.sort(
-          (a, b) => a.totalSalesCents.compareTo(b.totalSalesCents));
+      list.sort((a, b) => a.totalSalesCents.compareTo(b.totalSalesCents));
 
       expect(list[0].employeeName, 'Mona Low');
       expect(list[2].employeeName, 'Zara Top');
@@ -463,8 +473,11 @@ void main() {
 
     test('sort by commission descending', () {
       final list = List<SalespersonCommissionItem>.from(salespeople);
-      list.sort((a, b) => b.totalCommissionEarnedCents
-          .compareTo(a.totalCommissionEarnedCents));
+      list.sort(
+        (a, b) => b.totalCommissionEarnedCents.compareTo(
+          a.totalCommissionEarnedCents,
+        ),
+      );
 
       expect(list[0].employeeName, 'Zara Top');
       expect(list[0].totalCommissionEarnedCents, 400000);
@@ -488,8 +501,10 @@ void main() {
 
     test('sort by target achievement descending', () {
       final list = List<SalespersonCommissionItem>.from(salespeople);
-      list.sort((a, b) =>
-          b.targetAchievementPercent.compareTo(a.targetAchievementPercent));
+      list.sort(
+        (a, b) =>
+            b.targetAchievementPercent.compareTo(a.targetAchievementPercent),
+      );
 
       expect(list[0].employeeName, 'Zara Top');
       expect(list[0].targetAchievementPercent, 120.0);
@@ -683,32 +698,28 @@ void main() {
     test('pro-rated target for 30-day month', () {
       const monthlyTargetCents = 10000000; // 100,000.00
       const rangeDays = 30;
-      final proRatedTarget =
-          (monthlyTargetCents * rangeDays / 30).round();
+      final proRatedTarget = (monthlyTargetCents * rangeDays / 30).round();
       expect(proRatedTarget, 10000000);
     });
 
     test('pro-rated target for 7-day week', () {
       const monthlyTargetCents = 10000000;
       const rangeDays = 7;
-      final proRatedTarget =
-          (monthlyTargetCents * rangeDays / 30).round();
+      final proRatedTarget = (monthlyTargetCents * rangeDays / 30).round();
       expect(proRatedTarget, 2333333);
     });
 
     test('pro-rated target for 90-day quarter', () {
       const monthlyTargetCents = 10000000;
       const rangeDays = 90;
-      final proRatedTarget =
-          (monthlyTargetCents * rangeDays / 30).round();
+      final proRatedTarget = (monthlyTargetCents * rangeDays / 30).round();
       expect(proRatedTarget, 30000000);
     });
 
     test('pro-rated target for 365-day year', () {
       const monthlyTargetCents = 10000000;
       const rangeDays = 365;
-      final proRatedTarget =
-          (monthlyTargetCents * rangeDays / 30).round();
+      final proRatedTarget = (monthlyTargetCents * rangeDays / 30).round();
       expect(proRatedTarget, 121666667);
     });
 
@@ -847,16 +858,18 @@ void main() {
       expect(item.paidCommissionCents, 0);
     });
 
-    test('target color logic: >= 100% is primary, >= 70% is tertiary, < 70% is error',
-        () {
-      const excellent = 120.0;
-      const good = 85.0;
-      const poor = 40.0;
+    test(
+      'target color logic: >= 100% is primary, >= 70% is tertiary, < 70% is error',
+      () {
+        const excellent = 120.0;
+        const good = 85.0;
+        const poor = 40.0;
 
-      expect(excellent >= 100, true);
-      expect(good >= 70 && good < 100, true);
-      expect(poor < 70, true);
-    });
+        expect(excellent >= 100, true);
+        expect(good >= 70 && good < 100, true);
+        expect(poor < 70, true);
+      },
+    );
 
     test('commission paid color logic: > 0 is primary', () {
       const hasPaid = 100000;
@@ -912,7 +925,8 @@ void main() {
       ];
 
       salespeople.sort(
-          (a, b) => b.totalSalesCents.compareTo(a.totalSalesCents));
+        (a, b) => b.totalSalesCents.compareTo(a.totalSalesCents),
+      );
 
       expect(salespeople[0].employeeName, 'Large');
       expect(salespeople[1].employeeName, 'Medium');
@@ -931,8 +945,7 @@ void main() {
     });
 
     test('target represents 100,000.00 currency units', () {
-      final amount =
-          SalespeopleCommissionReportBloc.monthlyTargetCents / 100;
+      final amount = SalespeopleCommissionReportBloc.monthlyTargetCents / 100;
       expect(amount, 100000.00);
     });
   });

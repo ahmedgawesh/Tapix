@@ -10,11 +10,11 @@ class AppTheme {
     fontFamily: 'IBMPlexSansArabic',
     // Tapix Brand Colors (Blue & Orange from logo)
     colors: const FlexSchemeColor(
-      primary: AppColors.primary,                    // Tapix Blue
-      primaryContainer: AppColors.primaryContainer,  // Light Blue
-      secondary: AppColors.secondary,                // Tapix Orange
+      primary: AppColors.primary, // Tapix Blue
+      primaryContainer: AppColors.primaryContainer, // Light Blue
+      secondary: AppColors.secondary, // Tapix Orange
       secondaryContainer: AppColors.secondaryContainer, // Light Orange
-      tertiary: AppColors.primaryDark,               // Dark Blue
+      tertiary: AppColors.primaryDark, // Dark Blue
       tertiaryContainer: Color(0xFFBBDEFB),
       appBarColor: AppColors.surface,
       error: AppColors.error,
@@ -55,11 +55,11 @@ class AppTheme {
     fontFamily: 'IBMPlexSansArabic',
     // Tapix Brand Colors (Blue & Orange from logo) - Dark mode variants
     colors: const FlexSchemeColor(
-      primary: AppColors.primaryLight,               // Lighter Blue for dark mode
-      primaryContainer: AppColors.primaryDark,       // Dark Blue container
-      secondary: AppColors.secondaryLight,           // Lighter Orange for dark mode
-      secondaryContainer: AppColors.secondaryDark,   // Dark Orange container
-      tertiary: Color(0xFF90CAF9),                   // Light Blue accent
+      primary: AppColors.primaryLight, // Lighter Blue for dark mode
+      primaryContainer: AppColors.primaryDark, // Dark Blue container
+      secondary: AppColors.secondaryLight, // Lighter Orange for dark mode
+      secondaryContainer: AppColors.secondaryDark, // Dark Orange container
+      tertiary: Color(0xFF90CAF9), // Light Blue accent
       tertiaryContainer: Color(0xFF1565C0),
       appBarColor: AppColors.surfaceDark,
       error: Color(0xFFF2B8B5),
@@ -121,7 +121,9 @@ class SemanticColorsExtension extends ThemeExtension<SemanticColorsExtension> {
 
   @override
   SemanticColorsExtension lerp(
-      ThemeExtension<SemanticColorsExtension>? other, double t) {
+    ThemeExtension<SemanticColorsExtension>? other,
+    double t,
+  ) {
     if (other is! SemanticColorsExtension) {
       return this;
     }

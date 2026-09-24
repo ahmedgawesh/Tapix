@@ -20,7 +20,8 @@ class PaymentRemindersSection extends StatefulWidget {
   const PaymentRemindersSection({super.key});
 
   @override
-  State<PaymentRemindersSection> createState() => _PaymentRemindersSectionState();
+  State<PaymentRemindersSection> createState() =>
+      _PaymentRemindersSectionState();
 }
 
 class _PaymentRemindersSectionState extends State<PaymentRemindersSection> {
@@ -50,15 +51,16 @@ class _PaymentRemindersSectionState extends State<PaymentRemindersSection> {
     final prefs = sl<SharedPreferences>();
     final dismissedDate = prefs.getString(_kDismissedPaymentRemindersKey);
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    
+
     if (dismissedDate == today) {
       if (mounted) setState(() => _isDismissed = true);
     }
   }
 
   void _subscribeReminders() {
-    _remindersSub = _db.customSelect(
-      '''
+    _remindersSub = _db
+        .customSelect(
+          '''
       SELECT 
         'customer' AS type,
         COUNT(*) AS count,
@@ -75,46 +77,49 @@ class _PaymentRemindersSectionState extends State<PaymentRemindersSection> {
       FROM suppliers
       WHERE balance_cents < 0
       ''',
-      readsFrom: {_db.customers, _db.suppliers},
-    ).watch().map((rows) {
-      int customerCount = 0;
-      int customerBalanceCents = 0;
-      int supplierCount = 0;
-      int supplierBalanceCents = 0;
+          readsFrom: {_db.customers, _db.suppliers},
+        )
+        .watch()
+        .map((rows) {
+          int customerCount = 0;
+          int customerBalanceCents = 0;
+          int supplierCount = 0;
+          int supplierBalanceCents = 0;
 
-      for (final row in rows) {
-        final type = row.read<String>('type');
-        final count = row.read<int>('count');
-        final totalCents = row.read<int>('total_cents');
+          for (final row in rows) {
+            final type = row.read<String>('type');
+            final count = row.read<int>('count');
+            final totalCents = row.read<int>('total_cents');
 
-        if (type == 'customer') {
-          customerCount = count;
-          customerBalanceCents = totalCents;
-        } else if (type == 'supplier') {
-          supplierCount = count;
-          supplierBalanceCents = totalCents;
-        }
-      }
+            if (type == 'customer') {
+              customerCount = count;
+              customerBalanceCents = totalCents;
+            } else if (type == 'supplier') {
+              supplierCount = count;
+              supplierBalanceCents = totalCents;
+            }
+          }
 
-      final totalCount = customerCount + supplierCount;
-      if (totalCount == 0) {
-        return null;
-      }
+          final totalCount = customerCount + supplierCount;
+          if (totalCount == 0) {
+            return null;
+          }
 
-      return PaymentReminders(
-        customerCount: customerCount,
-        customerBalanceCents: customerBalanceCents,
-        supplierCount: supplierCount,
-        supplierBalanceCents: supplierBalanceCents,
-      );
-    }).listen((reminders) {
-      if (mounted) {
-        setState(() {
-          _reminders = reminders;
-          _loaded = true;
+          return PaymentReminders(
+            customerCount: customerCount,
+            customerBalanceCents: customerBalanceCents,
+            supplierCount: supplierCount,
+            supplierBalanceCents: supplierBalanceCents,
+          );
+        })
+        .listen((reminders) {
+          if (mounted) {
+            setState(() {
+              _reminders = reminders;
+              _loaded = true;
+            });
+          }
         });
-      }
-    });
   }
 
   Future<void> _dismiss() async {
@@ -144,7 +149,7 @@ class _PaymentRemindersSectionState extends State<PaymentRemindersSection> {
     return BlocBuilder<AppSettingsBloc, AppSettingsState>(
       builder: (context, settingsState) {
         final settings = settingsState.settings;
-        
+
         // Check if payment reminders are enabled
         if (!settings.paymentReminders) {
           return const SizedBox.shrink();
@@ -156,7 +161,8 @@ class _PaymentRemindersSectionState extends State<PaymentRemindersSection> {
 
         final theme = Theme.of(context);
         final isDark = theme.brightness == Brightness.dark;
-        final totalCount = _reminders!.customerCount + _reminders!.supplierCount;
+        final totalCount =
+            _reminders!.customerCount + _reminders!.supplierCount;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,8 +171,14 @@ class _PaymentRemindersSectionState extends State<PaymentRemindersSection> {
               key: const Key('payment_reminders'),
               direction: DismissDirection.horizontal,
               onDismissed: (_) => _dismiss(),
-              background: _buildDismissBackground(context, Alignment.centerLeft),
-              secondaryBackground: _buildDismissBackground(context, Alignment.centerRight),
+              background: _buildDismissBackground(
+                context,
+                Alignment.centerLeft,
+              ),
+              secondaryBackground: _buildDismissBackground(
+                context,
+                Alignment.centerRight,
+              ),
               child: Card(
                 elevation: 0,
                 color: isDark
@@ -184,7 +196,11 @@ class _PaymentRemindersSectionState extends State<PaymentRemindersSection> {
                       // Header
                       Row(
                         children: [
-                          const Icon(LucideIcons.bellRing, size: 20, color: Colors.amber),
+                          const Icon(
+                            LucideIcons.bellRing,
+                            size: 20,
+                            color: Colors.amber,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -196,7 +212,10 @@ class _PaymentRemindersSectionState extends State<PaymentRemindersSection> {
                             ),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.amber.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(12),
@@ -216,7 +235,9 @@ class _PaymentRemindersSectionState extends State<PaymentRemindersSection> {
                             label: Text('dashboard.report'.tr()),
                             style: FilledButton.styleFrom(
                               visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -240,7 +261,8 @@ class _PaymentRemindersSectionState extends State<PaymentRemindersSection> {
                           amount: _cs.format(_reminders!.customerBalanceCents),
                           color: Colors.green,
                         ),
-                      if (_reminders!.customerCount > 0 && _reminders!.supplierCount > 0)
+                      if (_reminders!.customerCount > 0 &&
+                          _reminders!.supplierCount > 0)
                         const SizedBox(height: 8),
                       if (_reminders!.supplierCount > 0)
                         _ReminderItem(
@@ -267,10 +289,7 @@ class _PaymentRemindersSectionState extends State<PaymentRemindersSection> {
     final isLeft = alignment == Alignment.centerLeft;
     return Container(
       alignment: alignment,
-      padding: EdgeInsets.only(
-        left: isLeft ? 20 : 0,
-        right: isLeft ? 0 : 20,
-      ),
+      padding: EdgeInsets.only(left: isLeft ? 20 : 0, right: isLeft ? 0 : 20),
       decoration: BoxDecoration(
         color: theme.colorScheme.errorContainer,
         borderRadius: BorderRadius.circular(14),

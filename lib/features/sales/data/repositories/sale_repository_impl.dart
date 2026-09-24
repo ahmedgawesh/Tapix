@@ -31,6 +31,7 @@ import '../../../../core/services/loyalty/loyalty_points_service.dart';
 import '../../../../core/services/return_calculation_service.dart';
 import '../../../../core/services/void_impact_analyzer.dart';
 import '../../../auth/data/services/session_service.dart';
+import '../../../consignment/data/consignment_sale_accounting_service.dart';
 import '../../../customers/domain/repositories/loyalty_repository.dart';
 import '../../domain/entities/sale_entity.dart';
 import '../../domain/repositories/sale_repository.dart';
@@ -252,6 +253,12 @@ class SaleRepositoryImpl implements SaleRepository {
             variantId: i.variantId != null
                 ? Value(i.variantId!)
                 : const Value.absent(),
+            supplierIdentityId: i.supplierIdentityId != null
+                ? Value(i.supplierIdentityId!)
+                : const Value.absent(),
+            consignmentLayerId: i.consignmentLayerId != null
+                ? Value(i.consignmentLayerId!)
+                : const Value.absent(),
             employeeId: i.employeeId != null
                 ? Value(i.employeeId!)
                 : const Value.absent(),
@@ -261,6 +268,12 @@ class SaleRepositoryImpl implements SaleRepository {
             unitPriceCents: Value(i.unitPriceCents),
             subtotalCents: Value(i.subtotalCents),
             discountCents: Value(i.discountCents),
+            itemDiscountAtPostCents: i.itemDiscountAtPostCents == null
+                ? const Value.absent()
+                : Value(i.itemDiscountAtPostCents!),
+            invoiceDiscountAtPostCents: i.invoiceDiscountAtPostCents == null
+                ? const Value.absent()
+                : Value(i.invoiceDiscountAtPostCents!),
             taxCents: Value(i.taxCents),
             totalCents: Value(i.totalCents),
           ),
@@ -299,6 +312,10 @@ class SaleRepositoryImpl implements SaleRepository {
             id,
             allowNegativeStock: allowNegativeStock,
             scope: warehouseScope,
+            beforeCompletion: (saleId) => ConsignmentSaleAccountingService(
+              _dao.db,
+              _journalService,
+            ).postPendingAccruals(saleId, userId: userId),
           );
 
           // Create journal entries — MANDATORY, errors propagate
@@ -687,6 +704,12 @@ class SaleRepositoryImpl implements SaleRepository {
             variantId: i.variantId != null
                 ? Value(i.variantId!)
                 : const Value.absent(),
+            supplierIdentityId: i.supplierIdentityId != null
+                ? Value(i.supplierIdentityId!)
+                : const Value.absent(),
+            consignmentLayerId: i.consignmentLayerId != null
+                ? Value(i.consignmentLayerId!)
+                : const Value.absent(),
             employeeId: i.employeeId != null
                 ? Value(i.employeeId!)
                 : const Value.absent(),
@@ -696,6 +719,12 @@ class SaleRepositoryImpl implements SaleRepository {
             unitPriceCents: Value(i.unitPriceCents),
             subtotalCents: Value(i.subtotalCents),
             discountCents: Value(i.discountCents),
+            itemDiscountAtPostCents: i.itemDiscountAtPostCents == null
+                ? const Value.absent()
+                : Value(i.itemDiscountAtPostCents!),
+            invoiceDiscountAtPostCents: i.invoiceDiscountAtPostCents == null
+                ? const Value.absent()
+                : Value(i.invoiceDiscountAtPostCents!),
             taxCents: Value(i.taxCents),
             totalCents: Value(i.totalCents),
           ),
@@ -799,6 +828,10 @@ class SaleRepositoryImpl implements SaleRepository {
         saleId,
         allowNegativeStock: allowNegativeStock,
         scope: warehouseScope,
+        beforeCompletion: (postedSaleId) => ConsignmentSaleAccountingService(
+          _dao.db,
+          _journalService,
+        ).postPendingAccruals(postedSaleId, userId: userId),
       );
       final payments = await _dao.getSalePayments(saleId);
       await _journalService.recordSaleJournalEntry(
@@ -873,6 +906,7 @@ class SaleRepositoryImpl implements SaleRepository {
                 lineId: '${i.id}',
                 productId: i.productId,
                 variantId: i.variantId,
+                supplierIdentityId: i.supplierIdentityId,
                 employeeId: i.employeeId,
                 quantity: i.quantity,
                 quantityScale: i.quantityScale,
@@ -978,11 +1012,19 @@ class SaleRepositoryImpl implements SaleRepository {
 
       // 2026-05-13 — pass the journal service so the DAO's cascade-void of
       // linked sale_returns also reverses their JEs (root-cause #3 fix).
+      final consignmentAccounting = ConsignmentSaleAccountingService(
+        _dao.db,
+        _journalService,
+      );
       await _dao.voidSale(
         saleId,
         journalEntryService: _journalService,
         userId: resolvedUserId,
         scope: warehouseScope,
+        beforeReturnCompletion: (returnId) => consignmentAccounting
+            .postPendingReturnVoidReaccruals(returnId, userId: resolvedUserId),
+        beforeCompletion: (id) => consignmentAccounting
+            .postPendingSaleVoidReversals(id, userId: resolvedUserId),
       );
       if (sale != null && sale.customerId != null) {
         await _reverseLoyaltyPointsForSale(saleId, sale.customerId!);
@@ -1413,7 +1455,14 @@ class SaleRepositoryImpl implements SaleRepository {
       final id = await _dao.createSaleReturn(returnCompanion, itemCompanions);
 
       // Auto-post return: restore stock immediately
-      await _dao.postSaleReturn(id, scope: warehouseScope);
+      await _dao.postSaleReturn(
+        id,
+        scope: warehouseScope,
+        beforeCompletion: (returnId) => ConsignmentSaleAccountingService(
+          _dao.db,
+          _journalService,
+        ).postPendingReturnReversals(returnId, userId: userId),
+      );
 
       // Create journal entries — MANDATORY.
       // `postingDate` flows through so `ReturnPostingService` enforces
@@ -1565,6 +1614,10 @@ class SaleRepositoryImpl implements SaleRepository {
         returnId,
         scope: warehouseScope,
         allowNegativeStock: allowNegativeStock,
+        beforeCompletion: (id) => ConsignmentSaleAccountingService(
+          _dao.db,
+          _journalService,
+        ).postPendingReturnVoidReaccruals(id, userId: userId),
       );
     });
     // Audit: log sale return void (CRITICAL)

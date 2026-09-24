@@ -83,7 +83,7 @@ class _BarcodeScannerViewState extends State<_BarcodeScannerView> {
     if (barcode.rawValue == null) return;
 
     final format = _mapBarcodeFormat(barcode.format);
-    
+
     // Provide haptic feedback
     HapticFeedback.mediumImpact();
 
@@ -93,10 +93,9 @@ class _BarcodeScannerViewState extends State<_BarcodeScannerView> {
       return;
     }
 
-    context.read<BarcodeScannerBloc>().add(BarcodeDetected(
-      barcode: barcode.rawValue!,
-      format: format,
-    ));
+    context.read<BarcodeScannerBloc>().add(
+      BarcodeDetected(barcode: barcode.rawValue!, format: format),
+    );
 
     // Pause scanning after detection
     _controller?.stop();
@@ -172,18 +171,24 @@ class _BarcodeScannerViewState extends State<_BarcodeScannerView> {
         ),
         title: Text('barcode.scanner_title'.tr()),
         centerTitle: true,
-        actions: _isDesktop ? null : [
-          IconButton(
-            icon: Icon(_isFlashOn ? LucideIcons.zapOff : LucideIcons.zap),
-            onPressed: _toggleFlash,
-            tooltip: 'barcode.toggle_flash'.tr(),
-          ),
-          IconButton(
-            icon: Icon(_isFrontCamera ? LucideIcons.camera : LucideIcons.flipHorizontal),
-            onPressed: _switchCamera,
-            tooltip: 'barcode.switch_camera'.tr(),
-          ),
-        ],
+        actions: _isDesktop
+            ? null
+            : [
+                IconButton(
+                  icon: Icon(_isFlashOn ? LucideIcons.zapOff : LucideIcons.zap),
+                  onPressed: _toggleFlash,
+                  tooltip: 'barcode.toggle_flash'.tr(),
+                ),
+                IconButton(
+                  icon: Icon(
+                    _isFrontCamera
+                        ? LucideIcons.camera
+                        : LucideIcons.flipHorizontal,
+                  ),
+                  onPressed: _switchCamera,
+                  tooltip: 'barcode.switch_camera'.tr(),
+                ),
+              ],
       ),
       body: BlocBuilder<BarcodeScannerBloc, RealtimeState<ScannerState>>(
         builder: (context, state) {
@@ -244,7 +249,9 @@ class _BarcodeScannerViewState extends State<_BarcodeScannerView> {
                                 const SizedBox(
                                   width: 16,
                                   height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 ),
                                 const SizedBox(width: 8),
                                 Text('barcode.searching'.tr()),
@@ -269,15 +276,20 @@ class _BarcodeScannerViewState extends State<_BarcodeScannerView> {
           );
         },
       ),
-      floatingActionButton: _isDesktop ? null : FloatingActionButton.extended(
-        onPressed: _showManualEntryDialog,
-        icon: const Icon(LucideIcons.keyboard),
-        label: Text('barcode.manual_entry'.tr()),
-      ),
+      floatingActionButton: _isDesktop
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _showManualEntryDialog,
+              icon: const Icon(LucideIcons.keyboard),
+              label: Text('barcode.manual_entry'.tr()),
+            ),
     );
   }
 
-  Widget _buildDesktopManualEntryUI(BuildContext context, ScannerState scannerState) {
+  Widget _buildDesktopManualEntryUI(
+    BuildContext context,
+    ScannerState scannerState,
+  ) {
     final colorScheme = Theme.of(context).colorScheme;
     final textController = TextEditingController();
 
@@ -289,11 +301,7 @@ class _BarcodeScannerViewState extends State<_BarcodeScannerView> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                LucideIcons.monitor,
-                size: 64,
-                color: colorScheme.primary,
-              ),
+              Icon(LucideIcons.monitor, size: 64, color: colorScheme.primary),
               const SizedBox(height: 24),
               Text(
                 'barcode.desktop_mode_title'.tr(),
@@ -321,7 +329,9 @@ class _BarcodeScannerViewState extends State<_BarcodeScannerView> {
                 textInputAction: TextInputAction.search,
                 onSubmitted: (value) {
                   if (value.isNotEmpty) {
-                    context.read<BarcodeScannerBloc>().add(ManualBarcodeEntered(value));
+                    context.read<BarcodeScannerBloc>().add(
+                      ManualBarcodeEntered(value),
+                    );
                     textController.clear();
                   }
                 },
@@ -333,7 +343,9 @@ class _BarcodeScannerViewState extends State<_BarcodeScannerView> {
                   onPressed: () {
                     final value = textController.text;
                     if (value.isNotEmpty) {
-                      context.read<BarcodeScannerBloc>().add(ManualBarcodeEntered(value));
+                      context.read<BarcodeScannerBloc>().add(
+                        ManualBarcodeEntered(value),
+                      );
                       textController.clear();
                     }
                   },
@@ -342,9 +354,7 @@ class _BarcodeScannerViewState extends State<_BarcodeScannerView> {
                 ),
               ),
               const SizedBox(height: 32),
-              Expanded(
-                child: _buildResultSection(context, scannerState),
-              ),
+              Expanded(child: _buildResultSection(context, scannerState)),
             ],
           ),
         ),
@@ -352,7 +362,10 @@ class _BarcodeScannerViewState extends State<_BarcodeScannerView> {
     );
   }
 
-  Widget _buildCameraError(BuildContext context, mobile_scanner.MobileScannerException error) {
+  Widget _buildCameraError(
+    BuildContext context,
+    mobile_scanner.MobileScannerException error,
+  ) {
     final colorScheme = Theme.of(context).colorScheme;
 
     String errorMessage;
@@ -373,11 +386,7 @@ class _BarcodeScannerViewState extends State<_BarcodeScannerView> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              LucideIcons.cameraOff,
-              size: 64,
-              color: colorScheme.error,
-            ),
+            Icon(LucideIcons.cameraOff, size: 64, color: colorScheme.error),
             const SizedBox(height: 16),
             Text(
               errorMessage,
@@ -428,19 +437,12 @@ class _BarcodeScannerViewState extends State<_BarcodeScannerView> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            LucideIcons.scan,
-            size: 48,
-            color: colorScheme.onSurfaceVariant,
-          ),
+          Icon(LucideIcons.scan, size: 48, color: colorScheme.onSurfaceVariant),
           const SizedBox(height: 16),
           Text(
             'barcode.scan_instructions'.tr(),
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: colorScheme.onSurfaceVariant,
-              fontSize: 16,
-            ),
+            style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 16),
           ),
         ],
       ),
@@ -554,7 +556,10 @@ class _BarcodeScannerViewState extends State<_BarcodeScannerView> {
                   ),
                   FilledButton.icon(
                     onPressed: () {
-                      context.push('/products/new', extra: {'barcode': scanResult.barcode});
+                      context.push(
+                        '/products/new',
+                        extra: {'barcode': scanResult.barcode},
+                      );
                     },
                     icon: const Icon(LucideIcons.plus, size: 18),
                     label: Text('barcode.create_product'.tr()),
@@ -573,10 +578,7 @@ class ScanOverlayPainter extends CustomPainter {
   final Color borderColor;
   final Color overlayColor;
 
-  ScanOverlayPainter({
-    required this.borderColor,
-    required this.overlayColor,
-  });
+  ScanOverlayPainter({required this.borderColor, required this.overlayColor});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -591,10 +593,7 @@ class ScanOverlayPainter extends CustomPainter {
       ..addRRect(RRect.fromRectAndRadius(scanRect, const Radius.circular(16)))
       ..fillType = PathFillType.evenOdd;
 
-    canvas.drawPath(
-      overlayPath,
-      Paint()..color = overlayColor,
-    );
+    canvas.drawPath(overlayPath, Paint()..color = overlayColor);
 
     // Draw corner brackets
     const cornerLength = 30.0;
@@ -606,16 +605,8 @@ class ScanOverlayPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     // Top-left corner
-    canvas.drawLine(
-      Offset(left, top + cornerLength),
-      Offset(left, top),
-      paint,
-    );
-    canvas.drawLine(
-      Offset(left, top),
-      Offset(left + cornerLength, top),
-      paint,
-    );
+    canvas.drawLine(Offset(left, top + cornerLength), Offset(left, top), paint);
+    canvas.drawLine(Offset(left, top), Offset(left + cornerLength, top), paint);
 
     // Top-right corner
     canvas.drawLine(

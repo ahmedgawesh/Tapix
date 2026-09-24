@@ -42,8 +42,11 @@ void main() {
       );
 
       expect(perItem.totalCents, 79992);
-      expect(overall.totalCents, perItem.totalCents,
-          reason: 'overall % must equal per-item % when same rate');
+      expect(
+        overall.totalCents,
+        perItem.totalCents,
+        reason: 'overall % must equal per-item % when same rate',
+      );
     });
 
     test('overall % base must NOT include tax', () {

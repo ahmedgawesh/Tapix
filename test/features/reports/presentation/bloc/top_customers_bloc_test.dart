@@ -56,7 +56,10 @@ void main() {
       );
 
       expect(item.averageOrderCents, 25000);
-      expect(item.averageOrderCents, item.totalRevenueCents ~/ item.transactionCount);
+      expect(
+        item.averageOrderCents,
+        item.totalRevenueCents ~/ item.transactionCount,
+      );
     });
 
     test('integer cents prevents floating point errors', () {
@@ -79,9 +82,7 @@ void main() {
 
   group('TopCustomersData', () {
     test('default values are correct', () {
-      final data = TopCustomersData(
-        dateRange: ReportDateRange.thisMonth(),
-      );
+      final data = TopCustomersData(dateRange: ReportDateRange.thisMonth());
 
       expect(data.customers, isEmpty);
       expect(data.grandTotalRevenueCents, 0);
@@ -102,9 +103,7 @@ void main() {
         dateRange: ReportDateRange.thisMonth(),
       );
 
-      final updated = original.copyWith(
-        dateRange: ReportDateRange.thisYear(),
-      );
+      final updated = original.copyWith(dateRange: ReportDateRange.thisYear());
 
       expect(updated.grandTotalRevenueCents, 500000);
       expect(updated.grandTotalTransactions, 50);
@@ -114,9 +113,7 @@ void main() {
     });
 
     test('copyWith updates specified fields', () {
-      final original = TopCustomersData(
-        dateRange: ReportDateRange.thisMonth(),
-      );
+      final original = TopCustomersData(dateRange: ReportDateRange.thisMonth());
 
       final updated = original.copyWith(
         grandTotalRevenueCents: 100000,
@@ -132,9 +129,7 @@ void main() {
     });
 
     test('copyWith updates customers list', () {
-      final original = TopCustomersData(
-        dateRange: ReportDateRange.thisMonth(),
-      );
+      final original = TopCustomersData(dateRange: ReportDateRange.thisMonth());
 
       const customer = TopCustomerItem(
         customerId: 1,
@@ -178,38 +173,74 @@ void main() {
   group('TopCustomersSortType enum', () {
     test('has all expected values', () {
       expect(TopCustomersSortType.values.length, 6);
-      expect(TopCustomersSortType.values, contains(TopCustomersSortType.revenueDesc));
-      expect(TopCustomersSortType.values, contains(TopCustomersSortType.revenueAsc));
-      expect(TopCustomersSortType.values, contains(TopCustomersSortType.volumeDesc));
-      expect(TopCustomersSortType.values, contains(TopCustomersSortType.volumeAsc));
-      expect(TopCustomersSortType.values, contains(TopCustomersSortType.nameAsc));
-      expect(TopCustomersSortType.values, contains(TopCustomersSortType.nameDesc));
+      expect(
+        TopCustomersSortType.values,
+        contains(TopCustomersSortType.revenueDesc),
+      );
+      expect(
+        TopCustomersSortType.values,
+        contains(TopCustomersSortType.revenueAsc),
+      );
+      expect(
+        TopCustomersSortType.values,
+        contains(TopCustomersSortType.volumeDesc),
+      );
+      expect(
+        TopCustomersSortType.values,
+        contains(TopCustomersSortType.volumeAsc),
+      );
+      expect(
+        TopCustomersSortType.values,
+        contains(TopCustomersSortType.nameAsc),
+      );
+      expect(
+        TopCustomersSortType.values,
+        contains(TopCustomersSortType.nameDesc),
+      );
     });
   });
 
   group('TopCustomersViewType enum', () {
     test('has all expected values', () {
       expect(TopCustomersViewType.values.length, 2);
-      expect(TopCustomersViewType.values, contains(TopCustomersViewType.byRevenue));
-      expect(TopCustomersViewType.values, contains(TopCustomersViewType.byVolume));
+      expect(
+        TopCustomersViewType.values,
+        contains(TopCustomersViewType.byRevenue),
+      );
+      expect(
+        TopCustomersViewType.values,
+        contains(TopCustomersViewType.byVolume),
+      );
     });
   });
 
   group('Sort logic', () {
     final customers = [
       const TopCustomerItem(
-        customerId: 1, customerName: 'Zebra Corp', segment: 'retail',
-        totalRevenueCents: 50000, transactionCount: 5, totalQuantity: 20,
+        customerId: 1,
+        customerName: 'Zebra Corp',
+        segment: 'retail',
+        totalRevenueCents: 50000,
+        transactionCount: 5,
+        totalQuantity: 20,
         averageOrderCents: 10000,
       ),
       const TopCustomerItem(
-        customerId: 2, customerName: 'Apple Inc', segment: 'wholesale',
-        totalRevenueCents: 200000, transactionCount: 20, totalQuantity: 100,
+        customerId: 2,
+        customerName: 'Apple Inc',
+        segment: 'wholesale',
+        totalRevenueCents: 200000,
+        transactionCount: 20,
+        totalQuantity: 100,
         averageOrderCents: 10000,
       ),
       const TopCustomerItem(
-        customerId: 3, customerName: 'Mango Ltd', segment: 'premium',
-        totalRevenueCents: 100000, transactionCount: 10, totalQuantity: 50,
+        customerId: 3,
+        customerName: 'Mango Ltd',
+        segment: 'premium',
+        totalRevenueCents: 100000,
+        transactionCount: 10,
+        totalQuantity: 50,
         averageOrderCents: 10000,
       ),
     ];
@@ -277,18 +308,30 @@ void main() {
     test('grand totals sum correctly from customer list', () {
       const customers = [
         TopCustomerItem(
-          customerId: 1, customerName: 'A', segment: 'retail',
-          totalRevenueCents: 50000, transactionCount: 5, totalQuantity: 20,
+          customerId: 1,
+          customerName: 'A',
+          segment: 'retail',
+          totalRevenueCents: 50000,
+          transactionCount: 5,
+          totalQuantity: 20,
           averageOrderCents: 10000,
         ),
         TopCustomerItem(
-          customerId: 2, customerName: 'B', segment: 'wholesale',
-          totalRevenueCents: 200000, transactionCount: 20, totalQuantity: 100,
+          customerId: 2,
+          customerName: 'B',
+          segment: 'wholesale',
+          totalRevenueCents: 200000,
+          transactionCount: 20,
+          totalQuantity: 100,
           averageOrderCents: 10000,
         ),
         TopCustomerItem(
-          customerId: 3, customerName: 'C', segment: 'premium',
-          totalRevenueCents: 100000, transactionCount: 10, totalQuantity: 50,
+          customerId: 3,
+          customerName: 'C',
+          segment: 'premium',
+          totalRevenueCents: 100000,
+          transactionCount: 10,
+          totalQuantity: 50,
           averageOrderCents: 10000,
         ),
       ];
@@ -374,12 +417,25 @@ void main() {
     test('all 3 languages have translation keys', () {
       // Verify the expected translation keys for the PDF service
       const expectedKeys = [
-        'top_customers_revenue', 'top_customers_volume', 'period',
-        'total_revenue', 'total_customers', 'total_transactions',
-        'total_quantity', 'customer', 'segment', 'revenue',
-        'transactions', 'quantity', 'avg_order', 'last_purchase',
-        'grand_total', 'printed_on', 'segment_retail',
-        'segment_wholesale', 'segment_premium',
+        'top_customers_revenue',
+        'top_customers_volume',
+        'period',
+        'total_revenue',
+        'total_customers',
+        'total_transactions',
+        'total_quantity',
+        'customer',
+        'segment',
+        'revenue',
+        'transactions',
+        'quantity',
+        'avg_order',
+        'last_purchase',
+        'grand_total',
+        'printed_on',
+        'segment_retail',
+        'segment_wholesale',
+        'segment_premium',
       ];
       expect(expectedKeys.length, 19);
     });

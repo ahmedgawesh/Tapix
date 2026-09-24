@@ -12,11 +12,15 @@ import 'package:tapix/features/products/presentation/bloc/import_products_event.
 import 'package:tapix/features/products/presentation/bloc/import_products_state.dart';
 
 class MockParseImportFile extends Mock implements ParseImportFile {}
+
 class MockValidateImportData extends Mock implements ValidateImportData {}
+
 class MockImportProducts extends Mock implements ImportProducts {}
+
 class MockCurrencyService extends Mock implements CurrencyService {}
 
 class FakeImportFileData extends Fake implements ImportFileData {}
+
 class FakeColumnMapping extends Fake implements ColumnMapping {}
 
 void main() {
@@ -37,9 +41,9 @@ void main() {
     mockImportProducts = MockImportProducts();
     mockCurrencyService = MockCurrencyService();
 
-    when(() => mockCurrencyService.getCurrency()).thenReturn(
-      const Currency(code: 'USD', symbol: '\$', name: 'US Dollar'),
-    );
+    when(
+      () => mockCurrencyService.getCurrency(),
+    ).thenReturn(const Currency(code: 'USD', symbol: '\$', name: 'US Dollar'));
 
     bloc = ImportProductsBloc(
       parseImportFile: mockParseImportFile,
@@ -65,58 +69,54 @@ void main() {
           fileName: 'test.csv',
           fileType: ImportFileType.csv,
           headers: ['name', 'price'],
-          rows: [['Product 1', '19.99']],
+          rows: [
+            ['Product 1', '19.99'],
+          ],
           totalRows: 1,
         );
 
-        when(() => mockParseImportFile(
-              bytes: any(named: 'bytes'),
-              fileName: any(named: 'fileName'),
-            )).thenAnswer((_) async => fileData);
+        when(
+          () => mockParseImportFile(
+            bytes: any(named: 'bytes'),
+            fileName: any(named: 'fileName'),
+          ),
+        ).thenAnswer((_) async => fileData);
 
         return bloc;
       },
       act: (bloc) => bloc.add(
-        const ImportFileSelected(
-          fileBytes: [1, 2, 3],
-          fileName: 'test.csv',
-        ),
+        const ImportFileSelected(fileBytes: [1, 2, 3], fileName: 'test.csv'),
       ),
-      expect: () => [
-        const ImportFileLoading(),
-        isA<ImportFileParsed>(),
-      ],
+      expect: () => [const ImportFileLoading(), isA<ImportFileParsed>()],
     );
 
     blocTest<ImportProductsBloc, ImportProductsState>(
       'emits [ImportFileLoading, ImportFailed] when file parsing fails',
       build: () {
-        when(() => mockParseImportFile(
-              bytes: any(named: 'bytes'),
-              fileName: any(named: 'fileName'),
-            )).thenThrow(Exception('Parse error'));
+        when(
+          () => mockParseImportFile(
+            bytes: any(named: 'bytes'),
+            fileName: any(named: 'fileName'),
+          ),
+        ).thenThrow(Exception('Parse error'));
 
         return bloc;
       },
       act: (bloc) => bloc.add(
-        const ImportFileSelected(
-          fileBytes: [1, 2, 3],
-          fileName: 'test.csv',
-        ),
+        const ImportFileSelected(fileBytes: [1, 2, 3], fileName: 'test.csv'),
       ),
-      expect: () => [
-        const ImportFileLoading(),
-        isA<ImportFailed>(),
-      ],
+      expect: () => [const ImportFileLoading(), isA<ImportFailed>()],
     );
 
     blocTest<ImportProductsBloc, ImportProductsState>(
       'emits [ImportValidating, ImportValidated] when validation succeeds',
       build: () {
-        when(() => mockValidateImportData(
-              fileData: any(named: 'fileData'),
-              columnMapping: any(named: 'columnMapping'),
-            )).thenAnswer((_) async => []);
+        when(
+          () => mockValidateImportData(
+            fileData: any(named: 'fileData'),
+            columnMapping: any(named: 'columnMapping'),
+          ),
+        ).thenAnswer((_) async => []);
 
         return bloc;
       },
@@ -125,17 +125,16 @@ void main() {
           fileName: 'test.csv',
           fileType: ImportFileType.csv,
           headers: ['name', 'price'],
-          rows: [['Product 1', '19.99']],
+          rows: [
+            ['Product 1', '19.99'],
+          ],
           totalRows: 1,
         ),
         columnMapping: ColumnMapping({'name': 0, 'price': 1}),
         availableFields: [],
       ),
       act: (bloc) => bloc.add(const ImportValidationRequested()),
-      expect: () => [
-        isA<ImportValidating>(),
-        isA<ImportValidated>(),
-      ],
+      expect: () => [isA<ImportValidating>(), isA<ImportValidated>()],
     );
 
     blocTest<ImportProductsBloc, ImportProductsState>(
@@ -150,10 +149,12 @@ void main() {
           duration: Duration(seconds: 1),
         );
 
-        when(() => mockImportProducts(
-              fileData: any(named: 'fileData'),
-              columnMapping: any(named: 'columnMapping'),
-            )).thenAnswer((_) async => result);
+        when(
+          () => mockImportProducts(
+            fileData: any(named: 'fileData'),
+            columnMapping: any(named: 'columnMapping'),
+          ),
+        ).thenAnswer((_) async => result);
 
         return bloc;
       },
@@ -162,17 +163,16 @@ void main() {
           fileName: 'test.csv',
           fileType: ImportFileType.csv,
           headers: ['name', 'price'],
-          rows: [['Product 1', '19.99']],
+          rows: [
+            ['Product 1', '19.99'],
+          ],
           totalRows: 1,
         ),
         columnMapping: ColumnMapping({'name': 0, 'price': 1}),
         validationErrors: [],
       ),
       act: (bloc) => bloc.add(const ImportExecutionStarted()),
-      expect: () => [
-        isA<ImportInProgress>(),
-        isA<ImportCompleted>(),
-      ],
+      expect: () => [isA<ImportInProgress>(), isA<ImportCompleted>()],
     );
 
     blocTest<ImportProductsBloc, ImportProductsState>(

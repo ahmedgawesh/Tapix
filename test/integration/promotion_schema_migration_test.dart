@@ -29,7 +29,7 @@ void main() {
 
     final tables = await _tableNames(db);
 
-    expect(db.schemaVersion, 10091);
+    expect(db.schemaVersion, 10115);
     expect(tables, containsAll(_promotionTables));
     expect(
       (await (db.select(
@@ -95,7 +95,7 @@ void main() {
     addTearDown(db.close);
     final tables = await _tableNames(db);
 
-    expect(db.schemaVersion, 10091);
+    expect(db.schemaVersion, 10115);
     expect(tables, containsAll(_promotionTables));
   });
 }

@@ -91,12 +91,22 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
       department: Value(department),
       roleId: Value(roleId),
       managerId: Value(managerId),
-      salaryCents: Value(salaryCents != null ? Decimal.fromInt(salaryCents) : null),
+      salaryCents: Value(
+        salaryCents != null ? Decimal.fromInt(salaryCents) : null,
+      ),
       defaultCommissionRateBps: Value(defaultCommissionRateBps),
-      fixedCommissionCents: Value(fixedCommissionCents != null ? Decimal.fromInt(fixedCommissionCents) : null),
+      fixedCommissionCents: Value(
+        fixedCommissionCents != null
+            ? Decimal.fromInt(fixedCommissionCents)
+            : null,
+      ),
       commissionType: Value(commissionType),
-      salesTargetCents: Value(salesTargetCents != null ? Decimal.fromInt(salesTargetCents) : null),
-      targetBonusCents: Value(targetBonusCents != null ? Decimal.fromInt(targetBonusCents) : null),
+      salesTargetCents: Value(
+        salesTargetCents != null ? Decimal.fromInt(salesTargetCents) : null,
+      ),
+      targetBonusCents: Value(
+        targetBonusCents != null ? Decimal.fromInt(targetBonusCents) : null,
+      ),
       targetPeriod: Value(targetPeriod),
       payPeriodType: Value(payPeriodType),
       workingDaysPerPeriod: Value(workingDaysPerPeriod),
@@ -322,7 +332,9 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     if (existing.checkInTime != null && overtimeMinutes == 0) {
       final employee = await _dao.getEmployee(employeeId);
       if (employee != null) {
-        final workedMinutes = checkOutTime.difference(existing.checkInTime!).inMinutes;
+        final workedMinutes = checkOutTime
+            .difference(existing.checkInTime!)
+            .inMinutes;
         final expectedMinutes = employee.workingHoursPerDay * 60;
         if (workedMinutes > expectedMinutes) {
           computedOvertime = workedMinutes - expectedMinutes;
@@ -400,8 +412,9 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     if (effectiveCheckIn != null && effectiveCheckOut != null) {
       final employee = await _dao.getEmployee(employeeId);
       if (employee != null && effectiveCheckOut.isAfter(effectiveCheckIn)) {
-        final workedMinutes =
-            effectiveCheckOut.difference(effectiveCheckIn).inMinutes;
+        final workedMinutes = effectiveCheckOut
+            .difference(effectiveCheckIn)
+            .inMinutes;
         final expectedMinutes = employee.workingHoursPerDay * 60;
         if (workedMinutes > expectedMinutes) {
           computedOvertime = workedMinutes - expectedMinutes;
@@ -452,13 +465,15 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
     var current = startDate;
     while (!current.isAfter(endDate)) {
       final counts = await _dao.watchAttendanceCountsByDate(current).first;
-      summaries.add(AttendanceSummary(
-        date: current,
-        presentCount: counts['present'] ?? 0,
-        lateCount: counts['late'] ?? 0,
-        absentCount: counts['absent'] ?? 0,
-        onLeaveCount: counts['leave'] ?? 0,
-      ));
+      summaries.add(
+        AttendanceSummary(
+          date: current,
+          presentCount: counts['present'] ?? 0,
+          lateCount: counts['late'] ?? 0,
+          absentCount: counts['absent'] ?? 0,
+          onLeaveCount: counts['leave'] ?? 0,
+        ),
+      );
       current = current.add(const Duration(days: 1));
     }
     return summaries;
@@ -561,7 +576,8 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
   // ==================== PAYROLL ====================
 
   @override
-  Stream<List<Payroll>> watchPayrollsByPeriod(String period, {
+  Stream<List<Payroll>> watchPayrollsByPeriod(
+    String period, {
     PayrollStatus? status,
   }) {
     final parts = period.split('-');
@@ -807,10 +823,7 @@ class EmployeeRepositoryImpl implements EmployeeRepository {
   }
 
   @override
-  Future<double?> getAveragePerformanceScore(
-    int employeeId, {
-    String? period,
-  }) {
+  Future<double?> getAveragePerformanceScore(int employeeId, {String? period}) {
     return _dao.getAveragePerformanceScore(employeeId, period: period);
   }
 }

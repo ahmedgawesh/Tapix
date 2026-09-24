@@ -1,3 +1,4 @@
+import '../../services/inventory/purchase_supplier_source_service.dart';
 import '../../services/business/warehouse_read_scope.dart';
 import '../../services/business/warehouse_inventory_reader.dart';
 import '../../services/business/warehouse_document_scope.dart';
@@ -60,6 +61,7 @@ class PurchaseReturnItemWithDetails {
 /// purchase-return-side join (`PurchaseReturnItemWithDetails`).
 class PurchaseItemWithDetails {
   final PurchaseItem item;
+  final SupplierProductIdentity? supplierIdentity;
   final Product product;
   final ProductVariant? variant;
   final String? colorName;
@@ -68,6 +70,7 @@ class PurchaseItemWithDetails {
 
   PurchaseItemWithDetails({
     required this.item,
+    this.supplierIdentity,
     required this.product,
     this.variant,
     this.colorName,
@@ -171,6 +174,11 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
     );
     await StockService.adjustStock(
       this,
+      origin: InventoryOriginIntent(
+        'purchase',
+        item.id,
+        supplierIdentityId: item.supplierIdentityId,
+      ),
       scope: scope,
       productId: item.productId,
       variantId: before.variantId,
@@ -372,12 +380,21 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
         productColors.id.equalsExp(productVariants.colorId),
       ),
       leftOuterJoin(sizes, sizes.id.equalsExp(productVariants.sizeId)),
+      leftOuterJoin(
+        attachedDatabase.supplierProductIdentities,
+        attachedDatabase.supplierProductIdentities.id.equalsExp(
+          purchaseItems.supplierIdentityId,
+        ),
+      ),
     ])..where(purchaseItems.purchaseId.equals(purchaseId));
 
     final rows = await query.get();
     return rows.map((row) {
       return PurchaseItemWithDetails(
         item: row.readTable(purchaseItems),
+        supplierIdentity: row.readTableOrNull(
+          attachedDatabase.supplierProductIdentities,
+        ),
         product: row.readTable(products),
         variant: row.readTableOrNull(productVariants),
         colorName: row.readTableOrNull(productColors)?.name,
@@ -403,12 +420,21 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
         productColors.id.equalsExp(productVariants.colorId),
       ),
       leftOuterJoin(sizes, sizes.id.equalsExp(productVariants.sizeId)),
+      leftOuterJoin(
+        attachedDatabase.supplierProductIdentities,
+        attachedDatabase.supplierProductIdentities.id.equalsExp(
+          purchaseItems.supplierIdentityId,
+        ),
+      ),
     ])..where(purchaseItems.purchaseId.equals(purchaseId));
 
     return query.watch().map(
       (rows) => rows.map((row) {
         return PurchaseItemWithDetails(
           item: row.readTable(purchaseItems),
+          supplierIdentity: row.readTableOrNull(
+            attachedDatabase.supplierProductIdentities,
+          ),
           product: row.readTable(products),
           variant: row.readTableOrNull(productVariants),
           colorName: row.readTableOrNull(productColors)?.name,
@@ -445,7 +471,11 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
       );
 
       for (final item in items) {
-        final itemWithPurchaseId = item.copyWith(purchaseId: Value(purchaseId));
+        final itemWithPurchaseId =
+            await PurchaseSupplierSourceService(attachedDatabase).bind(
+              supplierId: purchase.supplierId.value,
+              item: item.copyWith(purchaseId: Value(purchaseId)),
+            );
         await into(purchaseItems).insert(itemWithPurchaseId);
       }
 
@@ -478,15 +508,21 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
         );
       }
 
-      final updated = await updatePurchase(purchaseId, purchase);
-      if (!updated) return false;
-
       await (delete(
         purchaseItems,
       )..where((i) => i.purchaseId.equals(purchaseId))).go();
+      final updated = await updatePurchase(purchaseId, purchase);
+      if (!updated) throw StateError('Purchase disappeared during update');
+      final effectiveSupplierId = purchase.supplierId.present
+          ? purchase.supplierId.value
+          : existing.supplierId;
 
       for (final item in items) {
-        final itemWithPurchaseId = item.copyWith(purchaseId: Value(purchaseId));
+        final itemWithPurchaseId =
+            await PurchaseSupplierSourceService(attachedDatabase).bind(
+              supplierId: effectiveSupplierId,
+              item: item.copyWith(purchaseId: Value(purchaseId)),
+            );
         await into(purchaseItems).insert(itemWithPurchaseId);
       }
 
@@ -583,6 +619,9 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
         }
       }
       final items = await getPurchaseItems(purchaseId);
+      await PurchaseSupplierSourceService(
+        attachedDatabase,
+      ).validateForPosting(purchase, items);
 
       // Track which products were affected so we can sync them afterwards
       final affectedProductIds = <int>{};
@@ -734,6 +773,11 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
           if (tracks) {
             await StockService.adjustStock(
               this,
+              origin: InventoryOriginIntent(
+                'purchase',
+                item.id,
+                supplierIdentityId: item.supplierIdentityId,
+              ),
               scope: operationScope,
               productId: productId,
               variantId: variantId,
@@ -849,6 +893,11 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
             // Increase stock via StockService (handles products + default variant)
             await StockService.adjustStock(
               this,
+              origin: InventoryOriginIntent(
+                'purchase',
+                item.id,
+                supplierIdentityId: item.supplierIdentityId,
+              ),
               scope: operationScope,
               productId: productId,
               variantId: null,
@@ -1140,7 +1189,6 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
 
       // Update purchase status to posted
       await updatePurchaseStatus(purchaseId, 'posted', userId: userId);
-
       // Supplier accounting (one source of truth = suppliers.balanceCents):
       // - A posted purchase increases payable by total.
       // - Any paid amount decreases payable.
@@ -1596,6 +1644,11 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
           }
           await StockService.adjustStock(
             this,
+            origin: InventoryOriginIntent(
+              'purchase_void',
+              item.id,
+              reference: 'purchase:${item.id}',
+            ),
             scope: operationScope,
             productId: productId,
             variantId: variantId,
@@ -1902,9 +1955,18 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
   // ==================== PURCHASE ITEMS ====================
 
   /// Add item to purchase
-  Future<int> addPurchaseItem(PurchaseItemsCompanion item) {
-    return into(purchaseItems).insert(item);
-  }
+  Future<int> addPurchaseItem(PurchaseItemsCompanion item) =>
+      transaction(() async {
+        final parent = await getPurchaseById(item.purchaseId.value);
+        if (parent == null ||
+            (parent.status != 'draft' && parent.status != 'pending')) {
+          throw StateError('Purchase must be an editable draft');
+        }
+        final bound = await PurchaseSupplierSourceService(
+          attachedDatabase,
+        ).bind(supplierId: parent.supplierId, item: item);
+        return into(purchaseItems).insert(bound);
+      });
 
   /// Update a single purchase item.
   ///
@@ -1928,8 +1990,45 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
           '(#$pid). Void it and create a new one instead.',
         );
       }
+      final current = await (select(
+        purchaseItems,
+      )..where((i) => i.id.equals(itemId))).getSingle();
+      if ((item.purchaseId.present &&
+              item.purchaseId.value != current.purchaseId) ||
+          (item.id.present && item.id.value != itemId)) {
+        throw StateError(
+          'Move purchase lines through the draft replacement workflow',
+        );
+      }
+      final requested = item.supplierIdentityRequested.present
+          ? item.supplierIdentityRequested.value
+          : current.supplierIdentityRequested;
+      final sourceChanged =
+          (item.productId.present &&
+              item.productId.value != current.productId) ||
+          (item.variantId.present &&
+              item.variantId.value != current.variantId) ||
+          (requested != current.supplierIdentityRequested);
+      final merged = current
+          .toCompanion(false)
+          .copyWith(
+            productId: item.productId.present
+                ? item.productId
+                : Value(current.productId),
+            variantId: item.variantId.present
+                ? item.variantId
+                : Value(current.variantId),
+            supplierIdentityRequested: Value(requested),
+            supplierIdentityId: item.supplierIdentityId.present
+                ? item.supplierIdentityId
+                : Value(sourceChanged ? null : current.supplierIdentityId),
+          );
+      final parent = (await getPurchaseById(current.purchaseId))!;
+      final bound = await PurchaseSupplierSourceService(
+        attachedDatabase,
+      ).bind(supplierId: parent.supplierId, item: merged);
       return (update(purchaseItems)..where((i) => i.id.equals(itemId)))
-          .write(item)
+          .write(item.copyWith(supplierIdentityId: bound.supplierIdentityId))
           .then((rows) => rows > 0);
     });
   }
@@ -2286,6 +2385,11 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
           if (variantId != null) {
             await StockService.adjustStock(
               this,
+              origin: InventoryOriginIntent(
+                'purchase_return',
+                returnItem.id,
+                reference: 'purchase:${returnItem.purchaseItemId}',
+              ),
               scope: operationScope,
               productId: productId,
               variantId: variantId,
@@ -2311,6 +2415,11 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
           } else {
             await StockService.adjustStock(
               this,
+              origin: InventoryOriginIntent(
+                'purchase_return',
+                returnItem.id,
+                reference: 'purchase:${returnItem.purchaseItemId}',
+              ),
               scope: operationScope,
               productId: productId,
               variantId: null,
@@ -2567,6 +2676,11 @@ class PurchaseDao extends DatabaseAccessor<AppDatabase>
 
           await StockService.adjustStock(
             this,
+            origin: InventoryOriginIntent(
+              'purchase_return_void',
+              returnItem.id,
+              reference: 'purchase_return:${returnItem.id}',
+            ),
             scope: operationScope,
             productId: purchaseItem.productId,
             variantId: purchaseItem.variantId,

@@ -40,10 +40,15 @@ import 'package:tapix/features/suppliers/data/repositories/supplier_repository_i
 // about the guard short-circuiting (regression!) and the UnimplementedError
 // from Fake will surface it.
 class _FakeCustomerDatasource extends Fake implements CustomerLocalDatasource {}
+
 class _FakeSupplierDatasource extends Fake implements SupplierLocalDatasource {}
+
 class _FakeAuditService extends Fake implements AuditLogService {}
+
 class _FakeSessionService extends Fake implements SessionService {}
+
 class _FakeJournalService extends Fake implements JournalEntryService {}
+
 class _FakeAppDatabase extends Fake implements AppDatabase {}
 
 void main() {
@@ -68,20 +73,22 @@ void main() {
       );
     });
 
-    test('error message names the legal alternative (recordTransaction)',
-        () async {
-      try {
-        // ignore: deprecated_member_use_from_same_package
-        await repo.updateCustomerBalance(42, 5000);
-        fail('Expected StateError, none thrown');
-      } on StateError catch (e) {
-        // Hard-pin the diagnostic so future "helpful" message tweaks
-        // cannot accidentally hide the migration path.
-        expect(e.message, contains('DISABLED'));
-        expect(e.message, contains('recordTransaction'));
-        expect(e.message, contains('adjustment'));
-      }
-    });
+    test(
+      'error message names the legal alternative (recordTransaction)',
+      () async {
+        try {
+          // ignore: deprecated_member_use_from_same_package
+          await repo.updateCustomerBalance(42, 5000);
+          fail('Expected StateError, none thrown');
+        } on StateError catch (e) {
+          // Hard-pin the diagnostic so future "helpful" message tweaks
+          // cannot accidentally hide the migration path.
+          expect(e.message, contains('DISABLED'));
+          expect(e.message, contains('recordTransaction'));
+          expect(e.message, contains('adjustment'));
+        }
+      },
+    );
 
     test('guard short-circuits before touching the datasource', () async {
       // The Fake datasource intentionally implements nothing. If the guard
@@ -96,11 +103,14 @@ void main() {
       } catch (e) {
         caught = e;
       }
-      expect(caught, isA<StateError>(),
-          reason:
-              'Guard must short-circuit BEFORE invoking any dependency. '
-              'A NoSuchMethodError / UnimplementedError here means the '
-              'rogue direct-write path is back.');
+      expect(
+        caught,
+        isA<StateError>(),
+        reason:
+            'Guard must short-circuit BEFORE invoking any dependency. '
+            'A NoSuchMethodError / UnimplementedError here means the '
+            'rogue direct-write path is back.',
+      );
     });
   });
 
@@ -130,17 +140,19 @@ void main() {
       );
     });
 
-    test('error message names the legal alternative (recordTransaction)',
-        () async {
-      try {
-        // ignore: deprecated_member_use_from_same_package
-        await repo.updateSupplierBalance(42, 5000);
-        fail('Expected StateError, none thrown');
-      } on StateError catch (e) {
-        expect(e.message, contains('DISABLED'));
-        expect(e.message, contains('recordTransaction'));
-        expect(e.message, contains('adjustment'));
-      }
-    });
+    test(
+      'error message names the legal alternative (recordTransaction)',
+      () async {
+        try {
+          // ignore: deprecated_member_use_from_same_package
+          await repo.updateSupplierBalance(42, 5000);
+          fail('Expected StateError, none thrown');
+        } on StateError catch (e) {
+          expect(e.message, contains('DISABLED'));
+          expect(e.message, contains('recordTransaction'));
+          expect(e.message, contains('adjustment'));
+        }
+      },
+    );
   });
 }

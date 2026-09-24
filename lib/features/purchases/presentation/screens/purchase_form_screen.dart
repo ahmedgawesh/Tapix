@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import '../widgets/supplier_source_code_view.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -75,6 +76,7 @@ class PurchaseFormScreen extends StatelessWidget {
                 taxInclusivePricing: settings.taxInclusivePricing,
                 isEditingPosted: isEditingPosted,
                 pharmacyFeaturesEnabled: pharmacyFeaturesEnabled,
+                useSupplierProductCodes: settings.enableSupplierProductCodes,
               ),
             ),
         ),
@@ -1451,6 +1453,13 @@ class _PurchaseFormView extends StatelessWidget {
                   final item = state.items[index];
                   return _PurchaseItemTile(
                     item: item,
+                    sourceCode:
+                        state.supplierSourcePreviews[item.tempId]?.sourceSku,
+                    sourceErrorKey: state.supplierSourceErrors[item.tempId],
+                    showSupplierSource:
+                        state.useSupplierProductCodes &&
+                        item.product.trackInventory,
+                    sourcePending: state.isResolvingSupplierSources,
                     index: index,
                     currencyService: cs,
                     showItemDiscount:
@@ -1932,6 +1941,10 @@ class _SupplierPickerSheetState extends State<_SupplierPickerSheet> {
 // ═══════════════════════════════════════════════════════
 class _PurchaseItemTile extends StatelessWidget {
   final PurchaseLineItem item;
+  final String? sourceCode;
+  final String? sourceErrorKey;
+  final bool showSupplierSource;
+  final bool sourcePending;
   final int index;
   final CurrencyService currencyService;
   final bool showItemDiscount;
@@ -1942,6 +1955,10 @@ class _PurchaseItemTile extends StatelessWidget {
 
   const _PurchaseItemTile({
     required this.item,
+    this.sourceCode,
+    this.sourceErrorKey,
+    this.showSupplierSource = false,
+    this.sourcePending = false,
     required this.index,
     required this.currencyService,
     required this.showItemDiscount,
@@ -2007,6 +2024,12 @@ class _PurchaseItemTile extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  if (showSupplierSource)
+                    SupplierSourceCodeView(
+                      code: sourceCode,
+                      errorKey: sourceErrorKey,
+                      pending: sourcePending,
+                    ),
                   if (hasVariantInfo) ...[
                     const SizedBox(height: 4),
                     Wrap(
@@ -3963,6 +3986,39 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                           ),
                         ),
                       ),
+                      if (state.useSupplierProductCodes) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            'supplier_purchase.purchase_only_notice'.tr(),
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ),
+                        for (final line in state.items.where(
+                          (i) => i.product.trackInventory,
+                        ))
+                          Padding(
+                            key: ValueKey('checkout-source-${line.tempId}'),
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  line.product.name,
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                                SupplierSourceCodeView(
+                                  code: state
+                                      .supplierSourcePreviews[line.tempId]
+                                      ?.sourceSku,
+                                  errorKey:
+                                      state.supplierSourceErrors[line.tempId],
+                                  pending: state.isResolvingSupplierSources,
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
                       // ── Supplier Balance Info ──
                       if (state.supplierId != null)
                         Padding(

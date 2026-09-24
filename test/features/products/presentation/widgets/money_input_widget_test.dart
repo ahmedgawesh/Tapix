@@ -34,14 +34,12 @@ void main() {
 
     testWidgets('renders with initial value', (tester) async {
       final value = Decimal.fromInt(1000); // $10.00
-      
-      await tester.pumpWidget(createWidget(
-        MoneyInputWidget(
-          value: value,
-          onChanged: (_) {},
-          label: 'Price',
+
+      await tester.pumpWidget(
+        createWidget(
+          MoneyInputWidget(value: value, onChanged: (_) {}, label: 'Price'),
         ),
-      ));
+      );
 
       expect(find.text('10.00'), findsOneWidget);
       expect(find.text('Price'), findsOneWidget);
@@ -49,14 +47,16 @@ void main() {
 
     testWidgets('updates value on input', (tester) async {
       Decimal? changedValue;
-      
-      await tester.pumpWidget(createWidget(
-        MoneyInputWidget(
-          value: Decimal.zero,
-          onChanged: (val) => changedValue = val,
-          label: 'Price',
+
+      await tester.pumpWidget(
+        createWidget(
+          MoneyInputWidget(
+            value: Decimal.zero,
+            onChanged: (val) => changedValue = val,
+            label: 'Price',
+          ),
         ),
-      ));
+      );
 
       await tester.enterText(find.byType(TextField), '15.50');
       await tester.pump();
@@ -69,13 +69,15 @@ void main() {
     });
 
     testWidgets('displays error text', (tester) async {
-      await tester.pumpWidget(createWidget(
-        MoneyInputWidget(
-          value: Decimal.zero,
-          onChanged: (_) {},
-          errorText: 'Invalid amount',
+      await tester.pumpWidget(
+        createWidget(
+          MoneyInputWidget(
+            value: Decimal.zero,
+            onChanged: (_) {},
+            errorText: 'Invalid amount',
+          ),
         ),
-      ));
+      );
 
       expect(find.text('Invalid amount'), findsOneWidget);
     });

@@ -36,11 +36,8 @@ class RealtimeError<T> extends RealtimeState<T> {
   final T? previousData;
   final DateTime timestamp;
 
-  RealtimeError({
-    required this.error,
-    this.stackTrace,
-    this.previousData,
-  }) : timestamp = DateTime.now();
+  RealtimeError({required this.error, this.stackTrace, this.previousData})
+    : timestamp = DateTime.now();
 
   @override
   String toString() => 'RealtimeError(error: $error)';
@@ -111,7 +108,7 @@ class RealtimeOptimisticRollback extends RealtimeEvent {
 }
 
 /// Abstract base class for blocs that react to database streams.
-/// 
+///
 /// Type parameters:
 /// - [T]: The data type emitted by the stream
 /// - [E]: Additional event types specific to the implementing bloc
@@ -122,7 +119,7 @@ abstract class RealtimeBloc<T, E extends RealtimeEvent>
   bool _isDisposed = false;
 
   RealtimeBloc([RealtimeState<T>? initialState])
-      : super(initialState ?? const RealtimeLoading()) {
+    : super(initialState ?? const RealtimeLoading()) {
     on<RealtimeDataUpdated<T>>(_onDataUpdated);
     on<RealtimeErrorOccurred>(_onErrorOccurred);
     on<RealtimeRefreshRequested>(_onRefreshRequested);
@@ -169,7 +166,10 @@ abstract class RealtimeBloc<T, E extends RealtimeEvent>
     _subscription = dataStream.listen(
       (data) {
         if (!_isDisposed) {
-          LoggingService.debug('Stream data received', tag: runtimeType.toString());
+          LoggingService.debug(
+            'Stream data received',
+            tag: runtimeType.toString(),
+          );
           add(RealtimeDataUpdated<T>(data));
         }
       },
@@ -209,7 +209,7 @@ abstract class RealtimeBloc<T, E extends RealtimeEvent>
       stackTrace: event.stackTrace,
       tag: runtimeType.toString(),
     );
-    
+
     final previousData = _extractData(state);
     emit(
       mapErrorToState(
@@ -236,11 +236,13 @@ abstract class RealtimeBloc<T, E extends RealtimeEvent>
     final previousData = _extractData(state);
     if (previousData != null) {
       _pendingOptimisticUpdates[event.operationId] = previousData;
-      emit(RealtimeOptimistic<T>(
-        optimisticData: event.optimisticData,
-        previousData: previousData,
-        operationId: event.operationId,
-      ));
+      emit(
+        RealtimeOptimistic<T>(
+          optimisticData: event.optimisticData,
+          previousData: previousData,
+          operationId: event.operationId,
+        ),
+      );
     }
   }
 
@@ -266,14 +268,18 @@ abstract class RealtimeBloc<T, E extends RealtimeEvent>
       final optimisticState = state as RealtimeOptimistic<T>;
       if (optimisticState.operationId == event.operationId) {
         if (event.error != null) {
-          emit(RealtimeError<T>(
-            error: event.error!,
-            previousData: previousData ?? optimisticState.previousData,
-          ));
+          emit(
+            RealtimeError<T>(
+              error: event.error!,
+              previousData: previousData ?? optimisticState.previousData,
+            ),
+          );
         } else {
-          emit(RealtimeSuccess<T>(
-            data: previousData ?? optimisticState.previousData,
-          ));
+          emit(
+            RealtimeSuccess<T>(
+              data: previousData ?? optimisticState.previousData,
+            ),
+          );
         }
       }
     }
@@ -303,15 +309,20 @@ abstract class RealtimeBloc<T, E extends RealtimeEvent>
       params: {'operationId': operationId},
       tag: runtimeType.toString(),
     );
-    
-    add(RealtimeOptimisticUpdate<T>(
-      optimisticData: optimisticData,
-      operationId: operationId,
-    ));
+
+    add(
+      RealtimeOptimisticUpdate<T>(
+        optimisticData: optimisticData,
+        operationId: operationId,
+      ),
+    );
 
     try {
       await operation();
-      LoggingService.debug('Optimistic operation succeeded', tag: runtimeType.toString());
+      LoggingService.debug(
+        'Optimistic operation succeeded',
+        tag: runtimeType.toString(),
+      );
       add(RealtimeOptimisticConfirmed(operationId));
     } catch (e, st) {
       LoggingService.error(
@@ -323,7 +334,10 @@ abstract class RealtimeBloc<T, E extends RealtimeEvent>
       add(RealtimeOptimisticRollback(operationId, e));
       rethrow;
     } finally {
-      LoggingService.methodExit('performOptimisticUpdate', tag: runtimeType.toString());
+      LoggingService.methodExit(
+        'performOptimisticUpdate',
+        tag: runtimeType.toString(),
+      );
     }
   }
 

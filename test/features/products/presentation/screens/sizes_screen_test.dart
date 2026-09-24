@@ -41,7 +41,9 @@ void main() {
     when(() => mockBloc.add(any())).thenReturn(null);
     when(() => mockBloc.getProductCounts(any())).thenAnswer((_) async => {});
     when(() => mockBloc.state).thenReturn(const RealtimeLoading<List<Size>>());
-    when(() => mockBloc.stream).thenAnswer((_) => Stream.value(const RealtimeLoading<List<Size>>()));
+    when(
+      () => mockBloc.stream,
+    ).thenAnswer((_) => Stream.value(const RealtimeLoading<List<Size>>()));
     router = GoRouter(
       initialLocation: '/products/sizes',
       routes: [
@@ -77,7 +79,9 @@ void main() {
 
   group('SizesScreen', () {
     testWidgets('renders loading state', (WidgetTester tester) async {
-      when(() => mockBloc.state).thenReturn(const RealtimeLoading<List<Size>>());
+      when(
+        () => mockBloc.state,
+      ).thenReturn(const RealtimeLoading<List<Size>>());
 
       await tester.pumpWidget(createWidget());
       await tester.pump();
@@ -85,7 +89,9 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
-    testWidgets('renders empty state when no sizes', (WidgetTester tester) async {
+    testWidgets('renders empty state when no sizes', (
+      WidgetTester tester,
+    ) async {
       final successState = RealtimeSuccess<List<Size>>(data: []);
       when(() => mockBloc.state).thenReturn(successState);
       when(() => mockBloc.stream).thenAnswer((_) => Stream.value(successState));
@@ -98,15 +104,29 @@ void main() {
       expect(find.text('sizes.add_first_size'), findsOneWidget);
     });
 
-    testWidgets('renders size list when sizes exist', (WidgetTester tester) async {
+    testWidgets('renders size list when sizes exist', (
+      WidgetTester tester,
+    ) async {
       // Use a large screen to avoid RenderFlex overflow in the list tile Row
       tester.view.physicalSize = const ui.Size(1920, 1080);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
       final sizes = [
-        const Size(id: 1, name: 'Small', description: 'S', sortOrder: 1, isActive: true),
-        const Size(id: 2, name: 'Medium', description: 'M', sortOrder: 2, isActive: true),
+        const Size(
+          id: 1,
+          name: 'Small',
+          description: 'S',
+          sortOrder: 1,
+          isActive: true,
+        ),
+        const Size(
+          id: 2,
+          name: 'Medium',
+          description: 'M',
+          sortOrder: 2,
+          isActive: true,
+        ),
       ];
 
       final successState = RealtimeSuccess<List<Size>>(data: sizes);
@@ -120,7 +140,9 @@ void main() {
       expect(find.text('Medium'), findsOneWidget);
     });
 
-    testWidgets('shows error message when in error state', (WidgetTester tester) async {
+    testWidgets('shows error message when in error state', (
+      WidgetTester tester,
+    ) async {
       final errorState = RealtimeError<List<Size>>(error: 'Test error');
       when(() => mockBloc.state).thenReturn(errorState);
       when(() => mockBloc.stream).thenAnswer((_) => Stream.value(errorState));

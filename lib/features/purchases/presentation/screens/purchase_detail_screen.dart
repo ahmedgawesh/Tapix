@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/supplier_source_code_view.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -942,6 +943,10 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
                                       ),
                                   ],
                                 ),
+                              ),
+                            if (item.supplierSourceSku != null)
+                              SupplierSourceCodeView(
+                                code: item.supplierSourceSku,
                               ),
                             if (item.variantSku != null)
                               Container(

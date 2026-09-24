@@ -60,7 +60,7 @@ class AccountingHealthBloc
   final JournalRepository _repository;
 
   AccountingHealthBloc(this._repository)
-      : super(const AccountingHealthState()) {
+    : super(const AccountingHealthState()) {
     on<AccountingHealthCheckRequested>(_onCheckRequested);
   }
 
@@ -74,16 +74,15 @@ class AccountingHealthBloc
       final trialBalance = await _repository.getTrialBalance();
       final reconciliation = await _repository.reconcileBalances();
 
-      emit(state.copyWith(
-        isLoading: false,
-        trialBalance: trialBalance,
-        reconciliation: reconciliation,
-      ));
+      emit(
+        state.copyWith(
+          isLoading: false,
+          trialBalance: trialBalance,
+          reconciliation: reconciliation,
+        ),
+      );
     } catch (e) {
-      emit(state.copyWith(
-        isLoading: false,
-        error: e.toString(),
-      ));
+      emit(state.copyWith(isLoading: false, error: e.toString()));
     }
   }
 }

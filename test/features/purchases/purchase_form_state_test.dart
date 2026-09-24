@@ -116,28 +116,34 @@ void main() {
       expect(state.totalDiscountCents, equals(Decimal.fromInt(1000)));
     });
 
-    test('effectiveInvoiceDiscountCents reflects the fixed invoice discount', () {
-      final state = PurchaseFormState(
-        currencyId: 1,
-        purchaseDate: DateTime(2026, 1, 15),
-        discountMode: DiscountMode.invoice,
-        // Fixed cents is the single source of truth; the UI converts any
-        // typed percentage to cents before it reaches the state.
-        invoiceDiscountCents: Decimal.fromInt(1000), // 10% of 10000¢
-        items: [
-          PurchaseLineItem(
-            tempId: '1',
-            product: testProduct,
-            quantity: 1,
-            unitCostCents: Decimal.fromInt(10000),
-            originalCostCents: 10000,
-            originalPriceCents: 20000,
-          ),
-        ],
-      );
+    test(
+      'effectiveInvoiceDiscountCents reflects the fixed invoice discount',
+      () {
+        final state = PurchaseFormState(
+          currencyId: 1,
+          purchaseDate: DateTime(2026, 1, 15),
+          discountMode: DiscountMode.invoice,
+          // Fixed cents is the single source of truth; the UI converts any
+          // typed percentage to cents before it reaches the state.
+          invoiceDiscountCents: Decimal.fromInt(1000), // 10% of 10000¢
+          items: [
+            PurchaseLineItem(
+              tempId: '1',
+              product: testProduct,
+              quantity: 1,
+              unitCostCents: Decimal.fromInt(10000),
+              originalCostCents: 10000,
+              originalPriceCents: 20000,
+            ),
+          ],
+        );
 
-      expect(state.effectiveInvoiceDiscountCents, equals(Decimal.fromInt(1000)));
-    });
+        expect(
+          state.effectiveInvoiceDiscountCents,
+          equals(Decimal.fromInt(1000)),
+        );
+      },
+    );
 
     test('totalCents calculates correctly with tax', () {
       final state = PurchaseFormState(
@@ -178,7 +184,7 @@ void main() {
         isActive: true,
         trackInventory: true,
       );
-      
+
       final state = PurchaseFormState(
         currencyId: 1,
         purchaseDate: DateTime(2026, 1, 15),
@@ -215,7 +221,7 @@ void main() {
         isActive: true,
         trackInventory: true,
       );
-      
+
       final state = PurchaseFormState(
         currencyId: 1,
         purchaseDate: DateTime(2026, 1, 15),

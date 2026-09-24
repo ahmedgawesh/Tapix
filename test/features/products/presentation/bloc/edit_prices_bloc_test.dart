@@ -37,12 +37,15 @@ void main() {
     mockRepository = MockProductRepository();
     mockVariantRepository = MockProductVariantRepository();
     // Default stub for watchAllProducts
-    when(mockRepository.watchAllProducts())
-        .thenAnswer((_) => Stream.value([tProduct]));
-    when(mockRepository.watchFilteredProducts(
-      categoryId: anyNamed('categoryId'),
-      stockStatus: anyNamed('stockStatus'),
-    )).thenAnswer((_) => Stream.value([tProduct]));
+    when(
+      mockRepository.watchAllProducts(),
+    ).thenAnswer((_) => Stream.value([tProduct]));
+    when(
+      mockRepository.watchFilteredProducts(
+        categoryId: anyNamed('categoryId'),
+        stockStatus: anyNamed('stockStatus'),
+      ),
+    ).thenAnswer((_) => Stream.value([tProduct]));
   });
 
   group('EditPricesBloc', () {
@@ -56,9 +59,7 @@ void main() {
       'emits RealtimeSuccess when stream emits data',
       build: () => EditPricesBloc(mockRepository, mockVariantRepository),
       wait: const Duration(milliseconds: 100),
-      expect: () => [
-        isA<RealtimeSuccess<EditPricesStateData>>(),
-      ],
+      expect: () => [isA<RealtimeSuccess<EditPricesStateData>>()],
     );
 
     blocTest<EditPricesBloc, RealtimeState<EditPricesStateData>>(
@@ -78,11 +79,13 @@ void main() {
       build: () => EditPricesBloc(mockRepository, mockVariantRepository),
       act: (bloc) async {
         await Future<void>.delayed(const Duration(milliseconds: 50));
-        bloc.add(EditPricesPriceUpdated(
-          productId: 1,
-          newPrice: Decimal.parse('2500'),
-          isWholesale: false,
-        ));
+        bloc.add(
+          EditPricesPriceUpdated(
+            productId: 1,
+            newPrice: Decimal.parse('2500'),
+            isWholesale: false,
+          ),
+        );
       },
       wait: const Duration(milliseconds: 100),
       verify: (bloc) {
@@ -95,11 +98,13 @@ void main() {
       build: () => EditPricesBloc(mockRepository, mockVariantRepository),
       act: (bloc) async {
         await Future<void>.delayed(const Duration(milliseconds: 50));
-        bloc.add(EditPricesBulkAdjustRequested(
-          adjustmentType: 'percentage_increase',
-          value: Decimal.fromInt(10),
-          applyToAll: true,
-        ));
+        bloc.add(
+          EditPricesBulkAdjustRequested(
+            adjustmentType: 'percentage_increase',
+            value: Decimal.fromInt(10),
+            applyToAll: true,
+          ),
+        );
       },
       wait: const Duration(milliseconds: 100),
       verify: (bloc) {
@@ -112,11 +117,13 @@ void main() {
       build: () => EditPricesBloc(mockRepository, mockVariantRepository),
       act: (bloc) async {
         await Future<void>.delayed(const Duration(milliseconds: 50));
-        bloc.add(EditPricesPriceUpdated(
-          productId: 1,
-          newPrice: Decimal.parse('2500'),
-          isWholesale: false,
-        ));
+        bloc.add(
+          EditPricesPriceUpdated(
+            productId: 1,
+            newPrice: Decimal.parse('2500'),
+            isWholesale: false,
+          ),
+        );
         await Future<void>.delayed(const Duration(milliseconds: 50));
         bloc.add(const EditPricesUndoRequested());
       },
@@ -131,11 +138,13 @@ void main() {
       build: () => EditPricesBloc(mockRepository, mockVariantRepository),
       act: (bloc) async {
         await Future<void>.delayed(const Duration(milliseconds: 50));
-        bloc.add(EditPricesPriceUpdated(
-          productId: 1,
-          newPrice: Decimal.parse('2500'),
-          isWholesale: false,
-        ));
+        bloc.add(
+          EditPricesPriceUpdated(
+            productId: 1,
+            newPrice: Decimal.parse('2500'),
+            isWholesale: false,
+          ),
+        );
         await Future<void>.delayed(const Duration(milliseconds: 50));
         bloc.add(const EditPricesUndoRequested());
         await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -152,11 +161,13 @@ void main() {
       build: () => EditPricesBloc(mockRepository, mockVariantRepository),
       act: (bloc) async {
         await Future<void>.delayed(const Duration(milliseconds: 50));
-        bloc.add(EditPricesPriceUpdated(
-          productId: 1,
-          newPrice: Decimal.parse('2500'),
-          isWholesale: false,
-        ));
+        bloc.add(
+          EditPricesPriceUpdated(
+            productId: 1,
+            newPrice: Decimal.parse('2500'),
+            isWholesale: false,
+          ),
+        );
         await Future<void>.delayed(const Duration(milliseconds: 50));
         bloc.add(const EditPricesDiscardChanges());
       },
@@ -171,17 +182,18 @@ void main() {
     blocTest<EditPricesBloc, RealtimeState<EditPricesStateData>>(
       'saves price changes to repository',
       build: () {
-        when(mockRepository.updateProduct(any))
-            .thenAnswer((_) async => true);
+        when(mockRepository.updateProduct(any)).thenAnswer((_) async => true);
         return EditPricesBloc(mockRepository, mockVariantRepository);
       },
       act: (bloc) async {
         await Future<void>.delayed(const Duration(milliseconds: 50));
-        bloc.add(EditPricesPriceUpdated(
-          productId: 1,
-          newPrice: Decimal.parse('2500'),
-          isWholesale: false,
-        ));
+        bloc.add(
+          EditPricesPriceUpdated(
+            productId: 1,
+            newPrice: Decimal.parse('2500'),
+            isWholesale: false,
+          ),
+        );
         await Future<void>.delayed(const Duration(milliseconds: 50));
         bloc.add(const EditPricesSaveChanges());
       },
@@ -199,10 +211,12 @@ void main() {
       },
       wait: const Duration(milliseconds: 100),
       verify: (bloc) {
-        verify(mockRepository.watchFilteredProducts(
-          categoryId: 1,
-          stockStatus: null,
-        )).called(greaterThan(0));
+        verify(
+          mockRepository.watchFilteredProducts(
+            categoryId: 1,
+            stockStatus: null,
+          ),
+        ).called(greaterThan(0));
       },
     );
 
@@ -214,10 +228,12 @@ void main() {
       },
       wait: const Duration(milliseconds: 100),
       verify: (bloc) {
-        verify(mockRepository.watchFilteredProducts(
-          categoryId: null,
-          stockStatus: 'low_stock',
-        )).called(greaterThan(0));
+        verify(
+          mockRepository.watchFilteredProducts(
+            categoryId: null,
+            stockStatus: 'low_stock',
+          ),
+        ).called(greaterThan(0));
       },
     );
   });

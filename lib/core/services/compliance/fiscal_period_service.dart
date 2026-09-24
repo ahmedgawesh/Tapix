@@ -20,9 +20,9 @@ class FiscalPeriodClosedException extends AccountingException {
     required this.periodKey,
     required this.attemptedDate,
   }) : super(
-          'Fiscal period $periodKey is closed — cannot post or void '
-          'a transaction with effective date $attemptedDate.',
-        );
+         'Fiscal period $periodKey is closed — cannot post or void '
+         'a transaction with effective date $attemptedDate.',
+       );
 }
 
 /// **Single source of truth** for fiscal-period management.
@@ -68,14 +68,16 @@ class FiscalPeriodService {
   /// Ensure a period row exists for the month of [date]. Returns the row.
   Future<FiscalPeriod> ensurePeriod(DateTime date) async {
     final key = keyFor(date);
-    final existing = await (_db.select(_db.fiscalPeriods)
-          ..where((p) => p.periodKey.equals(key)))
-        .getSingleOrNull();
+    final existing = await (_db.select(
+      _db.fiscalPeriods,
+    )..where((p) => p.periodKey.equals(key))).getSingleOrNull();
     if (existing != null) return existing;
 
     final bounds = monthBounds(date);
     final now = DateTime.now();
-    final id = await _db.into(_db.fiscalPeriods).insert(
+    final id = await _db
+        .into(_db.fiscalPeriods)
+        .insert(
           FiscalPeriodsCompanion.insert(
             periodKey: key,
             startDate: bounds.start,
@@ -85,9 +87,9 @@ class FiscalPeriodService {
             updatedAt: Value(now),
           ),
         );
-    final inserted = await (_db.select(_db.fiscalPeriods)
-          ..where((p) => p.id.equals(id)))
-        .getSingle();
+    final inserted = await (_db.select(
+      _db.fiscalPeriods,
+    )..where((p) => p.id.equals(id))).getSingle();
     developer.log(
       'FiscalPeriodService: created new period $key '
       '(${bounds.start} .. ${bounds.end}) status=open',
@@ -119,15 +121,18 @@ class FiscalPeriodService {
     String? notes,
   }) async {
     final now = DateTime.now();
-    final count = await (_db.update(_db.fiscalPeriods)
-          ..where((p) => p.periodKey.equals(periodKey)))
-        .write(FiscalPeriodsCompanion(
-      status: const Value('closed'),
-      closedByUserId: Value(userId),
-      closedAt: Value(now),
-      notes: Value(notes),
-      updatedAt: Value(now),
-    ));
+    final count =
+        await (_db.update(
+          _db.fiscalPeriods,
+        )..where((p) => p.periodKey.equals(periodKey))).write(
+          FiscalPeriodsCompanion(
+            status: const Value('closed'),
+            closedByUserId: Value(userId),
+            closedAt: Value(now),
+            notes: Value(notes),
+            updatedAt: Value(now),
+          ),
+        );
     if (count == 0) {
       throw AccountingException(
         'FiscalPeriodService.closePeriod: no period found with key "$periodKey".',
@@ -147,15 +152,18 @@ class FiscalPeriodService {
     String? notes,
   }) async {
     final now = DateTime.now();
-    final count = await (_db.update(_db.fiscalPeriods)
-          ..where((p) => p.periodKey.equals(periodKey)))
-        .write(FiscalPeriodsCompanion(
-      status: const Value('open'),
-      closedByUserId: const Value(null),
-      closedAt: const Value(null),
-      notes: Value(notes),
-      updatedAt: Value(now),
-    ));
+    final count =
+        await (_db.update(
+          _db.fiscalPeriods,
+        )..where((p) => p.periodKey.equals(periodKey))).write(
+          FiscalPeriodsCompanion(
+            status: const Value('open'),
+            closedByUserId: const Value(null),
+            closedAt: const Value(null),
+            notes: Value(notes),
+            updatedAt: Value(now),
+          ),
+        );
     if (count == 0) {
       throw AccountingException(
         'FiscalPeriodService.reopenPeriod: no period found with key "$periodKey".',
@@ -176,14 +184,14 @@ class FiscalPeriodService {
   }
 
   Stream<List<FiscalPeriod>> watchAll() {
-    return (_db.select(_db.fiscalPeriods)
-          ..orderBy([(p) => OrderingTerm.desc(p.startDate)]))
-        .watch();
+    return (_db.select(
+      _db.fiscalPeriods,
+    )..orderBy([(p) => OrderingTerm.desc(p.startDate)])).watch();
   }
 
   Future<FiscalPeriod?> getByKey(String periodKey) {
-    return (_db.select(_db.fiscalPeriods)
-          ..where((p) => p.periodKey.equals(periodKey)))
-        .getSingleOrNull();
+    return (_db.select(
+      _db.fiscalPeriods,
+    )..where((p) => p.periodKey.equals(periodKey))).getSingleOrNull();
   }
 }

@@ -15,10 +15,7 @@ class PayrollInitialized extends PayrollEvent {
   final String period;
   final PayrollStatus? status;
 
-  const PayrollInitialized({
-    required this.period,
-    this.status,
-  });
+  const PayrollInitialized({required this.period, this.status});
 }
 
 class PayrollPeriodChanged extends PayrollEvent {
@@ -112,7 +109,9 @@ class PayrollState {
   }) {
     return PayrollState(
       period: period ?? this.period,
-      statusFilter: clearStatusFilter ? null : (statusFilter ?? this.statusFilter),
+      statusFilter: clearStatusFilter
+          ? null
+          : (statusFilter ?? this.statusFilter),
       payrolls: payrolls ?? this.payrolls,
       summary: summary ?? this.summary,
       availablePeriods: availablePeriods ?? this.availablePeriods,
@@ -128,7 +127,7 @@ class PayrollBloc extends Bloc<PayrollEvent, PayrollState> {
   final EmployeeRepository _repository;
 
   PayrollBloc(this._repository)
-      : super(PayrollState(period: _getCurrentPeriod())) {
+    : super(PayrollState(period: _getCurrentPeriod())) {
     on<PayrollInitialized>(_onInitialized);
     on<PayrollPeriodChanged>(_onPeriodChanged);
     on<PayrollFilterChanged>(_onFilterChanged);
@@ -146,11 +145,13 @@ class PayrollBloc extends Bloc<PayrollEvent, PayrollState> {
     PayrollInitialized event,
     Emitter<PayrollState> emit,
   ) async {
-    emit(state.copyWith(
-      period: event.period,
-      statusFilter: event.status,
-      isLoading: true,
-    ));
+    emit(
+      state.copyWith(
+        period: event.period,
+        statusFilter: event.status,
+        isLoading: true,
+      ),
+    );
 
     // Load available periods (safe – empty table returns [])
     try {
@@ -176,11 +177,13 @@ class PayrollBloc extends Bloc<PayrollEvent, PayrollState> {
     PayrollFilterChanged event,
     Emitter<PayrollState> emit,
   ) async {
-    emit(state.copyWith(
-      statusFilter: event.status,
-      clearStatusFilter: event.status == null,
-      isLoading: true,
-    ));
+    emit(
+      state.copyWith(
+        statusFilter: event.status,
+        clearStatusFilter: event.status == null,
+        isLoading: true,
+      ),
+    );
     await _subscribeToPayrolls(emit);
   }
 
@@ -200,7 +203,8 @@ class PayrollBloc extends Bloc<PayrollEvent, PayrollState> {
         int unpaidCount = 0;
 
         for (final p in payrolls) {
-          totalGross += p.basicSalaryCents +
+          totalGross +=
+              p.basicSalaryCents +
               p.commissionCents +
               p.bonusCents +
               p.overtimeCents;
@@ -238,10 +242,7 @@ class PayrollBloc extends Bloc<PayrollEvent, PayrollState> {
         );
       },
       onError: (error, stackTrace) {
-        return state.copyWith(
-          isLoading: false,
-          error: error.toString(),
-        );
+        return state.copyWith(isLoading: false, error: error.toString());
       },
     );
   }
@@ -293,7 +294,8 @@ class PayrollBloc extends Bloc<PayrollEvent, PayrollState> {
       await _repository.updatePayrollStatus(
         id: event.id,
         status: event.status,
-        processedAt: event.status == PayrollStatus.processed ||
+        processedAt:
+            event.status == PayrollStatus.processed ||
                 event.status == PayrollStatus.paid
             ? DateTime.now()
             : null,

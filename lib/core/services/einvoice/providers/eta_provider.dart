@@ -74,9 +74,8 @@ class EtaProvider implements EInvoiceProvider {
   }
 
   @override
-  Future<SignedArtifact> sign(PreparedArtifact prepared) async => SignedArtifact(
-        payloadJson: prepared.payloadJson,
-      );
+  Future<SignedArtifact> sign(PreparedArtifact prepared) async =>
+      SignedArtifact(payloadJson: prepared.payloadJson);
 
   @override
   Future<SubmissionResult> submit(

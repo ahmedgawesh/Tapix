@@ -58,10 +58,10 @@ class ReturnPostingService {
     required ReturnJournalPolicy policy,
     FiscalPeriodService? fiscalPeriodService,
     CustomerCreditNoteService? creditNoteService,
-  })  : _accountingRepo = accountingRepo,
-        _policy = policy,
-        _fiscalPeriodService = fiscalPeriodService,
-        _creditNoteService = creditNoteService;
+  }) : _accountingRepo = accountingRepo,
+       _policy = policy,
+       _fiscalPeriodService = fiscalPeriodService,
+       _creditNoteService = creditNoteService;
 
   /// Post the return journal entry, enforcing all Phase 2 invariants.
   ///
@@ -117,8 +117,7 @@ class ReturnPostingService {
         !ret.creditToReceivable &&
         ret.partyId != null &&
         ret.totalCents > 0) {
-      final sourceTable =
-          ret.link.sourceTable ?? 'sale_return_adjustments';
+      final sourceTable = ret.link.sourceTable ?? 'sale_return_adjustments';
       await credit.issueForReturn(
         customerId: ret.partyId!,
         currencyId: ret.currencyId,

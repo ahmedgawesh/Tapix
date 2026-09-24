@@ -32,7 +32,12 @@ void main() {
         )
         .toList(),
   );
-  Future<Map<String, int>> seed(String suffix) async {
+  Future<Map<String, int>> seed(
+    String suffix, {
+    int? invoiceVariantId,
+    int? adjustmentVariantId,
+    int adjustmentAllocatedQuantity = 0,
+  }) async {
     final docs = <String, int>{};
     final now = DateTime.now().toIso8601String();
     for (final side in ['sale', 'purchase']) {
@@ -52,7 +57,9 @@ void main() {
       final item = await insert('${side}_items', {
         '${side}_id': header,
         'product_id': product,
+        'variant_id': ?invoiceVariantId,
         'quantity': 10,
+        'qty_returned_adjustment': adjustmentAllocatedQuantity,
         sale ? 'unit_price_cents' : 'unit_cost_cents': 1000,
         'subtotal_cents': 10000,
         'discount_cents': 200,
@@ -96,6 +103,7 @@ void main() {
       await insert('${side}_return_adjustment_items', {
         'return_id': adjustment,
         'product_id': product,
+        'variant_id': ?adjustmentVariantId,
         'quantity': 1,
         'unit_price_cents': 1000,
         'unit_cost_cents': 500,
@@ -261,40 +269,35 @@ void main() {
       test(
         '$side adjustment candidate matches operational variant simple=$simple',
         () async {
+          // Create the invoice and its return in their final form. The stock
+          // source guard correctly rejects changing a posted sale line.
+          product = await insert('products', {
+            'name': 'Variant product $side $simple',
+            'cost_cents': 500,
+            'price_cents': 1000,
+            if (!simple) 'has_variants': 1,
+          });
           final a = await insert('product_variants', {
             'product_id': product,
             'cost_cents': 500,
             'price_cents': 1000,
           });
+          int? b;
           if (!simple) {
-            await db.customStatement(
-              'UPDATE products SET has_variants=1 WHERE id=?',
-              [product],
-            );
             final size = await insert('sizes', {'name': 'Other size'});
-            final b = await insert('product_variants', {
+            b = await insert('product_variants', {
               'size_id': size,
               'product_id': product,
               'cost_cents': 500,
               'price_cents': 1000,
             });
-            await db.customStatement(
-              'UPDATE ${base}_items SET variant_id=?,qty_returned_adjustment=1',
-              [a],
-            );
-            await db.customStatement(
-              'UPDATE ${base}_return_adjustment_items SET variant_id=?',
-              [b],
-            );
-          } else {
-            await db.customStatement(
-              'UPDATE ${base}_items SET qty_returned_adjustment=1',
-            );
-            await db.customStatement(
-              'UPDATE ${base}_return_adjustment_items SET variant_id=?',
-              [a],
-            );
           }
+          local = await seed(
+            'VARIANT-$side-$simple',
+            invoiceVariantId: simple ? null : a,
+            adjustmentVariantId: simple ? a : b,
+            adjustmentAllocatedQuantity: 1,
+          );
           final report = await impact(local[table]!);
           expect(report.entangledAdjustmentReturns, hasLength(simple ? 1 : 0));
         },

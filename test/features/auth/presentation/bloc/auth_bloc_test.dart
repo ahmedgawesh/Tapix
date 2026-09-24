@@ -13,7 +13,9 @@ void main() {
 
   setUp(() {
     mockRepository = MockAuthRepositoryInterface();
-    when(mockRepository.watchCurrentUser()).thenAnswer((_) => const Stream.empty());
+    when(
+      mockRepository.watchCurrentUser(),
+    ).thenAnswer((_) => const Stream.empty());
   });
 
   group('AuthBloc', () {
@@ -34,10 +36,7 @@ void main() {
           return AuthBloc(repository: mockRepository);
         },
         act: (bloc) => bloc.add(const AuthCheckRequested()),
-        expect: () => [
-          const AuthLoading(),
-          const AuthNeedsSetup(),
-        ],
+        expect: () => [const AuthLoading(), const AuthNeedsSetup()],
         verify: (_) {
           verify(mockRepository.hasAnyUsers()).called(1);
         },
@@ -51,24 +50,20 @@ void main() {
           return AuthBloc(repository: mockRepository);
         },
         act: (bloc) => bloc.add(const AuthCheckRequested()),
-        expect: () => [
-          const AuthLoading(),
-          const AuthUnauthenticated(),
-        ],
+        expect: () => [const AuthLoading(), const AuthUnauthenticated()],
       );
 
       blocTest<AuthBloc, RealtimeState<UserEntity?>>(
         'emits [AuthLoading, AuthAuthenticated] when session exists',
         build: () {
           when(mockRepository.hasAnyUsers()).thenAnswer((_) async => true);
-          when(mockRepository.getCurrentUser()).thenAnswer((_) async => testUser);
+          when(
+            mockRepository.getCurrentUser(),
+          ).thenAnswer((_) async => testUser);
           return AuthBloc(repository: mockRepository);
         },
         act: (bloc) => bloc.add(const AuthCheckRequested()),
-        expect: () => [
-          const AuthLoading(),
-          AuthAuthenticated(user: testUser),
-        ],
+        expect: () => [const AuthLoading(), AuthAuthenticated(user: testUser)],
       );
     });
 
@@ -76,31 +71,34 @@ void main() {
       blocTest<AuthBloc, RealtimeState<UserEntity?>>(
         'emits [AuthLoading, AuthAuthenticated] on successful login',
         build: () {
-          when(mockRepository.login('testuser', 'password123'))
-              .thenAnswer((_) async => testUser);
+          when(
+            mockRepository.login('testuser', 'password123'),
+          ).thenAnswer((_) async => testUser);
           return AuthBloc(repository: mockRepository);
         },
-        act: (bloc) => bloc.add(const AuthLoginRequested(
-          username: 'testuser',
-          password: 'password123',
-        )),
-        expect: () => [
-          const AuthLoading(),
-          AuthAuthenticated(user: testUser),
-        ],
+        act: (bloc) => bloc.add(
+          const AuthLoginRequested(
+            username: 'testuser',
+            password: 'password123',
+          ),
+        ),
+        expect: () => [const AuthLoading(), AuthAuthenticated(user: testUser)],
       );
 
       blocTest<AuthBloc, RealtimeState<UserEntity?>>(
         'emits [AuthLoading, AuthError] on invalid credentials',
         build: () {
-          when(mockRepository.login('wronguser', 'wrongpass'))
-              .thenAnswer((_) async => null);
+          when(
+            mockRepository.login('wronguser', 'wrongpass'),
+          ).thenAnswer((_) async => null);
           return AuthBloc(repository: mockRepository);
         },
-        act: (bloc) => bloc.add(const AuthLoginRequested(
-          username: 'wronguser',
-          password: 'wrongpass',
-        )),
+        act: (bloc) => bloc.add(
+          const AuthLoginRequested(
+            username: 'wronguser',
+            password: 'wrongpass',
+          ),
+        ),
         expect: () => [
           const AuthLoading(),
           const AuthError(message: 'Invalid username or password'),
@@ -116,10 +114,7 @@ void main() {
           return AuthBloc(repository: mockRepository);
         },
         act: (bloc) => bloc.add(const AuthLogoutRequested()),
-        expect: () => [
-          const AuthLoading(),
-          const AuthUnauthenticated(),
-        ],
+        expect: () => [const AuthLoading(), const AuthUnauthenticated()],
         verify: (_) {
           verify(mockRepository.logout()).called(1);
         },
@@ -130,35 +125,37 @@ void main() {
       blocTest<AuthBloc, RealtimeState<UserEntity?>>(
         'emits [AuthLoading, AuthAuthenticated] on successful owner creation',
         build: () {
-          when(mockRepository.createFirstOwner('admin', 'password123'))
-              .thenAnswer((_) async => testUser);
+          when(
+            mockRepository.createFirstOwner('admin', 'password123'),
+          ).thenAnswer((_) async => testUser);
           return AuthBloc(repository: mockRepository);
         },
-        act: (bloc) => bloc.add(const AuthFirstOwnerCreated(
-          username: 'admin',
-          password: 'password123',
-        )),
-        expect: () => [
-          const AuthLoading(),
-          AuthAuthenticated(user: testUser),
-        ],
+        act: (bloc) => bloc.add(
+          const AuthFirstOwnerCreated(
+            username: 'admin',
+            password: 'password123',
+          ),
+        ),
+        expect: () => [const AuthLoading(), AuthAuthenticated(user: testUser)],
       );
 
       blocTest<AuthBloc, RealtimeState<UserEntity?>>(
         'emits [AuthLoading, AuthError] when owner already exists',
         build: () {
-          when(mockRepository.createFirstOwner('admin', 'password123'))
-              .thenThrow(Exception('Cannot create first owner: users already exist'));
+          when(
+            mockRepository.createFirstOwner('admin', 'password123'),
+          ).thenThrow(
+            Exception('Cannot create first owner: users already exist'),
+          );
           return AuthBloc(repository: mockRepository);
         },
-        act: (bloc) => bloc.add(const AuthFirstOwnerCreated(
-          username: 'admin',
-          password: 'password123',
-        )),
-        expect: () => [
-          const AuthLoading(),
-          isA<AuthError>(),
-        ],
+        act: (bloc) => bloc.add(
+          const AuthFirstOwnerCreated(
+            username: 'admin',
+            password: 'password123',
+          ),
+        ),
+        expect: () => [const AuthLoading(), isA<AuthError>()],
       );
     });
   });

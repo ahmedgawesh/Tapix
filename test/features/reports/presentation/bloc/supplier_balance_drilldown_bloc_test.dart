@@ -138,7 +138,10 @@ void main() {
         netCents: net,
       );
 
-      expect(summary.netCents, summary.totalDebitCents - summary.totalCreditCents);
+      expect(
+        summary.netCents,
+        summary.totalDebitCents - summary.totalCreditCents,
+      );
     });
   });
 
@@ -232,9 +235,7 @@ void main() {
         dateRange: ReportDateRange.thisMonth(),
       );
 
-      final updated = original.copyWith(
-        dateRange: ReportDateRange.thisYear(),
-      );
+      final updated = original.copyWith(dateRange: ReportDateRange.thisYear());
 
       expect(updated.supplierId, 1);
       expect(updated.supplierName, 'Test Supplier');
@@ -268,8 +269,16 @@ void main() {
 
       final updated = original.copyWith(
         suppliers: const [
-          SupplierDrilldownOption(id: 1, name: 'Supplier A', balanceCents: 100000),
-          SupplierDrilldownOption(id: 2, name: 'Supplier B', balanceCents: 50000),
+          SupplierDrilldownOption(
+            id: 1,
+            name: 'Supplier A',
+            balanceCents: 100000,
+          ),
+          SupplierDrilldownOption(
+            id: 2,
+            name: 'Supplier B',
+            balanceCents: 50000,
+          ),
         ],
       );
 
@@ -432,8 +441,11 @@ void main() {
       int balance = openingBalance;
       for (final txn in transactions) {
         balance += txn.amountCents;
-        expect(txn.runningBalanceCents, balance,
-            reason: 'Running balance should be correct after ${txn.type}');
+        expect(
+          txn.runningBalanceCents,
+          balance,
+          reason: 'Running balance should be correct after ${txn.type}',
+        );
       }
 
       // Final balance should be closing balance
@@ -491,24 +503,39 @@ void main() {
     test('type summaries aggregate correctly', () {
       final transactions = [
         DrilldownTransaction(
-          id: 1, date: DateTime(2026, 1, 5), type: 'purchase',
-          amountCents: 50000, runningBalanceCents: 50000,
+          id: 1,
+          date: DateTime(2026, 1, 5),
+          type: 'purchase',
+          amountCents: 50000,
+          runningBalanceCents: 50000,
         ),
         DrilldownTransaction(
-          id: 2, date: DateTime(2026, 1, 10), type: 'payment',
-          amountCents: -30000, runningBalanceCents: 20000,
+          id: 2,
+          date: DateTime(2026, 1, 10),
+          type: 'payment',
+          amountCents: -30000,
+          runningBalanceCents: 20000,
         ),
         DrilldownTransaction(
-          id: 3, date: DateTime(2026, 1, 15), type: 'purchase',
-          amountCents: 25000, runningBalanceCents: 45000,
+          id: 3,
+          date: DateTime(2026, 1, 15),
+          type: 'purchase',
+          amountCents: 25000,
+          runningBalanceCents: 45000,
         ),
         DrilldownTransaction(
-          id: 4, date: DateTime(2026, 1, 20), type: 'return',
-          amountCents: -5000, runningBalanceCents: 40000,
+          id: 4,
+          date: DateTime(2026, 1, 20),
+          type: 'return',
+          amountCents: -5000,
+          runningBalanceCents: 40000,
         ),
         DrilldownTransaction(
-          id: 5, date: DateTime(2026, 1, 25), type: 'payment',
-          amountCents: -10000, runningBalanceCents: 30000,
+          id: 5,
+          date: DateTime(2026, 1, 25),
+          type: 'payment',
+          amountCents: -10000,
+          runningBalanceCents: 30000,
         ),
       ];
 
@@ -546,58 +573,99 @@ void main() {
 
     test('type summaries sorted by absolute net descending', () {
       final summaries = [
-        const DrilldownTypeSummary(type: 'purchase', count: 5, netCents: 250000),
-        const DrilldownTypeSummary(type: 'payment', count: 3, netCents: -150000),
+        const DrilldownTypeSummary(
+          type: 'purchase',
+          count: 5,
+          netCents: 250000,
+        ),
+        const DrilldownTypeSummary(
+          type: 'payment',
+          count: 3,
+          netCents: -150000,
+        ),
         const DrilldownTypeSummary(type: 'return', count: 1, netCents: -5000),
-        const DrilldownTypeSummary(type: 'adjustment', count: 2, netCents: 30000),
+        const DrilldownTypeSummary(
+          type: 'adjustment',
+          count: 2,
+          netCents: 30000,
+        ),
       ];
 
       final sorted = List<DrilldownTypeSummary>.from(summaries)
         ..sort((a, b) => b.netCents.abs().compareTo(a.netCents.abs()));
 
-      expect(sorted[0].type, 'purchase');   // |250000|
-      expect(sorted[1].type, 'payment');    // |150000|
+      expect(sorted[0].type, 'purchase'); // |250000|
+      expect(sorted[1].type, 'payment'); // |150000|
       expect(sorted[2].type, 'adjustment'); // |30000|
-      expect(sorted[3].type, 'return');     // |5000|
+      expect(sorted[3].type, 'return'); // |5000|
     });
 
     test('all transaction types produce correct summaries', () {
       final transactions = [
         DrilldownTransaction(
-          id: 1, date: DateTime(2026, 1, 5), type: 'purchase',
-          amountCents: 50000, runningBalanceCents: 50000,
+          id: 1,
+          date: DateTime(2026, 1, 5),
+          type: 'purchase',
+          amountCents: 50000,
+          runningBalanceCents: 50000,
         ),
         DrilldownTransaction(
-          id: 2, date: DateTime(2026, 1, 10), type: 'payment',
-          amountCents: -20000, runningBalanceCents: 30000,
+          id: 2,
+          date: DateTime(2026, 1, 10),
+          type: 'payment',
+          amountCents: -20000,
+          runningBalanceCents: 30000,
         ),
         DrilldownTransaction(
-          id: 3, date: DateTime(2026, 1, 12), type: 'return',
-          amountCents: -5000, runningBalanceCents: 25000,
+          id: 3,
+          date: DateTime(2026, 1, 12),
+          type: 'return',
+          amountCents: -5000,
+          runningBalanceCents: 25000,
         ),
         DrilldownTransaction(
-          id: 4, date: DateTime(2026, 1, 15), type: 'adjustment',
-          amountCents: 3000, runningBalanceCents: 28000,
+          id: 4,
+          date: DateTime(2026, 1, 15),
+          type: 'adjustment',
+          amountCents: 3000,
+          runningBalanceCents: 28000,
         ),
         DrilldownTransaction(
-          id: 5, date: DateTime(2026, 1, 18), type: 'discount',
-          amountCents: -8000, runningBalanceCents: 20000,
+          id: 5,
+          date: DateTime(2026, 1, 18),
+          type: 'discount',
+          amountCents: -8000,
+          runningBalanceCents: 20000,
         ),
         DrilldownTransaction(
-          id: 6, date: DateTime(2026, 1, 20), type: 'refund',
-          amountCents: -10000, runningBalanceCents: 10000,
+          id: 6,
+          date: DateTime(2026, 1, 20),
+          type: 'refund',
+          amountCents: -10000,
+          runningBalanceCents: 10000,
         ),
         DrilldownTransaction(
-          id: 7, date: DateTime(2026, 1, 22), type: 'credit_note',
-          amountCents: -2000, runningBalanceCents: 8000,
+          id: 7,
+          date: DateTime(2026, 1, 22),
+          type: 'credit_note',
+          amountCents: -2000,
+          runningBalanceCents: 8000,
         ),
       ];
 
       final types = transactions.map((t) => t.type).toSet();
-      expect(types, containsAll([
-        'purchase', 'payment', 'return', 'adjustment',
-        'discount', 'refund', 'credit_note',
-      ]));
+      expect(
+        types,
+        containsAll([
+          'purchase',
+          'payment',
+          'return',
+          'adjustment',
+          'discount',
+          'refund',
+          'credit_note',
+        ]),
+      );
       expect(transactions.length, 7);
 
       // Verify running balance chain from 0
@@ -614,16 +682,22 @@ void main() {
 
       final summaries = [
         const DrilldownTypeSummary(
-          type: 'purchase', count: 3,
-          totalDebitCents: 80000, netCents: 80000,
+          type: 'purchase',
+          count: 3,
+          totalDebitCents: 80000,
+          netCents: 80000,
         ),
         const DrilldownTypeSummary(
-          type: 'payment', count: 2,
-          totalCreditCents: 40000, netCents: -40000,
+          type: 'payment',
+          count: 2,
+          totalCreditCents: 40000,
+          netCents: -40000,
         ),
         const DrilldownTypeSummary(
-          type: 'return', count: 1,
-          totalCreditCents: 10000, netCents: -10000,
+          type: 'return',
+          count: 1,
+          totalCreditCents: 10000,
+          netCents: -10000,
         ),
       ];
 
@@ -672,34 +746,47 @@ void main() {
         ],
         typeSummaries: const [
           DrilldownTypeSummary(
-            type: 'purchase', count: 2,
-            totalDebitCents: 70000, netCents: 70000,
+            type: 'purchase',
+            count: 2,
+            totalDebitCents: 70000,
+            netCents: 70000,
           ),
           DrilldownTypeSummary(
-            type: 'payment', count: 1,
-            totalCreditCents: 40000, netCents: -40000,
+            type: 'payment',
+            count: 1,
+            totalCreditCents: 40000,
+            netCents: -40000,
           ),
         ],
         dateRange: ReportDateRange.thisMonth(),
       );
 
       // Verify closing = opening + debits - credits
-      expect(data.closingBalanceCents,
-          data.openingBalanceCents + data.totalDebitsCents - data.totalCreditsCents);
+      expect(
+        data.closingBalanceCents,
+        data.openingBalanceCents +
+            data.totalDebitsCents -
+            data.totalCreditsCents,
+      );
 
       // Verify transaction count
       expect(data.transactionCount, 3);
 
       // Verify last running balance equals closing balance
-      expect(data.transactions.last.runningBalanceCents,
-          data.closingBalanceCents);
+      expect(
+        data.transactions.last.runningBalanceCents,
+        data.closingBalanceCents,
+      );
 
       // Verify supplier info
       expect(data.supplierName, 'Test Supplier');
       expect(data.supplierAddress, '456 Supply St');
 
       // Verify type summaries net equals closing - opening
-      final totalNet = data.typeSummaries.fold<int>(0, (sum, s) => sum + s.netCents);
+      final totalNet = data.typeSummaries.fold<int>(
+        0,
+        (sum, s) => sum + s.netCents,
+      );
       expect(data.openingBalanceCents + totalNet, data.closingBalanceCents);
     });
 
@@ -809,13 +896,15 @@ void main() {
       for (int i = 0; i < 100; i++) {
         final amount = (i % 2 == 0) ? 10000 : -5000;
         balance += amount;
-        transactions.add(DrilldownTransaction(
-          id: i + 1,
-          date: DateTime(2026, 1, 1).add(Duration(days: i)),
-          type: i % 2 == 0 ? 'purchase' : 'payment',
-          amountCents: amount,
-          runningBalanceCents: balance,
-        ));
+        transactions.add(
+          DrilldownTransaction(
+            id: i + 1,
+            date: DateTime(2026, 1, 1).add(Duration(days: i)),
+            type: i % 2 == 0 ? 'purchase' : 'payment',
+            amountCents: amount,
+            runningBalanceCents: balance,
+          ),
+        );
       }
 
       expect(transactions.length, 100);
@@ -941,8 +1030,11 @@ void main() {
       int balance = openingBalance;
       for (final txn in transactions) {
         balance += txn.amountCents;
-        expect(txn.runningBalanceCents, balance,
-            reason: 'Running balance after ${txn.type}');
+        expect(
+          txn.runningBalanceCents,
+          balance,
+          reason: 'Running balance after ${txn.type}',
+        );
       }
 
       // Calculate totals
@@ -966,16 +1058,25 @@ void main() {
       // Adjustment can be both positive and negative
       final transactions = [
         DrilldownTransaction(
-          id: 1, date: DateTime(2026, 1, 5), type: 'adjustment',
-          amountCents: 15000, runningBalanceCents: 15000,
+          id: 1,
+          date: DateTime(2026, 1, 5),
+          type: 'adjustment',
+          amountCents: 15000,
+          runningBalanceCents: 15000,
         ),
         DrilldownTransaction(
-          id: 2, date: DateTime(2026, 1, 10), type: 'adjustment',
-          amountCents: -8000, runningBalanceCents: 7000,
+          id: 2,
+          date: DateTime(2026, 1, 10),
+          type: 'adjustment',
+          amountCents: -8000,
+          runningBalanceCents: 7000,
         ),
         DrilldownTransaction(
-          id: 3, date: DateTime(2026, 1, 15), type: 'adjustment',
-          amountCents: 3000, runningBalanceCents: 10000,
+          id: 3,
+          date: DateTime(2026, 1, 15),
+          type: 'adjustment',
+          amountCents: 3000,
+          runningBalanceCents: 10000,
         ),
       ];
 
@@ -991,9 +1092,9 @@ void main() {
         net += txn.amountCents;
       }
 
-      expect(debit, 18000);  // 15000 + 3000
-      expect(credit, 8000);  // 8000
-      expect(net, 10000);    // 18000 - 8000
+      expect(debit, 18000); // 15000 + 3000
+      expect(credit, 8000); // 8000
+      expect(net, 10000); // 18000 - 8000
       expect(debit - credit, net);
     });
   });

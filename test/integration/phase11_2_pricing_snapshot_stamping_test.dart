@@ -46,19 +46,23 @@ void main() {
     // Trigger seed migration.
     await db.customSelect('SELECT 1').get();
 
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     currencyId = usd.id;
 
-    customerId = await db.into(db.customers).insert(
+    customerId = await db
+        .into(db.customers)
+        .insert(
           CustomersCompanion.insert(
             name: 'Phase 11.2 Customer',
             currencyId: currencyId,
           ),
         );
 
-    supplierId = await db.into(db.suppliers).insert(
+    supplierId = await db
+        .into(db.suppliers)
+        .insert(
           SuppliersCompanion.insert(
             name: 'Phase 11.2 Supplier',
             currencyId: currencyId,
@@ -66,7 +70,9 @@ void main() {
         );
 
     // Parent sale + purchase rows so we can attach returns.
-    saleId = await db.into(db.sales).insert(
+    saleId = await db
+        .into(db.sales)
+        .insert(
           SalesCompanion.insert(
             invoiceNumber: 'INV-PARENT-001',
             customerId: Value(customerId),
@@ -78,7 +84,9 @@ void main() {
           ).withPricingSnapshot(taxInclusive: false),
         );
 
-    purchaseId = await db.into(db.purchases).insert(
+    purchaseId = await db
+        .into(db.purchases)
+        .insert(
           PurchasesCompanion.insert(
             purchaseNumber: 'PUR-PARENT-001',
             supplierId: supplierId,
@@ -96,7 +104,9 @@ void main() {
 
   group('Phase 11.2 — engine-version snapshot is stamped', () {
     test('sales header — taxInclusive=false', () async {
-      final id = await db.into(db.sales).insert(
+      final id = await db
+          .into(db.sales)
+          .insert(
             SalesCompanion.insert(
               invoiceNumber: 'INV-A-001',
               customerId: Value(customerId),
@@ -108,15 +118,18 @@ void main() {
             ).withPricingSnapshot(taxInclusive: false),
           );
 
-      final row = await (db.select(db.sales)..where((s) => s.id.equals(id)))
-          .getSingle();
+      final row = await (db.select(
+        db.sales,
+      )..where((s) => s.id.equals(id))).getSingle();
       expect(row.pricingEngineVersion, equals(PricingEngineVersion.current));
       expect(row.taxInclusiveAtPost, isFalse);
       expect(row.roundingModeAtPost, equals(RoundingModeLabel.halfUp));
     });
 
     test('sales header — taxInclusive=true is preserved verbatim', () async {
-      final id = await db.into(db.sales).insert(
+      final id = await db
+          .into(db.sales)
+          .insert(
             SalesCompanion.insert(
               invoiceNumber: 'INV-A-002',
               customerId: Value(customerId),
@@ -128,15 +141,18 @@ void main() {
             ).withPricingSnapshot(taxInclusive: true),
           );
 
-      final row = await (db.select(db.sales)..where((s) => s.id.equals(id)))
-          .getSingle();
+      final row = await (db.select(
+        db.sales,
+      )..where((s) => s.id.equals(id))).getSingle();
       expect(row.taxInclusiveAtPost, isTrue);
       expect(row.pricingEngineVersion, equals(PricingEngineVersion.current));
       expect(row.roundingModeAtPost, equals(RoundingModeLabel.halfUp));
     });
 
     test('purchases header — snapshot stamped', () async {
-      final id = await db.into(db.purchases).insert(
+      final id = await db
+          .into(db.purchases)
+          .insert(
             PurchasesCompanion.insert(
               purchaseNumber: 'PUR-A-001',
               supplierId: supplierId,
@@ -147,15 +163,18 @@ void main() {
             ).withPricingSnapshot(taxInclusive: true),
           );
 
-      final row = await (db.select(db.purchases)..where((p) => p.id.equals(id)))
-          .getSingle();
+      final row = await (db.select(
+        db.purchases,
+      )..where((p) => p.id.equals(id))).getSingle();
       expect(row.pricingEngineVersion, equals(PricingEngineVersion.current));
       expect(row.taxInclusiveAtPost, isTrue);
       expect(row.roundingModeAtPost, equals(RoundingModeLabel.halfUp));
     });
 
     test('sale_returns header — snapshot stamped', () async {
-      final id = await db.into(db.saleReturns).insert(
+      final id = await db
+          .into(db.saleReturns)
+          .insert(
             SaleReturnsCompanion.insert(
               saleId: saleId,
               returnNumber: 'SRET-A-001',
@@ -164,16 +183,18 @@ void main() {
             ).withPricingSnapshot(taxInclusive: false),
           );
 
-      final row = await (db.select(db.saleReturns)
-            ..where((r) => r.id.equals(id)))
-          .getSingle();
+      final row = await (db.select(
+        db.saleReturns,
+      )..where((r) => r.id.equals(id))).getSingle();
       expect(row.pricingEngineVersion, equals(PricingEngineVersion.current));
       expect(row.taxInclusiveAtPost, isFalse);
       expect(row.roundingModeAtPost, equals(RoundingModeLabel.halfUp));
     });
 
     test('purchase_returns header — snapshot stamped', () async {
-      final id = await db.into(db.purchaseReturns).insert(
+      final id = await db
+          .into(db.purchaseReturns)
+          .insert(
             PurchaseReturnsCompanion.insert(
               purchaseId: purchaseId,
               returnNumber: 'PRET-A-001',
@@ -182,16 +203,18 @@ void main() {
             ).withPricingSnapshot(taxInclusive: false),
           );
 
-      final row = await (db.select(db.purchaseReturns)
-            ..where((r) => r.id.equals(id)))
-          .getSingle();
+      final row = await (db.select(
+        db.purchaseReturns,
+      )..where((r) => r.id.equals(id))).getSingle();
       expect(row.pricingEngineVersion, equals(PricingEngineVersion.current));
       expect(row.taxInclusiveAtPost, isFalse);
       expect(row.roundingModeAtPost, equals(RoundingModeLabel.halfUp));
     });
 
     test('sale_return_adjustments header — snapshot stamped', () async {
-      final id = await db.into(db.saleReturnAdjustments).insert(
+      final id = await db
+          .into(db.saleReturnAdjustments)
+          .insert(
             SaleReturnAdjustmentsCompanion.insert(
               returnNumber: 'SADJ-A-001',
               currencyId: currencyId,
@@ -199,16 +222,18 @@ void main() {
             ).withPricingSnapshot(taxInclusive: false),
           );
 
-      final row = await (db.select(db.saleReturnAdjustments)
-            ..where((r) => r.id.equals(id)))
-          .getSingle();
+      final row = await (db.select(
+        db.saleReturnAdjustments,
+      )..where((r) => r.id.equals(id))).getSingle();
       expect(row.pricingEngineVersion, equals(PricingEngineVersion.current));
       expect(row.taxInclusiveAtPost, isFalse);
       expect(row.roundingModeAtPost, equals(RoundingModeLabel.halfUp));
     });
 
     test('purchase_return_adjustments header — snapshot stamped', () async {
-      final id = await db.into(db.purchaseReturnAdjustments).insert(
+      final id = await db
+          .into(db.purchaseReturnAdjustments)
+          .insert(
             PurchaseReturnAdjustmentsCompanion.insert(
               returnNumber: 'PADJ-A-001',
               supplierId: supplierId,
@@ -217,9 +242,9 @@ void main() {
             ).withPricingSnapshot(taxInclusive: true),
           );
 
-      final row = await (db.select(db.purchaseReturnAdjustments)
-            ..where((r) => r.id.equals(id)))
-          .getSingle();
+      final row = await (db.select(
+        db.purchaseReturnAdjustments,
+      )..where((r) => r.id.equals(id))).getSingle();
       expect(row.pricingEngineVersion, equals(PricingEngineVersion.current));
       expect(row.taxInclusiveAtPost, isTrue);
       expect(row.roundingModeAtPost, equals(RoundingModeLabel.halfUp));
@@ -232,7 +257,9 @@ void main() {
       // leave the three audit columns NULL. The schema declares them
       // nullable for exactly this reason — no false positives on legacy
       // data.
-      final id = await db.into(db.sales).insert(
+      final id = await db
+          .into(db.sales)
+          .insert(
             SalesCompanion.insert(
               invoiceNumber: 'INV-LEGACY-001',
               customerId: Value(customerId),
@@ -244,8 +271,9 @@ void main() {
             ),
           );
 
-      final row = await (db.select(db.sales)..where((s) => s.id.equals(id)))
-          .getSingle();
+      final row = await (db.select(
+        db.sales,
+      )..where((s) => s.id.equals(id))).getSingle();
       expect(row.pricingEngineVersion, isNull);
       expect(row.taxInclusiveAtPost, isNull);
       expect(row.roundingModeAtPost, isNull);

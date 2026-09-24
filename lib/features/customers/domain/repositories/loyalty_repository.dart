@@ -119,13 +119,12 @@ abstract class LoyaltyRepository {
   Future<List<LoyaltyReward>> getAvailableRewards(int customerId);
 
   /// Redeem a reward
-  Future<void> redeemReward({
-    required int customerId,
-    required int rewardId,
-  });
+  Future<void> redeemReward({required int customerId, required int rewardId});
 
   /// Watch customer reward redemptions
-  Stream<List<CustomerRewardRedemption>> watchCustomerRedemptions(int customerId);
+  Stream<List<CustomerRewardRedemption>> watchCustomerRedemptions(
+    int customerId,
+  );
 
   /// Get tier benefits summary for display
   TierBenefitsSummary getTierBenefitsSummary(LoyaltyTier tier);
@@ -134,7 +133,10 @@ abstract class LoyaltyRepository {
   int calculatePointsToEarn(int amountCents, double multiplier);
 
   /// Calculate points to earn using actual LoyaltySettings (async, accurate)
-  Future<int> calculatePointsToEarnWithSettings(int amountCents, double multiplier);
+  Future<int> calculatePointsToEarnWithSettings(
+    int amountCents,
+    double multiplier,
+  );
 
   /// Create a new loyalty tier
   Future<int> createTier(LoyaltyTier tier);

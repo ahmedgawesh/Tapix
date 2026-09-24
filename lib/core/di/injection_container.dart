@@ -3,6 +3,13 @@ import '../services/business/warehouse_read_scope.dart';
 import '../services/business/branch_currency_policy_store.dart';
 import '../services/business/warehouse_stocktake_service.dart';
 import '../../features/business/data/warehouse_setup_service.dart';
+import '../../features/business/data/warehouse_transfer_access_service.dart';
+import '../../features/business/data/warehouse_transfer_application_service.dart';
+import '../../features/business/data/warehouse_transfer_dispatch_service.dart';
+import '../../features/business/data/warehouse_transfer_receipt_service.dart';
+import '../../features/business/data/warehouse_transfer_recall_service.dart';
+import '../../features/business/data/warehouse_transfer_reporting_service.dart';
+import '../../features/business/data/warehouse_transfer_repository.dart';
 import '../../features/products/services/export_stock_reader.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get_it/get_it.dart';
@@ -12,6 +19,7 @@ import '../bloc/currency_bloc.dart';
 import '../bloc/localization_bloc.dart';
 import '../bloc/theme_bloc.dart';
 import '../database/app_database.dart';
+import '../services/inventory/purchase_supplier_source_service.dart';
 import '../database/daos/product_dao.dart';
 import '../database/daos/pharmacy_dao.dart';
 import '../database/daos/product_variant_dao.dart';
@@ -24,7 +32,17 @@ import '../database/daos/purchase_dao.dart';
 import '../database/daos/sale_dao.dart';
 import '../services/currency_service.dart';
 import '../services/business/branch_tax_policy_store.dart';
+import '../services/business/branch_consignment_policy_store.dart';
+import '../../features/consignment/data/consignment_entitlement.dart';
+import '../../features/consignment/data/consignment_agreement_service.dart';
+import '../../features/consignment/data/consignment_receipt_service.dart';
+import '../../features/consignment/data/consignment_ownership_conversion_service.dart';
+import '../../features/consignment/data/consignment_custody_service.dart';
+import '../../features/consignment/data/consignment_settlement_service.dart';
+import '../../features/consignment/data/consignment_reporting_service.dart';
+import '../../features/consignment/data/consignment_module_service.dart';
 import '../services/business/warehouse_stock_initialization_service.dart';
+import '../services/business/warehouse_transfer_preflight.dart';
 import '../services/cashier_shift_service.dart';
 import '../money/money_input_parser.dart';
 import '../services/parties/party_balance_classifier.dart';
@@ -691,6 +709,7 @@ Future<void> init() async {
       sl<ProductVariantRepository>(),
       sl<ProductRepository>(),
       pharmacyDao: sl<PharmacyDao>(),
+      supplierSourcePreviewer: PurchaseSupplierSourceService(sl<AppDatabase>()),
     ),
   );
   sl.registerFactory(
@@ -1188,14 +1207,86 @@ Future<void> init() async {
   sl.registerLazySingleton(() => BarcodeGenerationService());
   sl.registerLazySingleton(() => BarcodePrinterService(settingsDao: sl()));
 
+  // Licensing primitives must be registered before consignment and warehouse
+  // services are constructed during startup.
+  sl.registerLazySingleton(() => RevenueCatService.instance);
+  sl.registerLazySingleton(() => DeviceFingerprintService());
+  sl.registerLazySingleton(
+    () => DesktopLicenseService(
+      fingerprintService: sl<DeviceFingerprintService>(),
+    ),
+  );
+
   // Settings Services
   sl.registerLazySingleton(() => CompanyProfileService(sl()));
   sl.registerLazySingleton(() => BranchTaxPolicyStore(sl<AppDatabase>()));
   sl.registerLazySingleton(
+    () => BranchConsignmentPolicyStore(sl<AppDatabase>()),
+  );
+  sl.registerLazySingleton<ConsignmentEntitlement>(
+    () => PlatformConsignmentEntitlement(
+      revenueCat: sl<RevenueCatService>(),
+      desktopLicense: sl<DesktopLicenseService>(),
+    ),
+  );
+  sl.registerLazySingleton(
+    () => ConsignmentModuleService(
+      sl<AppDatabase>(),
+      sl<SessionService>(),
+      sl<ConsignmentEntitlement>(),
+      sl<BranchConsignmentPolicyStore>(),
+      isRemoteClient: () =>
+          sl<LanNetworkService>().snapshot.mode == LanMode.client,
+    ),
+  );
+  sl.registerLazySingleton(
+    () => ConsignmentAgreementService(
+      sl<AppDatabase>(),
+      sl<ConsignmentModuleService>(),
+    ),
+  );
+  sl.registerLazySingleton(
+    () => ConsignmentReceiptService(
+      sl<AppDatabase>(),
+      sl<ConsignmentModuleService>(),
+    ),
+  );
+  sl.registerLazySingleton(
+    () => ConsignmentOwnershipConversionService(
+      sl<AppDatabase>(),
+      sl<ConsignmentModuleService>(),
+      sl<ConsignmentReceiptService>(),
+      sl<JournalEntryService>(),
+    ),
+  );
+  sl.registerLazySingleton(
+    () => ConsignmentCustodyService(
+      sl<AppDatabase>(),
+      sl<ConsignmentModuleService>(),
+      sl<JournalEntryService>(),
+    ),
+  );
+  sl.registerLazySingleton(
+    () => ConsignmentSettlementService(
+      sl<AppDatabase>(),
+      sl<ConsignmentModuleService>(),
+      sl<JournalEntryService>(),
+    ),
+  );
+  sl.registerLazySingleton(
+    () => ConsignmentReportingService(
+      sl<AppDatabase>(),
+      sl<ConsignmentModuleService>(),
+    ),
+  );
+  sl.registerLazySingleton(
     () => WarehouseStockInitializationService(sl<AppDatabase>()),
   );
   sl.registerLazySingleton<WarehouseSetupEntitlement>(
-    () => const UnreleasedWarehouseSetupEntitlement(),
+    () => PlatformProWarehouseSetupEntitlement(
+      revenueCat: sl<RevenueCatService>(),
+      desktopLicense: sl<DesktopLicenseService>(),
+    ),
   );
   sl.registerLazySingleton(
     () => WarehouseSetupService(
@@ -1207,6 +1298,55 @@ Future<void> init() async {
       operatingCurrencyCode: () => sl<CurrencyService>().getCurrency().code,
       isRemoteClient: () =>
           sl<LanNetworkService>().snapshot.mode == LanMode.client,
+    ),
+  );
+  sl.registerLazySingleton(
+    () => WarehouseTransferAccessService(
+      sl<AppDatabase>(),
+      sl<SessionService>(),
+      sl<WarehouseSetupEntitlement>(),
+      isRemoteClient: () =>
+          sl<LanNetworkService>().snapshot.mode == LanMode.client,
+    ),
+  );
+  sl.registerLazySingleton(
+    () => WarehouseTransferPreflight(
+      sl<AppDatabase>(),
+      authorizeWarehouse:
+          sl<WarehouseTransferAccessService>().authorizeWarehouse,
+    ),
+  );
+  sl.registerLazySingleton(
+    () => WarehouseTransferRepository(
+      sl<AppDatabase>(),
+      preflight: sl<WarehouseTransferPreflight>(),
+      authorize: sl<WarehouseTransferAccessService>().authorize,
+    ),
+  );
+  sl.registerLazySingleton(
+    () => WarehouseTransferDispatchService(
+      sl<AppDatabase>(),
+      preflight: sl<WarehouseTransferPreflight>(),
+      authorize: sl<WarehouseTransferAccessService>().authorize,
+    ),
+  );
+  sl.registerLazySingleton(
+    () => WarehouseTransferReceiptService(
+      sl<AppDatabase>(),
+      authorize: sl<WarehouseTransferAccessService>().authorize,
+    ),
+  );
+  sl.registerLazySingleton(
+    () => WarehouseTransferRecallService(
+      sl<AppDatabase>(),
+      authorize: sl<WarehouseTransferAccessService>().authorize,
+    ),
+  );
+  sl.registerLazySingleton(
+    () => WarehouseTransferReportingService(
+      sl<AppDatabase>(),
+      authorizeWarehouse:
+          sl<WarehouseTransferAccessService>().authorizeWarehouse,
     ),
   );
   sl.registerLazySingleton(
@@ -1233,12 +1373,6 @@ Future<void> init() async {
   sl.registerLazySingleton(() => AppSettingsBloc(sl<AppSettingsService>()));
 
   // Security & Licensing Services
-  sl.registerLazySingleton(() => DeviceFingerprintService());
-  sl.registerLazySingleton(
-    () => DesktopLicenseService(
-      fingerprintService: sl<DeviceFingerprintService>(),
-    ),
-  );
   sl.registerLazySingleton(
     () => LicenseService(fingerprintService: sl<DeviceFingerprintService>()),
   );
@@ -1266,6 +1400,7 @@ Future<void> init() async {
       promotions: sl<PromotionRepository>(),
       featureGate: sl<FeatureGateService>(),
       auditLog: sl<AuditLogService>(),
+      warehouseEntitlement: sl<WarehouseSetupEntitlement>(),
     ),
   );
   sl.registerLazySingleton(
@@ -1274,6 +1409,26 @@ Future<void> init() async {
       authGateway: sl<LanMasterAuthGateway>(),
       businessGateway: sl<LanMasterBusinessGateway>(),
       localizationService: sl<LocalizationService>(),
+    ),
+  );
+  sl.registerLazySingleton(
+    () => LocalWarehouseTransferApplicationService(
+      access: sl<WarehouseTransferAccessService>(),
+      repository: sl<WarehouseTransferRepository>(),
+      preflight: sl<WarehouseTransferPreflight>(),
+      dispatch: sl<WarehouseTransferDispatchService>(),
+      receipt: sl<WarehouseTransferReceiptService>(),
+      recall: sl<WarehouseTransferRecallService>(),
+    ),
+  );
+  sl.registerLazySingleton(
+    () => RemoteWarehouseTransferApplicationService(sl<LanNetworkService>()),
+  );
+  sl.registerLazySingleton<WarehouseTransferApplicationService>(
+    () => AdaptiveWarehouseTransferApplicationService(
+      local: sl<LocalWarehouseTransferApplicationService>(),
+      remote: sl<RemoteWarehouseTransferApplicationService>(),
+      network: sl<LanNetworkService>(),
     ),
   );
   sl.registerLazySingleton(
@@ -1287,7 +1442,6 @@ Future<void> init() async {
   sl.registerLazySingleton(() => CodeIntegrityService());
 
   // RevenueCat / Subscription / AppGuard
-  sl.registerLazySingleton(() => RevenueCatService.instance);
   sl.registerLazySingleton(
     () => AppGuardService(
       revenueCat: sl<RevenueCatService>(),
@@ -1340,6 +1494,10 @@ Future<void> init() async {
       appSettings: sl<AppSettingsBloc>().state.settings,
     ),
   );
+
+  // Initialize optional business policy only after every dependency has been
+  // registered. This ordering is a startup invariant guarded by tests.
+  await sl<ConsignmentModuleService>().initialize();
 
   // ONE-TIME REPAIR: Fix journal entries (draft purchase orphans + overpayments).
   // Uses a SharedPreferences flag to ensure it only runs once per version.

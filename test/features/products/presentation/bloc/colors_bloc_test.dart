@@ -8,7 +8,8 @@ import 'package:tapix/features/products/data/models/product_color_model.dart';
 import 'package:tapix/features/products/presentation/bloc/colors_bloc.dart';
 import 'package:tapix/features/products/presentation/bloc/colors_event.dart';
 
-class MockProductColorRepository extends Mock implements ProductColorRepository {}
+class MockProductColorRepository extends Mock
+    implements ProductColorRepository {}
 
 void main() {
   late MockProductColorRepository mockRepository;
@@ -25,10 +26,12 @@ void main() {
       ),
     );
 
-    when(() => mockRepository.watchAllColors())
-        .thenAnswer((_) => const Stream.empty());
-    when(() => mockRepository.watchColorsBySearch(any()))
-        .thenAnswer((_) => const Stream.empty());
+    when(
+      () => mockRepository.watchAllColors(),
+    ).thenAnswer((_) => const Stream.empty());
+    when(
+      () => mockRepository.watchColorsBySearch(any()),
+    ).thenAnswer((_) => const Stream.empty());
   });
 
   group('ColorsBloc', () {
@@ -58,8 +61,9 @@ void main() {
     blocTest<ColorsBloc, RealtimeState<List<ProductColor>>>(
       'emits colors when LoadColors is added',
       build: () {
-        when(() => mockRepository.watchAllColors())
-            .thenAnswer((_) => Stream.value(tColors));
+        when(
+          () => mockRepository.watchAllColors(),
+        ).thenAnswer((_) => Stream.value(tColors));
         return ColorsBloc(mockRepository);
       },
       act: (bloc) => bloc.add(const LoadColors()),
@@ -69,17 +73,21 @@ void main() {
         isA<RealtimeSuccess<List<ProductColor>>>(),
       ],
       verify: (_) {
-        verify(() => mockRepository.watchAllColors()).called(greaterThanOrEqualTo(1));
+        verify(
+          () => mockRepository.watchAllColors(),
+        ).called(greaterThanOrEqualTo(1));
       },
     );
 
     blocTest<ColorsBloc, RealtimeState<List<ProductColor>>>(
       'emits filtered colors when SearchColors is added',
       build: () {
-        when(() => mockRepository.watchAllColors())
-            .thenAnswer((_) => const Stream.empty());
-        when(() => mockRepository.watchColorsBySearch(any()))
-            .thenAnswer((_) => Stream.value(<ProductColor>[tColor1]));
+        when(
+          () => mockRepository.watchAllColors(),
+        ).thenAnswer((_) => const Stream.empty());
+        when(
+          () => mockRepository.watchColorsBySearch(any()),
+        ).thenAnswer((_) => Stream.value(<ProductColor>[tColor1]));
         return ColorsBloc(mockRepository);
       },
       act: (bloc) => bloc.add(const SearchColors('Red')),
@@ -95,16 +103,16 @@ void main() {
     blocTest<ColorsBloc, RealtimeState<List<ProductColor>>>(
       'creates color when CreateColor is added',
       build: () {
-        when(() => mockRepository.createColor(any()))
-            .thenAnswer((_) async => 1);
-        when(() => mockRepository.watchAllColors())
-            .thenAnswer((_) => Stream.value(tColors));
+        when(
+          () => mockRepository.createColor(any()),
+        ).thenAnswer((_) async => 1);
+        when(
+          () => mockRepository.watchAllColors(),
+        ).thenAnswer((_) => Stream.value(tColors));
         return ColorsBloc(mockRepository);
       },
-      act: (bloc) => bloc.add(const CreateColor(
-        name: 'Green',
-        hexCode: '#00FF00',
-      )),
+      act: (bloc) =>
+          bloc.add(const CreateColor(name: 'Green', hexCode: '#00FF00')),
       verify: (_) {
         verify(() => mockRepository.createColor(any())).called(1);
       },
@@ -113,10 +121,12 @@ void main() {
     blocTest<ColorsBloc, RealtimeState<List<ProductColor>>>(
       'updates color when UpdateColor is added',
       build: () {
-        when(() => mockRepository.updateColor(any()))
-            .thenAnswer((_) async => true);
-        when(() => mockRepository.watchAllColors())
-            .thenAnswer((_) => Stream.value(tColors));
+        when(
+          () => mockRepository.updateColor(any()),
+        ).thenAnswer((_) async => true);
+        when(
+          () => mockRepository.watchAllColors(),
+        ).thenAnswer((_) => Stream.value(tColors));
         return ColorsBloc(mockRepository);
       },
       act: (bloc) => bloc.add(const UpdateColor(tColor1)),
@@ -128,12 +138,13 @@ void main() {
     blocTest<ColorsBloc, RealtimeState<List<ProductColor>>>(
       'deletes color when DeleteColor is added and color has no products',
       build: () {
-        when(() => mockRepository.hasProducts(any()))
-            .thenAnswer((_) async => false);
-        when(() => mockRepository.deleteColor(any()))
-            .thenAnswer((_) async {});
-        when(() => mockRepository.watchAllColors())
-            .thenAnswer((_) => Stream.value(tColors));
+        when(
+          () => mockRepository.hasProducts(any()),
+        ).thenAnswer((_) async => false);
+        when(() => mockRepository.deleteColor(any())).thenAnswer((_) async {});
+        when(
+          () => mockRepository.watchAllColors(),
+        ).thenAnswer((_) => Stream.value(tColors));
         return ColorsBloc(mockRepository);
       },
       act: (bloc) => bloc.add(const DeleteColor(1)),
@@ -146,21 +157,22 @@ void main() {
     blocTest<ColorsBloc, RealtimeState<List<ProductColor>>>(
       'emits error when DeleteColor is added and color has products',
       build: () {
-        when(() => mockRepository.hasProducts(any()))
-            .thenAnswer((_) async => true);
-        when(() => mockRepository.watchAllColors())
-            .thenAnswer((_) => Stream.value(tColors));
+        when(
+          () => mockRepository.hasProducts(any()),
+        ).thenAnswer((_) async => true);
+        when(
+          () => mockRepository.watchAllColors(),
+        ).thenAnswer((_) => Stream.value(tColors));
         return ColorsBloc(mockRepository);
       },
       act: (bloc) => bloc.add(const DeleteColor(1)),
       expect: () => [
         isA<RealtimeSuccess<List<ProductColor>>>(),
-        isA<RealtimeError<List<ProductColor>>>()
-            .having(
-              (state) => state.error,
-              'error',
-              contains('Cannot delete color with assigned products'),
-            ),
+        isA<RealtimeError<List<ProductColor>>>().having(
+          (state) => state.error,
+          'error',
+          contains('Cannot delete color with assigned products'),
+        ),
       ],
       verify: (_) {
         verify(() => mockRepository.hasProducts(1)).called(1);
@@ -172,10 +184,12 @@ void main() {
       final bloc = ColorsBloc(mockRepository);
       addTearDown(bloc.close);
 
-      when(() => mockRepository.getProductCountByColor(1))
-          .thenAnswer((_) async => 5);
-      when(() => mockRepository.getProductCountByColor(2))
-          .thenAnswer((_) async => 3);
+      when(
+        () => mockRepository.getProductCountByColor(1),
+      ).thenAnswer((_) async => 5);
+      when(
+        () => mockRepository.getProductCountByColor(2),
+      ).thenAnswer((_) async => 3);
 
       final counts = await bloc.getProductCounts(tColors);
 

@@ -34,12 +34,14 @@ class WarehouseTransferPreviewLine {
     this.request,
     this.variantId,
     this.quantityScale,
+    this.measurementType,
     this.sourceAvailable,
     this.destinationAvailable,
     this.valueCents,
     List<WarehouseTransferLayer> layers,
   ) : layers = List.unmodifiable(layers);
   final WarehouseTransferRequestLine request;
+  final String measurementType;
   final int variantId,
       quantityScale,
       sourceAvailable,
@@ -147,6 +149,31 @@ class WarehouseTransferPreflight {
       final batched =
           meta.read<String>('costing_method') == 'fifo' ||
           meta.read<String>('inventory_tracking_type') != 'standard';
+      final ownershipRows = await db
+          .customSelect(
+            '''SELECT warehouse_id,quantity,supplier_owned_quantity,unit_cost_cents
+               FROM business_warehouse_stocks
+               WHERE variant_id=? AND warehouse_id IN (?,?)
+               ORDER BY warehouse_id''',
+            variables: [
+              Variable.withInt(from.variantId),
+              Variable.withString(source.warehouseId),
+              Variable.withString(destination.warehouseId),
+            ],
+          )
+          .get();
+      if (ownershipRows.length != 2) {
+        throw StateError('Transfer warehouse ownership balance is missing');
+      }
+      final sourceOwnership = ownershipRows.singleWhere(
+        (row) => row.read<String>('warehouse_id') == source.warehouseId,
+      );
+      final sourceSupplierOwned = sourceOwnership.read<int>(
+        'supplier_owned_quantity',
+      );
+      if (sourceSupplierOwned < 0 || sourceSupplierOwned > from.quantity) {
+        throw StateError('Invalid supplier-owned source balance');
+      }
       final layers = <WarehouseTransferLayer>[];
       final state = <Object?>[
         line.productId,
@@ -157,15 +184,36 @@ class WarehouseTransferPreflight {
         to.quantity,
         to.unitCostCents,
         meta.data,
+        ownershipRows.map((row) => row.data).toList(),
       ];
       int poolValue(int quantity, int cost) => MeasuredAmount.cents(
         unitCents: cost,
         quantity: quantity,
         quantityScale: scale,
       );
+      final enterpriseAvailable = from.quantity - sourceSupplierOwned;
+      final enterpriseTake = line.quantity < enterpriseAvailable
+          ? line.quantity
+          : enterpriseAvailable;
       var value =
-          poolValue(from.quantity, from.unitCostCents) -
-          poolValue(from.quantity - line.quantity, from.unitCostCents);
+          poolValue(enterpriseAvailable, from.unitCostCents) -
+          poolValue(enterpriseAvailable - enterpriseTake, from.unitCostCents);
+      if (!batched) {
+        final origins = await db
+            .customSelect(
+              '''SELECT warehouse_id,quantity,measurement_type,dirty,layers
+             FROM inventory_origin_states
+             WHERE variant_id=? AND warehouse_id IN (?,?)
+             ORDER BY warehouse_id''',
+              variables: [
+                Variable.withInt(from.variantId),
+                Variable.withString(source.warehouseId),
+                Variable.withString(destination.warehouseId),
+              ],
+            )
+            .get();
+        state.add(origins.map((row) => row.data).toList());
+      }
       if (batched) {
         var remaining = line.quantity;
         value = 0;
@@ -175,9 +223,14 @@ class WarehouseTransferPreflight {
         ]) {
           final batches = await db
               .customSelect(
-                '''SELECT id,product_id,variant_id,remaining_quantity,unit_cost_cents,purchase_item_id,supplier_id,
-            expiry_date,manufacturer_lot_number,received_date FROM ${target.$1.batches} WHERE variant_id=? AND is_active=1 AND remaining_quantity>0
-            ORDER BY (expiry_date IS NULL) ASC, expiry_date ASC, received_date ASC,id ASC''',
+                '''SELECT b.id,b.product_id,b.variant_id,b.remaining_quantity,b.unit_cost_cents,
+            b.purchase_item_id,b.supplier_id,b.expiry_date,b.manufacturer_lot_number,
+            b.received_date,l.id AS consignment_layer_id
+            FROM ${target.$1.batches} b
+            LEFT JOIN consignment_inventory_layers l
+              ON l.batch_id=b.id AND l.status='open'
+            WHERE b.variant_id=? AND b.is_active=1 AND b.remaining_quantity>0
+            ORDER BY (b.expiry_date IS NULL) ASC,b.expiry_date ASC,b.received_date ASC,b.id ASC''',
                 variables: [Variable.withInt(from.variantId)],
               )
               .get();
@@ -199,7 +252,9 @@ class WarehouseTransferPreflight {
             }
             final take = remaining < available ? remaining : available;
             final delta =
-                poolValue(available, cost) - poolValue(available - take, cost);
+                batch.readNullable<String>('consignment_layer_id') == null
+                ? poolValue(available, cost) - poolValue(available - take, cost)
+                : 0;
             layers.add(
               WarehouseTransferLayer(
                 batchId: batch.read<int>('id'),
@@ -223,6 +278,7 @@ class WarehouseTransferPreflight {
           line,
           from.variantId,
           scale,
+          meta.read<String>('measurement_type'),
           from.quantity,
           to.quantity,
           value,

@@ -40,10 +40,12 @@ void main() {
   late int revenueAccountId;
 
   Future<int> accountIdByCode(String code) async {
-    final row = await db.customSelect(
-      'SELECT id FROM accounts WHERE account_code = ?',
-      variables: [Variable.withString(code)],
-    ).getSingle();
+    final row = await db
+        .customSelect(
+          'SELECT id FROM accounts WHERE account_code = ?',
+          variables: [Variable.withString(code)],
+        )
+        .getSingle();
     return row.read<int>('id');
   }
 
@@ -58,9 +60,9 @@ void main() {
     // Trigger migrations + seed accounts.
     await db.customSelect('SELECT 1').get();
 
-    final usd = await (db.select(db.currencies)
-          ..where((c) => c.code.equals('USD')))
-        .getSingle();
+    final usd = await (db.select(
+      db.currencies,
+    )..where((c) => c.code.equals('USD'))).getSingle();
     currencyId = usd.id;
 
     cashAccountId = await accountIdByCode('1000');
@@ -84,34 +86,34 @@ void main() {
   }
 
   group('Phase 11.1 — JE fiscal-period guard', () {
-    test(
-      'createJournalEntry into a CLOSED fiscal period throws '
-      'FiscalPeriodClosedException',
-      () async {
-        final entryDate = DateTime(2024, 3, 10);
-        await fiscalService.ensurePeriod(entryDate);
-        await fiscalService.closePeriod(
-          periodKey: FiscalPeriodService.keyFor(entryDate),
-          userId: 0,
-          notes: 'Q1 close',
-        );
+    test('createJournalEntry into a CLOSED fiscal period throws '
+        'FiscalPeriodClosedException', () async {
+      final entryDate = DateTime(2024, 3, 10);
+      await fiscalService.ensurePeriod(entryDate);
+      await fiscalService.closePeriod(
+        periodKey: FiscalPeriodService.keyFor(entryDate),
+        userId: 0,
+        notes: 'Q1 close',
+      );
 
-        await expectLater(
-          () => guardedRepo.createJournalEntry(
-            entryData: simpleCashRevenueJE(date: entryDate),
-            userId: null,
-          ),
-          throwsA(isA<FiscalPeriodClosedException>()),
-        );
+      await expectLater(
+        () => guardedRepo.createJournalEntry(
+          entryData: simpleCashRevenueJE(date: entryDate),
+          userId: null,
+        ),
+        throwsA(isA<FiscalPeriodClosedException>()),
+      );
 
-        // Ensure NOTHING was written.
-        final entries = await db.select(db.journalEntries).get();
-        expect(entries, isEmpty,
-            reason: 'No JE header should be created on a rejected post');
-        final lines = await db.select(db.journalEntryLines).get();
-        expect(lines, isEmpty);
-      },
-    );
+      // Ensure NOTHING was written.
+      final entries = await db.select(db.journalEntries).get();
+      expect(
+        entries,
+        isEmpty,
+        reason: 'No JE header should be created on a rejected post',
+      );
+      final lines = await db.select(db.journalEntryLines).get();
+      expect(lines, isEmpty);
+    });
 
     test('createJournalEntry into an OPEN fiscal period succeeds', () async {
       final entryDate = DateTime(2024, 5, 14);
@@ -123,55 +125,49 @@ void main() {
       );
       expect(id, greaterThan(0));
 
-      final entry = await (db.select(db.journalEntries)
-            ..where((e) => e.id.equals(id)))
-          .getSingle();
+      final entry = await (db.select(
+        db.journalEntries,
+      )..where((e) => e.id.equals(id))).getSingle();
       expect(entry.status, equals('posted'));
     });
 
-    test(
-      'createJournalEntry with auto-ensured period defaults to OPEN — no '
-      'pre-existing row required',
-      () async {
-        final entryDate = DateTime(2024, 7, 22);
-        // We do NOT call ensurePeriod ourselves. assertOpen creates it
-        // on demand with status=open.
-        final id = await guardedRepo.createJournalEntry(
-          entryData: simpleCashRevenueJE(date: entryDate),
-          userId: null,
-        );
-        expect(id, greaterThan(0));
+    test('createJournalEntry with auto-ensured period defaults to OPEN — no '
+        'pre-existing row required', () async {
+      final entryDate = DateTime(2024, 7, 22);
+      // We do NOT call ensurePeriod ourselves. assertOpen creates it
+      // on demand with status=open.
+      final id = await guardedRepo.createJournalEntry(
+        entryData: simpleCashRevenueJE(date: entryDate),
+        userId: null,
+      );
+      expect(id, greaterThan(0));
 
-        final period = await fiscalService.getByKey(
-          FiscalPeriodService.keyFor(entryDate),
-        );
-        expect(period, isNotNull);
-        expect(period!.status, equals('open'));
-      },
-    );
+      final period = await fiscalService.getByKey(
+        FiscalPeriodService.keyFor(entryDate),
+      );
+      expect(period, isNotNull);
+      expect(period!.status, equals('open'));
+    });
 
-    test(
-      'default constructor AccountingRepository(db) — no guard, posts '
-      'into closed fiscal period succeed (back-compat)',
-      () async {
-        final unguarded = AccountingRepository(db);
-        final entryDate = DateTime(2024, 9, 8);
-        await fiscalService.ensurePeriod(entryDate);
-        await fiscalService.closePeriod(
-          periodKey: FiscalPeriodService.keyFor(entryDate),
-          userId: 0,
-        );
+    test('default constructor AccountingRepository(db) — no guard, posts '
+        'into closed fiscal period succeed (back-compat)', () async {
+      final unguarded = AccountingRepository(db);
+      final entryDate = DateTime(2024, 9, 8);
+      await fiscalService.ensurePeriod(entryDate);
+      await fiscalService.closePeriod(
+        periodKey: FiscalPeriodService.keyFor(entryDate),
+        userId: 0,
+      );
 
-        // Default constructor → no FiscalPeriodService → no guard.
-        // Existing test suites that hand-build the repo continue to
-        // work without modification.
-        final id = await unguarded.createJournalEntry(
-          entryData: simpleCashRevenueJE(date: entryDate),
-          userId: null,
-        );
-        expect(id, greaterThan(0));
-      },
-    );
+      // Default constructor → no FiscalPeriodService → no guard.
+      // Existing test suites that hand-build the repo continue to
+      // work without modification.
+      final id = await unguarded.createJournalEntry(
+        entryData: simpleCashRevenueJE(date: entryDate),
+        userId: null,
+      );
+      expect(id, greaterThan(0));
+    });
 
     test('reopenPeriod lets a previously-blocked post succeed', () async {
       final entryDate = DateTime(2024, 11, 4);
@@ -196,41 +192,38 @@ void main() {
       expect(id, greaterThan(0));
     });
 
-    test(
-      'voidJournalEntry writes its reversal dated TODAY — succeeds even '
-      'after the original entry\'s period is closed',
-      () async {
-        // 1. Post an entry in May.
-        final origDate = DateTime(2024, 5, 20);
-        await fiscalService.ensurePeriod(origDate);
-        final origId = await guardedRepo.createJournalEntry(
-          entryData: simpleCashRevenueJE(date: origDate),
-          userId: null,
-        );
+    test('voidJournalEntry writes its reversal dated TODAY — succeeds even '
+        'after the original entry\'s period is closed', () async {
+      // 1. Post an entry in May.
+      final origDate = DateTime(2024, 5, 20);
+      await fiscalService.ensurePeriod(origDate);
+      final origId = await guardedRepo.createJournalEntry(
+        entryData: simpleCashRevenueJE(date: origDate),
+        userId: null,
+      );
 
-        // 2. Close May. The original entry is unaffected (immutable).
-        await fiscalService.closePeriod(
-          periodKey: FiscalPeriodService.keyFor(origDate),
-          userId: 0,
-        );
+      // 2. Close May. The original entry is unaffected (immutable).
+      await fiscalService.closePeriod(
+        periodKey: FiscalPeriodService.keyFor(origDate),
+        userId: 0,
+      );
 
-        // 3. Void today (today's period is open by default).
-        // The reversal entry uses entryDate = DateTime.now() per
-        // AccountingRepository.voidJournalEntry, so the closed May
-        // period does NOT block it.
-        final reversalId = await guardedRepo.voidJournalEntry(
-          entryId: origId,
-          reason: 'Phase 11.1 test',
-          userId: null,
-        );
-        expect(reversalId, greaterThan(0));
+      // 3. Void today (today's period is open by default).
+      // The reversal entry uses entryDate = DateTime.now() per
+      // AccountingRepository.voidJournalEntry, so the closed May
+      // period does NOT block it.
+      final reversalId = await guardedRepo.voidJournalEntry(
+        entryId: origId,
+        reason: 'Phase 11.1 test',
+        userId: null,
+      );
+      expect(reversalId, greaterThan(0));
 
-        final reversal = await (db.select(db.journalEntries)
-              ..where((e) => e.id.equals(reversalId)))
-            .getSingle();
-        expect(reversal.entryType, equals('reversal'));
-        expect(reversal.reversedEntryId, equals(origId));
-      },
-    );
+      final reversal = await (db.select(
+        db.journalEntries,
+      )..where((e) => e.id.equals(reversalId))).getSingle();
+      expect(reversal.entryType, equals('reversal'));
+      expect(reversal.reversedEntryId, equals(origId));
+    });
   });
 }

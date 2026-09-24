@@ -20,7 +20,7 @@ import 'returns/return_posting_service.dart';
 ///                1200 = Inventory, 1290 = Returns in Transit,
 ///                1300 = VAT Receivable
 ///   Liabilities: 2000 = Accounts Payable, 2020 = Cheques Issued,
-///                2100 = VAT Payable,
+///                2050 = Accrued Consignment Payable, 2100 = VAT Payable,
 ///                2300 = Loyalty Points Liability,
 ///                2400 = Customer Credit Liability
 ///   Equity:      3000 = Owner Capital, 3100 = Opening Balance Equity
@@ -62,6 +62,8 @@ class JournalEntryService {
       throw AccountingException(
         'Required account "$code" not found in Chart of Accounts. '
         'Run seedDefaultAccounts first.',
+        code: 'accounting.system_account_missing',
+        details: {'accountCode': code},
       );
     }
     return account.id;
@@ -280,6 +282,243 @@ class JournalEntryService {
     developer.log(
       'Journal entries created for Sale #$saleId',
       name: 'JournalEntryService',
+    );
+  }
+
+  /// Accrues supplier consideration when supplier-owned stock is sold.
+  ///
+  /// Positive: Dr COGS (5300), Cr Accrued Consignment Payable (2050).
+  /// Negative: Dr 2050, Cr 5300. The supplier AP sub-ledger is untouched until
+  /// a settlement statement is posted.
+  Future<int> recordConsignmentObligationJournalEntry({
+    required int obligationEventId,
+    required int signedAmountCents,
+    required int currencyId,
+    required String description,
+    String sourceTable = 'consignment_obligation_events',
+    DateTime? entryDate,
+    int? userId,
+  }) async {
+    if (signedAmountCents == 0) {
+      throw AccountingException(
+        'A zero consignment obligation needs no journal',
+      );
+    }
+    final cogsId = await _requireAccountId('5300');
+    final accruedId = await _requireAccountId('2050');
+    return _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description: description,
+        debitAccountId: signedAmountCents > 0 ? cogsId : accruedId,
+        creditAccountId: signedAmountCents > 0 ? accruedId : cogsId,
+        amountCents: signedAmountCents.abs(),
+        currencyId: currencyId,
+        entryDate: entryDate,
+        entryType: signedAmountCents > 0
+            ? 'consignment_accrual'
+            : 'consignment_accrual_reversal',
+        sourceTable: sourceTable,
+        sourceId: obligationEventId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
+  }
+
+  /// Records company responsibility for supplier-owned custody lost or
+  /// damaged before sale. Supplier-owned stock is not an enterprise asset, so
+  /// the credit is the accrued consignment payable rather than Inventory.
+  ///
+  /// Positive: Dr Inventory Shrinkage (5800), Cr Accrued Consignment (2050).
+  /// Negative: exact reversal of the same obligation.
+  Future<int> recordConsignmentCustodyLiabilityJournalEntry({
+    required int documentId,
+    required int signedAmountCents,
+    required int currencyId,
+    required DateTime entryDate,
+    required String reason,
+    int? userId,
+  }) async {
+    if (signedAmountCents == 0) {
+      throw AccountingException(
+        'A zero consignment custody liability needs no journal',
+      );
+    }
+    final shrinkageId = await _requireAccountId('5800');
+    final accruedId = await _requireAccountId('2050');
+    return _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description: signedAmountCents > 0
+            ? 'Consignment custody loss #$documentId — $reason'
+            : 'Void consignment custody loss #$documentId — $reason',
+        debitAccountId: signedAmountCents > 0 ? shrinkageId : accruedId,
+        creditAccountId: signedAmountCents > 0 ? accruedId : shrinkageId,
+        amountCents: signedAmountCents.abs(),
+        currencyId: currencyId,
+        entryDate: entryDate,
+        entryType: signedAmountCents > 0
+            ? 'consignment_custody_loss'
+            : 'consignment_custody_loss_void',
+        sourceTable: 'consignment_custody_documents',
+        sourceId: documentId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
+  }
+
+  /// Removes the enterprise inventory asset and the matching supplier AP
+  /// when already-recorded stock is formally reclassified as consignment.
+  /// A negative amount is the exact reversal used when an untouched
+  /// conversion is voided.
+  Future<int> recordConsignmentOwnershipConversionJournalEntry({
+    required int conversionId,
+    required int signedInventoryValueCents,
+    required int currencyId,
+    required DateTime entryDate,
+    required String evidenceReference,
+    int? userId,
+  }) async {
+    if (signedInventoryValueCents == 0) {
+      throw AccountingException('A zero ownership conversion needs no journal');
+    }
+    final inventoryId = await _requireAccountId('1200');
+    final payablesId = await _requireAccountId('2000');
+    return _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description: signedInventoryValueCents > 0
+            ? 'Consignment ownership conversion #$conversionId — $evidenceReference'
+            : 'Void consignment ownership conversion #$conversionId — $evidenceReference',
+        debitAccountId: signedInventoryValueCents > 0
+            ? payablesId
+            : inventoryId,
+        creditAccountId: signedInventoryValueCents > 0
+            ? inventoryId
+            : payablesId,
+        amountCents: signedInventoryValueCents.abs(),
+        currencyId: currencyId,
+        entryDate: entryDate,
+        entryType: signedInventoryValueCents > 0
+            ? 'consignment_ownership_conversion'
+            : 'consignment_ownership_conversion_void',
+        sourceTable: 'consignment_ownership_conversions',
+        sourceId: conversionId,
+        autoPost: true,
+      ),
+      userId: userId,
+    );
+  }
+
+  /// Transfers frozen consignment obligations from accrued payable (2050)
+  /// to supplier AP (2000). Purchase tax is recognized only when the reviewed
+  /// statement is posted. Inclusive tax also reclassifies the tax portion out
+  /// of COGS because the sale accrual initially carried the gross amount.
+  Future<int> recordConsignmentSettlementJournalEntry({
+    required int statementId,
+    required int obligationSubtotalCents,
+    required int taxCents,
+    required int totalCents,
+    required bool taxInclusive,
+    required int currencyId,
+    required DateTime entryDate,
+    int? userId,
+    bool reversal = false,
+  }) async {
+    if (obligationSubtotalCents == 0 && taxCents == 0 && totalCents == 0) {
+      throw AccountingException(
+        'A zero consignment settlement needs no journal',
+      );
+    }
+    final sameSign =
+        (obligationSubtotalCents > 0 && taxCents >= 0 && totalCents > 0) ||
+        (obligationSubtotalCents < 0 && taxCents <= 0 && totalCents < 0);
+    if (!sameSign ||
+        (taxInclusive
+            ? totalCents != obligationSubtotalCents
+            : totalCents != obligationSubtotalCents + taxCents)) {
+      throw AccountingException('Invalid consignment settlement totals');
+    }
+    final signedBase = reversal
+        ? -obligationSubtotalCents
+        : obligationSubtotalCents;
+    final signedTax = reversal ? -taxCents : taxCents;
+    final signedTotal = reversal ? -totalCents : totalCents;
+    final accruedId = await _requireAccountId('2050');
+    final payableId = await _requireAccountId('2000');
+    final vatId = signedTax == 0 ? null : await _requireAccountId('1300');
+    final cogsId = taxInclusive && signedTax != 0
+        ? await _requireAccountId('5300')
+        : null;
+    final lines = <JournalEntryLineData>[];
+    void addSigned(int accountId, int signedDebit) {
+      if (signedDebit == 0) return;
+      lines.add(
+        JournalEntryLineData(
+          accountId: accountId,
+          debitCents: signedDebit > 0 ? signedDebit : 0,
+          creditCents: signedDebit < 0 ? -signedDebit : 0,
+          currencyId: currencyId,
+        ),
+      );
+    }
+
+    addSigned(accruedId, signedBase);
+    if (!taxInclusive && signedTax != 0) addSigned(vatId!, signedTax);
+    addSigned(payableId, -signedTotal);
+    if (taxInclusive && signedTax != 0) {
+      addSigned(vatId!, signedTax);
+      addSigned(cogsId!, -signedTax);
+    }
+    return _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData(
+        description: reversal
+            ? 'Void consignment settlement #$statementId'
+            : 'Consignment settlement #$statementId',
+        entryDate: entryDate,
+        entryType: reversal
+            ? 'consignment_settlement_void'
+            : 'consignment_settlement',
+        sourceTable: 'consignment_settlement_statements',
+        sourceId: statementId,
+        autoPost: true,
+        lines: lines,
+      ),
+      userId: userId,
+    );
+  }
+
+  Future<int> recordConsignmentSettlementPaymentJournalEntry({
+    required int paymentId,
+    required int amountCents,
+    required int currencyId,
+    required String paymentMethod,
+    required DateTime entryDate,
+    int? userId,
+    bool reversal = false,
+  }) async {
+    if (amountCents <= 0) {
+      throw AccountingException('Consignment payment must be positive');
+    }
+    final payableId = await _requireAccountId('2000');
+    final settlementId = await _cashOrBankAccountId(paymentMethod);
+    return _accountingRepo.createJournalEntry(
+      entryData: JournalEntryData.simple(
+        description: reversal
+            ? 'Reverse consignment payment #$paymentId'
+            : 'Consignment payment #$paymentId',
+        debitAccountId: reversal ? settlementId : payableId,
+        creditAccountId: reversal ? payableId : settlementId,
+        amountCents: amountCents,
+        currencyId: currencyId,
+        entryDate: entryDate,
+        entryType: reversal
+            ? 'consignment_settlement_payment_reversal'
+            : 'consignment_settlement_payment',
+        sourceTable: 'consignment_settlement_payments',
+        sourceId: paymentId,
+        autoPost: true,
+      ),
+      userId: userId,
     );
   }
 

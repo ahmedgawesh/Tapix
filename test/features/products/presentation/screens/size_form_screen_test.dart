@@ -36,12 +36,16 @@ void main() {
     when(() => mockBloc.dataStream).thenAnswer((_) => Stream.value([]));
     when(() => mockBloc.add(any())).thenReturn(null);
     when(() => mockBloc.state).thenReturn(const RealtimeLoading<List<Size>>());
-    when(() => mockBloc.stream).thenAnswer((_) => Stream.value(const RealtimeLoading<List<Size>>()));
+    when(
+      () => mockBloc.stream,
+    ).thenAnswer((_) => Stream.value(const RealtimeLoading<List<Size>>()));
   });
 
   Widget createWidget({SizesBloc? bloc, int? sizeId}) {
     final effectiveBloc = bloc ?? mockBloc;
-    final startLocation = sizeId == null ? '/products/sizes/new' : '/products/sizes/1';
+    final startLocation = sizeId == null
+        ? '/products/sizes/new'
+        : '/products/sizes/1';
 
     router = GoRouter(
       initialLocation: startLocation,
@@ -52,7 +56,8 @@ void main() {
         ),
         GoRoute(
           path: '/products/sizes/1',
-          builder: (context, state) => SizeFormScreen(sizeId: 1, bloc: effectiveBloc),
+          builder: (context, state) =>
+              SizeFormScreen(sizeId: 1, bloc: effectiveBloc),
         ),
       ],
     );
@@ -73,7 +78,9 @@ void main() {
   }
 
   group('SizeFormScreen', () {
-    testWidgets('renders form fields for new size', (WidgetTester tester) async {
+    testWidgets('renders form fields for new size', (
+      WidgetTester tester,
+    ) async {
       final successState = RealtimeSuccess<List<Size>>(data: []);
       when(() => mockBloc.state).thenReturn(successState);
       when(() => mockBloc.stream).thenAnswer((_) => Stream.value(successState));
@@ -82,7 +89,10 @@ void main() {
       await tester.pump();
 
       expect(find.byType(Form), findsOneWidget);
-      expect(find.byType(TextFormField), findsNWidgets(3)); // name, description, sort order
+      expect(
+        find.byType(TextFormField),
+        findsNWidgets(3),
+      ); // name, description, sort order
       // SwitchListTile only shows in edit mode, not new
       expect(find.byType(SwitchListTile), findsNothing);
       expect(find.text('sizes.name'), findsOneWidget);
@@ -102,7 +112,9 @@ void main() {
       expect(find.text('sizes.cancel'), findsOneWidget);
     });
 
-    testWidgets('populates form when editing existing size', (WidgetTester tester) async {
+    testWidgets('populates form when editing existing size', (
+      WidgetTester tester,
+    ) async {
       const existingSize = Size(
         id: 1,
         name: 'Large',
@@ -114,7 +126,9 @@ void main() {
       final successState = RealtimeSuccess<List<Size>>(data: []);
       when(() => mockBloc.state).thenReturn(successState);
       when(() => mockBloc.stream).thenAnswer((_) => Stream.value(successState));
-      when(() => mockBloc.mockRepository.getSizeById(1)).thenAnswer((_) async => existingSize);
+      when(
+        () => mockBloc.mockRepository.getSizeById(1),
+      ).thenAnswer((_) async => existingSize);
 
       await tester.pumpWidget(createWidget(sizeId: 1));
       await tester.pumpAndSettle();
@@ -142,7 +156,9 @@ void main() {
       expect(find.text('sizes.name_required'), findsOneWidget);
     });
 
-    testWidgets('cancel button is present and tappable', (WidgetTester tester) async {
+    testWidgets('cancel button is present and tappable', (
+      WidgetTester tester,
+    ) async {
       final successState = RealtimeSuccess<List<Size>>(data: []);
       when(() => mockBloc.state).thenReturn(successState);
       when(() => mockBloc.stream).thenAnswer((_) => Stream.value(successState));
@@ -152,7 +168,10 @@ void main() {
 
       expect(find.text('sizes.cancel'), findsOneWidget);
       // Verify it's an OutlinedButton
-      expect(find.widgetWithText(OutlinedButton, 'sizes.cancel'), findsOneWidget);
+      expect(
+        find.widgetWithText(OutlinedButton, 'sizes.cancel'),
+        findsOneWidget,
+      );
     });
   });
 }

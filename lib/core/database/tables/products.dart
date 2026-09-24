@@ -4,6 +4,8 @@ import 'settings.dart';
 import 'parties.dart';
 import 'users.dart';
 import 'business.dart';
+import 'inventory.dart';
+import 'transactions.dart';
 
 @DataClassName('ProductCategory')
 class ProductCategories extends Table {
@@ -273,8 +275,10 @@ class ProductBatches extends Table {
 
   /// Source purchase item that created this batch (null for opening / found /
   /// return-originated batches). Restrict prevents losing audit trail.
-  IntColumn get purchaseItemId => integer().nullable().customConstraint(
-    'NULL REFERENCES purchase_items(id) ON DELETE RESTRICT',
+  IntColumn get purchaseItemId => integer().nullable().references(
+    PurchaseItems,
+    #id,
+    onDelete: KeyAction.restrict,
   )();
 
   IntColumn get supplierId => integer().nullable().references(
@@ -283,7 +287,20 @@ class ProductBatches extends Table {
     onDelete: KeyAction.restrict,
   )();
 
-  /// One of: 'purchase' | 'opening' | 'found' | 'sale_return'.
+  /// Filled on a batch recreated at the destination of a warehouse transfer.
+  /// The immediate link preserves the complete lot chain across many moves.
+  IntColumn get originBatchId => integer().nullable().references(
+    ProductBatches,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
+
+  /// Polymorphic link validated by transfer SQL guards. Kept as text here to
+  /// avoid a circular table import between products and warehouse transfers.
+  TextColumn get transferAllocationId => text().nullable()();
+
+  /// One of: 'purchase' | 'opening' | 'found' | 'sale_return' |
+  ///         'warehouse_transfer'.
   TextColumn get source => text().withDefault(const Constant('purchase'))();
 
   DateTimeColumn get receivedDate =>
@@ -342,26 +359,41 @@ class BatchConsumptions extends Table {
 
   // Optional source FKs — exactly one is expected to be set per row, but we
   // tolerate NULL across all to keep migrations safe.
-  IntColumn get saleItemId => integer().nullable().customConstraint(
-    'NULL REFERENCES sale_items(id) ON DELETE RESTRICT',
+  IntColumn get saleItemId => integer().nullable().references(
+    SaleItems,
+    #id,
+    onDelete: KeyAction.restrict,
   )();
-  IntColumn get saleReturnItemId => integer().nullable().customConstraint(
-    'NULL REFERENCES sale_return_items(id) ON DELETE RESTRICT',
+  IntColumn get saleReturnItemId => integer().nullable().references(
+    SaleReturnItems,
+    #id,
+    onDelete: KeyAction.restrict,
   )();
-  IntColumn get purchaseReturnItemId => integer().nullable().customConstraint(
-    'NULL REFERENCES purchase_return_items(id) ON DELETE RESTRICT',
+  IntColumn get purchaseReturnItemId => integer().nullable().references(
+    PurchaseReturnItems,
+    #id,
+    onDelete: KeyAction.restrict,
   )();
-  IntColumn get inventoryAdjustmentId => integer().nullable().customConstraint(
-    'NULL REFERENCES inventory_adjustments(id) ON DELETE RESTRICT',
+  IntColumn get inventoryAdjustmentId => integer().nullable().references(
+    InventoryAdjustments,
+    #id,
+    onDelete: KeyAction.restrict,
   )();
-  IntColumn
-  get purchaseReturnAdjustmentItemId => integer().nullable().customConstraint(
-    'NULL REFERENCES purchase_return_adjustment_items(id) ON DELETE RESTRICT',
-  )();
-  IntColumn get saleReturnAdjustmentItemId =>
-      integer().nullable().customConstraint(
-        'NULL REFERENCES sale_return_adjustment_items(id) ON DELETE RESTRICT',
+  IntColumn get purchaseReturnAdjustmentItemId =>
+      integer().nullable().references(
+        PurchaseReturnAdjustmentItems,
+        #id,
+        onDelete: KeyAction.restrict,
       )();
+  IntColumn get saleReturnAdjustmentItemId => integer().nullable().references(
+    SaleReturnAdjustmentItems,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
+
+  /// Allocation identity for FIFO warehouse dispatch and its exact recall.
+  /// SQLite guards validate the relationship to avoid a table import cycle.
+  TextColumn get transferAllocationId => text().nullable()();
 
   TextColumn get notes => text().nullable()();
 

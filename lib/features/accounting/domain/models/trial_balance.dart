@@ -18,19 +18,24 @@ class TrialBalance {
   int get differenceCents => totalDebitCents - totalCreditCents;
 
   /// Get items with non-zero balances only
-  List<TrialBalanceItem> get nonZeroItems =>
-      items.where((item) => item.debitCents > 0 || item.creditCents > 0).toList();
+  List<TrialBalanceItem> get nonZeroItems => items
+      .where((item) => item.debitCents > 0 || item.creditCents > 0)
+      .toList();
 
   /// Get items by account type
-  List<TrialBalanceItem> getItemsByType(String accountType) =>
-      items.where((item) => item.accountType.toLowerCase() == accountType.toLowerCase()).toList();
+  List<TrialBalanceItem> getItemsByType(String accountType) => items
+      .where(
+        (item) => item.accountType.toLowerCase() == accountType.toLowerCase(),
+      )
+      .toList();
 
   /// Get total for a specific account type
   int getTotalDebitsByType(String accountType) =>
       getItemsByType(accountType).fold(0, (sum, item) => sum + item.debitCents);
 
-  int getTotalCreditsByType(String accountType) =>
-      getItemsByType(accountType).fold(0, (sum, item) => sum + item.creditCents);
+  int getTotalCreditsByType(String accountType) => getItemsByType(
+    accountType,
+  ).fold(0, (sum, item) => sum + item.creditCents);
 
   /// Phase 7 — Reporting consolidation SoT.
   ///
@@ -42,8 +47,9 @@ class TrialBalance {
   /// / `(sum + i.debitCents - i.creditCents)` patterns that were duplicated
   /// across P&L, balance-sheet, financial-management-hub and
   /// accounting-close-service. Sole owner of account-type signing for reports.
-  int totalForType(String accountType) => getItemsByType(accountType)
-      .fold(0, (sum, item) => sum + item.naturalBalanceCents);
+  int totalForType(String accountType) => getItemsByType(
+    accountType,
+  ).fold(0, (sum, item) => sum + item.naturalBalanceCents);
 }
 
 /// Individual item in trial balance

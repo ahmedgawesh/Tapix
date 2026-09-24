@@ -40,18 +40,16 @@ class DiscountConverter {
   /// Convert a percent (0..100) into a fixed discount in cents against
   /// [subtotalCents]. Returns `0` if the subtotal is `<= 0` or the
   /// percent rounds to zero.
-  int fixedFromPercent({
-    required int subtotalCents,
-    required Decimal percent,
-  }) {
+  int fixedFromPercent({required int subtotalCents, required Decimal percent}) {
     if (subtotalCents <= 0) return 0;
     final p = _clampPercent(percent);
     if (p == Decimal.zero) return 0;
     // (subtotal * percent) / 100, rounded half-away-from-zero. We stay
     // inside Decimal/Rational and only collapse to int at the boundary.
-    final rational = (Decimal.fromInt(subtotalCents) * p) /
-        Decimal.fromInt(100);
-    final cents = rational.toDecimal(scaleOnInfinitePrecision: 6)
+    final rational =
+        (Decimal.fromInt(subtotalCents) * p) / Decimal.fromInt(100);
+    final cents = rational
+        .toDecimal(scaleOnInfinitePrecision: 6)
         .round()
         .toBigInt()
         .toInt();
@@ -72,11 +70,13 @@ class DiscountConverter {
   }) {
     if (subtotalCents <= 0 || fixedCents <= 0) return Decimal.zero;
     final clamped = fixedCents > subtotalCents ? subtotalCents : fixedCents;
-    final rational = (Decimal.fromInt(clamped) * Decimal.fromInt(100)) /
+    final rational =
+        (Decimal.fromInt(clamped) * Decimal.fromInt(100)) /
         Decimal.fromInt(subtotalCents);
     // Truncate the infinite-precision result to the requested digits so
     // the UI does not jitter between keystrokes.
-    return rational.toDecimal(scaleOnInfinitePrecision: decimalDigits)
+    return rational
+        .toDecimal(scaleOnInfinitePrecision: decimalDigits)
         .round(scale: decimalDigits);
   }
 
@@ -86,5 +86,4 @@ class DiscountConverter {
     if (p > max) return max;
     return p;
   }
-
 }

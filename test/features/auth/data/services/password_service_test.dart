@@ -18,13 +18,16 @@ void main() {
       expect(hash.length, greaterThan(50));
     });
 
-    test('hashPassword returns different hashes for same password (due to salt)', () {
-      const password = 'testpassword123';
-      final hash1 = passwordService.hashPassword(password);
-      final hash2 = passwordService.hashPassword(password);
+    test(
+      'hashPassword returns different hashes for same password (due to salt)',
+      () {
+        const password = 'testpassword123';
+        final hash1 = passwordService.hashPassword(password);
+        final hash2 = passwordService.hashPassword(password);
 
-      expect(hash1, isNot(equals(hash2)));
-    });
+        expect(hash1, isNot(equals(hash2)));
+      },
+    );
 
     test('verifyPassword returns true for correct password', () {
       const password = 'testpassword123';

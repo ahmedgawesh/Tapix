@@ -10,10 +10,7 @@ import '../screens/setup_screen.dart';
 class AuthWrapper extends StatelessWidget {
   final Widget child;
 
-  const AuthWrapper({
-    super.key,
-    required this.child,
-  });
+  const AuthWrapper({super.key, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -21,9 +18,7 @@ class AuthWrapper extends StatelessWidget {
       builder: (context, state) {
         if (state is AuthInitial || state is AuthLoading) {
           return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(),
-            ),
+            body: Center(child: CircularProgressIndicator()),
           );
         }
 

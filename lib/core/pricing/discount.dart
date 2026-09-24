@@ -56,8 +56,10 @@ class NoDiscount extends Discount {
   const NoDiscount._();
 
   @override
-  Money resolve(Money base, {MoneyRoundingMode mode = MoneyRoundingMode.halfUp}) =>
-      Money.zero;
+  Money resolve(
+    Money base, {
+    MoneyRoundingMode mode = MoneyRoundingMode.halfUp,
+  }) => Money.zero;
 
   @override
   bool get isZero => true;
@@ -78,7 +80,10 @@ class FixedDiscount extends Discount {
   const FixedDiscount(this.amount);
 
   @override
-  Money resolve(Money base, {MoneyRoundingMode mode = MoneyRoundingMode.halfUp}) {
+  Money resolve(
+    Money base, {
+    MoneyRoundingMode mode = MoneyRoundingMode.halfUp,
+  }) {
     if (base.isZero || amount.isZero) return Money.zero;
     if (amount.isNegative) {
       throw ArgumentError(
@@ -117,12 +122,17 @@ class PercentDiscount extends Discount {
   final int bps;
 
   const PercentDiscount(this.bps)
-      : assert(bps >= 0, 'PercentDiscount.bps must be non-negative'),
-        assert(bps <= 1000000,
-            'PercentDiscount.bps capped at 1_000_000 (10 000 %)');
+    : assert(bps >= 0, 'PercentDiscount.bps must be non-negative'),
+      assert(
+        bps <= 1000000,
+        'PercentDiscount.bps capped at 1_000_000 (10 000 %)',
+      );
 
   @override
-  Money resolve(Money base, {MoneyRoundingMode mode = MoneyRoundingMode.halfUp}) {
+  Money resolve(
+    Money base, {
+    MoneyRoundingMode mode = MoneyRoundingMode.halfUp,
+  }) {
     if (base.isZero || bps == 0) return Money.zero;
     final raw = base.percentage(bps, mode: mode);
     // Clamp so a >100 % rate cannot exceed the base.
@@ -140,6 +150,5 @@ class PercentDiscount extends Discount {
   int get hashCode => bps.hashCode ^ 0x9E3779B9;
 
   @override
-  String toString() =>
-      'Discount.percent(${(bps / 100).toStringAsFixed(2)}%)';
+  String toString() => 'Discount.percent(${(bps / 100).toStringAsFixed(2)}%)';
 }

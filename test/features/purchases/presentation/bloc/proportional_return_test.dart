@@ -96,26 +96,29 @@ void main() {
       expect(result.refundCents, Decimal.fromInt(4950));
     });
 
-    test('Single unit return from qty 3 with odd amounts uses integer division', () {
-      // 3 items @ subtotal=1000, discount=100, tax=90 → total=990
-      // Return 1: subtotal=333, discount=33, tax=30 → refund=330
-      final item = _purchaseItem(
-        quantity: 3,
-        subtotalCents: 1000,
-        discountCents: 100,
-        taxCents: 90,
-        totalCents: 990,
-      );
+    test(
+      'Single unit return from qty 3 with odd amounts uses integer division',
+      () {
+        // 3 items @ subtotal=1000, discount=100, tax=90 → total=990
+        // Return 1: subtotal=333, discount=33, tax=30 → refund=330
+        final item = _purchaseItem(
+          quantity: 3,
+          subtotalCents: 1000,
+          discountCents: 100,
+          taxCents: 90,
+          totalCents: 990,
+        );
 
-      final result = computeProportionalPurchaseReturn(item, 1);
+        final result = computeProportionalPurchaseReturn(item, 1);
 
-      expect(result.returnQuantity, 1);
-      expect(result.subtotalCents, Decimal.fromInt(333));
-      expect(result.discountCents, Decimal.fromInt(33));
-      expect(result.taxCents, Decimal.fromInt(30));
-      // refund = 333 - 33 + 30 = 330
-      expect(result.refundCents, Decimal.fromInt(330));
-    });
+        expect(result.returnQuantity, 1);
+        expect(result.subtotalCents, Decimal.fromInt(333));
+        expect(result.discountCents, Decimal.fromInt(33));
+        expect(result.taxCents, Decimal.fromInt(30));
+        // refund = 333 - 33 + 30 = 330
+        expect(result.refundCents, Decimal.fromInt(330));
+      },
+    );
 
     test('Return 2 of 3 items with odd amounts', () {
       final item = _purchaseItem(
@@ -194,9 +197,7 @@ void main() {
       final line1 = computeProportionalPurchaseReturn(item1, 3);
       final line2 = computeProportionalPurchaseReturn(item2, 2);
 
-      final state = PurchaseReturnFormState(
-        returnItems: [line1, line2],
-      );
+      final state = PurchaseReturnFormState(returnItems: [line1, line2]);
 
       // line1: subtotal=(10000*3)~/10=3000, discount=(500*3)~/10=150, tax=(950*3)~/10=285
       //        refund=3000-150+285=3135
@@ -299,9 +300,7 @@ void main() {
       final line1 = computeProportionalSaleReturn(item1, 2);
       final line2 = computeProportionalSaleReturn(item2, 3);
 
-      final state = SaleReturnFormState(
-        returnItems: [line1, line2],
-      );
+      final state = SaleReturnFormState(returnItems: [line1, line2]);
 
       // line1: sub=4000, disc=200, tax=380, refund=4180
       expect(line1.subtotalCents, Decimal.fromInt(4000));
@@ -361,10 +360,15 @@ void main() {
         );
 
         final result = computeProportionalPurchaseReturn(item, tc.retQty);
-        final expectedRefund = result.subtotalCents - result.discountCents + result.taxCents;
-        expect(result.refundCents, expectedRefund,
-            reason: 'refund should equal subtotal - discount + tax for '
-                'qty=${tc.qty}, retQty=${tc.retQty}');
+        final expectedRefund =
+            result.subtotalCents - result.discountCents + result.taxCents;
+        expect(
+          result.refundCents,
+          expectedRefund,
+          reason:
+              'refund should equal subtotal - discount + tax for '
+              'qty=${tc.qty}, retQty=${tc.retQty}',
+        );
       }
     });
   });
@@ -373,7 +377,9 @@ void main() {
 /// Expose the private function for testing by wrapping it.
 /// This calls the same logic as _computeProportionalReturn in the BLoC.
 ReturnLineItem computeProportionalPurchaseReturn(
-    PurchaseItemEntity original, int returnQty) {
+  PurchaseItemEntity original,
+  int returnQty,
+) {
   final origQty = original.quantity;
   if (origQty <= 0) {
     return ReturnLineItem(
@@ -389,8 +395,7 @@ ReturnLineItem computeProportionalPurchaseReturn(
       (original.subtotalCents.toBigInt().toInt() * returnQty) ~/ origQty;
   final discountInt =
       (original.discountCents.toBigInt().toInt() * returnQty) ~/ origQty;
-  final taxInt =
-      (original.taxCents.toBigInt().toInt() * returnQty) ~/ origQty;
+  final taxInt = (original.taxCents.toBigInt().toInt() * returnQty) ~/ origQty;
   final refundInt = subtotalInt - discountInt + taxInt;
   return ReturnLineItem(
     originalItem: original,
@@ -404,7 +409,9 @@ ReturnLineItem computeProportionalPurchaseReturn(
 
 /// Expose the private function for testing by wrapping it.
 SaleReturnLineItem computeProportionalSaleReturn(
-    SaleItemEntity original, int returnQty) {
+  SaleItemEntity original,
+  int returnQty,
+) {
   final origQty = original.quantity;
   if (origQty <= 0) {
     return SaleReturnLineItem(
@@ -420,8 +427,7 @@ SaleReturnLineItem computeProportionalSaleReturn(
       (original.subtotalCents.toBigInt().toInt() * returnQty) ~/ origQty;
   final discountInt =
       (original.discountCents.toBigInt().toInt() * returnQty) ~/ origQty;
-  final taxInt =
-      (original.taxCents.toBigInt().toInt() * returnQty) ~/ origQty;
+  final taxInt = (original.taxCents.toBigInt().toInt() * returnQty) ~/ origQty;
   final refundInt = subtotalInt - discountInt + taxInt;
   return SaleReturnLineItem(
     originalItem: original,

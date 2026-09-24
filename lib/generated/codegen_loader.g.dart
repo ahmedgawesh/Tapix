@@ -2,7 +2,7 @@
 
 // ignore_for_file: constant_identifier_names
 
-abstract class  LocaleKeys {
+abstract class LocaleKeys {
   static const app_name = 'app.name';
   static const app = 'app';
   static const settings_title = 'settings.title';
@@ -27,14 +27,15 @@ abstract class  LocaleKeys {
   static const auth_password_min_length = 'auth.password_min_length';
   static const auth_confirm_password = 'auth.confirm_password';
   static const auth_confirm_password_hint = 'auth.confirm_password_hint';
-  static const auth_confirm_password_required = 'auth.confirm_password_required';
+  static const auth_confirm_password_required =
+      'auth.confirm_password_required';
   static const auth_passwords_dont_match = 'auth.passwords_dont_match';
   static const auth_remember_me = 'auth.remember_me';
   static const auth_forgot_password = 'auth.forgot_password';
-  static const auth_forgot_password_coming_soon = 'auth.forgot_password_coming_soon';
+  static const auth_forgot_password_coming_soon =
+      'auth.forgot_password_coming_soon';
   static const auth_login = 'auth.login';
   static const auth_create_account = 'auth.create_account';
   static const auth_logout = 'auth.logout';
   static const auth = 'auth';
-
 }

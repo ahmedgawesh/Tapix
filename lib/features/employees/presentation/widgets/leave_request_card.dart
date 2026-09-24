@@ -129,7 +129,9 @@ class LeaveRequestCard extends StatelessWidget {
 
             // Action Buttons (for pending requests)
             if (request.status == 'pending' &&
-                (onApprove != null || onReject != null || onCancel != null)) ...[
+                (onApprove != null ||
+                    onReject != null ||
+                    onCancel != null)) ...[
               const SizedBox(height: 12),
               const Divider(),
               const SizedBox(height: 8),

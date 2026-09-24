@@ -14,9 +14,7 @@ void main() {
 
   setUp(() {
     mockSettingsDao = MockSettingsDao();
-    service = BarcodePrinterService(
-      settingsDao: mockSettingsDao,
-    );
+    service = BarcodePrinterService(settingsDao: mockSettingsDao);
   });
 
   group('BarcodePrinterService', () {
@@ -33,18 +31,34 @@ void main() {
       );
 
       // Assert
-      verify(mockSettingsDao.saveSetting('barcode_label_width', '58.0')).called(1);
-      verify(mockSettingsDao.saveSetting('barcode_label_height', '40.0')).called(1);
-      verify(mockSettingsDao.saveSetting('barcode_include_name', 'true')).called(1);
-      verify(mockSettingsDao.saveSetting('barcode_include_price', 'true')).called(1);
+      verify(
+        mockSettingsDao.saveSetting('barcode_label_width', '58.0'),
+      ).called(1);
+      verify(
+        mockSettingsDao.saveSetting('barcode_label_height', '40.0'),
+      ).called(1);
+      verify(
+        mockSettingsDao.saveSetting('barcode_include_name', 'true'),
+      ).called(1);
+      verify(
+        mockSettingsDao.saveSetting('barcode_include_price', 'true'),
+      ).called(1);
     });
 
     test('getSettings retrieves stored configuration', () async {
       // Arrange
-      when(mockSettingsDao.getSetting('barcode_label_width')).thenAnswer((_) async => '50.0');
-      when(mockSettingsDao.getSetting('barcode_label_height')).thenAnswer((_) async => '30.0');
-      when(mockSettingsDao.getSetting('barcode_include_name')).thenAnswer((_) async => 'true');
-      when(mockSettingsDao.getSetting('barcode_include_price')).thenAnswer((_) async => 'false');
+      when(
+        mockSettingsDao.getSetting('barcode_label_width'),
+      ).thenAnswer((_) async => '50.0');
+      when(
+        mockSettingsDao.getSetting('barcode_label_height'),
+      ).thenAnswer((_) async => '30.0');
+      when(
+        mockSettingsDao.getSetting('barcode_include_name'),
+      ).thenAnswer((_) async => 'true');
+      when(
+        mockSettingsDao.getSetting('barcode_include_price'),
+      ).thenAnswer((_) async => 'false');
 
       // Act
       final config = await service.getSettings();
@@ -69,8 +83,8 @@ void main() {
       expect(config.includeName, false);
       expect(config.includePrice, false);
     });
-    
-    // Note: PDF generation tests are skipped as they require Flutter's painting 
+
+    // Note: PDF generation tests are skipped as they require Flutter's painting
     // framework and are better tested via integration tests or manual verification.
   });
 }

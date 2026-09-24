@@ -71,9 +71,7 @@ void main() {
 
   group('ExpenseReportData', () {
     test('default values are correct', () {
-      final data = ExpenseReportData(
-        dateRange: ReportDateRange.thisMonth(),
-      );
+      final data = ExpenseReportData(dateRange: ReportDateRange.thisMonth());
 
       expect(data.categories, isEmpty);
       expect(data.grandTotalCents, 0);
@@ -99,9 +97,7 @@ void main() {
         dateRange: ReportDateRange.thisMonth(),
       );
 
-      final updated = original.copyWith(
-        dateRange: ReportDateRange.thisYear(),
-      );
+      final updated = original.copyWith(dateRange: ReportDateRange.thisYear());
 
       expect(updated.grandTotalCents, 500000);
       expect(updated.totalExpenseCount, 50);
@@ -163,8 +159,7 @@ void main() {
     });
 
     test('ExpenseReportSortChanged stores sort type', () {
-      const event = ExpenseReportSortChanged(
-          ExpenseReportSortType.categoryAsc);
+      const event = ExpenseReportSortChanged(ExpenseReportSortType.categoryAsc);
       expect(event.sort, ExpenseReportSortType.categoryAsc);
     });
   });
@@ -172,18 +167,30 @@ void main() {
   group('ExpenseReportSortType enum', () {
     test('has all expected values', () {
       expect(ExpenseReportSortType.values.length, 6);
-      expect(ExpenseReportSortType.values,
-          contains(ExpenseReportSortType.amountDesc));
-      expect(ExpenseReportSortType.values,
-          contains(ExpenseReportSortType.amountAsc));
-      expect(ExpenseReportSortType.values,
-          contains(ExpenseReportSortType.categoryAsc));
-      expect(ExpenseReportSortType.values,
-          contains(ExpenseReportSortType.categoryDesc));
-      expect(ExpenseReportSortType.values,
-          contains(ExpenseReportSortType.countDesc));
-      expect(ExpenseReportSortType.values,
-          contains(ExpenseReportSortType.countAsc));
+      expect(
+        ExpenseReportSortType.values,
+        contains(ExpenseReportSortType.amountDesc),
+      );
+      expect(
+        ExpenseReportSortType.values,
+        contains(ExpenseReportSortType.amountAsc),
+      );
+      expect(
+        ExpenseReportSortType.values,
+        contains(ExpenseReportSortType.categoryAsc),
+      );
+      expect(
+        ExpenseReportSortType.values,
+        contains(ExpenseReportSortType.categoryDesc),
+      );
+      expect(
+        ExpenseReportSortType.values,
+        contains(ExpenseReportSortType.countDesc),
+      );
+      expect(
+        ExpenseReportSortType.values,
+        contains(ExpenseReportSortType.countAsc),
+      );
     });
   });
 
@@ -214,8 +221,7 @@ void main() {
 
     test('sort by amount descending', () {
       final list = List<ExpenseCategorySummary>.from(categories);
-      list.sort(
-          (a, b) => b.totalAmountCents.compareTo(a.totalAmountCents));
+      list.sort((a, b) => b.totalAmountCents.compareTo(a.totalAmountCents));
 
       expect(list[0].categoryName, 'Apple Costs');
       expect(list[0].totalAmountCents, 200000);
@@ -227,8 +233,7 @@ void main() {
 
     test('sort by amount ascending', () {
       final list = List<ExpenseCategorySummary>.from(categories);
-      list.sort(
-          (a, b) => a.totalAmountCents.compareTo(b.totalAmountCents));
+      list.sort((a, b) => a.totalAmountCents.compareTo(b.totalAmountCents));
 
       expect(list[0].categoryName, 'Zebra Expenses');
       expect(list[2].categoryName, 'Apple Costs');
@@ -402,9 +407,11 @@ void main() {
       ];
 
       final highest = categories.reduce(
-          (a, b) => a.totalAmountCents >= b.totalAmountCents ? a : b);
+        (a, b) => a.totalAmountCents >= b.totalAmountCents ? a : b,
+      );
       final lowest = categories.reduce(
-          (a, b) => a.totalAmountCents <= b.totalAmountCents ? a : b);
+        (a, b) => a.totalAmountCents <= b.totalAmountCents ? a : b,
+      );
 
       expect(highest.categoryName, 'Rent');
       expect(highest.totalAmountCents, 500000);
@@ -424,9 +431,11 @@ void main() {
       ];
 
       final highest = categories.reduce(
-          (a, b) => a.totalAmountCents >= b.totalAmountCents ? a : b);
+        (a, b) => a.totalAmountCents >= b.totalAmountCents ? a : b,
+      );
       final lowest = categories.reduce(
-          (a, b) => a.totalAmountCents <= b.totalAmountCents ? a : b);
+        (a, b) => a.totalAmountCents <= b.totalAmountCents ? a : b,
+      );
 
       expect(highest.categoryName, 'Only Category');
       expect(lowest.categoryName, 'Only Category');
@@ -477,9 +486,7 @@ void main() {
 
     test('copyWith preserves unchanged fields', () {
       final range = ReportDateRange.thisMonth();
-      final updated = range.copyWith(
-        preset: ReportPeriodPreset.custom,
-      );
+      final updated = range.copyWith(preset: ReportPeriodPreset.custom);
       expect(updated.startDate, range.startDate);
       expect(updated.endDate, range.endDate);
       expect(updated.preset, ReportPeriodPreset.custom);
@@ -553,7 +560,9 @@ void main() {
 
       // Grand total: 100000
       final grandTotal = expenses.fold<int>(
-        0, (sum, e) => sum + e['amount_cents']!);
+        0,
+        (sum, e) => sum + e['amount_cents']!,
+      );
       expect(grandTotal, 100000);
     });
 

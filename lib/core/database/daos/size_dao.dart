@@ -11,14 +11,20 @@ class SizeDao extends DatabaseAccessor<AppDatabase> with _$SizeDaoMixin {
   Stream<List<Size>> watchAllSizes() {
     return (select(sizes)
           ..where((s) => s.isActive.equals(true))
-          ..orderBy([(s) => OrderingTerm(expression: s.sortOrder), (s) => OrderingTerm(expression: s.name)]))
+          ..orderBy([
+            (s) => OrderingTerm(expression: s.sortOrder),
+            (s) => OrderingTerm(expression: s.name),
+          ]))
         .watch();
   }
 
   Future<List<Size>> getAllSizes() {
     return (select(sizes)
           ..where((s) => s.isActive.equals(true))
-          ..orderBy([(s) => OrderingTerm(expression: s.sortOrder), (s) => OrderingTerm(expression: s.name)]))
+          ..orderBy([
+            (s) => OrderingTerm(expression: s.sortOrder),
+            (s) => OrderingTerm(expression: s.name),
+          ]))
         .get();
   }
 

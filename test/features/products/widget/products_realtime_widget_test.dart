@@ -14,8 +14,12 @@ import 'package:tapix/core/services/audit_log_service.dart';
 import 'package:tapix/features/auth/data/services/session_service.dart';
 
 void main() {
-  testWidgets('UI updates when database changes via ProductsBloc stream', (tester) async {
-    final database = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
+  testWidgets('UI updates when database changes via ProductsBloc stream', (
+    tester,
+  ) async {
+    final database = AppDatabase.connect(
+      DatabaseConnection(NativeDatabase.memory()),
+    );
 
     ProductsBloc? bloc;
     addTearDown(() async {
@@ -41,16 +45,22 @@ void main() {
       fail('Timed out waiting for: $finder');
     }
 
-    final currencyId = await database.into(database.currencies).insert(
-      CurrenciesCompanion.insert(
-        code: 'TST',
-        name: 'Test Currency',
-        symbol: 'T',
-        exchangeRate: Decimal.fromInt(1),
-      ),
-    );
+    final currencyId = await database
+        .into(database.currencies)
+        .insert(
+          CurrenciesCompanion.insert(
+            code: 'TST',
+            name: 'Test Currency',
+            symbol: 'T',
+            exchangeRate: Decimal.fromInt(1),
+          ),
+        );
 
-    final repository = ProductRepositoryImpl(ProductLocalDatasourceImpl(database.productDao), AuditLogService(database), SessionService());
+    final repository = ProductRepositoryImpl(
+      ProductLocalDatasourceImpl(database.productDao),
+      AuditLogService(database),
+      SessionService(),
+    );
     bloc = ProductsBloc(repository);
 
     await tester.pumpWidget(
@@ -77,15 +87,17 @@ void main() {
     await pumpUntilFound(find.text('0'));
     expect(find.text('0'), findsOneWidget);
 
-    await database.into(database.products).insert(
-      ProductsCompanion.insert(
-        sku: const Value<String?>('WGT-001'),
-        name: 'Widget Product',
-        costCents: Decimal.fromInt(1000),
-        priceCents: Decimal.fromInt(2000),
-        currencyId: Value(currencyId),
-      ),
-    );
+    await database
+        .into(database.products)
+        .insert(
+          ProductsCompanion.insert(
+            sku: const Value<String?>('WGT-001'),
+            name: 'Widget Product',
+            costCents: Decimal.fromInt(1000),
+            priceCents: Decimal.fromInt(2000),
+            currencyId: Value(currencyId),
+          ),
+        );
 
     await pumpUntilFound(find.text('1'));
     expect(find.text('1'), findsOneWidget);

@@ -1,3 +1,4 @@
+import '../../services/inventory/supplier_identity_rules.dart';
 import 'package:drift/drift.dart';
 import 'package:decimal/decimal.dart';
 import '../app_database.dart';
@@ -45,17 +46,139 @@ class SupplierDao extends DatabaseAccessor<AppDatabase>
     return q.get();
   }
 
-  Future<int> createSupplier(SuppliersCompanion supplier) {
-    return into(suppliers).insert(supplier);
+  Future<bool> isProductCodeAvailable(
+    String? input, {
+    int? excludingSupplierId,
+  }) async {
+    final code = SupplierIdentityRules.normalizeSupplierCode(input);
+    if (code == null) return true;
+    final query = select(suppliers)..where((s) => s.productCode.equals(code));
+    if (excludingSupplierId != null) {
+      query.where((s) => s.id.equals(excludingSupplierId).not());
+    }
+    // Deliberately no isActive filter: inactive suppliers still own the code.
+    return await query.getSingleOrNull() == null;
   }
 
-  Future<bool> updateSupplier(Supplier supplier) {
-    return update(suppliers).replace(supplier);
+  Future<bool> isProductCodeLocked(int supplierId) async {
+    final row = await customSelect(
+      'SELECT 1 AS locked FROM supplier_product_code_locks WHERE supplier_id=? '
+      'UNION ALL SELECT 1 AS locked FROM supplier_product_identities '
+      'WHERE supplier_id=? LIMIT 1',
+      variables: [Variable.withInt(supplierId), Variable.withInt(supplierId)],
+    ).getSingleOrNull();
+    return row != null;
   }
 
-  Future<int> deleteSupplier(int id) {
-    return (delete(suppliers)..where((s) => s.id.equals(id))).go();
+  /// Change only status, never overwrite a balance/code from a stale list row.
+  Future<void> setSupplierActive(int supplierId, bool isActive) async {
+    final count =
+        await (update(suppliers)..where((s) => s.id.equals(supplierId))).write(
+          SuppliersCompanion(
+            isActive: Value(isActive),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
+    if (count == 0) {
+      throw const SupplierIdentityException(
+        'supplier_identity.source_mismatch',
+      );
+    }
   }
+
+  Future<void> _assertCodeAuthority() async {
+    // A client's private database cannot reserve a code on its host.
+    // Supplier editing has no LAN write endpoint in this version.
+    if (await attachedDatabase.settingsDao.getSetting('lan.mode') == 'client') {
+      throw const SupplierIdentityException(
+        'supplier_identity.master_required',
+      );
+    }
+  }
+
+  Future<T> _withCodeErrors<T>(Future<T> Function() action) async {
+    try {
+      return await action();
+    } catch (error) {
+      final failure = SupplierIdentityException.fromError(error);
+      if (failure != null) throw failure;
+      rethrow;
+    }
+  }
+
+  Future<int> createSupplier(SuppliersCompanion supplier) => _withCodeErrors(
+    () => transaction(() async {
+      final code = SupplierIdentityRules.normalizeSupplierCode(
+        supplier.productCode.present ? supplier.productCode.value : null,
+      );
+      if (code != null) {
+        await _assertCodeAuthority();
+        if (!await isProductCodeAvailable(code)) {
+          throw const SupplierIdentityException(
+            'supplier_identity.code_in_use',
+          );
+        }
+      }
+      return into(
+        suppliers,
+      ).insert(supplier.copyWith(productCode: Value(code)));
+    }),
+  );
+
+  Future<bool> updateSupplier(Supplier supplier) => _withCodeErrors(
+    () => transaction(() async {
+      final existing = await getSupplier(supplier.id);
+      if (existing == null) return false;
+      final code = SupplierIdentityRules.normalizeSupplierCode(
+        supplier.productCode,
+      );
+      if (code != existing.productCode) {
+        await _assertCodeAuthority();
+        if (await isProductCodeLocked(supplier.id)) {
+          throw const SupplierIdentityException(
+            'supplier_identity.code_locked',
+          );
+        }
+      }
+      if (!await isProductCodeAvailable(
+        code,
+        excludingSupplierId: supplier.id,
+      )) {
+        throw const SupplierIdentityException('supplier_identity.code_in_use');
+      }
+      return update(
+        suppliers,
+      ).replace(supplier.copyWith(productCode: Value(code)));
+    }),
+  );
+
+  Future<int> deleteSupplier(int id) => _withCodeErrors(
+    () => transaction(() async {
+      final existing = await getSupplier(id);
+      if (existing == null) return 0;
+      if (existing.productCode != null) await _assertCodeAuthority();
+      if (await isProductCodeLocked(id)) {
+        throw const SupplierIdentityException(
+          'supplier_identity.delete_blocked',
+        );
+      }
+      final history = await customSelect(
+        '''SELECT 1 AS used WHERE
+              EXISTS(SELECT 1 FROM purchases WHERE supplier_id=?)
+              OR EXISTS(SELECT 1 FROM supplier_transactions WHERE supplier_id=?)
+              OR EXISTS(SELECT 1 FROM products WHERE supplier_id=?)
+              OR EXISTS(SELECT 1 FROM product_batches WHERE supplier_id=?)
+              OR EXISTS(SELECT 1 FROM purchase_return_adjustments WHERE supplier_id=?)''',
+        variables: List.generate(5, (_) => Variable.withInt(id)),
+      ).getSingleOrNull();
+      if (history != null) {
+        throw const SupplierIdentityException(
+          'supplier_identity.delete_blocked',
+        );
+      }
+      return (delete(suppliers)..where((s) => s.id.equals(id))).go();
+    }),
+  );
 
   Future<String> _nextTransactionNumber(String prefix) =>
       DocumentNumberService(attachedDatabase).nextSupplierTransaction(prefix);

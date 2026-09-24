@@ -76,28 +76,58 @@ void main() {
 
     group('_computeMonetaryScore', () {
       test('returns 5 for highest spenders (80-100% of max)', () {
-        expect(CustomerAnalysisReportBloc.computeMonetaryScore(100000, 100000), 5);
-        expect(CustomerAnalysisReportBloc.computeMonetaryScore(80000, 100000), 5);
+        expect(
+          CustomerAnalysisReportBloc.computeMonetaryScore(100000, 100000),
+          5,
+        );
+        expect(
+          CustomerAnalysisReportBloc.computeMonetaryScore(80000, 100000),
+          5,
+        );
       });
 
       test('returns 4 for high spenders (60-79% of max)', () {
-        expect(CustomerAnalysisReportBloc.computeMonetaryScore(79000, 100000), 4);
-        expect(CustomerAnalysisReportBloc.computeMonetaryScore(60000, 100000), 4);
+        expect(
+          CustomerAnalysisReportBloc.computeMonetaryScore(79000, 100000),
+          4,
+        );
+        expect(
+          CustomerAnalysisReportBloc.computeMonetaryScore(60000, 100000),
+          4,
+        );
       });
 
       test('returns 3 for moderate spenders (40-59% of max)', () {
-        expect(CustomerAnalysisReportBloc.computeMonetaryScore(59000, 100000), 3);
-        expect(CustomerAnalysisReportBloc.computeMonetaryScore(40000, 100000), 3);
+        expect(
+          CustomerAnalysisReportBloc.computeMonetaryScore(59000, 100000),
+          3,
+        );
+        expect(
+          CustomerAnalysisReportBloc.computeMonetaryScore(40000, 100000),
+          3,
+        );
       });
 
       test('returns 2 for low spenders (20-39% of max)', () {
-        expect(CustomerAnalysisReportBloc.computeMonetaryScore(39000, 100000), 2);
-        expect(CustomerAnalysisReportBloc.computeMonetaryScore(20000, 100000), 2);
+        expect(
+          CustomerAnalysisReportBloc.computeMonetaryScore(39000, 100000),
+          2,
+        );
+        expect(
+          CustomerAnalysisReportBloc.computeMonetaryScore(20000, 100000),
+          2,
+        );
       });
 
       test('returns 1 for lowest spenders (0-19% of max)', () {
-        expect(CustomerAnalysisReportBloc.computeMonetaryScore(19000, 100000), 1);
-        expect(CustomerAnalysisReportBloc.computeMonetaryScore(1000, 100000), 1);
+        expect(
+          CustomerAnalysisReportBloc.computeMonetaryScore(19000, 100000),
+          1,
+        );
+        expect(
+          CustomerAnalysisReportBloc.computeMonetaryScore(1000, 100000),
+          1,
+        );
       });
 
       test('returns 1 when maxSpent is 0', () {

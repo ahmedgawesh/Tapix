@@ -61,8 +61,9 @@ void main() {
       product: taxableProduct,
       quantity: qty,
       unitCostCents: Decimal.fromInt(unitCostCents),
-      discountCents:
-          discountCents != null ? Decimal.fromInt(discountCents) : null,
+      discountCents: discountCents != null
+          ? Decimal.fromInt(discountCents)
+          : null,
       originalCostCents: unitCostCents,
       originalPriceCents: unitCostCents * 2,
     );
@@ -83,19 +84,32 @@ void main() {
         purchaseDate: DateTime(2026, 5, 18),
         discountMode: DiscountMode.perItem,
         items: [
-          buildLine(tempId: 'L1', qty: 1, unitCostCents: 10000, discountCents: 500),
-          buildLine(tempId: 'L2', qty: 2, unitCostCents: 7500, discountCents: 1200),
+          buildLine(
+            tempId: 'L1',
+            qty: 1,
+            unitCostCents: 10000,
+            discountCents: 500,
+          ),
+          buildLine(
+            tempId: 'L2',
+            qty: 2,
+            unitCostCents: 7500,
+            discountCents: 1200,
+          ),
         ],
       ),
-      act: (bloc) => bloc
-          .add(const PurchaseDiscountModeChanged(DiscountMode.invoice)),
+      act: (bloc) =>
+          bloc.add(const PurchaseDiscountModeChanged(DiscountMode.invoice)),
       verify: (bloc) {
         final s = bloc.state;
         expect(s.discountMode, DiscountMode.invoice);
         // EVERY line's per-line discount must be zero after the switch.
         for (final item in s.items) {
-          expect(item.discountCents, Decimal.zero,
-              reason: 'line ${item.tempId} retained stale discount');
+          expect(
+            item.discountCents,
+            Decimal.zero,
+            reason: 'line ${item.tempId} retained stale discount',
+          );
         }
         // Engine view also confirms — itemDiscountCents must be zero.
         expect(s.itemDiscountCents, Decimal.zero);
@@ -112,12 +126,10 @@ void main() {
         purchaseDate: DateTime(2026, 5, 18),
         discountMode: DiscountMode.invoice,
         invoiceDiscountCents: Decimal.fromInt(2000),
-        items: [
-          buildLine(tempId: 'L1', qty: 1, unitCostCents: 10000),
-        ],
+        items: [buildLine(tempId: 'L1', qty: 1, unitCostCents: 10000)],
       ),
-      act: (bloc) => bloc
-          .add(const PurchaseDiscountModeChanged(DiscountMode.perItem)),
+      act: (bloc) =>
+          bloc.add(const PurchaseDiscountModeChanged(DiscountMode.perItem)),
       verify: (bloc) {
         final s = bloc.state;
         expect(s.discountMode, DiscountMode.perItem);
@@ -136,7 +148,12 @@ void main() {
         purchaseDate: DateTime(2026, 5, 18),
         discountMode: DiscountMode.perItem,
         items: [
-          buildLine(tempId: 'L1', qty: 1, unitCostCents: 10000, discountCents: 500),
+          buildLine(
+            tempId: 'L1',
+            qty: 1,
+            unitCostCents: 10000,
+            discountCents: 500,
+          ),
         ],
       ),
       act: (bloc) async {
@@ -148,16 +165,18 @@ void main() {
       verify: (bloc) {
         final s = bloc.state;
         expect(s.discountMode, DiscountMode.perItem);
-        expect(s.items.single.discountCents, Decimal.zero,
-            reason: 'switching invoice→perItem resurrected the wiped 500');
+        expect(
+          s.items.single.discountCents,
+          Decimal.zero,
+          reason: 'switching invoice→perItem resurrected the wiped 500',
+        );
         expect(s.itemDiscountCents, Decimal.zero);
         // Total discount is now genuinely zero — no double-credit possible.
         expect(s.totalDiscountCents, Decimal.zero);
       },
     );
 
-    test(
-        'sanity: pricing engine already masks per-line discount in invoice mode '
+    test('sanity: pricing engine already masks per-line discount in invoice mode '
         '(defence-in-depth — the bug never reached the books, but state '
         'leaked into the UI before Phase-14)', () {
       // Construct a state that simulates the PRE-FIX bug: invoice mode
