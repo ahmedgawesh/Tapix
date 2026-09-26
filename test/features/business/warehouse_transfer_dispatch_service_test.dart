@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
@@ -11,6 +13,7 @@ import 'package:tapix/core/services/business/branch_consignment_policy_store.dar
 import 'package:tapix/core/services/business/branch_currency_policy_store.dart';
 import 'package:tapix/core/services/business/warehouse_operation_scope.dart';
 import 'package:tapix/core/services/business/warehouse_transfer_preflight.dart';
+import 'package:tapix/core/services/sync/offline_sync_event_store.dart';
 import 'package:tapix/features/auth/data/services/session_service.dart';
 import 'package:tapix/features/business/data/warehouse_transfer_dispatch_service.dart';
 import 'package:tapix/features/business/data/warehouse_transfer_repository.dart';
@@ -61,9 +64,17 @@ class _Fixture {
   final WarehouseTransferRecallService recall;
 }
 
-Future<_Fixture> _fixture({bool withOpeningStock = true}) async {
+Future<_Fixture> _fixture({
+  bool withOpeningStock = true,
+  bool withOnlineSync = true,
+}) async {
   final db = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
   final source = await WarehouseOperationScope.resolve(db);
+  if (withOnlineSync) {
+    await OfflineSyncEventStore(db).activateWriterRecording(
+      enrollmentId: '10101010-1010-4010-8010-101010101010',
+    );
+  }
   final currency = (await (db.select(
     db.currencies,
   )..where((c) => c.code.equals('USD'))).getSingle()).id;
@@ -204,6 +215,26 @@ Future<int> _stock(
 
 void main() {
   test(
+    'single-branch and LAN-only operation does not accumulate cloud outbox',
+    () async {
+      final fixture = await _fixture(withOnlineSync: false);
+      addTearDown(fixture.db.close);
+      final draft = await _draft(fixture);
+      await fixture.dispatch.dispatch(
+        transferId: draft.header.id,
+        requestKey: const Uuid().v4(),
+      );
+      expect(
+        await fixture.db
+            .customSelect('SELECT COUNT(*) AS c FROM sync_outbox_events')
+            .map((row) => row.read<int>('c'))
+            .getSingle(),
+        0,
+      );
+    },
+  );
+
+  test(
     'dispatch atomically freezes WAC value and moves it to inventory in transit',
     () async {
       final fixture = await _fixture();
@@ -292,6 +323,33 @@ void main() {
         await fixture.db.select(fixture.db.warehouseTransferDispatches).get(),
         hasLength(1),
       );
+      final outbox = await fixture.db
+          .customSelect('SELECT * FROM sync_outbox_events')
+          .getSingle();
+      expect(
+        outbox.read<String>('event_type'),
+        'warehouse_transfer.dispatched.v1',
+      );
+      expect(outbox.read<String>('aggregate_id'), draft.header.id);
+      final payload =
+          jsonDecode(outbox.read<String>('payload_json'))
+              as Map<String, dynamic>;
+      expect(payload['sourceDatabaseId'], fixture.source.databaseId);
+      expect(payload['currencyCode'], 'USD');
+      expect(payload['ownedValueMinor'], 2000);
+      final syncedAllocation = Map<String, dynamic>.from(
+        (payload['allocations'] as List).single as Map,
+      );
+      expect(syncedAllocation['quantityScaled'], 2);
+      expect(syncedAllocation['productGlobalId'], hasLength(36));
+      expect(syncedAllocation['variantGlobalId'], hasLength(36));
+      expect(syncedAllocation.containsKey('productId'), isFalse);
+      final origin = Map<String, dynamic>.from(
+        (syncedAllocation['originSlices'] as List).single as Map,
+      );
+      expect(origin['quantityScaled'], 2);
+      expect(origin['originKind'], 'unknown');
+      expect(origin['sourceQuality'], 'unverified');
     },
   );
 
@@ -418,6 +476,34 @@ void main() {
         await fixture.db.select(fixture.db.warehouseTransferEvents).get(),
         hasLength(3),
       );
+      final syncRows = await fixture.db
+          .customSelect(
+            'SELECT event_type,payload_json FROM sync_outbox_events '
+            'ORDER BY local_sequence',
+          )
+          .get();
+      expect(syncRows.map((row) => row.read<String>('event_type')), [
+        'warehouse_transfer.dispatched.v1',
+        'warehouse_transfer.received.v1',
+        'warehouse_transfer.received.v1',
+      ]);
+      final receiptPayloads = syncRows
+          .skip(1)
+          .map(
+            (row) =>
+                jsonDecode(row.read<String>('payload_json'))
+                    as Map<String, dynamic>,
+          )
+          .toList(growable: false);
+      expect(receiptPayloads.first['completedTransfer'], isFalse);
+      expect(receiptPayloads.last['completedTransfer'], isTrue);
+      expect(receiptPayloads.last['acceptedOwnedValueMinor'], 2000);
+      expect(receiptPayloads.last['varianceOwnedValueMinor'], 1000);
+      final finalItem = Map<String, dynamic>.from(
+        (receiptPayloads.last['items'] as List).single as Map,
+      );
+      expect(finalItem['acceptedQuantityScaled'], 2);
+      expect(finalItem['lostQuantityScaled'], 1);
     },
   );
 
@@ -430,11 +516,13 @@ void main() {
       final dispatch = await fixture.dispatch.dispatch(
         transferId: draft.header.id,
         requestKey: const Uuid().v4(),
+        dispatchedAt: DateTime.utc(2026, 9, 24, 9),
       );
       final receiptKey = const Uuid().v4();
       final partialReceipt = await fixture.receipt.receive(
         transferId: draft.header.id,
         requestKey: receiptKey,
+        receivedAt: DateTime.utc(2026, 9, 24, 10),
         items: [
           WarehouseTransferReceiptRequestItem(
             allocationId: dispatch.allocations.single.id,
@@ -448,6 +536,7 @@ void main() {
         transferId: draft.header.id,
         requestKey: key,
         reason: 'Vehicle returned to source',
+        recalledAt: DateTime.utc(2026, 9, 24, 11),
       );
 
       expect(recalled.transfer.status, 'cancelled');
@@ -513,6 +602,27 @@ void main() {
       expect(report.rows.single.recalledQuantity, 3);
       expect(report.rows.single.inTransitQuantity, 0);
       expect(report.rows.single.sources.single.quality, 'unknown');
+      final syncRows = await fixture.db
+          .customSelect(
+            'SELECT event_type,payload_json FROM sync_outbox_events '
+            'ORDER BY local_sequence',
+          )
+          .get();
+      expect(syncRows.map((row) => row.read<String>('event_type')), [
+        'warehouse_transfer.dispatched.v1',
+        'warehouse_transfer.received.v1',
+        'warehouse_transfer.recalled.v1',
+      ]);
+      final recallPayload =
+          jsonDecode(syncRows.last.read<String>('payload_json'))
+              as Map<String, dynamic>;
+      expect(recallPayload['ownedValueMinor'], 3000);
+      expect(recallPayload['reason'], 'Vehicle returned to source');
+      final recallItem = Map<String, dynamic>.from(
+        (recallPayload['items'] as List).single as Map,
+      );
+      expect(recallItem['quantityScaled'], 3);
+      expect(recallItem['valueMinor'], 3000);
     },
   );
 
@@ -763,6 +873,35 @@ void main() {
           (allocation) => allocation.manufacturerLotNumber,
         ),
         ['LOT-EARLY', 'LOT-LATER'],
+      );
+      final fifoEvent = await fixture.db
+          .customSelect('SELECT payload_json FROM sync_outbox_events')
+          .getSingle();
+      final fifoPayload =
+          jsonDecode(fifoEvent.read<String>('payload_json'))
+              as Map<String, dynamic>;
+      final syncedBatches = (fifoPayload['allocations'] as List)
+          .map(
+            (raw) =>
+                Map<String, dynamic>.from((raw as Map)['sourceBatch'] as Map),
+          )
+          .toList(growable: false);
+      expect(
+        syncedBatches.map((batch) => batch['globalId']),
+        everyElement(hasLength(36)),
+      );
+      expect(
+        syncedBatches.map((batch) => batch['globalId']).toSet(),
+        hasLength(2),
+      );
+      expect(
+        await fixture.db
+            .customSelect(
+              'SELECT COUNT(*) AS c FROM sync_inventory_layer_identities',
+            )
+            .map((row) => row.read<int>('c'))
+            .getSingle(),
+        2,
       );
       final remaining = {
         for (final batch
@@ -1150,6 +1289,7 @@ void main() {
       final posted = await fixture.dispatch.dispatch(
         transferId: draft.header.id,
         requestKey: const Uuid().v4(),
+        dispatchedAt: DateTime.utc(2026, 9, 24, 9),
       );
 
       expect(posted.dispatch.ownedValueCents, 0);
@@ -1157,6 +1297,19 @@ void main() {
       expect(posted.allocations.single.ownerType, 'consignment');
       expect(posted.allocations.single.sourceConsignmentLayerId, layer.id);
       expect(posted.allocations.single.supplierId, supplier);
+      final consignmentEvent = await fixture.db
+          .customSelect('SELECT payload_json FROM sync_outbox_events')
+          .getSingle();
+      final consignmentPayload =
+          jsonDecode(consignmentEvent.read<String>('payload_json'))
+              as Map<String, dynamic>;
+      final syncedConsignment = Map<String, dynamic>.from(
+        (consignmentPayload['allocations'] as List).single as Map,
+      );
+      expect(syncedConsignment['ownerType'], 'consignment');
+      expect(syncedConsignment['supplierGlobalId'], hasLength(36));
+      expect(syncedConsignment['consignmentAgreementId'], agreement.id);
+      expect(syncedConsignment['sourceConsignmentLayerId'], layer.id);
       expect(
         await _stock(fixture.db, fixture.source.warehouseId, fixture.variant),
         2,
@@ -1182,6 +1335,7 @@ void main() {
       final transferReceipt = await fixture.receipt.receive(
         transferId: draft.header.id,
         requestKey: const Uuid().v4(),
+        receivedAt: DateTime.utc(2026, 9, 24, 10),
         items: [
           WarehouseTransferReceiptRequestItem(
             allocationId: posted.allocations.single.id,
@@ -1226,6 +1380,7 @@ void main() {
         transferId: draft.header.id,
         requestKey: const Uuid().v4(),
         reason: 'Return remaining custody to source',
+        recalledAt: DateTime.utc(2026, 9, 24, 11),
       );
       expect(recalled.transfer.status, 'cancelled');
       expect(recalled.items.single.quantity, 1);

@@ -239,6 +239,11 @@ abstract class SaleRepository {
     required List<SaleReturnItemInput> items,
     String? reason,
     String? dispositionType,
+
+    /// For damaged/scrapped consignment goods: supplier reverses its
+    /// obligation, company preserves it, and review fails closed.
+    String consignmentLiabilityResponsibility = 'review',
+    String? consignmentLiabilityReason,
     String? refundMethod,
     DateTime? returnDate,
 

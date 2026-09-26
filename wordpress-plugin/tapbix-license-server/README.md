@@ -1,4 +1,4 @@
-# TapBix License Server v0.5.1
+# TapBix License Server v0.5.2
 
 Production WooCommerce license issuing and offline-first device activation server for TapBix Desktop on Windows and Linux.
 
@@ -57,13 +57,13 @@ The administrator table shows the existing customer email plus separate customer
 ## Upgrade and data safety
 
 1. Back up the WordPress database and the current plugin ZIP.
-2. Upload `tapbix-license-server-v0.5.1.zip` in Plugins -> Add Plugin -> Upload Plugin.
+2. Package the reviewed `tapbix-license-server/` source as version 0.5.2, then upload it in Plugins -> Add Plugin -> Upload Plugin.
 3. Choose **Replace current with uploaded**.
-4. Open WordPress Admin -> TapBix Licenses so the non-destructive version check runs.
+4. Open any WordPress page or the REST endpoint so the non-destructive version check creates the rate-limit table before serving requests.
 5. Confirm the displayed public key is unchanged and matches TapBix Desktop.
 6. Configure the hidden add-device product as described above, then test using a staging customer/order before accepting live payments.
 
-Version 0.5.0 added only the capacity transaction table; version 0.5.1 adds no database changes. Neither version renames or removes existing tables or rewrites licenses, activations, activation tokens, or RSA options. Never delete `tapbix_license_private_key` or `tapbix_license_public_key`. If only half of the key pair exists, the plugin refuses to generate a replacement and displays an administrator warning.
+Version 0.5.2 adds an independent rate-limit table and ensures transactional tables use InnoDB. It does not rename, remove, or rewrite licenses, activations, activation tokens, or RSA options. Never delete `tapbix_license_private_key` or `tapbix_license_public_key`. If only half of the key pair exists, the plugin refuses to generate a replacement and displays an administrator warning.
 
 ## Renewal integration retained from v0.4.0
 
@@ -81,6 +81,19 @@ add_filter('tapbix_license_renewal_source_order_ids', function ($source_order_id
 
 The external subscription/payment component remains responsible for charging customers and creating paid renewal orders.
 
+## Activation concurrency and trusted proxies
+
+Device activation locks the license row inside an InnoDB transaction before counting or adding devices, so concurrent requests cannot exceed `max_devices`. Rate limits use atomic database counters with separate per-IP and per-license buckets.
+
+Forwarded IP headers are ignored by default. A site behind a trusted proxy may opt in with both filters below. Never enable a forwarded header without restricting the proxy addresses or CIDR ranges.
+
+```php
+add_filter('tapbix_trusted_proxy_header', fn() => 'HTTP_CF_CONNECTING_IP');
+add_filter('tapbix_trusted_proxies', fn() => ['203.0.113.0/24', '2001:db8::/32']);
+```
+
+Supported header names are `HTTP_CF_CONNECTING_IP`, `HTTP_X_REAL_IP`, and `HTTP_X_FORWARDED_FOR`. Optional filters `tapbix_license_rate_limit_per_ip` and `tapbix_license_rate_limit_per_license` can adjust the defaults of 60 and 20 requests per five minutes.
+
 ## Desktop protocol compatibility
 
 - `POST /wp-json/tapbix/v1/activate`
@@ -97,6 +110,12 @@ These endpoints, inputs/outputs, activation-token behavior, signed payload, RSA 
 Before production, verify on staging: base lifetime issuance and duplicate hooks; add-on quantities 1 and 2; targeting the correct one of two licenses; forged/direct add-on rejection; repeated payment/refund/cancel hooks; partial/full add-on refunds; base-license refund suspension; legacy SKU issuance; an existing v0.4.0 activation/validation; and activation on Windows and Linux.
 
 ## Changelog
+
+### 0.5.2
+
+- Made device activation capacity checks atomic with an InnoDB license-row lock.
+- Added atomic per-IP and per-license request limits without trusting forwarded headers by default.
+- Added explicit trusted-proxy CIDR and forwarded-header configuration.
 
 ### 0.5.1
 

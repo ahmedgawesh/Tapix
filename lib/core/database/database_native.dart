@@ -8,6 +8,7 @@ import 'dart:io';
 import 'dart:developer' as developer;
 
 import 'database_encryption.dart';
+import 'database_encryption_migration.dart';
 
 /// Opens the native SQLite database with optional encryption support.
 ///
@@ -22,71 +23,132 @@ import 'database_encryption.dart';
 /// SQLite3MultipleCiphers is compatible with existing SQLCipher databases.
 Future<QueryExecutor> openDatabase({int? targetSchemaVersion}) async {
   // sqlite3 v3 uses build hooks — no manual library loading needed.
-
-  // Use getApplicationSupportDirectory instead of getApplicationDocumentsDirectory
-  // so the database is deleted when the app is uninstalled on Android
   final dbFolder = await getApplicationSupportDirectory();
-
-  // Ensure the directory exists
-  if (!dbFolder.existsSync()) {
-    debugPrint('Creating database directory: ${dbFolder.path}');
-    await dbFolder.create(recursive: true);
-  }
-
-  final file = File(p.join(dbFolder.path, 'tapix.db'));
-  debugPrint('Opening database at: ${file.path}');
-  debugPrint('Database file exists: ${file.existsSync()}');
-
   final keyManager = DatabaseEncryptionKeyManager();
+  return openDatabaseFrom(
+    dbFolder: dbFolder,
+    keyManager: keyManager,
+    targetSchemaVersion: targetSchemaVersion,
+  );
+}
+
+/// Opens a database from an explicit folder.
+///
+/// Production delegates here after resolving the support directory. Keeping
+/// the file-state machine independent from path_provider lets the real
+/// sqlite3mc engine exercise every migration and recovery path in tests.
+@visibleForTesting
+Future<QueryExecutor> openDatabaseFrom({
+  required Directory dbFolder,
+  required DatabaseEncryptionKeyManager keyManager,
+  int? targetSchemaVersion,
+}) async {
+  await dbFolder.create(recursive: true);
+  await discardEncryptionMigrationTemps(dbFolder);
+
+  final plainFile = File(p.join(dbFolder.path, 'tapix.db'));
+  final encryptedFile = File(p.join(dbFolder.path, 'tapix_encrypted.db'));
   final encryptionEnabled = await keyManager.isEncryptionEnabled();
   debugPrint('Encryption enabled: $encryptionEnabled');
 
+  String? activeEncryptionKey;
+  var activeIsEncrypted = false;
+
+  if (encryptionEnabled) {
+    activeEncryptionKey = encryptedFile.existsSync()
+        ? await _requireExistingEncryptionKey(keyManager)
+        : await keyManager.getOrCreateKey();
+
+    if (encryptedFile.existsSync()) {
+      await repairEncryptedDatabase(
+        encryptedFile: encryptedFile,
+        key: activeEncryptionKey,
+      );
+      await discardVerifiedReplacementRecovery(encryptedFile);
+      if (plainFile.existsSync()) {
+        await quarantineLegacyPlainDatabase(
+          databaseFolder: dbFolder,
+          plainFile: plainFile,
+          key: activeEncryptionKey,
+        );
+      }
+    } else if (plainFile.existsSync()) {
+      try {
+        await enableDatabaseEncryption(
+          plainFile: plainFile,
+          encryptedFile: encryptedFile,
+          key: activeEncryptionKey,
+        );
+        await discardVerifiedReplacementRecovery(encryptedFile);
+      } catch (error, stackTrace) {
+        developer.log(
+          'Encryption migration failed; the verified plain database remains active.',
+          name: 'DB_ENCRYPTION',
+          error: error,
+          stackTrace: stackTrace,
+        );
+        if (targetSchemaVersion != null) {
+          await createPreMigrationBackupIfNeededFrom(
+            dbFolder: dbFolder,
+            keyManager: keyManager,
+            encryptionEnabled: false,
+            targetSchemaVersion: targetSchemaVersion,
+          );
+        }
+        return NativeDatabase(plainFile);
+      }
+    }
+    activeIsEncrypted = true;
+  } else if (encryptedFile.existsSync()) {
+    activeEncryptionKey = await _requireExistingEncryptionKey(keyManager);
+    await repairEncryptedDatabase(
+      encryptedFile: encryptedFile,
+      key: activeEncryptionKey,
+    );
+    await discardVerifiedReplacementRecovery(encryptedFile);
+    if (plainFile.existsSync()) {
+      await quarantineLegacyPlainDatabase(
+        databaseFolder: dbFolder,
+        plainFile: plainFile,
+        key: activeEncryptionKey,
+      );
+    }
+    try {
+      await disableDatabaseEncryption(
+        encryptedFile: encryptedFile,
+        plainFile: plainFile,
+        key: activeEncryptionKey,
+      );
+      await discardVerifiedReplacementRecovery(plainFile);
+    } catch (error, stackTrace) {
+      developer.log(
+        'Encryption disable failed; continuing with the encrypted database.',
+        name: 'DB_ENCRYPTION',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      activeIsEncrypted = true;
+    }
+  }
+
   if (targetSchemaVersion != null) {
-    // This runs before Drift opens the database and starts onUpgrade. Keeping
-    // the backup outside the migration transaction also lets us checkpoint WAL
-    // safely so the copied .db file is self-contained.
     await createPreMigrationBackupIfNeededFrom(
       dbFolder: dbFolder,
       keyManager: keyManager,
-      encryptionEnabled: encryptionEnabled,
+      encryptionEnabled: activeIsEncrypted,
       targetSchemaVersion: targetSchemaVersion,
     );
   }
 
-  if (encryptionEnabled) {
-    final encryptedFile = File(p.join(dbFolder.path, 'tapix_encrypted.db'));
-    final key = encryptedFile.existsSync()
-        ? await _requireExistingEncryptionKey(keyManager)
-        : await keyManager.getOrCreateKey();
-    final escapedKey = key.replaceAll("'", "''");
-
-    // Migrate existing unencrypted DB → encrypted DB (one-time)
-    if (file.existsSync() && !encryptedFile.existsSync()) {
-      debugPrint('Migrating unencrypted database to encrypted...');
-      try {
-        await _migrateToEncrypted(file, encryptedFile, escapedKey);
-        debugPrint('Database migration to encrypted completed.');
-      } catch (e) {
-        debugPrint('WARNING: Encryption migration failed: $e');
-        debugPrint('Falling back to unencrypted database.');
-        return NativeDatabase(file);
-      }
-    }
-
-    final dbFile = _selectActiveDatabaseFile(dbFolder, encryptionEnabled: true);
-
+  if (activeIsEncrypted) {
+    final key =
+        activeEncryptionKey ?? await _requireExistingEncryptionKey(keyManager);
     return NativeDatabase(
-      dbFile,
-      setup: (rawDb) {
-        // SQLite3MultipleCiphers: set cipher to sqlcipher-compatible mode
-        rawDb.execute("PRAGMA cipher = 'sqlcipher';");
-        rawDb.execute('PRAGMA legacy = 4;');
-        rawDb.execute("PRAGMA key = '$escapedKey';");
-      },
+      encryptedFile,
+      setup: (rawDb) => applyCanonicalCipherPragmas(rawDb, key),
     );
   }
-
-  return NativeDatabase(file);
+  return NativeDatabase(plainFile);
 }
 
 /// Create a timestamped backup of the database file before schema migrations.
@@ -183,12 +245,12 @@ class _DatabaseTarget {
   const _DatabaseTarget({
     required this.file,
     required this.isEncrypted,
-    this.escapedKey,
+    this.encryptionKey,
   });
 
   final File file;
   final bool isEncrypted;
-  final String? escapedKey;
+  final String? encryptionKey;
 }
 
 File _selectActiveDatabaseFile(
@@ -208,22 +270,23 @@ Future<_DatabaseTarget?> _resolveExistingDatabaseTarget(
   bool? encryptionEnabled,
 }) async {
   final enabled = encryptionEnabled ?? await keyManager.isEncryptionEnabled();
-  final file = _selectActiveDatabaseFile(dbFolder, encryptionEnabled: enabled);
-  if (!file.existsSync()) {
-    return null;
-  }
+  final preferred = _selectActiveDatabaseFile(
+    dbFolder,
+    encryptionEnabled: enabled,
+  );
+  final fallback = File(
+    p.join(dbFolder.path, enabled ? 'tapix.db' : 'tapix_encrypted.db'),
+  );
+  final file = preferred.existsSync() ? preferred : fallback;
+  if (!file.existsSync()) return null;
 
-  final isEncrypted = enabled && p.basename(file.path) == 'tapix_encrypted.db';
+  final isEncrypted = p.basename(file.path) == 'tapix_encrypted.db';
   if (!isEncrypted) {
     return _DatabaseTarget(file: file, isEncrypted: false);
   }
 
   final key = await _requireExistingEncryptionKey(keyManager);
-  return _DatabaseTarget(
-    file: file,
-    isEncrypted: true,
-    escapedKey: key.replaceAll("'", "''"),
-  );
+  return _DatabaseTarget(file: file, isEncrypted: true, encryptionKey: key);
 }
 
 Future<String> _requireExistingEncryptionKey(
@@ -242,9 +305,7 @@ sqlite.Database _openRawDatabase(_DatabaseTarget target) {
   final db = sqlite.sqlite3.open(target.file.path);
   try {
     if (target.isEncrypted) {
-      db.execute("PRAGMA cipher = 'sqlcipher';");
-      db.execute('PRAGMA legacy = 4;');
-      db.execute("PRAGMA key = '${target.escapedKey}';");
+      applyCanonicalCipherPragmas(db, target.encryptionKey!);
     }
     return db;
   } catch (_) {
@@ -364,42 +425,4 @@ Future<File?> createPreMigrationBackupIfNeededFrom({
     name: 'DB_MIGRATION',
   );
   return backup;
-}
-
-/// Migrate an unencrypted database to an encrypted one.
-///
-/// Uses VACUUM INTO to create a plain copy, then applies PRAGMA rekey
-/// to encrypt it in-place.
-Future<void> _migrateToEncrypted(
-  File plainFile,
-  File encryptedFile,
-  String escapedKey,
-) async {
-  // Copy the plain database to the encrypted path first
-  await plainFile.copy(encryptedFile.path);
-
-  // Open the copy and apply encryption via PRAGMA rekey
-  final tempDb = NativeDatabase(
-    encryptedFile,
-    setup: (rawDb) {
-      rawDb.execute("PRAGMA rekey = '$escapedKey';");
-    },
-  );
-
-  // Force the database to open (triggers setup callback)
-  final conn = tempDb.ensureOpen(_DummyDriftUser());
-  await conn;
-  await tempDb.close();
-}
-
-/// Minimal [QueryExecutorUser] for the migration step.
-class _DummyDriftUser extends QueryExecutorUser {
-  @override
-  int get schemaVersion => 1;
-
-  @override
-  Future<void> beforeOpen(
-    QueryExecutor executor,
-    OpeningDetails details,
-  ) async {}
 }

@@ -195,6 +195,9 @@ void main() {
     required int totalCents,
     String status = 'posted',
   }) async {
+    // Posted return lines are immutable. Build the fixture through the same
+    // draft -> lines -> final status lifecycle used by the application.
+    final finalStatus = status;
     final returnId = await db
         .into(db.saleReturnAdjustments)
         .insert(
@@ -206,7 +209,7 @@ void main() {
             totalCents: Decimal.fromInt(totalCents),
             subtotalCents: Value(Decimal.fromInt(totalCents)),
             refundMethod: const Value('cash'),
-            status: Value(status),
+            status: const Value('draft'),
             returnDate: Value(date),
           ),
         );
@@ -224,6 +227,11 @@ void main() {
             totalCents: Decimal.fromInt(totalCents),
           ),
         );
+    if (finalStatus != 'draft') {
+      await (db.update(db.saleReturnAdjustments)
+            ..where((row) => row.id.equals(returnId)))
+          .write(SaleReturnAdjustmentsCompanion(status: Value(finalStatus)));
+    }
     return returnId;
   }
 

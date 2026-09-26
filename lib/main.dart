@@ -49,13 +49,6 @@ void main() {
         );
       }
 
-      // Push notifications are deliberately independent from licensing.
-      // Android/iOS devices register with the standalone TapBix Notifications
-      // WordPress plugin; Windows is handled separately in a later phase.
-      if (!kIsWeb && (PlatformUtils.isAndroid || PlatformUtils.isIOS)) {
-        await PushNotificationService.instance.initialize();
-      }
-
       // Initialize Crashlytics
       final crashlytics = CrashlyticsService.instance;
       await crashlytics.initialize();
@@ -120,6 +113,12 @@ void main() {
           child: const TapixApp(),
         ),
       );
+
+      // Push registration may wait for FCM or the notification server. It is
+      // useful background work, never a prerequisite for opening the POS.
+      if (!kIsWeb && (PlatformUtils.isAndroid || PlatformUtils.isIOS)) {
+        unawaited(PushNotificationService.instance.initialize());
+      }
     },
     (error, stackTrace) {
       LoggingService.error(

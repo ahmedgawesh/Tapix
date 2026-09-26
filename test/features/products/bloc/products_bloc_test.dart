@@ -3,6 +3,7 @@ import 'package:tapix/features/products/data/datasources/variant_local_datasourc
 import 'package:tapix/core/database/daos/inventory_adjustment_dao.dart';
 import 'package:tapix/core/services/inventory/inventory_adjustment_service.dart';
 import 'package:tapix/core/services/journal_entry_service.dart';
+import 'package:tapix/core/services/business/branch_currency_policy_store.dart';
 import 'package:tapix/features/accounting/data/repositories/accounting_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:drift/drift.dart' hide isNull;
@@ -29,6 +30,14 @@ void main() {
       database = AppDatabase.connect(
         DatabaseConnection(NativeDatabase.memory()),
       );
+      await database.customStatement(
+        "INSERT OR IGNORE INTO users (id, username, password_hash, role, is_active, created_at, updated_at) VALUES (0, 'system', 'no-pin', 'owner', 1, 0, 0)",
+      );
+
+      currencyId = (await (database.select(
+        database.currencies,
+      )..where((currency) => currency.code.equals('USD'))).getSingle()).id;
+      await BranchCurrencyPolicyStore(database).bind('USD');
       repository = ProductRepositoryImpl(
         ProductLocalDatasourceImpl(database.productDao),
         AuditLogService(database),
@@ -47,20 +56,6 @@ void main() {
         ),
       );
       bloc = ProductsBloc(repository, null, null, variants);
-      await database.customStatement(
-        "INSERT OR IGNORE INTO users (id, username, password_hash, role, is_active, created_at, updated_at) VALUES (0, 'system', 'no-pin', 'owner', 1, 0, 0)",
-      );
-
-      currencyId = await database
-          .into(database.currencies)
-          .insert(
-            CurrenciesCompanion.insert(
-              code: 'TST',
-              name: 'Test Currency',
-              symbol: 'T',
-              exchangeRate: Decimal.fromInt(1),
-            ),
-          );
     });
 
     tearDown(() async {

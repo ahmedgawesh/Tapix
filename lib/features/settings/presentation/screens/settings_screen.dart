@@ -9,6 +9,8 @@ import '../../../../core/bloc/theme_bloc.dart';
 import '../../../../core/bloc/localization_bloc.dart';
 import '../../../../core/bloc/currency_bloc.dart';
 import '../../../../core/services/currency_service.dart';
+import '../../../../core/di/injection_container.dart';
+import '../../../auth/data/services/owner_password_verification_service.dart';
 import '../../../../core/bloc/realtime_bloc.dart';
 import '../widgets/receipt_settings_section.dart';
 import '../bloc/app_settings_bloc.dart';
@@ -322,7 +324,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             // ── Subscription ──
             const SizedBox(height: 16),
             const SubscriptionSettingsCard(),
-
+            // Operational centers live on the dashboard. Settings keeps only
+            // configuration switches and policies.
             // ── Business Settings (expandable sections) ──
             const SizedBox(height: 24),
             Padding(
@@ -500,6 +503,8 @@ class _AdminPasswordDialog extends StatefulWidget {
 
 class _AdminPasswordDialogState extends State<_AdminPasswordDialog> {
   late final TextEditingController _controller;
+  bool _verifying = false;
+  String? _error;
 
   @override
   void initState() {
@@ -513,26 +518,54 @@ class _AdminPasswordDialogState extends State<_AdminPasswordDialog> {
     super.dispose();
   }
 
+  Future<void> _verify() async {
+    if (_verifying) return;
+    setState(() {
+      _verifying = true;
+      _error = null;
+    });
+    final valid = await sl<OwnerPasswordVerificationService>()
+        .verifyCurrentOwner(_controller.text);
+    if (!mounted) return;
+    if (valid) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+    setState(() {
+      _verifying = false;
+      _error = 'admin_tools.owner_password_invalid'.tr();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('admin'.tr()),
+      title: Text('admin_tools.owner_password_title'.tr()),
       content: TextField(
         controller: _controller,
         obscureText: true,
-        keyboardType: TextInputType.number,
-        decoration: const InputDecoration(border: OutlineInputBorder()),
+        autofocus: true,
+        enabled: !_verifying,
+        onSubmitted: (_) => _verify(),
+        decoration: InputDecoration(
+          border: const OutlineInputBorder(),
+          labelText: 'admin_tools.owner_password'.tr(),
+          errorText: _error,
+        ),
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: _verifying ? null : () => Navigator.of(context).pop(false),
           child: Text('common.cancel'.tr()),
         ),
         FilledButton(
-          onPressed: () {
-            Navigator.of(context).pop(_controller.text.trim() == '123456');
-          },
-          child: Text('common.confirm'.tr()),
+          onPressed: _verifying ? null : _verify,
+          child: _verifying
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Text('common.confirm'.tr()),
         ),
       ],
     );

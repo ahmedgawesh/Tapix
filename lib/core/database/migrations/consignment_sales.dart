@@ -1,9 +1,11 @@
 import '../app_database.dart';
+import 'consignment_return_liability.dart';
 
 /// Installs append-only guards for consignment sale allocations and obligation
 /// events. Application services still validate business policy; these guards
 /// prevent alternate DAO, LAN or restore paths from rewriting posted history.
 Future<void> installConsignmentSalesGuards(AppDatabase db) async {
+  await installConsignmentReturnLiabilityGuards(db);
   // These two guards evolve with additive event columns. Recreate them so
   // upgraded databases enforce the same contract as fresh databases.
   await db.customStatement(
@@ -123,6 +125,23 @@ Future<void> installConsignmentSalesGuards(AppDatabase db) async {
                   AND NEW.restores_stock=CASE
                     WHEN r.disposition_type IN ('write_off','damaged','scrap')
                     THEN 0 ELSE 1 END
+                  AND (
+                    (r.disposition_type NOT IN ('write_off','damaged','scrap'))
+                    OR EXISTS(
+                      SELECT 1
+                      FROM consignment_return_liability_decisions d
+                      WHERE d.source_table='sale_returns'
+                        AND d.source_id=r.id
+                        AND d.source_item_id=ri.id
+                        AND d.disposition_type=r.disposition_type
+                        AND d.responsibility IN ('supplier','company')
+                        AND (
+                          d.responsibility='supplier'
+                          OR (d.responsibility='company'
+                            AND NEW.signed_amount_cents=0)
+                        )
+                    )
+                  )
               ))
             OR
             (NEW.kind='return_void_reaccrual'

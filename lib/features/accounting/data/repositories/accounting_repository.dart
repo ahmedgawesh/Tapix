@@ -279,6 +279,11 @@ class AccountingRepository {
       );
     }
 
+    // A mathematically balanced entry is still invalid when its monetary
+    // unit differs from the account's monetary unit. Validate before any
+    // header, line, or cached balance is written.
+    await _validatePostingAccountCurrencies(entryData.lines);
+
     // Enforce control account protection: manual entries cannot touch AR/AP
     final entryType = entryData.entryType ?? 'manual';
     if (!_systemEntryTypes.contains(entryType)) {
@@ -426,6 +431,8 @@ class AccountingRepository {
           entry.totalCreditCents.toBigInt().toInt() != data.totalCreditCents) {
         throw AccountingException('Invalid draft journal entry');
       }
+      await _validatePostingAccountCurrencies(data.lines);
+
       // Update entry status
       await (_db.update(
         _db.journalEntries,
@@ -927,6 +934,56 @@ SELECT COALESCE(SUM(jel.debit_cents - jel.credit_cents), 0) AS balance
   // ============================================================
   // PRIVATE HELPER METHODS
   // ============================================================
+
+  Future<void> _validatePostingAccountCurrencies(
+    Iterable<JournalEntryLineData> lines,
+  ) async {
+    final accountById = <int, Account>{};
+    final currencyHealthChecked = <int>{};
+    for (final line in lines) {
+      final account =
+          accountById[line.accountId] ?? await getAccountById(line.accountId);
+      if (account == null) {
+        throw AccountingException(
+          'Journal account not found: ${line.accountId}',
+        );
+      }
+      accountById[line.accountId] = account;
+      if (!account.isActive) {
+        throw AccountingException(
+          'Journal account ${account.accountCode} is inactive',
+        );
+      }
+      if (account.currencyId != line.currencyId) {
+        throw AccountingException(
+          'Journal line currency ${line.currencyId} does not match account '
+          '${account.accountCode} currency ${account.currencyId}',
+        );
+      }
+      if (currencyHealthChecked.add(account.id)) {
+        final conflictingHistory = await _db
+            .customSelect(
+              '''
+                SELECT 1
+                FROM journal_entry_lines
+                WHERE account_id = ? AND currency_id != ?
+                LIMIT 1
+              ''',
+              variables: [
+                Variable.withInt(account.id),
+                Variable.withInt(account.currencyId),
+              ],
+            )
+            .getSingleOrNull();
+        if (conflictingHistory != null) {
+          throw AccountingException(
+            'Journal account ${account.accountCode} has historical journal '
+            'lines in another currency; reconcile it before posting',
+          );
+        }
+      }
+    }
+  }
 
   /// Update account balance based on debit/credit and account type
   Future<void> _updateAccountBalance({

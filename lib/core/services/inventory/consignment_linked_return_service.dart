@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../database/app_database.dart';
+import '../../database/migrations/consignment_return_liability.dart';
 import '../business/warehouse_operation_scope.dart';
 
 class ConsignmentReturnRestoration {
@@ -48,43 +49,62 @@ class ConsignmentLinkedReturnService {
         : await _allocationPieces(db, saleItem.id, returnItem.quantity);
     if (pieces.isEmpty) return ConsignmentReturnRestoration.empty;
 
+    final responsibility = restoresStock
+        ? ConsignmentReturnLiabilityResponsibility.supplier
+        : await ConsignmentReturnLiabilityStore.requireResolved(
+            dao,
+            sourceTable: 'sale_returns',
+            sourceId: returnItem.returnId,
+            sourceItemId: returnItem.id,
+          );
+    final supplierResponsible =
+        responsibility == ConsignmentReturnLiabilityResponsibility.supplier;
+
     var restoredQuantity = 0;
     var reversedAmount = 0;
     for (final piece in pieces) {
       final allocation = piece.allocation;
-      final available = allocation.quantity - allocation.reversedQuantity;
+      final physicallyReturned = await _netReturnedQuantity(db, allocation.id);
+      final available = allocation.quantity - physicallyReturned;
       if (piece.quantity <= 0 || piece.quantity > available) {
         throw StateError('Return exceeds its consignment allocation.');
       }
-      final newReversedQuantity = allocation.reversedQuantity + piece.quantity;
-      final cumulativeAmount = _proportional(
-        allocation.obligationCents,
-        newReversedQuantity,
-        allocation.quantity,
-      );
-      final amount = cumulativeAmount - allocation.reversedObligationCents;
-      final fullyReversed = newReversedQuantity == allocation.quantity;
-      final changed =
-          await (db.update(db.consignmentSaleAllocations)..where(
-                (a) =>
-                    a.id.equals(allocation.id) &
-                    a.reversedQuantity.equals(allocation.reversedQuantity) &
-                    a.reversedObligationCents.equals(
-                      allocation.reversedObligationCents,
+
+      var amount = 0;
+      if (supplierResponsible) {
+        final newReversedQuantity =
+            allocation.reversedQuantity + piece.quantity;
+        final cumulativeAmount = _proportional(
+          allocation.obligationCents,
+          newReversedQuantity,
+          allocation.quantity,
+        );
+        amount = cumulativeAmount - allocation.reversedObligationCents;
+        final fullyReversed =
+            newReversedQuantity == allocation.quantity &&
+            cumulativeAmount == allocation.obligationCents;
+        final changed =
+            await (db.update(db.consignmentSaleAllocations)..where(
+                  (a) =>
+                      a.id.equals(allocation.id) &
+                      a.reversedQuantity.equals(allocation.reversedQuantity) &
+                      a.reversedObligationCents.equals(
+                        allocation.reversedObligationCents,
+                      ),
+                ))
+                .write(
+                  ConsignmentSaleAllocationsCompanion(
+                    reversedQuantity: Value(newReversedQuantity),
+                    reversedObligationCents: Value(cumulativeAmount),
+                    status: Value(
+                      fullyReversed ? 'fully_reversed' : 'partially_reversed',
                     ),
-              ))
-              .write(
-                ConsignmentSaleAllocationsCompanion(
-                  reversedQuantity: Value(newReversedQuantity),
-                  reversedObligationCents: Value(cumulativeAmount),
-                  status: Value(
-                    fullyReversed ? 'fully_reversed' : 'partially_reversed',
+                    updatedAt: Value(DateTime.now().toUtc()),
                   ),
-                  updatedAt: Value(DateTime.now().toUtc()),
-                ),
-              );
-      if (changed != 1) {
-        throw StateError('Consignment allocation changed during return.');
+                );
+        if (changed != 1) {
+          throw StateError('Consignment allocation changed during return.');
+        }
       }
       if (restoresStock) {
         final layerChanged = await db.customUpdate(
@@ -179,6 +199,21 @@ class ConsignmentLinkedReturnService {
       throw StateError('Consignment return void was already recorded.');
     }
 
+    final recordedResponsibility =
+        prior.any((event) => event.restoresStock)
+        ? ConsignmentReturnLiabilityResponsibility.supplier
+        : await ConsignmentReturnLiabilityStore.read(
+            dao,
+            sourceTable: 'sale_returns',
+            sourceItemId: returnItem.id,
+          );
+    // Legacy non-restock returns predate the decision ledger and followed the
+    // supplier-responsible policy. Preserve their ability to be voided.
+    final supplierResponsible =
+        recordedResponsibility == null ||
+        recordedResponsibility ==
+            ConsignmentReturnLiabilityResponsibility.supplier;
+
     var quantity = 0;
     var amount = 0;
     int? variantId;
@@ -189,9 +224,11 @@ class ConsignmentLinkedReturnService {
       final restoreQuantity = -reversal.signedQuantity;
       final restoreAmount = -reversal.signedAmountCents;
       if (restoreQuantity <= 0 ||
-          restoreQuantity > allocation.reversedQuantity ||
           restoreAmount < 0 ||
-          restoreAmount > allocation.reversedObligationCents) {
+          (supplierResponsible &&
+              (restoreQuantity > allocation.reversedQuantity ||
+                  restoreAmount > allocation.reversedObligationCents)) ||
+          (!supplierResponsible && restoreAmount != 0)) {
         throw StateError('Invalid consignment return reversal history.');
       }
       final layer = await (db.select(
@@ -223,26 +260,30 @@ class ConsignmentLinkedReturnService {
           );
         }
       }
-      final newQuantity = allocation.reversedQuantity - restoreQuantity;
-      final newAmount = allocation.reversedObligationCents - restoreAmount;
-      final allocationChanged =
-          await (db.update(db.consignmentSaleAllocations)..where(
-                (a) =>
-                    a.id.equals(allocation.id) &
-                    a.reversedQuantity.equals(allocation.reversedQuantity),
-              ))
-              .write(
-                ConsignmentSaleAllocationsCompanion(
-                  reversedQuantity: Value(newQuantity),
-                  reversedObligationCents: Value(newAmount),
-                  status: Value(
-                    newQuantity == 0 ? 'active' : 'partially_reversed',
+      if (supplierResponsible) {
+        final newQuantity = allocation.reversedQuantity - restoreQuantity;
+        final newAmount = allocation.reversedObligationCents - restoreAmount;
+        final allocationChanged =
+            await (db.update(db.consignmentSaleAllocations)..where(
+                  (a) =>
+                      a.id.equals(allocation.id) &
+                      a.reversedQuantity.equals(allocation.reversedQuantity),
+                ))
+                .write(
+                  ConsignmentSaleAllocationsCompanion(
+                    reversedQuantity: Value(newQuantity),
+                    reversedObligationCents: Value(newAmount),
+                    status: Value(
+                      newQuantity == 0 ? 'active' : 'partially_reversed',
+                    ),
+                    updatedAt: Value(DateTime.now().toUtc()),
                   ),
-                  updatedAt: Value(DateTime.now().toUtc()),
-                ),
-              );
-      if (allocationChanged != 1) {
-        throw StateError('Consignment allocation changed during return void.');
+                );
+        if (allocationChanged != 1) {
+          throw StateError(
+            'Consignment allocation changed during return void.',
+          );
+        }
       }
       await db
           .into(db.consignmentObligationEvents)
@@ -423,7 +464,8 @@ class ConsignmentLinkedReturnService {
     final result = <_ReturnPiece>[];
     for (final allocation in allocations) {
       if (remaining == 0) break;
-      final available = allocation.quantity - allocation.reversedQuantity;
+      final returned = await _netReturnedQuantity(db, allocation.id);
+      final available = allocation.quantity - returned;
       if (available <= 0) continue;
       final quantity = available < remaining ? available : remaining;
       final layer = await (db.select(
@@ -539,6 +581,20 @@ class ConsignmentLinkedReturnService {
       );
     }
     return result;
+  }
+
+  static Future<int> _netReturnedQuantity(
+    AppDatabase db,
+    String allocationId,
+  ) async {
+    final row = await db.customSelect(
+      'SELECT COALESCE(-SUM(signed_quantity),0) AS quantity '
+      'FROM consignment_obligation_events '
+      "WHERE allocation_id=? AND kind IN ('linked_return_reversal',"
+      "'return_void_reaccrual')",
+      variables: [Variable.withString(allocationId)],
+    ).getSingle();
+    return row.read<int>('quantity');
   }
 
   static int _proportional(int total, int quantity, int denominator) =>

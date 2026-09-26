@@ -91,6 +91,7 @@ class ConsignmentDashboardSnapshot {
     required this.currencyCodes,
     required this.operationsEnabled,
     required this.historicalManagementEnabled,
+    required this.openCustodyAgreementIds,
     required this.reportRows,
   });
 
@@ -104,6 +105,10 @@ class ConsignmentDashboardSnapshot {
   final Map<int, String> currencyCodes;
   final bool operationsEnabled;
   final bool historicalManagementEnabled;
+
+  /// Agreements that still own an open physical quantity. Closed and
+  /// superseded revisions remain eligible only for custody exit documents.
+  final Set<String> openCustodyAgreementIds;
   final List<ConsignmentSupplierReportRow> reportRows;
 
   Map<String, int> get supplierOwnedQuantities =>
@@ -180,6 +185,17 @@ class ConsignmentReportingService {
                 ..where((row) => row.statementId.isIn(statementIds))
                 ..orderBy([(row) => OrderingTerm.desc(row.paidAt)]))
               .get();
+    final openCustodyAgreementIds = agreementIds.isEmpty
+        ? <String>{}
+        : (await (_db.select(_db.consignmentInventoryLayers)..where(
+                    (layer) =>
+                        layer.agreementId.isIn(agreementIds) &
+                        layer.status.equals('open') &
+                        layer.remainingQuantity.isBiggerThanValue(0),
+                  ))
+                  .get())
+              .map((layer) => layer.agreementId)
+              .toSet();
     final lookup = await _lookups(agreements);
     final operationsEnabled = await _module.operationsEnabled();
     final historicalManagementEnabled = await _module
@@ -200,6 +216,7 @@ class ConsignmentReportingService {
       currencyCodes: lookup.currencyCodes,
       operationsEnabled: operationsEnabled,
       historicalManagementEnabled: historicalManagementEnabled,
+      openCustodyAgreementIds: openCustodyAgreementIds,
       reportRows: rows,
     );
   });

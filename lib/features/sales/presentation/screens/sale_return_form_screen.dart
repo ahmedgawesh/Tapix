@@ -793,6 +793,65 @@ class _SaleReturnFormViewState extends State<_SaleReturnFormView> {
                 );
               }).toList(),
             ),
+            if (const {'write_off', 'damaged', 'scrap'}.contains(
+              state.dispositionType,
+            )) ...[
+              const SizedBox(height: 14),
+              Divider(color: cs.outlineVariant),
+              const SizedBox(height: 8),
+              Text(
+                'sales.consignment_liability_title'.tr(),
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'sales.consignment_liability_help'.tr(),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                children: const ['supplier', 'company'].map((value) {
+                  final selected =
+                      state.consignmentLiabilityResponsibility == value;
+                  return ChoiceChip(
+                    label: Text(
+                      'sales.consignment_liability_$value'.tr(),
+                    ),
+                    selected: selected,
+                    onSelected: (_) =>
+                        context.read<SaleReturnFormBloc>().add(
+                          SaleReturnConsignmentLiabilityChanged(
+                            responsibility: value,
+                            reason: state.consignmentLiabilityReason,
+                          ),
+                        ),
+                  );
+                }).toList(growable: false),
+              ),
+              const SizedBox(height: 10),
+              TextFormField(
+                initialValue: state.consignmentLiabilityReason,
+                maxLength: 500,
+                decoration: InputDecoration(
+                  labelText: 'sales.consignment_liability_reason'.tr(),
+                  helperText:
+                      'sales.consignment_liability_reason_help'.tr(),
+                ),
+                onChanged: (value) =>
+                    context.read<SaleReturnFormBloc>().add(
+                      SaleReturnConsignmentLiabilityChanged(
+                        responsibility:
+                            state.consignmentLiabilityResponsibility,
+                        reason: value,
+                      ),
+                    ),
+              ),
+            ],
           ],
         ),
       ),

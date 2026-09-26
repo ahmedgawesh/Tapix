@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/database/daos/inventory_adjustment_dao.dart';
+import 'package:tapix/core/database/migrations/consignment_return_liability.dart';
 import 'package:tapix/core/services/business/branch_consignment_policy_store.dart';
 import 'package:tapix/core/services/business/local_branch_scope.dart';
 import 'package:tapix/core/services/business/warehouse_operation_scope.dart';
@@ -321,6 +322,69 @@ void main() {
           db.consignmentAgreements,
         )..where((a) => a.id.equals(active.id))).getSingle()).status,
         'superseded',
+      );
+    },
+  );
+
+  test(
+    'only never-activated agreement drafts can be permanently deleted',
+    () async {
+      final db = _memoryDb();
+      addTearDown(db.close);
+      final seed = await _seed(db);
+      final module = _module(db, seed.owner);
+      await module.initialize();
+      await module.setEnabled(
+        enabled: true,
+        reason: 'agreement deletion policy',
+      );
+      final service = ConsignmentAgreementService(db, module);
+      final term = ConsignmentAgreementTermInput.fixedCost(
+        productId: seed.product,
+        variantId: seed.variant,
+        amountCents: 900,
+      );
+
+      final unused = await service.createDraft(
+        supplierId: seed.supplier,
+        currencyId: seed.currency,
+        agreementNumber: 'CON-UNUSED',
+        effectiveFrom: DateTime.utc(2026, 9, 1),
+        terms: [term],
+      );
+      await service.deleteUnusedDraft(unused.id);
+      expect(
+        await (db.select(
+          db.consignmentAgreements,
+        )..where((row) => row.id.equals(unused.id))).getSingleOrNull(),
+        isNull,
+      );
+      expect(
+        await (db.select(
+          db.consignmentAgreementItems,
+        )..where((row) => row.agreementId.equals(unused.id))).get(),
+        isEmpty,
+      );
+
+      final activated = await service.createDraft(
+        supplierId: seed.supplier,
+        currencyId: seed.currency,
+        agreementNumber: 'CON-AUDIT',
+        effectiveFrom: DateTime.utc(2026, 9, 1),
+        terms: [term],
+      );
+      await service.activate(activated.id);
+      await service.close(activated.id);
+
+      await expectLater(
+        service.deleteUnusedDraft(activated.id),
+        throwsStateError,
+      );
+      expect(
+        (await (db.select(
+          db.consignmentAgreements,
+        )..where((row) => row.id.equals(activated.id))).getSingle()).status,
+        'closed',
       );
     },
   );
@@ -814,6 +878,8 @@ void main() {
         db,
         module,
       ).post(receiptId: receipt.id, requestKey: const Uuid().v4());
+      final zeroLayer =
+          (await db.select(db.consignmentInventoryLayers).get()).single;
 
       final accountingService = ConsignmentSaleAccountingService(
         db,
@@ -841,6 +907,7 @@ void main() {
             itemDiscountAtPostCents: Value(Decimal.zero),
             invoiceDiscountAtPostCents: Value(Decimal.zero),
             totalCents: Decimal.fromInt(1500),
+            consignmentLayerId: Value(zeroLayer.id),
           ),
         ],
         scope: scope,
@@ -1025,6 +1092,15 @@ void main() {
         supplierId: secondSupplier,
         agreementId: secondAgreement.id,
       );
+      final percentageLayers = await db
+          .select(db.consignmentInventoryLayers)
+          .get();
+      final firstPercentageLayer = percentageLayers.singleWhere(
+        (layer) => layer.supplierId == seed.supplier,
+      );
+      final secondPercentageLayer = percentageLayers.singleWhere(
+        (layer) => layer.supplierId == secondSupplier,
+      );
 
       final accounting = AccountingRepository(db);
       await JournalRepositoryImpl(
@@ -1052,14 +1128,29 @@ void main() {
             saleId: 0,
             productId: seed.product,
             variantId: Value(seed.variant),
-            quantity: 3,
+            quantity: 2,
             unitPriceCents: Decimal.fromInt(4000),
-            subtotalCents: Decimal.fromInt(12000),
-            discountCents: Value(Decimal.fromInt(1800)),
-            itemDiscountAtPostCents: Value(Decimal.fromInt(1200)),
-            invoiceDiscountAtPostCents: Value(Decimal.fromInt(600)),
-            taxCents: Value(Decimal.fromInt(1020)),
-            totalCents: Decimal.fromInt(11220),
+            subtotalCents: Decimal.fromInt(8000),
+            discountCents: Value(Decimal.fromInt(1200)),
+            itemDiscountAtPostCents: Value(Decimal.fromInt(800)),
+            invoiceDiscountAtPostCents: Value(Decimal.fromInt(400)),
+            taxCents: Value(Decimal.fromInt(680)),
+            totalCents: Decimal.fromInt(7480),
+            consignmentLayerId: Value(firstPercentageLayer.id),
+          ),
+          SaleItemsCompanion.insert(
+            saleId: 0,
+            productId: seed.product,
+            variantId: Value(seed.variant),
+            quantity: 1,
+            unitPriceCents: Decimal.fromInt(4000),
+            subtotalCents: Decimal.fromInt(4000),
+            discountCents: Value(Decimal.fromInt(600)),
+            itemDiscountAtPostCents: Value(Decimal.fromInt(400)),
+            invoiceDiscountAtPostCents: Value(Decimal.fromInt(200)),
+            taxCents: Value(Decimal.fromInt(340)),
+            totalCents: Decimal.fromInt(3740),
+            consignmentLayerId: Value(secondPercentageLayer.id),
           ),
         ],
         scope: scope,
@@ -1073,7 +1164,7 @@ void main() {
 
       final allocations = await (db.select(
         db.consignmentSaleAllocations,
-      )..orderBy([(row) => OrderingTerm.asc(row.sequence)])).get();
+      )..orderBy([(row) => OrderingTerm.asc(row.supplierId)])).get();
       expect(allocations, hasLength(2));
       expect(
         allocations
@@ -1125,8 +1216,8 @@ void main() {
       expect(
         (await db.saleDao.getSaleItems(
           saleId,
-        )).single.inventoryValueAtPostCents!.toBigInt().toInt(),
-        0,
+        )).map((item) => item.inventoryValueAtPostCents!.toBigInt().toInt()),
+        everyElement(0),
       );
       Future<int> accountBalance(String code) async =>
           (await (db.select(
@@ -1196,6 +1287,8 @@ void main() {
         ],
       );
       await receipts.post(receiptId: receipt.id, requestKey: const Uuid().v4());
+      final mixedLayer =
+          (await db.select(db.consignmentInventoryLayers).get()).single;
       await StockService.adjustStock(
         db.productDao,
         productId: seed.product,
@@ -1240,12 +1333,24 @@ void main() {
             saleId: 0,
             productId: seed.product,
             variantId: Value(seed.variant),
-            quantity: 6,
+            quantity: 5,
             unitPriceCents: Decimal.fromInt(1500),
-            subtotalCents: Decimal.fromInt(9000),
+            subtotalCents: Decimal.fromInt(7500),
             itemDiscountAtPostCents: Value(Decimal.zero),
             invoiceDiscountAtPostCents: Value(Decimal.zero),
-            totalCents: Decimal.fromInt(9000),
+            totalCents: Decimal.fromInt(7500),
+            consignmentLayerId: Value(mixedLayer.id),
+          ),
+          SaleItemsCompanion.insert(
+            saleId: 0,
+            productId: seed.product,
+            variantId: Value(seed.variant),
+            quantity: 1,
+            unitPriceCents: Decimal.fromInt(1500),
+            subtotalCents: Decimal.fromInt(1500),
+            itemDiscountAtPostCents: Value(Decimal.zero),
+            invoiceDiscountAtPostCents: Value(Decimal.zero),
+            totalCents: Decimal.fromInt(1500),
           ),
         ],
         scope: scope,
@@ -1266,8 +1371,18 @@ void main() {
               .getSingle();
       expect(stock.quantity, 4);
       expect(stock.supplierOwnedQuantity, 0);
-      final item = (await db.saleDao.getSaleItems(saleId)).single;
-      expect(item.inventoryValueAtPostCents!.toBigInt().toInt(), 1000);
+      final saleItems = await db.saleDao.getSaleItems(saleId);
+      final item = saleItems.singleWhere(
+        (saleItem) => saleItem.consignmentLayerId != null,
+      );
+      final enterpriseItem = saleItems.singleWhere(
+        (saleItem) => saleItem.consignmentLayerId == null,
+      );
+      expect(item.inventoryValueAtPostCents!.toBigInt().toInt(), 0);
+      expect(
+        enterpriseItem.inventoryValueAtPostCents!.toBigInt().toInt(),
+        1000,
+      );
       final allocation =
           (await db.select(db.consignmentSaleAllocations).get()).single;
       expect(allocation.quantity, 5);
@@ -1433,6 +1548,20 @@ void main() {
             refundCents: Decimal.fromInt(1500),
           ),
         ],
+      );
+      final damagedLinkedItem =
+          (await db.saleDao.watchSaleReturnItems(damagedReturnId).first).single;
+      await ConsignmentReturnLiabilityStore.record(
+        db.saleDao,
+        sourceTable: 'sale_returns',
+        sourceId: damagedReturnId,
+        sourceItemId: damagedLinkedItem.id,
+        dispositionType: 'write_off',
+        decision: ConsignmentReturnLiabilityDecision(
+          responsibility: ConsignmentReturnLiabilityResponsibility.supplier,
+          reason: 'Supplier bears damaged linked consignment return in test.',
+          decidedBy: seed.owner,
+        ),
       );
       await db.saleDao.postSaleReturn(
         damagedReturnId,
@@ -1603,6 +1732,9 @@ void main() {
           requestKey: const Uuid().v4(),
         );
       }
+      final fifoLayers = await (db.select(
+        db.consignmentInventoryLayers,
+      )..orderBy([(layer) => OrderingTerm.asc(layer.receivedAt)])).get();
 
       final accounting = AccountingRepository(db);
       await JournalRepositoryImpl(
@@ -1627,12 +1759,25 @@ void main() {
             saleId: 0,
             productId: seed.product,
             variantId: Value(seed.variant),
-            quantity: 5,
+            quantity: 3,
             unitPriceCents: Decimal.fromInt(1500),
-            subtotalCents: Decimal.fromInt(7500),
+            subtotalCents: Decimal.fromInt(4500),
             itemDiscountAtPostCents: Value(Decimal.zero),
             invoiceDiscountAtPostCents: Value(Decimal.zero),
-            totalCents: Decimal.fromInt(7500),
+            totalCents: Decimal.fromInt(4500),
+            consignmentLayerId: Value(fifoLayers[0].id),
+          ),
+          SaleItemsCompanion.insert(
+            saleId: 0,
+            productId: seed.product,
+            variantId: Value(seed.variant),
+            quantity: 2,
+            unitPriceCents: Decimal.fromInt(1500),
+            subtotalCents: Decimal.fromInt(3000),
+            itemDiscountAtPostCents: Value(Decimal.zero),
+            invoiceDiscountAtPostCents: Value(Decimal.zero),
+            totalCents: Decimal.fromInt(3000),
+            consignmentLayerId: Value(fifoLayers[1].id),
           ),
         ],
         scope: scope,
@@ -1643,7 +1788,7 @@ void main() {
         beforeCompletion: (id) =>
             accountingService.postPendingAccruals(id, userId: seed.owner),
       );
-      final saleItem = (await db.saleDao.getSaleItems(saleId)).single;
+      final fifoSaleItems = await db.saleDao.getSaleItems(saleId);
       final batchesAfterSale = await (db.select(
         db.productBatches,
       )..orderBy([(b) => OrderingTerm.asc(b.receivedDate)])).get();
@@ -1652,7 +1797,15 @@ void main() {
         [0, 1],
       );
 
-      Future<int> postReturn(String number, DateTime date) async {
+      Future<int> postReturn(
+        String number,
+        DateTime date,
+        List<({SaleItem item, int quantity})> lines,
+      ) async {
+        final totalQuantity = lines.fold<int>(
+          0,
+          (sum, line) => sum + line.quantity,
+        );
         final id = await db.saleDao.createSaleReturn(
           SaleReturnsCompanion.insert(
             saleId: saleId,
@@ -1664,15 +1817,17 @@ void main() {
             returnDate: Value(date),
           ),
           [
-            SaleReturnItemsCompanion.insert(
-              returnId: 0,
-              saleItemId: saleItem.id,
-              quantity: 2,
-              subtotalCents: Value(Decimal.fromInt(3000)),
-              refundCents: Decimal.fromInt(3000),
-            ),
+            for (final line in lines)
+              SaleReturnItemsCompanion.insert(
+                returnId: 0,
+                saleItemId: line.item.id,
+                quantity: line.quantity,
+                subtotalCents: Value(Decimal.fromInt(line.quantity * 1500)),
+                refundCents: Decimal.fromInt(line.quantity * 1500),
+              ),
           ],
         );
+        expect(totalQuantity, 2);
         await db.saleDao.postSaleReturn(
           id,
           scope: scope,
@@ -1682,8 +1837,13 @@ void main() {
         return id;
       }
 
-      await postReturn('SR-CON-FIFO-001', DateTime.utc(2026, 9, 24));
-      await postReturn('SR-CON-FIFO-002', DateTime.utc(2026, 9, 25));
+      await postReturn('SR-CON-FIFO-001', DateTime.utc(2026, 9, 24), [
+        (item: fifoSaleItems[0], quantity: 2),
+      ]);
+      await postReturn('SR-CON-FIFO-002', DateTime.utc(2026, 9, 25), [
+        (item: fifoSaleItems[0], quantity: 1),
+        (item: fifoSaleItems[1], quantity: 1),
+      ]);
       final batchesAfterReturns = await (db.select(
         db.productBatches,
       )..orderBy([(b) => OrderingTerm.asc(b.receivedDate)])).get();
@@ -1967,6 +2127,22 @@ void main() {
           ),
         ],
         scope: scope,
+      );
+      final damagedReturnItem =
+          (await db.adjustmentReturnDao.getSaleAdjReturnItems(
+            damagedReturnId,
+          )).single;
+      await ConsignmentReturnLiabilityStore.record(
+        db.adjustmentReturnDao,
+        sourceTable: 'sale_return_adjustments',
+        sourceId: damagedReturnId,
+        sourceItemId: damagedReturnItem.id,
+        dispositionType: damagedReturnItem.dispositionType,
+        decision: ConsignmentReturnLiabilityDecision(
+          responsibility: ConsignmentReturnLiabilityResponsibility.supplier,
+          reason: 'Supplier bears damaged consignment return in this test.',
+          decidedBy: seed.owner,
+        ),
       );
       await db.adjustmentReturnDao.postSaleAdjReturn(
         damagedReturnId,
@@ -2308,6 +2484,8 @@ void main() {
         ],
       );
       await receipts.post(receiptId: receipt.id, requestKey: const Uuid().v4());
+      final settlementLayer =
+          (await db.select(db.consignmentInventoryLayers).get()).single;
 
       final accounting = AccountingRepository(db);
       await JournalRepositoryImpl(
@@ -2338,6 +2516,7 @@ void main() {
             itemDiscountAtPostCents: Value(Decimal.zero),
             invoiceDiscountAtPostCents: Value(Decimal.zero),
             totalCents: Decimal.fromInt(3000),
+            consignmentLayerId: Value(settlementLayer.id),
           ),
         ],
         scope: scope,

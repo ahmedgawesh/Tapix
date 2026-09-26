@@ -49,5 +49,9 @@
 	<string>Tapix needs camera access to scan barcodes and QR codes for products and inventory management.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Tapix needs photo library access to select product images and company logos.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>TapBix uses Face ID to unlock the app without typing your password.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>TapBix connects to other TapBix devices on your local network to share sales and inventory.</string>
 </dict>
 </plist>

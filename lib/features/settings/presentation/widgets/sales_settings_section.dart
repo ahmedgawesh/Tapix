@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -141,9 +143,15 @@ class SalesSettingsSection extends StatelessWidget {
         userRole: user.role.name,
         severity: AuditSeverity.critical,
       );
-    } catch (_) {
-      // The persisted setting remains authoritative; audit storage failures
-      // are surfaced by the central diagnostics without undoing the choice.
+    } catch (error, stackTrace) {
+      // The persisted setting remains authoritative, but a missing audit row
+      // must remain visible in local diagnostics.
+      developer.log(
+        'Could not audit the below-cost sales policy change.',
+        name: 'SalesSettingsSection',
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
   }
 }

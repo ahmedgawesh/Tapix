@@ -6,6 +6,7 @@ import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/database/migrations/consignment_ownership_conversion_economics.dart';
 import '../../../core/measurement/measurement.dart';
 import '../../../core/services/balance_service.dart';
 import '../../../core/services/batch_service.dart';
@@ -62,6 +63,8 @@ class ConsignmentOwnershipConversionService {
     required String agreementId,
     required int currencyId,
     required DateTime convertedAt,
+    required int supplierCreditNetCents,
+    required int supplierCreditTaxCents,
     String notes = '',
     required List<ConsignmentOwnershipConversionLineInput> lines,
   }) => _db.transaction(() async {
@@ -89,6 +92,17 @@ class ConsignmentOwnershipConversionService {
       );
     }
 
+    final supplierCreditTotalCents =
+        supplierCreditNetCents + supplierCreditTaxCents;
+    if (supplierCreditNetCents <= 0 ||
+        supplierCreditTaxCents < 0 ||
+        supplierCreditTotalCents <= 0 ||
+        supplierCreditTotalCents > 9007199254740991) {
+      throw const ConsignmentUserException(
+        'consignment.conversion_credit_invalid',
+      );
+    }
+
     final prior = await (_db.select(
       _db.consignmentOwnershipConversions,
     )..where((row) => row.requestKey.equals(requestKey))).getSingleOrNull();
@@ -100,6 +114,8 @@ class ConsignmentOwnershipConversionService {
       'agreementId': agreementId,
       'currencyId': currencyId,
       'convertedAt': convertedAt.toUtc().toIso8601String(),
+      'supplierCreditNetCents': supplierCreditNetCents,
+      'supplierCreditTaxCents': supplierCreditTaxCents,
       'notes': cleanNotes,
       'lines': [
         for (final line in lines)
@@ -407,6 +423,13 @@ class ConsignmentOwnershipConversionService {
             createdBy: access.actorId,
           ),
         );
+    await ConsignmentOwnershipConversionEconomicsStore.record(
+      _db.productDao,
+      conversionId: conversionId,
+      inventoryValueCents: totalValue,
+      supplierCreditNetCents: supplierCreditNetCents,
+      supplierCreditTaxCents: supplierCreditTaxCents,
+    );
     for (final item in pendingItems) {
       await _db
           .into(_db.consignmentOwnershipConversionItems)
@@ -433,7 +456,9 @@ class ConsignmentOwnershipConversionService {
     final journalId = await _journal
         .recordConsignmentOwnershipConversionJournalEntry(
           conversionId: conversionId,
-          signedInventoryValueCents: totalValue,
+          inventoryValueCents: totalValue,
+          supplierCreditNetCents: supplierCreditNetCents,
+          supplierCreditTaxCents: supplierCreditTaxCents,
           currencyId: currencyId,
           entryDate: instant,
           evidenceReference: evidence,
@@ -446,7 +471,7 @@ class ConsignmentOwnershipConversionService {
             supplierId: supplierId,
             transactionNumber: Value(number),
             transactionType: 'consignment_ownership_conversion',
-            amountCents: Decimal.fromInt(-totalValue),
+            amountCents: Decimal.fromInt(-supplierCreditTotalCents),
             currencyId: currencyId,
             description: Value(
               'Consignment ownership conversion $number — $evidence',
@@ -459,7 +484,7 @@ class ConsignmentOwnershipConversionService {
     await BalanceService.adjustSupplierBalance(
       _db.supplierDao,
       supplierId: supplierId,
-      deltaCents: -totalValue,
+      deltaCents: -supplierCreditTotalCents,
     );
     await (_db.update(_db.consignmentOwnershipConversions)..where(
           (row) => row.id.equals(conversionId) & row.status.equals('posting'),
@@ -520,6 +545,11 @@ class ConsignmentOwnershipConversionService {
       );
     }
 
+    final economics =
+        await ConsignmentOwnershipConversionEconomicsStore.require(
+          _db.productDao,
+          conversionId,
+        );
     final items = await (_db.select(
       _db.consignmentOwnershipConversionItems,
     )..where((row) => row.conversionId.equals(conversionId))).get();
@@ -585,8 +615,11 @@ class ConsignmentOwnershipConversionService {
     final reversalJournalId = await _journal
         .recordConsignmentOwnershipConversionJournalEntry(
           conversionId: conversionId,
-          signedInventoryValueCents: -any.inventoryValueCents,
+          inventoryValueCents: economics.inventoryValueCents,
+          supplierCreditNetCents: economics.supplierCreditNetCents,
+          supplierCreditTaxCents: economics.supplierCreditTaxCents,
           currencyId: any.currencyId,
+          reversal: true,
           entryDate: DateTime.now().toUtc(),
           evidenceReference: cleanReason,
           userId: access.actorId,
@@ -598,7 +631,7 @@ class ConsignmentOwnershipConversionService {
             supplierId: any.supplierId,
             transactionNumber: Value('${any.conversionNumber}-VOID'),
             transactionType: 'consignment_ownership_conversion_void',
-            amountCents: Decimal.fromInt(any.inventoryValueCents),
+            amountCents: Decimal.fromInt(economics.supplierCreditTotalCents),
             currencyId: any.currencyId,
             description: Value(
               'Void consignment ownership conversion ${any.conversionNumber} — $cleanReason',
@@ -610,7 +643,7 @@ class ConsignmentOwnershipConversionService {
     await BalanceService.adjustSupplierBalance(
       _db.supplierDao,
       supplierId: any.supplierId,
-      deltaCents: any.inventoryValueCents,
+      deltaCents: economics.supplierCreditTotalCents,
     );
     final now = DateTime.now().toUtc();
     final changed =

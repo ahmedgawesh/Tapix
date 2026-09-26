@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tapix/core/services/feature_gate_service.dart';
 import 'package:tapix/core/services/free_quota_service.dart';
+import 'package:tapix/core/services/local_integrity_key_service.dart';
 
 /// Minimal fake that lets us flip [isPro] freely without touching the real
 /// RevenueCat SDK or its stream. Extends [ChangeNotifier] so it satisfies the
@@ -224,6 +225,92 @@ void main() {
     });
   });
 
+  group('Signed secure persistence', () {
+    test(
+      'migrates legacy counters and reconciles committed database rows',
+      () async {
+        await prefs.setInt('free_quota.products_created_lifetime', 2);
+        await prefs.setInt('free_quota.sales_created_lifetime', 1);
+        final store = _MemoryQuotaStateStore();
+        final signer = LocalIntegrityKeyService.testing(
+          List<int>.filled(32, 7),
+        );
+        final secured = FreeQuotaService(
+          prefs: prefs,
+          featureGateService: fakeGate,
+          stateStore: store,
+          integritySigner: signer,
+          usageReader: () async => (products: 5, sales: 4),
+          maxProductsLifetime: 10,
+          maxSalesLifetime: 10,
+        );
+
+        await secured.initialize();
+
+        expect(secured.productsCreatedLifetime, 5);
+        expect(secured.salesCreatedLifetime, 4);
+        expect(store.value, isNotNull);
+      },
+    );
+
+    test('ignores edited SharedPreferences after secure migration', () async {
+      final store = _MemoryQuotaStateStore();
+      final signer = LocalIntegrityKeyService.testing(List<int>.filled(32, 8));
+      final first = FreeQuotaService(
+        prefs: prefs,
+        featureGateService: fakeGate,
+        stateStore: store,
+        integritySigner: signer,
+        usageReader: () async => (products: 0, sales: 0),
+        maxProductsLifetime: 10,
+        maxSalesLifetime: 10,
+      );
+      await first.initialize();
+      await first.incrementProductsCreatedBy(6);
+      await first.incrementSalesCreated();
+      await prefs.setInt('free_quota.products_created_lifetime', 0);
+      await prefs.setInt('free_quota.sales_created_lifetime', 0);
+
+      final reloaded = FreeQuotaService(
+        prefs: prefs,
+        featureGateService: fakeGate,
+        stateStore: store,
+        integritySigner: signer,
+        usageReader: () async => (products: 0, sales: 0),
+        maxProductsLifetime: 10,
+        maxSalesLifetime: 10,
+      );
+      await reloaded.initialize();
+
+      expect(reloaded.productsCreatedLifetime, 6);
+      expect(reloaded.salesCreatedLifetime, 1);
+    });
+
+    test('invalid secure signature fails closed at the free limit', () async {
+      final store = _MemoryQuotaStateStore()
+        ..value =
+            '{"version":1,"products":0,"sales":0,"signature":"${'0' * 64}"}';
+      final secured = FreeQuotaService(
+        prefs: prefs,
+        featureGateService: fakeGate,
+        stateStore: store,
+        integritySigner: LocalIntegrityKeyService.testing(
+          List<int>.filled(32, 9),
+        ),
+        usageReader: () async => (products: 1, sales: 2),
+        maxProductsLifetime: 3,
+        maxSalesLifetime: 3,
+      );
+
+      await secured.initialize();
+
+      expect(secured.productsCreatedLifetime, 3);
+      expect(secured.salesCreatedLifetime, 3);
+      expect(secured.canCreateProduct(), isFalse);
+      expect(secured.canCreateSale(), isFalse);
+    });
+  });
+
   group('Persistence across instances', () {
     test('counters persist via SharedPreferences', () async {
       await quota.incrementProductsCreated();
@@ -241,4 +328,17 @@ void main() {
       expect(quota2.salesCreatedLifetime, 1);
     });
   });
+}
+
+class _MemoryQuotaStateStore implements FreeQuotaStateStore {
+  String? value;
+
+  @override
+  Future<String?> read() async => value;
+
+  @override
+  Future<void> write(String value) async => this.value = value;
+
+  @override
+  Future<void> delete() async => value = null;
 }

@@ -80,12 +80,16 @@ class _BatchesCard extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: cs.surface,
+    // ExpansionTile paints its ink and background on the nearest Material.
+    // A decorated Container here hides that ink and triggers a framework
+    // assertion in debug builds when the tile expands.
+    return Material(
+      color: cs.surface,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+        side: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

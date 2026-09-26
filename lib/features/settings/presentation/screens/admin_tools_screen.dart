@@ -6,6 +6,9 @@ import '../../../../core/database/app_database.dart';
 import '../../../../core/database/database_reset.dart';
 import '../../../../core/di/injection_container.dart';
 import '../../../../core/services/database_health_check_service.dart';
+import '../../../../core/utils/app_restart.dart';
+import '../../../auth/data/services/owner_password_verification_service.dart';
+import '../../../auth/data/services/session_service.dart';
 
 class AdminToolsScreen extends StatefulWidget {
   const AdminToolsScreen({super.key});
@@ -66,38 +69,133 @@ class _AdminToolsScreenState extends State<AdminToolsScreen> {
     }
   }
 
+  Future<String?> _requestDeletionPassword() async {
+    final controller = TextEditingController();
+    String? error;
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          icon: Icon(
+            Icons.warning_amber_rounded,
+            color: Theme.of(context).colorScheme.error,
+          ),
+          title: Text('admin_tools.delete_confirm_title'.tr()),
+          content: SizedBox(
+            width: 440,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('admin_tools.delete_confirm_body'.tr()),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  obscureText: true,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    labelText: 'admin_tools.owner_password'.tr(),
+                    errorText: error,
+                  ),
+                  onSubmitted: (_) {
+                    if (controller.text.isEmpty) {
+                      setDialogState(
+                        () => error = 'admin_tools.owner_password_invalid'.tr(),
+                      );
+                    } else {
+                      Navigator.pop(dialogContext, controller.text);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('common.cancel'.tr()),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
+              onPressed: () {
+                if (controller.text.isEmpty) {
+                  setDialogState(
+                    () => error = 'admin_tools.owner_password_invalid'.tr(),
+                  );
+                } else {
+                  Navigator.pop(dialogContext, controller.text);
+                }
+              },
+              child: Text('admin_tools.delete_confirm_action'.tr()),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
   Future<void> _deleteDatabase() async {
-    setState(() {
-      _deletingDb = true;
-    });
+    if (_deletingDb) return;
+    final password = await _requestDeletionPassword();
+    if (password == null || !mounted) return;
+    final verified = await sl<OwnerPasswordVerificationService>()
+        .verifyCurrentOwner(password);
+    if (!mounted) return;
+    if (!verified) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('admin_tools.owner_password_invalid'.tr()),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+      return;
+    }
 
+    setState(() => _deletingDb = true);
     try {
-      final prefs = sl<SharedPreferences>();
-      await prefs.clear();
-
-      final db = sl<AppDatabase>();
-      await db.close();
-
-      final deleted = await DatabaseReset.deleteDatabaseFile();
-
+      final database = sl<AppDatabase>();
+      await database.close();
+      await DatabaseReset.deleteAllLocalDatabaseFiles();
+      await sl<SessionService>().clearSession();
+      await sl<SharedPreferences>().clear();
       if (!mounted) return;
-
-      final msg = deleted
-          ? 'admin_tools.delete_success'.tr()
-          : 'admin_tools.delete_not_found'.tr();
-
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('${'common.failed'.tr()}: $e')));
-    } finally {
-      if (mounted) {
-        setState(() {
-          _deletingDb = false;
-        });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('admin_tools.delete_success'.tr())),
+      );
+      final closed = await closeAppForFreshRestart();
+      if (!closed && mounted) {
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            title: Text('admin_tools.restart_required_title'.tr()),
+            content: Text('admin_tools.restart_required_body'.tr()),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text('common.ok'.tr()),
+              ),
+            ],
+          ),
+        );
       }
+    } catch (error, stackTrace) {
+      debugPrint('Database reset failed: $error\n$stackTrace');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('admin_tools.delete_failed'.tr()),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _deletingDb = false);
     }
   }
 

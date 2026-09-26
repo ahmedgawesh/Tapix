@@ -1,11 +1,14 @@
+import 'dart:convert';
+import 'dart:developer' as developer;
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'feature_gate_service.dart';
+import 'local_integrity_key_service.dart';
 
-/// Thrown by [FreeQuotaService.guardProductCreation] and
-/// [FreeQuotaService.guardSaleCreation] when a free-tier user has exhausted
-/// their cumulative quota and tries to create one more.
+/// Thrown when a free-tier user has exhausted a cumulative quota.
 class FreeQuotaExceededException implements Exception {
   final FreeQuotaKind kind;
   final int limit;
@@ -22,21 +25,12 @@ class FreeQuotaExceededException implements Exception {
       'FreeQuotaExceededException(kind=$kind, limit=$limit, current=$currentCount)';
 }
 
-/// Which counter has been exhausted.
 enum FreeQuotaKind { products, sales }
 
-/// Snapshot of the user's free-tier counters.
 class FreeQuotaStatus {
-  /// Cumulative number of products ever created (lifetime, never decrements).
   final int productsCreatedLifetime;
-
-  /// Cumulative number of sale invoices ever created (lifetime).
   final int salesCreatedLifetime;
-
-  /// Configured max for products. `null` means unlimited (Pro users).
   final int? productsLimit;
-
-  /// Configured max for sales. `null` means unlimited (Pro users).
   final int? salesLimit;
 
   const FreeQuotaStatus({
@@ -63,47 +57,165 @@ class FreeQuotaStatus {
   bool get isUnlimited => productsLimit == null && salesLimit == null;
 }
 
-/// Enforces the free-tier cumulative quota:
-/// - 100 products created lifetime
-/// - 100 sale invoices created lifetime
+/// Storage boundary for the signed cumulative quota state.
+abstract interface class FreeQuotaStateStore {
+  Future<String?> read();
+
+  Future<void> write(String value);
+
+  Future<void> delete();
+}
+
+class SecureFreeQuotaStateStore implements FreeQuotaStateStore {
+  static const _key = 'tapix.free_quota_state.v1';
+  final FlutterSecureStorage _storage;
+
+  SecureFreeQuotaStateStore({FlutterSecureStorage? storage})
+    : _storage = storage ?? const FlutterSecureStorage();
+
+  @override
+  Future<String?> read() => _storage.read(key: _key);
+
+  @override
+  Future<void> write(String value) => _storage.write(key: _key, value: value);
+
+  @override
+  Future<void> delete() => _storage.delete(key: _key);
+}
+
+typedef FreeQuotaUsageReader = Future<({int products, int sales})> Function();
+
+/// Enforces cumulative free-tier limits.
 ///
-/// **Hybrid model**: counters are stored in [SharedPreferences] and only ever
-/// increment. Deleting a product / voiding a sale does NOT free up quota.
-/// UI components can still query live `COUNT(*)` from the database for display.
-///
-/// Pro users bypass all checks via [FeatureGateService.isPro].
+/// Production stores one signed state in platform secure storage. The old
+/// SharedPreferences counters remain mirrors for backwards compatibility and
+/// are imported once during upgrade; they are no longer the authority. At
+/// startup the state is reconciled upwards with live database counts, so a
+/// crash after committing a product/sale cannot lose quota usage. Deleting or
+/// voiding a row never decrements the lifetime counters.
 class FreeQuotaService {
-  /// Hard caps for free tier (Phase B2, per product requirement).
   static const int defaultMaxProductsLifetime = 100;
   static const int defaultMaxSalesLifetime = 100;
 
   static const String _kProductsKey = 'free_quota.products_created_lifetime';
   static const String _kSalesKey = 'free_quota.sales_created_lifetime';
+  static const String _integrityScope = 'tapix.free_quota.v1';
+  static const int _stateVersion = 1;
 
   final SharedPreferences _prefs;
   final FeatureGateService _featureGateService;
+  final FreeQuotaStateStore? _stateStore;
+  final LocalIntegritySigner? _integritySigner;
+  final FreeQuotaUsageReader? _usageReader;
 
-  /// Allows tests / future remote-config to override limits.
   final int maxProductsLifetime;
   final int maxSalesLifetime;
+
+  late int _productsCreatedLifetime;
+  late int _salesCreatedLifetime;
+  late bool _initialized;
 
   FreeQuotaService({
     required SharedPreferences prefs,
     required FeatureGateService featureGateService,
+    FreeQuotaStateStore? stateStore,
+    LocalIntegritySigner? integritySigner,
+    FreeQuotaUsageReader? usageReader,
     this.maxProductsLifetime = defaultMaxProductsLifetime,
     this.maxSalesLifetime = defaultMaxSalesLifetime,
   }) : _prefs = prefs,
-       _featureGateService = featureGateService;
+       _featureGateService = featureGateService,
+       _stateStore = stateStore,
+       _integritySigner = integritySigner,
+       _usageReader = usageReader {
+    _productsCreatedLifetime = _nonNegative(_prefs.getInt(_kProductsKey) ?? 0);
+    _salesCreatedLifetime = _nonNegative(_prefs.getInt(_kSalesKey) ?? 0);
+    _initialized = _stateStore == null;
+  }
 
-  // ── Read ──────────────────────────────────────────────────────────────────
+  /// Loads and verifies secure state, imports legacy counters, and reconciles
+  /// committed rows that may have preceded a crash before counter persistence.
+  Future<void> initialize() async {
+    if (_initialized) return;
+    final store = _stateStore!;
+    final signer = _integritySigner;
+    if (signer == null || !signer.isReady) {
+      throw StateError('FreeQuotaService requires an initialized signer.');
+    }
 
-  /// Current cumulative count of products created (never decrements).
-  int get productsCreatedLifetime => _prefs.getInt(_kProductsKey) ?? 0;
+    final live = await _readLiveUsage();
+    String? encoded;
+    var secureStoreAvailable = true;
+    try {
+      encoded = await store.read();
+    } on Object catch (error, stackTrace) {
+      secureStoreAvailable = false;
+      developer.log(
+        'Secure quota state is unavailable; free-tier limits fail closed.',
+        name: 'FreeQuotaService',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+    var products = _productsCreatedLifetime;
+    var sales = _salesCreatedLifetime;
+    var trustedState = false;
 
-  /// Current cumulative count of sale invoices created (never decrements).
-  int get salesCreatedLifetime => _prefs.getInt(_kSalesKey) ?? 0;
+    if (!secureStoreAvailable) {
+      products = _max(live.products, maxProductsLifetime);
+      sales = _max(live.sales, maxSalesLifetime);
+    }
 
-  /// Snapshot for UI display. When user is Pro, limits are `null` (unlimited).
+    if (encoded != null && encoded.isNotEmpty) {
+      try {
+        final json = jsonDecode(encoded) as Map<String, dynamic>;
+        final version = (json['version'] as num?)?.toInt() ?? 0;
+        final storedProducts = _nonNegative(
+          (json['products'] as num?)?.toInt() ?? 0,
+        );
+        final storedSales = _nonNegative((json['sales'] as num?)?.toInt() ?? 0);
+        final signature = json['signature'] as String? ?? '';
+        trustedState =
+            version == _stateVersion &&
+            signer.verify(
+              _integrityScope,
+              _payload(storedProducts, storedSales),
+              signature,
+            );
+        if (trustedState) {
+          products = storedProducts;
+          sales = storedSales;
+        }
+      } on Object catch (error) {
+        if (kDebugMode) {
+          debugPrint('FreeQuota: invalid secure state: $error');
+        }
+      }
+
+      if (!trustedState) {
+        // A present but invalid signed state fails closed. Live counts are
+        // still retained when already above the configured free limit.
+        products = live.products.clamp(maxProductsLifetime, 0x7fffffff);
+        sales = live.sales.clamp(maxSalesLifetime, 0x7fffffff);
+      }
+    }
+
+    _productsCreatedLifetime = _max(products, live.products);
+    _salesCreatedLifetime = _max(sales, live.sales);
+    _initialized = true;
+    await _persist();
+  }
+
+  int get productsCreatedLifetime {
+    _ensureInitialized();
+    return _productsCreatedLifetime;
+  }
+
+  int get salesCreatedLifetime {
+    _ensureInitialized();
+    return _salesCreatedLifetime;
+  }
+
   FreeQuotaStatus status() {
     final isPro = _featureGateService.isPro;
     return FreeQuotaStatus(
@@ -114,31 +226,15 @@ class FreeQuotaService {
     );
   }
 
-  // ── Guards (call before performing the action) ────────────────────────────
+  bool canCreateProduct() =>
+      _featureGateService.isPro ||
+      productsCreatedLifetime < maxProductsLifetime;
 
-  /// Returns `true` when the user may create one more product.
-  /// Pro users always return `true`.
-  bool canCreateProduct() {
-    if (_featureGateService.isPro) return true;
-    return productsCreatedLifetime < maxProductsLifetime;
-  }
+  bool canCreateSale() =>
+      _featureGateService.isPro || salesCreatedLifetime < maxSalesLifetime;
 
-  /// Returns `true` when the user may create one more sale invoice.
-  /// Pro users always return `true`.
-  bool canCreateSale() {
-    if (_featureGateService.isPro) return true;
-    return salesCreatedLifetime < maxSalesLifetime;
-  }
+  void guardProductCreation() => guardProductCreations(1);
 
-  /// Throw [FreeQuotaExceededException] if the user cannot create another
-  /// product. Pro users bypass.
-  void guardProductCreation() {
-    guardProductCreations(1);
-  }
-
-  /// Throw before an atomic batch that would cross the free-tier product cap.
-  /// Checking the complete batch up front avoids committing only its first
-  /// rows and then failing halfway through the file/form.
   void guardProductCreations(int count) {
     if (count < 0) {
       throw ArgumentError.value(count, 'count', 'must not be negative');
@@ -154,65 +250,119 @@ class FreeQuotaService {
     }
   }
 
-  /// Throw [FreeQuotaExceededException] if the user cannot create another
-  /// sale invoice. Pro users bypass.
   void guardSaleCreation() {
     if (_featureGateService.isPro) return;
-    final count = salesCreatedLifetime;
-    if (count >= maxSalesLifetime) {
+    final current = salesCreatedLifetime;
+    if (current >= maxSalesLifetime) {
       throw FreeQuotaExceededException(
         kind: FreeQuotaKind.sales,
         limit: maxSalesLifetime,
-        currentCount: count,
+        currentCount: current,
       );
     }
   }
 
-  // ── Mutations (call after a successful creation) ──────────────────────────
+  Future<void> incrementProductsCreated() => incrementProductsCreatedBy(1);
 
-  /// Increment the cumulative products counter. Pro users still increment so
-  /// that if their subscription lapses, their lifetime usage is accurate.
-  Future<void> incrementProductsCreated() async {
-    await incrementProductsCreatedBy(1);
-  }
-
-  /// Record a successfully committed atomic product batch.
   Future<void> incrementProductsCreatedBy(int count) async {
     if (count < 0) {
       throw ArgumentError.value(count, 'count', 'must not be negative');
     }
-    final next = productsCreatedLifetime + count;
-    await _prefs.setInt(_kProductsKey, next);
+    _ensureInitialized();
+    _productsCreatedLifetime += count;
+    await _persist();
     if (kDebugMode) {
-      debugPrint('FreeQuota: products lifetime → $next / $maxProductsLifetime');
+      debugPrint(
+        'FreeQuota: products lifetime → '
+        '$_productsCreatedLifetime / $maxProductsLifetime',
+      );
     }
   }
 
-  /// Compensates an external SharedPreferences counter when the surrounding
-  /// database transaction rolls back. This does not decrement real lifetime
-  /// usage: the corresponding product rows never committed.
+  /// Compensates a counter changed inside a database transaction that rolled
+  /// back. Callers snapshot after entering their serialized DB transaction.
   Future<void> restoreProductsCreatedAfterRollback(int snapshot) async {
     if (snapshot < 0) {
       throw ArgumentError.value(snapshot, 'snapshot', 'must not be negative');
     }
-    await _prefs.setInt(_kProductsKey, snapshot);
+    _ensureInitialized();
+    _productsCreatedLifetime = snapshot;
+    await _persist();
   }
 
-  /// Increment the cumulative sales counter. Pro users still increment.
   Future<void> incrementSalesCreated() async {
-    final next = salesCreatedLifetime + 1;
-    await _prefs.setInt(_kSalesKey, next);
+    _ensureInitialized();
+    _salesCreatedLifetime += 1;
+    await _persist();
     if (kDebugMode) {
-      debugPrint('FreeQuota: sales lifetime → $next / $maxSalesLifetime');
+      debugPrint(
+        'FreeQuota: sales lifetime → '
+        '$_salesCreatedLifetime / $maxSalesLifetime',
+      );
     }
   }
 
-  // ── Admin / Tests ─────────────────────────────────────────────────────────
+  Future<({int products, int sales})> _readLiveUsage() async {
+    final reader = _usageReader;
+    if (reader == null) return (products: 0, sales: 0);
+    final usage = await reader();
+    return (
+      products: _nonNegative(usage.products),
+      sales: _nonNegative(usage.sales),
+    );
+  }
 
-  /// Reset both counters. Used by tests and by an admin "reset usage"
-  /// flow if one is ever exposed (not exposed to free users).
+  Future<void> _persist() async {
+    final signer = _integritySigner;
+    final store = _stateStore;
+    if (signer != null && store != null) {
+      final signature = signer.sign(
+        _integrityScope,
+        _payload(_productsCreatedLifetime, _salesCreatedLifetime),
+      );
+      try {
+        await store.write(
+          jsonEncode({
+            'version': _stateVersion,
+            'products': _productsCreatedLifetime,
+            'sales': _salesCreatedLifetime,
+            'signature': signature,
+          }),
+        );
+      } on Object catch (error, stackTrace) {
+        developer.log(
+          'Could not persist secure quota state.',
+          name: 'FreeQuotaService',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
+    }
+
+    // Compatibility mirrors. Security decisions never read these after the
+    // signed secure state has been created.
+    await _prefs.setInt(_kProductsKey, _productsCreatedLifetime);
+    await _prefs.setInt(_kSalesKey, _salesCreatedLifetime);
+  }
+
+  String _payload(int products, int sales) => '$_stateVersion|$products|$sales';
+
+  void _ensureInitialized() {
+    if (!_initialized) {
+      throw StateError('FreeQuotaService.initialize() must complete first.');
+    }
+  }
+
+  static int _nonNegative(int value) => value < 0 ? 0 : value;
+
+  static int _max(int a, int b) => a > b ? a : b;
+
   @visibleForTesting
   Future<void> resetCountersForTesting() async {
+    _productsCreatedLifetime = 0;
+    _salesCreatedLifetime = 0;
+    _initialized = true;
+    await _stateStore?.delete();
     await _prefs.remove(_kProductsKey);
     await _prefs.remove(_kSalesKey);
   }

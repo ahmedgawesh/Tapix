@@ -1084,20 +1084,26 @@ class PurchaseRepositoryImpl implements PurchaseRepository {
       return id;
     });
 
-    // Audit log outside transaction (non-critical)
-    _auditService.log(
-      entityType: 'purchase_return',
-      entityId: returnId,
-      action: 'create_and_post',
-      newValue: {
-        'purchaseId': purchaseId,
-        'returnNumber': returnNumber,
-        'totalCents': postedTotalCents.toString(),
-        'dispositionType': dispositionType,
-        'itemCount': items.length,
-      },
-      userId: userId,
-    );
+    // Await the non-critical audit write before returning. LAN callers may
+    // own an outer transaction; a fire-and-forget write would otherwise keep
+    // using that transaction runner after it has committed.
+    try {
+      await _auditService.log(
+        entityType: 'purchase_return',
+        entityId: returnId,
+        action: 'create_and_post',
+        newValue: {
+          'purchaseId': purchaseId,
+          'returnNumber': returnNumber,
+          'totalCents': postedTotalCents.toString(),
+          'dispositionType': dispositionType,
+          'itemCount': items.length,
+        },
+        userId: userId,
+      );
+    } catch (_) {
+      // Audit availability must not invalidate an already posted return.
+    }
 
     return returnId;
   }

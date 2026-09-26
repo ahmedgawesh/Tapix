@@ -367,43 +367,101 @@ class JournalEntryService {
     );
   }
 
-  /// Removes the enterprise inventory asset and the matching supplier AP
-  /// when already-recorded stock is formally reclassified as consignment.
-  /// A negative amount is the exact reversal used when an untouched
-  /// conversion is voided.
+  /// Reclassifies enterprise-owned inventory to consignment using the exact
+  /// supplier credit-note economics. Carrying value, credit-note net and input
+  /// tax are independent frozen amounts; any net difference is posted to a
+  /// named variance account instead of being hidden in inventory or payables.
   Future<int> recordConsignmentOwnershipConversionJournalEntry({
     required int conversionId,
-    required int signedInventoryValueCents,
+    required int inventoryValueCents,
+    required int supplierCreditNetCents,
+    required int supplierCreditTaxCents,
     required int currencyId,
     required DateTime entryDate,
     required String evidenceReference,
     int? userId,
+    bool reversal = false,
   }) async {
-    if (signedInventoryValueCents == 0) {
-      throw AccountingException('A zero ownership conversion needs no journal');
+    final supplierCreditTotalCents =
+        supplierCreditNetCents + supplierCreditTaxCents;
+    if (inventoryValueCents <= 0 ||
+        supplierCreditNetCents < 0 ||
+        supplierCreditTaxCents < 0 ||
+        supplierCreditTotalCents <= 0) {
+      throw AccountingException(
+        'Ownership conversion requires positive, explicit credit-note values',
+      );
     }
+
     final inventoryId = await _requireAccountId('1200');
+    final inputTaxId = await _requireAccountId('1300');
     final payablesId = await _requireAccountId('2000');
+    final purchaseGainId = await _requireAccountId('4900');
+    final revaluationLossId = await _requireAccountId('5900');
+    final varianceCents = supplierCreditNetCents - inventoryValueCents;
+
+    JournalEntryLineData line(
+      int accountId, {
+      required int debit,
+      required int credit,
+      required String description,
+    }) => JournalEntryLineData(
+      accountId: accountId,
+      debitCents: reversal ? credit : debit,
+      creditCents: reversal ? debit : credit,
+      currencyId: currencyId,
+      description: description,
+    );
+
+    final lines = <JournalEntryLineData>[
+      line(
+        payablesId,
+        debit: supplierCreditTotalCents,
+        credit: 0,
+        description: 'Supplier credit-note total',
+      ),
+      line(
+        inventoryId,
+        debit: 0,
+        credit: inventoryValueCents,
+        description: 'Enterprise inventory carrying value removed',
+      ),
+      if (supplierCreditTaxCents > 0)
+        line(
+          inputTaxId,
+          debit: 0,
+          credit: supplierCreditTaxCents,
+          description: 'Input tax reversed by supplier credit note',
+        ),
+      if (varianceCents > 0)
+        line(
+          purchaseGainId,
+          debit: 0,
+          credit: varianceCents,
+          description: 'Supplier credit above inventory carrying value',
+        ),
+      if (varianceCents < 0)
+        line(
+          revaluationLossId,
+          debit: -varianceCents,
+          credit: 0,
+          description: 'Inventory carrying value above supplier credit',
+        ),
+    ];
+
     return _accountingRepo.createJournalEntry(
-      entryData: JournalEntryData.simple(
-        description: signedInventoryValueCents > 0
-            ? 'Consignment ownership conversion #$conversionId — $evidenceReference'
-            : 'Void consignment ownership conversion #$conversionId — $evidenceReference',
-        debitAccountId: signedInventoryValueCents > 0
-            ? payablesId
-            : inventoryId,
-        creditAccountId: signedInventoryValueCents > 0
-            ? inventoryId
-            : payablesId,
-        amountCents: signedInventoryValueCents.abs(),
-        currencyId: currencyId,
+      entryData: JournalEntryData(
+        description: reversal
+            ? 'Void consignment ownership conversion #$conversionId — $evidenceReference'
+            : 'Consignment ownership conversion #$conversionId — $evidenceReference',
         entryDate: entryDate,
-        entryType: signedInventoryValueCents > 0
-            ? 'consignment_ownership_conversion'
-            : 'consignment_ownership_conversion_void',
+        entryType: reversal
+            ? 'consignment_ownership_conversion_void'
+            : 'consignment_ownership_conversion',
         sourceTable: 'consignment_ownership_conversions',
         sourceId: conversionId,
         autoPost: true,
+        lines: lines,
       ),
       userId: userId,
     );

@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../database/app_database.dart';
+import '../../database/migrations/consignment_return_liability.dart';
 import '../../measurement/measurement.dart';
 import '../business/warehouse_operation_scope.dart';
 import '../journal_entry_service.dart';
@@ -90,7 +91,16 @@ class ConsignmentAdjustmentReturnService {
     if (base < 0) {
       throw StateError('Negative consignment adjustment settlement base.');
     }
-    final obligation = layer.settlementBasis == 'fixed_unit_cost'
+    final restoresStock = returnItem.dispositionType == 'restock';
+    final responsibility = restoresStock
+        ? ConsignmentReturnLiabilityResponsibility.supplier
+        : await ConsignmentReturnLiabilityStore.requireResolved(
+            dao,
+            sourceTable: 'sale_return_adjustments',
+            sourceId: item.id,
+            sourceItemId: returnItem.id,
+          );
+    final calculatedObligation = layer.settlementBasis == 'fixed_unit_cost'
         ? MeasuredAmount.cents(
             unitCents: layer.unitCostCents!,
             quantity: returnItem.quantity,
@@ -99,8 +109,12 @@ class ConsignmentAdjustmentReturnService {
         : _basisPoints(base, layer.supplierShareBps!);
     return ConsignmentAdjustmentReturnPlan(
       layer: layer,
-      obligationCents: obligation,
-      restoresStock: returnItem.dispositionType == 'restock',
+      obligationCents:
+          responsibility ==
+              ConsignmentReturnLiabilityResponsibility.supplier
+          ? calculatedObligation
+          : 0,
+      restoresStock: restoresStock,
     );
   }
 

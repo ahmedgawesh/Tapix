@@ -48,4 +48,11 @@ void main() {
       unorderedEquals([UserRole.owner]),
     );
   });
+
+  test('locations management inherits owner-only settings access', () {
+    expect(
+      RoutePermissions.rolesForPath('/settings/locations'),
+      unorderedEquals([UserRole.owner]),
+    );
+  });
 }

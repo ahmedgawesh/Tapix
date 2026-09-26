@@ -13,6 +13,7 @@ import '../../../../core/database/app_database.dart' as db;
 import '../../../../core/database/daos/cheque_confirmation_dao.dart';
 import '../../../../core/database/daos/cheque_instrument_dao.dart';
 import '../../../../core/database/daos/sale_dao.dart' hide SaleDashboardStats;
+import '../../../../core/database/migrations/consignment_return_liability.dart';
 import '../../../../core/payments/checkout_settlement.dart';
 import '../../../../core/payments/return_settlement_service.dart';
 import '../../../../core/pricing/pricing_snapshot.dart';
@@ -29,6 +30,9 @@ import '../../../../core/services/free_quota_service.dart';
 import '../../../../core/services/journal_entry_service.dart';
 import '../../../../core/services/loyalty/loyalty_points_service.dart';
 import '../../../../core/services/return_calculation_service.dart';
+import '../../../../core/services/sync/offline_sync_event_store.dart';
+import '../../../../core/services/sync/sale_sync_contract.dart';
+import '../../../../core/services/sync/sync_entity_identity_store.dart';
 import '../../../../core/services/void_impact_analyzer.dart';
 import '../../../auth/data/services/session_service.dart';
 import '../../../consignment/data/consignment_sale_accounting_service.dart';
@@ -76,6 +80,14 @@ class SaleRepositoryImpl implements SaleRepository {
   /// successful transaction.
   final FreeQuotaService? _freeQuotaService;
   final CashierShiftService? _cashierShiftService;
+  final OfflineSyncEventStore? _syncEvents;
+  final SyncEntityIdentityStore? _syncIdentities;
+
+  OfflineSyncEventStore get _effectiveSyncEvents =>
+      _syncEvents ?? OfflineSyncEventStore(_dao.db);
+
+  SyncEntityIdentityStore get _effectiveSyncIdentities =>
+      _syncIdentities ?? SyncEntityIdentityStore(_dao.db);
 
   SaleRepositoryImpl(
     this._datasource,
@@ -90,11 +102,67 @@ class SaleRepositoryImpl implements SaleRepository {
     EInvoiceDispatchService? einvoiceDispatch,
     FreeQuotaService? freeQuotaService,
     CashierShiftService? cashierShiftService,
+    OfflineSyncEventStore? syncEvents,
+    SyncEntityIdentityStore? syncIdentities,
   }) : _einvoiceDispatch = einvoiceDispatch,
        _freeQuotaService = freeQuotaService,
-       _cashierShiftService = cashierShiftService;
+       _cashierShiftService = cashierShiftService,
+       _syncEvents = syncEvents,
+       _syncIdentities = syncIdentities;
 
   Future<int?> _currentUserId() => _sessionService.getCurrentUserId();
+
+  Future<void> _appendPostedSaleEvent(
+    OfflineSyncTransaction transaction, {
+    required int saleId,
+    required int? actorUserId,
+  }) async {
+    if (!await transaction.isWriterRecordingEnabled()) return;
+    final sale = await _dao.getSaleById(saleId);
+    if (sale == null) {
+      throw StateError('Posted sale is missing from the local database.');
+    }
+    final payload = await SaleSyncContractBuilder(
+      _dao.db,
+      _effectiveSyncIdentities,
+    ).buildPostedSale(sale: sale, actorUserId: actorUserId);
+    await transaction.appendOnce(
+      producerKey: 'sale:posted:$saleId',
+      eventType: 'sale.posted.v1',
+      aggregateType: 'sale',
+      aggregateId: payload['documentId']! as String,
+      contractVersion: 1,
+      occurredAt: sale.updatedAt,
+      payload: payload,
+    );
+  }
+
+  Future<void> _appendPostedLinkedReturnEvent(
+    OfflineSyncTransaction transaction, {
+    required int returnId,
+    required int? actorUserId,
+  }) async {
+    if (!await transaction.isWriterRecordingEnabled()) return;
+    final saleReturn = await _dao.getSaleReturnById(returnId);
+    if (saleReturn == null) {
+      throw StateError(
+        'Posted sale return is missing from the local database.',
+      );
+    }
+    final payload = await SaleSyncContractBuilder(
+      _dao.db,
+      _effectiveSyncIdentities,
+    ).buildPostedLinkedReturn(saleReturn: saleReturn, actorUserId: actorUserId);
+    await transaction.appendOnce(
+      producerKey: 'sale_return:posted:$returnId',
+      eventType: 'sale_return.posted.v1',
+      aggregateType: 'sale_return',
+      aggregateId: payload['documentId']! as String,
+      contractVersion: 1,
+      occurredAt: saleReturn.returnDate,
+      payload: payload,
+    );
+  }
 
   @override
   Future<String> generateInvoiceNumber() => _datasource.generateInvoiceNumber();
@@ -289,7 +357,9 @@ class SaleRepositoryImpl implements SaleRepository {
     late int saleId;
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        saleId = await _dao.db.transaction(() async {
+        saleId = await _effectiveSyncEvents.transaction((
+          syncTransaction,
+        ) async {
           // Generate invoice number INSIDE the transaction for atomicity
           final invoiceNumber = await _dao.generateInvoiceNumber();
           final companionWithNumber = saleCompanion.copyWith(
@@ -406,6 +476,11 @@ class SaleRepositoryImpl implements SaleRepository {
               strict: true,
             );
           }
+          await _appendPostedSaleEvent(
+            syncTransaction,
+            saleId: id,
+            actorUserId: userId,
+          );
           return id;
         });
         break; // success
@@ -791,7 +866,9 @@ class SaleRepositoryImpl implements SaleRepository {
   @override
   Future<void> postSale(int saleId, {bool allowNegativeStock = false}) async {
     _freeQuotaService?.guardSaleCreation();
-    final posted = await _dao.db.transaction(() async {
+    final posted = await _effectiveSyncEvents.transaction((
+      syncTransaction,
+    ) async {
       await DocumentPostingScope.validate(
         _dao.db,
         InventoryPostingDocument.sale,
@@ -887,6 +964,11 @@ class SaleRepositoryImpl implements SaleRepository {
         entityId: saleId,
         action: 'post',
         userId: userId,
+      );
+      await _appendPostedSaleEvent(
+        syncTransaction,
+        saleId: saleId,
+        actorUserId: userId,
       );
       return (sale, await _dao.getSaleItems(saleId));
     });
@@ -1280,6 +1362,8 @@ class SaleRepositoryImpl implements SaleRepository {
     required List<SaleReturnItemInput> items,
     String? reason,
     String? dispositionType,
+    String consignmentLiabilityResponsibility = 'review',
+    String? consignmentLiabilityReason,
     String? refundMethod,
     DateTime? returnDate,
     DateTime? dueDate,
@@ -1317,7 +1401,9 @@ class SaleRepositoryImpl implements SaleRepository {
     late int postedTotalCents;
     late List<SaleReturnItemInput> postedItems;
 
-    final returnId = await _dao.db.transaction(() async {
+    final returnId = await _effectiveSyncEvents.transaction((
+      syncTransaction,
+    ) async {
       final returnNumber = await _datasource.generateSaleReturnNumber();
       final originalSale = await _dao.getSaleById(saleId);
       if (originalSale == null) throw Exception('Sale not found');
@@ -1454,6 +1540,49 @@ class SaleRepositoryImpl implements SaleRepository {
           .toList();
       final id = await _dao.createSaleReturn(returnCompanion, itemCompanions);
 
+      final effectiveDisposition = dispositionType ?? 'restock';
+      if (const {
+        'write_off',
+        'damaged',
+        'scrap',
+      }.contains(effectiveDisposition)) {
+        final consignmentItems = await _dao.db
+            .customSelect(
+              'SELECT ri.id FROM sale_return_items ri '
+              'WHERE ri.return_id=? AND EXISTS('
+              'SELECT 1 FROM consignment_sale_allocations a '
+              'WHERE a.sale_item_id=ri.sale_item_id)',
+              variables: [Variable.withInt(id)],
+            )
+            .get();
+        if (consignmentItems.isNotEmpty) {
+          final responsibility =
+              ConsignmentReturnLiabilityResponsibility.fromWire(
+                consignmentLiabilityResponsibility,
+              );
+          if (responsibility ==
+              ConsignmentReturnLiabilityResponsibility.review) {
+            throw const ConsignmentReturnLiabilityException(
+              ConsignmentReturnLiabilityException.decisionRequired,
+            );
+          }
+          for (final row in consignmentItems) {
+            await ConsignmentReturnLiabilityStore.record(
+              _dao,
+              sourceTable: 'sale_returns',
+              sourceId: id,
+              sourceItemId: row.read<int>('id'),
+              dispositionType: effectiveDisposition,
+              decision: ConsignmentReturnLiabilityDecision(
+                responsibility: responsibility,
+                reason: consignmentLiabilityReason ?? '',
+                decidedBy: userId,
+              ),
+            );
+          }
+        }
+      }
+
       // Auto-post return: restore stock immediately
       await _dao.postSaleReturn(
         id,
@@ -1549,6 +1678,12 @@ class SaleRepositoryImpl implements SaleRepository {
         returnId: id,
         returnTotalCents: postedTotalCents,
         strict: true,
+      );
+
+      await _appendPostedLinkedReturnEvent(
+        syncTransaction,
+        returnId: id,
+        actorUserId: userId,
       );
 
       return id;

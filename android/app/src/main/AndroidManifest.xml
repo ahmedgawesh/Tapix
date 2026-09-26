@@ -16,6 +16,8 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
     <application
+        android:allowBackup="false"
+        android:fullBackupContent="false"
         android:label="TapBix"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"

@@ -2249,18 +2249,6 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
         );
       }
 
-      // Update status to posted (Phase 3: stamp postedBy / postedAt audit)
-      await (update(
-        saleReturnAdjustments,
-      )..where((r) => r.id.equals(returnId))).write(
-        SaleReturnAdjustmentsCompanion(
-          status: const Value('posted'),
-          postedBy: Value(userId),
-          postedAt: Value(DateTime.now()),
-          updatedAt: Value(DateTime.now()),
-        ),
-      );
-
       // ── Customer ledger (mirror of the purchase-adjustment supplier path) ──
       // For a CREDIT ("رصيد") refund on an adjustment sale return the store
       // owes the customer less, so we reduce 1100 AR directly (symmetric with
@@ -2495,6 +2483,22 @@ class AdjustmentReturnDao extends DatabaseAccessor<AppDatabase>
           returnDate: returnData.returnDate,
         );
       }
+
+      // Seal the document only after every line snapshot, stock/source update,
+      // sub-ledger entry and journal has succeeded. The database item guards
+      // then make the posted lines immutable for every caller, including raw
+      // SQL paths. Because this runs in the same transaction, any preceding
+      // failure leaves the document draft and rolls all effects back.
+      await (update(
+        saleReturnAdjustments,
+      )..where((r) => r.id.equals(returnId))).write(
+        SaleReturnAdjustmentsCompanion(
+          status: const Value('posted'),
+          postedBy: Value(userId),
+          postedAt: Value(DateTime.now()),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
     });
   }
 

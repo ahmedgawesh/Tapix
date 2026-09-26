@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../utils/platform_utils.dart';
+import 'app_guard_service.dart';
 import 'desktop_license_service.dart';
 import 'revenuecat_service.dart';
 
@@ -122,6 +125,9 @@ enum FeatureDenyReason {
 class FeatureGateService extends ChangeNotifier {
   final RevenueCatService _revenueCatService;
   final DesktopLicenseService? _desktopLicenseService;
+  final AppGuardService? _appGuardService;
+  StreamSubscription<AppGuardStatus>? _appGuardSubscription;
+  StreamSubscription<SubscriptionStatus>? _revenueCatSubscription;
 
   /// Cached last-known Pro state, refreshed by [refresh] and by listening to
   /// [RevenueCatService.subscriptionStatusStream]. Reads are sync so the
@@ -135,8 +141,10 @@ class FeatureGateService extends ChangeNotifier {
   FeatureGateService({
     required RevenueCatService revenueCatService,
     DesktopLicenseService? desktopLicenseService,
+    AppGuardService? appGuardService,
   }) : _revenueCatService = revenueCatService,
-       _desktopLicenseService = desktopLicenseService {
+       _desktopLicenseService = desktopLicenseService,
+       _appGuardService = appGuardService {
     if (PlatformUtils.isWindows || PlatformUtils.isLinux) {
       final desktop = _desktopLicenseService;
       _isPro = desktop?.status == DesktopLicenseStatus.valid;
@@ -159,13 +167,27 @@ class FeatureGateService extends ChangeNotifier {
       return;
     }
 
-    _revenueCatService.subscriptionStatusStream.listen((status) {
-      _setPro(status.isPro);
-    });
-    // Fire-and-forget initial sync. The stream is broadcast (no replay), so
-    // we must explicitly fetch the current entitlement at startup.
-    // ignore: discarded_futures
-    refresh();
+    // AppGuard is the mobile source of truth because it combines the verified
+    // store status with the bounded, device-bound offline licence.
+    final appGuard = _appGuardService;
+    if (appGuard != null) {
+      final current = appGuard.currentStatus;
+      if (current.isUnlocked) {
+        _setPro(!current.isFreeTier);
+      }
+      _appGuardSubscription = appGuard.statusStream.listen((status) {
+        _setPro(status.isUnlocked && !status.isFreeTier);
+      });
+      return;
+    }
+
+    // Compatibility fallback for isolated consumers and tests that do not
+    // provide AppGuard.
+    _revenueCatSubscription = _revenueCatService.subscriptionStatusStream
+        .listen((status) {
+          _setPro(status.isPro);
+        });
+    unawaited(refresh());
   }
 
   /// Whether the user currently has Pro entitlement (sync, cached).
@@ -196,8 +218,47 @@ class FeatureGateService extends ChangeNotifier {
       _setPro(false);
       return;
     }
-    final status = await _revenueCatService.checkSubscription();
-    _setPro(status.isPro);
+    final appGuard = _appGuardService;
+    if (appGuard != null) {
+      try {
+        final status = await appGuard.revalidateOnline();
+        _setPro(status.isUnlocked && !status.isFreeTier);
+      } catch (error) {
+        _initialized = true;
+        if (kDebugMode) {
+          debugPrint(
+            'FeatureGate: guard refresh failed; keeping last trusted state: '
+            '$error',
+          );
+        }
+      }
+      return;
+    }
+
+    try {
+      // A transient store/network error is not proof that the subscription
+      // was revoked. Preserve the last trusted state and let AppGuard's
+      // bounded offline license policy decide how long Pro remains usable.
+      final status = await _revenueCatService.checkSubscription(
+        throwOnError: true,
+      );
+      _setPro(status.isPro);
+    } catch (error) {
+      _initialized = true;
+      if (kDebugMode) {
+        debugPrint(
+          'FeatureGate: entitlement refresh failed; keeping last trusted '
+          'state: $error',
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_appGuardSubscription?.cancel());
+    unawaited(_revenueCatSubscription?.cancel());
+    super.dispose();
   }
 
   /// **SoT** — declares whether [feature] requires a Pro subscription.

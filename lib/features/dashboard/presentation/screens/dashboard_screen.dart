@@ -116,6 +116,21 @@ const _kAllDefaultItems = [
     route: '/purchases',
   ),
   DashboardItemData(
+    id: 'business_locations',
+    icon: LucideIcons.warehouse,
+    titleKey: 'dashboard.business_locations',
+    color: Color(0xFF00695C),
+    route: '/settings/locations',
+    ownerOnly: true,
+  ),
+  DashboardItemData(
+    id: 'consignment_center',
+    icon: LucideIcons.handshake,
+    titleKey: 'dashboard.consignment_center',
+    color: Color(0xFF8D6E63),
+    route: '/consignment',
+  ),
+  DashboardItemData(
     id: 'employees',
     icon: LucideIcons.userCog,
     titleKey: 'dashboard.employees',
@@ -267,6 +282,7 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   List<DashboardItemData> _visibleItems(UserEntity user) {
     final allowed = _items.where((item) {
+      if (item.ownerOnly && user.role != UserRole.owner) return false;
       if (item.id == 'promotions' &&
           !context.read<AppSettingsBloc>().state.settings.enablePromotions) {
         return false;

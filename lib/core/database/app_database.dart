@@ -6,6 +6,7 @@ import 'migrations/consignment_adjustment_returns.dart';
 import 'migrations/consignment_settlements.dart';
 import 'migrations/consignment_custody.dart';
 import 'migrations/consignment_ownership_conversion.dart';
+import 'migrations/consignment_ownership_conversion_economics.dart';
 import 'tables/consignment.dart';
 import 'migrations/purchase_supplier_sources.dart';
 import 'migrations/supplier_identity_movements.dart';
@@ -18,8 +19,12 @@ import 'tables/inventory_origins.dart';
 import 'migrations/inventory_origins.dart';
 import 'tables/warehouse_transfers.dart';
 import 'migrations/warehouse_transfers.dart';
+import 'migrations/warehouse_transfer_provenance.dart';
+import 'migrations/sale_adjustment_return_item_immutability.dart';
 import 'migrations/inventory_revaluation_audit.dart';
 import 'migrations/lan_request_receipts.dart';
+import 'migrations/offline_sync_ledger.dart';
+import 'dart:convert';
 import 'dart:developer' as developer;
 
 import 'package:drift/drift.dart';
@@ -3011,6 +3016,7 @@ END
         await installSaleSourceSelectionGuards(this);
         await installInventoryOrigins(this);
         await installWarehouseTransferGuards(this);
+        await installWarehouseTransferProvenanceGuards(this);
         await installInventoryRevaluationAudit(this);
         await initializeBusinessFoundation(this);
         await installBusinessDocumentLocations(this);
@@ -3021,12 +3027,15 @@ END
         await installConsignmentInventoryGuards(this);
         await installConsignmentSalesGuards(this);
         await installConsignmentAdjustmentReturnGuards(this);
+        await installSaleAdjustmentReturnItemImmutabilityGuards(this);
         await installConsignmentCustodyGuards(this);
         await installConsignmentOwnershipConversionGuards(this);
+        await installConsignmentOwnershipConversionEconomics(this);
         await installConsignmentSettlementGuards(this);
         await installCommissionReturnSource(this);
         await _ensureDocumentSequencesTable();
         await installLanRequestReceiptLedger(this);
+        await installOfflineSyncLedger(this);
         await _createIndexes();
         await _installProductBatchesIntegrityTriggers();
         await _installPartyAccountPaymentTriggers();
@@ -5621,8 +5630,19 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
         await customStatement('PRAGMA journal_mode = WAL');
         await customStatement('PRAGMA synchronous = NORMAL');
         await _ensureDocumentSequencesTable();
+        await installLanRequestReceiptLedger(this);
+        await installOfflineSyncLedger(this);
         await _installPartyAccountPaymentTriggers();
         await _ensureSchemaIntegrity();
+        // Trigger-only hardening is reinstalled on every open so clients
+        // already at the current schema version receive the same guards.
+        await installWarehouseTransferGuards(this);
+        await installWarehouseTransferProvenanceGuards(this);
+        await installConsignmentSalesGuards(this);
+        await installConsignmentAdjustmentReturnGuards(this);
+        await installSaleAdjustmentReturnItemImmutabilityGuards(this);
+        await installConsignmentOwnershipConversionGuards(this);
+        await installConsignmentOwnershipConversionEconomics(this);
         await _repairProductVariantsSkuNullabilityIfNeeded();
         await _convertIntegerTimestampsToTextOnce();
         await _dedupeUniqueSkuBarcodeIfNeeded();
@@ -5638,12 +5658,13 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
           debugPrint('DB seed skipped (loyalty settings): $e');
           debugPrint('$st');
         }
-        try {
-          await _seedDefaultAccounts();
-        } catch (e, st) {
-          debugPrint('DB seed skipped (default accounts): $e');
-          debugPrint('$st');
-        }
+        // Required posting accounts are a hard accounting prerequisite. A
+        // previous best-effort catch let the application continue with a
+        // partial chart of accounts and only fail later while posting (for
+        // example: missing account 2050). Keep optional UI seeds best-effort,
+        // but fail the database open deterministically if the accounting
+        // foundation cannot be repaired or verified.
+        await _seedDefaultAccounts();
       },
     );
   }
@@ -6961,43 +6982,228 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
 
   /// Seed default Chart of Accounts (idempotent).
   /// These accounts are required by JournalEntryService for posting transactions.
-  Future<void> _seedDefaultAccounts() async {
-    final now = DateTime.now();
-
-    // Get default currency
-    final defaultCurrencyRow = await (select(
-      currencies,
-    )..limit(1)).getSingleOrNull();
-    if (defaultCurrencyRow == null) {
-      debugPrint('No currency found, skipping default accounts seed');
-      return;
+  Future<({int id, bool strict})> _resolveSystemAccountCurrency({
+    int? explicitCurrencyId,
+  }) async {
+    Future<int> requireActiveCurrency(int id, String source) async {
+      final currency =
+          await (select(currencies)
+                ..where((c) => c.id.equals(id) & c.isActive.equals(true)))
+              .getSingleOrNull();
+      if (currency == null) {
+        throw StateError(
+          'Accounting currency $id from $source is missing or inactive.',
+        );
+      }
+      return currency.id;
     }
-    final currencyId = defaultCurrencyRow.id;
 
-    // STRICT Chart of Accounts — matches JournalEntryService requirements
-    final defaultAccounts = systemAccountDefinitions;
+    if (explicitCurrencyId != null) {
+      return (
+        id: await requireActiveCurrency(explicitCurrencyId, 'explicit binding'),
+        strict: true,
+      );
+    }
 
-    // Idempotent and self-healing: legacy databases may already contain the
-    // required codes but with is_system_account=false (older seed versions).
-    // Repair immutable metadata on every open so posting accounts cannot be
-    // edited, deactivated or deleted from the Chart of Accounts screen.
-    for (final acct in defaultAccounts) {
-      final code = acct['code'] as String;
-      final existing = await (select(
-        accounts,
-      )..where((a) => a.accountCode.equals(code))).getSingleOrNull();
-      if (existing != null) {
+    // Once enabled, the local branch binding is the authoritative accounting
+    // currency. A corrupt binding must not silently fall back to USD.
+    final bindingRows = await customSelect('''
+      SELECT s.value, c.organization_id, c.branch_id, c.database_id
+      FROM business_contexts c
+      JOIN app_settings s
+        ON s.key = 'business.currency.v1.' || c.branch_id
+      WHERE c.id = 1
+    ''').get();
+    if (bindingRows.length > 1) {
+      throw StateError('Multiple branch accounting-currency bindings found.');
+    }
+    if (bindingRows.length == 1) {
+      final row = bindingRows.single;
+      final decoded = jsonDecode(row.read<String>('value'));
+      if (decoded is! Map ||
+          decoded['version'] != 1 ||
+          decoded['organizationId'] != row.read<String>('organization_id') ||
+          decoded['branchId'] != row.read<String>('branch_id') ||
+          decoded['databaseId'] != row.read<String>('database_id') ||
+          decoded['currencyId'] is! int ||
+          decoded['code'] is! String ||
+          decoded['digits'] is! int) {
+        throw StateError('Invalid branch accounting-currency binding.');
+      }
+      final boundCurrencyId = await requireActiveCurrency(
+        decoded['currencyId'] as int,
+        'branch binding',
+      );
+      final boundCurrency = await (select(
+        currencies,
+      )..where((c) => c.id.equals(boundCurrencyId))).getSingle();
+      if (boundCurrency.code != decoded['code']) {
+        throw StateError('Branch accounting-currency identity changed.');
+      }
+      return (id: boundCurrencyId, strict: true);
+    }
+
+    // Legacy single-branch databases had no explicit binding. A single
+    // currency already present in the posted ledger is stronger evidence than
+    // the old display/default preference and allows safe non-USD repair.
+    final ledgerCurrencies = await customSelect(
+      '''
+        SELECT DISTINCT l.currency_id
+        FROM journal_entry_lines l
+        JOIN journal_entries j ON j.id = l.journal_entry_id
+        JOIN accounts a ON a.id = l.account_id
+        WHERE j.status = 'posted'
+          AND a.account_code IN (
+            ${List.filled(systemAccountDefinitions.length, '?').join(', ')}
+          )
+        ORDER BY l.currency_id
+        LIMIT 2
+      ''',
+      variables: [
+        for (final account in systemAccountDefinitions)
+          Variable.withString(account['code'] as String),
+      ],
+    ).get();
+    if (ledgerCurrencies.length == 1) {
+      return (
+        id: await requireActiveCurrency(
+          ledgerCurrencies.single.read<int>('currency_id'),
+          'posted ledger',
+        ),
+        strict: false,
+      );
+    }
+
+    final defaultSetting = await (select(
+      appSettings,
+    )..where((s) => s.key.equals('default_currency_id'))).getSingleOrNull();
+    if (defaultSetting != null) {
+      final configuredDefault = int.tryParse(defaultSetting.value.trim());
+      if (configuredDefault == null) {
+        throw StateError('Invalid default_currency_id setting.');
+      }
+      return (
+        id: await requireActiveCurrency(
+          configuredDefault,
+          'default_currency_id',
+        ),
+        strict: false,
+      );
+    }
+
+    final baseCurrencies =
+        await (select(currencies)
+              ..where((c) => c.isBase.equals(true) & c.isActive.equals(true))
+              ..orderBy([(c) => OrderingTerm(expression: c.id)]))
+            .get();
+    if (baseCurrencies.length != 1) {
+      throw StateError(
+        'Exactly one active base currency is required to seed system accounts.',
+      );
+    }
+    return (id: baseCurrencies.single.id, strict: false);
+  }
+
+  Future<void> _seedDefaultAccounts({int? explicitCurrencyId}) async {
+    await transaction(() async {
+      final now = DateTime.now();
+      final currency = await _resolveSystemAccountCurrency(
+        explicitCurrencyId: explicitCurrencyId,
+      );
+      final currencyId = currency.id;
+
+      // Repair metadata on every open. Currency repair is allowed only when
+      // the ledger proves the account belongs to the selected currency, or
+      // when the unused account has a zero balance. Historical money is never
+      // silently relabelled.
+      for (final acct in systemAccountDefinitions) {
+        final code = acct['code'] as String;
         final expectedType = acct['type'] as String;
         final expectedOrder = acct['order'] as int;
+        final existing = await (select(
+          accounts,
+        )..where((a) => a.accountCode.equals(code))).getSingleOrNull();
+
+        if (existing == null) {
+          await into(accounts).insert(
+            AccountsCompanion(
+              accountCode: Value(code),
+              accountName: Value(acct['name'] as String),
+              accountType: Value(expectedType),
+              currencyId: Value(currencyId),
+              isSystemAccount: Value(acct['system'] as bool),
+              displayOrder: Value(expectedOrder),
+              isActive: const Value(true),
+              balanceCents: Value(Decimal.zero),
+              createdAt: Value(now),
+              updatedAt: Value(now),
+            ),
+          );
+          continue;
+        }
+
+        final lineCurrencies = await customSelect(
+          '''
+            SELECT DISTINCT currency_id
+            FROM journal_entry_lines
+            WHERE account_id = ?
+            ORDER BY currency_id
+            LIMIT 2
+          ''',
+          variables: [Variable.withInt(existing.id)],
+        ).get();
+        final usedCurrencyIds = lineCurrencies
+            .map((row) => row.read<int>('currency_id'))
+            .toSet();
+        final hasConflictingLedger =
+            usedCurrencyIds.isNotEmpty &&
+            (usedCurrencyIds.length != 1 ||
+                usedCurrencyIds.single != currencyId);
+        final hasUnexplainedBalance =
+            existing.currencyId != currencyId &&
+            usedCurrencyIds.isEmpty &&
+            existing.balanceCents.toBigInt() != BigInt.zero;
+        if (currency.strict && hasConflictingLedger) {
+          throw StateError(
+            'System account $code has journal lines in currencies '
+            '$usedCurrencyIds, but the accounting currency is $currencyId. '
+            'Reconcile the ledger before posting.',
+          );
+        }
+        if (currency.strict && hasUnexplainedBalance) {
+          throw StateError(
+            'System account $code has a non-zero balance in currency '
+            '${existing.currencyId} without journal evidence; refusing to '
+            'reinterpret it as currency $currencyId.',
+          );
+        }
+
+        if (!currency.strict &&
+            (hasConflictingLedger || hasUnexplainedBalance)) {
+          developer.log(
+            'Legacy system account $code kept in currency '
+            '${existing.currencyId}; evidence is incompatible with resolved '
+            'currency $currencyId. New mismatched postings will be rejected.',
+            name: 'ACCOUNTING_HEALTH',
+            level: 900,
+          );
+        }
+
+        final canRepairCurrency =
+            !hasConflictingLedger && !hasUnexplainedBalance;
         if (!existing.isSystemAccount ||
             !existing.isActive ||
             existing.accountType != expectedType ||
-            existing.displayOrder != expectedOrder) {
+            existing.displayOrder != expectedOrder ||
+            (canRepairCurrency && existing.currencyId != currencyId)) {
           await (update(
             accounts,
           )..where((a) => a.id.equals(existing.id))).write(
             AccountsCompanion(
               accountType: Value(expectedType),
+              currencyId: canRepairCurrency
+                  ? Value(currencyId)
+                  : const Value.absent(),
               isSystemAccount: const Value(true),
               isActive: const Value(true),
               displayOrder: Value(expectedOrder),
@@ -7005,28 +7211,36 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
             ),
           );
         }
-        continue;
       }
 
-      await into(accounts).insert(
-        AccountsCompanion(
-          accountCode: Value(code),
-          accountName: Value(acct['name'] as String),
-          accountType: Value(acct['type'] as String),
-          currencyId: Value(currencyId),
-          isSystemAccount: Value(acct['system'] as bool),
-          displayOrder: Value(acct['order'] as int),
-          isActive: const Value(true),
-          balanceCents: Value(Decimal.zero),
-          createdAt: Value(now),
-          updatedAt: Value(now),
-        ),
-      );
-    }
+      for (final acct in systemAccountDefinitions) {
+        final code = acct['code'] as String;
+        final account = await (select(
+          accounts,
+        )..where((a) => a.accountCode.equals(code))).getSingleOrNull();
+        if (account == null ||
+            !account.isSystemAccount ||
+            !account.isActive ||
+            account.accountType != acct['type'] ||
+            (currency.strict && account.currencyId != currencyId)) {
+          throw StateError(
+            'Required system-account health check failed for account $code '
+            'and currency $currencyId.',
+          );
+        }
+      }
+    });
   }
 
+  /// Align the canonical chart while an explicit branch accounting currency
+  /// is being bound. The caller keeps this in the same transaction as the
+  /// binding write, so either both changes commit or neither does.
+  Future<void> ensureSystemAccountsForAccountingCurrency(int currencyId) =>
+      _seedDefaultAccounts(explicitCurrencyId: currencyId);
+
   @visibleForTesting
-  Future<void> seedDefaultAccountsForTest() => _seedDefaultAccounts();
+  Future<void> seedDefaultAccountsForTest({int? accountingCurrencyId}) =>
+      _seedDefaultAccounts(explicitCurrencyId: accountingCurrencyId);
 }
 
 QueryExecutor _openConnection() {

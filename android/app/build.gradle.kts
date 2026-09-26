@@ -13,8 +13,23 @@ plugins {
 
 val keyPropertiesFile = rootProject.file("key.properties")
 val keyProperties = Properties()
-if (keyPropertiesFile.exists()) {
+val hasReleaseKeystore = keyPropertiesFile.exists()
+if (hasReleaseKeystore) {
     keyProperties.load(FileInputStream(keyPropertiesFile))
+}
+
+fun requiredSigningProperty(name: String): String =
+    keyProperties.getProperty(name)
+        ?: throw GradleException("Missing '$name' in android/key.properties")
+
+val releaseTaskRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+if (releaseTaskRequested && !hasReleaseKeystore) {
+    throw GradleException(
+        "android/key.properties is required for release builds. " +
+            "Debug builds and CI do not require the production signing key."
+    )
 }
 
 android {
@@ -39,17 +54,21 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            keyAlias = keyProperties["keyAlias"] as String
-            keyPassword = keyProperties["keyPassword"] as String
-            storeFile = file("${keyProperties["storeFile"]}")
-            storePassword = keyProperties["storePassword"] as String
+        if (hasReleaseKeystore) {
+            create("release") {
+                keyAlias = requiredSigningProperty("keyAlias")
+                keyPassword = requiredSigningProperty("keyPassword")
+                storeFile = file(requiredSigningProperty("storeFile"))
+                storePassword = requiredSigningProperty("storePassword")
+            }
         }
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            if (hasReleaseKeystore) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(

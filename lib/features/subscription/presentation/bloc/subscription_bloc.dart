@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
@@ -18,9 +19,9 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
   SubscriptionBloc({
     required RevenueCatService revenueCatService,
     required AppGuardService appGuardService,
-  })  : _revenueCatService = revenueCatService,
-        _appGuardService = appGuardService,
-        super(const SubscriptionInitial()) {
+  }) : _revenueCatService = revenueCatService,
+       _appGuardService = appGuardService,
+       super(const SubscriptionInitial()) {
     on<SubscriptionStartGuard>(_onStartGuard);
     on<SubscriptionGuardStatusChanged>(_onGuardStatusChanged);
     on<SubscriptionRefresh>(_onRefresh);
@@ -39,22 +40,34 @@ class SubscriptionBloc extends Bloc<SubscriptionEvent, SubscriptionState> {
     emit(const SubscriptionLoading());
 
     try {
-      // Initialize RevenueCat (no-op on unsupported platforms)
-      await _revenueCatService.initialize(appUserId: event.appUserId);
-
-      // Run full guard sequence
+      // Resolve the signed local licence first. The initial UI state must not
+      // wait for the store or any remote endpoint.
       final guardStatus = await _appGuardService.initialize();
 
-      // Start listening for ongoing changes
+      // Subscribe before starting the background refresh so no update can be
+      // missed between the local and online decisions.
       _guardSubscription?.cancel();
       _guardSubscription = _appGuardService.statusStream.listen(
         (gs) => add(SubscriptionGuardStatusChanged(gs)),
       );
-      _appGuardService.startListening();
 
       emit(_stateFromGuardStatus(guardStatus));
+      unawaited(_initializeOnlineServices(event.appUserId));
     } catch (e) {
       emit(SubscriptionError(e.toString()));
+    }
+  }
+
+  Future<void> _initializeOnlineServices(String? appUserId) async {
+    try {
+      await _revenueCatService.initialize(appUserId: appUserId);
+      _appGuardService.startListening();
+      await _appGuardService.revalidateOnline();
+    } catch (error) {
+      // Network/store failure never replaces a valid local startup decision.
+      debugPrint(
+        'SubscriptionBloc: background entitlement refresh failed: $error',
+      );
     }
   }
 

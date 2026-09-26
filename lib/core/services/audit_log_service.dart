@@ -46,7 +46,14 @@ class AuditLogService {
           _cachedUsername = u.username;
           return (id: u.id, name: u.username);
         }
-      } catch (_) {}
+      } catch (error, stackTrace) {
+        developer.log(
+          'Could not resolve username for explicit audit user $explicit.',
+          name: 'AuditLogService',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
       return (id: explicit, name: null);
     }
 
@@ -65,7 +72,14 @@ class AuditLogService {
           _cachedUsername = u.username;
           return (id: u.id, name: u.username);
         }
-      } catch (_) {}
+      } catch (error, stackTrace) {
+        developer.log(
+          'Could not resolve username for session audit user $fromSession.',
+          name: 'AuditLogService',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
       return (id: fromSession, name: null);
     }
 
@@ -120,9 +134,10 @@ class AuditLogService {
     AuditSeverity severity = AuditSeverity.normal,
   }) async {
     final user = await _resolveUser(userId);
-    // ignore: avoid_print
-    print(
-      '[AuditLog] action=$action entity=$entityType userId=${user.id} userName=${user.name}',
+    developer.log(
+      'action=$action entity=$entityType '
+      'userId=${user.id} userName=${user.name}',
+      name: 'AuditLogService',
     );
     return await _db
         .into(_db.auditLogs)

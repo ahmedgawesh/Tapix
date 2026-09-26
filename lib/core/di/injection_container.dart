@@ -3,6 +3,8 @@ import '../services/business/warehouse_read_scope.dart';
 import '../services/business/branch_currency_policy_store.dart';
 import '../services/business/warehouse_stocktake_service.dart';
 import '../../features/business/data/warehouse_setup_service.dart';
+import '../../features/business/data/online_branches_entitlement.dart';
+import '../../features/business/data/online_branches_purchase_service.dart';
 import '../../features/business/data/warehouse_transfer_access_service.dart';
 import '../../features/business/data/warehouse_transfer_application_service.dart';
 import '../../features/business/data/warehouse_transfer_dispatch_service.dart';
@@ -226,11 +228,14 @@ import '../services/license_service.dart';
 import '../services/connectivity_service.dart';
 import '../services/lan/lan_network_service.dart';
 import '../services/lan/device_mode_reset_service.dart';
+import '../services/sync/offline_sync_event_store.dart';
+import '../services/sync/sync_entity_identity_store.dart';
 import '../services/remote_security_service.dart';
 import '../services/code_integrity_service.dart';
 import '../services/app_guard_service.dart';
 import '../services/feature_gate_service.dart';
 import '../services/free_quota_service.dart';
+import '../services/local_integrity_key_service.dart';
 import '../../features/subscription/subscription.dart';
 
 final sl = GetIt.instance;
@@ -242,6 +247,8 @@ Future<void> init() async {
 
   // Database
   sl.registerLazySingleton(() => AppDatabase());
+  sl.registerLazySingleton(() => OfflineSyncEventStore(sl<AppDatabase>()));
+  sl.registerLazySingleton(() => SyncEntityIdentityStore(sl<AppDatabase>()));
 
   // DAOs
   sl.registerLazySingleton(() => ProductDao(sl()));
@@ -275,6 +282,13 @@ Future<void> init() async {
 
   // Auth Services
   sl.registerLazySingleton(() => PasswordService());
+  sl.registerLazySingleton(
+    () => OwnerPasswordVerificationService(
+      database: sl<AppDatabase>(),
+      passwordService: sl<PasswordService>(),
+      sessionService: sl<SessionService>(),
+    ),
+  );
   sl.registerLazySingleton(() => SessionService());
   sl.registerLazySingleton(() => PermissionService());
   sl.registerLazySingleton(() => PinService());
@@ -546,6 +560,8 @@ Future<void> init() async {
       // Phase B4 — enforce free-tier 100-invoice cumulative cap.
       freeQuotaService: sl<FreeQuotaService>(),
       cashierShiftService: sl<CashierShiftService>(),
+      syncEvents: sl<OfflineSyncEventStore>(),
+      syncIdentities: sl<SyncEntityIdentityStore>(),
     ),
   );
 
@@ -1211,6 +1227,9 @@ Future<void> init() async {
   // services are constructed during startup.
   sl.registerLazySingleton(() => RevenueCatService.instance);
   sl.registerLazySingleton(() => DeviceFingerprintService());
+  final localIntegrityKeyService = LocalIntegrityKeyService();
+  await localIntegrityKeyService.initialize();
+  sl.registerSingleton<LocalIntegritySigner>(localIntegrityKeyService);
   sl.registerLazySingleton(
     () => DesktopLicenseService(
       fingerprintService: sl<DeviceFingerprintService>(),
@@ -1288,6 +1307,23 @@ Future<void> init() async {
       desktopLicense: sl<DesktopLicenseService>(),
     ),
   );
+  sl.registerLazySingleton<OnlineBranchesEntitlement>(
+    () => PlatformOnlineBranchesEntitlement(
+      revenueCat: sl<RevenueCatService>(),
+      desktopLicense: sl<DesktopLicenseService>(),
+    ),
+  );
+  sl.registerLazySingleton<OnlineBranchesPurchaseGateway>(
+    () => PlatformOnlineBranchesPurchaseGateway(
+      revenueCat: sl<RevenueCatService>(),
+    ),
+  );
+  sl.registerLazySingleton<OnlineBranchesPurchaseService>(
+    () => DefaultOnlineBranchesPurchaseService(
+      gateway: sl<OnlineBranchesPurchaseGateway>(),
+      entitlement: sl<OnlineBranchesEntitlement>(),
+    ),
+  );
   sl.registerLazySingleton(
     () => WarehouseSetupService(
       sl<AppDatabase>(),
@@ -1328,18 +1364,24 @@ Future<void> init() async {
       sl<AppDatabase>(),
       preflight: sl<WarehouseTransferPreflight>(),
       authorize: sl<WarehouseTransferAccessService>().authorize,
+      syncEvents: sl<OfflineSyncEventStore>(),
+      syncIdentities: sl<SyncEntityIdentityStore>(),
     ),
   );
   sl.registerLazySingleton(
     () => WarehouseTransferReceiptService(
       sl<AppDatabase>(),
       authorize: sl<WarehouseTransferAccessService>().authorize,
+      syncEvents: sl<OfflineSyncEventStore>(),
+      syncIdentities: sl<SyncEntityIdentityStore>(),
     ),
   );
   sl.registerLazySingleton(
     () => WarehouseTransferRecallService(
       sl<AppDatabase>(),
       authorize: sl<WarehouseTransferAccessService>().authorize,
+      syncEvents: sl<OfflineSyncEventStore>(),
+      syncIdentities: sl<SyncEntityIdentityStore>(),
     ),
   );
   sl.registerLazySingleton(
@@ -1374,7 +1416,10 @@ Future<void> init() async {
 
   // Security & Licensing Services
   sl.registerLazySingleton(
-    () => LicenseService(fingerprintService: sl<DeviceFingerprintService>()),
+    () => LicenseService(
+      fingerprintService: sl<DeviceFingerprintService>(),
+      integritySigner: sl<LocalIntegritySigner>(),
+    ),
   );
   sl.registerLazySingleton(() => ConnectivityService());
   sl.registerLazySingleton<LanMasterAuthGateway>(
@@ -1462,14 +1507,29 @@ Future<void> init() async {
     () => FeatureGateService(
       revenueCatService: sl<RevenueCatService>(),
       desktopLicenseService: sl<DesktopLicenseService>(),
+      appGuardService: sl<AppGuardService>(),
     ),
   );
-  sl.registerLazySingleton(
-    () => FreeQuotaService(
-      prefs: sl<SharedPreferences>(),
-      featureGateService: sl<FeatureGateService>(),
-    ),
+  final freeQuotaService = FreeQuotaService(
+    prefs: sl<SharedPreferences>(),
+    featureGateService: sl<FeatureGateService>(),
+    stateStore: SecureFreeQuotaStateStore(),
+    integritySigner: sl<LocalIntegritySigner>(),
+    usageReader: () async {
+      final row = await sl<AppDatabase>()
+          .customSelect(
+            'SELECT (SELECT COUNT(*) FROM products) AS products_count, '
+            '(SELECT COUNT(*) FROM sales) AS sales_count',
+          )
+          .getSingle();
+      return (
+        products: row.read<int>('products_count'),
+        sales: row.read<int>('sales_count'),
+      );
+    },
   );
+  await freeQuotaService.initialize();
+  sl.registerSingleton<FreeQuotaService>(freeQuotaService);
 
   // Configure SessionService to use AppSettings for timeout
   sl<SessionService>().configureTimeoutSettings(() {

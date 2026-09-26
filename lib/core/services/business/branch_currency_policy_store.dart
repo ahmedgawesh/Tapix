@@ -89,6 +89,12 @@ class BranchCurrencyPolicyStore {
         'Reconcile historical currencies before enabling warehouses',
       );
     }
+
+    // The branch binding and its canonical system chart are one accounting
+    // decision. Repair unused legacy USD accounts for the selected currency,
+    // or reject incompatible historical balances before the binding commits.
+    await _db.ensureSystemAccountsForAccountingCurrency(currency.id);
+
     await _db
         .into(_db.appSettings)
         .insert(

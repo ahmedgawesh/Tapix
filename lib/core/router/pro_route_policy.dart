@@ -39,6 +39,8 @@ class ProRoutePolicy {
     '/sales/returns': AppFeature.returns,
     '/settings/backup': AppFeature.backupRestore,
     '/settings/admin-tools': AppFeature.multiUser,
+    '/settings/locations': AppFeature.inventoryAdvanced,
+    '/consignment': AppFeature.inventoryAdvanced,
     '/promotions': AppFeature.promotions,
   };
 

@@ -89,6 +89,7 @@ void main() {
                   .getSingle())
               .read<int>('id');
     }
+    final finalStatus = status ?? (sale ? 'completed' : 'posted');
     final id = await insert(kind.table, {
       sale
               ? 'invoice_number'
@@ -101,7 +102,9 @@ void main() {
         'payment_method': 'cash'
       else
         'refund_method': 'cash',
-      'status': status ?? (sale ? 'completed' : 'posted'),
+      'status': kind == InventoryPostingDocument.saleAdjustment
+          ? 'draft'
+          : finalStatus,
       'subtotal_cents': quantity * 1000,
       'discount_cents': 200,
       'tax_cents': 0,
@@ -143,6 +146,14 @@ void main() {
       'tax_cents': 0,
       original != null ? 'refund_cents' : 'total_cents': quantity * 1000 - 100,
     });
+    if (kind == InventoryPostingDocument.saleAdjustment &&
+        finalStatus != 'draft') {
+      await db.customUpdate(
+        'UPDATE sale_return_adjustments SET status = ? WHERE id = ?',
+        variables: [Variable.withString(finalStatus), Variable.withInt(id)],
+        updates: {db.saleReturnAdjustments},
+      );
+    }
     return id;
   }
 

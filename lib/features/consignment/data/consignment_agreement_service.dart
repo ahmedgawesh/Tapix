@@ -284,6 +284,36 @@ class ConsignmentAgreementService {
     await _insertTerms(draft.id, terms);
   });
 
+  /// Permanently removes an agreement that has never been activated.
+  ///
+  /// Activated, superseded and closed revisions are accounting evidence and
+  /// remain protected by both this service and the database trigger.
+  Future<void> deleteUnusedDraft(String agreementId) =>
+      _db.transaction(() async {
+        await _module.requireManageAccess();
+        final draft =
+            await (_db.select(_db.consignmentAgreements)..where(
+                  (agreement) =>
+                      agreement.id.equals(agreementId) &
+                      agreement.status.equals('draft') &
+                      agreement.activatedAt.isNull(),
+                ))
+                .getSingleOrNull();
+        if (draft == null) {
+          throw StateError('Only an unused agreement draft can be deleted.');
+        }
+
+        await (_db.delete(
+          _db.consignmentAgreementItems,
+        )..where((item) => item.agreementId.equals(draft.id))).go();
+        final deleted = await (_db.delete(
+          _db.consignmentAgreements,
+        )..where((agreement) => agreement.id.equals(draft.id))).go();
+        if (deleted != 1) {
+          throw StateError('Agreement draft was not deleted.');
+        }
+      });
+
   Future<ConsignmentAgreement> activate(
     String agreementId,
   ) => _db.transaction(() async {

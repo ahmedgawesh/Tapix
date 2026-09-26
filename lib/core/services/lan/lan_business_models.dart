@@ -937,6 +937,8 @@ class LanSaleReturnSummary {
   final int currencyId;
   final String status;
   final String dispositionType;
+  final String consignmentLiabilityResponsibility;
+  final String? consignmentLiabilityReason;
   final String refundMethod;
   final String? reason;
   final DateTime returnDate;
@@ -959,6 +961,8 @@ class LanSaleReturnSummary {
     required this.currencyId,
     required this.status,
     required this.dispositionType,
+    this.consignmentLiabilityResponsibility = 'review',
+    this.consignmentLiabilityReason,
     required this.refundMethod,
     this.reason,
     required this.returnDate,
@@ -982,6 +986,9 @@ class LanSaleReturnSummary {
     'currencyId': currencyId,
     'status': status,
     'dispositionType': dispositionType,
+    'consignmentLiabilityResponsibility': consignmentLiabilityResponsibility,
+    if (consignmentLiabilityReason != null)
+      'consignmentLiabilityReason': consignmentLiabilityReason,
     'refundMethod': refundMethod,
     'reason': reason,
     'returnDate': returnDate.toUtc().toIso8601String(),
@@ -1006,6 +1013,10 @@ class LanSaleReturnSummary {
         currencyId: (json['currencyId'] as num?)?.toInt() ?? 1,
         status: json['status']?.toString() ?? 'posted',
         dispositionType: json['dispositionType']?.toString() ?? 'restock',
+        consignmentLiabilityResponsibility:
+            json['consignmentLiabilityResponsibility']?.toString() ?? 'review',
+        consignmentLiabilityReason: json['consignmentLiabilityReason']
+            ?.toString(),
         refundMethod: json['refundMethod']?.toString() ?? 'cash',
         reason: json['reason']?.toString(),
         returnDate: DateTime.parse(json['returnDate'].toString()),
@@ -1249,6 +1260,8 @@ class LanSaleReturnRequest {
   final String refundMethod;
   final String? reason;
   final DateTime? dueDate;
+  final String consignmentLiabilityResponsibility;
+  final String? consignmentLiabilityReason;
   final List<LanSaleReturnLineRequest> lines;
   final List<LanCheckoutPaymentRequest> payments;
 
@@ -1259,6 +1272,8 @@ class LanSaleReturnRequest {
     required this.refundMethod,
     this.reason,
     this.dueDate,
+    this.consignmentLiabilityResponsibility = 'review',
+    this.consignmentLiabilityReason,
     required this.lines,
     this.payments = const [],
   });
@@ -1270,6 +1285,9 @@ class LanSaleReturnRequest {
     'refundMethod': refundMethod,
     'reason': reason,
     'dueDate': dueDate?.toUtc().toIso8601String(),
+    'consignmentLiabilityResponsibility': consignmentLiabilityResponsibility,
+    if (consignmentLiabilityReason != null)
+      'consignmentLiabilityReason': consignmentLiabilityReason,
     'lines': lines.map((value) => value.toJson()).toList(),
     'payments': payments.map((value) => value.toJson()).toList(),
   };
@@ -1284,6 +1302,10 @@ class LanSaleReturnRequest {
         dueDate: json['dueDate'] == null
             ? null
             : DateTime.tryParse(json['dueDate'].toString()),
+        consignmentLiabilityResponsibility:
+            json['consignmentLiabilityResponsibility']?.toString() ?? 'review',
+        consignmentLiabilityReason: json['consignmentLiabilityReason']
+            ?.toString(),
         lines: (json['lines'] as List<dynamic>? ?? const [])
             .whereType<Map<String, dynamic>>()
             .map(LanSaleReturnLineRequest.fromJson)

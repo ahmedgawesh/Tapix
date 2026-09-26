@@ -127,7 +127,29 @@ Future<void> installWarehouseTransferGuards(AppDatabase db) async {
             WHERE a.dispatch_id=OLD.id AND a.line_id=l.id),0)
       )
       AND ((NEW.owned_value_cents=0 AND NEW.journal_entry_id IS NULL)
-        OR (NEW.owned_value_cents>0 AND NEW.journal_entry_id IS NOT NULL))
+        OR (NEW.owned_value_cents>0 AND EXISTS(
+          SELECT 1 FROM journal_entries j
+          JOIN warehouse_transfers t ON t.id=OLD.transfer_id
+          WHERE j.id=NEW.journal_entry_id
+            AND j.status='posted'
+            AND j.entry_type='warehouse_transfer_dispatch'
+            AND j.source_table='warehouse_transfer_dispatches'
+            AND j.source_id=OLD.id
+            AND j.total_debit_cents=NEW.owned_value_cents
+            AND j.total_credit_cents=NEW.owned_value_cents
+            AND (SELECT COUNT(*) FROM journal_entry_lines l
+              WHERE l.journal_entry_id=j.id)=2
+            AND EXISTS(
+              SELECT 1 FROM journal_entry_lines l JOIN accounts a ON a.id=l.account_id
+              WHERE l.journal_entry_id=j.id AND a.account_code='1210'
+                AND l.currency_id=t.currency_id
+                AND l.debit_cents=NEW.owned_value_cents AND l.credit_cents=0)
+            AND EXISTS(
+              SELECT 1 FROM journal_entry_lines l JOIN accounts a ON a.id=l.account_id
+              WHERE l.journal_entry_id=j.id AND a.account_code='1200'
+                AND l.currency_id=t.currency_id
+                AND l.debit_cents=0 AND l.credit_cents=NEW.owned_value_cents)
+        )))
     )
     BEGIN SELECT RAISE(ABORT,'Transfer dispatch is incomplete'); END
   ''');
@@ -307,7 +329,36 @@ Future<void> installWarehouseTransferGuards(AppDatabase db) async {
       AND ((NEW.accepted_owned_value_cents=0 AND NEW.variance_owned_value_cents=0
         AND NEW.destination_inventory_delta_cents=0 AND NEW.journal_entry_id IS NULL)
         OR (NEW.accepted_owned_value_cents+NEW.variance_owned_value_cents>0
-          AND NEW.journal_entry_id IS NOT NULL))
+          AND EXISTS(
+            SELECT 1 FROM journal_entries j
+            JOIN warehouse_transfers t ON t.id=OLD.transfer_id
+            WHERE j.id=NEW.journal_entry_id
+              AND j.status='posted'
+              AND j.entry_type='warehouse_transfer_receipt'
+              AND j.source_table='warehouse_transfer_receipts'
+              AND j.source_id=OLD.id
+              AND j.total_debit_cents=NEW.accepted_owned_value_cents+NEW.variance_owned_value_cents
+              AND j.total_credit_cents=NEW.accepted_owned_value_cents+NEW.variance_owned_value_cents
+              AND (SELECT COUNT(*) FROM journal_entry_lines l
+                WHERE l.journal_entry_id=j.id)
+                  =1+(CASE WHEN NEW.accepted_owned_value_cents>0 THEN 1 ELSE 0 END)
+                    +(CASE WHEN NEW.variance_owned_value_cents>0 THEN 1 ELSE 0 END)
+              AND (NEW.accepted_owned_value_cents=0 OR EXISTS(
+                SELECT 1 FROM journal_entry_lines l JOIN accounts a ON a.id=l.account_id
+                WHERE l.journal_entry_id=j.id AND a.account_code='1200'
+                  AND l.currency_id=t.currency_id
+                  AND l.debit_cents=NEW.accepted_owned_value_cents AND l.credit_cents=0))
+              AND (NEW.variance_owned_value_cents=0 OR EXISTS(
+                SELECT 1 FROM journal_entry_lines l JOIN accounts a ON a.id=l.account_id
+                WHERE l.journal_entry_id=j.id AND a.account_code='5800'
+                  AND l.currency_id=t.currency_id
+                  AND l.debit_cents=NEW.variance_owned_value_cents AND l.credit_cents=0))
+              AND EXISTS(
+                SELECT 1 FROM journal_entry_lines l JOIN accounts a ON a.id=l.account_id
+                WHERE l.journal_entry_id=j.id AND a.account_code='1210'
+                  AND l.currency_id=t.currency_id AND l.debit_cents=0
+                  AND l.credit_cents=NEW.accepted_owned_value_cents+NEW.variance_owned_value_cents)
+          )))
     )
     BEGIN SELECT RAISE(ABORT,'Transfer receipt is incomplete'); END
   ''');
@@ -377,10 +428,89 @@ Future<void> installWarehouseTransferGuards(AppDatabase db) async {
               WHERE ri.allocation_id=a.id
                 AND (recall.sealed=1 OR recall.id=OLD.id)),0))
       AND ((NEW.owned_value_cents=0 AND NEW.journal_entry_id IS NULL)
-        OR (NEW.owned_value_cents>0 AND NEW.journal_entry_id IS NOT NULL))
+        OR (NEW.owned_value_cents>0 AND EXISTS(
+          SELECT 1 FROM journal_entries j
+          JOIN warehouse_transfers t ON t.id=OLD.transfer_id
+          WHERE j.id=NEW.journal_entry_id
+            AND j.status='posted'
+            AND j.entry_type='warehouse_transfer_recall'
+            AND j.source_table='warehouse_transfer_recalls'
+            AND j.source_id=OLD.id
+            AND j.total_debit_cents=NEW.owned_value_cents
+            AND j.total_credit_cents=NEW.owned_value_cents
+            AND (SELECT COUNT(*) FROM journal_entry_lines l
+              WHERE l.journal_entry_id=j.id)=2
+            AND EXISTS(
+              SELECT 1 FROM journal_entry_lines l JOIN accounts a ON a.id=l.account_id
+              WHERE l.journal_entry_id=j.id AND a.account_code='1200'
+                AND l.currency_id=t.currency_id
+                AND l.debit_cents=NEW.owned_value_cents AND l.credit_cents=0)
+            AND EXISTS(
+              SELECT 1 FROM journal_entry_lines l JOIN accounts a ON a.id=l.account_id
+              WHERE l.journal_entry_id=j.id AND a.account_code='1210'
+                AND l.currency_id=t.currency_id
+                AND l.debit_cents=0 AND l.credit_cents=NEW.owned_value_cents)
+        )))
     )
     BEGIN SELECT RAISE(ABORT,'Transfer recall is incomplete'); END
   ''');
+
+  // Once a transfer document is sealed, its exact journal is immutable. This
+  // prevents a valid link at posting time from being rebound or edited later
+  // through raw SQL while keeping ordinary draft journals unaffected.
+  const linkedTransferJournal = '''
+    EXISTS(SELECT 1 FROM warehouse_transfer_dispatches d
+      WHERE d.sealed=1 AND d.journal_entry_id=OLD.id)
+    OR EXISTS(SELECT 1 FROM warehouse_transfer_receipts r
+      WHERE r.sealed=1 AND r.journal_entry_id=OLD.id)
+    OR EXISTS(SELECT 1 FROM warehouse_transfer_recalls r
+      WHERE r.sealed=1 AND r.journal_entry_id=OLD.id)
+  ''';
+  await db.customStatement("""
+    CREATE TRIGGER warehouse_transfer_journal_header_update
+    BEFORE UPDATE ON journal_entries
+    WHEN $linkedTransferJournal
+    BEGIN SELECT RAISE(ABORT,'Posted transfer journal is immutable'); END
+  """);
+  await db.customStatement("""
+    CREATE TRIGGER warehouse_transfer_journal_header_delete
+    BEFORE DELETE ON journal_entries
+    WHEN $linkedTransferJournal
+    BEGIN SELECT RAISE(ABORT,'Posted transfer journal cannot be deleted'); END
+  """);
+  await db.customStatement("""
+    CREATE TRIGGER warehouse_transfer_journal_line_insert
+    BEFORE INSERT ON journal_entry_lines
+    WHEN EXISTS(SELECT 1 FROM warehouse_transfer_dispatches d
+        WHERE d.sealed=1 AND d.journal_entry_id=NEW.journal_entry_id)
+      OR EXISTS(SELECT 1 FROM warehouse_transfer_receipts r
+        WHERE r.sealed=1 AND r.journal_entry_id=NEW.journal_entry_id)
+      OR EXISTS(SELECT 1 FROM warehouse_transfer_recalls r
+        WHERE r.sealed=1 AND r.journal_entry_id=NEW.journal_entry_id)
+    BEGIN SELECT RAISE(ABORT,'Posted transfer journal lines are immutable'); END
+  """);
+  await db.customStatement("""
+    CREATE TRIGGER warehouse_transfer_journal_line_update
+    BEFORE UPDATE ON journal_entry_lines
+    WHEN EXISTS(SELECT 1 FROM warehouse_transfer_dispatches d
+        WHERE d.sealed=1 AND d.journal_entry_id IN (OLD.journal_entry_id,NEW.journal_entry_id))
+      OR EXISTS(SELECT 1 FROM warehouse_transfer_receipts r
+        WHERE r.sealed=1 AND r.journal_entry_id IN (OLD.journal_entry_id,NEW.journal_entry_id))
+      OR EXISTS(SELECT 1 FROM warehouse_transfer_recalls r
+        WHERE r.sealed=1 AND r.journal_entry_id IN (OLD.journal_entry_id,NEW.journal_entry_id))
+    BEGIN SELECT RAISE(ABORT,'Posted transfer journal lines are immutable'); END
+  """);
+  await db.customStatement("""
+    CREATE TRIGGER warehouse_transfer_journal_line_delete
+    BEFORE DELETE ON journal_entry_lines
+    WHEN EXISTS(SELECT 1 FROM warehouse_transfer_dispatches d
+        WHERE d.sealed=1 AND d.journal_entry_id=OLD.journal_entry_id)
+      OR EXISTS(SELECT 1 FROM warehouse_transfer_receipts r
+        WHERE r.sealed=1 AND r.journal_entry_id=OLD.journal_entry_id)
+      OR EXISTS(SELECT 1 FROM warehouse_transfer_recalls r
+        WHERE r.sealed=1 AND r.journal_entry_id=OLD.journal_entry_id)
+    BEGIN SELECT RAISE(ABORT,'Posted transfer journal lines cannot be deleted'); END
+  """);
 
   await db.customStatement('''
     CREATE TRIGGER warehouse_transfer_events_creation

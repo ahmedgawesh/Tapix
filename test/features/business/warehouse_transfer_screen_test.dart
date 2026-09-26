@@ -33,6 +33,28 @@ class _Service extends Fake implements WarehouseTransferApplicationService {
   }) async => const [];
 }
 
+class _ComposerService extends _Service {
+  _ComposerService() : super(_RetryingOperationService.warehousesList);
+
+  @override
+  Future<List<WarehouseTransferAppCatalogItem>> catalog(
+    String warehouseId, {
+    String query = '',
+    int offset = 0,
+  }) async => const [
+    WarehouseTransferAppCatalogItem(
+      productId: 1,
+      variantId: 11,
+      name: 'Mixed ownership product',
+      code: 'MIX-11',
+      quantity: 10,
+      supplierOwnedQuantity: 4,
+      quantityScale: 1,
+      measurementType: 'piece',
+    ),
+  ];
+}
+
 class _RetryingOperationService extends Fake
     implements WarehouseTransferApplicationService {
   final List<String> dispatchKeys = [];
@@ -151,6 +173,56 @@ void main() {
         ),
         findsOneWidget,
       );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'quantity dialog survives its closing animation and explains mixed ownership',
+    (tester) async {
+      tester.view.physicalSize = const Size(400, 820);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        EasyLocalization(
+          supportedLocales: const [Locale('ar'), Locale('en'), Locale('fr')],
+          path: 'assets/translations',
+          assetLoader: const _Assets(),
+          startLocale: const Locale('en'),
+          saveLocale: false,
+          child: Builder(
+            builder: (context) => MaterialApp(
+              locale: context.locale,
+              supportedLocales: context.supportedLocales,
+              localizationsDelegates: context.localizationDelegates,
+              home: WarehouseTransferScreen(service: _ComposerService()),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+
+      final sourceButton = find.ancestor(
+        of: find.byIcon(Icons.upload_outlined),
+        matching: find.byType(OutlinedButton),
+      );
+      await tester.tap(sourceButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Main warehouse').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Add').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Company-owned: 6'), findsOneWidget);
+      expect(find.text('Consignment: 4'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mixed ownership product'), findsWidgets);
       expect(tester.takeException(), isNull);
     },
   );

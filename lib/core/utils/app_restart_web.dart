@@ -1,3 +1,2 @@
-Future<void> closeAppForFreshRestart() async {
-  throw UnsupportedError('Please reload the browser to restart the app.');
-}
+/// Browsers do not permit an application process restart.
+Future<bool> closeAppForFreshRestart() async => false;

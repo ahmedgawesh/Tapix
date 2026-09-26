@@ -194,7 +194,27 @@ class _LanNetworkSettingsScreenState extends State<LanNetworkSettingsScreen> {
         target: target,
         actorRole: authState.user.role,
       );
-      await closeAppForFreshRestart();
+      final closed = await closeAppForFreshRestart();
+      if (!closed && mounted) {
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(
+              'settings.network.fresh_reset.restart_required_title'.tr(),
+            ),
+            content: Text(
+              'settings.network.fresh_reset.restart_required_body'.tr(),
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text('common.ok'.tr()),
+              ),
+            ],
+          ),
+        );
+      }
     });
   }
 

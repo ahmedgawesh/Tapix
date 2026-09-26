@@ -171,6 +171,21 @@ void main() {
     permissions: const ['create_sales', 'process_sales'],
   );
 
+  Future<void> expectPayloadConflict(Future<Object?> Function() action) async {
+    await expectLater(
+      action(),
+      throwsA(
+        isA<LanBusinessException>()
+            .having(
+              (error) => error.code,
+              'code',
+              'idempotency_payload_conflict',
+            )
+            .having((error) => error.statusCode, 'statusCode', 409),
+      ),
+    );
+  }
+
   test(
     'cashier shift retries are idempotent and conflict on changed money',
     () async {
@@ -1643,6 +1658,26 @@ void main() {
         actor: actor(),
         request: request,
       );
+      await expectPayloadConflict(
+        () => gateway.createSaleAdjustmentReturn(
+          actor: actor(),
+          request: LanSaleAdjustmentReturnRequest(
+            idempotencyKey: key,
+            refundMethod: 'cash',
+            returnDate: DateTime(2026, 8, 25),
+            reasonCode: 'noReceipt',
+            lines: [
+              LanSaleAdjustmentReturnLineRequest(
+                productId: productId,
+                quantity: 1000,
+                unitPriceCents: 1200,
+                sourceResolution: 'unverified',
+                sourceResolutionReason: 'Different retry payload.',
+              ),
+            ],
+          ),
+        ),
+      );
 
       expect(created.duplicate, isFalse);
       expect(replayed.duplicate, isTrue);
@@ -1849,6 +1884,20 @@ void main() {
         actor: actor(),
         request: request,
       );
+      await expectPayloadConflict(
+        () => gateway.createSaleReturn(
+          actor: actor(),
+          request: LanSaleReturnRequest(
+            idempotencyKey: request.idempotencyKey,
+            saleId: sale.saleId,
+            dispositionType: 'restock',
+            refundMethod: 'cash',
+            lines: [
+              LanSaleReturnLineRequest(saleItemId: item.id, quantity: 300),
+            ],
+          ),
+        ),
+      );
 
       expect(created.returnId, replayed.returnId);
       expect(created.duplicate, isFalse);
@@ -2023,6 +2072,23 @@ void main() {
       final replayed = await gateway.createPurchaseReturn(
         actor: actor(),
         request: request,
+      );
+      await expectPayloadConflict(
+        () => gateway.createPurchaseReturn(
+          actor: actor(),
+          request: LanPurchaseReturnRequest(
+            idempotencyKey: idempotencyKey,
+            purchaseId: purchaseId,
+            dispositionType: 'restock',
+            refundMethod: 'credit',
+            lines: [
+              LanPurchaseReturnLineRequest(
+                purchaseItemId: purchaseItemId,
+                quantity: 400,
+              ),
+            ],
+          ),
+        ),
       );
       expect(created.duplicate, isFalse);
       expect(replayed.duplicate, isTrue);
@@ -2537,6 +2603,27 @@ void main() {
         actor: actor(),
         request: request,
       );
+      await expectPayloadConflict(
+        () => gateway.createPurchaseAdjustmentReturn(
+          actor: actor(),
+          request: LanPurchaseAdjustmentReturnRequest(
+            idempotencyKey: idempotencyKey,
+            supplierId: supplierId,
+            refundMethod: 'credit',
+            returnDate: DateTime(2026, 9, 13),
+            reasonCode: 'noReceipt',
+            notes: 'Network adjustment return',
+            lines: [
+              LanPurchaseAdjustmentReturnLineRequest(
+                productId: productId,
+                variantId: variantId,
+                quantity: 400,
+                unitPriceCents: 800,
+              ),
+            ],
+          ),
+        ),
+      );
       expect(created.duplicate, isFalse);
       expect(replayed.duplicate, isTrue);
       expect(replayed.returnId, created.returnId);
@@ -3044,6 +3131,17 @@ void main() {
       final replayed = await gateway.createSale(
         actor: actor(),
         request: request,
+      );
+      await expectPayloadConflict(
+        () => gateway.createSale(
+          actor: actor(),
+          request: LanSaleRequest(
+            idempotencyKey: key,
+            paymentMethod: 'cash',
+            paidAmountCents: 1200,
+            lines: [LanSaleLineRequest(productId: productId, quantity: 1000)],
+          ),
+        ),
       );
       final stockAfterReplay = await (db.select(
         db.products,

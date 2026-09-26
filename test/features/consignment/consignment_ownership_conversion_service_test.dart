@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:tapix/core/database/app_database.dart';
+import 'package:tapix/core/database/migrations/consignment_ownership_conversion_economics.dart';
 import 'package:tapix/core/services/business/branch_consignment_policy_store.dart';
 import 'package:tapix/core/services/business/local_branch_scope.dart';
 import 'package:tapix/core/services/business/warehouse_operation_scope.dart';
@@ -152,6 +153,8 @@ void main() {
         agreementId: agreement.id,
         currencyId: currency,
         convertedAt: DateTime.utc(2026, 9, 24),
+        supplierCreditNetCents: 2200,
+        supplierCreditTaxCents: 220,
         lines: [
           ConsignmentOwnershipConversionLineInput(
             productId: product,
@@ -182,7 +185,7 @@ void main() {
         (await (db.select(
           db.suppliers,
         )..where((row) => row.id.equals(supplier))).getSingle()).balanceCents,
-        Decimal.fromInt(3000),
+        Decimal.fromInt(2580),
       );
       final postingLines =
           await (db.select(db.journalEntryLines).join([
@@ -202,8 +205,23 @@ void main() {
             db.journalEntryLines,
           ),
       };
-      expect(byCode['2000']!.debitCents.toBigInt().toInt(), 2000);
+      expect(byCode['2000']!.debitCents.toBigInt().toInt(), 2420);
       expect(byCode['1200']!.creditCents.toBigInt().toInt(), 2000);
+      expect(byCode['1300']!.creditCents.toBigInt().toInt(), 220);
+      expect(byCode['4900']!.creditCents.toBigInt().toInt(), 200);
+      final economics = await db
+          .customSelect(
+            'SELECT supplier_credit_net_cents,supplier_credit_tax_cents,'
+            'supplier_credit_total_cents,variance_cents '
+            'FROM consignment_ownership_conversion_economics '
+            'WHERE conversion_id=?',
+            variables: [Variable.withInt(conversion.id)],
+          )
+          .getSingle();
+      expect(economics.read<int>('supplier_credit_net_cents'), 2200);
+      expect(economics.read<int>('supplier_credit_tax_cents'), 220);
+      expect(economics.read<int>('supplier_credit_total_cents'), 2420);
+      expect(economics.read<int>('variance_cents'), 200);
 
       final voided = await service.voidConversion(
         conversionId: conversion.id,
@@ -230,6 +248,40 @@ void main() {
           db.suppliers,
         )..where((row) => row.id.equals(supplier))).getSingle()).balanceCents,
         Decimal.fromInt(5000),
+      );
+
+      // Reproduce an interrupted/older installation: a posted or voided
+      // conversion exists but its additive economics row is absent while the
+      // strict insert guard is already installed from a previous app start.
+      await db.customStatement(
+        'DROP TRIGGER IF EXISTS consignment_conversion_economics_no_delete',
+      );
+      await db.customStatement(
+        'DELETE FROM consignment_ownership_conversion_economics '
+        'WHERE conversion_id=?',
+        [conversion.id],
+      );
+      // The legacy implementation being repaired stored a supplier movement
+      // equal to carrying value and had no separately frozen tax/variance.
+      await db.customStatement(
+        'UPDATE supplier_transactions SET amount_cents=? WHERE id=?',
+        [-conversion.inventoryValueCents, conversion.supplierTransactionId!],
+      );
+      await installConsignmentOwnershipConversionEconomics(db);
+      await installConsignmentOwnershipConversionEconomics(db);
+
+      final restoredEconomics = await db
+          .customSelect(
+            'SELECT COUNT(*) AS row_count,supplier_credit_total_cents '
+            'FROM consignment_ownership_conversion_economics '
+            'WHERE conversion_id=?',
+            variables: [Variable.withInt(conversion.id)],
+          )
+          .getSingle();
+      expect(restoredEconomics.read<int>('row_count'), 1);
+      expect(
+        restoredEconomics.read<int>('supplier_credit_total_cents'),
+        conversion.inventoryValueCents,
       );
     },
   );

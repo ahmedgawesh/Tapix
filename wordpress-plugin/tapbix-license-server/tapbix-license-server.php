@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TapBix License Server
  * Description: Offline-first license issuing and device activation server for TapBix Windows and Linux, integrated with WooCommerce.
- * Version: 0.5.1
+ * Version: 0.5.2
  * Author: Tapix Solutions
  * Requires at least: 6.4
  * Requires PHP: 8.1
@@ -11,7 +11,7 @@
 if (!defined('ABSPATH')) exit;
 
 final class TapBix_License_Server {
-    const VERSION='0.5.1';
+    const VERSION='0.5.2';
     const PRODUCT_CODE='tapbix-desktop';
     const ADD_DEVICE_SKU='TAPBIX-DESKTOP-ADD-DEVICE';
     const APP_ID='com.tapix.pos';
@@ -47,7 +47,7 @@ final class TapBix_License_Server {
         add_action('admin_post_tapbix_create_test_license',[$this,'handle_create_test_license']);
         add_action('admin_post_tapbix_test_activation',[$this,'handle_test_activation']);
         add_action('admin_post_tapbix_adjust_max_devices',[$this,'handle_adjust_max_devices']);
-        add_action('admin_init',[$this,'maybe_upgrade']);
+        add_action('init',[$this,'maybe_upgrade'],1);
     }
     private function table($n){ global $wpdb; return $wpdb->prefix.'tapbix_'.$n; }
     private function now(){ return current_time('mysql',true); }
@@ -244,7 +244,7 @@ final class TapBix_License_Server {
             notes TEXT NULL,
             PRIMARY KEY (id), UNIQUE KEY license_key (license_key), UNIQUE KEY order_item_unique (order_id,order_item_id),
             KEY customer_id (customer_id), KEY customer_email (customer_email), KEY status (status)
-        ) $c;");
+        ) ENGINE=InnoDB $c;");
         dbDelta("CREATE TABLE {$this->table('activations')} (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             license_id BIGINT UNSIGNED NOT NULL,
@@ -258,7 +258,7 @@ final class TapBix_License_Server {
             last_seen_at DATETIME NOT NULL,
             deactivated_at DATETIME NULL,
             PRIMARY KEY (id), UNIQUE KEY license_device_unique (license_id,device_id), KEY license_id (license_id), KEY status (status)
-        ) $c;");
+        ) ENGINE=InnoDB $c;");
         dbDelta("CREATE TABLE {$this->table('license_logs')} (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             license_id BIGINT UNSIGNED NULL,
@@ -267,7 +267,14 @@ final class TapBix_License_Server {
             details LONGTEXT NULL,
             created_at DATETIME NOT NULL,
             PRIMARY KEY (id), KEY license_id (license_id), KEY event_type (event_type), KEY created_at (created_at)
-        ) $c;");
+        ) ENGINE=InnoDB $c;");
+        dbDelta("CREATE TABLE {$this->table('rate_limits')} (
+            bucket_key CHAR(64) NOT NULL,
+            hits INT UNSIGNED NOT NULL DEFAULT 0,
+            window_start DATETIME NOT NULL,
+            expires_at DATETIME NOT NULL,
+            PRIMARY KEY (bucket_key), KEY expires_at (expires_at)
+        ) ENGINE=InnoDB $c;");
         dbDelta("CREATE TABLE {$this->table('capacity_transactions')} (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
             license_id BIGINT UNSIGNED NOT NULL,
@@ -295,7 +302,7 @@ final class TapBix_License_Server {
     }
     private function gen_key(){ $a='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; $g=[]; for($x=0;$x<5;$x++){ $p=''; for($i=0;$i<4;$i++) $p.=$a[random_int(0,strlen($a)-1)]; $g[]=$p; } return 'TBX-'.implode('-',$g); }
     private function log($lid,$type,$details=[]){
-        global $wpdb; $ip=isset($_SERVER['REMOTE_ADDR'])?sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])):''; $h=$ip?hash('sha256',wp_salt('auth').'|'.$ip):null;
+        global $wpdb; $ip=$this->client_ip(); $h=$ip?hash('sha256',wp_salt('auth').'|'.$ip):null;
         $wpdb->insert($this->table('license_logs'),['license_id'=>$lid?:null,'event_type'=>sanitize_key($type),'ip_hash'=>$h,'details'=>wp_json_encode($details,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),'created_at'=>$this->now()],['%d','%s','%s','%s','%s']);
     }
     public function issue_for_order($order_id){
@@ -626,7 +633,72 @@ final class TapBix_License_Server {
     private function get_license($key){ global $wpdb; return $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table('licenses')} WHERE license_key=%s LIMIT 1",$key)); }
     private function activation($lid,$did){ global $wpdb; return $wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table('activations')} WHERE license_id=%d AND device_id=%s LIMIT 1",$lid,$did)); }
     private function active_count($lid){ global $wpdb; return (int)$wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$this->table('activations')} WHERE license_id=%d AND status='active'",$lid)); }
-    private function rate_ok(){ $ip=isset($_SERVER['REMOTE_ADDR'])?sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])):'unknown'; $k='tapbix_rl_'.md5(wp_salt('nonce').'|'.$ip); $n=(int)get_transient($k); if($n>=20)return false; set_transient($k,$n+1,5*MINUTE_IN_SECONDS); return true; }
+    private function ip_in_cidr($ip,$cidr){
+        $parts=explode('/',trim((string)$cidr),2);
+        $network=filter_var($parts[0]??'',FILTER_VALIDATE_IP);
+        if(!$network||!filter_var($ip,FILTER_VALIDATE_IP)) return false;
+        $ip_bin=inet_pton($ip); $network_bin=inet_pton($network);
+        if($ip_bin===false||$network_bin===false||strlen($ip_bin)!==strlen($network_bin)) return false;
+        $max_bits=strlen($ip_bin)*8;
+        $bits=isset($parts[1])?(int)$parts[1]:$max_bits;
+        if($bits<0||$bits>$max_bits) return false;
+        $bytes=intdiv($bits,8); $remainder=$bits%8;
+        if($bytes>0&&substr($ip_bin,0,$bytes)!==substr($network_bin,0,$bytes)) return false;
+        if($remainder===0) return true;
+        $mask=(0xFF<<(8-$remainder))&0xFF;
+        return (ord($ip_bin[$bytes])&$mask)===(ord($network_bin[$bytes])&$mask);
+    }
+    private function trusted_proxy($ip){
+        $ranges=(array)apply_filters('tapbix_trusted_proxies',[]);
+        foreach($ranges as $range) if($this->ip_in_cidr($ip,$range)) return true;
+        return false;
+    }
+    private function client_ip(){
+        $remote=filter_var(sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR']??'')),FILTER_VALIDATE_IP);
+        if(!$remote) return '';
+        $header=strtoupper((string)apply_filters('tapbix_trusted_proxy_header',''));
+        $allowed=['HTTP_CF_CONNECTING_IP','HTTP_X_REAL_IP','HTTP_X_FORWARDED_FOR'];
+        if(!$header||!in_array($header,$allowed,true)||!$this->trusted_proxy($remote)||empty($_SERVER[$header])) return $remote;
+        $raw=sanitize_text_field(wp_unslash($_SERVER[$header]));
+        if($header!=='HTTP_X_FORWARDED_FOR'){
+            $candidate=filter_var(trim($raw),FILTER_VALIDATE_IP);
+            return $candidate?:$remote;
+        }
+        $chain=array_values(array_filter(array_map('trim',explode(',',$raw))));
+        $chain[]=$remote;
+        for($i=count($chain)-1;$i>=0;$i--){
+            $candidate=filter_var($chain[$i],FILTER_VALIDATE_IP);
+            if($candidate&&!$this->trusted_proxy($candidate)) return $candidate;
+        }
+        return $remote;
+    }
+    private function rate_bucket_ok($scope,$identity,$limit,$window_seconds=300){
+        global $wpdb;
+        $identity=substr((string)$identity,0,256);
+        $bucket=hash('sha256',wp_salt('nonce').'|'.$scope.'|'.$identity);
+        $now=$this->now();
+        $expires=gmdate('Y-m-d H:i:s',time()+max(1,(int)$window_seconds));
+        $table=$this->table('rate_limits');
+        $sql=$wpdb->prepare(
+            "INSERT INTO $table (bucket_key,hits,window_start,expires_at) VALUES (%s,1,%s,%s)
+             ON DUPLICATE KEY UPDATE
+               hits=IF(expires_at<=VALUES(window_start),1,hits+1),
+               window_start=IF(expires_at<=VALUES(window_start),VALUES(window_start),window_start),
+               expires_at=IF(expires_at<=VALUES(window_start),VALUES(expires_at),expires_at)",
+            $bucket,$now,$expires
+        );
+        if($wpdb->query($sql)===false) return false;
+        $hits=(int)$wpdb->get_var($wpdb->prepare("SELECT hits FROM $table WHERE bucket_key=%s",$bucket));
+        try{ if(random_int(1,100)===1) $wpdb->query($wpdb->prepare("DELETE FROM $table WHERE expires_at<%s LIMIT 500",gmdate('Y-m-d H:i:s',time()-DAY_IN_SECONDS))); }catch(Exception $e){}
+        return $hits<=max(1,(int)$limit);
+    }
+    private function rate_ok($operation,$license_identity){
+        $ip=$this->client_ip()?:'unknown';
+        $ip_limit=(int)apply_filters('tapbix_license_rate_limit_per_ip',60,$operation);
+        $license_limit=(int)apply_filters('tapbix_license_rate_limit_per_license',20,$operation);
+        return $this->rate_bucket_ok($operation.':ip',$ip,$ip_limit)
+            &&$this->rate_bucket_ok($operation.':license',$license_identity,$license_limit);
+    }
 
     public function register_rest_routes(){
         register_rest_route('tapbix/v1','/activate',['methods'=>'POST','callback'=>[$this,'rest_activate'],'permission_callback'=>'__return_true']);
@@ -715,7 +787,7 @@ final class TapBix_License_Server {
 
         $device_id='tapbix-test-device-'.(int)$license->id;
         $device_name='TapBix Test Device';
-        $app_version='TEST-0.5.1';
+        $app_version='TEST-0.5.2';
         $platform='linux';
         if(!in_array($platform,$this->allowed_platforms($license),true)){
             return new WP_Error('invalid_product','The TEST license does not allow Linux.');
@@ -763,12 +835,12 @@ final class TapBix_License_Server {
     }
 
     public function rest_activate(WP_REST_Request $r){
-        if(!$this->rate_ok()) return new WP_Error('rate_limited','Too many attempts.',['status'=>429]);
         $key=strtoupper(trim((string)$r->get_param('license_key')));
         $did=trim((string)$r->get_param('device_id'));
         $name=substr(sanitize_text_field((string)$r->get_param('device_name')),0,190);
         $ver=substr(sanitize_text_field((string)$r->get_param('app_version')),0,50);
         $platform=$this->normalize_platform($r->get_param('platform'));
+        if(!$this->rate_ok('activate',$key?:'invalid')) return new WP_Error('rate_limited','Too many attempts.',['status'=>429]);
         if(!preg_match('/^TBX(?:-[A-HJ-NP-Z2-9]{4}){5}$/',$key)||strlen($did)<8||strlen($did)>190||!$platform){
             return new WP_Error('invalid_request','Valid license_key, device_id, and platform are required.',['status'=>400]);
         }
@@ -785,9 +857,31 @@ final class TapBix_License_Server {
         $token=$this->new_activation_token();
         $token_hash=$this->token_hash($token);
         global $wpdb;
-        $a=$this->activation($l->id,$did);
+        if($wpdb->query('START TRANSACTION')===false){
+            return new WP_Error('activation_write_failed','Could not start the activation transaction.',['status'=>500]);
+        }
+        $locked=$wpdb->get_row($wpdb->prepare("SELECT * FROM {$this->table('licenses')} WHERE id=%d FOR UPDATE",$l->id));
+        if(!$locked){
+            $wpdb->query('ROLLBACK');
+            return new WP_Error('invalid_license','Invalid license key.',['status'=>404]);
+        }
+        if($locked->status!=='active'){
+            $wpdb->query('ROLLBACK');
+            return new WP_Error('license_revoked','License is not active.',['status'=>403]);
+        }
+        if($locked->expires_at&&strtotime($locked->expires_at.' UTC')<time()){
+            $wpdb->query('ROLLBACK');
+            return new WP_Error('license_expired','License expired.',['status'=>403]);
+        }
+        if(!in_array($platform,$this->allowed_platforms($locked),true)){
+            $wpdb->query('ROLLBACK');
+            return new WP_Error('invalid_product','License is not valid for this platform.',['status'=>403]);
+        }
+
+        $a=$this->activation($locked->id,$did);
         if($a){
-            if($a->status!=='active'&&$this->active_count($l->id)>=(int)$l->max_devices){
+            if($a->status!=='active'&&$this->active_count($locked->id)>=(int)$locked->max_devices){
+                $wpdb->query('ROLLBACK');
                 return new WP_Error('device_limit_reached','Device limit reached.',['status'=>409]);
             }
             $ok=$wpdb->update(
@@ -798,24 +892,34 @@ final class TapBix_License_Server {
                 ['%d']
             );
         }else{
-            if($this->active_count($l->id)>=(int)$l->max_devices) return new WP_Error('device_limit_reached','Device limit reached.',['status'=>409]);
+            if($this->active_count($locked->id)>=(int)$locked->max_devices){
+                $wpdb->query('ROLLBACK');
+                return new WP_Error('device_limit_reached','Device limit reached.',['status'=>409]);
+            }
             $ok=$wpdb->insert(
                 $this->table('activations'),
-                ['license_id'=>$l->id,'device_id'=>$did,'platform'=>$platform,'activation_token_hash'=>$token_hash,'device_name'=>$name,'app_version'=>$ver,'status'=>'active','activated_at'=>$this->now(),'last_seen_at'=>$this->now()],
+                ['license_id'=>$locked->id,'device_id'=>$did,'platform'=>$platform,'activation_token_hash'=>$token_hash,'device_name'=>$name,'app_version'=>$ver,'status'=>'active','activated_at'=>$this->now(),'last_seen_at'=>$this->now()],
                 ['%d','%s','%s','%s','%s','%s','%s','%s','%s']
             );
         }
-        if($ok===false) return new WP_Error('activation_write_failed','Could not store device activation.',['status'=>500]);
+        if($ok===false){
+            $wpdb->query('ROLLBACK');
+            return new WP_Error('activation_write_failed','Could not store device activation.',['status'=>500]);
+        }
+        if($wpdb->query('COMMIT')===false){
+            $wpdb->query('ROLLBACK');
+            return new WP_Error('activation_write_failed','Could not commit device activation.',['status'=>500]);
+        }
 
-        $s=$this->sign($this->payload($l,$did,$platform));
+        $s=$this->sign($this->payload($locked,$did,$platform));
         if(is_wp_error($s)) return $s;
-        $this->log($l->id,'activation_success',['device_id_hash'=>substr(hash('sha256',$did),0,16),'platform'=>$platform,'app_version'=>$ver]);
-        return rest_ensure_response(['ok'=>true,'license_id'=>(int)$l->id,'activation_token'=>$token,'license'=>$s]);
+        $this->log($locked->id,'activation_success',['device_id_hash'=>substr(hash('sha256',$did),0,16),'platform'=>$platform,'app_version'=>$ver]);
+        return rest_ensure_response(['ok'=>true,'license_id'=>(int)$locked->id,'activation_token'=>$token,'license'=>$s]);
     }
 
     public function rest_validate(WP_REST_Request $r){
-        if(!$this->rate_ok()) return new WP_Error('rate_limited','Too many attempts.',['status'=>429]);
         $license_id=absint($r->get_param('license_id'));
+        if(!$this->rate_ok('validate',$license_id?:'invalid')) return new WP_Error('rate_limited','Too many attempts.',['status'=>429]);
         $token=trim((string)$r->get_param('activation_token'));
         $did=trim((string)$r->get_param('device_id'));
         $platform=$this->normalize_platform($r->get_param('platform'));

@@ -33,6 +33,7 @@ class _Reports implements ConsignmentReportingService {
         currencyCodes: {},
         operationsEnabled: true,
         historicalManagementEnabled: true,
+        openCustodyAgreementIds: {},
         reportRows: [],
       );
   @override

@@ -65,6 +65,8 @@ void main() {
       '/sales/returns/adjustment',
       '/settings/backup',
       '/settings/admin-tools',
+      '/settings/locations',
+      '/consignment',
     ];
 
     for (final path in proNestedPaths) {
@@ -141,6 +143,14 @@ void main() {
       expect(
         ProRoutePolicy.featureFor('/settings/backup'),
         AppFeature.backupRestore,
+      );
+      expect(
+        ProRoutePolicy.featureFor('/settings/locations'),
+        AppFeature.inventoryAdvanced,
+      );
+      expect(
+        ProRoutePolicy.featureFor('/consignment'),
+        AppFeature.inventoryAdvanced,
       );
     });
 

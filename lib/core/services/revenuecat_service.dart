@@ -17,6 +17,11 @@ class RevenueCatConfig {
   /// Entitlement identifier for Tapix Pro
   static const String entitlementId = 'Tapix Pro';
 
+  /// Separately priced online-branches module. Local warehouses and LAN must
+  /// never check this entitlement.
+  static const String onlineBranchesEntitlementId = 'Tapix Online Branches';
+  static const String onlineBranchesOfferingId = 'online_branches';
+
   /// Android application package name (must match `applicationId` in
   /// `android/app/build.gradle.kts`). Used to deep-link to the Google Play
   /// subscription-management page per Play policy.
@@ -64,10 +69,13 @@ enum SubscriptionType {
       case weekly:
         return 3;
       case monthly:
-        return 7;
       case yearly:
-        return 14;
+        // Keep the local fallback aligned with RevenueCat's short offline
+        // entitlement grace instead of trusting a long-lived client ticket.
+        return 3;
       case lifetime:
+        // Lifetime ownership does not naturally expire, while a bounded
+        // refresh window still allows refunds/revocations to propagate.
         return 30;
       case none:
         return 0;
@@ -84,6 +92,14 @@ class SubscriptionStatus {
   final DateTime? expirationDate;
   final bool willRenew;
   final String? userId;
+  final bool verificationFailed;
+
+  /// Time at which RevenueCat produced this customer-info snapshot.
+  ///
+  /// The SDK may return a cached snapshot while the device only has a local
+  /// network interface. Consumers must check this before treating an inactive
+  /// result as proof that a locally signed licence was revoked.
+  final DateTime? checkedAt;
 
   const SubscriptionStatus({
     this.isActive = false,
@@ -93,6 +109,8 @@ class SubscriptionStatus {
     this.expirationDate,
     this.willRenew = false,
     this.userId,
+    this.verificationFailed = false,
+    this.checkedAt,
   });
 
   factory SubscriptionStatus.fromCustomerInfo(CustomerInfo? info) {
@@ -101,7 +119,9 @@ class SubscriptionStatus {
     }
 
     final entitlement = info.entitlements.all[RevenueCatConfig.entitlementId];
-    final isActive = entitlement?.isActive ?? false;
+    final verificationFailed =
+        info.entitlements.verification == VerificationResult.failed;
+    final isActive = !verificationFailed && (entitlement?.isActive ?? false);
     final productId = entitlement?.productIdentifier;
 
     return SubscriptionStatus(
@@ -114,6 +134,8 @@ class SubscriptionStatus {
           : null,
       willRenew: entitlement?.willRenew ?? false,
       userId: info.originalAppUserId,
+      verificationFailed: verificationFailed,
+      checkedAt: DateTime.tryParse(info.requestDate),
     );
   }
 
@@ -127,6 +149,8 @@ class SubscriptionStatus {
     DateTime? expirationDate,
     bool? willRenew,
     String? userId,
+    bool? verificationFailed,
+    DateTime? checkedAt,
   }) {
     return SubscriptionStatus(
       isActive: isActive ?? this.isActive,
@@ -136,8 +160,28 @@ class SubscriptionStatus {
       expirationDate: expirationDate ?? this.expirationDate,
       willRenew: willRenew ?? this.willRenew,
       userId: userId ?? this.userId,
+      verificationFailed: verificationFailed ?? this.verificationFailed,
+      checkedAt: checkedAt ?? this.checkedAt,
     );
   }
+}
+
+/// Read-only status for a single RevenueCat entitlement.
+///
+/// This intentionally stays separate from [SubscriptionStatus] so optional
+/// paid modules cannot accidentally grant or revoke the base Pro plan.
+class RevenueCatEntitlementStatus {
+  const RevenueCatEntitlementStatus({
+    this.isActive = false,
+    this.productId,
+    this.expirationDate,
+    this.willRenew = false,
+  });
+
+  final bool isActive;
+  final String? productId;
+  final DateTime? expirationDate;
+  final bool willRenew;
 }
 
 /// Purchase result model
@@ -204,6 +248,8 @@ class RevenueCatService {
       }
 
       final configuration = PurchasesConfiguration(RevenueCatConfig.apiKey);
+      configuration.entitlementVerificationMode =
+          EntitlementVerificationMode.informational;
 
       if (appUserId != null && appUserId.isNotEmpty) {
         configuration.appUserID = appUserId;
@@ -215,8 +261,6 @@ class RevenueCatService {
 
       _isInitialized = true;
       debugPrint('RevenueCat: Initialized successfully');
-
-      await refreshSubscriptionStatus();
     } catch (e, st) {
       debugPrint('RevenueCat: Initialization failed: $e');
       debugPrint('$st');
@@ -231,7 +275,9 @@ class RevenueCatService {
   }
 
   /// Check subscription and return status. Returns inactive on unsupported platforms.
-  Future<SubscriptionStatus> checkSubscription() async {
+  Future<SubscriptionStatus> checkSubscription({
+    bool throwOnError = false,
+  }) async {
     if (!RevenueCatConfig.isSupported || !_isInitialized) {
       return const SubscriptionStatus();
     }
@@ -241,29 +287,59 @@ class RevenueCatService {
       return SubscriptionStatus.fromCustomerInfo(customerInfo);
     } catch (e) {
       debugPrint('RevenueCat: Failed to check subscription: $e');
+      if (throwOnError) rethrow;
       return const SubscriptionStatus();
     }
   }
 
-  /// Checks one named RevenueCat entitlement without deriving it from the
-  /// application's general Pro status. Unsupported or unavailable stores fail
-  /// closed, which prevents an add-on from being granted during an outage.
-  Future<bool> hasActiveEntitlement(String entitlementId) async {
-    if (entitlementId.trim().isEmpty ||
-        !RevenueCatConfig.isSupported ||
-        !_isInitialized) {
-      return false;
+  /// Reads one named entitlement without deriving it from the general Pro
+  /// status. Unsupported or unavailable stores fail closed.
+  Future<RevenueCatEntitlementStatus> checkEntitlement(
+    String entitlementId,
+  ) async =>
+      (await checkEntitlements([entitlementId]))[entitlementId] ??
+      const RevenueCatEntitlementStatus();
+
+  /// Reads multiple entitlements from one CustomerInfo snapshot so a feature
+  /// cannot observe the base plan and its add-on at different store revisions.
+  Future<Map<String, RevenueCatEntitlementStatus>> checkEntitlements(
+    Iterable<String> entitlementIds,
+  ) async {
+    final ids = entitlementIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    if (ids.isEmpty || !RevenueCatConfig.isSupported || !_isInitialized) {
+      return {for (final id in ids) id: const RevenueCatEntitlementStatus()};
     }
     try {
       final customerInfo = await Purchases.getCustomerInfo();
-      return customerInfo.entitlements.all[entitlementId]?.isActive ?? false;
+      return {
+        for (final id in ids)
+          id: _entitlementStatus(customerInfo.entitlements.all[id]),
+      };
     } catch (error) {
-      debugPrint(
-        'RevenueCat: Failed to check entitlement $entitlementId: $error',
-      );
-      return false;
+      debugPrint('RevenueCat: Failed to check named entitlements: $error');
+      return {for (final id in ids) id: const RevenueCatEntitlementStatus()};
     }
   }
+
+  RevenueCatEntitlementStatus _entitlementStatus(EntitlementInfo? entitlement) {
+    if (entitlement == null) {
+      return const RevenueCatEntitlementStatus();
+    }
+    return RevenueCatEntitlementStatus(
+      isActive: entitlement.isActive,
+      productId: entitlement.productIdentifier,
+      expirationDate: entitlement.expirationDate == null
+          ? null
+          : DateTime.tryParse(entitlement.expirationDate!),
+      willRenew: entitlement.willRenew,
+    );
+  }
+
+  Future<bool> hasActiveEntitlement(String entitlementId) async =>
+      (await checkEntitlement(entitlementId)).isActive;
 
   /// Refresh and broadcast subscription status
   Future<SubscriptionStatus> refreshSubscriptionStatus() async {

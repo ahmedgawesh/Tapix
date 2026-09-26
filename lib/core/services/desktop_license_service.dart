@@ -107,6 +107,27 @@ rQIDAQAB
     return raw.whereType<String>().contains(featureId);
   }
 
+  /// Expiry carried by the verified license envelope. It is exposed only
+  /// while the signature, device binding and offline lease are all valid.
+  DateTime? get signedLicenseExpiration {
+    if (_status != DesktopLicenseStatus.valid) return null;
+    return _parseUtc(_verifiedPayload?['expires_at'], nullable: true);
+  }
+
+  /// Optional positive plan limit signed by the licensing server.
+  /// Expected payload shape:
+  /// `feature_limits: {featureId: {limitName: positiveInteger}}`.
+  int? signedFeatureLimit(String featureId, String limitName) {
+    if (!hasSignedFeature(featureId)) return null;
+    final allLimits = _verifiedPayload?['feature_limits'];
+    if (allLimits is! Map) return null;
+    final feature = allLimits[featureId];
+    if (feature is! Map) return null;
+    final raw = feature[limitName];
+    final value = raw is int ? raw : int.tryParse(raw?.toString() ?? '');
+    return value != null && value > 0 ? value : null;
+  }
+
   DesktopLicenseService({
     required DeviceFingerprintService fingerprintService,
     FlutterSecureStorage? secureStorage,

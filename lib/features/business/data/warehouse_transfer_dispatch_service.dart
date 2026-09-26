@@ -13,6 +13,9 @@ import '../../../core/services/business/warehouse_inventory_reader.dart';
 import '../../../core/services/business/warehouse_operation_scope.dart';
 import '../../../core/services/business/warehouse_transfer_preflight.dart';
 import '../../../core/services/stock_service.dart';
+import '../../../core/services/sync/offline_sync_event_store.dart';
+import '../../../core/services/sync/sync_entity_identity_store.dart';
+import '../../../core/services/sync/warehouse_transfer_sync_contract.dart';
 import '../../accounting/data/repositories/accounting_repository.dart';
 import '../../accounting/domain/models/journal_entry_data.dart';
 import 'warehouse_transfer_repository.dart';
@@ -37,12 +40,18 @@ class WarehouseTransferDispatchService {
     required this.preflight,
     required this.authorize,
     AccountingRepository? accounting,
-  }) : accounting = accounting ?? AccountingRepository(db);
+    OfflineSyncEventStore? syncEvents,
+    SyncEntityIdentityStore? syncIdentities,
+  }) : accounting = accounting ?? AccountingRepository(db),
+       syncEvents = syncEvents ?? OfflineSyncEventStore(db),
+       syncIdentities = syncIdentities ?? SyncEntityIdentityStore(db);
 
   final AppDatabase db;
   final WarehouseTransferPreflight preflight;
   final AuthorizeTransferDraft authorize;
   final AccountingRepository accounting;
+  final OfflineSyncEventStore syncEvents;
+  final SyncEntityIdentityStore syncIdentities;
 
   static String _key(String input) {
     final key = input.trim().toLowerCase();
@@ -99,7 +108,7 @@ class WarehouseTransferDispatchService {
     required String transferId,
     required String requestKey,
     DateTime? dispatchedAt,
-  }) => db.transaction(() async {
+  }) => syncEvents.transaction((sync) async {
     final key = _key(requestKey);
     var transfer = await (db.select(
       db.warehouseTransfers,
@@ -119,7 +128,9 @@ class WarehouseTransferDispatchService {
       if (replay.transferId != transfer.id || replay.requestHash != hash) {
         throw StateError('Dispatch request key belongs to another operation');
       }
-      return _result(transfer, replay);
+      final replayed = await _result(transfer, replay);
+      await _appendSyncEvent(sync, replayed);
+      return replayed;
     }
     final existing = await (db.select(
       db.warehouseTransferDispatches,
@@ -321,8 +332,35 @@ class WarehouseTransferDispatchService {
     final dispatch = await (db.select(
       db.warehouseTransferDispatches,
     )..where((d) => d.id.equals(dispatchId))).getSingle();
-    return _result(transfer, dispatch);
+    final result = await _result(transfer, dispatch);
+    await _appendSyncEvent(sync, result);
+    return result;
   });
+
+  Future<void> _appendSyncEvent(
+    OfflineSyncTransaction sync,
+    WarehouseTransferDispatchResult result,
+  ) async {
+    if (!await sync.isWriterRecordingEnabled()) return;
+    final payload =
+        await WarehouseTransferSyncContractBuilder(
+          db,
+          syncIdentities,
+        ).buildDispatch(
+          transfer: result.transfer,
+          dispatch: result.dispatch,
+          allocations: result.allocations,
+        );
+    await sync.appendOnce(
+      producerKey: 'warehouse_transfer:${result.transfer.id}:dispatched',
+      eventType: 'warehouse_transfer.dispatched.v1',
+      aggregateType: 'warehouse_transfer',
+      aggregateId: result.transfer.id,
+      payload: payload,
+      contractVersion: 1,
+      occurredAt: result.dispatch.dispatchedAt,
+    );
+  }
 
   Future<List<_DispatchAllocationPlan>> _planLine(
     WarehouseTransferLine line,

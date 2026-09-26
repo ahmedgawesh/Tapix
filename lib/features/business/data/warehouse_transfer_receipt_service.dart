@@ -11,6 +11,9 @@ import '../../../core/services/business/warehouse_inventory_reader.dart';
 import '../../../core/services/business/warehouse_operation_scope.dart';
 import '../../../core/services/inventory/wac_movement_service.dart';
 import '../../../core/services/stock_service.dart';
+import '../../../core/services/sync/offline_sync_event_store.dart';
+import '../../../core/services/sync/sync_entity_identity_store.dart';
+import '../../../core/services/sync/warehouse_transfer_sync_contract.dart';
 import '../../accounting/data/repositories/accounting_repository.dart';
 import '../../accounting/domain/models/journal_entry_data.dart';
 import 'warehouse_transfer_repository.dart';
@@ -71,11 +74,17 @@ class WarehouseTransferReceiptService {
     this.db, {
     required this.authorize,
     AccountingRepository? accounting,
-  }) : accounting = accounting ?? AccountingRepository(db);
+    OfflineSyncEventStore? syncEvents,
+    SyncEntityIdentityStore? syncIdentities,
+  }) : accounting = accounting ?? AccountingRepository(db),
+       syncEvents = syncEvents ?? OfflineSyncEventStore(db),
+       syncIdentities = syncIdentities ?? SyncEntityIdentityStore(db);
 
   final AppDatabase db;
   final AuthorizeTransferDraft authorize;
   final AccountingRepository accounting;
+  final OfflineSyncEventStore syncEvents;
+  final SyncEntityIdentityStore syncIdentities;
 
   static String _key(String input) {
     final key = input.trim().toLowerCase();
@@ -204,7 +213,7 @@ class WarehouseTransferReceiptService {
     required List<WarehouseTransferReceiptRequestItem> items,
     String notes = '',
     DateTime? receivedAt,
-  }) => db.transaction(() async {
+  }) => syncEvents.transaction((sync) async {
     final key = _key(requestKey);
     final trimmedNotes = notes.trim();
     if (trimmedNotes.length > 500) {
@@ -261,7 +270,9 @@ class WarehouseTransferReceiptService {
       if (replay.transferId != transfer.id || replay.requestHash != hash) {
         throw StateError('Receipt request key belongs to another operation');
       }
-      return _result(transfer, replay);
+      final replayed = await _result(transfer, replay);
+      await _appendSyncEvent(sync, replayed);
+      return replayed;
     }
     if (!transfer.sealed ||
         !const {'in_transit', 'partially_received'}.contains(transfer.status)) {
@@ -650,8 +661,36 @@ class WarehouseTransferReceiptService {
     final receipt = await (db.select(
       db.warehouseTransferReceipts,
     )..where((row) => row.id.equals(receiptId))).getSingle();
-    return _result(transfer, receipt);
+    final result = await _result(transfer, receipt);
+    await _appendSyncEvent(sync, result);
+    return result;
   });
+
+  Future<void> _appendSyncEvent(
+    OfflineSyncTransaction sync,
+    WarehouseTransferReceiptResult result,
+  ) async {
+    if (!await sync.isWriterRecordingEnabled()) return;
+    final payload =
+        await WarehouseTransferSyncContractBuilder(
+          db,
+          syncIdentities,
+        ).buildReceipt(
+          transfer: result.transfer,
+          receipt: result.receipt,
+          items: result.items,
+        );
+    await sync.appendOnce(
+      producerKey:
+          'warehouse_transfer:${result.transfer.id}:receipt:${result.receipt.requestKey}',
+      eventType: 'warehouse_transfer.received.v1',
+      aggregateType: 'warehouse_transfer',
+      aggregateId: result.transfer.id,
+      payload: payload,
+      contractVersion: 1,
+      occurredAt: result.receipt.receivedAt,
+    );
+  }
 }
 
 class _ReceiptPlan {

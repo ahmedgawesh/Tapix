@@ -59,6 +59,7 @@ import '../../features/settings/presentation/screens/company_profile_screen.dart
 import '../../features/settings/presentation/screens/backup_restore_screen.dart';
 import '../../features/settings/presentation/screens/lan_network_settings_screen.dart';
 import '../../features/settings/presentation/screens/lan_client_session_screen.dart';
+import '../../features/business/presentation/screens/business_locations_hub_screen.dart';
 import '../../features/settings/presentation/screens/lan_remote_sale_screen.dart';
 import '../../features/promotions/presentation/screens/promotions_screen.dart';
 import '../../features/promotions/presentation/screens/promotion_usage_report_screen.dart';
@@ -1218,6 +1219,10 @@ class AppRouter {
         path: '/settings',
         builder: (context, state) => const SettingsScreen(),
         routes: [
+          GoRoute(
+            path: 'locations',
+            builder: (context, state) => const BusinessLocationsHubScreen(),
+          ),
           GoRoute(
             path: 'company',
             builder: (context, state) => const CompanyProfileScreen(),

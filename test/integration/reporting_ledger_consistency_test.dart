@@ -370,7 +370,7 @@ void main() {
               subtotalCents: Value(Decimal.fromInt(500)),
               taxCents: Value(Decimal.fromInt(75)),
               totalCents: Decimal.fromInt(575),
-              status: const Value('posted'),
+              status: const Value('draft'),
               refundMethod: const Value('cash'),
               returnDate: Value(day),
             ),
@@ -391,6 +391,9 @@ void main() {
               totalCents: Decimal.fromInt(575),
             ),
           );
+      await (db.update(db.saleReturnAdjustments)
+            ..where((row) => row.id.equals(adjustmentReturn)))
+          .write(const SaleReturnAdjustmentsCompanion(status: Value('posted')));
 
       final range = ReportDateRange(
         startDate: DateTime(2026, 8, 1),

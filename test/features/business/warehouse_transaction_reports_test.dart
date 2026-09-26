@@ -88,7 +88,7 @@ void main() {
         sale ? 'customer_id' : 'supplier_id': sale ? customer : supplier,
         'currency_id': currency,
         'return_date': now,
-        'status': 'posted',
+        'status': sale ? 'draft' : 'posted',
         'subtotal_cents': 1000,
         'discount_cents': 20,
         'tax_cents': 10,
@@ -105,6 +105,16 @@ void main() {
         'tax_cents': 10,
         'total_cents': 990,
       });
+      if (sale) {
+        await db.customUpdate(
+          'UPDATE sale_return_adjustments SET status = ? WHERE id = ?',
+          variables: [
+            Variable.withString('posted'),
+            Variable.withInt(adjustment),
+          ],
+          updates: {db.saleReturnAdjustments},
+        );
+      }
       docs.addAll({
         '${side}s': header,
         '${side}_returns': linked,

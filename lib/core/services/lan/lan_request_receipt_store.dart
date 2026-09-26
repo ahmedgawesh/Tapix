@@ -19,13 +19,9 @@ final class LanLegacyRequestDocument {
 }
 
 final class LanRequestReservation {
-  const LanRequestReservation._({
-    required this.shouldCreate,
-    this.documentId,
-  });
+  const LanRequestReservation._({required this.shouldCreate, this.documentId});
 
-  const LanRequestReservation.create()
-    : this._(shouldCreate: true);
+  const LanRequestReservation.create() : this._(shouldCreate: true);
 
   const LanRequestReservation.replay(int documentId)
     : this._(shouldCreate: false, documentId: documentId);
@@ -59,13 +55,15 @@ final class LanRequestReceiptStore {
     required Future<LanLegacyRequestDocument?> Function() findLegacyDocument,
   }) async {
     final requestHash = fingerprint(payload);
-    final rows = await _db.customSelect(
-      '''SELECT request_hash, state, document_id
+    final rows = await _db
+        .customSelect(
+          '''SELECT request_hash, state, document_id
          FROM lan_request_receipts
          WHERE operation = ? AND idempotency_key = ?
          LIMIT 1''',
-      variables: [Variable(operation), Variable(idempotencyKey)],
-    ).get();
+          variables: [Variable(operation), Variable(idempotencyKey)],
+        )
+        .get();
     if (rows.isNotEmpty) {
       final row = rows.single;
       final state = row.read<String>('state');

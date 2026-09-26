@@ -1,8 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:drift/drift.dart' hide isNotNull;
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
+import 'package:decimal/decimal.dart';
 
 import 'package:tapix/core/database/app_database.dart';
+import 'package:tapix/core/services/business/branch_currency_policy_store.dart';
 import 'package:tapix/features/accounting/data/repositories/accounting_repository.dart';
 import 'package:tapix/features/accounting/domain/exceptions/accounting_exception.dart';
 import 'package:tapix/features/accounting/domain/models/journal_entry_data.dart';
@@ -200,5 +202,205 @@ void main() {
       );
       expect(id, greaterThan(0));
     });
+
+    test(
+      'same line currency is rejected when account currencies differ',
+      () async {
+        await expectLater(
+          repo.createJournalEntry(
+            entryData: JournalEntryData(
+              description: 'EUR lines against USD accounts',
+              entryDate: DateTime.now(),
+              autoPost: true,
+              lines: [
+                JournalEntryLineData(
+                  accountId: cashAccountId,
+                  debitCents: 5000,
+                  creditCents: 0,
+                  currencyId: eurId,
+                ),
+                JournalEntryLineData(
+                  accountId: revenueAccountId,
+                  debitCents: 0,
+                  creditCents: 5000,
+                  currencyId: eurId,
+                ),
+              ],
+            ),
+            userId: null,
+          ),
+          throwsA(
+            isA<AccountingException>().having(
+              (error) => error.toString(),
+              'message',
+              contains('does not match account'),
+            ),
+          ),
+        );
+        expect(await db.select(db.journalEntries).get(), isEmpty);
+        expect(await db.select(db.journalEntryLines).get(), isEmpty);
+      },
+    );
+
+    test('non-USD branch accounts can post a matching non-USD entry', () async {
+      await BranchCurrencyPolicyStore(db).bind('EUR');
+
+      final accounts =
+          await (db.select(db.accounts)..where(
+                (account) =>
+                    account.id.isIn(<int>[cashAccountId, revenueAccountId]),
+              ))
+              .get();
+      expect(accounts.map((account) => account.currencyId).toSet(), <int>{
+        eurId,
+      });
+
+      final id = await repo.createJournalEntry(
+        entryData: JournalEntryData(
+          description: 'Valid EUR entry',
+          entryDate: DateTime.now(),
+          autoPost: true,
+          lines: [
+            JournalEntryLineData(
+              accountId: cashAccountId,
+              debitCents: 4200,
+              creditCents: 0,
+              currencyId: eurId,
+            ),
+            JournalEntryLineData(
+              accountId: revenueAccountId,
+              debitCents: 0,
+              creditCents: 4200,
+              currencyId: eurId,
+            ),
+          ],
+        ),
+        userId: null,
+      );
+
+      expect(id, greaterThan(0));
+    });
+
+    test('posting revalidates account currency for persisted drafts', () async {
+      final entryId = await db
+          .into(db.journalEntries)
+          .insert(
+            JournalEntriesCompanion.insert(
+              entryNumber: 'JE-CURRENCY-DRAFT',
+              description: 'Persisted invalid draft',
+              totalDebitCents: Value(Decimal.fromInt(2500)),
+              totalCreditCents: Value(Decimal.fromInt(2500)),
+            ),
+          );
+      await db
+          .into(db.journalEntryLines)
+          .insert(
+            JournalEntryLinesCompanion.insert(
+              journalEntryId: entryId,
+              accountId: cashAccountId,
+              debitCents: Value(Decimal.fromInt(2500)),
+              currencyId: eurId,
+            ),
+          );
+      await db
+          .into(db.journalEntryLines)
+          .insert(
+            JournalEntryLinesCompanion.insert(
+              journalEntryId: entryId,
+              accountId: revenueAccountId,
+              creditCents: Value(Decimal.fromInt(2500)),
+              currencyId: eurId,
+              lineNumber: const Value(2),
+            ),
+          );
+
+      await expectLater(
+        repo.postJournalEntry(entryId: entryId, userId: null),
+        throwsA(
+          isA<AccountingException>().having(
+            (error) => error.toString(),
+            'message',
+            contains('does not match account'),
+          ),
+        ),
+      );
+
+      final entry = await (db.select(
+        db.journalEntries,
+      )..where((row) => row.id.equals(entryId))).getSingle();
+      expect(entry.status, 'draft');
+      expect(entry.postedAt, isNull);
+    });
+
+    test(
+      'historical account currency conflicts block further posting',
+      () async {
+        final legacyEntryId = await db
+            .into(db.journalEntries)
+            .insert(
+              JournalEntriesCompanion.insert(
+                entryNumber: 'JE-LEGACY-MIXED-ACCOUNT',
+                description: 'Legacy currency conflict',
+                status: const Value('posted'),
+                totalDebitCents: Value(Decimal.fromInt(700)),
+                totalCreditCents: Value(Decimal.fromInt(700)),
+              ),
+            );
+        await db
+            .into(db.journalEntryLines)
+            .insert(
+              JournalEntryLinesCompanion.insert(
+                journalEntryId: legacyEntryId,
+                accountId: cashAccountId,
+                debitCents: Value(Decimal.fromInt(700)),
+                currencyId: eurId,
+              ),
+            );
+        await db
+            .into(db.journalEntryLines)
+            .insert(
+              JournalEntryLinesCompanion.insert(
+                journalEntryId: legacyEntryId,
+                accountId: revenueAccountId,
+                creditCents: Value(Decimal.fromInt(700)),
+                currencyId: eurId,
+                lineNumber: const Value(2),
+              ),
+            );
+
+        await expectLater(
+          repo.createJournalEntry(
+            entryData: JournalEntryData(
+              description: 'Must wait for reconciliation',
+              entryDate: DateTime.now(),
+              autoPost: true,
+              lines: [
+                JournalEntryLineData(
+                  accountId: cashAccountId,
+                  debitCents: 100,
+                  creditCents: 0,
+                  currencyId: usdId,
+                ),
+                JournalEntryLineData(
+                  accountId: revenueAccountId,
+                  debitCents: 0,
+                  creditCents: 100,
+                  currencyId: usdId,
+                ),
+              ],
+            ),
+            userId: null,
+          ),
+          throwsA(
+            isA<AccountingException>().having(
+              (error) => error.toString(),
+              'message',
+              contains('historical journal lines in another currency'),
+            ),
+          ),
+        );
+        expect(await db.select(db.journalEntries).get(), hasLength(1));
+      },
+    );
   });
 }

@@ -8,8 +8,8 @@ import '../../../../core/database/app_database.dart' show BusinessWarehouse;
 import '../../data/warehouse_setup_service.dart';
 import 'warehouse_stocktake_screen.dart';
 
-/// Ready for the independently licensed business section. Not linked into
-/// existing subscriptions or navigation before the add-on release gate exists.
+/// Local multi-warehouse setup included in the existing Pro plan.
+/// Online branch synchronization has a separate commercial boundary.
 class WarehouseSetupScreen extends StatefulWidget {
   const WarehouseSetupScreen({super.key, required this.service});
   final WarehouseSetupService service;

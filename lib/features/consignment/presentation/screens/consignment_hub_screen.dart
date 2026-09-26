@@ -265,12 +265,15 @@ class _ConsignmentHubScreenState extends State<ConsignmentHubScreen> {
             _run(() async => sl<ConsignmentAgreementService>().activate(id)),
         onClose: _closeAgreement,
         onRevise: _reviseAgreement,
+        onDeleteDraft: _deleteAgreementDraft,
+        onDetails: (agreement) => _showAgreementDetails(agreement, data),
       ),
       2 => _ReceiptsSection(
         data: data,
         onCreate: () => _newReceipt(data),
         onConvert: () => _newConversion(data),
         onVoidConversion: _voidConversion,
+        onDetails: (receipt) => _showReceiptDetails(receipt, data),
         onPost: (id) => _run(
           () async => sl<ConsignmentReceiptService>().post(
             receiptId: id,
@@ -372,6 +375,34 @@ class _ConsignmentHubScreenState extends State<ConsignmentHubScreen> {
     });
   }
 
+  Future<void> _deleteAgreementDraft(ConsignmentAgreement agreement) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('consignment.delete_draft_agreement'.tr()),
+        content: Text(
+          'consignment.delete_draft_agreement_confirm'.tr(
+            namedArgs: {'number': agreement.agreementNumber},
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text('common.cancel'.tr()),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text('common.delete'.tr()),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _run(
+      () => sl<ConsignmentAgreementService>().deleteUnusedDraft(agreement.id),
+    );
+  }
+
   Future<void> _closeAgreement(String agreementId) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -395,6 +426,47 @@ class _ConsignmentHubScreenState extends State<ConsignmentHubScreen> {
       () async => sl<ConsignmentAgreementService>().close(agreementId),
     );
   }
+
+  Future<void> _showAgreementDetails(
+    ConsignmentAgreement agreement,
+    ConsignmentDashboardSnapshot data,
+  ) => showModalBottomSheet<void>(
+    context: context,
+    useSafeArea: true,
+    isScrollControlled: true,
+    builder: (context) => _AgreementDetailsSheet(
+      agreement: agreement,
+      supplierName:
+          data.suppliers[agreement.supplierId]?.name ??
+          '#${agreement.supplierId}',
+      currencyCode:
+          data.currencyCodes[agreement.currencyId] ??
+          sl<CurrencyService>().currencyCode,
+    ),
+  );
+
+  Future<void> _showReceiptDetails(
+    ConsignmentReceipt receipt,
+    ConsignmentDashboardSnapshot data,
+  ) => showModalBottomSheet<void>(
+    context: context,
+    useSafeArea: true,
+    isScrollControlled: true,
+    builder: (context) => _ReceiptDetailsSheet(
+      receipt: receipt,
+      agreementNumber:
+          data.agreements
+              .where((agreement) => agreement.id == receipt.agreementId)
+              .map((agreement) => agreement.agreementNumber)
+              .firstOrNull ??
+          receipt.agreementId,
+      supplierName:
+          data.suppliers[receipt.supplierId]?.name ?? '#${receipt.supplierId}',
+      currencyCode:
+          data.currencyCodes[receipt.currencyId] ??
+          sl<CurrencyService>().currencyCode,
+    ),
+  );
 
   Future<void> _newReceipt(ConsignmentDashboardSnapshot data) async {
     final input = await showModalBottomSheet<_ReceiptInput>(
@@ -449,6 +521,8 @@ class _ConsignmentHubScreenState extends State<ConsignmentHubScreen> {
         agreementId: agreement.id,
         currencyId: agreement.currencyId,
         convertedAt: input.convertedAt,
+        supplierCreditNetCents: input.supplierCreditNetCents,
+        supplierCreditTaxCents: input.supplierCreditTaxCents,
         notes: input.notes,
         lines: input.lines,
       );
@@ -847,12 +921,16 @@ class _AgreementsSection extends StatelessWidget {
     required this.onActivate,
     required this.onClose,
     required this.onRevise,
+    required this.onDeleteDraft,
+    required this.onDetails,
   });
   final ConsignmentDashboardSnapshot data;
   final VoidCallback onCreate;
   final ValueChanged<String> onActivate;
   final ValueChanged<String> onClose;
   final ValueChanged<ConsignmentAgreement> onRevise;
+  final ValueChanged<ConsignmentAgreement> onDeleteDraft;
+  final ValueChanged<ConsignmentAgreement> onDetails;
 
   @override
   Widget build(BuildContext context) => _SectionScaffold(
@@ -863,6 +941,7 @@ class _AgreementsSection extends StatelessWidget {
     children: [
       for (final row in data.agreements)
         _RecordCard(
+          onTap: () => onDetails(row),
           icon: LucideIcons.fileSignature,
           title: '${row.agreementNumber} · v${row.revision}',
           subtitle:
@@ -872,13 +951,21 @@ class _AgreementsSection extends StatelessWidget {
           trailing: Wrap(
             spacing: 6,
             children: [
-              if (row.status == 'draft')
+              if (row.status == 'draft') ...[
                 FilledButton.tonal(
                   onPressed: data.operationsEnabled
                       ? () => onActivate(row.id)
                       : null,
                   child: Text('consignment.activate'.tr()),
                 ),
+                IconButton(
+                  onPressed: data.operationsEnabled
+                      ? () => onDeleteDraft(row)
+                      : null,
+                  icon: const Icon(LucideIcons.trash2),
+                  tooltip: 'consignment.delete_draft_agreement'.tr(),
+                ),
+              ],
               if (row.status == 'active') ...[
                 IconButton(
                   onPressed: data.operationsEnabled
@@ -906,6 +993,7 @@ class _ReceiptsSection extends StatelessWidget {
     required this.onCreate,
     required this.onConvert,
     required this.onVoidConversion,
+    required this.onDetails,
     required this.onPost,
     required this.onVoid,
   });
@@ -913,6 +1001,7 @@ class _ReceiptsSection extends StatelessWidget {
   final VoidCallback onCreate;
   final VoidCallback onConvert;
   final ValueChanged<int> onVoidConversion;
+  final ValueChanged<ConsignmentReceipt> onDetails;
   final ValueChanged<String> onPost;
   final ValueChanged<String> onVoid;
 
@@ -959,6 +1048,7 @@ class _ReceiptsSection extends StatelessWidget {
         const Divider(height: 28),
       for (final row in data.receipts)
         _RecordCard(
+          onTap: () => onDetails(row),
           icon: LucideIcons.packageOpen,
           title: row.receiptNumber,
           subtitle:
@@ -2327,6 +2417,8 @@ class _ConversionSheetState extends State<_ConversionSheet> {
   final _number = TextEditingController();
   final _evidence = TextEditingController();
   final _quantity = TextEditingController(text: '1');
+  final _supplierCreditNet = TextEditingController();
+  final _supplierCreditTax = TextEditingController(text: '0');
   final _notes = TextEditingController();
   String? _agreementId;
   String? _sourceKey;
@@ -2334,6 +2426,46 @@ class _ConversionSheetState extends State<_ConversionSheet> {
   List<_ConversionSourceChoice> _sources = [];
   final List<ConsignmentOwnershipConversionLineInput> _lines = [];
   final List<_ConversionSourceChoice> _lineSources = [];
+  bool _supplierCreditEdited = false;
+
+  int get _inventoryValueCents {
+    var total = 0;
+    for (var index = 0; index < _lines.length; index++) {
+      total += MeasuredAmount.cents(
+        unitCents: _lineSources[index].unitCostCents,
+        quantity: _lines[index].quantity,
+        quantityScale: _lineSources[index].source.quantityScale,
+      );
+    }
+    return total;
+  }
+
+  String get _conversionCurrencyCode {
+    final agreementId = _agreementId;
+    if (agreementId == null) return sl<CurrencyService>().currencyCode;
+    final agreement = widget.data.agreements.firstWhere(
+      (row) => row.id == agreementId,
+    );
+    return widget.data.currencyCodes[agreement.currencyId] ??
+        sl<CurrencyService>().currencyCode;
+  }
+
+  String _minorToInput(int cents) {
+    final digits = sl<CurrencyService>().decimalDigitsForCode(
+      _conversionCurrencyCode,
+    );
+    final raw = cents.abs().toString().padLeft(digits + 1, '0');
+    if (digits == 0) return '${cents < 0 ? '-' : ''}$raw';
+    return '${cents < 0 ? '-' : ''}'
+        '${raw.substring(0, raw.length - digits)}.'
+        '${raw.substring(raw.length - digits)}';
+  }
+
+  void _syncSuggestedSupplierCredit() {
+    if (_supplierCreditEdited) return;
+    _supplierCreditNet.text = _minorToInput(_inventoryValueCents);
+    _supplierCreditTax.text = '0';
+  }
 
   @override
   void initState() {
@@ -2348,6 +2480,9 @@ class _ConversionSheetState extends State<_ConversionSheet> {
       _sources = [];
       _lines.clear();
       _lineSources.clear();
+      _supplierCreditEdited = false;
+      _supplierCreditNet.clear();
+      _supplierCreditTax.text = '0';
       _loading = agreementId != null;
     });
     if (agreementId == null) return;
@@ -2483,6 +2618,7 @@ class _ConversionSheetState extends State<_ConversionSheet> {
       _lineSources.add(choice);
       _sourceKey = null;
       _quantity.text = '1';
+      _syncSuggestedSupplierCredit();
     });
   }
 
@@ -2495,6 +2631,21 @@ class _ConversionSheetState extends State<_ConversionSheet> {
       _showError('common.required'.tr());
       return;
     }
+    final digits = sl<CurrencyService>().decimalDigitsForCode(
+      _conversionCurrencyCode,
+    );
+    final net = sl<MoneyInputParser>().parse(
+      _supplierCreditNet.text,
+      decimalDigits: digits,
+    );
+    final tax = sl<MoneyInputParser>().parse(
+      _supplierCreditTax.text,
+      decimalDigits: digits,
+    );
+    if (!net.isValid || net.cents <= 0 || !tax.isValid || tax.cents < 0) {
+      _showError('consignment.conversion_credit_invalid'.tr());
+      return;
+    }
     Navigator.pop(
       context,
       _ConversionInput(
@@ -2502,6 +2653,8 @@ class _ConversionSheetState extends State<_ConversionSheet> {
         number: _number.text.trim(),
         evidenceReference: _evidence.text.trim(),
         convertedAt: DateTime.now(),
+        supplierCreditNetCents: net.cents,
+        supplierCreditTaxCents: tax.cents,
         notes: _notes.text.trim(),
         lines: List.unmodifiable(_lines),
       ),
@@ -2519,6 +2672,8 @@ class _ConversionSheetState extends State<_ConversionSheet> {
     _number.dispose();
     _evidence.dispose();
     _quantity.dispose();
+    _supplierCreditNet.dispose();
+    _supplierCreditTax.dispose();
     _notes.dispose();
     super.dispose();
   }
@@ -2673,10 +2828,56 @@ class _ConversionSheetState extends State<_ConversionSheet> {
                     onPressed: () => setState(() {
                       _lines.removeAt(index);
                       _lineSources.removeAt(index);
+                      _syncSuggestedSupplierCredit();
                     }),
                   ),
                 ),
               ),
+          ],
+          if (_lines.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Text(
+                  'consignment.conversion_economics_help'.tr(
+                    namedArgs: {
+                      'inventory': sl<CurrencyService>().formatForCode(
+                        _inventoryValueCents,
+                        _conversionCurrencyCode,
+                      ),
+                    },
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _supplierCreditNet,
+              onTap: () => _selectAll(_supplierCreditNet),
+              onChanged: (_) => _supplierCreditEdited = true,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: InputDecoration(
+                labelText: 'consignment.conversion_credit_net'.tr(),
+                suffixText: _conversionCurrencyCode,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _supplierCreditTax,
+              onTap: () => _selectAll(_supplierCreditTax),
+              onChanged: (_) => _supplierCreditEdited = true,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: InputDecoration(
+                labelText: 'consignment.conversion_credit_tax'.tr(),
+                helperText: 'consignment.conversion_credit_tax_help'.tr(),
+                suffixText: _conversionCurrencyCode,
+              ),
+            ),
           ],
           const SizedBox(height: 12),
           TextField(
@@ -2740,6 +2941,17 @@ class _ReceiptSheetState extends State<_ReceiptSheet> {
     super.initState();
     _number.text =
         'CR-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
+    final preferred = widget.data.agreements.where(
+      (agreement) =>
+          agreement.status == 'active' &&
+          widget.data.suppliers[agreement.supplierId]?.defaultSupplyMode ==
+              'consignment',
+    );
+    if (preferred.length == 1) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _selectAgreement(preferred.single.id);
+      });
+    }
   }
 
   Future<void> _selectAgreement(String? id) async {
@@ -3282,7 +3494,11 @@ class _CustodySheetState extends State<_CustodySheet> {
   @override
   Widget build(BuildContext context) {
     final agreements = widget.data.agreements
-        .where((row) => row.status != 'draft')
+        .where(
+          (row) =>
+              row.status != 'draft' &&
+              widget.data.openCustodyAgreementIds.contains(row.id),
+        )
         .toList();
     final selected = _layerId == null
         ? null
@@ -3760,6 +3976,491 @@ class _PaymentDialogState extends State<_PaymentDialog> {
   );
 }
 
+class _AgreementTermDetail {
+  const _AgreementTermDetail({required this.item, required this.label});
+
+  final ConsignmentAgreementItem item;
+  final String label;
+}
+
+class _AgreementDetailsSheet extends StatefulWidget {
+  const _AgreementDetailsSheet({
+    required this.agreement,
+    required this.supplierName,
+    required this.currencyCode,
+  });
+
+  final ConsignmentAgreement agreement;
+  final String supplierName;
+  final String currencyCode;
+
+  @override
+  State<_AgreementDetailsSheet> createState() => _AgreementDetailsSheetState();
+}
+
+class _AgreementDetailsSheetState extends State<_AgreementDetailsSheet> {
+  late final Future<List<_AgreementTermDetail>> _future = _load();
+
+  Future<List<_AgreementTermDetail>> _load() async {
+    final db = sl<AppDatabase>();
+    final rows =
+        await (db.select(db.consignmentAgreementItems).join([
+              innerJoin(
+                db.products,
+                db.products.id.equalsExp(
+                  db.consignmentAgreementItems.productId,
+                ),
+              ),
+              leftOuterJoin(
+                db.productVariants,
+                db.productVariants.id.equalsExp(
+                  db.consignmentAgreementItems.variantId,
+                ),
+              ),
+            ])..where(
+              db.consignmentAgreementItems.agreementId.equals(
+                widget.agreement.id,
+              ),
+            ))
+            .get();
+    return [
+      for (final row in rows)
+        _AgreementTermDetail(
+          item: row.readTable(db.consignmentAgreementItems),
+          label: row.readTableOrNull(db.productVariants) == null
+              ? row.readTable(db.products).name
+              : _variantSearchLabel(
+                  productName: row.readTable(db.products).name,
+                  sku:
+                      row.readTable(db.productVariants).sku ??
+                      row.readTable(db.products).sku ??
+                      '',
+                  barcode:
+                      row.readTable(db.productVariants).barcode ??
+                      row.readTable(db.products).barcode ??
+                      '',
+                  variantId: row.readTable(db.productVariants).id,
+                ),
+        ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final agreement = widget.agreement;
+    return _SheetFrame(
+      title: 'consignment.agreement_details'.tr(),
+      child: FutureBuilder<List<_AgreementTermDetail>>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Text('consignment.operation_failed'.tr());
+          }
+          final terms = snapshot.data!;
+          final taxMode = agreement.settlementTaxInclusive
+              ? 'consignment.tax_included'.tr()
+              : 'consignment.tax_excluded'.tr();
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _DetailsHeader(
+                icon: LucideIcons.fileSignature,
+                title: '${agreement.agreementNumber} · v${agreement.revision}',
+                subtitle: widget.supplierName,
+                status: agreement.status,
+              ),
+              const SizedBox(height: 12),
+              if (agreement.status == 'closed' ||
+                  agreement.status == 'superseded') ...[
+                const ConsignmentHelpCard(
+                  messageKey: 'consignment.closed_agreement_history_help',
+                ),
+                const SizedBox(height: 12),
+              ],
+              _DetailsGrid(
+                children: [
+                  _DetailValue(
+                    label: 'consignment.effective_from'.tr(),
+                    value: _date(agreement.effectiveFrom),
+                  ),
+                  _DetailValue(
+                    label: 'consignment.frequency'.tr(),
+                    value:
+                        'consignment.frequency_${agreement.settlementFrequency}'
+                            .tr(),
+                  ),
+                  _DetailValue(
+                    label: 'consignment.payment_terms_days'.tr(),
+                    value: agreement.paymentTermsDays.toString(),
+                  ),
+                  _DetailValue(
+                    label: 'consignment.settlement_tax'.tr(),
+                    value:
+                        '${agreement.settlementTaxRateBps / 100}% · $taxMode',
+                  ),
+                  _DetailValue(
+                    label: 'consignment.created_at'.tr(),
+                    value: _date(agreement.createdAt),
+                  ),
+                  if (agreement.endedAt != null)
+                    _DetailValue(
+                      label: 'consignment.ended_at'.tr(),
+                      value: _date(agreement.endedAt!),
+                    ),
+                ],
+              ),
+              if (agreement.notes.trim().isNotEmpty) ...[
+                const SizedBox(height: 16),
+                _DetailValue(
+                  label: 'consignment.notes'.tr(),
+                  value: agreement.notes,
+                ),
+              ],
+              const SizedBox(height: 20),
+              Text(
+                'consignment.agreement_items_count'.tr(
+                  namedArgs: {'count': terms.length.toString()},
+                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              for (final term in terms)
+                Card(
+                  child: ListTile(
+                    leading: const Icon(LucideIcons.package),
+                    title: Text(term.label),
+                    subtitle: Text(
+                      term.item.settlementBasis == 'fixed_unit_cost'
+                          ? 'consignment.term_fixed_value'.tr(
+                              namedArgs: {
+                                'amount': sl<CurrencyService>().formatForCode(
+                                  term.item.unitCostCents ?? 0,
+                                  widget.currencyCode,
+                                ),
+                              },
+                            )
+                          : 'consignment.term_percentage_value'.tr(
+                              namedArgs: {
+                                'percent':
+                                    ((term.item.supplierShareBps ?? 0) / 100)
+                                        .toString(),
+                              },
+                            ),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ReceiptLineDetail {
+  const _ReceiptLineDetail({
+    required this.item,
+    required this.label,
+    required this.layers,
+  });
+
+  final ConsignmentReceiptItem item;
+  final String label;
+  final List<ConsignmentInventoryLayer> layers;
+}
+
+class _ReceiptDetailsSheet extends StatefulWidget {
+  const _ReceiptDetailsSheet({
+    required this.receipt,
+    required this.agreementNumber,
+    required this.supplierName,
+    required this.currencyCode,
+  });
+
+  final ConsignmentReceipt receipt;
+  final String agreementNumber;
+  final String supplierName;
+  final String currencyCode;
+
+  @override
+  State<_ReceiptDetailsSheet> createState() => _ReceiptDetailsSheetState();
+}
+
+class _ReceiptDetailsSheetState extends State<_ReceiptDetailsSheet> {
+  late final Future<List<_ReceiptLineDetail>> _future = _load();
+
+  Future<List<_ReceiptLineDetail>> _load() async {
+    final db = sl<AppDatabase>();
+    final rows =
+        await (db.select(db.consignmentReceiptItems).join([
+              innerJoin(
+                db.products,
+                db.products.id.equalsExp(db.consignmentReceiptItems.productId),
+              ),
+              innerJoin(
+                db.productVariants,
+                db.productVariants.id.equalsExp(
+                  db.consignmentReceiptItems.variantId,
+                ),
+              ),
+            ])..where(
+              db.consignmentReceiptItems.receiptId.equals(widget.receipt.id),
+            ))
+            .get();
+    final itemIds = rows
+        .map((row) => row.readTable(db.consignmentReceiptItems).id)
+        .toList();
+    final layers = itemIds.isEmpty
+        ? <ConsignmentInventoryLayer>[]
+        : await (db.select(
+            db.consignmentInventoryLayers,
+          )..where((layer) => layer.receiptItemId.isIn(itemIds))).get();
+    return [
+      for (final row in rows)
+        _ReceiptLineDetail(
+          item: row.readTable(db.consignmentReceiptItems),
+          label: _variantSearchLabel(
+            productName: row.readTable(db.products).name,
+            sku:
+                row.readTable(db.productVariants).sku ??
+                row.readTable(db.products).sku ??
+                '',
+            barcode:
+                row.readTable(db.productVariants).barcode ??
+                row.readTable(db.products).barcode ??
+                '',
+            variantId: row.readTable(db.productVariants).id,
+          ),
+          layers: layers
+              .where(
+                (layer) =>
+                    layer.receiptItemId ==
+                    row.readTable(db.consignmentReceiptItems).id,
+              )
+              .toList(),
+        ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final receipt = widget.receipt;
+    return _SheetFrame(
+      title: 'consignment.receipt_details'.tr(),
+      child: FutureBuilder<List<_ReceiptLineDetail>>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Text('consignment.operation_failed'.tr());
+          }
+          final lines = snapshot.data!;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _DetailsHeader(
+                icon: LucideIcons.packageOpen,
+                title: receipt.receiptNumber,
+                subtitle: widget.supplierName,
+                status: receipt.status,
+              ),
+              const SizedBox(height: 12),
+              _DetailsGrid(
+                children: [
+                  _DetailValue(
+                    label: 'consignment.agreement_number'.tr(),
+                    value: widget.agreementNumber,
+                  ),
+                  _DetailValue(
+                    label: 'consignment.received_at'.tr(),
+                    value: _date(receipt.receivedAt),
+                  ),
+                  _DetailValue(
+                    label: 'consignment.lines'.tr(),
+                    value: receipt.lineCount.toString(),
+                  ),
+                  _DetailValue(
+                    label: 'consignment.created_at'.tr(),
+                    value: _date(receipt.createdAt),
+                  ),
+                ],
+              ),
+              if (receipt.notes.trim().isNotEmpty) ...[
+                const SizedBox(height: 16),
+                _DetailValue(
+                  label: 'consignment.notes'.tr(),
+                  value: receipt.notes,
+                ),
+              ],
+              if (receipt.voidReason.trim().isNotEmpty) ...[
+                const SizedBox(height: 16),
+                _DetailValue(
+                  label: 'consignment.void_reason'.tr(),
+                  value: receipt.voidReason,
+                ),
+              ],
+              const SizedBox(height: 20),
+              Text(
+                'consignment.receipt_items'.tr(),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              for (final line in lines)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          line.label,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          "${'consignment.received_quantity'.tr()}: "
+                          '${MeasuredQuantity.majorValue(line.item.quantity, MeasurementType.fromDb(line.item.measurementType))}',
+                        ),
+                        if (line.layers.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            "${'consignment.remaining_quantity'.tr()}: "
+                            '${MeasuredQuantity.majorValue(line.layers.fold<int>(0, (sum, layer) => sum + layer.remainingQuantity), MeasurementType.fromDb(line.item.measurementType))}',
+                          ),
+                          const SizedBox(height: 6),
+                          for (final layer in line.layers)
+                            Text(
+                              "${'consignment.source_code'.tr()}: "
+                              '${layer.id} · '
+                              "${'consignment.status_${layer.status}'.tr()}",
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                        ],
+                        if (line.item.manufacturerLotNumber != null) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            "${'consignment.lot_number'.tr()}: "
+                            '${line.item.manufacturerLotNumber}',
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _DetailsHeader extends StatelessWidget {
+  const _DetailsHeader({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.status,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String status;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    color: Theme.of(context).colorScheme.primaryContainer,
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 12,
+        runSpacing: 10,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircleAvatar(child: Icon(icon)),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  Text(subtitle),
+                ],
+              ),
+            ],
+          ),
+          _StatusChip(status),
+        ],
+      ),
+    ),
+  );
+}
+
+class _DetailsGrid extends StatelessWidget {
+  const _DetailsGrid({required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final width = constraints.maxWidth >= 620
+          ? (constraints.maxWidth - 12) / 2
+          : constraints.maxWidth;
+      return Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          for (final child in children) SizedBox(width: width, child: child),
+        ],
+      );
+    },
+  );
+}
+
+class _DetailValue extends StatelessWidget {
+  const _DetailValue({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.labelMedium),
+          const SizedBox(height: 4),
+          SelectableText(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 class _SheetFrame extends StatelessWidget {
   const _SheetFrame({required this.title, required this.child});
   final String title;
@@ -3857,36 +4558,76 @@ class _RecordCard extends StatelessWidget {
     required this.subtitle,
     required this.status,
     this.trailing,
+    this.onTap,
   });
   final IconData icon;
   final String title, subtitle, status;
   final Widget? trailing;
+  final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) => Card(
     margin: const EdgeInsets.only(bottom: 10),
-    child: Padding(
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        children: [
-          CircleAvatar(child: Icon(icon, size: 20)),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final identity = Row(
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+                CircleAvatar(child: Icon(icon, size: 20)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 4),
-                Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+                if (onTap != null) ...[
+                  const SizedBox(width: 6),
+                  const Icon(LucideIcons.chevronRight, size: 18),
+                ],
               ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          _StatusChip(status),
-          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
-        ],
+            );
+            final controls = Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 6,
+              children: [_StatusChip(status), ?trailing],
+            );
+            if (constraints.maxWidth < 620) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  identity,
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: controls,
+                  ),
+                ],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(child: identity),
+                const SizedBox(width: 12),
+                controls,
+              ],
+            );
+          },
+        ),
       ),
     ),
   );
@@ -4292,12 +5033,15 @@ class _ConversionInput {
     required this.number,
     required this.evidenceReference,
     required this.convertedAt,
+    required this.supplierCreditNetCents,
+    required this.supplierCreditTaxCents,
     required this.notes,
     required this.lines,
   });
 
   final String agreementId, number, evidenceReference, notes;
   final DateTime convertedAt;
+  final int supplierCreditNetCents, supplierCreditTaxCents;
   final List<ConsignmentOwnershipConversionLineInput> lines;
 }
 

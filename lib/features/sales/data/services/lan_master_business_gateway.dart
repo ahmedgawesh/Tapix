@@ -4,6 +4,7 @@ import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart';
 
 import '../../../../core/database/app_database.dart';
+import '../../../../core/database/migrations/consignment_return_liability.dart';
 import '../../../../core/services/business/warehouse_catalog_scope.dart';
 import '../../../../core/services/business/document_posting_scope.dart';
 import '../../../../core/services/business/warehouse_document_scope.dart';
@@ -41,6 +42,7 @@ import '../../../../core/services/loyalty/loyalty_points_service.dart';
 import '../../../../core/services/inventory/supplier_identity_rules.dart';
 import '../../../../core/services/inventory/supplier_product_identity_service.dart';
 import '../../../../core/services/inventory/inventory_stock_source_service.dart';
+import '../../../../core/services/lan/lan_request_receipt_store.dart';
 import '../../../../core/services/lan/lan_business_models.dart';
 import '../../../../core/services/lan/lan_models.dart';
 import '../../../settings/data/services/app_settings_service.dart';
@@ -1429,13 +1431,53 @@ class LanMasterBusinessGatewayImpl
   Future<LanSaleReturnResult> createSaleReturn({
     required LanRemoteUser actor,
     required LanSaleReturnRequest request,
-  }) async {
+  }) => _database.transaction(() async {
     _guardRemotePinProtectedOperation();
     final key = request.idempotencyKey.trim();
     if (key.isEmpty || key.length > 120) {
       throw const LanBusinessException(
         'invalid_idempotency_key',
         'A valid request identity is required.',
+      );
+    }
+    final requestReceipts = LanRequestReceiptStore(_database);
+    final reservation = await requestReceipts.reserve(
+      operation: 'sale_return',
+      idempotencyKey: key,
+      payload: request.toJson(),
+      findLegacyDocument: () async {
+        final legacy =
+            await (_database.select(_database.saleReturns)
+                  ..where((row) => row.idempotencyKey.equals(key))
+                  ..limit(1))
+                .getSingleOrNull();
+        return legacy == null
+            ? null
+            : LanLegacyRequestDocument(
+                id: legacy.id,
+                number: legacy.returnNumber,
+                totalCents: _cents(legacy.totalCents),
+              );
+      },
+    );
+    if (!reservation.shouldCreate) {
+      final existing =
+          await (_database.select(_database.saleReturns)
+                ..where((row) => row.id.equals(reservation.documentId!))
+                ..limit(1))
+              .getSingleOrNull();
+      if (existing == null) {
+        throw const LanBusinessException(
+          'idempotency_receipt_corrupt',
+          'The saved request result is unavailable.',
+          statusCode: 409,
+        );
+      }
+      return LanSaleReturnResult(
+        returnId: existing.id,
+        returnNumber: existing.returnNumber,
+        totalCents: _cents(existing.totalCents),
+        duplicate: true,
       );
     }
     if (request.saleId <= 0 || request.lines.isEmpty) {
@@ -1474,20 +1516,6 @@ class LanMasterBusinessGatewayImpl
           statusCode: 409,
         );
       }
-    }
-
-    final existing =
-        await (_database.select(_database.saleReturns)
-              ..where((row) => row.idempotencyKey.equals(key))
-              ..limit(1))
-            .getSingleOrNull();
-    if (existing != null) {
-      return LanSaleReturnResult(
-        returnId: existing.id,
-        returnNumber: existing.returnNumber,
-        totalCents: _cents(existing.totalCents),
-        duplicate: true,
-      );
     }
 
     final details = await fetchReturnableSale(saleId: request.saleId);
@@ -1569,35 +1597,51 @@ class LanMasterBusinessGatewayImpl
       );
     }
 
-    final returnId = await _sales.createSaleReturn(
-      saleId: request.saleId,
-      currencyId: details.sale.currencyId,
-      subtotalCents: Decimal.zero,
-      discountCents: Decimal.zero,
-      taxCents: Decimal.zero,
-      totalCents: Decimal.zero,
-      items: items,
-      reason: request.reason,
-      dispositionType: request.dispositionType,
-      refundMethod: request.refundMethod,
-      returnDate: DateTime.now(),
-      dueDate: request.dueDate,
-      idempotencyKey: key,
-      actorUserId: actor.id,
-      taxInclusiveAtPost: details.sale.taxInclusiveAtPost,
-      settlementAllocations: settlementAllocations,
-    );
+    late final int returnId;
+    try {
+      returnId = await _sales.createSaleReturn(
+        saleId: request.saleId,
+        currencyId: details.sale.currencyId,
+        subtotalCents: Decimal.zero,
+        discountCents: Decimal.zero,
+        taxCents: Decimal.zero,
+        totalCents: Decimal.zero,
+        items: items,
+        reason: request.reason,
+        dispositionType: request.dispositionType,
+        refundMethod: request.refundMethod,
+        returnDate: DateTime.now(),
+        dueDate: request.dueDate,
+        idempotencyKey: key,
+        actorUserId: actor.id,
+        taxInclusiveAtPost: details.sale.taxInclusiveAtPost,
+        settlementAllocations: settlementAllocations,
+        consignmentLiabilityResponsibility:
+            request.consignmentLiabilityResponsibility,
+        consignmentLiabilityReason: request.consignmentLiabilityReason,
+      );
+    } on ConsignmentReturnLiabilityException catch (error) {
+      throw LanBusinessException(error.code, error.code, statusCode: 409);
+    }
     final created =
         await (_database.select(_database.saleReturns)
               ..where((row) => row.id.equals(returnId))
               ..limit(1))
             .getSingle();
+    await requestReceipts.complete(
+      operation: 'sale_return',
+      idempotencyKey: key,
+      payload: request.toJson(),
+      documentId: created.id,
+      documentNumber: created.returnNumber,
+      totalCents: _cents(created.totalCents),
+    );
     return LanSaleReturnResult(
       returnId: created.id,
       returnNumber: created.returnNumber,
       totalCents: _cents(created.totalCents),
     );
-  }
+  });
 
   @override
   Future<List<LanConsignmentReturnSource>>
@@ -1694,6 +1738,8 @@ class LanMasterBusinessGatewayImpl
     required LanRemoteUser actor,
     required LanSaleAdjustmentReturnRequest request,
   }) => _database.transaction(() async {
+    // The request reservation, document posting, and receipt completion all
+    // participate in this outer transaction; any failure rolls all three back.
     _guardRemotePinProtectedOperation();
     final key = request.idempotencyKey.trim();
     if (key.length < 8 || key.length > 128) {
@@ -1750,12 +1796,39 @@ class LanMasterBusinessGatewayImpl
       );
     }
 
-    final existing =
-        await (_database.select(_database.saleReturnAdjustments)
-              ..where((row) => row.idempotencyKey.equals(key))
-              ..limit(1))
-            .getSingleOrNull();
-    if (existing != null) {
+    final requestReceipts = LanRequestReceiptStore(_database);
+    final reservation = await requestReceipts.reserve(
+      operation: 'sale_adjustment_return',
+      idempotencyKey: key,
+      payload: request.toJson(),
+      findLegacyDocument: () async {
+        final legacy =
+            await (_database.select(_database.saleReturnAdjustments)
+                  ..where((row) => row.idempotencyKey.equals(key))
+                  ..limit(1))
+                .getSingleOrNull();
+        return legacy == null
+            ? null
+            : LanLegacyRequestDocument(
+                id: legacy.id,
+                number: legacy.returnNumber,
+                totalCents: _cents(legacy.totalCents),
+              );
+      },
+    );
+    if (!reservation.shouldCreate) {
+      final existing =
+          await (_database.select(_database.saleReturnAdjustments)
+                ..where((row) => row.id.equals(reservation.documentId!))
+                ..limit(1))
+              .getSingleOrNull();
+      if (existing == null) {
+        throw const LanBusinessException(
+          'idempotency_receipt_corrupt',
+          'The saved request result is unavailable.',
+          statusCode: 409,
+        );
+      }
       return LanSaleReturnResult(
         returnId: existing.id,
         returnNumber: existing.returnNumber,
@@ -2089,6 +2162,14 @@ class LanMasterBusinessGatewayImpl
           statusCode: 500,
         );
       }
+      await requestReceipts.complete(
+        operation: 'sale_adjustment_return',
+        idempotencyKey: key,
+        payload: request.toJson(),
+        documentId: created.id,
+        documentNumber: created.returnNumber,
+        totalCents: _cents(created.totalCents),
+      );
       return LanSaleReturnResult(
         returnId: created.id,
         returnNumber: created.returnNumber,
@@ -2563,7 +2644,9 @@ class LanMasterBusinessGatewayImpl
   Future<LanPurchaseReturnResult> createPurchaseReturn({
     required LanRemoteUser actor,
     required LanPurchaseReturnRequest request,
-  }) async {
+  }) => _database.transaction(() async {
+    // Reservation, return posting, and receipt completion are committed as a
+    // single unit so a rejected return leaves no stale pending identity.
     _guardRemotePinProtectedOperation();
     final key = request.idempotencyKey.trim();
     if (key.length < 8 || key.length > 128 || request.lines.isEmpty) {
@@ -2592,12 +2675,39 @@ class LanMasterBusinessGatewayImpl
         'Unsupported purchase return disposition.',
       );
     }
-    final existing =
-        await (_database.select(_database.purchaseReturns)
-              ..where((row) => row.idempotencyKey.equals(key))
-              ..limit(1))
-            .getSingleOrNull();
-    if (existing != null) {
+    final requestReceipts = LanRequestReceiptStore(_database);
+    final reservation = await requestReceipts.reserve(
+      operation: 'purchase_return',
+      idempotencyKey: key,
+      payload: request.toJson(),
+      findLegacyDocument: () async {
+        final legacy =
+            await (_database.select(_database.purchaseReturns)
+                  ..where((row) => row.idempotencyKey.equals(key))
+                  ..limit(1))
+                .getSingleOrNull();
+        return legacy == null
+            ? null
+            : LanLegacyRequestDocument(
+                id: legacy.id,
+                number: legacy.returnNumber,
+                totalCents: _cents(legacy.totalCents),
+              );
+      },
+    );
+    if (!reservation.shouldCreate) {
+      final existing =
+          await (_database.select(_database.purchaseReturns)
+                ..where((row) => row.id.equals(reservation.documentId!))
+                ..limit(1))
+              .getSingleOrNull();
+      if (existing == null) {
+        throw const LanBusinessException(
+          'idempotency_receipt_corrupt',
+          'The saved request result is unavailable.',
+          statusCode: 409,
+        );
+      }
       return LanPurchaseReturnResult(
         returnId: existing.id,
         returnNumber: existing.returnNumber,
@@ -2665,6 +2775,14 @@ class LanMasterBusinessGatewayImpl
       );
       final created = await _purchases.getPurchaseReturnById(returnId);
       if (created == null) throw StateError('Purchase return not found');
+      await requestReceipts.complete(
+        operation: 'purchase_return',
+        idempotencyKey: key,
+        payload: request.toJson(),
+        documentId: created.id,
+        documentNumber: created.returnNumber,
+        totalCents: _cents(created.totalCents),
+      );
       return LanPurchaseReturnResult(
         returnId: created.id,
         returnNumber: created.returnNumber,
@@ -2677,13 +2795,15 @@ class LanMasterBusinessGatewayImpl
         statusCode: 409,
       );
     }
-  }
+  });
 
   @override
   Future<LanPurchaseReturnResult> createPurchaseAdjustmentReturn({
     required LanRemoteUser actor,
     required LanPurchaseAdjustmentReturnRequest request,
   }) => _database.transaction(() async {
+    // The outer transaction makes the reservation and posted return one
+    // durable outcome; an exception rolls the pending receipt back.
     _guardRemotePinProtectedOperation();
     final key = request.idempotencyKey.trim();
     if (key.length < 8 || key.length > 128 || request.lines.isEmpty) {
@@ -2729,12 +2849,39 @@ class LanMasterBusinessGatewayImpl
         'The overall discount is invalid.',
       );
     }
-    final existing =
-        await (_database.select(_database.purchaseReturnAdjustments)
-              ..where((row) => row.idempotencyKey.equals(key))
-              ..limit(1))
-            .getSingleOrNull();
-    if (existing != null) {
+    final requestReceipts = LanRequestReceiptStore(_database);
+    final reservation = await requestReceipts.reserve(
+      operation: 'purchase_adjustment_return',
+      idempotencyKey: key,
+      payload: request.toJson(),
+      findLegacyDocument: () async {
+        final legacy =
+            await (_database.select(_database.purchaseReturnAdjustments)
+                  ..where((row) => row.idempotencyKey.equals(key))
+                  ..limit(1))
+                .getSingleOrNull();
+        return legacy == null
+            ? null
+            : LanLegacyRequestDocument(
+                id: legacy.id,
+                number: legacy.returnNumber,
+                totalCents: _cents(legacy.totalCents),
+              );
+      },
+    );
+    if (!reservation.shouldCreate) {
+      final existing =
+          await (_database.select(_database.purchaseReturnAdjustments)
+                ..where((row) => row.id.equals(reservation.documentId!))
+                ..limit(1))
+              .getSingleOrNull();
+      if (existing == null) {
+        throw const LanBusinessException(
+          'idempotency_receipt_corrupt',
+          'The saved request result is unavailable.',
+          statusCode: 409,
+        );
+      }
       return LanPurchaseReturnResult(
         returnId: existing.id,
         returnNumber: existing.returnNumber,
@@ -2932,6 +3079,14 @@ class LanMasterBusinessGatewayImpl
         returnId,
       );
       if (created == null) throw StateError('Purchase return not found');
+      await requestReceipts.complete(
+        operation: 'purchase_adjustment_return',
+        idempotencyKey: key,
+        payload: request.toJson(),
+        documentId: created.id,
+        documentNumber: created.returnNumber,
+        totalCents: _cents(created.totalCents),
+      );
       return LanPurchaseReturnResult(
         returnId: created.id,
         returnNumber: created.returnNumber,
@@ -3008,7 +3163,9 @@ class LanMasterBusinessGatewayImpl
   Future<LanSaleResult> createSale({
     required LanRemoteUser actor,
     required LanSaleRequest request,
-  }) async {
+  }) => _database.transaction(() async {
+    // Reserve the key, post the sale, and complete the receipt atomically so
+    // a failed checkout never leaves a key permanently in progress.
     final key = request.idempotencyKey.trim();
     if (key.length < 8 || key.length > 128) {
       throw const LanBusinessException(
@@ -3023,10 +3180,39 @@ class LanMasterBusinessGatewayImpl
       );
     }
 
-    final existing = await (_database.select(
-      _database.sales,
-    )..where((row) => row.idempotencyKey.equals(key))).getSingleOrNull();
-    if (existing != null) {
+    final requestReceipts = LanRequestReceiptStore(_database);
+    final reservation = await requestReceipts.reserve(
+      operation: 'sale',
+      idempotencyKey: key,
+      payload: request.toJson(),
+      findLegacyDocument: () async {
+        final legacy =
+            await (_database.select(_database.sales)
+                  ..where((row) => row.idempotencyKey.equals(key))
+                  ..limit(1))
+                .getSingleOrNull();
+        return legacy == null
+            ? null
+            : LanLegacyRequestDocument(
+                id: legacy.id,
+                number: legacy.invoiceNumber,
+                totalCents: _cents(legacy.totalCents),
+              );
+      },
+    );
+    if (!reservation.shouldCreate) {
+      final existing =
+          await (_database.select(_database.sales)
+                ..where((row) => row.id.equals(reservation.documentId!))
+                ..limit(1))
+              .getSingleOrNull();
+      if (existing == null) {
+        throw const LanBusinessException(
+          'idempotency_receipt_corrupt',
+          'The saved request result is unavailable.',
+          statusCode: 409,
+        );
+      }
       return _resultFromSale(existing, duplicate: true);
     }
 
@@ -3615,8 +3801,16 @@ class LanMasterBusinessGatewayImpl
     final sale = await (_database.select(
       _database.sales,
     )..where((row) => row.id.equals(saleId))).getSingle();
+    await requestReceipts.complete(
+      operation: 'sale',
+      idempotencyKey: key,
+      payload: request.toJson(),
+      documentId: sale.id,
+      documentNumber: sale.invoiceNumber,
+      totalCents: _cents(sale.totalCents),
+    );
     return _resultFromSale(sale);
-  }
+  });
 
   Discount _discountForRequest(LanSaleLineRequest line) {
     if (line.discountValue < 0) {

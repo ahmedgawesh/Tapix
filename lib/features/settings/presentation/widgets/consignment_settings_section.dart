@@ -1,6 +1,5 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/di/injection_container.dart';
@@ -27,7 +26,6 @@ class _ConsignmentSettingsSectionState
     return _ConsignmentSettingState(
       snapshot: policy,
       licensed: await module.canEnable(),
-      canOpenCenter: await module.canOpenCenter(),
     );
   }
 
@@ -131,14 +129,6 @@ class _ConsignmentSettingsSectionState
                     title: Text('consignment.pro_required'.tr()),
                     subtitle: Text('consignment.pro_required_desc'.tr()),
                   ),
-                if (data.canOpenCenter)
-                  ListTile(
-                    leading: const Icon(LucideIcons.layoutDashboard),
-                    title: Text('consignment.open_center'.tr()),
-                    subtitle: Text('consignment.open_center_desc'.tr()),
-                    trailing: const Icon(LucideIcons.chevronRight),
-                    onTap: () => context.push('/consignment'),
-                  ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                   child: Text(
@@ -161,12 +151,10 @@ class _ConsignmentSettingState {
   const _ConsignmentSettingState({
     required this.snapshot,
     required this.licensed,
-    required this.canOpenCenter,
   });
 
   final BranchConsignmentPolicySnapshot snapshot;
   final bool licensed;
-  final bool canOpenCenter;
 }
 
 class _ConsignmentReasonDialog extends StatefulWidget {

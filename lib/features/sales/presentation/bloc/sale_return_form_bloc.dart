@@ -107,6 +107,8 @@ class SaleReturnFormState extends Equatable {
   final List<SaleReturnLineItem> returnItems;
   final String? reason;
   final String dispositionType;
+  final String consignmentLiabilityResponsibility;
+  final String? consignmentLiabilityReason;
   final String refundMethod;
 
   /// Phase 14.0 — cheque due date. Required by `_onSubmitted` when
@@ -128,6 +130,8 @@ class SaleReturnFormState extends Equatable {
     this.returnItems = const [],
     this.reason,
     this.dispositionType = 'restock',
+    this.consignmentLiabilityResponsibility = 'review',
+    this.consignmentLiabilityReason,
     this.refundMethod = 'cash',
     this.dueDate,
     this.currencyId = 1,
@@ -198,6 +202,8 @@ class SaleReturnFormState extends Equatable {
     List<SaleReturnLineItem>? returnItems,
     String? reason,
     String? dispositionType,
+    String? consignmentLiabilityResponsibility,
+    String? consignmentLiabilityReason,
     String? refundMethod,
     Object? dueDate = _sentinel,
     int? currencyId,
@@ -216,6 +222,11 @@ class SaleReturnFormState extends Equatable {
       returnItems: returnItems ?? this.returnItems,
       reason: reason ?? this.reason,
       dispositionType: dispositionType ?? this.dispositionType,
+      consignmentLiabilityResponsibility:
+          consignmentLiabilityResponsibility ??
+          this.consignmentLiabilityResponsibility,
+      consignmentLiabilityReason:
+          consignmentLiabilityReason ?? this.consignmentLiabilityReason,
       refundMethod: refundMethod ?? this.refundMethod,
       dueDate: identical(dueDate, _sentinel)
           ? this.dueDate
@@ -240,6 +251,8 @@ class SaleReturnFormState extends Equatable {
     returnItems,
     reason,
     dispositionType,
+    consignmentLiabilityResponsibility,
+    consignmentLiabilityReason,
     refundMethod,
     dueDate,
     currencyId,
@@ -315,6 +328,20 @@ class SaleReturnDispositionChanged extends SaleReturnFormEvent {
   List<Object?> get props => [dispositionType];
 }
 
+class SaleReturnConsignmentLiabilityChanged
+    extends SaleReturnFormEvent {
+  const SaleReturnConsignmentLiabilityChanged({
+    required this.responsibility,
+    this.reason,
+  });
+
+  final String responsibility;
+  final String? reason;
+
+  @override
+  List<Object?> get props => [responsibility, reason];
+}
+
 class SaleReturnRefundMethodChanged extends SaleReturnFormEvent {
   final String refundMethod;
   const SaleReturnRefundMethodChanged(this.refundMethod);
@@ -362,6 +389,9 @@ class SaleReturnFormBloc
     on<SaleReturnItemReasonChanged>(_onItemReasonChanged);
     on<SaleReturnReasonChanged>(_onReasonChanged);
     on<SaleReturnDispositionChanged>(_onDispositionChanged);
+    on<SaleReturnConsignmentLiabilityChanged>(
+      _onConsignmentLiabilityChanged,
+    );
     on<SaleReturnRefundMethodChanged>(_onRefundMethodChanged);
     on<SaleReturnDueDateChanged>(_onDueDateChanged);
     on<SaleReturnFormSubmitted>(_onSubmitted);
@@ -573,6 +603,18 @@ class SaleReturnFormBloc
     emit(state.copyWith(dispositionType: event.dispositionType));
   }
 
+  void _onConsignmentLiabilityChanged(
+    SaleReturnConsignmentLiabilityChanged event,
+    Emitter<SaleReturnFormState> emit,
+  ) {
+    emit(
+      state.copyWith(
+        consignmentLiabilityResponsibility: event.responsibility,
+        consignmentLiabilityReason: event.reason,
+      ),
+    );
+  }
+
   void _onRefundMethodChanged(
     SaleReturnRefundMethodChanged event,
     Emitter<SaleReturnFormState> emit,
@@ -648,6 +690,9 @@ class SaleReturnFormBloc
             idempotencyKey: const Uuid().v4(),
             saleId: state.saleId!,
             dispositionType: state.dispositionType,
+            consignmentLiabilityResponsibility:
+                state.consignmentLiabilityResponsibility,
+            consignmentLiabilityReason: state.consignmentLiabilityReason,
             refundMethod: state.refundMethod,
             reason: state.reason,
             dueDate: state.dueDate,
@@ -710,6 +755,9 @@ class SaleReturnFormBloc
         items: items,
         reason: state.reason,
         dispositionType: state.dispositionType,
+        consignmentLiabilityResponsibility:
+            state.consignmentLiabilityResponsibility,
+        consignmentLiabilityReason: state.consignmentLiabilityReason,
         refundMethod: state.refundMethod,
         returnDate: DateTime.now(),
         dueDate: state.dueDate,

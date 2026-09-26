@@ -20,6 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/database/daos/adjustment_return_dao.dart';
 import 'package:tapix/core/services/journal_entry_service.dart';
+import 'package:tapix/core/services/business/branch_currency_policy_store.dart';
 import 'package:tapix/core/services/loyalty/loyalty_points_service.dart';
 import 'package:tapix/features/accounting/data/repositories/accounting_repository.dart';
 import 'package:tapix/features/customers/data/repositories/loyalty_repository_impl.dart';
@@ -146,6 +147,7 @@ void main() {
                     symbol: entry.$1,
                   ),
                 );
+        await BranchCurrencyPolicyStore(db).bind(entry.$1);
         currencyId = id;
         await (db.update(db.customers)..where((c) => c.id.equals(customerId)))
             .write(CustomersCompanion(currencyId: Value(id)));

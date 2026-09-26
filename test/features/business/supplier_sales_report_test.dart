@@ -444,7 +444,7 @@ void main() {
         'return_number': 'ADJ',
         'customer_id': customer,
         'currency_id': currency,
-        'status': 'posted',
+        'status': 'draft',
         'total_cents': 80,
         'subtotal_cents': 80,
         'return_date': DateTime.now().toUtc().toIso8601String(),
@@ -457,6 +457,11 @@ void main() {
         'unit_price_cents': 80,
         'total_cents': 80,
       });
+      await db.customUpdate(
+        'UPDATE sale_return_adjustments SET status = ? WHERE id = ?',
+        variables: [Variable.withString('posted'), Variable.withInt(id)],
+        updates: {db.saleReturnAdjustments},
+      );
       final data = await report();
       expect(data.rows.single.supplierId, -2);
       expect(data.rows.single.returnedQuantity, 1);

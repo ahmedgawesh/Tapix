@@ -40,6 +40,8 @@ class WarehouseTransferAppCatalogItem {
   final int quantityScale;
   final String measurementType;
 
+  int get ownedQuantity => quantity - supplierOwnedQuantity;
+
   int parseQuantity(String input) {
     var text = input.trim().replaceAll('\u066B', '.').replaceAll(',', '.');
     const arabic =

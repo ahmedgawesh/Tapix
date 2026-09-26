@@ -1,6 +1,8 @@
 import '../app_database.dart';
+import 'consignment_return_liability.dart';
 
 Future<void> installConsignmentAdjustmentReturnGuards(AppDatabase db) async {
+  await installConsignmentReturnLiabilityGuards(db);
   await db.customStatement(
     'DROP TRIGGER IF EXISTS consignment_adj_event_insert_guard',
   );
@@ -42,7 +44,24 @@ Future<void> installConsignmentAdjustmentReturnGuards(AppDatabase db) async {
               AND NEW.signed_quantity=-i.quantity
               AND NEW.signed_amount_cents<=0
               AND NEW.restores_stock=CASE
-                WHEN i.disposition_type='restock' THEN 1 ELSE 0 END)
+                WHEN i.disposition_type='restock' THEN 1 ELSE 0 END
+              AND (
+                i.disposition_type='restock'
+                OR EXISTS(
+                  SELECT 1
+                  FROM consignment_return_liability_decisions d
+                  WHERE d.source_table='sale_return_adjustments'
+                    AND d.source_id=r.id
+                    AND d.source_item_id=i.id
+                    AND d.disposition_type=i.disposition_type
+                    AND d.responsibility IN ('supplier','company')
+                    AND (
+                      d.responsibility='supplier'
+                      OR (d.responsibility='company'
+                        AND NEW.signed_amount_cents=0)
+                    )
+                )
+              ))
             OR
             (NEW.kind='adjustment_return_void_reaccrual'
               AND r.status='posted'

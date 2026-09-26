@@ -602,14 +602,20 @@ void main() {
         requestKey: const Uuid().v4(),
         preview: preview,
       );
-      final dispatched = await WarehouseTransferDispatchService(
-        db,
-        preflight: preflight,
-        authorize: authorize,
-      ).dispatch(transferId: draft.header.id, requestKey: const Uuid().v4());
+      final dispatched =
+          await WarehouseTransferDispatchService(
+            db,
+            preflight: preflight,
+            authorize: authorize,
+          ).dispatch(
+            transferId: draft.header.id,
+            requestKey: const Uuid().v4(),
+            dispatchedAt: DateTime.utc(2026, 9, 24, 9),
+          );
       await WarehouseTransferReceiptService(db, authorize: authorize).receive(
         transferId: draft.header.id,
         requestKey: const Uuid().v4(),
+        receivedAt: DateTime.utc(2026, 9, 24, 10),
         items: [
           WarehouseTransferReceiptRequestItem(
             allocationId: dispatched.allocations.single.id,

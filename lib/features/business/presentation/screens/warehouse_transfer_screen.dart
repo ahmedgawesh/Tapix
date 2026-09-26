@@ -165,40 +165,10 @@ class _WarehouseTransferScreenState extends State<WarehouseTransferScreen> {
     }, 'warehouse_transfer.recalled');
   }
 
-  Future<String?> _reasonDialog(String titleKey) async {
-    final controller = TextEditingController();
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(titleKey.tr()),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 500,
-          maxLines: 3,
-          decoration: InputDecoration(
-            labelText: 'warehouse_transfer.reason'.tr(),
-            border: const OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('warehouse_transfer.back'.tr()),
-          ),
-          FilledButton(
-            onPressed: () {
-              final value = controller.text.trim();
-              if (value.isNotEmpty) Navigator.pop(context, value);
-            },
-            child: Text('warehouse_transfer.confirm'.tr()),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    return result;
-  }
+  Future<String?> _reasonDialog(String titleKey) => showDialog<String>(
+    context: context,
+    builder: (context) => _TransferReasonDialog(titleKey: titleKey),
+  );
 
   Future<void> _receive(WarehouseTransferAppDocument draft) async {
     setState(() => _busy = true);
@@ -691,60 +661,10 @@ class _WarehouseTransferComposerState
   }
 
   Future<void> _add(WarehouseTransferAppCatalogItem item) async {
-    final controller = TextEditingController(
-      text: _displayQuantity(item.quantityScale, 1 * item.quantityScale),
-    );
     final quantity = await showDialog<int>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(item.name),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'warehouse_transfer.available'.tr(
-                namedArgs: {
-                  'quantity': _displayQuantity(
-                    item.quantityScale,
-                    item.quantity,
-                  ),
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: InputDecoration(
-                labelText: 'warehouse_transfer.quantity'.tr(),
-                border: const OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('warehouse_transfer.back'.tr()),
-          ),
-          FilledButton(
-            onPressed: () {
-              try {
-                Navigator.pop(context, item.parseQuantity(controller.text));
-              } on FormatException {
-                // Keep the dialog open so the user can correct the value.
-              }
-            },
-            child: Text('warehouse_transfer.add'.tr()),
-          ),
-        ],
-      ),
+      builder: (context) => _TransferQuantityDialog(item: item),
     );
-    controller.dispose();
     if (quantity == null || !mounted) return;
     setState(() => _cart[item.variantId] = _CartLine(item, quantity));
   }
@@ -796,6 +716,11 @@ class _WarehouseTransferComposerState
                     ),
                   const SizedBox(height: 8),
                   Text('warehouse_transfer.review_note'.tr()),
+                  const SizedBox(height: 8),
+                  Text(
+                    'warehouse_transfer.ownership_allocation_note'.tr(),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ],
               ),
             ),
@@ -949,6 +874,15 @@ class _WarehouseTransferComposerState
                                 ),
                               },
                             ),
+                            if (item.ownedQuantity > 0)
+                              'warehouse_transfer.owned_available'.tr(
+                                namedArgs: {
+                                  'quantity': _displayQuantity(
+                                    item.quantityScale,
+                                    item.ownedQuantity,
+                                  ),
+                                },
+                              ),
                             if (item.supplierOwnedQuantity > 0)
                               'warehouse_transfer.consignment_available'.tr(
                                 namedArgs: {
@@ -1049,6 +983,179 @@ class _WarehouseTransferComposerState
       ),
     ),
   );
+}
+
+class _TransferReasonDialog extends StatefulWidget {
+  const _TransferReasonDialog({required this.titleKey});
+
+  final String titleKey;
+
+  @override
+  State<_TransferReasonDialog> createState() => _TransferReasonDialogState();
+}
+
+class _TransferReasonDialogState extends State<_TransferReasonDialog> {
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final value = _controller.text.trim();
+    if (value.isNotEmpty) Navigator.pop(context, value);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.titleKey.tr()),
+    content: TextField(
+      controller: _controller,
+      autofocus: true,
+      maxLength: 500,
+      maxLines: 3,
+      onSubmitted: (_) => _submit(),
+      decoration: InputDecoration(
+        labelText: 'warehouse_transfer.reason'.tr(),
+        border: const OutlineInputBorder(),
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: Text('warehouse_transfer.back'.tr()),
+      ),
+      FilledButton(
+        onPressed: _submit,
+        child: Text('warehouse_transfer.confirm'.tr()),
+      ),
+    ],
+  );
+}
+
+class _TransferQuantityDialog extends StatefulWidget {
+  const _TransferQuantityDialog({required this.item});
+
+  final WarehouseTransferAppCatalogItem item;
+
+  @override
+  State<_TransferQuantityDialog> createState() =>
+      _TransferQuantityDialogState();
+}
+
+class _TransferQuantityDialogState extends State<_TransferQuantityDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: _displayQuantity(
+      widget.item.quantityScale,
+      widget.item.quantityScale,
+    ),
+  );
+  String? _errorKey;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    try {
+      final quantity = widget.item.parseQuantity(_controller.text);
+      Navigator.pop(context, quantity);
+    } on FormatException {
+      setState(() => _errorKey = 'warehouse_transfer.invalid_quantity');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    return AlertDialog(
+      title: Text(item.name),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'warehouse_transfer.available'.tr(
+                namedArgs: {
+                  'quantity': _displayQuantity(
+                    item.quantityScale,
+                    item.quantity,
+                  ),
+                },
+              ),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                Chip(
+                  avatar: const Icon(Icons.business_outlined, size: 18),
+                  label: Text(
+                    'warehouse_transfer.owned_available'.tr(
+                      namedArgs: {
+                        'quantity': _displayQuantity(
+                          item.quantityScale,
+                          item.ownedQuantity,
+                        ),
+                      },
+                    ),
+                  ),
+                ),
+                Chip(
+                  avatar: const Icon(Icons.handshake_outlined, size: 18),
+                  label: Text(
+                    'warehouse_transfer.consignment_available'.tr(
+                      namedArgs: {
+                        'quantity': _displayQuantity(
+                          item.quantityScale,
+                          item.supplierOwnedQuantity,
+                        ),
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'warehouse_transfer.ownership_allocation_note'.tr(),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _controller,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              onSubmitted: (_) => _submit(),
+              decoration: InputDecoration(
+                labelText: 'warehouse_transfer.quantity'.tr(),
+                errorText: _errorKey?.tr(),
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('warehouse_transfer.back'.tr()),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: Text('warehouse_transfer.add'.tr()),
+        ),
+      ],
+    );
+  }
 }
 
 class _CartLine {

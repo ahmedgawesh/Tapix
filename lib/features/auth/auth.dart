@@ -1,6 +1,7 @@
 export 'data/repositories/auth_repository.dart';
 export 'data/repositories/user_repository.dart';
 export 'data/services/password_service.dart';
+export 'data/services/owner_password_verification_service.dart';
 export 'data/services/permission_service.dart';
 export 'data/services/session_service.dart';
 export 'data/services/lan_master_auth_gateway.dart';
