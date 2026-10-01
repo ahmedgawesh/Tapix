@@ -1,0 +1,48 @@
+name: Online PostgreSQL validation
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: isolated-ci-only
+          POSTGRES_DB: tapbix_online_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      PGPASSWORD: isolated-ci-only
+      TAPBIX_TEST_ADMIN_URL: postgresql://postgres:isolated-ci-only@127.0.0.1:5432/tapbix_online_test?sslmode=disable
+      TAPBIX_TEST_DATABASE_URL: postgresql://tapbix_online_app:isolated-ci-only@127.0.0.1:5432/tapbix_online_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Initialize isolated schema
+        run: |
+          psql -h 127.0.0.1 -U postgres -d tapbix_online_test -v ON_ERROR_STOP=1 -f server/online/sql/001_initial.sql
+          psql -h 127.0.0.1 -U postgres -d tapbix_online_test -v ON_ERROR_STOP=1 -c "ALTER ROLE tapbix_online_app PASSWORD 'isolated-ci-only'"
+      - name: Resolve locked dependencies
+        working-directory: server/online
+        run: dart pub get --enforce-lockfile
+      - name: Analyze service
+        working-directory: server/online
+        run: dart analyze
+      - name: PostgreSQL integration tests
+        working-directory: server/online
+        run: dart test --reporter expanded

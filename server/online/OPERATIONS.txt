@@ -1,0 +1,75 @@
+TapBix online development service
+
+Scope
+This is the first executable S7-A delivery: the existing event envelope, canonical
+hash and supported contract names are shared with the Flutter local ledger.
+PostgreSQL persists immutable events and independent delivery leases, under forced
+company RLS. It never posts a second financial journal on receipt.
+The Flutter HTTPS gateway implements the existing synchronization gateway contract.
+It is not yet selected by the released app UI. Keep online purchases disabled.
+
+Local computer setup
+1. Install PostgreSQL 16 tools, or extract the official Ubuntu 24.04 packages
+   postgresql-16, postgresql-client-16 and libpq5 under:
+   .buildlog/station7/runtime/pg
+2. From repository root:
+   python3 server/online/tool/local_postgres.py
+   cd server/online
+   dart pub get --enforce-lockfile
+3. From repository root, start the API:
+   python3 server/online/tool/run_local.py
+4. Check http://127.0.0.1:45830/healthz
+PostgreSQL binds 127.0.0.1:55432. It uses independent development/test databases,
+SCRAM passwords in mode-0600 ignored files, and an application role that cannot
+own schema tables, bypass RLS, or update/delete event history. No mobile or Linux
+branch databases are opened or replaced. This is a development process, not an
+installed auto-start service; restart it after a machine reboot.
+
+Development company
+   python3 server/online/tool/run_local.py run bin/provision_development.dart NEW_PRIVATE_JSON_PATH
+The output contains a newly generated demo organization, branch, database and owner
+token. The command accepts only loopback tapbix_online_dev and issues a seven-day
+development grant. This is NOT RevenueCat verification or a production entitlement.
+Keep the output below .buildlog; never commit it or use an existing branch identity
+without the future enrollment/bootstrap workflow. Never share access tokens in logs.
+
+HTTP protocol
+Every /v1 request requires X-Organization-Id. Protected requests also require
+Authorization: Bearer <token>. JSON POST bodies are limited to 2 MiB and batches to
+50 events. The service serializes per-company commit/fan-out boundaries and retains
+per-source sequence order; duplicate hashes are acknowledged without reapplying.
+- POST /v1/invitations (owner): databaseId, branchId, name. Ten-minute invite.
+- POST /v1/enroll: databaseId, invitationCode. Uses the invite's fixed identity/name.
+  A lost response can be retried for the same identity before invite expiry.
+- POST /v1/sync/push: events using the shared v1 SyncEventEnvelope contract.
+- POST /v1/sync/pull: optional limit (1..50); returns leaseToken and events.
+- POST /v1/sync/ack: leaseToken and eventIds, only AFTER durable local application.
+- GET /v1/events (owner): raw event envelopes, optional sourceDatabaseId and offset.
+  This endpoint is a development inspection feed, not a completed financial report.
+Only the owner writer can publish catalogue/location snapshots. Each branch has one
+active database writer. A role token authenticates a branch service, not a cashier.
+An API acceptance confirms durable relay storage, NOT stock receipt by the destination.
+Actual receipt remains a separately authored event from the receiving branch.
+
+Validation
+   python3 server/online/tool/run_local.py test --reporter expanded
+   python3 server/online/tool/verify_restore.py
+The integration suite requires tapbix_online_test and fails rather than silently
+skipping when configuration is missing. The restore checker creates a uniquely named
+throwaway database, compares fingerprints/deliveries/forced RLS, then drops only that
+database. Backup files contain data and credentials and remain private/ignored.
+CI uses a fresh PostgreSQL service and the same migration and tests.
+
+Remaining S7 / S8 gates
+- Authenticated company enrollment of existing branches and local identity bootstrap.
+- User-facing online settings, secure credential persistence, background retry and
+  transport selection, with LAN/online delivery cursors kept independent.
+- Apply downloaded events through existing business projectors and reconcile actual
+  sale/return/transfer/report results across devices using the online transport.
+- Verified commercial entitlements/webhooks, revocation/rotation and restoration.
+- Full central reporting and freshness, quotas/rate limits/retention/monitoring.
+- HTTPS named tunnel with access controls and public-ingress security acceptance.
+- Automated backups including configuration, remote recovery exercise, load testing,
+  platform builds, update paths and a limited user pilot before station 8 approval.
+The API listens only on loopback. Do not expose it publicly while these gates remain.
+The 1.3.2 Play AAB from the earlier release audit has not been overwritten by this work.

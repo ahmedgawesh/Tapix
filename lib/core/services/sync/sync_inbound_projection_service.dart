@@ -1,3 +1,5 @@
+import 'package:tapbix_sync_contracts/tapbix_sync_contracts.dart'
+    show SyncWireContract;
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
@@ -26,41 +28,7 @@ class SyncInboundProjectionService {
   final Future<void> Function(SyncEventEnvelope event)? _operationalProjector;
   final Future<void> Function(SyncEventEnvelope event)? _appliedObserver;
 
-  static const supportedContracts = {
-    'catalogue.snapshot_page.v1',
-    'customer.profile_upserted.v1',
-    'customer_transaction.posted.v1',
-    'customer_transaction.corrected.v1',
-    'consignment_receipt.posted.v1',
-    'consignment_receipt.voided.v1',
-    'consignment_custody.posted.v1',
-    'consignment_custody.voided.v1',
-    'consignment_conversion.posted.v1',
-    'consignment_conversion.voided.v1',
-    'consignment_settlement.posted.v1',
-    'consignment_settlement.voided.v1',
-    'consignment_payment.posted.v1',
-    'consignment_payment.reversed.v1',
-    'location.snapshot_page.v1',
-    'sale.posted.v1',
-    'sale.voided.v1',
-    'sale_return.posted.v1',
-    'sale_return.voided.v1',
-    'purchase.posted.v1',
-    'purchase.voided.v1',
-    'purchase_return.posted.v1',
-    'purchase_return.voided.v1',
-    'inventory_adjustment.posted.v1',
-    'sale_adjustment_return.posted.v1',
-    'sale_adjustment_return.voided.v1',
-    'purchase_adjustment_return.posted.v1',
-    'purchase_adjustment_return.voided.v1',
-    'warehouse_transfer.dispatched.v1',
-    'warehouse_transfer.received.v1',
-    'warehouse_transfer.recalled.v1',
-    'warehouse_transfer.recall_requested.v1',
-    'warehouse_transfer.recall_resolved.v1',
-  };
+  static const supportedContracts = SyncWireContract.supportedContracts;
 
   Future<InboundSyncResult> apply(SyncEventEnvelope event) async {
     final result = await _events.applyInbound(

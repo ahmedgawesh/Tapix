@@ -66,3 +66,7 @@ app.*.map.json
 
 # Optional Easy Localization key generation; the app uses asset keys directly
 /lib/generated/locale_keys.g.dart
+
+# Python caches for documentation and local server tools
+__pycache__/
+*.py[cod]

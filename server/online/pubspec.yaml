@@ -1,0 +1,14 @@
+name: tapbix_online
+version: 0.1.0
+publish_to: none
+environment:
+  sdk: ">=3.11.0 <4.0.0"
+dependencies:
+  postgres: ^3.5.17
+  crypto: ^3.0.7
+  uuid: ^4.5.2
+  tapbix_sync_contracts:
+    path: ../../packages/tapbix_sync_contracts
+dev_dependencies:
+  test: ^1.29.0
+  lints: ^6.0.0
