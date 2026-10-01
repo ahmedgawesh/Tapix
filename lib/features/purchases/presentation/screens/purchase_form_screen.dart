@@ -20,7 +20,7 @@ import '../../../../core/measurement/measurement.dart';
 import '../../../../core/measurement/measurement_localization.dart';
 import '../../../../core/payments/checkout_settlement.dart';
 import '../../../../core/utils/app_date_formatter.dart';
-import '../../../../core/database/app_database.dart' show Supplier;
+import '../../../../core/database/app_database.dart' show Supplier, AppDatabase;
 import '../../../products/domain/entities/product_entity.dart';
 import '../../../products/domain/entities/product_variant_entity.dart';
 import '../../../products/domain/repositories/product_color_repository.dart';
@@ -36,6 +36,7 @@ import '../../../products/presentation/bloc/product_variants_bloc.dart';
 import '../../../products/presentation/bloc/variant_previews_bloc.dart';
 import '../../../suppliers/domain/repositories/supplier_repository.dart';
 import '../../../barcode/data/models/invoice_print_data.dart';
+import '../../../barcode/data/repositories/barcode_repository.dart';
 import '../../domain/repositories/purchase_repository.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../bloc/purchase_form_bloc.dart';
@@ -91,40 +92,64 @@ class PurchaseFormScreen extends StatelessWidget {
 class _PurchaseFormView extends StatelessWidget {
   const _PurchaseFormView();
 
-  InvoicePrintData _buildInvoicePrintDataFromPurchaseFormState(
+  Future<InvoicePrintData> _buildInvoicePrintDataFromPurchaseFormState(
     PurchaseFormState state,
-  ) {
-    final lines = state.items
-        .where(
-          (i) =>
-              (i.variant?.barcode ?? i.product.barcode ?? '').trim().isNotEmpty,
-        )
-        .map((i) {
-          final barcode = (i.variant?.barcode ?? i.product.barcode)!.trim();
-          final skuValue = (i.variant?.sku ?? i.product.sku ?? '').trim();
-          return InvoiceLinePrintData(
-            variantId: i.variant?.id ?? i.product.id,
-            quantity: i.quantity,
-            productName: i.product.name,
-            colorName: i.colorName,
-            sizeName: i.sizeName,
-            barcode: barcode,
-            sku: skuValue.isEmpty
-                ? '${i.variant?.id ?? i.product.id}'
-                : skuValue,
-            unitPriceCents: i.unitCostCents.toBigInt().toInt(),
-            sellingPriceCents: (i.variant?.priceCents ?? i.product.priceCents)
-                .toBigInt()
+  ) async {
+    final lan = sl.isRegistered<LanNetworkService>()
+        ? sl<LanNetworkService>()
+        : null;
+    if (lan?.snapshot.mode != LanMode.client) {
+      return BarcodeRepositoryImpl(
+        sl<AppDatabase>(),
+      ).getPurchasePrintData(state.purchaseId!, allowDraft: true);
+    }
+    // Read issued source identities from the branch that actually saved the
+    // invoice; its IDs must never be looked up in the cashier's local database.
+    final saved = await lan!.fetchRemotePurchaseDetails(state.purchaseId!);
+    String labelBarcode(PurchaseLineItem item) =>
+        (item.product.hasVariants
+                ? item.variant?.barcode
+                : ((item.product.barcode?.trim().isNotEmpty ?? false)
+                      ? item.product.barcode
+                      : item.variant?.barcode))
+            ?.trim() ??
+        '';
+    final lines = state.items.where((i) => labelBarcode(i).isNotEmpty).map((i) {
+      final barcode = labelBarcode(i);
+      final sourceLines = saved.lines.where(
+        (line) =>
+            line.productId == i.product.id &&
+            (!i.product.hasVariants || line.variantId == i.variant?.id),
+      );
+      if (sourceLines.isEmpty || sourceLines.first.variantId == null) {
+        throw StateError('Saved purchase line identity is unavailable');
+      }
+      final savedLine = sourceLines.first;
+      final skuValue = resolveInvoiceLabelSku(
+        hasVariants: i.product.hasVariants,
+        productSku: i.product.sku,
+        variantSku: i.variant?.sku,
+        supplierSourceSku: savedLine.supplierSourceSku,
+      );
+      return InvoiceLinePrintData(
+        variantId: savedLine.variantId!,
+        quantity: i.quantity,
+        productName: i.product.name,
+        colorName: i.colorName,
+        sizeName: i.sizeName,
+        barcode: barcode,
+        sku: skuValue,
+        unitPriceCents: i.unitCostCents.toBigInt().toInt(),
+        sellingPriceCents: (i.variant?.priceCents ?? i.product.priceCents)
+            .toBigInt()
+            .toInt(),
+        wholesalePriceCents:
+            (i.variant?.wholesalePriceCents ?? i.product.wholesalePriceCents)
+                ?.toBigInt()
                 .toInt(),
-            wholesalePriceCents:
-                (i.variant?.wholesalePriceCents ??
-                        i.product.wholesalePriceCents)
-                    ?.toBigInt()
-                    .toInt(),
-            isActive: true,
-          );
-        })
-        .toList();
+        isActive: true,
+      );
+    }).toList();
 
     return InvoicePrintData(
       lines: lines,
@@ -299,6 +324,7 @@ class _PurchaseFormView extends StatelessWidget {
             children: [
               Expanded(
                 child: ListView(
+                  key: const ValueKey('purchase-form-scroll'),
                   padding: const EdgeInsets.all(16),
                   children: [
                     _buildItemsCard(context, state, cs),
@@ -324,53 +350,39 @@ class _PurchaseFormView extends StatelessWidget {
     PurchaseFormState state,
     CurrencyService cs,
   ) {
-    return Column(
+    // All form sections share one viewport. Pinning the header above a list
+    // leaves no room for items on landscape phones or with the keyboard open.
+    return ListView(
+      key: const ValueKey('purchase-form-scroll'),
+      padding: const EdgeInsets.all(16),
       children: [
-        // Fixed top section: invoice header, discount mode + supplier ref row,
-        // and the product search bar. This stays pinned and does NOT scroll
-        // away when new items are added.
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-          child: Column(
+        _buildInvoiceHeaderCard(context, state),
+        const SizedBox(height: 12),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildInvoiceHeaderCard(context, state),
-              const SizedBox(height: 12),
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: _buildDiscountModeCard(
-                        context,
-                        state,
-                        cs,
-                        compact: true,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(child: _buildRefCard(context, state)),
-                  ],
+              Expanded(
+                child: _buildDiscountModeCard(
+                  context,
+                  state,
+                  cs,
+                  compact: true,
                 ),
               ),
-              const SizedBox(height: 12),
-              _buildSearchBarWithScan(context),
+              const SizedBox(width: 8),
+              Expanded(child: _buildRefCard(context, state)),
             ],
           ),
         ),
         const SizedBox(height: 12),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            children: [
-              _buildItemsCard(context, state, cs),
-              const SizedBox(height: 12),
-              _buildDueDateCard(context, state),
-              const SizedBox(height: 12),
-              _buildTotalsCard(context, state, cs),
-              const SizedBox(height: 80),
-            ],
-          ),
-        ),
+        _buildSearchBarWithScan(context),
+        const SizedBox(height: 12),
+        _buildItemsCard(context, state, cs),
+        const SizedBox(height: 12),
+        _buildDueDateCard(context, state),
+        const SizedBox(height: 12),
+        _buildTotalsCard(context, state, cs),
         _buildBottomBar(context, state, cs),
       ],
     );
@@ -973,16 +985,23 @@ class _PurchaseFormView extends StatelessWidget {
             TextButton.icon(
               icon: const Icon(LucideIcons.scan, size: 18),
               label: Text('purchases.generate_barcode'.tr()),
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(ctx);
-                final invoiceData = _buildInvoicePrintDataFromPurchaseFormState(
-                  state,
-                );
-                final products = state.items.map((i) => i.product).toList();
-                context.push(
-                  '/products/barcode-design',
-                  extra: {'products': products, 'invoiceData': invoiceData},
-                );
+                try {
+                  final invoiceData =
+                      await _buildInvoicePrintDataFromPurchaseFormState(state);
+                  if (!context.mounted) return;
+                  context.push(
+                    '/products/barcode-design',
+                    extra: {'invoiceData': invoiceData},
+                  );
+                } catch (_) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('purchases.print_error'.tr())),
+                    );
+                  }
+                }
               },
             ),
             FilledButton.icon(
@@ -1488,7 +1507,10 @@ class _PurchaseFormView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Container(
                   padding: const EdgeInsets.all(7),
@@ -1534,7 +1556,6 @@ class _PurchaseFormView extends StatelessWidget {
                     ),
                   ),
                 ],
-                const Spacer(),
                 FilledButton.icon(
                   onPressed: () => _showAddItemSheet(context),
                   icon: const Icon(LucideIcons.plus, size: 16),
@@ -1741,20 +1762,26 @@ class _PurchaseFormView extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: style?.copyWith(color: isBold ? null : cs.onSurfaceVariant),
+        Expanded(
+          child: Text(
+            label,
+            style: style?.copyWith(color: isBold ? null : cs.onSurfaceVariant),
+          ),
         ),
-        Text(
-          value,
-          style:
-              (isBold
-                      ? theme.textTheme.titleMedium
-                      : theme.textTheme.bodyMedium)
-                  ?.copyWith(
-                    color: valueColor,
-                    fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
-                  ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style:
+                (isBold
+                        ? theme.textTheme.titleMedium
+                        : theme.textTheme.bodyMedium)
+                    ?.copyWith(
+                      color: valueColor,
+                      fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
+                    ),
+          ),
         ),
       ],
     );
@@ -1794,9 +1821,13 @@ class _PurchaseFormView extends StatelessWidget {
         ],
       ),
       child: SafeArea(
-        child: Row(
+        child: OverflowBar(
+          alignment: MainAxisAlignment.spaceBetween,
+          spacing: 8,
+          overflowSpacing: 8,
           children: [
-            Expanded(
+            SizedBox(
+              width: 140,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -1833,7 +1864,6 @@ class _PurchaseFormView extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 12),
             OutlinedButton(
               onPressed: state.isSubmitting
                   ? null
@@ -1842,7 +1872,6 @@ class _PurchaseFormView extends StatelessWidget {
                     },
               child: Text('common.cancel'.tr()),
             ),
-            const SizedBox(width: 8),
             FilledButton.icon(
               onPressed: state.isSubmitting || state.items.isEmpty
                   ? null
@@ -2189,235 +2218,263 @@ class _PurchaseItemTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Index badge
-            Container(
-              width: 28,
-              height: 28,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: cs.primaryContainer,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                '${index + 1}',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: cs.onPrimaryContainer,
-                  fontWeight: FontWeight.bold,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final parts = <Widget>[
+              // Index badge
+              Container(
+                width: 28,
+                height: 28,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            // Product info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.product.name,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (showSupplierSource)
-                    SupplierSourceCodeView(
-                      code: sourceCode,
-                      errorKey: sourceErrorKey,
-                      pending: sourcePending,
-                    ),
-                  if (hasVariantInfo) ...[
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: [
-                        if (item.colorName != null)
-                          _VariantChip(
-                            icon: item.colorHex != null
-                                ? Container(
-                                    width: 10,
-                                    height: 10,
-                                    decoration: BoxDecoration(
-                                      color:
-                                          _parseHexColor(item.colorHex) ??
-                                          cs.primary,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: cs.outline.withValues(
-                                          alpha: 0.3,
-                                        ),
-                                        width: 0.5,
-                                      ),
-                                    ),
-                                  )
-                                : null,
-                            label: item.colorName!,
-                            color: cs.tertiaryContainer,
-                            textColor: cs.onTertiaryContainer,
-                          ),
-                        if (item.sizeName != null)
-                          _VariantChip(
-                            label: item.sizeName!,
-                            color: cs.secondaryContainer,
-                            textColor: cs.onSecondaryContainer,
-                          ),
-                        if (item.variant?.sku != null)
-                          _VariantChip(
-                            label: item.variant!.sku!,
-                            color: cs.surfaceContainerHighest,
-                            textColor: cs.onSurfaceVariant,
-                          ),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 2),
-                  Text(
-                    '${currencyService.format(item.unitCostCents.toBigInt().toInt())} × ${localizedQuantity(item.quantity, item.product.measurementType)}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: cs.onSurfaceVariant,
-                    ),
-                  ),
-                  if (showItemDiscount && item.discountCents > Decimal.zero)
-                    Text(
-                      '${'purchases.discount'.tr()}: -${currencyService.format(item.discountCents.toBigInt().toInt())}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: cs.tertiary,
-                      ),
-                    ),
-                  if (showManufacturerLot &&
-                      item.requiresManufacturerLot &&
-                      item.manufacturerLotNumber?.trim().isNotEmpty == true)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        '${'pharmacy.batch.lot_short'.tr()}: ${item.manufacturerLotNumber}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: cs.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  if (showManufacturerLot &&
-                      item.requiresManufacturerLot &&
-                      (item.manufacturerLotNumber?.trim().isEmpty ?? true))
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        'pharmacy.batch.lot_required'.tr(),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: cs.error,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  if (item.expiryDate != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            LucideIcons.clock,
-                            size: 12,
-                            color: Colors.orange,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            AppDateFormatter.date(item.expiryDate!),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: Colors.orange,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            // Quantity controls
-            Container(
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: item.quantity > item.product.quantityScale
-                        ? () => onQuantityChanged(
-                            item.quantity - item.product.quantityScale,
-                          )
-                        : null,
-                    child: Padding(
-                      padding: const EdgeInsets.all(6),
-                      child: Icon(
-                        LucideIcons.minus,
-                        size: 14,
-                        color: item.quantity > item.product.quantityScale
-                            ? cs.onSurface
-                            : cs.onSurface.withValues(alpha: 0.3),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Text(
-                      localizedQuantity(
-                        item.quantity,
-                        item.product.measurementType,
-                      ),
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () => onQuantityChanged(
-                      item.quantity + item.product.quantityScale,
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(6),
-                      child: Icon(
-                        LucideIcons.plus,
-                        size: 14,
-                        color: cs.onSurface,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            // Total + remove
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  currencyService.format(item.totalCents.toBigInt().toInt()),
-                  style: theme.textTheme.titleSmall?.copyWith(
+                child: Text(
+                  '${index + 1}',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: cs.onPrimaryContainer,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 4),
-                InkWell(
-                  borderRadius: BorderRadius.circular(4),
-                  onTap: onRemove,
-                  child: Padding(
-                    padding: const EdgeInsets.all(2),
-                    child: Icon(LucideIcons.trash2, size: 14, color: cs.error),
-                  ),
+              ),
+              const SizedBox(width: 12),
+              // Product info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.product.name,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (showSupplierSource)
+                      SupplierSourceCodeView(
+                        code: sourceCode,
+                        errorKey: sourceErrorKey,
+                        pending: sourcePending,
+                      ),
+                    if (hasVariantInfo) ...[
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          if (item.colorName != null)
+                            _VariantChip(
+                              icon: item.colorHex != null
+                                  ? Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: BoxDecoration(
+                                        color:
+                                            _parseHexColor(item.colorHex) ??
+                                            cs.primary,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: cs.outline.withValues(
+                                            alpha: 0.3,
+                                          ),
+                                          width: 0.5,
+                                        ),
+                                      ),
+                                    )
+                                  : null,
+                              label: item.colorName!,
+                              color: cs.tertiaryContainer,
+                              textColor: cs.onTertiaryContainer,
+                            ),
+                          if (item.sizeName != null)
+                            _VariantChip(
+                              label: item.sizeName!,
+                              color: cs.secondaryContainer,
+                              textColor: cs.onSecondaryContainer,
+                            ),
+                          if (item.variant?.sku != null)
+                            _VariantChip(
+                              label: item.variant!.sku!,
+                              color: cs.surfaceContainerHighest,
+                              textColor: cs.onSurfaceVariant,
+                            ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 2),
+                    Text(
+                      '${currencyService.format(item.unitCostCents.toBigInt().toInt())} × ${localizedQuantity(item.quantity, item.product.measurementType)}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                    if (showItemDiscount && item.discountCents > Decimal.zero)
+                      Text(
+                        '${'purchases.discount'.tr()}: -${currencyService.format(item.discountCents.toBigInt().toInt())}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: cs.tertiary,
+                        ),
+                      ),
+                    if (showManufacturerLot &&
+                        item.requiresManufacturerLot &&
+                        item.manufacturerLotNumber?.trim().isNotEmpty == true)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          '${'pharmacy.batch.lot_short'.tr()}: ${item.manufacturerLotNumber}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: cs.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    if (showManufacturerLot &&
+                        item.requiresManufacturerLot &&
+                        (item.manufacturerLotNumber?.trim().isEmpty ?? true))
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          'pharmacy.batch.lot_required'.tr(),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: cs.error,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    if (item.expiryDate != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              LucideIcons.clock,
+                              size: 12,
+                              color: Colors.orange,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              AppDateFormatter.date(item.expiryDate!),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: Colors.orange,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
-              ],
-            ),
-          ],
+              ),
+              // Quantity controls
+              Container(
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: item.quantity > item.product.quantityScale
+                          ? () => onQuantityChanged(
+                              item.quantity - item.product.quantityScale,
+                            )
+                          : null,
+                      child: Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Icon(
+                          LucideIcons.minus,
+                          size: 14,
+                          color: item.quantity > item.product.quantityScale
+                              ? cs.onSurface
+                              : cs.onSurface.withValues(alpha: 0.3),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Text(
+                        localizedQuantity(
+                          item.quantity,
+                          item.product.measurementType,
+                        ),
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () => onQuantityChanged(
+                        item.quantity + item.product.quantityScale,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Icon(
+                          LucideIcons.plus,
+                          size: 14,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Total + remove
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    currencyService.format(item.totalCents.toBigInt().toInt()),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(4),
+                    onTap: onRemove,
+                    child: Padding(
+                      padding: const EdgeInsets.all(2),
+                      child: Icon(
+                        LucideIcons.trash2,
+                        size: 14,
+                        color: cs.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ];
+            if (constraints.maxWidth < 500) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: parts.take(3).toList(),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 12,
+                    runSpacing: 8,
+                    children: [parts[3], parts[5]],
+                  ),
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: parts,
+            );
+          },
         ),
       ),
     );

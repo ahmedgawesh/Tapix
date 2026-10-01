@@ -97,7 +97,7 @@ class FileImportService implements ParseImportFile {
         bytes[0] == 0xEF &&
         bytes[1] == 0xBB &&
         bytes[2] == 0xBF) {
-      return utf8.decode(bytes.sublist(3), allowMalformed: true);
+      return utf8.decode(bytes.sublist(3), allowMalformed: false);
     }
 
     // UTF-16 LE BOM: FF FE
@@ -121,13 +121,25 @@ class FileImportService implements ParseImportFile {
     }
 
     // Default: assume UTF-8.
-    return utf8.decode(bytes, allowMalformed: true);
+    return utf8.decode(bytes, allowMalformed: false);
+  }
+
+  void _validateHeaders(List<String> headers) {
+    final normalized = headers
+        .where((h) => h.trim().isNotEmpty)
+        .map(ColumnMapping.normalizeHeader)
+        .toList();
+    if (normalized.isEmpty || normalized.toSet().length != normalized.length) {
+      throw const FormatException(
+        'Column headers must be nonempty and unique.',
+      );
+    }
   }
 
   Future<ImportFileData> _parseCsv(List<int> bytes, String fileName) async {
     try {
       final csvString = _decodeCsvBytes(bytes);
-      final csvDecoder = const CsvDecoder();
+      final csvDecoder = const CsvDecoder(dynamicTyping: false);
       final rows = csvDecoder.convert(csvString);
 
       if (rows.isEmpty) {
@@ -135,6 +147,7 @@ class FileImportService implements ParseImportFile {
       }
 
       final headers = rows.first.map((e) => e.toString().trim()).toList();
+      _validateHeaders(headers);
       final dataRows = rows.skip(1).map((row) {
         return row.map((cell) => cell?.toString() ?? '').toList();
       }).toList();
@@ -194,6 +207,7 @@ class FileImportService implements ParseImportFile {
           .map((String h) => h.trim())
           .toList();
 
+      _validateHeaders(headers);
       final dataRows = rows
           .skip(1)
           .map(

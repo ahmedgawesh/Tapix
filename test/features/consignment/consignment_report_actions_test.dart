@@ -76,8 +76,18 @@ void main() {
       final profile = _UnavailableProfile();
       sl.registerSingleton<CompanyProfileService>(profile);
       final router = GoRouter(
+        initialLocation: '/consignment',
         routes: [
-          GoRoute(path: '/', builder: (_, _) => const ConsignmentHubScreen()),
+          GoRoute(
+            path: '/',
+            builder: (_, _) => const Scaffold(body: Text('dashboard')),
+            routes: [
+              GoRoute(
+                path: 'consignment',
+                builder: (_, _) => const ConsignmentHubScreen(),
+              ),
+            ],
+          ),
           GoRoute(
             path: '/reports/sales/by-supplier',
             builder: (_, _) =>
@@ -130,6 +140,28 @@ void main() {
         await tester.pumpAndSettle();
       }
       expect(profile.calls, 3);
+      for (final systemBack in [false, true]) {
+        if (systemBack) {
+          await tester.binding.handlePopRoute();
+        } else {
+          await tester.tap(find.byTooltip('common.back'.tr()));
+        }
+        await tester.pumpAndSettle();
+        expect(find.text('consignment.quick_actions'.tr()), findsOneWidget);
+        expect(find.text('dashboard'), findsNothing);
+        expect(router.routeInformationProvider.value.uri.path, '/consignment');
+        if (!systemBack) {
+          await tester.ensureVisible(
+            find.text('consignment.report'.tr()).first,
+          );
+          await tester.tap(find.text('consignment.report'.tr()).first);
+          await tester.pumpAndSettle();
+        }
+      }
+      // Only a further Back from the overview leaves the consignment hub.
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('dashboard'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

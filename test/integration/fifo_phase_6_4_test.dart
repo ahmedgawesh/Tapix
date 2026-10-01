@@ -509,7 +509,7 @@ void main() {
         // The migration is exercised on every fresh in-memory DB. We assert:
         //   - schema is at the latest exported version
         //   - no batch rows exist for an empty seed (sanity)
-        expect(db.schemaVersion, equals(10119));
+        expect(db.schemaVersion, equals(10120));
 
         final any = await db
             .customSelect('SELECT COUNT(*) AS c FROM product_batches')

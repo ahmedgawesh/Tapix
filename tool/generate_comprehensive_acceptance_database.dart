@@ -288,9 +288,9 @@ Future<void> _generate(AppDatabase db) async {
       'company_profile',
       jsonEncode({
         'name': 'شركة قبول Tapix',
-        'phone': '01000000000',
-        'email': 'acceptance@example.test',
-        'address': 'بيئة اختبار معزولة',
+        'phone': '',
+        'email': '',
+        'address': '',
       }),
       'Acceptance company profile',
     ],

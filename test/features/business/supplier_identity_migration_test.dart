@@ -28,6 +28,9 @@ void main() {
         await db.customStatement('DROP $type "$name"');
       }
       await db.customStatement('DROP TABLE supplier_product_code_locks');
+      // This sidecar did not exist in 10093; remove its target guard too
+      // when constructing the historical fixture from a current database.
+      await db.customStatement('DROP TABLE sync_supplier_product_identities');
       await db.customStatement('DROP TABLE supplier_product_identities');
       await db.customStatement(
         'ALTER TABLE suppliers DROP COLUMN product_code',
@@ -52,6 +55,7 @@ void main() {
       addTearDown(db.close);
       final after = await fixtures.legacySnapshot(db);
       expect(after.remove('supplier_product_identities'), isEmpty);
+      expect(after.remove('sync_supplier_product_identities'), isEmpty);
       expect(after.remove('supplier_product_code_locks'), isEmpty);
       for (final row in after['suppliers']!) {
         expect(row.remove('product_code'), isNull);
@@ -61,7 +65,7 @@ void main() {
         expect(row.remove('supplier_identity_id'), isNull);
       }
       expect(after, before);
-      expect(db.schemaVersion, 10119);
+      expect(db.schemaVersion, 10120);
       expect(await db.customSelect('PRAGMA foreign_key_check').get(), isEmpty);
     },
   );
@@ -98,7 +102,7 @@ void main() {
       (await db.customSelect('PRAGMA user_version').getSingle()).read<int>(
         'user_version',
       ),
-      10119,
+      10120,
     );
   });
 

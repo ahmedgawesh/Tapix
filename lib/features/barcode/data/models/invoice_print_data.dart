@@ -68,3 +68,17 @@ class InvoiceNotPostedException implements Exception {
   @override
   String toString() => 'InvoiceNotPostedException($invoiceType#$invoiceId)';
 }
+
+/// A simple product keeps its user-entered SKU, regardless of its internal
+/// stock variant. An issued supplier identity is an immutable invoice snapshot.
+/// Never substitute a database ID or a generated barcode for a missing SKU.
+String resolveInvoiceLabelSku({
+  required bool hasVariants,
+  String? productSku,
+  String? variantSku,
+  String? supplierSourceSku,
+}) {
+  final source = supplierSourceSku?.trim();
+  if (source != null && source.isNotEmpty) return source;
+  return (hasVariants ? variantSku : productSku)?.trim() ?? '';
+}

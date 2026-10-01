@@ -1,4 +1,6 @@
 import 'package:decimal/decimal.dart';
+import 'product_import_service.dart';
+import '../domain/repositories/product_variant_repository.dart';
 import 'package:easy_localization/easy_localization.dart';
 import '../domain/entities/import_file_data.dart';
 import '../domain/entities/import_result.dart';
@@ -8,7 +10,8 @@ import '../domain/usecases/validate_import_data.dart';
 class ImportValidationService implements ValidateImportData {
   final ProductRepository _productRepository;
 
-  ImportValidationService(this._productRepository);
+  final ProductVariantRepository? variants;
+  ImportValidationService(this._productRepository, {this.variants});
 
   @override
   Future<List<ImportError>> call({
@@ -17,10 +20,74 @@ class ImportValidationService implements ValidateImportData {
   }) async {
     final errors = <ImportError>[];
 
+    final codes = <String, int>{};
+    final groups = <String, ProductImportRow>{};
     for (var rowIndex = 0; rowIndex < fileData.rows.length; rowIndex++) {
       final row = fileData.rows[rowIndex];
       final rowErrors = await _validateRow(row, rowIndex, columnMapping);
       errors.addAll(rowErrors);
+      try {
+        final parsed = ProductImportService.parseRow(
+          row,
+          rowIndex,
+          columnMapping,
+          fileData.headers,
+        );
+        final first = groups[parsed.groupKey];
+        if (first != null &&
+            (first.hasVariantsExplicit == false ||
+                first.productSignature != parsed.productSignature)) {
+          errors.add(
+            ImportError(
+              rowIndex: rowIndex,
+              field: 'product_id',
+              message: 'import_products.group_conflict'.tr(),
+              severity: ImportErrorSeverity.error,
+            ),
+          );
+        }
+        groups[parsed.groupKey] = first ?? parsed;
+        for (final code in {
+          parsed.sku,
+          parsed.barcode,
+        }.where((v) => v.isNotEmpty)) {
+          final key = code.toLowerCase();
+          if (codes.containsKey(key) && codes[key] != rowIndex) {
+            errors.add(
+              ImportError(
+                rowIndex: rowIndex,
+                field: 'sku/barcode',
+                message: 'import_products.duplicate_code'.tr(args: [code]),
+                severity: ImportErrorSeverity.error,
+              ),
+            );
+          }
+          codes[key] = rowIndex;
+          if (variants != null &&
+              (await variants!.isSkuTaken(code) ||
+                  await variants!.isBarcodeTaken(code))) {
+            errors.add(
+              ImportError(
+                rowIndex: rowIndex,
+                field: 'sku/barcode',
+                message: 'import_products.validation_sku_exists'.tr(
+                  args: [code],
+                ),
+                severity: ImportErrorSeverity.error,
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        errors.add(
+          ImportError(
+            rowIndex: rowIndex,
+            field: 'row',
+            message: e.toString(),
+            severity: ImportErrorSeverity.error,
+          ),
+        );
+      }
     }
 
     return errors;
@@ -86,6 +153,16 @@ class ImportValidationService implements ValidateImportData {
         final costValidation = _validateMoneyField(costStr, 'cost', rowIndex);
         if (costValidation != null) errors.add(costValidation);
       }
+    }
+
+    final wholesale = columnMapping.getColumnIndex('wholesale_price');
+    if (wholesale != null && _getCellValue(row, wholesale).isNotEmpty) {
+      final error = _validateMoneyField(
+        _getCellValue(row, wholesale),
+        'wholesale_price',
+        rowIndex,
+      );
+      if (error != null) errors.add(error);
     }
 
     final skuIndex = columnMapping.getColumnIndex('sku');

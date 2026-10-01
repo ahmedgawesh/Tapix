@@ -52,7 +52,7 @@ void main() {
       await original.customStatement('DROP TABLE sync_source_checkpoints');
       await original.customStatement('DROP TABLE sync_outbox_events');
       await original.customStatement('DROP TABLE sync_local_state');
-      expect(original.schemaVersion, 10119);
+      expect(original.schemaVersion, 10120);
       await original.close();
 
       final reopened = AppDatabase.connect(
@@ -65,7 +65,7 @@ void main() {
           .getSingle();
       expect(identity.read<String>('database_id'), hasLength(36));
       expect(identity.read<int>('next_sequence'), 1);
-      expect(reopened.schemaVersion, 10119);
+      expect(reopened.schemaVersion, 10120);
       await reopened.close();
       db = AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
       await db.customSelect('SELECT 1').get();

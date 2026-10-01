@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/feature_gate_service.dart';
 import '../../../../core/services/business/branch_consignment_policy_store.dart';
 import '../../../consignment/data/consignment_module_service.dart';
 import 'settings_widgets.dart';
@@ -19,6 +20,28 @@ class _ConsignmentSettingsSectionState
     extends State<ConsignmentSettingsSection> {
   late Future<_ConsignmentSettingState> _state = _load();
   bool _saving = false;
+
+  FeatureGateService? _featureGate;
+
+  @override
+  void initState() {
+    super.initState();
+    if (sl.isRegistered<FeatureGateService>()) {
+      _featureGate = sl<FeatureGateService>();
+      _featureGate!.addListener(_onEntitlementChanged);
+    }
+  }
+
+  void _onEntitlementChanged() {
+    if (!mounted) return;
+    setState(() => _state = _load());
+  }
+
+  @override
+  void dispose() {
+    _featureGate?.removeListener(_onEntitlementChanged);
+    super.dispose();
+  }
 
   Future<_ConsignmentSettingState> _load() async {
     final module = sl<ConsignmentModuleService>();

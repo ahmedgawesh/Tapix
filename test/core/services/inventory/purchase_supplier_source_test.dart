@@ -2,6 +2,10 @@ import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tapix/features/barcode/data/models/invoice_print_data.dart';
+import 'package:tapix/features/barcode/data/repositories/barcode_repository.dart';
+import 'package:tapix/features/barcode/domain/models/barcode_design_state.dart';
+import 'package:tapix/features/barcode/services/barcode_label_job_builder.dart';
 import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/services/inventory/purchase_supplier_source_service.dart';
 import 'package:tapix/core/services/inventory/supplier_identity_rules.dart';
@@ -153,6 +157,92 @@ void main() {
         );
   });
   tearDown(() => db.close());
+
+  for (final hasVariants in [false, true]) {
+    for (final sourceCodes in [false, true]) {
+      test(
+        'purchase labels preserve SKU before/after posting: variants=$hasVariants sources=$sourceCodes',
+        () async {
+          await BranchCurrencyPolicyStore(db).bind('USD');
+          await (db.update(
+            db.products,
+          )..where((p) => p.id.equals(product))).write(
+            ProductsCompanion(
+              hasVariants: Value(hasVariants),
+              barcode: const Value('2900000000230'),
+            ),
+          );
+          final variantSku = hasVariants ? '015-BL-M' : 'INTERNAL-9009';
+          await (db.update(
+            db.productVariants,
+          )..where((v) => v.id.equals(variant))).write(
+            ProductVariantsCompanion(
+              sku: Value(variantSku),
+              barcode: const Value('2900000000261'),
+            ),
+          );
+          final id = await buy(noor, requested: sourceCodes);
+          final labels = BarcodeRepositoryImpl(db);
+          final baseSku = hasVariants ? variantSku : '015';
+          final expectedSku = sourceCodes ? 'N1-$baseSku' : baseSku;
+          final expectedBarcode = hasVariants
+              ? '2900000000261'
+              : '2900000000230';
+          final draft = await labels.getPurchasePrintData(id, allowDraft: true);
+          expect(draft.lines.single.sku, expectedSku);
+          expect(draft.lines.single.barcode, expectedBarcode);
+          await expectLater(
+            labels.getPurchasePrintData(id),
+            throwsA(isA<InvoiceNotPostedException>()),
+          );
+          await db.purchaseDao.postPurchase(id);
+          final posted = await labels.getPurchasePrintData(id);
+          expect(posted.lines.single.sku, expectedSku);
+          expect(posted.lines.single.barcode, expectedBarcode);
+          for (final mode in QuantityMode.values) {
+            final jobs = await BarcodeLabelJobBuilder(db.productVariantDao)
+                .build(
+                  selectedProducts: const [],
+                  settings: BarcodeDesignSettings(quantityMode: mode),
+                  invoiceData: posted,
+                );
+            expect(jobs.single.product.sku, expectedSku, reason: mode.name);
+            expect(
+              jobs.single.product.barcode,
+              expectedBarcode,
+              reason: mode.name,
+            );
+          }
+          final storedProduct = await (db.select(
+            db.products,
+          )..where((p) => p.id.equals(product))).getSingle();
+          final storedVariant = await (db.select(
+            db.productVariants,
+          )..where((v) => v.id.equals(variant))).getSingle();
+          expect(storedProduct.sku, '015');
+          expect(storedVariant.sku, variantSku);
+          if (sourceCodes) {
+            // Historical labels follow the issued invoice identity even if a
+            // catalogue SKU is subsequently edited.
+            await (db.update(db.products)..where((p) => p.id.equals(product)))
+                .write(const ProductsCompanion(sku: Value('NEW-SKU')));
+            expect(
+              (await labels.getPurchasePrintData(id)).lines.single.sku,
+              expectedSku,
+            );
+          }
+        },
+      );
+    }
+  }
+
+  test('missing SKU never prints a barcode or database identifier as SKU', () {
+    expect(
+      resolveInvoiceLabelSku(hasVariants: false, variantSku: 'INTERNAL-99'),
+      '',
+    );
+    expect(resolveInvoiceLabelSku(hasVariants: true, productSku: 'PARENT'), '');
+  });
 
   test(
     'legacy purchase stays unbound even when the supplier has a code',
@@ -523,6 +613,7 @@ void main() {
     )..where((v) => v.id.equals(variant))).write(
       ProductVariantsCompanion(
         sku: const Value('015-BL-S'),
+        barcode: const Value('2900000000230'),
         colorId: Value(blue),
         sizeId: Value(smallSize),
       ),
@@ -533,6 +624,7 @@ void main() {
           ProductVariantsCompanion.insert(
             productId: product,
             sku: const Value('015-BL-L'),
+            barcode: const Value('2900000000261'),
             colorId: Value(blue),
             sizeId: Value(largeSize),
             costCents: cents(2500),
@@ -553,6 +645,23 @@ void main() {
       large,
     });
     expect(rows.map((r) => r.supplierIdentity!.id).toSet(), hasLength(2));
+    final printData = await BarcodeRepositoryImpl(
+      db,
+    ).getPurchasePrintData(id, allowDraft: true);
+    final jobs = await BarcodeLabelJobBuilder(db.productVariantDao).build(
+      selectedProducts: const [],
+      invoiceData: printData,
+      settings: const BarcodeDesignSettings(quantityMode: QuantityMode.single),
+    );
+    expect(
+      jobs
+          .map((j) => (j.product.sku, j.product.barcode, j.variantInfo))
+          .toSet(),
+      {
+        ('N1-015-BL-S', '2900000000230', 'S / Blue'),
+        ('N1-015-BL-L', '2900000000261', 'L / Blue'),
+      },
+    );
     final before = await snapshot();
     await expectLater(
       buy(noor, implicit: true),

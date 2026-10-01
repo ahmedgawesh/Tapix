@@ -183,7 +183,7 @@ class ExportBloc extends RealtimeBloc<ExportUiData, ExportEvent> {
           activeOnly: activeOnly,
           selectedProductIds: selectedProductIds,
         );
-        bytes = Uint8List.fromList(utf8.encode(csv));
+        bytes = Uint8List.fromList(utf8.encode('\uFEFF$csv'));
         filename = 'products_export.csv';
       } else {
         LoggingService.serviceOperation(

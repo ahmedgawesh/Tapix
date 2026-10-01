@@ -12,7 +12,7 @@ void main() {
   });
 
   test(
-    '10112 to 10119 preserves data and installs transfer provenance and ownership intent',
+    '10112 to 10120 preserves data and installs transfer provenance and ownership intent',
     () async {
       final schema = await verifier.schemaAt(10112);
       addTearDown(schema.close);
@@ -44,7 +44,7 @@ void main() {
       ''');
 
       final db = AppDatabase.connect(schema.newConnection());
-      await verifier.migrateAndValidate(db, 10119);
+      await verifier.migrateAndValidate(db, 10120);
       addTearDown(db.close);
 
       expect(
@@ -119,7 +119,7 @@ void main() {
         (await db.customSelect('PRAGMA user_version').getSingle()).read<int>(
           'user_version',
         ),
-        10119,
+        10120,
       );
     },
   );

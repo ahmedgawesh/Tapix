@@ -283,6 +283,7 @@ class BarcodePreviewWidget extends StatelessWidget {
                                 drawText: true,
                                 style: TextStyle(
                                   fontSize: 8 * scale * densityFactor,
+                                  color: Colors.black,
                                 ),
                                 errorBuilder: (context, error) {
                                   return BarcodeWidget(
@@ -293,6 +294,7 @@ class BarcodePreviewWidget extends StatelessWidget {
                                     drawText: true,
                                     style: TextStyle(
                                       fontSize: 8 * scale * densityFactor,
+                                      color: Colors.black,
                                     ),
                                     errorBuilder: (context, error) {
                                       return Container(

@@ -1,3 +1,4 @@
+import '../../../../core/services/lan/lan_network_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -22,7 +23,19 @@ class SimpleExportScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Check permissions - only Manager/Owner can export
+    if (sl.isRegistered<LanNetworkService>() &&
+        sl<LanNetworkService>().snapshot.mode == LanMode.client) {
+      return Scaffold(
+        appBar: AppBar(title: Text('export_products.title'.tr())),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text('export_products.local_server_required'.tr()),
+          ),
+        ),
+      );
+    }
+    // Use the same cost/export permissions as the product list and router.
     final authBloc = sl<AuthBloc>();
     final authState = authBloc.state;
 
@@ -34,7 +47,9 @@ class SimpleExportScreen extends StatelessWidget {
     }
 
     final user = authState.user;
-    if (user.role != UserRole.owner && user.role != UserRole.manager) {
+    final permissions = sl<PermissionService>();
+    if (!permissions.hasPermission(user, Permissions.viewProductCost) ||
+        !permissions.hasPermission(user, Permissions.exportData)) {
       return Scaffold(
         appBar: AppBar(title: Text('export_products.title'.tr())),
         body: Center(
@@ -54,7 +69,7 @@ class SimpleExportScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'import_products.manager_owner_only'.tr(),
+                'export_products.permission_required'.tr(),
                 style: Theme.of(context).textTheme.bodyMedium,
                 textAlign: TextAlign.center,
               ),
@@ -134,7 +149,11 @@ class _SimpleExportScreenContent extends StatelessWidget {
                     children: [
                       _buildFormatSelector(context),
                       const SizedBox(height: 24),
-                      _buildFilterSection(context, isMobile),
+                      _buildFilterSection(
+                        context,
+                        isMobile,
+                        data?.activeOnly ?? true,
+                      ),
                       const SizedBox(height: 24),
                       if (products.isNotEmpty) ...[
                         _buildPreviewSection(context, products, selectedIds),
@@ -175,7 +194,11 @@ class _SimpleExportScreenContent extends StatelessWidget {
     );
   }
 
-  Widget _buildFilterSection(BuildContext context, bool isMobile) {
+  Widget _buildFilterSection(
+    BuildContext context,
+    bool isMobile,
+    bool activeOnly,
+  ) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -188,8 +211,15 @@ class _SimpleExportScreenContent extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'export_products.filters_description'.tr(),
+              'export_products.file_scope_hint'.tr(),
               style: Theme.of(context).textTheme.bodySmall,
+            ),
+            CheckboxListTile(
+              value: activeOnly,
+              title: Text('export_products.active_only'.tr()),
+              onChanged: (value) => context.read<ExportBloc>().add(
+                UpdateActiveFilter(value ?? true),
+              ),
             ),
           ],
         ),

@@ -222,7 +222,7 @@ void main() {
       legacy = AppDatabase.connect(DatabaseConnection(NativeDatabase(file)));
       addTearDown(legacy.close);
       expect(await fixtures.legacySnapshot(legacy), before);
-      expect(legacy.schemaVersion, 10119);
+      expect(legacy.schemaVersion, 10120);
       expect(
         (await legacy.select(legacy.businessContexts).get())
             .map((r) => r.toJson())
@@ -286,7 +286,7 @@ void main() {
       legacy = AppDatabase.connect(DatabaseConnection(NativeDatabase(file)));
       addTearDown(legacy.close);
       expect(await fixtures.legacySnapshot(legacy), before);
-      expect(legacy.schemaVersion, 10119);
+      expect(legacy.schemaVersion, 10120);
       expect(
         (await legacy.select(legacy.businessDocumentLocations).get())
             .map((r) => r.toJson())

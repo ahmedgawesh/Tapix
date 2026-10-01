@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/services/sync/offline_sync_event_store.dart';
+import 'package:tapix/core/services/inventory/supplier_product_identity_service.dart';
+import 'package:tapix/core/database/migrations/offline_sync_ledger.dart';
 import 'package:tapix/core/services/sync/sync_entity_identity_store.dart';
 
 void main() {
@@ -84,6 +86,76 @@ void main() {
   });
 
   tearDown(() => db.close());
+
+  test(
+    'supplier source identity is stable, guarded and survives additive upgrade',
+    () async {
+      await db.customStatement(
+        "UPDATE suppliers SET product_code='SRC' WHERE id=?",
+        [supplierId],
+      );
+      await db.customStatement(
+        "UPDATE product_variants SET sku='150' WHERE id=?",
+        [variantId],
+      );
+      await db.customStatement("UPDATE products SET sku='150' WHERE id=?", [
+        productId,
+      ]);
+      final source = await SupplierProductIdentityService(db).ensureIssued(
+        supplierId: supplierId,
+        productId: productId,
+        variantId: variantId,
+      );
+      final first = await identities.getOrCreateLocal(
+        entityType: 'supplier_product_identity',
+        localId: source.id,
+      );
+      await installOfflineSyncLedger(db);
+      final again = await SyncEntityIdentityStore(db).getOrCreateLocal(
+        entityType: 'supplier_product_identity',
+        localId: source.id,
+      );
+      expect(again.globalId, first.globalId);
+      expect(
+        (await identities.findByGlobal(
+          entityType: 'supplier_product_identity',
+          globalId: first.globalId,
+        ))!.localId,
+        source.id,
+      );
+      expect(
+        await identities.findByLocal(
+          entityType: 'supplier',
+          localId: supplierId,
+        ),
+        isNotNull,
+      );
+      expect(
+        await identities.findByLocal(
+          entityType: 'product_variant',
+          localId: variantId,
+        ),
+        isNotNull,
+      );
+      await expectLater(
+        db.customStatement('DELETE FROM sync_supplier_product_identities'),
+        throwsA(anything),
+      );
+      await expectLater(
+        db.customStatement(
+          "UPDATE sync_supplier_product_identities SET global_id='11111111-1111-4111-8111-111111111111'",
+        ),
+        throwsA(anything),
+      );
+      await expectLater(
+        identities.getOrCreateLocal(
+          entityType: 'supplier_product_identity',
+          localId: 999999,
+        ),
+        throwsA(_code('sync_entity_not_found')),
+      );
+    },
+  );
 
   test(
     'local mapping is stable and records the authoritative database',

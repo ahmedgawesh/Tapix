@@ -70,7 +70,7 @@ void main() {
         (await db.customSelect('PRAGMA user_version').getSingle()).read<int>(
           'user_version',
         ),
-        10119,
+        10120,
       );
       expect(await db.select(db.inventoryOriginStates).get(), isEmpty);
       expect(await db.select(db.inventoryOriginEvents).get(), isEmpty);
@@ -141,7 +141,7 @@ void main() {
       expect(
         (await recovered.customSelect('PRAGMA user_version').getSingle())
             .read<int>('user_version'),
-        10119,
+        10120,
       );
     },
   );

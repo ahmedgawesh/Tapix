@@ -1,3 +1,7 @@
+import 'dart:convert';
+import 'dart:typed_data';
+import '../../../../core/services/export_file_saver.dart';
+import '../../services/export_service.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -213,7 +217,7 @@ class _ImportProductsView extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'import_products.supported_formats'.tr(),
+                  'import_products.file_scope_hint'.tr(),
                   style: Theme.of(context).textTheme.bodyMedium,
                   textAlign: TextAlign.center,
                 ),
@@ -225,8 +229,28 @@ class _ImportProductsView extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 TextButton.icon(
-                  onPressed: () {
-                    // TODO: Download sample template
+                  onPressed: () async {
+                    try {
+                      await createExportFileSaver().saveBytes(
+                        bytes: Uint8List.fromList(
+                          utf8.encode(
+                            '\uFEFF${ExportServiceImpl.headers.join(',')}\r\n',
+                          ),
+                        ),
+                        filename: 'products_template.csv',
+                        mimeType: 'text/csv',
+                      );
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'import_products.template_failed'.tr(),
+                            ),
+                          ),
+                        );
+                      }
+                    }
                   },
                   icon: const Icon(LucideIcons.download),
                   label: Text('import_products.download_template'.tr()),
@@ -287,7 +311,7 @@ class _ImportProductsView extends StatelessWidget {
 
       final file = await FilePicker.pickFile(
         type: FileType.custom,
-        allowedExtensions: ['csv', 'xlsx', 'xls'],
+        allowedExtensions: ['csv', 'xlsx'],
       );
 
       debugPrint(

@@ -262,7 +262,7 @@ void main() {
           expect(
             (await upgraded.customSelect('PRAGMA user_version').getSingle())
                 .read<int>('user_version'),
-            10119,
+            10120,
           );
           expect(
             await upgraded.customSelect('PRAGMA foreign_key_check').get(),
@@ -387,7 +387,7 @@ void main() {
         expect(
           (await upgraded.customSelect('PRAGMA user_version').getSingle())
               .read<int>('user_version'),
-          10119,
+          10120,
         );
         expect(
           await upgraded.customSelect('PRAGMA foreign_key_check').get(),

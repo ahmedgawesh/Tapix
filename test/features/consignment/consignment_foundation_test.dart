@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:sqlite3/sqlite3.dart' as sqlite;
 import 'package:decimal/decimal.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
@@ -145,13 +147,247 @@ _seed(AppDatabase db) async {
 }
 
 void main() {
+  for (final upgrade in [false, true]) {
+    test(
+      'closed agreement blocks pending receipt; draft cancellation has no stock or financial effect (upgrade=$upgrade)',
+      () async {
+        final folder = await Directory.systemTemp.createTemp(
+          'consignment-receipt-upgrade-',
+        );
+        final file = File('${folder.path}/test.db');
+        var db = AppDatabase.connect(
+          DatabaseConnection(
+            NativeDatabase(
+              file,
+              setup: (raw) => raw.execute('PRAGMA foreign_keys=ON'),
+            ),
+          ),
+        );
+        addTearDown(() async {
+          await db.close();
+          await folder.delete(recursive: true);
+        });
+        final seed = await _seed(db);
+        var module = _module(db, seed.owner);
+        await module.initialize();
+        await module.setEnabled(enabled: true, reason: 'activate');
+        var agreements = ConsignmentAgreementService(db, module);
+        final agreement = await agreements.createDraft(
+          supplierId: seed.supplier,
+          currencyId: seed.currency,
+          agreementNumber: 'CLOSED-PENDING',
+          effectiveFrom: DateTime.utc(2026, 1, 1),
+          terms: [
+            ConsignmentAgreementTermInput.fixedCost(
+              productId: seed.product,
+              variantId: seed.variant,
+              amountCents: 900,
+            ),
+          ],
+        );
+        await agreements.activate(agreement.id);
+        final scope = await LocalBranchScope.read(db);
+        var receipts = ConsignmentReceiptService(db, module);
+        final sibling = await receipts.createDraft(
+          requestKey: const Uuid().v4(),
+          receiptNumber: 'ALREADY-POSTED',
+          warehouseId: scope.warehouseId,
+          supplierId: seed.supplier,
+          agreementId: agreement.id,
+          currencyId: seed.currency,
+          receivedAt: DateTime.utc(2026, 9, 22),
+          lines: [
+            ConsignmentReceiptLineInput(
+              productId: seed.product,
+              variantId: seed.variant,
+              quantity: 2,
+            ),
+          ],
+        );
+        await receipts.post(
+          receiptId: sibling.id,
+          requestKey: const Uuid().v4(),
+        );
+        final draft = await receipts.createDraft(
+          requestKey: const Uuid().v4(),
+          receiptNumber: 'PENDING-RECEIPT',
+          warehouseId: scope.warehouseId,
+          supplierId: seed.supplier,
+          agreementId: agreement.id,
+          currencyId: seed.currency,
+          receivedAt: DateTime.utc(2026, 9, 23),
+          lines: [
+            ConsignmentReceiptLineInput(
+              productId: seed.product,
+              variantId: seed.variant,
+              quantity: 5,
+            ),
+          ],
+        );
+        if (upgrade) {
+          // Reconstruct the actual previous CHECK constraint with a populated
+          // receipt and its foreign-key children, then run the normal upgrade.
+          await db.close();
+          final raw = sqlite.sqlite3.open(file.path);
+          try {
+            final ddl =
+                raw
+                        .select(
+                          "SELECT sql FROM sqlite_master WHERE name='consignment_receipts'",
+                        )
+                        .single['sql']
+                    as String;
+            final oldDdl = ddl
+                .replaceFirst(
+                  '"consignment_receipts"',
+                  '"consignment_receipts_old_check"',
+                )
+                .replaceFirst(
+                  '((posted_by IS NULL AND posted_at IS NULL) OR (posted_by IS NOT NULL AND posted_at IS NOT NULL))',
+                  'posted_by IS NOT NULL AND posted_at IS NOT NULL',
+                );
+            expect(oldDdl, isNot(ddl));
+            final deps = raw.select(
+              "SELECT name,type,sql FROM sqlite_master WHERE sql IS NOT NULL AND ((type='trigger' AND lower(sql) LIKE '%consignment_receipts%') OR (type='index' AND tbl_name='consignment_receipts'))",
+            );
+            raw.execute('PRAGMA foreign_keys=OFF');
+            raw.execute('BEGIN');
+            for (final row in deps) {
+              final name = (row['name'] as String).replaceAll('"', '""');
+              raw.execute('DROP ${row['type']} "$name"');
+            }
+            raw.execute(oldDdl);
+            raw.execute(
+              'INSERT INTO consignment_receipts_old_check SELECT * FROM consignment_receipts',
+            );
+            raw.execute('DROP TABLE consignment_receipts');
+            raw.execute(
+              'ALTER TABLE consignment_receipts_old_check RENAME TO consignment_receipts',
+            );
+            for (final row in deps) {
+              raw.execute(row['sql'] as String);
+            }
+            raw.execute('PRAGMA user_version=10119');
+            raw.execute('COMMIT');
+          } finally {
+            raw.close();
+          }
+          db = AppDatabase.connect(
+            DatabaseConnection(
+              NativeDatabase(
+                file,
+                setup: (raw) => raw.execute('PRAGMA foreign_keys=ON'),
+              ),
+            ),
+          );
+          module = _module(db, seed.owner);
+          agreements = ConsignmentAgreementService(db, module);
+          receipts = ConsignmentReceiptService(db, module);
+          final restored = await (db.select(
+            db.consignmentReceipts,
+          )..where((r) => r.id.equals(draft.id))).getSingle();
+          expect(restored, draft);
+          expect(
+            (await (db.select(
+                  db.consignmentReceiptItems,
+                )..where((i) => i.receiptId.equals(draft.id))).get())
+                .single
+                .quantity,
+            5,
+          );
+        }
+        Future<List<Object?>> balances() async => [
+          await db.select(db.productVariants).get(),
+          await db.select(db.businessWarehouseStocks).get(),
+          await db.select(db.consignmentInventoryLayers).get(),
+          await db.select(db.suppliers).get(),
+          await db.select(db.supplierTransactions).get(),
+          await db.select(db.journalEntries).get(),
+        ];
+        // Revalidate saved catalogue data atomically at posting time.
+        await (db.update(db.productVariants)
+              ..where((v) => v.id.equals(seed.variant)))
+            .write(const ProductVariantsCompanion(isActive: Value(false)));
+        final inactive = await balances();
+        await expectLater(
+          receipts.post(receiptId: draft.id, requestKey: const Uuid().v4()),
+          throwsA(
+            isA<ConsignmentUserException>().having(
+              (e) => e.messageKey,
+              'key',
+              'consignment.receipt_catalogue_changed',
+            ),
+          ),
+        );
+        expect(await balances(), inactive);
+        expect(
+          await (db.select(
+            db.consignmentReceiptEvents,
+          )..where((e) => e.receiptId.equals(draft.id))).get(),
+          isEmpty,
+        );
+        await (db.update(db.productVariants)
+              ..where((v) => v.id.equals(seed.variant)))
+            .write(const ProductVariantsCompanion(isActive: Value(true)));
+        await agreements.close(agreement.id);
+        final before = await balances();
+        await expectLater(
+          receipts.post(receiptId: draft.id, requestKey: const Uuid().v4()),
+          throwsA(
+            isA<ConsignmentUserException>().having(
+              (e) => e.messageKey,
+              'key',
+              'consignment.receipt_agreement_unavailable',
+            ),
+          ),
+        );
+        expect(await balances(), before);
+        expect(
+          await (db.select(
+            db.consignmentReceiptEvents,
+          )..where((e) => e.receiptId.equals(draft.id))).get(),
+          isEmpty,
+        );
+        // Disabling new work must not trap an existing document.
+        await module.setEnabled(enabled: false, reason: 'stop new receipts');
+        final key = const Uuid().v4();
+        final cancelled = await receipts.voidReceipt(
+          receiptId: draft.id,
+          requestKey: key,
+          reason: 'Agreement closed before receipt',
+        );
+        expect(cancelled.status, 'voided');
+        expect(cancelled.postedAt, isNull);
+        expect(await balances(), before);
+        expect(
+          (await receipts.voidReceipt(
+            receiptId: draft.id,
+            requestKey: key,
+            reason: 'Agreement closed before receipt',
+          )).id,
+          draft.id,
+        );
+        expect(
+          await (db.select(
+            db.consignmentReceiptEvents,
+          )..where((e) => e.receiptId.equals(draft.id))).get(),
+          hasLength(1),
+        );
+        expect(
+          await db.customSelect('PRAGMA foreign_key_check').get(),
+          isEmpty,
+        );
+      },
+    );
+  }
+
   test(
     'fresh foundation is disabled and historical suppliers stay standard',
     () async {
       final db = _memoryDb();
       addTearDown(db.close);
       final seed = await _seed(db);
-      expect(db.schemaVersion, 10119);
+      expect(db.schemaVersion, 10120);
 
       final policy = await BranchConsignmentPolicyStore(
         db,

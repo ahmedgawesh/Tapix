@@ -23,7 +23,7 @@ void main() {
       ''');
 
       final db = AppDatabase.connect(schema.newConnection());
-      await verifier.migrateAndValidate(db, 10119);
+      await verifier.migrateAndValidate(db, 10120);
       addTearDown(db.close);
 
       expect(

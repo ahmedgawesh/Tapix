@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../core/database/app_database.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../core/services/feature_gate_service.dart';
 import '../../../../core/money/money_input_parser.dart';
 import '../../../../core/measurement/measurement.dart';
 import '../../../../core/measurement/measurement_localization.dart';
@@ -37,6 +38,28 @@ class ConsignmentHubScreen extends StatefulWidget {
 class _ConsignmentHubScreenState extends State<ConsignmentHubScreen> {
   int _section = 0;
   late Future<ConsignmentDashboardSnapshot> _future = _load();
+
+  FeatureGateService? _featureGate;
+
+  @override
+  void initState() {
+    super.initState();
+    if (sl.isRegistered<FeatureGateService>()) {
+      _featureGate = sl<FeatureGateService>();
+      _featureGate!.addListener(_onEntitlementChanged);
+    }
+  }
+
+  void _onEntitlementChanged() {
+    if (!mounted) return;
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    _featureGate?.removeListener(_onEntitlementChanged);
+    super.dispose();
+  }
 
   Future<ConsignmentDashboardSnapshot> _load() =>
       sl<ConsignmentReportingService>().load();
@@ -69,60 +92,73 @@ class _ConsignmentHubScreenState extends State<ConsignmentHubScreen> {
     }
   }
 
+  void _goBack() {
+    if (_section != 0) {
+      setState(() => _section = 0);
+      return;
+    }
+    context.canPop() ? context.pop() : context.go('/suppliers');
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          onPressed: () =>
-              context.canPop() ? context.pop() : context.go('/suppliers'),
-          icon: const Icon(LucideIcons.arrowLeft),
-          tooltip: 'common.back'.tr(),
-        ),
-        title: Text('consignment.title'.tr()),
-        actions: [
-          IconButton(
-            onPressed: () => showConsignmentGuide(context),
-            icon: const Icon(Icons.help_outline),
-            tooltip: 'consignment.guide_title'.tr(),
+    return PopScope<Object?>(
+      canPop: _section == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _section != 0) setState(() => _section = 0);
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            onPressed: _goBack,
+            icon: const Icon(LucideIcons.arrowLeft),
+            tooltip: 'common.back'.tr(),
           ),
-          IconButton(
-            onPressed: _refresh,
-            icon: const Icon(LucideIcons.refreshCw),
-            tooltip: 'common.refresh'.tr(),
-          ),
-        ],
-      ),
-      body: FutureBuilder<ConsignmentDashboardSnapshot>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return _AccessOrError(error: snapshot.error, retry: _refresh);
-          }
-          final data = snapshot.data!;
-          return RefreshIndicator(
-            onRefresh: () async => _refresh(),
-            child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                SliverToBoxAdapter(child: _hero(context, data)),
-                SliverPersistentHeader(
-                  pinned: true,
-                  delegate: _SectionHeaderDelegate(
-                    child: _sectionSelector(context),
-                  ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-                  sliver: SliverToBoxAdapter(child: _body(context, data)),
-                ),
-              ],
+          title: Text('consignment.title'.tr()),
+          actions: [
+            IconButton(
+              onPressed: () => showConsignmentGuide(context),
+              icon: const Icon(Icons.help_outline),
+              tooltip: 'consignment.guide_title'.tr(),
             ),
-          );
-        },
+            IconButton(
+              onPressed: _refresh,
+              icon: const Icon(LucideIcons.refreshCw),
+              tooltip: 'common.refresh'.tr(),
+            ),
+          ],
+        ),
+        body: FutureBuilder<ConsignmentDashboardSnapshot>(
+          future: _future,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return _AccessOrError(error: snapshot.error, retry: _refresh);
+            }
+            final data = snapshot.data!;
+            return RefreshIndicator(
+              onRefresh: () async => _refresh(),
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverToBoxAdapter(child: _hero(context, data)),
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _SectionHeaderDelegate(
+                      child: _sectionSelector(context),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+                    sliver: SliverToBoxAdapter(child: _body(context, data)),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -694,10 +730,12 @@ class _ConsignmentHubScreenState extends State<ConsignmentHubScreen> {
                       ),
                       trailing: payment.status == 'posted'
                           ? TextButton.icon(
-                              onPressed: () {
-                                Navigator.pop(dialogContext);
-                                _reversePayment(payment);
-                              },
+                              onPressed: data.historicalManagementEnabled
+                                  ? () {
+                                      Navigator.pop(dialogContext);
+                                      _reversePayment(payment);
+                                    }
+                                  : null,
                               icon: const Icon(LucideIcons.undo2),
                               label: Text('consignment.reverse_payment'.tr()),
                             )
@@ -975,7 +1013,9 @@ class _AgreementsSection extends StatelessWidget {
                   tooltip: 'consignment.revise_agreement'.tr(),
                 ),
                 IconButton(
-                  onPressed: () => onClose(row.id),
+                  onPressed: data.historicalManagementEnabled
+                      ? () => onClose(row.id)
+                      : null,
                   icon: const Icon(LucideIcons.archive),
                   tooltip: 'consignment.close_agreement'.tr(),
                 ),
@@ -1065,9 +1105,11 @@ class _ReceiptsSection extends StatelessWidget {
                       : null,
                   child: Text('consignment.post'.tr()),
                 ),
-              if (row.status == 'posted')
+              if (row.status == 'draft' || row.status == 'posted')
                 IconButton(
-                  onPressed: () => onVoid(row.id),
+                  onPressed: data.historicalManagementEnabled
+                      ? () => onVoid(row.id)
+                      : null,
                   icon: const Icon(LucideIcons.ban),
                   tooltip: 'consignment.void_receipt'.tr(),
                 ),
@@ -1191,7 +1233,7 @@ class _SettlementsSection extends StatelessWidget {
                 ),
               if (row.status == 'reviewed')
                 IconButton.filledTonal(
-                  onPressed: data.operationsEnabled
+                  onPressed: data.historicalManagementEnabled
                       ? () => onPost(row.id)
                       : null,
                   icon: const Icon(LucideIcons.send),
@@ -1200,7 +1242,9 @@ class _SettlementsSection extends StatelessWidget {
               if ((row.status == 'posted' || row.status == 'partially_paid') &&
                   row.totalCents > row.paidCents)
                 IconButton.filledTonal(
-                  onPressed: () => onPay(row),
+                  onPressed: data.historicalManagementEnabled
+                      ? () => onPay(row)
+                      : null,
                   icon: const Icon(LucideIcons.walletCards),
                   tooltip: 'consignment.pay'.tr(),
                 ),
@@ -1217,7 +1261,9 @@ class _SettlementsSection extends StatelessWidget {
                         payment.status == 'posted',
                   ))
                 IconButton(
-                  onPressed: () => onVoid(row),
+                  onPressed: data.historicalManagementEnabled
+                      ? () => onVoid(row)
+                      : null,
                   icon: const Icon(LucideIcons.ban),
                   tooltip: 'consignment.void_statement'.tr(),
                 ),

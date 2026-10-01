@@ -38,22 +38,11 @@ class _ColumnMappingWidgetState extends State<ColumnMappingWidget> {
 
   void _initializeAutoMapping() {
     final state = widget.state as ImportFileParsed;
-    // Normalize headers: lowercase and replace spaces with underscores
-    // so that 'Stock Quantity' matches field 'stock_quantity'
-    final headers = state.fileData.headers
-        .map((h) => h.toLowerCase().replaceAll(' ', '_'))
-        .toList();
-
+    final mapping = ColumnMapping.fromHeaders(state.fileData.headers);
     for (final field in state.availableFields) {
-      final fieldName = field.fieldName.toLowerCase();
-      // Prefer exact match first, then fallback to contains
-      var index = headers.indexWhere((h) => h == fieldName);
-      if (index == -1) {
-        index = headers.indexWhere((h) => h.contains(fieldName));
-      }
-      if (index != -1) {
-        _fieldToColumnIndex[field.fieldName] = index;
-      }
+      _fieldToColumnIndex[field.fieldName] = mapping.getColumnIndex(
+        field.fieldName,
+      );
     }
   }
 

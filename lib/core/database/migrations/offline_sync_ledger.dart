@@ -365,6 +365,28 @@ WHEN NOT EXISTS(SELECT 1 FROM product_batches WHERE id=NEW.local_batch_id)
 BEGIN SELECT RAISE(ABORT,'Sync inventory layer target does not exist'); END''',
   );
 
+  // Supplier source SKUs are referenced by purchase and adjustment events.
+  // Keep their stable identity separate so existing immutable mappings survive.
+  await db.customStatement('''
+CREATE TABLE IF NOT EXISTS sync_supplier_product_identities(
+ local_identity_id INTEGER PRIMARY KEY CHECK(local_identity_id>0),
+ global_id TEXT NOT NULL UNIQUE CHECK(length(global_id)=36),
+ origin_database_id TEXT NOT NULL CHECK(length(origin_database_id)=36),
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)
+''');
+  await db.customStatement(
+    "CREATE TRIGGER IF NOT EXISTS trg_sync_supplier_product_no_delete BEFORE DELETE ON sync_supplier_product_identities BEGIN SELECT RAISE(ABORT,'Sync supplier product identity cannot be deleted'); END",
+  );
+  await db.customStatement(
+    "CREATE TRIGGER IF NOT EXISTS trg_sync_supplier_product_no_update BEFORE UPDATE ON sync_supplier_product_identities BEGIN SELECT RAISE(ABORT,'Sync supplier product identity is immutable'); END",
+  );
+  await db.customStatement("""
+CREATE TRIGGER IF NOT EXISTS trg_sync_supplier_product_target
+BEFORE INSERT ON sync_supplier_product_identities
+WHEN NOT EXISTS(SELECT 1 FROM supplier_product_identities WHERE id=NEW.local_identity_id)
+BEGIN SELECT RAISE(ABORT,'Sync supplier product target does not exist'); END
+""");
+
   // Categories, colours and sizes also need stable identities. They are kept
   // separate from financial parties so an older generic identity table does
   // not need a destructive CHECK-constraint rebuild.

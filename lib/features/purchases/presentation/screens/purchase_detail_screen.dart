@@ -20,10 +20,8 @@ import '../../../auth/auth.dart';
 import '../../../settings/presentation/bloc/app_settings_bloc.dart';
 import '../../domain/entities/purchase_entity.dart';
 import '../../domain/repositories/purchase_repository.dart';
-import '../../../products/domain/repositories/product_variant_repository.dart';
-import '../../../products/domain/repositories/product_repository.dart';
 import '../services/purchase_pdf_service.dart';
-import '../../../barcode/data/models/invoice_print_data.dart';
+import '../../../barcode/data/repositories/barcode_repository.dart';
 
 class PurchaseDetailScreen extends StatefulWidget {
   final int purchaseId;
@@ -1856,65 +1854,9 @@ class _PurchaseDetailScreenState extends State<PurchaseDetailScreen> {
         case 'print_labels':
           // Navigate to barcode design screen with invoice data for label printing
           if (_items.isNotEmpty && _purchase != null) {
-            final lines = <InvoiceLinePrintData>[];
-            for (final item in _items) {
-              // Use variant barcode or generate a fallback
-              final barcode =
-                  item.variantSku ?? '${item.variantId ?? item.productId}';
-              // Try to get the actual barcode from the variant
-              String? actualBarcode;
-              if (item.variantId != null) {
-                final variant = await sl<ProductVariantRepository>()
-                    .getVariantById(item.variantId!);
-                actualBarcode = variant?.barcode;
-              }
-              if (actualBarcode == null || actualBarcode.trim().isEmpty) {
-                // Skip items without barcodes
-                continue;
-              }
-              // Use variant selling price (not purchase cost price) for barcode labels
-              int sellingPriceCents;
-              int? wholesalePriceCents;
-              if (item.variantId != null) {
-                final variantForPrice = await sl<ProductVariantRepository>()
-                    .getVariantById(item.variantId!);
-                sellingPriceCents =
-                    variantForPrice?.priceCents.toBigInt().toInt() ?? 0;
-                wholesalePriceCents = variantForPrice?.wholesalePriceCents
-                    ?.toBigInt()
-                    .toInt();
-              } else {
-                final productForPrice = await sl<ProductRepository>()
-                    .getProductById(item.productId);
-                sellingPriceCents =
-                    productForPrice?.priceCents.toBigInt().toInt() ?? 0;
-                wholesalePriceCents = productForPrice?.wholesalePriceCents
-                    ?.toBigInt()
-                    .toInt();
-              }
-              lines.add(
-                InvoiceLinePrintData(
-                  variantId: item.variantId ?? item.productId,
-                  quantity: item.quantity,
-                  productName: item.productName ?? 'Product #${item.productId}',
-                  colorName: item.colorName,
-                  sizeName: item.sizeName,
-                  barcode: actualBarcode,
-                  sku: item.variantSku ?? barcode,
-                  unitPriceCents: sellingPriceCents,
-                  sellingPriceCents: sellingPriceCents,
-                  wholesalePriceCents: wholesalePriceCents,
-                  isActive: true,
-                ),
-              );
-            }
-            final invoiceData = InvoicePrintData(
-              lines: lines,
-              invoiceType: 'purchase',
-              invoiceId: _purchase!.id,
-              invoiceNumber: _purchase!.purchaseNumber,
-              invoiceDate: _purchase!.purchaseDate,
-            );
+            final invoiceData = await BarcodeRepositoryImpl(
+              sl<AppDatabase>(),
+            ).getPurchasePrintData(_purchase!.id, allowDraft: true);
             router.push(
               '/products/barcode-design',
               extra: {'invoiceData': invoiceData},

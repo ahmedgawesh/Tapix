@@ -5,7 +5,10 @@ import '../models/invoice_print_data.dart';
 /// Handles both barcode design and invoice-based label printing
 abstract class BarcodeRepository {
   /// Get purchase invoice data for label printing
-  Future<InvoicePrintData> getPurchasePrintData(int purchaseId);
+  Future<InvoicePrintData> getPurchasePrintData(
+    int purchaseId, {
+    bool allowDraft = false,
+  });
 
   /// Get sale invoice data for label printing
   Future<InvoicePrintData> getSalePrintData(int saleId);
@@ -30,7 +33,10 @@ class BarcodeRepositoryImpl implements BarcodeRepository {
   BarcodeRepositoryImpl(this._database);
 
   @override
-  Future<InvoicePrintData> getPurchasePrintData(int purchaseId) async {
+  Future<InvoicePrintData> getPurchasePrintData(
+    int purchaseId, {
+    bool allowDraft = false,
+  }) async {
     // Get purchase header information
     final purchase = await (_database.select(
       _database.purchases,
@@ -41,56 +47,51 @@ class BarcodeRepositoryImpl implements BarcodeRepository {
     }
 
     // Check if posted (status == 'posted')
-    if (purchase.status != 'posted') {
+    if (purchase.status != 'posted' &&
+        !(allowDraft && purchase.status == 'draft')) {
       throw InvoiceNotPostedException(purchaseId, 'purchase');
     }
 
-    // Get purchase line items with variant information
-    final purchaseItems = await (_database.select(
-      _database.purchaseItems,
-    )..where((pi) => pi.purchaseId.equals(purchaseId))).get();
-
+    final items = await _database.purchaseDao.getPurchaseItemsWithDetails(
+      purchaseId,
+    );
     final lines = <InvoiceLinePrintData>[];
-
-    for (final item in purchaseItems) {
-      // Skip if no variant
-      if (item.variantId == null) continue;
-
-      // Get variant information
-      final variant = await getVariantById(item.variantId!);
-      if (variant == null || !variant.isActive) {
-        continue; // Skip inactive or missing variants
+    for (final details in items) {
+      final item = details.item;
+      final product = details.product;
+      // Old draft lines can omit the internal stock variant. Resolve only
+      // unambiguous simple products; never pick a random size or color.
+      var variant = details.variant;
+      if (variant == null && !product.hasVariants) {
+        final active = (await _database.productVariantDao.getVariantsByProduct(
+          product.id,
+        )).where((v) => v.isActive).toList();
+        if (active.length == 1) variant = active.single;
       }
-
-      // Get product information
-      final product = await getProductById(variant.productId);
-      if (product == null) {
-        continue; // Skip products without valid data
-      }
-
-      // Get color and size information if available
-      String? colorName;
-      String? sizeName;
-
-      if (variant.colorId != null) {
-        final color = await getColorById(variant.colorId!);
-        colorName = color?.name;
-      }
-
-      if (variant.sizeId != null) {
-        final size = await getSizeById(variant.sizeId!);
-        sizeName = size?.name;
-      }
-
+      if (variant == null || !variant.isActive) continue;
+      final barcode =
+          (product.hasVariants
+                  ? variant.barcode
+                  : (product.barcode?.trim().isNotEmpty == true
+                        ? product.barcode
+                        : variant.barcode))
+              ?.trim() ??
+          '';
+      if (barcode.isEmpty) continue;
       lines.add(
         InvoiceLinePrintData(
           variantId: variant.id,
           quantity: item.quantity,
           productName: product.name,
-          colorName: colorName,
-          sizeName: sizeName,
-          barcode: variant.barcode ?? '',
-          sku: variant.sku ?? '',
+          colorName: details.colorName,
+          sizeName: details.sizeName,
+          barcode: barcode,
+          sku: resolveInvoiceLabelSku(
+            hasVariants: product.hasVariants,
+            productSku: product.sku,
+            variantSku: variant.sku,
+            supplierSourceSku: details.supplierIdentity?.sourceSku,
+          ),
           unitPriceCents: variant.priceCents.toBigInt().toInt(),
           sellingPriceCents: variant.priceCents.toBigInt().toInt(),
           wholesalePriceCents: variant.wholesalePriceCents?.toBigInt().toInt(),
@@ -169,7 +170,11 @@ class BarcodeRepositoryImpl implements BarcodeRepository {
           colorName: colorName,
           sizeName: sizeName,
           barcode: variant.barcode ?? '',
-          sku: variant.sku ?? '',
+          sku: resolveInvoiceLabelSku(
+            hasVariants: product.hasVariants,
+            productSku: product.sku,
+            variantSku: variant.sku,
+          ),
           unitPriceCents: item.unitPriceCents.toBigInt().toInt(),
           sellingPriceCents: variant.priceCents.toBigInt().toInt(),
           wholesalePriceCents: variant.wholesalePriceCents?.toBigInt().toInt(),

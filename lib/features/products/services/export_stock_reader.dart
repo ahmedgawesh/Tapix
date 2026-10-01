@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import '../../../core/database/app_database.dart' as db;
 import '../../../core/services/business/warehouse_catalog_scope.dart';
 import '../../../core/services/business/warehouse_read_scope.dart';
@@ -15,7 +16,12 @@ class WarehouseExportStockReader implements ExportStockReader {
 
   @override
   Future<T> snapshot<T>(Future<T> Function() action) =>
-      database.transaction(action);
+      database.transaction(() async {
+        if (await database.settingsDao.getSetting('lan.mode') == 'client') {
+          throw StateError('export_products.local_server_required'.tr());
+        }
+        return action();
+      });
 
   @override
   Future<ProductVariant> read(ProductVariant variant) async {

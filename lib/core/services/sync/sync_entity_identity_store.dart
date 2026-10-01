@@ -33,6 +33,7 @@ class SyncEntityIdentityStore {
     'product',
     'product_variant',
     'product_batch',
+    'supplier_product_identity',
     'supplier',
     'customer',
   };
@@ -65,6 +66,19 @@ class SyncEntityIdentityStore {
           localId: batch.supplierId!,
         );
       }
+    }
+    if (entityType == 'supplier_product_identity') {
+      final source = await (_db.select(
+        _db.supplierProductIdentities,
+      )..where((row) => row.id.equals(localId))).getSingle();
+      await getOrCreateLocal(
+        entityType: 'supplier',
+        localId: source.supplierId,
+      );
+      await getOrCreateLocal(
+        entityType: 'product_variant',
+        localId: source.canonicalVariantId,
+      );
     }
     final existing = await findByLocal(
       entityType: entityType,
@@ -148,13 +162,13 @@ class SyncEntityIdentityStore {
     required int localId,
   }) async {
     _validateKey(entityType, localId);
-    final batch = entityType == 'product_batch';
+    final sidecar = _sidecar(entityType);
     final row = await _db
         .customSelect(
-          batch
-              ? "SELECT 'product_batch' AS entity_type,local_batch_id AS local_id,global_id,origin_database_id FROM sync_inventory_layer_identities WHERE local_batch_id=?"
+          sidecar != null
+              ? "SELECT '$entityType' AS entity_type,${sidecar.column} AS local_id,global_id,origin_database_id FROM ${sidecar.table} WHERE ${sidecar.column}=?"
               : 'SELECT entity_type,local_id,global_id,origin_database_id FROM sync_entity_identities WHERE entity_type=? AND local_id=?',
-          variables: batch
+          variables: sidecar != null
               ? [Variable.withInt(localId)]
               : [Variable.withString(entityType), Variable.withInt(localId)],
         )
@@ -172,13 +186,13 @@ class SyncEntityIdentityStore {
         'The entity type or global identity is invalid.',
       );
     }
-    final batch = entityType == 'product_batch';
+    final sidecar = _sidecar(entityType);
     final row = await _db
         .customSelect(
-          batch
-              ? "SELECT 'product_batch' AS entity_type,local_batch_id AS local_id,global_id,origin_database_id FROM sync_inventory_layer_identities WHERE global_id=?"
+          sidecar != null
+              ? "SELECT '$entityType' AS entity_type,${sidecar.column} AS local_id,global_id,origin_database_id FROM ${sidecar.table} WHERE global_id=?"
               : 'SELECT entity_type,local_id,global_id,origin_database_id FROM sync_entity_identities WHERE entity_type=? AND global_id=?',
-          variables: batch
+          variables: sidecar != null
               ? [Variable.withString(globalId)]
               : [
                   Variable.withString(entityType),
@@ -194,6 +208,7 @@ class SyncEntityIdentityStore {
       'product' => 'products',
       'product_variant' => 'product_variants',
       'product_batch' => 'product_batches',
+      'supplier_product_identity' => 'supplier_product_identities',
       'supplier' => 'suppliers',
       'customer' => 'customers',
       _ => throw const OfflineSyncException(
@@ -223,22 +238,37 @@ class SyncEntityIdentityStore {
               .getSingle())
           .read<String>('database_id');
 
+  // Additive tables preserve older installations' immutable generic CHECK.
+  ({String table, String column})? _sidecar(String type) => switch (type) {
+    'product_batch' => (
+      table: 'sync_inventory_layer_identities',
+      column: 'local_batch_id',
+    ),
+    'supplier_product_identity' => (
+      table: 'sync_supplier_product_identities',
+      column: 'local_identity_id',
+    ),
+    _ => null,
+  };
+
   Future<void> _insertIdentity({
     required String entityType,
     required int localId,
     required String globalId,
     required String originDatabaseId,
-  }) => entityType == 'product_batch'
-      ? _db.customStatement(
-          'INSERT INTO sync_inventory_layer_identities('
-          'local_batch_id,global_id,origin_database_id) VALUES(?,?,?)',
-          [localId, globalId, originDatabaseId],
-        )
-      : _db.customStatement(
-          'INSERT INTO sync_entity_identities(entity_type,local_id,global_id,'
-          'origin_database_id) VALUES(?,?,?,?)',
-          [entityType, localId, globalId, originDatabaseId],
-        );
+  }) {
+    final sidecar = _sidecar(entityType);
+    return sidecar != null
+        ? _db.customStatement(
+            'INSERT INTO ${sidecar.table}(${sidecar.column},global_id,origin_database_id) VALUES(?,?,?)',
+            [localId, globalId, originDatabaseId],
+          )
+        : _db.customStatement(
+            'INSERT INTO sync_entity_identities(entity_type,local_id,global_id,'
+            'origin_database_id) VALUES(?,?,?,?)',
+            [entityType, localId, globalId, originDatabaseId],
+          );
+  }
 
   void _validateKey(String type, int id) {
     if (!supportedTypes.contains(type)) {

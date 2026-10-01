@@ -178,7 +178,7 @@ void main() {
       final db = memoryDb();
       addTearDown(db.close);
       final scope = await BusinessFoundationRepository(db).getScope();
-      expect(db.schemaVersion, 10119);
+      expect(db.schemaVersion, 10120);
       expect(scope.organizationId, hasLength(36));
       expect({
         scope.organizationId,

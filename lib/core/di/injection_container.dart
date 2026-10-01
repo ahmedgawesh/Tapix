@@ -1,3 +1,4 @@
+import '../../features/products/services/product_file_metadata.dart';
 import '../services/online/online_branch_sync_service.dart';
 import '../services/online/online_sync_controller.dart';
 import '../services/online/online_configuration_policy.dart';
@@ -724,13 +725,17 @@ Future<void> init() async {
   // Import Products Services
   sl.registerLazySingleton<ParseImportFile>(() => FileImportService());
   sl.registerLazySingleton<ValidateImportData>(
-    () => ImportValidationService(sl<ProductRepository>()),
+    () => ImportValidationService(
+      sl<ProductRepository>(),
+      variants: sl<ProductVariantRepository>(),
+    ),
   );
   sl.registerLazySingleton<ImportProducts>(
     () => ProductImportService(
       sl<ProductRepository>(),
       sl<ProductVariantRepository>(),
       sl<CategoryRepository>(),
+      metadata: ProductFileMetadata(sl<AppDatabase>()),
     ),
   );
 
@@ -741,6 +746,7 @@ Future<void> init() async {
       sl<ProductVariantRepository>(),
       sl<CategoryRepository>(),
       WarehouseExportStockReader(sl<AppDatabase>()),
+      metadata: ProductFileMetadata(sl<AppDatabase>()),
     ),
   );
 
@@ -1318,10 +1324,7 @@ Future<void> init() async {
     () => BranchConsignmentPolicyStore(sl<AppDatabase>()),
   );
   sl.registerLazySingleton<ConsignmentEntitlement>(
-    () => PlatformConsignmentEntitlement(
-      revenueCat: sl<RevenueCatService>(),
-      desktopLicense: sl<DesktopLicenseService>(),
-    ),
+    () => PlatformConsignmentEntitlement(featureGate: sl<FeatureGateService>()),
   );
   sl.registerLazySingleton(
     () => ConsignmentModuleService(

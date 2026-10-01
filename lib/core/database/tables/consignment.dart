@@ -165,7 +165,7 @@ class ConsignmentReceipts extends Table {
     'CHECK (line_count BETWEEN 1 AND 500)',
     'CHECK (length(notes)<=2000)',
     'CHECK (length(void_reason)<=500)',
-    "CHECK ((status='draft' AND posted_by IS NULL AND posted_at IS NULL AND voided_by IS NULL AND voided_at IS NULL AND length(void_reason)=0) OR (status='posted' AND posted_by IS NOT NULL AND posted_at IS NOT NULL AND voided_by IS NULL AND voided_at IS NULL AND length(void_reason)=0) OR (status='voided' AND posted_by IS NOT NULL AND posted_at IS NOT NULL AND voided_by IS NOT NULL AND voided_at IS NOT NULL AND length(trim(void_reason))>0))",
+    "CHECK ((status='draft' AND posted_by IS NULL AND posted_at IS NULL AND voided_by IS NULL AND voided_at IS NULL AND length(void_reason)=0) OR (status='posted' AND posted_by IS NOT NULL AND posted_at IS NOT NULL AND voided_by IS NULL AND voided_at IS NULL AND length(void_reason)=0) OR (status='voided' AND ((posted_by IS NULL AND posted_at IS NULL) OR (posted_by IS NOT NULL AND posted_at IS NOT NULL)) AND voided_by IS NOT NULL AND voided_at IS NOT NULL AND length(trim(void_reason))>0))",
   ];
 }
 

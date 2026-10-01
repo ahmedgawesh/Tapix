@@ -1,7 +1,5 @@
 import '../../../core/services/business/local_branch_scope.dart';
-import '../../../core/services/desktop_license_service.dart';
-import '../../../core/services/revenuecat_service.dart';
-import '../../../core/utils/platform_utils.dart';
+import '../../../core/services/feature_gate_service.dart';
 
 /// Commercial boundary for consignment inventory, which is included in Pro.
 abstract interface class ConsignmentEntitlement {
@@ -18,32 +16,19 @@ class UnreleasedConsignmentEntitlement implements ConsignmentEntitlement {
   Future<bool> permits(LocalBranchScope scope) async => false;
 }
 
-/// Production adapter for the existing Tapix Pro entitlement.
-///
-/// Mobile reads the main RevenueCat Pro entitlement. A valid signed desktop
-/// license is Pro on Windows/Linux. Web remains closed until its existing Pro
-/// licensing path can be verified by a trusted server.
+/// Uses the same verified Pro state as the rest of the application, including
+/// AppGuard's device-bound offline licence and signed desktop licences.
+/// A separate store request here would disable valid offline installations.
 class PlatformConsignmentEntitlement implements ConsignmentEntitlement {
   const PlatformConsignmentEntitlement({
-    required RevenueCatService revenueCat,
-    required DesktopLicenseService desktopLicense,
-  }) : _revenueCat = revenueCat,
-       _desktopLicense = desktopLicense;
+    required FeatureGateService featureGate,
+  }) : _featureGate = featureGate;
 
-  final RevenueCatService _revenueCat;
-  final DesktopLicenseService _desktopLicense;
+  final FeatureGateService _featureGate;
 
   @override
-  Future<bool> permits(LocalBranchScope scope) async {
-    if (PlatformUtils.isAndroid || PlatformUtils.isIOS) {
-      return _revenueCat.hasActiveEntitlement(RevenueCatConfig.entitlementId);
-    }
-    if (PlatformUtils.isWindows || PlatformUtils.isLinux) {
-      final status = await _desktopLicense.initialize();
-      return status == DesktopLicenseStatus.valid;
-    }
-    return false;
-  }
+  Future<bool> permits(LocalBranchScope scope) async =>
+      _featureGate.canAccess(AppFeature.inventoryAdvanced).granted;
 }
 
 class GrantedConsignmentEntitlement implements ConsignmentEntitlement {

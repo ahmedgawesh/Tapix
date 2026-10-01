@@ -1,13 +1,18 @@
 import '../app_database.dart';
 
 Future<void> installConsignmentInventoryGuards(AppDatabase db) async {
-  // These guards evolve with the schema. Drop only the two layer guards
-  // whose accepted insert shapes changed when warehouse transfers were added.
+  // Reinstall only evolving guards, including cancellation of unposted intent.
   await db.customStatement(
     'DROP TRIGGER IF EXISTS consignment_layers_insert_guard',
   );
   await db.customStatement(
     'DROP TRIGGER IF EXISTS consignment_layers_identity_guard',
+  );
+  await db.customStatement(
+    'DROP TRIGGER IF EXISTS consignment_receipts_status_guard',
+  );
+  await db.customStatement(
+    'DROP TRIGGER IF EXISTS consignment_receipt_events_insert_guard',
   );
   await db.customStatement('''
     CREATE TRIGGER IF NOT EXISTS business_stock_supplier_owned_insert_guard
@@ -141,6 +146,17 @@ Future<void> installConsignmentInventoryGuards(AppDatabase db) async {
           )
       )
     ) AND NOT (
+      OLD.status='draft' AND NEW.status='voided'
+      AND NEW.posted_by IS NULL AND NEW.posted_at IS NULL
+      AND NEW.voided_by IS NOT NULL AND NEW.voided_at IS NOT NULL
+      AND length(trim(NEW.void_reason))>0
+      AND EXISTS(SELECT 1 FROM consignment_receipt_events e
+        WHERE e.receipt_id=OLD.id AND e.kind='voided'
+          AND e.actor_id=NEW.voided_by AND e.reason=NEW.void_reason)
+      AND NOT EXISTS(SELECT 1 FROM consignment_inventory_layers l
+        JOIN consignment_receipt_items i ON i.id=l.receipt_item_id
+        WHERE i.receipt_id=OLD.id)
+    ) AND NOT (
       OLD.status='posted'
       AND NEW.status='voided'
       AND NEW.posted_by=OLD.posted_by
@@ -245,7 +261,7 @@ Future<void> installConsignmentInventoryGuards(AppDatabase db) async {
           (NEW.kind='posted' AND r.status='draft'
             AND r.line_count=(SELECT COUNT(*) FROM consignment_receipt_items i WHERE i.receipt_id=r.id))
           OR
-          (NEW.kind='voided' AND r.status='posted' AND length(trim(NEW.reason))>0)
+          (NEW.kind='voided' AND r.status IN ('draft','posted') AND length(trim(NEW.reason))>0)
         )
     )
     BEGIN

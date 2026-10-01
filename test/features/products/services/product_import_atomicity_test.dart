@@ -94,6 +94,15 @@ void main() {
       when(
         () => products.createProduct(
           name: any(named: 'name'),
+          nameAr: any(named: 'nameAr'),
+          nameFr: any(named: 'nameFr'),
+          supplierId: any(named: 'supplierId'),
+          currencyId: any(named: 'currencyId'),
+          measurementType: any(named: 'measurementType'),
+          inventoryTrackingType: any(named: 'inventoryTrackingType'),
+          costingMethod: any(named: 'costingMethod'),
+          purchaseTaxRateBps: any(named: 'purchaseTaxRateBps'),
+          salesTaxRateBps: any(named: 'salesTaxRateBps'),
           description: any(named: 'description'),
           sku: any(named: 'sku'),
           barcode: any(named: 'barcode'),
@@ -114,6 +123,20 @@ void main() {
         return 101;
       });
 
+      when(
+        () => variants.createVariant(
+          productId: any(named: 'productId'),
+          sku: any(named: 'sku'),
+          barcode: any(named: 'barcode'),
+          colorId: any(named: 'colorId'),
+          sizeId: any(named: 'sizeId'),
+          costCents: any(named: 'costCents'),
+          priceCents: any(named: 'priceCents'),
+          wholesalePriceCents: any(named: 'wholesalePriceCents'),
+          stockQuantity: any(named: 'stockQuantity'),
+          isActive: any(named: 'isActive'),
+        ),
+      ).thenAnswer((_) async => 1);
       final result = await service(
         fileData: file([
           ['First product', '10.00', 'FIRST-1'],
@@ -126,6 +149,7 @@ void main() {
       expect(result.failedRows, 2);
       expect(result.rowToProductId, isEmpty);
       expect(result.errors.map((e) => e.rowIndex).toSet(), {0, 1});
+      expect(calls, 2);
       verify(() => products.runInTransaction<void>(any())).called(1);
     },
   );

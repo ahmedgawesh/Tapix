@@ -90,7 +90,7 @@ import 'database_native.dart' if (dart.library.html) 'database_web.dart';
 
 part 'app_database.g.dart';
 
-const _currentDatabaseSchemaVersion = 10119;
+const _currentDatabaseSchemaVersion = 10120;
 
 @DriftDatabase(
   tables: [
@@ -5692,6 +5692,47 @@ CREATE TABLE IF NOT EXISTS cheque_confirmations (
             );
             await ensureBusinessWarehouseLocationKinds(this);
           });
+        }
+
+        // Allow audited cancellation of an unposted consignment receipt.
+        // Rebuild only its CHECK constraint and retain all historical rows.
+        if (from < 10120) {
+          final foreignKeys = (await customSelect(
+            'PRAGMA foreign_keys',
+          ).getSingle()).read<int>('foreign_keys');
+          await customStatement('PRAGMA foreign_keys=OFF');
+          try {
+            await transaction(() async {
+              final dependencies = await customSelect(
+                'SELECT name,type,sql FROM sqlite_master WHERE sql IS NOT NULL '
+                "AND ((type='trigger' AND lower(sql) LIKE '%consignment_receipts%') "
+                "OR (type='index' AND tbl_name='consignment_receipts'))",
+              ).get();
+              for (final row in dependencies) {
+                final name = row.read<String>('name').replaceAll('"', '""');
+                await customStatement(
+                  'DROP ${row.read<String>('type')} "$name"',
+                );
+              }
+              await m.alterTable(TableMigration(consignmentReceipts));
+              for (final row in dependencies) {
+                await customStatement(row.read<String>('sql'));
+              }
+              await installConsignmentInventoryGuards(this);
+              final referenceErrors = await customSelect(
+                'PRAGMA foreign_key_check',
+              ).get();
+              if (referenceErrors.isNotEmpty) {
+                throw StateError(
+                  'Consignment receipt migration violated references',
+                );
+              }
+            });
+          } finally {
+            if (foreignKeys != 0) {
+              await customStatement('PRAGMA foreign_keys=ON');
+            }
+          }
         }
 
         await _createIndexes();

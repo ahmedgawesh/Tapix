@@ -32,7 +32,7 @@ void main() {
     ''');
 
       final db = AppDatabase.connect(schema.newConnection());
-      await verifier.migrateAndValidate(db, 10119);
+      await verifier.migrateAndValidate(db, 10120);
 
       final supplier = await (db.select(
         db.suppliers,
@@ -61,7 +61,7 @@ void main() {
       );
 
       final db = AppDatabase.connect(schema.newConnection());
-      await verifier.migrateAndValidate(db, 10119);
+      await verifier.migrateAndValidate(db, 10120);
 
       final sentinel =
           await (db.select(db.appSettings)..where(
@@ -93,7 +93,7 @@ void main() {
       addTearDown(schema.close);
       final db = AppDatabase.connect(schema.newConnection());
 
-      await verifier.migrateAndValidate(db, 10119);
+      await verifier.migrateAndValidate(db, 10120);
 
       final column = await db
           .customSelect(
@@ -170,7 +170,7 @@ void main() {
       );
 
       final db = AppDatabase.connect(schema.newConnection());
-      await verifier.migrateAndValidate(db, 10119);
+      await verifier.migrateAndValidate(db, 10120);
 
       final sentinel =
           await (db.select(db.appSettings)
@@ -220,7 +220,7 @@ void main() {
       );
 
       final db = AppDatabase.connect(schema.newConnection());
-      await verifier.migrateAndValidate(db, 10119);
+      await verifier.migrateAndValidate(db, 10120);
 
       final sentinel = await (db.select(
         db.appSettings,
@@ -270,10 +270,10 @@ void main() {
       schema.rawDatabase.execute('PRAGMA user_version=10107');
 
       final db = AppDatabase.connect(schema.newConnection());
-      await verifier.migrateAndValidate(db, 10119);
+      await verifier.migrateAndValidate(db, 10120);
 
       final version = await db.customSelect('PRAGMA user_version').getSingle();
-      expect(version.read<int>('user_version'), 10119);
+      expect(version.read<int>('user_version'), 10120);
 
       final sentinel =
           await (db.select(db.appSettings)..where(
@@ -356,7 +356,7 @@ void main() {
       );
 
       final db = AppDatabase.connect(schema.newConnection());
-      await verifier.migrateAndValidate(db, 10119);
+      await verifier.migrateAndValidate(db, 10120);
 
       final sentinel =
           await (db.select(db.appSettings)
@@ -390,7 +390,7 @@ void main() {
       );
 
       final db = AppDatabase.connect(schema.newConnection());
-      await verifier.migrateAndValidate(db, 10119);
+      await verifier.migrateAndValidate(db, 10120);
 
       final sentinel =
           await (db.select(db.appSettings)

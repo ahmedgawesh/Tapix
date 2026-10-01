@@ -6,6 +6,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:tapix/core/database/app_database.dart';
+import 'package:tapix/core/database/migrations/business_warehouse_stock.dart';
 import 'package:tapix/core/services/stock_service.dart';
 
 void main() {
@@ -85,6 +86,13 @@ void main() {
           [productId, metadataId],
         );
 
+        // This fixture downgrades a fresh database to v10067. Warehouse
+        // stock tables did not exist until v10086; remove the zero-stock row
+        // created by today's triggers for the metadata-only variant.
+        await removeBusinessWarehouseStockTriggers(db);
+        await (db.delete(
+          db.businessWarehouseStocks,
+        )..where((row) => row.variantId.equals(metadataId))).go();
         await db.customStatement('PRAGMA user_version = 10067');
         await db.close();
         db = null;
@@ -137,7 +145,11 @@ void main() {
           db.productVariants,
         )..where((v) => v.id.equals(operationalId))).getSingle();
         expect(after.stockQuantity, 1500);
-        expect(db.schemaVersion, 10119);
+        expect(db.schemaVersion, 10120);
+        expect(
+          await db.customSelect('PRAGMA foreign_key_check').get(),
+          isEmpty,
+        );
       } finally {
         await db?.close();
         await temp.delete(recursive: true);

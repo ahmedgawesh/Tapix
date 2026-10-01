@@ -26,6 +26,28 @@ class ColumnMapping extends Equatable {
 
   const ColumnMapping(this.fieldToColumnIndex);
 
+  static String normalizeHeader(String header) => header
+      .trim()
+      .toLowerCase()
+      .replaceAll(RegExp(r'[()]+'), '')
+      .replaceAll(RegExp(r'\s+'), '_');
+
+  /// Exact aliases only: `price` must never map to `wholesale_price`.
+  factory ColumnMapping.fromHeaders(List<String> headers) {
+    const aliases = {
+      'cost_cents': 'cost',
+      'price_cents': 'price',
+      'wholesale_price_cents': 'wholesale_price',
+    };
+    final mapping = <String, int>{};
+    for (var i = 0; i < headers.length; i++) {
+      final header = normalizeHeader(headers[i]);
+      final field = aliases[header] ?? header;
+      if (!mapping.containsKey(field)) mapping[field] = i;
+    }
+    return ColumnMapping(mapping);
+  }
+
   int? getColumnIndex(String field) => fieldToColumnIndex[field];
 
   bool hasMapping(String field) => fieldToColumnIndex.containsKey(field);

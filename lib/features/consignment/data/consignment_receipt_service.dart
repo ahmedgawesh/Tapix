@@ -277,6 +277,25 @@ class ConsignmentReceiptService {
         receipt.databaseId != access.scope.databaseId) {
       throw StateError('Receipt scope changed before posting.');
     }
+    // A draft must not bypass an agreement that was closed or superseded
+    // after it was saved. Already posted retries return before this check.
+    final agreement = await (_db.select(
+      _db.consignmentAgreements,
+    )..where((a) => a.id.equals(receipt.agreementId))).getSingleOrNull();
+    if (agreement == null ||
+        agreement.status != 'active' ||
+        agreement.supplierId != receipt.supplierId ||
+        agreement.currencyId != receipt.currencyId ||
+        agreement.organizationId != access.scope.organizationId ||
+        agreement.branchId != access.scope.branchId ||
+        agreement.databaseId != access.scope.databaseId ||
+        receipt.receivedAt.isBefore(agreement.effectiveFrom) ||
+        (agreement.effectiveTo != null &&
+            receipt.receivedAt.isAfter(agreement.effectiveTo!))) {
+      throw const ConsignmentUserException(
+        'consignment.receipt_agreement_unavailable',
+      );
+    }
     final items = await (_db.select(
       _db.consignmentReceiptItems,
     )..where((i) => i.receiptId.equals(receipt.id))).get();
@@ -303,6 +322,22 @@ class ConsignmentReceiptService {
       final product = await (_db.select(
         _db.products,
       )..where((p) => p.id.equals(item.productId))).getSingle();
+      final variant = await (_db.select(
+        _db.productVariants,
+      )..where((v) => v.id.equals(item.variantId))).getSingleOrNull();
+      if (!product.isActive ||
+          !product.trackInventory ||
+          product.currencyId != receipt.currencyId ||
+          product.measurementType != item.measurementType ||
+          item.quantityScale !=
+              (product.measurementType == 'piece' ? 1 : 1000) ||
+          variant == null ||
+          !variant.isActive ||
+          variant.productId != product.id) {
+        throw const ConsignmentUserException(
+          'consignment.receipt_catalogue_changed',
+        );
+      }
       final tracked =
           product.costingMethod == 'fifo' ||
           product.inventoryTrackingType == 'batch' ||
@@ -446,7 +481,7 @@ class ConsignmentReceiptService {
     )..where((r) => r.id.equals(receipt.id))).getSingle();
   });
 
-  /// Voids an untouched posted receipt. Once any unit has been sold, moved or
+  /// Cancels a draft or voids an untouched posted receipt. Once any unit has been sold, moved or
   /// adjusted, the receipt stays immutable and must be corrected by a later
   /// ownership movement instead of rewriting history.
   Future<ConsignmentReceipt> voidReceipt({
@@ -483,9 +518,11 @@ class ConsignmentReceiptService {
     }
 
     final receipt =
-        await (_db.select(
-              _db.consignmentReceipts,
-            )..where((r) => r.id.equals(receiptId) & r.status.equals('posted')))
+        await (_db.select(_db.consignmentReceipts)..where(
+              (r) =>
+                  r.id.equals(receiptId) &
+                  r.status.isIn(const ['draft', 'posted']),
+            ))
             .getSingle();
     if (!allowOwnershipConversion) {
       final conversion =
@@ -510,6 +547,37 @@ class ConsignmentReceiptService {
         scope.branchId != access.scope.branchId ||
         receipt.databaseId != access.scope.databaseId) {
       throw StateError('Receipt scope changed before voiding.');
+    }
+
+    if (receipt.status == 'draft') {
+      // Cancelling unposted intent creates only an audit event. There is no
+      // stock, ownership, payable or journal entry to reverse.
+      await _db
+          .into(_db.consignmentReceiptEvents)
+          .insert(
+            ConsignmentReceiptEventsCompanion.insert(
+              id: const Uuid().v4(),
+              receiptId: receipt.id,
+              kind: 'voided',
+              requestKey: requestKey,
+              requestHash: hash,
+              actorId: access.actorId,
+              reason: Value(cleanReason),
+            ),
+          );
+      await (_db.update(
+        _db.consignmentReceipts,
+      )..where((r) => r.id.equals(receipt.id))).write(
+        ConsignmentReceiptsCompanion(
+          status: const Value('voided'),
+          voidedBy: Value(access.actorId),
+          voidedAt: Value(DateTime.now().toUtc()),
+          voidReason: Value(cleanReason),
+        ),
+      );
+      return (_db.select(
+        _db.consignmentReceipts,
+      )..where((r) => r.id.equals(receipt.id))).getSingle();
     }
 
     final layers = await (_db.select(_db.consignmentInventoryLayers).join([

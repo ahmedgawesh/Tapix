@@ -312,6 +312,7 @@ class ProductRepositoryImpl implements ProductRepository {
           trackInventory: product.trackInventory,
           measurementType: product.measurementType,
           costingMethod: product.costingMethod,
+          inventoryTrackingType: product.inventoryTrackingType,
         ),
       );
     }
