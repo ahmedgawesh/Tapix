@@ -1735,7 +1735,6 @@ class PurchaseFormBloc extends Bloc<PurchaseFormEvent, PurchaseFormState> {
 
         CrashlyticsService.instance.logAction('purchase_created', {
           'purchase_id': purchaseId.toString(),
-          'total_cents': submittedState.totalCents.toString(),
           'items_count': submittedState.items.length.toString(),
         });
         emit(

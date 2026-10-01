@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 /// Service for Firebase Crashlytics integration.
 /// Provides automatic crash reporting and manual error logging.
@@ -51,17 +52,19 @@ class CrashlyticsService {
       Platform.operatingSystemVersion,
     );
     await _crashlytics!.setCustomKey('dart_version', Platform.version);
-    await _crashlytics!.setCustomKey('app_version', _appVersion);
+    // Use the installed package metadata, including build-number overrides.
+    // An absent --dart-define must not label every release as version 1.0.0.
+    try {
+      final package = await PackageInfo.fromPlatform();
+      await _crashlytics!.setCustomKey('app_version', package.version);
+      await _crashlytics!.setCustomKey('app_build', package.buildNumber);
+    } catch (_) {
+      await _crashlytics!.setCustomKey('app_version', 'unknown');
+      await _crashlytics!.setCustomKey('app_build', 'unknown');
+    }
 
     debugPrint('CrashlyticsService: Initialized successfully');
   }
-
-  /// The app version string. Populated from pubspec via the build system.
-  /// Falls back to 'unknown' if not available.
-  static const String _appVersion = String.fromEnvironment(
-    'APP_VERSION',
-    defaultValue: '1.0.0',
-  );
 
   // ── User & Context ────────────────────────────────────────────────
 

@@ -5976,6 +5976,8 @@
     }
   },
   "business_locations": {
+    "online_coming_soon": "Bientôt disponible",
+    "online_not_released_help": "La connexion des succursales par Internet n’est pas disponible dans cette version et son option ne peut pas encore être achetée. Les succursales et entrepôts sur le réseau local restent disponibles avec Pro.",
     "settings_title": "Gestion des sites",
     "title": "Succursales, entrepôts et appareils",
     "settings_subtitle": "Gérer les entrepôts, les transferts et les appareils du réseau local, et consulter l’accès aux succursales en ligne",

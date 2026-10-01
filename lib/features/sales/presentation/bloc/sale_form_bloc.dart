@@ -1951,7 +1951,6 @@ class SaleFormBloc extends Bloc<SaleFormEvent, SaleFormState> {
 
         CrashlyticsService.instance.logAction('sale_created', {
           'sale_id': saleId.toString(),
-          'total_cents': state.totalCents.toString(),
           'items_count': state.items.length.toString(),
         });
         emit(

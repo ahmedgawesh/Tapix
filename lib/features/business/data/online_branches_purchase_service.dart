@@ -46,22 +46,38 @@ abstract interface class OnlineBranchesPurchaseService {
   Future<bool> openManagement();
 }
 
+/// Keep new cloud subscriptions closed until the station 7 backend and station 8
+/// release checks are complete. Pro and LAN entitlements are independent.
+class OnlineBranchesRelease {
+  const OnlineBranchesRelease._();
+  static const bool serviceAvailable = false;
+}
+
 class DefaultOnlineBranchesPurchaseService
     implements OnlineBranchesPurchaseService {
   const DefaultOnlineBranchesPurchaseService({
     required OnlineBranchesPurchaseGateway gateway,
     required OnlineBranchesEntitlement entitlement,
+    this.serviceAvailable = OnlineBranchesRelease.serviceAvailable,
   }) : _gateway = gateway,
        _entitlement = entitlement;
 
+  final bool serviceAvailable;
   final OnlineBranchesPurchaseGateway _gateway;
   final OnlineBranchesEntitlement _entitlement;
 
   @override
-  Future<List<OnlineBranchesPlan>> loadPlans() => _gateway.loadPlans();
+  Future<List<OnlineBranchesPlan>> loadPlans() async =>
+      serviceAvailable ? await _gateway.loadPlans() : const [];
 
   @override
   Future<OnlineBranchesPurchaseOutcome> purchase(String planId) async {
+    if (!serviceAvailable) {
+      return const OnlineBranchesPurchaseOutcome(
+        OnlineBranchesStoreResult.unavailable,
+        errorCode: 'online_service_not_released',
+      );
+    }
     if (planId.trim().isEmpty) {
       return const OnlineBranchesPurchaseOutcome(
         OnlineBranchesStoreResult.failed,

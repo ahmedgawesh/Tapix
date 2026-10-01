@@ -133,6 +133,10 @@ class _BusinessLocationsHubScreenState
   }
 
   Future<void> _showPlans() async {
+    if (!OnlineBranchesRelease.serviceAvailable) {
+      _showMessage('business_locations.online_not_released_help');
+      return;
+    }
     if (_purchaseBusy) return;
     setState(() => _purchaseBusy = true);
     List<OnlineBranchesPlan> plans;
@@ -197,6 +201,11 @@ class _BusinessLocationsHubScreenState
   Future<void> _handlePurchaseOutcome(
     OnlineBranchesPurchaseOutcome outcome,
   ) async {
+    if (outcome.activated && !OnlineBranchesRelease.serviceAvailable) {
+      _showMessage('business_locations.online_not_released_help');
+      await _loadEntitlement();
+      return;
+    }
     final key = switch (outcome.result) {
       OnlineBranchesStoreResult.success =>
         'business_locations.purchase_activated',
@@ -735,7 +744,9 @@ class _OnlineAddOnCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final active = snapshot?.permitsOnlineBranches ?? false;
+    const serviceAvailable = OnlineBranchesRelease.serviceAvailable;
+    final active =
+        serviceAvailable && (snapshot?.permitsOnlineBranches ?? false);
     final expiry = snapshot?.expirationDate;
     return Card(
       color: active
@@ -767,13 +778,28 @@ class _OnlineAddOnCard extends StatelessWidget {
                   const SizedBox.square(
                     dimension: 22,
                     child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else
-                  Chip(label: Text(_statusKey().tr())),
+                  ),
               ],
             ),
+            if (!loading) ...[
+              const SizedBox(height: 8),
+              Chip(
+                label: Text(
+                  (serviceAvailable
+                          ? _statusKey()
+                          : 'business_locations.online_coming_soon')
+                      .tr(),
+                  softWrap: true,
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
-            Text('business_locations.online_help'.tr()),
+            Text(
+              (serviceAvailable
+                      ? 'business_locations.online_help'
+                      : 'business_locations.online_not_released_help')
+                  .tr(),
+            ),
             if (!loading && snapshot == null) ...[
               const SizedBox(height: 12),
               TextButton.icon(
@@ -834,13 +860,13 @@ class _OnlineAddOnCard extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  if (active)
+                  if (active || snapshot!.addOnActive)
                     FilledButton.icon(
                       onPressed: purchaseBusy ? null : onManage,
                       icon: const Icon(Icons.manage_accounts_outlined),
                       label: Text('business_locations.manage_plan'.tr()),
                     )
-                  else
+                  else if (serviceAvailable)
                     FilledButton.icon(
                       onPressed: purchaseBusy ? null : onPlans,
                       icon: const Icon(Icons.shopping_cart_outlined),

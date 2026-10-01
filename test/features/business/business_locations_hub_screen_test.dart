@@ -93,7 +93,8 @@ void main() {
                   onlineEntitlement: _Entitlement(
                     OnlineBranchesEntitlementPolicy.evaluate(
                       baseProActive: true,
-                      addOnActive: true,
+                      // Cover both inactive subscriptions and existing ones.
+                      addOnActive: dark,
                       expirationDate: DateTime.utc(2027),
                       willRenew: true,
                       maxBranches: 5,
@@ -125,11 +126,21 @@ void main() {
           findsOneWidget,
         );
         expect(tester.takeException(), isNull);
-        await tester.drag(
-          find.byType(CustomScrollView),
-          const Offset(0, -1200),
+        await tester.scrollUntilVisible(
+          find.text('business_locations.online_coming_soon'.tr()),
+          300,
+          scrollable: find.byType(Scrollable).first,
         );
         await tester.pumpAndSettle();
+        expect(
+          find.text('business_locations.online_coming_soon'.tr()),
+          findsOneWidget,
+        );
+        expect(find.text('business_locations.view_plans'.tr()), findsNothing);
+        expect(
+          find.text('business_locations.online_status.active'.tr()),
+          findsNothing,
+        );
         expect(tester.takeException(), isNull);
       });
     }

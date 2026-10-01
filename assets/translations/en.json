@@ -5971,6 +5971,8 @@
     }
   },
   "business_locations": {
+    "online_coming_soon": "Coming soon",
+    "online_not_released_help": "Online branch connectivity is not available in this release, and its add-on cannot be purchased yet. Local network branches and warehouses remain available with Pro.",
     "settings_title": "Locations management",
     "title": "Branches, warehouses and devices",
     "settings_subtitle": "Manage warehouses, transfers and LAN devices, and review online-branches access",

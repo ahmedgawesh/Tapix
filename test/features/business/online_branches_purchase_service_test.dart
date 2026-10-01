@@ -51,6 +51,43 @@ OnlineBranchesEntitlementSnapshot _snapshot(bool active) =>
     );
 
 void main() {
+  test(
+    'unreleased cloud service never offers or charges a subscription',
+    () async {
+      final gateway = _Gateway()
+        ..purchaseResult = OnlineBranchesStoreResult.success;
+      final entitlement = _Entitlement(_snapshot(true));
+      final service = DefaultOnlineBranchesPurchaseService(
+        gateway: gateway,
+        entitlement: entitlement,
+      );
+      expect(await service.loadPlans(), isEmpty);
+      final outcome = await service.purchase('annual');
+      expect(outcome.result, OnlineBranchesStoreResult.unavailable);
+      expect(outcome.errorCode, 'online_service_not_released');
+      expect(gateway.purchaseCalls, 0);
+      expect(entitlement.calls, 0);
+      expect(entitlement.snapshot.permitsLocalOperations, isTrue);
+    },
+  );
+
+  test(
+    'unreleased service still allows existing subscription management',
+    () async {
+      final gateway = _Gateway()
+        ..managementResult = true
+        ..restoreResult = OnlineBranchesStoreResult.success;
+      final service = DefaultOnlineBranchesPurchaseService(
+        gateway: gateway,
+        entitlement: _Entitlement(_snapshot(true)),
+      );
+      expect(await service.openManagement(), isTrue);
+      expect((await service.restore()).activated, isTrue);
+      expect(gateway.restoreCalls, 1);
+      expect(gateway.purchaseCalls, 0);
+    },
+  );
+
   test('loads only plans exposed by the dedicated gateway', () async {
     final gateway = _Gateway()
       ..plans = const [
@@ -63,6 +100,7 @@ void main() {
         ),
       ];
     final service = DefaultOnlineBranchesPurchaseService(
+      serviceAvailable: true,
       gateway: gateway,
       entitlement: _Entitlement(_snapshot(false)),
     );
@@ -78,6 +116,7 @@ void main() {
         ..purchaseResult = OnlineBranchesStoreResult.success;
       final entitlement = _Entitlement(_snapshot(true));
       final service = DefaultOnlineBranchesPurchaseService(
+        serviceAvailable: true,
         gateway: gateway,
         entitlement: entitlement,
       );
@@ -93,6 +132,7 @@ void main() {
     final gateway = _Gateway()
       ..purchaseResult = OnlineBranchesStoreResult.success;
     final service = DefaultOnlineBranchesPurchaseService(
+      serviceAvailable: true,
       gateway: gateway,
       entitlement: _Entitlement(_snapshot(false)),
     );
@@ -107,6 +147,7 @@ void main() {
       ..purchaseResult = OnlineBranchesStoreResult.cancelled;
     final entitlement = _Entitlement(_snapshot(false));
     final service = DefaultOnlineBranchesPurchaseService(
+      serviceAvailable: true,
       gateway: gateway,
       entitlement: entitlement,
     );
@@ -121,6 +162,7 @@ void main() {
       ..restoreResult = OnlineBranchesStoreResult.success;
     final entitlement = _Entitlement(_snapshot(true));
     final service = DefaultOnlineBranchesPurchaseService(
+      serviceAvailable: true,
       gateway: gateway,
       entitlement: entitlement,
     );
@@ -135,6 +177,7 @@ void main() {
     final gateway = _Gateway()
       ..purchaseResult = OnlineBranchesStoreResult.success;
     final service = DefaultOnlineBranchesPurchaseService(
+      serviceAvailable: true,
       gateway: gateway,
       entitlement: _Entitlement(_snapshot(true)),
     );
