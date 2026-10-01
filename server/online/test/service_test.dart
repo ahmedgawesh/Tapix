@@ -147,6 +147,38 @@ void main() {
     expect((await call('/healthz', method: 'GET')).$1, 200);
     expect((await call('/v1/events', method: 'GET', asToken: 'wrong')).$1, 401);
   });
+  test(
+    'session binding is authenticated, scoped and stable across writers',
+    () async {
+      final owner = await call('/v1/session');
+      expect(owner.$1, 200);
+      expect(owner.$2['organizationId'], org);
+      expect(owner.$2['databaseId'], db);
+      expect(owner.$2['branchId'], branch);
+      expect(owner.$2['role'], 'owner');
+      expect(owner.$2.containsKey('accessToken'), false);
+      final remoteDb = id(), remoteBranch = id();
+      final enrolled = await enroll(remoteDb, remoteBranch);
+      final remote = await call(
+        '/v1/session',
+        asToken: enrolled['accessToken'] as String,
+      );
+      expect(remote.$1, 200);
+      expect(remote.$2['databaseId'], remoteDb);
+      expect(remote.$2['branchId'], remoteBranch);
+      expect(remote.$2['role'], 'writer');
+      expect(remote.$2['deviceName'], 'فرع مستقل');
+      expect(remote.$2['relayId'], owner.$2['relayId']);
+      expect(remote.$2['relayId'], isNot(db));
+      expect((await call('/v1/session', asOrg: otherOrg)).$1, 401);
+      final another = await call(
+        '/v1/session',
+        asOrg: otherOrg,
+        asToken: otherToken,
+      );
+      expect(another.$2['relayId'], isNot(owner.$2['relayId']));
+    },
+  );
   test('retries persist an event exactly once', () async {
     final e = event();
     for (var i = 0; i < 2; i++) {

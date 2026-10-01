@@ -46,3 +46,7 @@ jobs:
       - name: PostgreSQL integration tests
         working-directory: server/online
         run: dart test --reporter expanded
+      - name: Resolve Flutter dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: SQLite to PostgreSQL round trip
+        run: flutter test test_integration/online_postgres_roundtrip_test.dart --reporter expanded

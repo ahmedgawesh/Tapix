@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:uuid/uuid.dart';
 
 import '../lan/lan_models.dart';
 
@@ -47,7 +48,7 @@ class OnlineSyncGateway implements LanBranchSyncGateway {
 
   Future<Map<String, dynamic>> _post(
     String path,
-    LanBranchSyncAuth auth,
+    LanBranchSyncAuth? auth,
     Map<String, Object?> body,
   ) async {
     try {
@@ -56,7 +57,7 @@ class OnlineSyncGateway implements LanBranchSyncGateway {
         data: body,
         options: Options(
           headers: {
-            'Authorization': 'Bearer ${auth.accessToken}',
+            if (auth != null) 'Authorization': 'Bearer ${auth.accessToken}',
             'X-Organization-Id': organizationId,
           },
           contentType: Headers.jsonContentType,
@@ -81,6 +82,45 @@ class OnlineSyncGateway implements LanBranchSyncGateway {
       // Do not expose request options, credentials or raw server errors in UI.
       throw const OnlineSyncException('online_connection_unavailable');
     }
+  }
+
+  /// Validates the server-side binding before saving or using a credential.
+  Future<OnlineWriterSession> inspectSession(LanBranchSyncAuth auth) async =>
+      OnlineWriterSession.fromJson(await _post('/v1/session', auth, {}));
+
+  /// Only a company owner credential can issue an identity-bound invitation.
+  Future<Map<String, dynamic>> createInvitation(
+    LanBranchSyncAuth auth, {
+    required String databaseId,
+    required String branchId,
+    required String name,
+  }) => _post('/v1/invitations', auth, {
+    'databaseId': databaseId,
+    'branchId': branchId,
+    'name': name,
+  });
+
+  /// A timed invitation is exchanged once; subsequent connections use the
+  /// saved credential. Retrying a lost response preserves the same identity.
+  Future<String> enroll({
+    required String databaseId,
+    required String branchId,
+    required String invitationCode,
+  }) async {
+    final result = await _post('/v1/enroll', null, {
+      'databaseId': databaseId,
+      'invitationCode': invitationCode,
+    });
+    final token = result['accessToken'];
+    if (result['organizationId'] != organizationId ||
+        result['databaseId'] != databaseId ||
+        result['branchId'] != branchId ||
+        token is! String ||
+        token.length != 64 ||
+        !RegExp(r'^[0-9a-f]+$').hasMatch(token)) {
+      throw const OnlineSyncException('online_identity_mismatch');
+    }
+    return token;
   }
 
   @override
@@ -139,4 +179,44 @@ class OnlineSyncGateway implements LanBranchSyncGateway {
   }
 
   void close() => _client.close();
+}
+
+/// Confirmed identity returned by the authenticated online service.
+class OnlineWriterSession {
+  const OnlineWriterSession({
+    required this.organizationId,
+    required this.databaseId,
+    required this.branchId,
+    required this.relayId,
+    required this.deviceName,
+    required this.role,
+  });
+  final String organizationId, databaseId, branchId, relayId, deviceName, role;
+
+  factory OnlineWriterSession.fromJson(Map<String, dynamic> json) {
+    for (final key in ['organizationId', 'databaseId', 'branchId', 'relayId']) {
+      final value = json[key];
+      if (value is! String ||
+          !Uuid.isValidUUID(fromString: value) ||
+          value != value.toLowerCase()) {
+        throw const OnlineSyncException('invalid_online_response');
+      }
+    }
+    final name = json['deviceName'];
+    final role = json['role'];
+    if (name is! String ||
+        name.trim().isEmpty ||
+        name.length > 80 ||
+        (role != 'owner' && role != 'writer')) {
+      throw const OnlineSyncException('invalid_online_response');
+    }
+    return OnlineWriterSession(
+      organizationId: json['organizationId'] as String,
+      databaseId: json['databaseId'] as String,
+      branchId: json['branchId'] as String,
+      relayId: json['relayId'] as String,
+      deviceName: name,
+      role: role as String,
+    );
+  }
 }

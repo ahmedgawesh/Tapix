@@ -81,6 +81,7 @@ class OfflineSyncEventStore {
     required String organizationId,
     required String branchId,
     int firstSequence = 1,
+    bool relayRemoteEvents = true,
   }) async {
     final target = targetDatabaseId.trim().toLowerCase();
     final organization = organizationId.trim().toLowerCase();
@@ -110,7 +111,7 @@ class OfflineSyncEventStore {
     await _db.transaction(() async {
       final existing = await _db
           .customSelect(
-            'SELECT organization_id,branch_id,first_sequence,status '
+            'SELECT organization_id,branch_id,first_sequence,status,relay_remote_events '
             'FROM sync_delivery_peers WHERE target_database_id=?',
             variables: [Variable.withString(target)],
           )
@@ -119,6 +120,8 @@ class OfflineSyncEventStore {
         if (existing.read<String>('organization_id') != organization ||
             existing.read<String>('branch_id') != branch ||
             existing.read<int>('first_sequence') != firstSequence ||
+            existing.read<int>('relay_remote_events') !=
+                (relayRemoteEvents ? 1 : 0) ||
             existing.read<String>('status') == 'revoked') {
           throw const OfflineSyncException(
             'delivery_peer_conflict',
@@ -135,8 +138,14 @@ class OfflineSyncEventStore {
       } else {
         await _db.customStatement(
           'INSERT INTO sync_delivery_peers(target_database_id,'
-          'organization_id,branch_id,first_sequence) VALUES(?,?,?,?)',
-          [target, organization, branch, firstSequence],
+          'organization_id,branch_id,first_sequence,relay_remote_events) VALUES(?,?,?,?,?)',
+          [
+            target,
+            organization,
+            branch,
+            firstSequence,
+            relayRemoteEvents ? 1 : 0,
+          ],
         );
       }
       await _db.customStatement(
@@ -146,8 +155,9 @@ class OfflineSyncEventStore {
           FROM sync_outbox_events WHERE local_sequence>=?''',
         [target, firstSequence],
       );
-      await _db.customStatement(
-        '''INSERT OR IGNORE INTO sync_relay_deliveries(
+      if (relayRemoteEvents) {
+        await _db.customStatement(
+          '''INSERT OR IGNORE INTO sync_relay_deliveries(
           target_database_id,event_id,source_database_id,source_sequence,
           next_attempt_at)
           SELECT ?,event_id,source_database_id,source_sequence,
@@ -155,8 +165,9 @@ class OfflineSyncEventStore {
               THEN occurred_at ELSE projected_at END
           FROM sync_remote_event_projections
           WHERE organization_id=? AND source_database_id<>?''',
-        [target, organization, target],
-      );
+          [target, organization, target],
+        );
+      }
     });
   }
 
@@ -200,7 +211,7 @@ class OfflineSyncEventStore {
           next_attempt_at)
           SELECT target_database_id,?,?,?,?
           FROM sync_delivery_peers
-          WHERE status='active' AND organization_id=?
+          WHERE status='active' AND relay_remote_events=1 AND organization_id=?
             AND target_database_id<>?''',
         [
           event.eventId,

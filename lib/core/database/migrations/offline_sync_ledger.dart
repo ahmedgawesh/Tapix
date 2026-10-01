@@ -33,6 +33,24 @@ CREATE TABLE IF NOT EXISTS sync_delivery_peers(
  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)
 ''');
+  // Cloud accepts only the authenticated writer's own stream. It must not
+  // receive relay copies that already arrived from LAN or the cloud itself.
+  final peerColumns = await db
+      .customSelect('PRAGMA table_info(sync_delivery_peers)')
+      .get();
+  if (!peerColumns.any(
+    (row) => row.read<String>('name') == 'relay_remote_events',
+  )) {
+    await db.customStatement(
+      'ALTER TABLE sync_delivery_peers ADD COLUMN relay_remote_events INTEGER NOT NULL DEFAULT 1 CHECK(relay_remote_events IN (0,1))',
+    );
+  }
+  await db.customStatement(
+    '''CREATE TRIGGER IF NOT EXISTS trg_sync_peer_relay_policy
+BEFORE UPDATE OF relay_remote_events ON sync_delivery_peers
+WHEN NEW.relay_remote_events IS NOT OLD.relay_remote_events
+BEGIN SELECT RAISE(ABORT,'Sync peer relay policy is immutable'); END''',
+  );
   await db.customStatement('''
 CREATE TABLE IF NOT EXISTS sync_outbox_deliveries(
  target_database_id TEXT NOT NULL,

@@ -38,6 +38,8 @@ Every /v1 request requires X-Organization-Id. Protected requests also require
 Authorization: Bearer <token>. JSON POST bodies are limited to 2 MiB and batches to
 50 events. The service serializes per-company commit/fan-out boundaries and retains
 per-source sequence order; duplicate hashes are acknowledged without reapplying.
+- POST /v1/session: authenticated organization/database/branch/name/role and stable relay ID.
+  No access token is returned by this inspection endpoint.
 - POST /v1/invitations (owner): databaseId, branchId, name. Ten-minute invite.
 - POST /v1/enroll: databaseId, invitationCode. Uses the invite's fixed identity/name.
   A lost response can be retried for the same identity before invite expiry.
@@ -54,16 +56,38 @@ Actual receipt remains a separately authored event from the receiving branch.
 Validation
    python3 server/online/tool/run_local.py test --reporter expanded
    python3 server/online/tool/verify_restore.py
+   python3 server/online/tool/run_local.py flutter-test --reporter expanded
 The integration suite requires tapbix_online_test and fails rather than silently
 skipping when configuration is missing. The restore checker creates a uniquely named
 throwaway database, compares fingerprints/deliveries/forced RLS, then drops only that
 database. Backup files contain data and credentials and remain private/ignored.
-CI uses a fresh PostgreSQL service and the same migration and tests.
+CI uses a fresh PostgreSQL service and the same migration and tests, including
+Flutter/SQLite -> HTTP -> PostgreSQL -> inbound projection. The bridge fixture
+requires tapbix_online_test and exchanges its temporary credentials over a private
+process pipe. It tests durable envelopes, 64-bit amounts, Unicode, and reopening
+the SQLite file. It does not certify end-user accounting workflows over the internet.
+
+Existing-writer client integration
+OnlineBranchSyncService validates the authenticated server binding against the
+local immutable organization/database/branch before storing a connection. Existing
+LAN writer enrollment is required and is preserved. A timed invitation is exchanged
+once; the saved credential, endpoint and binding live together in secure storage,
+keyed by the local database identity. Configuration requires an authorization
+callback; the future UI must connect it to existing owner/permission checks.
+The service reuses OfflineSyncEventStore and the supplied business projector. Its
+cloud delivery peer has relay_remote_events=false: only locally authored events
+are uploaded, with a cursor independent of every LAN peer. Remote acknowledgement
+follows durable local application. Concurrent refreshes coalesce; interrupted pushes
+remain retryable and duplicate inbound events do not repeat their effects.
+No production UI or scheduler invokes this service yet. Do not provision a live
+company by copying the synthetic demo credentials into its database. Existing
+history/bootstrap, secure-storage platform validation and user setup remain gates.
 
 Remaining S7 / S8 gates
 - Authenticated company enrollment of existing branches and local identity bootstrap.
-- User-facing online settings, secure credential persistence, background retry and
-  transport selection, with LAN/online delivery cursors kept independent.
+- User-facing online settings, existing permission wiring, secure-storage platform
+  validation, background retry scheduling and transport selection. Credential storage
+  and independent transport cursors are implemented and tested at service level.
 - Apply downloaded events through existing business projectors and reconcile actual
   sale/return/transfer/report results across devices using the online transport.
 - Verified commercial entitlements/webhooks, revocation/rotation and restoration.

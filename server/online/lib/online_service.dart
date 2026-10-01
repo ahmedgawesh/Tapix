@@ -115,6 +115,25 @@ class OnlineService {
         final branch = identity.single[1] as String;
         final owner = identity.single[2] == 'owner';
         switch ('${request.method} ${request.uri.path}') {
+          case 'POST /v1/session':
+            final writer = await tx.execute(
+              Sql.named(
+                'SELECT name FROM tapbix_online.writers WHERE database_id=@db::uuid',
+              ),
+              parameters: {'db': db},
+            );
+            return {
+              'organizationId': org,
+              'databaseId': db,
+              'branchId': branch,
+              'deviceName': writer.single[0],
+              'role': owner ? 'owner' : 'writer',
+              // A transport identity, distinct from every LAN database cursor.
+              'relayId': const Uuid().v5(
+                Namespace.url.value,
+                'tapbix:online-relay:$org',
+              ),
+            };
           case 'POST /v1/invitations':
             if (!owner) throw const ApiFailure(403, 'owner_required');
             return _invite(tx, org, body);
