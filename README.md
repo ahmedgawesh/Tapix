@@ -73,11 +73,16 @@ The Android release build uses R8 minification with keep-rules in
 
 ## User handbook and online development
 
-The Arabic [customer handbook](docs/user-guide/TapBix-User-Guide-AR-1.3.2.pdf)
-covers the released local and LAN workflows in 40 pages. Editable content is in
-`docs/user-guide/sections-ar.json`; regenerate HTML with
-`python3 tool/user_guide/build_guide.py` and print it to A4 PDF with Chrome without
-browser headers/footers. Fonts and logo come from repository assets.
+Customer handbooks (40 pages each, 38 sections and clickable contents):
+
+- [Arabic PDF](docs/user-guide/TapBix-User-Guide-AR-1.3.2.pdf)
+- [English PDF](docs/user-guide/TapBix-User-Guide-EN-1.3.2.pdf)
+
+Both cover local and LAN workflows. Editable content is in
+`docs/user-guide/sections-ar.json` and `sections-en.json`. Regenerate HTML with
+`python3 tool/user_guide/build_guide.py --language ar` or `--language en`, then
+print to A4 PDF with Chrome without browser headers/footers. Fonts and logo come
+from repository assets. The PDFs can be uploaded as website download files.
 
 The first online-service implementation is in `server/online/`, with shared wire
 contracts in `packages/tapbix_sync_contracts/`. See
