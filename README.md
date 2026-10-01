@@ -70,3 +70,17 @@ flutter build windows --release     # Windows
 
 The Android release build uses R8 minification with keep-rules in
 `android/app/proguard-rules.pro`.
+
+## User handbook and online development
+
+The Arabic [customer handbook](docs/user-guide/TapBix-User-Guide-AR-1.3.2.pdf)
+covers the released local and LAN workflows in 40 pages. Editable content is in
+`docs/user-guide/sections-ar.json`; regenerate HTML with
+`python3 tool/user_guide/build_guide.py` and print it to A4 PDF with Chrome without
+browser headers/footers. Fonts and logo come from repository assets.
+
+The first online-service implementation is in `server/online/`, with shared wire
+contracts in `packages/tapbix_sync_contracts/`. See
+[local operation instructions](server/online/OPERATIONS.txt) for isolated PostgreSQL
+setup, tests, and the remaining enrollment, entitlement and release gates. Online
+purchases remain disabled until those gates are complete.
