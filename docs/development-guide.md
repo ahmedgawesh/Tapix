@@ -4,14 +4,14 @@
 
 ### Required Software
 
-1. **Flutter SDK** (version 3.10.7 or higher)
+1. **Flutter SDK 3.47.2** (the version used by repository CI)
    - Download from [flutter.dev](https://flutter.dev/docs/get-started/install)
    - Add Flutter to your PATH
    - Run `flutter doctor` to verify installation
 
 2. **Dart SDK** (included with Flutter)
    - Automatically installed with Flutter SDK
-   - Version 3.10.7 or higher
+   - Use the repository's `pubspec.yaml` constraint and `pubspec.lock`; the Dart constraint is not a Flutter version number.
 
 3. **IDE/Editor** (choose one)
    - **Android Studio** with Flutter plugin (recommended)
@@ -48,7 +48,7 @@ cd tapix
 ### 2. Install Dependencies
 
 ```bash
-flutter pub get
+flutter pub get --enforce-lockfile
 ```
 
 ### 3. Verify Setup

@@ -1,5 +1,7 @@
 # Two-Layer Inventory Architecture — Implementation Plan
 
+> Historical rollout record (April–May 2026), not a current implementation queue. Its schema baseline and completion claims apply to that rollout. Current warehouse/branch scope is in [the enhanced plan](business/LAN_BRANCHES_ENHANCED_PLAN_AR.md); consult the accounting guidelines and current code before applying any deprecated-field cleanup below.
+
 > **Status:** Done (Phases A–I complete; Phase J in progress for closing-doc updates only).
 > **Started:** 2026-04-28
 > **Phase G completed:** 2026-04-29
@@ -260,7 +262,7 @@ Rollback paths:
 2. Property tests for batch invariants under all valuation × tracking
    combinations.
 3. New `docs/INVENTORY_ARCHITECTURE.md` describing the final design.
-4. Update `docs/architecture.md` to point to the inventory chapter.
+4. The current documentation entry point is [docs/index.md](index.md); the obsolete counter-app architecture document was removed in September 2026.
 
 ### Phase H — Audit / transparency surfaces
 

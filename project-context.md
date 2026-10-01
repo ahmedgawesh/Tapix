@@ -1,5 +1,7 @@
 # Tapix Project Context
 
+> Current scope and commercial decisions (1 October 2026): [enhanced LAN plan](docs/business/LAN_BRANCHES_ENHANCED_PLAN_AR.md) and [roadmap](docs/business/REMAINING_ROADMAP_AR.md). They supersede older branch/licensing/completion assumptions. This file remains an engineering-pattern reference, not proof that proposed features are implemented.
+
 > **CRITICAL**: This document is the **SINGLE SOURCE OF TRUTH** for all cross-cutting concerns, architectural patterns, and system-wide constraints. Every story, every feature, every screen MUST follow these patterns automatically.
 
 ---

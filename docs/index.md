@@ -1,138 +1,33 @@
-# TAPIX Project Documentation
+# فهرس وثائق TapBix
 
-## Project Overview
+تحديث 1 أكتوبر 2026. التطبيق نقطة بيع ومخزون ومحاسبة متعددة المنصات، وليس قالب Flutter الافتراضي. الإصدار واعتماديات SDK يؤخذان من [pubspec.yaml](../pubspec.yaml)، ولا تُنسخ أرقام قديمة إلى هذا الفهرس.
 
-**Type:** Mobile Application  
-**Primary Language:** Dart  
-**Framework:** Flutter  
-**Architecture:** Widget-based Architecture
+## المراجع الحالية
 
-## Quick Reference
+- [الخطة المحسنة للفروع والمخازن: LAN أولًا](business/LAN_BRANCHES_ENHANCED_PLAN_AR.md): نموذج الفروع والمخازن والأجهزة، الواجهات، المحاسبة، وحدود القبول.
+- [خارطة الطريق الحالية](business/REMAINING_ROADMAP_AR.md): ما بقي في S5-R والمحطات 6–8.
+- [مراجعة الانتقال إلى المحطة السابعة](business/STATION_7_ENTRY_REVIEW_AR.md): تجربة الأجهزة الثلاثة، الاختبارات، حدود الاعتماد، وخيارات الاستضافة.
+- [قائمة المحطة السادسة](business/STATION_6_OFFLINE_SYNC_CHECKLIST_AR.md): التنفيذ المتحقق والفجوات.
+- [دليل العميل للإعداد والربط](business/BRANCH_WAREHOUSE_CUSTOMER_GUIDE_AR.md): رحلة الاستخدام المستهدفة؛ لا يعني وجود الدليل اكتمال الميزات.
+- [قواعد السلامة المحاسبية](ACCOUNTING_INTEGRITY_GUIDELINES.md).
+- [خريطة مصادر الحقيقة](SOURCE_OF_TRUTH_MAP.md).
+- [محرك تسعير البنود](PRICING_ENGINE.md).
+- [عقد عملة الفروع](business/BRANCH_CURRENCY_CONTRACT_AR.md) و[عقد الضريبة](business/BRANCH_TAX_SETTINGS_CONTRACT_AR.md).
+- [README](../README.md) و[دليل التطوير](development-guide.md) و[تحديث الواجهات اللحظي](realtime-bloc-guide.md).
 
-- **Tech Stack:** Flutter 3.10.7+, Dart, Material Design
-- **Entry Point:** `lib/main.dart`
-- **Architecture Pattern:** Widget-based with StatefulWidget
-- **Platforms:** iOS, Android, Web, Windows, Linux
+## قراءة الحالة بصورة صحيحة
 
-## Generated Documentation
+جرت تجربة الفروع والمخازن على ثلاثة أجهزة فعلية. يُحدد تقرير الانتقال إلى المحطة السابعة نتيجة التحقق النهائي؛ مراحل التشغيل السابقة تخص نطاقها المثبت. LAN والأمانة ضمن Pro، والأونلاين وحده إضافة منفصلة. المرجع الحالي لا يغيّر سياسة مكافحة القرصنة.
 
-- [Project Overview](./project-overview.md)
-- [Architecture](./architecture.md)
-- [Source Tree Analysis](./source-tree-analysis.md)
-- [Component Inventory](./component-inventory.md)
-- [Development Guide](./development-guide.md)
+تقارير `VERIFICATION` و`CHECKLIST` أدلة مؤرخة، وليست شهادات قبول لكل إصدار لاحق. تواريخ مخطط قديم وعدد اختبارات قديم تُقرأ كتاريخ، ولا تتغلب على خطة أحدث أو عيب مثبت.
 
-## Domain Documentation
+## السجل التاريخي والمقترحات
 
-- [Inventory Architecture](./INVENTORY_ARCHITECTURE.md) - Two-layer model (global valuation × per-product tracking), FEFO contract, expiry alerts.
-- [Inventory Architecture — Plan & Migration history](./INVENTORY_ARCHITECTURE_PLAN.md)
-- [Pricing Engine](./PRICING_ENGINE.md) - Centralised line-level totals (subtotal/discount/tax/total).
-- [Accounting Integrity Guidelines](./ACCOUNTING_INTEGRITY_GUIDELINES.md) - Posting invariants and audit rules.
-- [Variants Implementation Plan](./VARIANTS_IMPLEMENTATION_PLAN.md)
+- [سجل خارطة الطريق السابقة](business/REMAINING_ROADMAP_HISTORY_AR.md).
+- [خطة التأسيس وسجل دفعاتها](business/IMPLEMENTATION_PLAN_AR.md).
+- [تصميم المخزون القديم](INVENTORY_ARCHITECTURE.md) و[خطة طرحه](INVENTORY_ARCHITECTURE_PLAN.md): خلفية تاريخية، مع الرجوع لعقود المخازن والمحاسبة الحديثة قبل التعديل.
+- [خطة المتغيرات القديمة](VARIANTS_IMPLEMENTATION_PLAN.md): لا تعتمد أرصدة المتغير العامة بدل دفتر المخزن الحالي.
+- ملفات `MOC` و`_bmad-output` مقترحات/مخرجات سابقة، لا قائمة ميزات تجارية مؤكدة. مجلد `_bmad` قوالب أدوات تطوير وليس وصفًا لحالة التطبيق.
+- [سجل تنظيف الوثائق](DOCUMENTATION_CLEANUP_AR.md): ما حُذف أو عُدّل وسبب ذلك.
 
-## Existing Documentation
-
-- [README.md](../README.md) - Basic project information and getting started guide
-
-## Getting Started
-
-1. **Prerequisites**
-   - Install Flutter SDK 3.10.7 or higher
-   - Set up your preferred IDE (Android Studio, VS Code, or IntelliJ)
-   - Configure platform-specific tools for target platforms
-
-2. **Setup**
-   ```bash
-   git clone <repository-url>
-   cd tapix
-   flutter pub get
-   ```
-
-3. **Run the Application**
-   ```bash
-   flutter run
-   ```
-
-4. **Platform-Specific Runs**
-   ```bash
-   flutter run -d android    # Android device/emulator
-   flutter run -d ios        # iOS simulator/device
-   flutter run -d chrome     # Web browser
-   flutter run -d windows    # Windows desktop
-   flutter run -d linux      # Linux desktop
-   ```
-
-## Project Status
-
-- **Current Version:** 1.0.0+1
-- **Development Stage:** Initial setup with default Flutter counter app
-- **Last Updated:** 2026-01-23
-- **Documentation Generated:** BMad document-project workflow
-
-## Development Workflow
-
-### Testing
-```bash
-flutter test                # Run all tests
-flutter test --coverage     # Run with coverage report
-```
-
-### Code Quality
-```bash
-flutter analyze             # Static analysis
-dart format .               # Format code
-```
-
-### Build
-```bash
-flutter build apk           # Android APK
-flutter build ios           # iOS build
-flutter build web           # Web build
-```
-
-## Architecture Notes
-
-This project follows Flutter's standard widget-based architecture:
-
-- **StatelessWidget** for immutable UI components
-- **StatefulWidget** for components requiring state management
-- **MaterialApp** as the root widget providing Material Design
-- **setState()** for local state management (current implementation)
-
-## Next Steps for Development
-
-1. **Define Application Requirements**
-   - Determine app purpose and features
-   - Design user interface and user experience
-   - Plan data models and business logic
-
-2. **Improve Project Structure**
-   - Create organized folder structure in `lib/`
-   - Implement proper navigation
-   - Add state management solution
-
-3. **Add Features**
-   - Implement custom screens and widgets
-   - Add API integration layer
-   - Include data persistence
-
-4. **Enhance Testing**
-   - Write unit tests for business logic
-   - Add widget tests for UI components
-   - Implement integration tests
-
-## Documentation Maintenance
-
-This documentation was generated by the BMad document-project workflow. To update:
-
-1. Run the document-project workflow again
-2. Update individual files manually as needed
-3. Keep `index.md` as the primary entry point for AI-assisted development
-
-## Additional Resources
-
-- [Flutter Documentation](https://flutter.dev/docs)
-- [Dart Language Guide](https://dart.dev/guides)
-- [Material Design 3](https://m3.material.io/)
-- [Android Studio Flutter Plugin](https://plugins.jetbrains.com/plugin/9212-flutter)
-- [VS Code Flutter Extension](https://marketplace.visualstudio.com/items?itemName=Dart-Code.flutter)
+أي تعارض يُحسم بالكود المتحقق والقرار الأحدث، ويُصحح في الوثيقة؛ لا يُنفذ نص قديم لإرجاع سلوك أُلغي.

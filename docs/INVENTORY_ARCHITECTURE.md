@@ -1,6 +1,6 @@
 # Inventory Architecture — Tapix
 
-> **Status:** Active design (final, post Phase G)
+> **Status:** Historical design baseline (April 2026), not a complete description of the current multi-warehouse implementation. Use [current branch/warehouse scope](business/LAN_BRANCHES_ENHANCED_PLAN_AR.md), accounting guidelines and verified runtime code for current decisions. Deprecated-field statements below describe the historical rollout and are not instructions to remove fields still used by current operations.
 > **Last updated:** 2026-04-29
 > **Schema baseline:** v10047
 > **Companion documents:** `INVENTORY_ARCHITECTURE_PLAN.md` (rollout history),

@@ -1,4 +1,5 @@
 # TAPIX Enhanced User Management MOC
+> Historical design proposal. Role and device permissions must follow verified runtime checks and [the current branch plan](docs/business/LAN_BRANCHES_ENHANCED_PLAN_AR.md); proposed screens below are not evidence of implementation.
 ## Stories 4.15-4.16: Modern User & Role Management Interface
 
 > **Date**: 2026-02-06  

@@ -1,4 +1,5 @@
 # TAPIX Supplier Management UI - MOC Design Analysis
+> Historical design proposal, not proof that every described interaction exists. Current supplier ownership and branch scope follow [the enhanced plan](docs/business/LAN_BRANCHES_ENHANCED_PLAN_AR.md) and verified accounting contracts.
 > **Based on Stories 4.5-4.12, Global Best Practices, and TAPIX Architecture Patterns**
 
 ---

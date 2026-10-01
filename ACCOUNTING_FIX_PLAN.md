@@ -1,5 +1,7 @@
 # Tapix Accounting Fix Plan
 
+> Historical repair checklist, retained to explain earlier fixes. Do not replay these mutations against current customer data. Current scope and acceptance gates: [roadmap](docs/business/REMAINING_ROADMAP_AR.md); accounting rules: [guidelines](docs/ACCOUNTING_INTEGRITY_GUIDELINES.md).
+
 ## Fix 1: Make CustomerDao.createTransaction atomic (like SupplierDao)
 **File:** `lib/core/database/daos/customer_dao.dart`
 **Problem:** `createTransaction()` only inserts a row — does NOT update `customers.balanceCents`

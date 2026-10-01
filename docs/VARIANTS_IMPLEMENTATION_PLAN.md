@@ -1,5 +1,7 @@
 # Tapix — Product Variants + Barcode + Invoice Printing (Implementation Plan)
 
+> Historical implementation plan. Current inventory authority is warehouse-scoped; aggregate variant fields are compatibility views and must not override warehouse balances. For current supplier identity, ownership and branch scope use [the enhanced plan](business/LAN_BRANCHES_ENHANCED_PLAN_AR.md) and accounting guidelines. Do not replay this plan as a fresh migration.
+
 ## Decisions (Locked)
 - **Barcode generation**: automatic, deterministic **prefix + `variantId`** after insert.
   - Example: `29 + zeroPad(variantId, 11)` → `2900000001234`

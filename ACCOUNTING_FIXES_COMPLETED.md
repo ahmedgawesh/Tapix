@@ -1,6 +1,6 @@
 # 🎉 Tapix Accounting Fixes Completed
 
-All critical accounting issues have been resolved. Tapix now follows **single source of truth** accounting principles like global software.
+Historical completion report for the fixes listed below. It does not certify the absence of accounting issues in later changes or the completion of independent branches. Current acceptance gates are recorded in the [roadmap](docs/business/REMAINING_ROADMAP_AR.md).
 
 ## ✅ Fixes Applied
 

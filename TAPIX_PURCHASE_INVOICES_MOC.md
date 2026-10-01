@@ -1,5 +1,7 @@
 # TAPIX Purchase Invoices & Returns — World-Class UI/UX MOC
 
+> Historical UI proposal, not a release checklist. Current warehouse, supplier ownership and synchronization scope is defined in [the enhanced plan](docs/business/LAN_BRANCHES_ENHANCED_PLAN_AR.md). Verify any proposed interaction against the current implementation before reusing it.
+
 ## Overview
 
 This document describes the phased UI/UX enhancement plan for Epic 6 (Purchase Management).

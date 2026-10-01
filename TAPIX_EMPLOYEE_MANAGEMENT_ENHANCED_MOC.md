@@ -1,5 +1,7 @@
 # TAPIX Employee Management System - Enhanced MOC
 
+> Historical design proposal, not an implemented-feature inventory or a current execution plan. Verify each capability in code and tests; current cross-cutting scope is in [the roadmap](docs/business/REMAINING_ROADMAP_AR.md).
+
 > **Version**: 1.0  
 > **Date**: 2026-01-30  
 > **Status**: Ready for Implementation  
