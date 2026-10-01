@@ -4,6 +4,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:tapix/core/bloc/realtime_bloc.dart';
 import 'package:tapix/core/database/app_database.dart';
 import 'package:tapix/core/database/daos/inventory_adjustment_dao.dart';
 import 'package:tapix/core/database/migrations/consignment_return_liability.dart';
@@ -27,6 +28,7 @@ import 'package:tapix/features/consignment/data/consignment_receipt_service.dart
 import 'package:tapix/features/consignment/data/consignment_reporting_service.dart';
 import 'package:tapix/features/consignment/data/consignment_settlement_service.dart';
 import 'package:tapix/features/reports/presentation/bloc/supplier_sales_report_bloc.dart';
+import 'package:tapix/features/reports/presentation/widgets/report_date_range.dart';
 
 class _TestSession extends SessionService {
   _TestSession(this.userId);
@@ -38,6 +40,28 @@ class _TestSession extends SessionService {
 
 AppDatabase _memoryDb() =>
     AppDatabase.connect(DatabaseConnection(NativeDatabase.memory()));
+
+// These assertions reconcile complete lifecycles. Fixtures have historical
+// document dates, while posting/void timestamps use the actual execution date.
+// Use an explicit lifetime window instead of assuming the test runs in September.
+ConsignmentReportRange _lifecycleReportRange() =>
+    ConsignmentReportRange(start: DateTime.utc(2000), end: DateTime.utc(9999));
+
+Future<SupplierSalesReportData> _loadLifecycleSupplierReport(
+  SupplierSalesReportBloc bloc,
+) async {
+  final range = ReportDateRange(
+    startDate: DateTime.utc(2000),
+    endDate: DateTime.utc(9999),
+  );
+  final loaded = bloc.stream.firstWhere(
+    (state) =>
+        state is RealtimeSuccess<SupplierSalesReportData> &&
+        state.data.range == range,
+  );
+  bloc.add(SupplierSalesFilterChanged(range: range));
+  return ((await loaded) as RealtimeSuccess<SupplierSalesReportData>).data;
+}
 
 Future<int> _user(AppDatabase db, String name, String role) => db
     .into(db.users)
@@ -990,12 +1014,10 @@ void main() {
               .getSingle();
       expect(stock.quantity, 2);
       expect(stock.supplierOwnedQuantity, 2);
-      final report = await ConsignmentReportingService(db, module).loadReport(
-        range: ConsignmentReportRange(
-          start: DateTime.utc(2026, 9, 1),
-          end: DateTime.utc(2026, 9, 30, 23, 59, 59),
-        ),
-      );
+      final report = await ConsignmentReportingService(
+        db,
+        module,
+      ).loadReport(range: _lifecycleReportRange());
       expect(report.single.netSoldQuantities, isEmpty);
       expect(report.single.returnedQuantities, isEmpty);
       expect(report.single.remainingQuantities, {'piece': 2});
@@ -1463,7 +1485,9 @@ void main() {
       expect(reversal.journalEntryId, isNotNull);
       final supplierReport = SupplierSalesReportBloc(db);
       addTearDown(supplierReport.close);
-      final supplierReportData = await supplierReport.load();
+      final supplierReportData = await _loadLifecycleSupplierReport(
+        supplierReport,
+      );
       final consignmentRow = supplierReportData.rows.singleWhere(
         (row) => row.sourceQuality == 'consignment',
       );
@@ -1591,13 +1615,10 @@ void main() {
       expect(damagedEvent.signedQuantity, -1);
       expect(damagedEvent.signedAmountCents, -900);
       expect(damagedEvent.restoresStock, isFalse);
-      var custodyReport = await ConsignmentReportingService(db, module)
-          .loadReport(
-            range: ConsignmentReportRange(
-              start: DateTime.utc(2026, 9, 1),
-              end: DateTime.utc(2026, 9, 30, 23, 59, 59),
-            ),
-          );
+      var custodyReport = await ConsignmentReportingService(
+        db,
+        module,
+      ).loadReport(range: _lifecycleReportRange());
       expect(custodyReport.single.remainingQuantities, isEmpty);
       expect(custodyReport.single.unavailableQuantities, {'piece': 1});
 
@@ -1616,12 +1637,10 @@ void main() {
               .getSingle();
       expect(stockAfterDamagedVoid.quantity, 4);
       expect(stockAfterDamagedVoid.supplierOwnedQuantity, 0);
-      custodyReport = await ConsignmentReportingService(db, module).loadReport(
-        range: ConsignmentReportRange(
-          start: DateTime.utc(2026, 9, 1),
-          end: DateTime.utc(2026, 9, 30, 23, 59, 59),
-        ),
-      );
+      custodyReport = await ConsignmentReportingService(
+        db,
+        module,
+      ).loadReport(range: _lifecycleReportRange());
       expect(custodyReport.single.unavailableQuantities, isEmpty);
 
       await db.saleDao.voidSale(
@@ -2175,12 +2194,10 @@ void main() {
       expect(damagedEvent.signedQuantity, -1);
       expect(damagedEvent.signedAmountCents, -900);
       expect(damagedEvent.restoresStock, isFalse);
-      var report = await ConsignmentReportingService(db, module).loadReport(
-        range: ConsignmentReportRange(
-          start: DateTime.utc(2026, 9, 1),
-          end: DateTime.utc(2026, 9, 30, 23, 59, 59),
-        ),
-      );
+      var report = await ConsignmentReportingService(
+        db,
+        module,
+      ).loadReport(range: _lifecycleReportRange());
       expect(report.single.remainingQuantities, {'piece': 3});
       expect(report.single.unavailableQuantities, {'piece': 1});
 
@@ -2199,12 +2216,10 @@ void main() {
               .getSingle();
       expect(stock.quantity, 3);
       expect(stock.supplierOwnedQuantity, 3);
-      report = await ConsignmentReportingService(db, module).loadReport(
-        range: ConsignmentReportRange(
-          start: DateTime.utc(2026, 9, 1),
-          end: DateTime.utc(2026, 9, 30, 23, 59, 59),
-        ),
-      );
+      report = await ConsignmentReportingService(
+        db,
+        module,
+      ).loadReport(range: _lifecycleReportRange());
       expect(report.single.unavailableQuantities, isEmpty);
     },
   );
@@ -2357,7 +2372,9 @@ void main() {
       expect(returnItem.inventoryValueAtPostCents!.toBigInt().toInt(), 0);
       final supplierReport = SupplierSalesReportBloc(db);
       addTearDown(supplierReport.close);
-      final supplierReportData = await supplierReport.load();
+      final supplierReportData = await _loadLifecycleSupplierReport(
+        supplierReport,
+      );
       final consignmentRow = supplierReportData.rows.singleWhere(
         (row) => row.sourceQuality == 'consignment',
       );
@@ -2601,10 +2618,7 @@ void main() {
       expect(await accountBalance('1300'), 180);
 
       final reportService = ConsignmentReportingService(db, module);
-      final reportRange = ConsignmentReportRange(
-        start: DateTime.utc(2026, 9, 1),
-        end: DateTime.utc(2026, 9, 30, 23, 59, 59),
-      );
+      final reportRange = _lifecycleReportRange();
       var report = (await reportService.loadReport(
         range: reportRange,
         supplierId: seed.supplier,
