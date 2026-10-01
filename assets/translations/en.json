@@ -6286,5 +6286,51 @@
       "export_failed": "Could not create the document file. Please try again.",
       "unavailable": "Unavailable in the legacy version"
     }
+  },
+  "online_setup": {
+    "title": "Internet synchronisation — pilot",
+    "pilot_help": "This pilot is for previously configured branch servers. Branch transactions stay local when the internet is unavailable. The service is not yet available for sale.",
+    "steps": "On the branch server, copy its connection request and send it to the company administrator. On the company master, create an invitation for that request. Paste the invitation here once; the application retains the connection for later attempts.",
+    "request_title": "Copy this branch’s connection request",
+    "request_help": "This request identifies the company, branch and device and contains no password. Send it to the administrator to create an invitation.",
+    "invitation_title": "Branch connection invitation",
+    "invitation_help": "Share this invitation only with the intended branch administrator. It expires after ten minutes.",
+    "code": "Company activation code or branch invitation",
+    "confirm": "Review connection",
+    "confirm_help": "Check the branch and service address. The application verifies the invitation against this device’s database before connecting.",
+    "connect": "Connect and save",
+    "cancel": "Cancel",
+    "next": "Next",
+    "copy": "Copy code",
+    "close": "Close",
+    "create_invitation": "Create a branch invitation",
+    "branch_request": "Connection request copied from the branch server",
+    "automatic": "Synchronise automatically while the application is active",
+    "sync_now": "Synchronise now",
+    "last_success": "Last successful sync this session: {time}",
+    "next_attempt": "Next attempt: {time}",
+    "status": {
+      "unconfigured": "Internet connection not configured",
+      "paused": "Synchronisation paused",
+      "syncing": "Exchanging data",
+      "healthy": "Last synchronisation succeeded",
+      "retrying": "Connection failed; retry scheduled",
+      "blocked": "Synchronisation needs attention"
+    },
+    "errors": {
+      "owner_required": "Sign in with the active owner account to configure the company connection.",
+      "pro_required": "An active Pro entitlement is required to configure branch connections.",
+      "writer_required": "Configure this on the company master or branch server. Cashier and warehouse devices use their branch server.",
+      "not_enrolled": "Complete local branch setup and enrollment before joining the internet pilot.",
+      "identity_mismatch": "This invitation or account belongs to a different branch database. Device identity has not changed.",
+      "expired": "The invitation has expired or is invalid. Request a new invitation.",
+      "invalid_code": "Invalid code. Copy the complete code from the setup screen.",
+      "entitlement": "Internet service is inactive or expired for this company. Contact the service administrator.",
+      "unauthorized": "The connection credential was rejected. Contact the administrator before reconnecting.",
+      "connection_failed": "Cannot reach the internet service. Local data is retained; check your network.",
+      "busy": "A sync or setup operation is running. Wait for it to finish.",
+      "failed": "Synchronisation could not complete. Check the service connection and branch configuration, then retry.",
+      "pilot_only": "This screen is available in the pilot build only."
+    }
   }
 }

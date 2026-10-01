@@ -8,6 +8,8 @@ import '../lan/lan_models.dart';
 import '../sync/offline_sync_event_store.dart';
 import '../sync/sync_inbound_projection_service.dart';
 import 'online_sync_gateway.dart';
+import 'online_setup_code.dart';
+import 'package:drift/drift.dart';
 
 abstract interface class OnlineConnectionVault {
   Future<String?> read(String key);
@@ -156,6 +158,9 @@ class OnlineBranchSyncService {
             'branchId': local.branch,
             'relayId': session.relayId,
             'accessToken': token,
+            'deviceName': session.deviceName,
+            'role': session.role,
+            'enabled': true,
           }),
         );
         return session;
@@ -164,6 +169,162 @@ class OnlineBranchSyncService {
       }
     } finally {
       _configuring = false;
+    }
+  }
+
+  Future<void> authorizeConfiguration() => _authorizeConfiguration();
+
+  Future<OnlineConnectionSummary?> inspectConnection() async {
+    final local = await _identity();
+    final raw = await _vault.read(_key(local.database));
+    if (raw == null) return null;
+    try {
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      if (data['databaseId'] != local.database ||
+          data['organizationId'] != local.organization ||
+          data['branchId'] != local.branch) {
+        throw const FormatException();
+      }
+      return OnlineConnectionSummary(
+        endpoint: Uri.parse(data['endpoint'] as String),
+        name: data['deviceName'] as String? ?? '',
+        role: data['role'] as String? ?? 'writer',
+        enabled: data['enabled'] != false,
+      );
+    } catch (_) {
+      throw const OnlineSyncException('online_connection_invalid');
+    }
+  }
+
+  Future<void> setEnabled(bool enabled) async {
+    await _authorizeConfiguration();
+    // Wait for the current durable exchange before changing its configuration.
+    // No new exchange may start until this operation has completed.
+    if (_configuring) throw const OnlineSyncException('online_sync_busy');
+    _configuring = true;
+    try {
+      try {
+        await _running;
+      } catch (_) {
+        /* Preserve pending work for resume. */
+      }
+      final local = await _identity();
+      final raw = await _vault.read(_key(local.database));
+      if (raw == null) throw const OnlineSyncException('online_not_configured');
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      data['enabled'] = enabled;
+      await _vault.write(_key(local.database), jsonEncode(data));
+    } finally {
+      _configuring = false;
+    }
+  }
+
+  String _branchName(QueryRow row) {
+    final name = row.readNullable<String>('name')?.trim() ?? '';
+    final label = name.isEmpty ? row.read<String>('code') : name;
+    return label.length <= 80 ? label : label.substring(0, 80);
+  }
+
+  Future<OnlineSetupCode> bindingRequest() async {
+    await _authorizeConfiguration();
+    final local = await _identity();
+    final row = await _db
+        .customSelect(
+          'SELECT name,code FROM business_branches WHERE id=? AND organization_id=?',
+          variables: [
+            Variable.withString(local.branch),
+            Variable.withString(local.organization),
+          ],
+        )
+        .getSingle();
+    return OnlineSetupCode(
+      type: 'request',
+      organizationId: local.organization,
+      databaseId: local.database,
+      branchId: local.branch,
+      name: _branchName(row),
+    );
+  }
+
+  Future<OnlineWriterSession> connectCode(String encoded) async {
+    await _authorizeConfiguration();
+    final local = await _identity();
+    final code = OnlineSetupCode.decode(encoded);
+    if (code.type == 'request' ||
+        code.organizationId != local.organization ||
+        code.databaseId != local.database ||
+        code.branchId != local.branch) {
+      throw const OnlineSyncException('online_identity_mismatch');
+    }
+    return code.type == 'invitation'
+        ? connectInvitation(
+            endpoint: code.endpoint!,
+            invitationCode: code.secret!,
+          )
+        : connect(endpoint: code.endpoint!, accessToken: code.secret!);
+  }
+
+  Future<OnlineSetupCode> issueInvitation(String requestCode) async {
+    await _authorizeConfiguration();
+    final local = await _identity();
+    final request = OnlineSetupCode.decode(requestCode);
+    if (request.type != 'request' ||
+        request.organizationId != local.organization ||
+        request.databaseId == local.database) {
+      throw const OnlineSyncException('online_identity_mismatch');
+    }
+    // In this pilot, an online invite can only extend an existing LAN enrollment.
+    // Use the authoritative local name, never a name supplied by the request.
+    final target = await _db
+        .customSelect(
+          'SELECT b.name,b.code FROM lan_branch_enrollments e JOIN business_branches b ON b.id=e.branch_id '
+          "WHERE e.status='active' AND e.remote_database_id=? AND e.branch_id=? AND b.organization_id=?",
+          variables: [
+            Variable.withString(request.databaseId),
+            Variable.withString(request.branchId),
+            Variable.withString(local.organization),
+          ],
+        )
+        .getSingleOrNull();
+    if (target == null) {
+      throw const OnlineSyncException('online_branch_not_enrolled');
+    }
+    final raw = await _vault.read(_key(local.database));
+    if (raw == null) throw const OnlineSyncException('online_not_configured');
+    final data = jsonDecode(raw) as Map<String, dynamic>;
+    final endpoint = Uri.parse(data['endpoint'] as String);
+    final gateway = _gateway(endpoint, local.organization);
+    try {
+      final auth = LanBranchSyncAuth(
+        enrollmentId: local.database,
+        remoteDatabaseId: local.database,
+        accessToken: data['accessToken'] as String,
+      );
+      final session = await gateway.inspectSession(auth);
+      _checkSession(session, local);
+      if (session.role != 'owner') {
+        throw const OnlineSyncException('owner_required');
+      }
+      final response = await gateway.createInvitation(
+        auth,
+        databaseId: request.databaseId,
+        branchId: request.branchId,
+        name: _branchName(target),
+      );
+      return OnlineSetupCode(
+        type: 'invitation',
+        organizationId: local.organization,
+        databaseId: request.databaseId,
+        branchId: request.branchId,
+        name: _branchName(target),
+        endpoint: endpoint,
+        secret: response['invitationCode'] as String,
+        expiresAt: _clock().toUtc().add(
+          Duration(seconds: response['expiresInSeconds'] as int),
+        ),
+      );
+    } finally {
+      gateway.close();
     }
   }
 
@@ -193,6 +354,9 @@ class OnlineBranchSyncService {
       }
     } catch (_) {
       throw const OnlineSyncException('online_connection_invalid');
+    }
+    if (config['enabled'] == false) {
+      throw const OnlineSyncException('online_paused');
     }
     final gateway = _gateway(
       Uri.parse(config['endpoint'] as String),
@@ -296,4 +460,16 @@ class OnlineBranchSyncService {
       gateway.close();
     }
   }
+}
+
+class OnlineConnectionSummary {
+  const OnlineConnectionSummary({
+    required this.endpoint,
+    required this.name,
+    required this.role,
+    required this.enabled,
+  });
+  final Uri endpoint;
+  final String name, role;
+  final bool enabled;
 }

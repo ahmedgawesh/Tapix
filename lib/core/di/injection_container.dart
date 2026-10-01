@@ -1,3 +1,8 @@
+import '../services/online/online_branch_sync_service.dart';
+import '../services/online/online_sync_controller.dart';
+import '../services/online/online_configuration_policy.dart';
+import '../services/online/online_setup_code.dart';
+import '../services/online/online_sync_gateway.dart';
 import '../services/business/warehouse_operation_scope.dart';
 import '../../features/reports/presentation/bloc/supplier_sales_report_bloc.dart';
 import '../services/business/warehouse_read_scope.dart';
@@ -1376,6 +1381,38 @@ Future<void> init() async {
       revenueCat: sl<RevenueCatService>(),
       desktopLicense: sl<DesktopLicenseService>(),
     ),
+  );
+  sl.registerLazySingleton(
+    () => OnlineConfigurationPolicy(
+      sl<AppDatabase>(),
+      sl<SessionService>(),
+      sl<WarehouseSetupEntitlement>(),
+      isDependentClient: () =>
+          sl<LanNetworkService>().snapshot.mode == LanMode.client,
+    ),
+  );
+  sl.registerLazySingleton(
+    () => OnlineBranchSyncService(
+      database: sl<AppDatabase>(),
+      projection: sl<SyncInboundProjectionService>(),
+      authorizeConfiguration: () async {
+        if (!OnlinePilot.enabled) {
+          throw const OnlineSyncException('online_pilot_unavailable');
+        }
+        await sl<OnlineConfigurationPolicy>().authorize();
+      },
+      allowLoopbackDevelopment: OnlinePilot.enabled && OnlinePilot.loopback,
+    ),
+  );
+  sl.registerLazySingleton(
+    () => OnlineSyncController(
+      inspect: sl<OnlineBranchSyncService>().inspectConnection,
+      synchronize: sl<OnlineBranchSyncService>().synchronizeOnce,
+      canRun: () =>
+          OnlinePilot.enabled &&
+          sl<LanNetworkService>().snapshot.mode != LanMode.client,
+    ),
+    dispose: (controller) => controller.dispose(),
   );
   sl.registerLazySingleton<OnlineBranchesEntitlement>(
     () => PlatformOnlineBranchesEntitlement(

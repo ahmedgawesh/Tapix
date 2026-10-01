@@ -9,6 +9,7 @@ import 'package:tapix/core/services/online/online_branch_sync_service.dart';
 import 'package:tapix/core/services/sync/offline_sync_event_store.dart';
 import 'package:tapix/core/services/sync/sync_inbound_projection_service.dart';
 import 'package:uuid/uuid.dart';
+import 'package:tapix/core/services/online/online_setup_code.dart';
 
 class TestVault implements OnlineConnectionVault {
   final values = <String, String>{};
@@ -103,9 +104,20 @@ void main() {
           vault: vault,
           allowLoopbackDevelopment: true,
         );
-        await service().connect(
-          endpoint: endpoint,
-          accessToken: boot['token'] as String,
+        final binding = await service().bindingRequest();
+        expect(binding.organizationId, org);
+        expect(binding.databaseId, database);
+        await service().connectCode(
+          OnlineSetupCode(
+            type: 'activation',
+            organizationId: org,
+            databaseId: database,
+            branchId: branch,
+            name: binding.name,
+            endpoint: endpoint,
+            secret: boot['token'] as String,
+            expiresAt: DateTime.now().add(const Duration(minutes: 10)),
+          ).encode(),
         );
         final result = await service().synchronizeOnce();
         expect(result.uploaded, 1);

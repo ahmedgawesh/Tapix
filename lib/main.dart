@@ -1,3 +1,5 @@
+import 'core/services/online/online_sync_controller.dart';
+import 'core/services/online/online_setup_code.dart';
 import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
@@ -164,7 +166,8 @@ class TapixApp extends StatefulWidget {
   State<TapixApp> createState() => _TapixAppState();
 }
 
-class _TapixAppState extends State<TapixApp> {
+class _TapixAppState extends State<TapixApp> with WidgetsBindingObserver {
+  StreamSubscription<LanMode>? _onlineModeSubscription;
   StreamSubscription<LanNetworkSnapshot>? _lanLocaleSubscription;
   StreamSubscription<LanMasterActivityEvent>? _lanActivitySubscription;
   StreamSubscription<RealtimeState<UserEntity?>>?
@@ -175,6 +178,21 @@ class _TapixAppState extends State<TapixApp> {
   @override
   void initState() {
     super.initState();
+    if (OnlinePilot.enabled) {
+      WidgetsBinding.instance.addObserver(this);
+      di.sl<OnlineSyncController>().start();
+      _onlineModeSubscription = di
+          .sl<LanNetworkService>()
+          .changes
+          .map((snapshot) => snapshot.mode)
+          .distinct()
+          .listen((_) {
+            if (WidgetsBinding.instance.lifecycleState ==
+                AppLifecycleState.resumed) {
+              di.sl<OnlineSyncController>().start();
+            }
+          });
+    }
     _setupBackButtonHandler();
     final lan = di.sl<LanNetworkService>();
     _lanLocaleSubscription = lan.changes.listen(_syncMasterLocale);
@@ -285,7 +303,22 @@ class _TapixAppState extends State<TapixApp> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!OnlinePilot.enabled) return;
+    if (state == AppLifecycleState.resumed) {
+      di.sl<OnlineSyncController>().start();
+    } else {
+      di.sl<OnlineSyncController>().stop();
+    }
+  }
+
+  @override
   void dispose() {
+    if (OnlinePilot.enabled) {
+      WidgetsBinding.instance.removeObserver(this);
+      di.sl<OnlineSyncController>().stop();
+    }
+    _onlineModeSubscription?.cancel();
     _lanLocaleSubscription?.cancel();
     _lanActivitySubscription?.cancel();
     _pendingDeviceModeSubscription?.cancel();

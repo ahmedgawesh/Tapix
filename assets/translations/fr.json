@@ -6291,5 +6291,51 @@
       "export_failed": "Impossible de créer le fichier du document. Réessayez.",
       "unavailable": "Indisponible dans l’ancienne version"
     }
+  },
+  "online_setup": {
+    "title": "Synchronisation Internet — pilote",
+    "pilot_help": "Ce pilote concerne les serveurs de succursales déjà configurés. Les opérations restent enregistrées localement en cas de coupure Internet. Le service n’est pas encore commercialisé.",
+    "steps": "Sur le serveur de la succursale, copiez la demande de connexion et envoyez-la à l’administrateur de l’entreprise. Sur l’appareil principal, créez une invitation pour cette demande. Collez-la ici une seule fois ; la connexion sera conservée.",
+    "request_title": "Copier la demande de cette succursale",
+    "request_help": "Cette demande identifie l’entreprise, la succursale et l’appareil, sans mot de passe. Transmettez-la à l’administrateur pour obtenir une invitation.",
+    "invitation_title": "Invitation de connexion",
+    "invitation_help": "Transmettez cette invitation uniquement à l’administrateur de la succursale concernée. Elle expire après dix minutes.",
+    "code": "Code d’activation ou invitation de succursale",
+    "confirm": "Vérifier la connexion",
+    "confirm_help": "Vérifiez la succursale et l’adresse du service. L’application compare l’invitation à la base de cet appareil avant de le connecter.",
+    "connect": "Connecter et enregistrer",
+    "cancel": "Annuler",
+    "next": "Suivant",
+    "copy": "Copier le code",
+    "close": "Fermer",
+    "create_invitation": "Créer une invitation",
+    "branch_request": "Demande copiée depuis le serveur de la succursale",
+    "automatic": "Synchroniser automatiquement lorsque l’application est active",
+    "sync_now": "Synchroniser maintenant",
+    "last_success": "Dernière synchronisation réussie de cette session : {time}",
+    "next_attempt": "Prochaine tentative : {time}",
+    "status": {
+      "unconfigured": "Connexion Internet non configurée",
+      "paused": "Synchronisation suspendue",
+      "syncing": "Échange de données en cours",
+      "healthy": "Dernière synchronisation réussie",
+      "retrying": "Connexion impossible ; nouvelle tentative prévue",
+      "blocked": "Synchronisation à vérifier"
+    },
+    "errors": {
+      "owner_required": "Connectez-vous avec le compte propriétaire actif pour configurer la connexion.",
+      "pro_required": "Un abonnement Pro actif est nécessaire pour configurer les succursales.",
+      "writer_required": "Effectuez la configuration sur l’appareil principal ou le serveur de succursale. Les caisses et entrepôts utilisent leur serveur de succursale.",
+      "not_enrolled": "Terminez la configuration et la liaison locales avant de rejoindre le pilote Internet.",
+      "identity_mismatch": "Cette invitation ou ce compte correspond à une autre base de succursale. L’identité de l’appareil reste inchangée.",
+      "expired": "Invitation expirée ou non valide. Demandez une nouvelle invitation.",
+      "invalid_code": "Code non valide. Copiez le code complet depuis l’écran de configuration.",
+      "entitlement": "Le service Internet de cette entreprise est inactif ou expiré. Contactez l’administrateur du service.",
+      "unauthorized": "Les identifiants de connexion ont été refusés. Contactez l’administrateur avant de reconnecter l’appareil.",
+      "connection_failed": "Service Internet inaccessible. Les données locales sont conservées ; vérifiez le réseau.",
+      "busy": "Une opération est en cours. Attendez sa fin.",
+      "failed": "La synchronisation a échoué. Vérifiez la connexion au service et la configuration de la succursale, puis réessayez.",
+      "pilot_only": "Cet écran est réservé à la version pilote."
+    }
   }
 }

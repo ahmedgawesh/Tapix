@@ -6,7 +6,8 @@ hash and supported contract names are shared with the Flutter local ledger.
 PostgreSQL persists immutable events and independent delivery leases, under forced
 company RLS. It never posts a second financial journal on receipt.
 The Flutter HTTPS gateway implements the existing synchronization gateway contract.
-It is not yet selected by the released app UI. Keep online purchases disabled.
+A build-gated pilot settings screen now invokes it. The released app does not
+expose this pilot. Keep online purchases disabled.
 
 Local computer setup
 1. Install PostgreSQL 16 tools, or extract the official Ubuntu 24.04 packages
@@ -30,8 +31,9 @@ Development company
 The output contains a newly generated demo organization, branch, database and owner
 token. The command accepts only loopback tapbix_online_dev and issues a seven-day
 development grant. This is NOT RevenueCat verification or a production entitlement.
-Keep the output below .buildlog; never commit it or use an existing branch identity
-without the future enrollment/bootstrap workflow. Never share access tokens in logs.
+Keep the output below .buildlog; never commit it. Never share access tokens in logs.
+The request-based pilot flow below binds to an existing local writer explicitly;
+it does not implement historical bootstrap or commercial company enrollment.
 
 HTTP protocol
 Every /v1 request requires X-Organization-Id. Protected requests also require
@@ -73,21 +75,54 @@ local immutable organization/database/branch before storing a connection. Existi
 LAN writer enrollment is required and is preserved. A timed invitation is exchanged
 once; the saved credential, endpoint and binding live together in secure storage,
 keyed by the local database identity. Configuration requires an authorization
-callback; the future UI must connect it to existing owner/permission checks.
+callback; the pilot UI uses the existing active owner session and Pro policy,
+and rejects dependent cashier/warehouse clients.
 The service reuses OfflineSyncEventStore and the supplied business projector. Its
 cloud delivery peer has relay_remote_events=false: only locally authored events
 are uploaded, with a cursor independent of every LAN peer. Remote acknowledgement
 follows durable local application. Concurrent refreshes coalesce; interrupted pushes
 remain retryable and duplicate inbound events do not repeat their effects.
-No production UI or scheduler invokes this service yet. Do not provision a live
-company by copying the synthetic demo credentials into its database. Existing
-history/bootstrap, secure-storage platform validation and user setup remain gates.
+The pilot controller schedules exchanges while the app is active, and checks
+immediately on resume. Successful idle polls wait 15 seconds; full batches drain
+after one second. Transient failures back off from 5 to 160 seconds. Identity,
+credential and entitlement failures stop automatic retries and remain visible.
+Pause persists in the secure connection record; resume needs no new invitation.
+This is not an OS background service. Existing history/bootstrap and physical
+platform secure-storage validation remain gates.
+
+
+Pilot setup on the development computer
+Use only an isolated test company with existing LAN writer enrollment. The pilot
+preserves its immutable local identities and existing LAN peers; it does not
+replace databases or create a second set of business permissions.
+1. Build the Flutter app with --dart-define=TAPBIX_ONLINE_PILOT=true.
+   For the same-computer development API only, also use
+   --dart-define=TAPBIX_ONLINE_LOOPBACK=true. Network devices require HTTPS.
+2. Sign in as an active owner with the existing Pro entitlement on the company
+   writer. Open Branches, Warehouses and Devices -> Online synchronization (pilot).
+   Copy its binding request into a private REQUEST.txt below .buildlog.
+3. Provision the isolated development company from repository root:
+   python3 server/online/tool/run_local.py run bin/provision_development.dart --request ABS_REQUEST_PATH --endpoint http://127.0.0.1:45830 ABS_NEW_PRIVATE_JSON_PATH
+   The command refuses an existing output and is restricted to tapbix_online_dev.
+   Paste the output's activationCode into the pilot screen, review the branch and
+   service address, and connect. Do not paste raw access tokens or demo identities.
+4. For another enrolled branch writer, copy its binding request. On the company
+   writer choose Create branch invitation and paste that request. The service
+   verifies the active LAN enrollment and uses the directory's branch name. Paste
+   the resulting ten-minute invitation on the matching branch writer and connect.
+   Dependent warehouse/cashier devices keep their existing branch connection.
+5. The screen shows last successful exchange, retry time and failures. Use Pause
+   to retain pairing without automatic exchanges; resume or restart does not need
+   a new code. Server-side expiry/revocation still applies to saved credentials.
+This validates setup and event transport, not every accounting workflow over WAN.
+The public online service release flag stays false. No paid entitlement is granted
+by enabling a build flag: the server still enforces its development expiry.
 
 Remaining S7 / S8 gates
 - Authenticated company enrollment of existing branches and local identity bootstrap.
-- User-facing online settings, existing permission wiring, secure-storage platform
-  validation, background retry scheduling and transport selection. Credential storage
-  and independent transport cursors are implemented and tested at service level.
+- Physical platform secure-storage validation and platform background execution.
+  Pilot UI, existing permission wiring, active-app retry scheduling and independent
+  transport cursors are implemented; default production builds keep them disabled.
 - Apply downloaded events through existing business projectors and reconcile actual
   sale/return/transfer/report results across devices using the online transport.
 - Verified commercial entitlements/webhooks, revocation/rotation and restoration.

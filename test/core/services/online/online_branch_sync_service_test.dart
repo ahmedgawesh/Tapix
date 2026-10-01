@@ -10,6 +10,7 @@ import 'package:tapix/core/services/online/online_sync_gateway.dart';
 import 'package:tapix/core/services/sync/offline_sync_event_store.dart';
 import 'package:tapix/core/services/sync/sync_inbound_projection_service.dart';
 import 'package:uuid/uuid.dart';
+import 'package:tapix/core/services/online/online_setup_code.dart';
 
 class MemoryVault implements OnlineConnectionVault {
   final values = <String, String>{};
@@ -146,6 +147,15 @@ void main() {
             'databaseId': database,
             'branchId': branch,
             'accessToken': grantedToken,
+          };
+        case '/v1/invitations':
+          expect(body['name'], 'Authoritative branch');
+          response = {
+            'organizationId': org,
+            'databaseId': body['databaseId'],
+            'branchId': body['branchId'],
+            'invitationCode': List.filled(43, 'a').join(),
+            'expiresInSeconds': 600,
           };
         case '/v1/sync/push':
           pushes++;
@@ -398,4 +408,140 @@ void main() {
       throwsA(isA<OfflineSyncException>()),
     );
   });
+  test('pause survives recreation and resume uses saved credential', () async {
+    await service.connect(endpoint: endpoint, accessToken: token);
+    await service.setEnabled(false);
+    service = createService();
+    expect((await service.inspectConnection())!.enabled, false);
+    await expectLater(
+      service.synchronizeOnce(),
+      throwsA(
+        isA<OnlineSyncException>().having(
+          (e) => e.code,
+          'code',
+          'online_paused',
+        ),
+      ),
+    );
+    expect(pushes + pulls, 0);
+    await service.setEnabled(true);
+    await service.synchronizeOnce();
+    expect(pulls, 1);
+    expect(enrollments, 0);
+  });
+
+  test(
+    'binding request uses current branch identity and contains no secret',
+    () async {
+      final request = await service.bindingRequest();
+      final decoded = OnlineSetupCode.decode(request.encode());
+      expect(decoded.type, 'request');
+      expect(decoded.databaseId, database);
+      expect(decoded.branchId, branch);
+      expect(decoded.organizationId, org);
+      expect(decoded.secret, isNull);
+    },
+  );
+
+  test('wrong branch code rejected before redeeming invitation', () async {
+    final request = OnlineSetupCode(
+      type: 'invitation',
+      organizationId: org,
+      databaseId: const Uuid().v4(),
+      branchId: branch,
+      name: 'Wrong branch',
+      endpoint: endpoint,
+      secret: List.filled(43, 'a').join(),
+      expiresAt: DateTime.now().add(const Duration(minutes: 10)),
+    );
+    await expectLater(
+      service.connectCode(request.encode()),
+      throwsA(isA<OnlineSyncException>()),
+    );
+    expect(enrollments, 0);
+    expect(vault.values, isEmpty);
+  });
+
+  test('owner cannot invite an unknown local branch or writer', () async {
+    session['role'] = 'owner';
+    await service.connect(endpoint: endpoint, accessToken: token);
+    final request = OnlineSetupCode(
+      type: 'request',
+      organizationId: org,
+      databaseId: const Uuid().v4(),
+      branchId: const Uuid().v4(),
+      name: 'Unknown',
+    );
+    await expectLater(
+      service.issueInvitation(request.encode()),
+      throwsA(
+        isA<OnlineSyncException>().having(
+          (e) => e.code,
+          'code',
+          'online_branch_not_enrolled',
+        ),
+      ),
+    );
+  });
+  test(
+    'owner invitation preserves an enrolled branch binding and authoritative name',
+    () async {
+      session['role'] = 'owner';
+      await service.connect(endpoint: endpoint, accessToken: token);
+      final otherBranch = const Uuid().v4(),
+          otherDb = const Uuid().v4(),
+          warehouse = const Uuid().v4();
+      await db
+          .into(db.businessBranches)
+          .insert(
+            BusinessBranchesCompanion.insert(
+              id: otherBranch,
+              organizationId: org,
+              code: 'BRANCH',
+              name: const Value('Authoritative branch'),
+            ),
+          );
+      await db
+          .into(db.businessWarehouses)
+          .insert(
+            BusinessWarehousesCompanion.insert(
+              id: warehouse,
+              organizationId: org,
+              branchId: otherBranch,
+              code: 'WH',
+            ),
+          );
+      await db.customStatement(
+        "INSERT INTO users(id,username,password_hash,role,is_active,created_at,updated_at) VALUES(77,'owner','x','owner',1,0,0)",
+      );
+      await db.customStatement(
+        "INSERT INTO lan_branch_enrollments(enrollment_id,organization_id,branch_id,warehouse_id,coordinator_database_id,secret_hash,status,issued_by,expires_at,remote_database_id,activated_at) VALUES(?,?,?,?,?,?,'active',77,?,?,?)",
+        [
+          const Uuid().v4(),
+          org,
+          otherBranch,
+          warehouse,
+          database,
+          List.filled(64, 'a').join(),
+          clock.toIso8601String(),
+          otherDb,
+          clock.toIso8601String(),
+        ],
+      );
+      final request = OnlineSetupCode(
+        type: 'request',
+        organizationId: org,
+        databaseId: otherDb,
+        branchId: otherBranch,
+        name: 'Untrusted request name',
+      );
+      final invite = await service.issueInvitation(request.encode());
+      expect(invite.name, 'Authoritative branch');
+      expect(invite.databaseId, otherDb);
+      expect(invite.branchId, otherBranch);
+      expect(invite.endpoint, endpoint);
+      expect(invite.type, 'invitation');
+      expect(OnlineSetupCode.decode(invite.encode()).secret, hasLength(43));
+    },
+  );
 }

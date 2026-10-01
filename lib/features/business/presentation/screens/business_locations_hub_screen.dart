@@ -1,3 +1,5 @@
+import '../../../../core/services/online/online_setup_code.dart';
+import 'online_sync_settings_screen.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
@@ -277,6 +279,19 @@ class _BusinessLocationsHubScreenState
                     child: _LocalOperationsHeader(theme: theme),
                   ),
                 ),
+                if (OnlinePilot.enabled)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.cloud_sync_outlined),
+                          title: Text('online_setup.title'.tr()),
+                          onTap: () => _open(const OnlineSyncSettingsScreen()),
+                        ),
+                      ),
+                    ),
+                  ),
                 const SliverPadding(
                   padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
                   sliver: SliverToBoxAdapter(child: _PrimaryWarehouseNotice()),
