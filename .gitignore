@@ -43,3 +43,26 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local databases, device snapshots, and generated build reports
+/backups/
+/android/build/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.ab
+
+# Local credentials and signing material (examples may be committed)
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.jks
+*.keystore
+*.p12
+/android/key.properties
+
+# Optional Easy Localization key generation; the app uses asset keys directly
+/lib/generated/locale_keys.g.dart
