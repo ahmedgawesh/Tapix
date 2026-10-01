@@ -36,7 +36,7 @@ and approving an online production release.
 | `assets/translations/` | Arabic, English, and French translations |
 | `docs/` | Current contracts, guides, dated verification, and roadmap |
 | `tool/` | Development utilities, including synthetic acceptance data generation |
-| `website/`, `legal/`, `marketing/` | Website and publication material requiring release review |
+| `legal/`, `marketing/` | Historical legal and publication material requiring release review |
 
 Device databases, backups, signing material, and build output stay outside Git.
 The `_bmad` directories and root `MOC` documents are historical development/design
